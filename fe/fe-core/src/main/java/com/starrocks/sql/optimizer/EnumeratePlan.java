@@ -57,9 +57,10 @@ public class EnumeratePlan {
         int localRankOfGroupExpression = nthExecPlan - planCountOfKGroupExpression;
         // 3. compute use which output/input properties
         int planCountOfKProperties = 0;
+        List<PhysicalPropertySet> inputProperties = Lists.newArrayList();
         for (Map.Entry<OutputInputProperty, Integer> entry : chooseGroupExpression
                 .getPropertiesPlanCountMap(requiredProperty).entrySet()) {
-            List<PhysicalPropertySet> inputProperties = entry.getKey().getInputProperties();
+            inputProperties = entry.getKey().getInputProperties();
 
             if (planCountOfKProperties + entry.getValue() >= localRankOfGroupExpression) {
                 // 4. compute the localProperty-rank in the property.
@@ -79,6 +80,8 @@ public class EnumeratePlan {
         }
         // 7. construct the OptExpression
         OptExpression chooseExpression = OptExpression.create(chooseGroupExpression.getOp(), childPlans);
+        // record inputProperties at optExpression, used for planFragment builder to determine join type
+        chooseExpression.setRequiredProperties(inputProperties);
         chooseExpression.setStatistics(group.getConfidenceStatistics() != null ?
                 group.getConfidenceStatistics() :
                 group.getStatistics());

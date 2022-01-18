@@ -1051,23 +1051,6 @@ public class Coordinator {
         return new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
     }
 
-    private FragmentExecParams getMaxParallelismScanFragmentExecParams() {
-        List<FragmentExecParams> scanNodePlanFragmentParams =
-                this.scanNodes.stream().map(node -> fragmentExecParamsMap.get(node.getFragment().getFragmentId()))
-                        .collect(Collectors.toList());
-        int maxParallelism = 0;
-        FragmentExecParams maxParallelismExecParams = null;
-
-        for (FragmentExecParams params : scanNodePlanFragmentParams) {
-            int currentChildFragmentParallelism = params.instanceExecParams.size();
-            if (currentChildFragmentParallelism > maxParallelism) {
-                maxParallelism = currentChildFragmentParallelism;
-                maxParallelismExecParams = params;
-            }
-        }
-        return maxParallelismExecParams;
-    }
-
     private Set<PlanNodeId> getExchangeNodes(PlanNode node) {
         if (exchangeIds.containsKey(node.getId())) {
             return exchangeIds.get(node.getId());
@@ -1095,24 +1078,6 @@ public class Coordinator {
         } else {
             return null;
         }
-    }
-
-    private boolean hasShuffleHashBucketJoin(PlanNode node) {
-        if (node instanceof HashJoinNode) {
-            HashJoinNode hashJoinNode = (HashJoinNode) node;
-            if (hashJoinNode.isShuffleHashBucket()) {
-                return true;
-            }
-        }
-        if (node instanceof ExchangeNode) {
-            return false;
-        }
-        for (PlanNode child : node.getChildren()) {
-            if (hasShuffleHashBucketJoin(child)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // For each fragment in fragments, computes hosts on which to run the instances
@@ -1175,20 +1140,6 @@ public class Coordinator {
                 PlanFragmentId inputFragmentId = fragment.getChild(inputFragmentIndex).getFragmentId();
                 FragmentExecParams maxParallelismFragmentExecParams = fragmentExecParamsMap.get(inputFragmentId);
 
-                boolean hasShuffleHashBucketJoinInFragment = hasShuffleHashBucketJoin(fragment.getPlanRoot());
-                if (hasShuffleHashBucketJoinInFragment) {
-                    FragmentExecParams execParams = getMaxParallelismScanFragmentExecParams();
-                    if (execParams != null) {
-                        maxParallelism = execParams.instanceExecParams.size();
-                        // when dop adaptation enabled, numInstances * pipelineDop is equivalent to numInstances in
-                        // non-pipeline engine and pipeline engine(dop adaptation disabled).
-                        if (dopAdaptionEnabled) {
-                            maxParallelism *= execParams.fragment.getPipelineDop();
-                        }
-                        maxParallelismFragmentExecParams = execParams;
-                    }
-                }
-
                 // hostSet contains target backends to whom fragment instances of the current PlanFragment will be
                 // delivered. when pipeline parallelization is adopted, the number of instances should be the size
                 // of hostSet, that it to say, each backend has exactly one fragment.
@@ -1225,9 +1176,8 @@ public class Coordinator {
                     // random select some instance
                     // get distinct host,  when parallel_fragment_exec_instance_num > 1, single host may execute several instances
                     List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
-                    if (!hasShuffleHashBucketJoinInFragment) {
-                        Collections.shuffle(hosts, instanceRandom);
-                    }
+                    Collections.shuffle(hosts, instanceRandom);
+
                     for (int index = 0; index < exchangeInstances; index++) {
                         FInstanceExecParam instanceParam =
                                 new FInstanceExecParam(null, hosts.get(index % hosts.size()), 0, params);
@@ -1245,9 +1195,7 @@ public class Coordinator {
                 // When group by cardinality is smaller than number of backend, only some backends always
                 // process while other has no data to process.
                 // So we shuffle instances to make different backends handle different queries.
-                if (!hasShuffleHashBucketJoinInFragment) {
-                    Collections.shuffle(params.instanceExecParams, instanceRandom);
-                }
+                Collections.shuffle(params.instanceExecParams, instanceRandom);
 
                 // TODO: switch to unpartitioned/coord execution if our input fragment
                 // is executed that way (could have been downgraded from distributed)

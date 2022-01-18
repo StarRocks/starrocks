@@ -232,10 +232,6 @@ public class HashJoinNode extends PlanNode {
         return isLocalHashBucket;
     }
 
-    public boolean isShuffleHashBucket() {
-        return isShuffleHashBucket;
-    }
-
     public void setColocate(boolean colocate, String reason) {
         isColocate = colocate;
         colocateReason = reason;
@@ -243,10 +239,6 @@ public class HashJoinNode extends PlanNode {
 
     public void setLocalHashBucket(boolean localHashBucket) {
         isLocalHashBucket = localHashBucket;
-    }
-
-    public void setShuffleHashBucket(boolean runtimeBucketShuffle) {
-        isShuffleHashBucket = runtimeBucketShuffle;
     }
 
     public void setPartitionExprs(List<Expr> exprs) {
