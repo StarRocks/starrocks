@@ -88,8 +88,7 @@ public class ColumnDef {
     private boolean isKey;
     // Primary-key column should obey the not-null constraint. When creating a table, the not-null constraint will add to the primary-key column default. If the user specifies NULL explicitly, semantics analysis will report an error.
     // Now, isAllowNull is used to indicate a null constraint hold or not. Primary-key and non-primary-key columns obey different constraints, so the isAllowNull can not be assigned a default value.
-    // Add a new variable name isAllowNullImplicit to indicate the message. IfisAllowNullImplicit=true, it indicates the null constraint is obeyed implicitly.
-    // For opt_is_allow_null without keyword scenario, change it to null value. Add a boolean value named isAllowNullImplicit indicate that null constraint implicit specified.
+    // Add a new variable name isAllowNullImplicit to indicate the message. If isAllowNullImplicit=true, it indicates the null constraint is obeyed implicitly.
     private boolean isAllowNullImplicit = false;
     private Boolean isAllowNull;
     private DefaultValueDef defaultValueDef;
