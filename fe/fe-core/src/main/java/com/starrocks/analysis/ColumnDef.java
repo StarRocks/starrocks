@@ -86,7 +86,11 @@ public class ColumnDef {
     private final TypeDef typeDef;
     private AggregateType aggregateType;
     private boolean isKey;
-    private boolean isAllowNull;
+    // Primary-key column should obey the not-null constraint. When creating a table, the not-null constraint will add to the primary-key column default. If the user specifies NULL explicitly, semantics analysis will report an error.
+    // Now, isAllowNull is used to indicate a null constraint hold or not. Primary-key and non-primary-key columns obey different constraints, so the isAllowNull can not be assigned a default value.
+    // Add a new variable name isAllowNullImplicit to indicate the message. If isAllowNullImplicit=true, it indicates the null constraint is obeyed implicitly.
+    private boolean isAllowNullImplicit = false;
+    private Boolean isAllowNull;
     private DefaultValueDef defaultValueDef;
     private final String comment;
 
@@ -95,18 +99,32 @@ public class ColumnDef {
     }
 
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
-                     boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
+                     Boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
         this.name = name;
         this.typeDef = typeDef;
         this.isKey = isKey;
         this.aggregateType = aggregateType;
-        this.isAllowNull = isAllowNull;
+        if (isAllowNull == null) {
+            this.isAllowNull = true;
+            this.isAllowNullImplicit = true;
+        } else {
+            this.isAllowNull = isAllowNull;
+            this.isAllowNullImplicit = false;
+        }
         this.defaultValueDef = defaultValueDef;
         this.comment = comment;
     }
 
     public boolean isAllowNull() {
         return isAllowNull;
+    }
+
+    // The columns will obey NULL constraint if not specified. The primary key column should abide by the NOT NULL constraint default to be compatible with ANSI.
+    // So add a new setPrimaryKeyNonNullable() to set isAllowNull to be true for primary key columns.
+    public void setPrimaryKeyNonNullable() {
+        if (isAllowNullImplicit) {
+            this.isAllowNull = false;
+        }
     }
 
     // only for test
