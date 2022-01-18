@@ -124,6 +124,15 @@ public:
 
     virtual void append(const Column& src) { append(src, 0, src.size()); }
 
+    // This function will update data from src according to the input indexes. 'indexes' contains
+    // the row index will be update
+    // For example:
+    //      input indexes: [0, 3]
+    //      column data: [0, 1, 2, 3, 4]
+    //      src_column data: [5, 6]
+    // After call this function, column data will be set as [5, 1, 2, 6, 4]
+    virtual Status update_rows(const Column& src, const uint32_t* indexes) = 0;
+
     // This function will append data from src according to the input indexes. 'indexes' contains
     // the row index of the src.
     // This function will get row index from indexes and append the data to this column.
