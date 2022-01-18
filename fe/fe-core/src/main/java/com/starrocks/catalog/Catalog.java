@@ -5957,7 +5957,7 @@ public class Catalog {
 
         Database db = getDb(dbId);
         db.writeLock();
-        try {    
+        try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
             if (opCode == OperationType.OP_SET_FORBIT_GLOBAL_DICT) {
                 String enAble = properties.get("enable_low_card_dict");
