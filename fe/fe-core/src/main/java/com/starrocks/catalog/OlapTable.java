@@ -1473,6 +1473,20 @@ public class OlapTable extends Table {
         tableProperty.setHasDelete(true);
     }
 
+    public boolean hasForbitGlobalDict() {
+        if (tableProperty == null) {
+            return false;
+        }
+        return tableProperty.hasForbitGlobalDict();
+    }
+
+    public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.setHasForbitGlobalDict(hasForbitGlobalDict);
+    }
+
     // return true if partition with given name already exist, both in partitions and temp partitions.
     // return false otherwise
     public boolean checkPartitionNameExist(String partitionName) {

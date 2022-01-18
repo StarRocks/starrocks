@@ -741,6 +741,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
+                case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
@@ -1256,6 +1257,10 @@ public class EditLog {
 
     public void logDropFunction(FunctionSearchDesc function) {
         logEdit(OperationType.OP_DROP_FUNCTION, function);
+    }
+
+    public void logSetHasForbitGlobalDict(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
     }
 
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {

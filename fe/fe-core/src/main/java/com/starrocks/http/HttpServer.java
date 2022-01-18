@@ -35,6 +35,7 @@ import com.starrocks.http.action.SystemAction;
 import com.starrocks.http.action.VariableAction;
 import com.starrocks.http.common.StarRocksHttpPostObjectAggregator;
 import com.starrocks.http.meta.ColocateMetaService;
+import com.starrocks.http.meta.GlobalDictMetaService;
 import com.starrocks.http.meta.MetaService.CheckAction;
 import com.starrocks.http.meta.MetaService.DumpAction;
 import com.starrocks.http.meta.MetaService.ImageAction;
@@ -150,6 +151,7 @@ public class HttpServer {
         ColocateMetaService.BucketSeqAction.registerAction(controller);
         ColocateMetaService.ColocateMetaAction.registerAction(controller);
         ColocateMetaService.MarkGroupStableAction.registerAction(controller);
+        GlobalDictMetaService.ForbitTableAction.registerAction(controller);
         ProfileAction.registerAction(controller);
         QueryDetailAction.registerAction(controller);
         ConnectionAction.registerAction(controller);

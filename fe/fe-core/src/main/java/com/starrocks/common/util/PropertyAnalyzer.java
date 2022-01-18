@@ -88,6 +88,10 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_TYPE = "type";
 
+    public static final String ENABLE_LOW_CARD_DICT_TYPE = "enable_low_card_dict";
+    public static final String ABLE_LOW_CARD_DICT = "1";
+    public static final String DISABLE_LOW_CARD_DICT = "0";
+
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
         if (properties == null) {
