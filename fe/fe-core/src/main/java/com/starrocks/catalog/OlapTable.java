@@ -1468,7 +1468,7 @@ public class OlapTable extends Table {
 
     public void setHasDelete() {
         if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
+            return;
         }
         tableProperty.setHasDelete(true);
     }
