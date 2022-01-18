@@ -20,7 +20,6 @@ public:
     Status parse_csv(int chunk_size, ChunkPtr* chunk);
 
 private:
-
     // create a reader or re init reader
     Status _create_or_reinit_reader();
 
