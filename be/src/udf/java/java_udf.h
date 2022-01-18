@@ -113,8 +113,8 @@ public:
         _capacity = other._capacity;
 
         other._handle = nullptr;
-        _data = nullptr;
-        _capacity = 0;
+        other._data = nullptr;
+        other._capacity = 0;
     }
 
     DirectByteBuffer& operator=(DirectByteBuffer&& other) {
@@ -189,6 +189,7 @@ private:
 struct MethodTypeDescriptor {
     PrimitiveType type;
     bool is_box;
+    bool is_array;
 };
 
 struct JavaMethodDescriptor {
@@ -208,6 +209,11 @@ public:
     Status get_signature(jclass clazz, const std::string& method, std::string* sign);
     Status get_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
     Status get_udaf_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
+};
+
+class UDFHelper {
+public:
+    jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffer, int sz);
 };
 
 struct JavaUDFContext {
@@ -246,6 +252,14 @@ public:
     // UDAF finalize
     jvalue finalize(jobject state);
 
+    // WindowFunction reset
+    void reset(jobject state);
+    // WindowFunction getValues
+    jobject get_values(jobject state, int start, int end);
+    // WindowFunction updateBatch
+    jobject window_update_batch(jobject state, int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                int64_t frame_end, int col_sz, jobject* cols);
+
 private:
     jobject _udaf_state_clazz;
     jobject _udaf_clazz;
@@ -256,16 +270,21 @@ private:
 struct JavaUDAFContext {
     std::unique_ptr<ClassLoader> udf_classloader;
     std::unique_ptr<ClassAnalyzer> analyzer;
+    std::unique_ptr<UDFHelper> udf_helper;
     JVMClass udaf_class = nullptr;
     JVMClass udaf_state_class = nullptr;
     std::unique_ptr<JavaMethodDescriptor> create;
     std::unique_ptr<JavaMethodDescriptor> destory;
-    std::unique_ptr<JavaMethodDescriptor> reset;
     std::unique_ptr<JavaMethodDescriptor> update;
     std::unique_ptr<JavaMethodDescriptor> merge;
     std::unique_ptr<JavaMethodDescriptor> finalize;
     std::unique_ptr<JavaMethodDescriptor> serialize;
     std::unique_ptr<JavaMethodDescriptor> serialize_size;
+
+    std::unique_ptr<JavaMethodDescriptor> reset;
+    std::unique_ptr<JavaMethodDescriptor> window_update;
+    std::unique_ptr<JavaMethodDescriptor> get_values;
+
     std::unique_ptr<DirectByteBuffer> buffer;
 
     jobject handle;

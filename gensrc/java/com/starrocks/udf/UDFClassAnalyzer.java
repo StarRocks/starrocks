@@ -32,6 +32,8 @@ public class UDFClassAnalyzer {
         String signStr = anlyMap.get(typeName);
         if (signStr != null) {
             return prefix + signStr;
+        } else if (typeName.contains("[L")){
+            return typeName.replace(".", "/");
         } else {
             return prefix + "L" + typeName.replace('.', '/') + ";";
         }

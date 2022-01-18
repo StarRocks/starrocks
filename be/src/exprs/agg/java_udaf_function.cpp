@@ -125,6 +125,46 @@ template jvalue cast_to_jvalue<true>(MethodTypeDescriptor method_type_desc, cons
 
 template jvalue cast_to_jvalue<false>(MethodTypeDescriptor method_type_desc, const Column* col, int row_num);
 
+void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    Column* data_col = col;
+    if (col->is_nullable() && method_type_desc.type != PrimitiveType::TYPE_VARCHAR &&
+        method_type_desc.type != PrimitiveType::TYPE_CHAR) {
+        auto* nullable_column = down_cast<NullableColumn*>(col);
+        nullable_column->set_null(row_num);
+        data_col = nullable_column->mutable_data_column();
+    }
+    DCHECK(method_type_desc.is_box);
+    switch (method_type_desc.type) {
+#define ASSIGN_BOX_TYPE(NAME, TYPE)                                                \
+    case NAME: {                                                                   \
+        auto data = helper.val##TYPE(val.l);                                       \
+        down_cast<RunTimeColumnType<NAME>*>(data_col)->get_data()[row_num] = data; \
+        break;                                                                     \
+    }
+
+        ASSIGN_BOX_TYPE(TYPE_TINYINT, int8_t)
+        ASSIGN_BOX_TYPE(TYPE_SMALLINT, int16_t)
+        ASSIGN_BOX_TYPE(TYPE_INT, int32_t)
+        ASSIGN_BOX_TYPE(TYPE_BIGINT, int64_t)
+        ASSIGN_BOX_TYPE(TYPE_FLOAT, float)
+        ASSIGN_BOX_TYPE(TYPE_DOUBLE, double)
+    case TYPE_VARCHAR: {
+        if (val.l == nullptr) {
+            col->append_nulls(1);
+        } else {
+            auto slice = helper.sliceVal((jstring)val.l);
+            col->append_datum(Datum(slice));
+        }
+        break;
+    }
+
+    default:
+        DCHECK(false);
+        break;
+    }
+}
+
 void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val) {
     auto& helper = JVMFunctionHelper::getInstance();
     if (!method_type_desc.is_box) {
@@ -170,7 +210,7 @@ void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue va
 
 const int DEFAULT_UDAF_BUFFER_SIZE = 1024;
 
-const AggregateFunction* newJavaUDAFFunction(bool input_nullable) {
+const AggregateFunction* getJavaUDAFFunction(bool input_nullable) {
     static JavaUDAFAggregateFunction<false> no_nullable_udaf_func;
     return &no_nullable_udaf_func;
 }
@@ -183,6 +223,7 @@ Status init_udaf_context(int id, const std::string& url, const std::string& chec
     auto* udaf_ctx = context->impl()->udaf_ctxs();
     udaf_ctx->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
     RETURN_IF_ERROR(udaf_ctx->udf_classloader->init());
+    udaf_ctx->udf_helper = std::make_unique<UDFHelper>();
     udaf_ctx->analyzer = std::make_unique<ClassAnalyzer>();
 
     udaf_ctx->udaf_class = udaf_ctx->udf_classloader->getClass(symbol);

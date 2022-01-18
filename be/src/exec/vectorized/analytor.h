@@ -124,7 +124,7 @@ private:
     RuntimeState* _state = nullptr;
     bool _is_closed = false;
 
-    const TPlanNode& _tnode;
+    const TPlanNode _tnode;
     const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     ObjectPool* _pool;
