@@ -1468,7 +1468,7 @@ public class OlapTable extends Table {
 
     public void setHasDelete() {
         if (tableProperty == null) {
-            return;
+            tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty.setHasDelete(true);
     }
@@ -1482,7 +1482,7 @@ public class OlapTable extends Table {
 
     public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
         if (tableProperty == null) {
-            return;
+            tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty.setHasForbitGlobalDict(hasForbitGlobalDict);
     }
