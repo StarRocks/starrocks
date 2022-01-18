@@ -236,7 +236,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     }
 
     vectorized::AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-    _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(agg_states, this));
+    _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
 
     return Status::OK();
 }

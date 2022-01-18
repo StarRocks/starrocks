@@ -429,6 +429,8 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
             ADD_BOXED_METHOD_TYPE_DESC("java/lang/Short", TYPE_SMALLINT)
             ADD_BOXED_METHOD_TYPE_DESC("java/lang/Integer", TYPE_INT)
             ADD_BOXED_METHOD_TYPE_DESC("java/lang/Long", TYPE_BIGINT)
+            ADD_BOXED_METHOD_TYPE_DESC("java/lang/Float", TYPE_FLOAT)
+            ADD_BOXED_METHOD_TYPE_DESC("java/lang/Double", TYPE_DOUBLE)
                 // clang-format on
             } else if (type == "java/lang/String") {
                 desc->emplace_back(MethodTypeDescriptor{TYPE_VARCHAR, true});
@@ -514,45 +516,5 @@ int UDAFFunction::serialize_size(jobject state) {
     JNIEnv* env = getJNIEnv();
     jmethodID serialize_size = _ctx->serialize_size->get_method_id((jclass)_udaf_state_clazz);
     return env->CallIntMethod(state, serialize_size);
-}
-
-// Used For UDAF
-jvalue cast_to_jvalue(MethodTypeDescriptor method_type_desc, const Column* col, int row_num) {
-    DCHECK(!col->is_nullable());
-    DCHECK(!col->is_constant());
-    auto& helper = JVMFunctionHelper::getInstance();
-    jvalue v;
-    if (!method_type_desc.is_box) {
-        switch (method_type_desc.type) {
-        case TYPE_INT: {
-            auto spec_col = down_cast<const Int32Column*>(col);
-            const auto& container = spec_col->get_data();
-            v.i = container[row_num];
-            break;
-        }
-        default:
-            DCHECK(false) << "udf unsupport type" << method_type_desc.type;
-            break;
-        }
-    } else {
-        switch (method_type_desc.type) {
-        case TYPE_INT: {
-            auto spec_col = down_cast<const Int32Column*>(col);
-            const auto& container = spec_col->get_data();
-            v.l = helper.newInteger(container[row_num]);
-            break;
-        }
-        case TYPE_VARCHAR: {
-            auto spec_col = down_cast<const BinaryColumn*>(col);
-            Slice slice = spec_col->get_slice(row_num);
-            v.l = helper.newString(slice.get_data(), slice.get_size());
-            break;
-        }
-        default:
-            DCHECK(false) << "udf unsupport type" << method_type_desc.type;
-            break;
-        }
-    }
-    return v;
 }
 } // namespace starrocks::vectorized

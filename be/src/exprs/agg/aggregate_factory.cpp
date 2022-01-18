@@ -789,8 +789,11 @@ AggregateFuncResolver::AggregateFuncResolver() {
 
 AggregateFuncResolver::~AggregateFuncResolver() = default;
 
+const AggregateFunction* newJavaUDAFFunction(bool input_nullable);
+
 const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
-                                                PrimitiveType return_type, bool is_null, int agg_func_set_version) {
+                                                PrimitiveType return_type, bool is_null,
+                                                TFunctionBinaryType::type binary_type, int agg_func_set_version) {
     std::string func_name = name;
     if (agg_func_set_version > 1) {
         if (name == "multi_distinct_sum") {
@@ -799,7 +802,14 @@ const AggregateFunction* get_aggregate_function(const std::string& name, Primiti
             func_name = "multi_distinct_count2";
         }
     }
-    return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type, is_null);
-}
 
+    if (binary_type == TFunctionBinaryType::BUILTIN) {
+        return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type, is_null);
+    } else if (binary_type == TFunctionBinaryType::SRJAR) {
+#ifdef STARROCKS_WITH_HDFS
+        return newJavaUDAFFunction(is_null);
+#endif
+    }
+    return nullptr;
+}
 } // namespace starrocks::vectorized

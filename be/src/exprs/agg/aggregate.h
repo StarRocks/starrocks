@@ -75,8 +75,8 @@ public:
     // State management methods:
     virtual size_t size() const = 0;
     virtual size_t alignof_size() const = 0;
-    virtual void create(AggDataPtr __restrict ptr) const = 0;
-    virtual void destroy(AggDataPtr __restrict ptr) const = 0;
+    virtual void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
+    virtual void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
 
     // Contains a loop with calls to "update" function.
     // You can collect arguments into array "states"
@@ -123,9 +123,9 @@ protected:
     static const State& data(ConstAggDataPtr __restrict place) { return *reinterpret_cast<const State*>(place); }
 
 public:
-    void create(AggDataPtr __restrict ptr) const final { new (ptr) State; }
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { new (ptr) State; }
 
-    void destroy(AggDataPtr __restrict ptr) const final { data(ptr).~State(); }
+    void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { data(ptr).~State(); }
 
     size_t size() const final { return sizeof(State); }
 
@@ -195,31 +195,6 @@ class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> 
             static_cast<const Derived*>(this)->finalize_to_column(ctx, agg_states[i] + state_offset, to);
         }
     }
-};
-
-// Helper class that properly invokes destructor when state goes out of scope.
-class ManagedAggregateState {
-public:
-    ManagedAggregateState(const AggregateFunction* desc, std::shared_ptr<Buffer<uint8_t>>&& buffer)
-            : _desc(desc), _state(std::move(buffer)) {
-        _desc->create(_state->data());
-    }
-
-    ~ManagedAggregateState() { _desc->destroy(_state->data()); }
-
-    uint8_t* mutable_data() { return _state->data(); }
-
-    uint8_t* data() const { return _state->data(); }
-
-    static std::unique_ptr<ManagedAggregateState> Make(const AggregateFunction* desc) {
-        std::shared_ptr<Buffer<uint8_t>> buf = std::make_shared<Buffer<uint8_t>>();
-        buf->reserve(desc->size());
-        return std::make_unique<ManagedAggregateState>(desc, std::move(buf));
-    }
-
-private:
-    const AggregateFunction* _desc;
-    std::shared_ptr<Buffer<uint8_t>> _state;
 };
 
 using AggregateFunctionPtr = std::shared_ptr<AggregateFunction>;
