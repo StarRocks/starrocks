@@ -23,8 +23,10 @@ add_library(Formats STATIC
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
-set_source_files_properties(json/nullable_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-set_source_files_properties(json/binary_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-set_source_files_properties(json/numeric_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    set_source_files_properties(json/nullable_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(json/binary_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(json/numeric_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+endif()
 
 add_subdirectory(orc/apache-orc)

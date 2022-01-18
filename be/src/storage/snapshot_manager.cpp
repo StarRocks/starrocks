@@ -111,7 +111,7 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
     }
 }
 
-OLAPStatus SnapshotManager::release_snapshot(const string& snapshot_path) {
+Status SnapshotManager::release_snapshot(const string& snapshot_path) {
     std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "snapshot", _mem_tracker);
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
@@ -122,20 +122,17 @@ OLAPStatus SnapshotManager::release_snapshot(const string& snapshot_path) {
     auto stores = StorageEngine::instance()->get_stores();
     for (auto store : stores) {
         std::string abs_path;
-        RETURN_CODE_IF_ERROR_WITH_WARN(FileUtils::canonicalize(store->path(), &abs_path), OLAP_ERR_DIR_NOT_EXIST,
-                                       "canonical path " + store->path() + "failed");
-
+        RETURN_IF_ERROR(FileUtils::canonicalize(store->path(), &abs_path));
         if (snapshot_path.compare(0, abs_path.size(), abs_path) == 0 &&
             snapshot_path.compare(abs_path.size(), SNAPSHOT_PREFIX.size(), SNAPSHOT_PREFIX) == 0) {
             (void)FileUtils::remove_all(snapshot_path);
             LOG(INFO) << "success to release snapshot path. [path='" << snapshot_path << "']";
-
-            return OLAP_SUCCESS;
+            return Status::OK();
         }
     }
 
-    LOG(WARNING) << "released snapshot path illegal. [path='" << snapshot_path << "']";
-    return OLAP_ERR_CE_CMD_PARAMS_ERROR;
+    LOG(WARNING) << "Illegal snapshot_path: " << snapshot_path;
+    return Status::InvalidArgument(fmt::format("Illegal snapshot_path: {}", snapshot_path));
 }
 
 Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tablet_id, int32_t schema_hash) {

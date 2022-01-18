@@ -2,6 +2,7 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
@@ -109,7 +110,15 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public boolean isNullable() {
-        return fn == null || fn.isNullable();
+        // check if fn always return non null
+        if (fn != null && !fn.isNullable()) {
+            return false;
+        }
+        // check children nullable
+        if (FunctionCallExpr.nullableSameWithChildrenFunctions.contains(fnName)) {
+            return arguments.stream().anyMatch(ScalarOperator::isNullable);
+        }
+        return true;
     }
 
     public ColumnRefSet getUsedColumns() {

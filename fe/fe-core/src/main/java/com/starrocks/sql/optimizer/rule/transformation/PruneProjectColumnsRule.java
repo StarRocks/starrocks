@@ -47,7 +47,6 @@ public class PruneProjectColumnsRule extends TransformationRule {
 
         if (input.inputAt(0).getOp() instanceof LogicalJoinOperator ||
                 input.inputAt(0).getOp() instanceof LogicalScanOperator) {
-            //LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.inputAt(0).getOp();
             LogicalOperator operator = (LogicalOperator) input.inputAt(0).getOp();
             ColumnRefSet requiredColumns = requiredInputColumns;
             ColumnRefSet outputColumns =

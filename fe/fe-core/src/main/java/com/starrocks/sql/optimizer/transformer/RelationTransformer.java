@@ -214,10 +214,14 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
                 List<ScalarOperator> row = valuesOperator.getRows().get(0);
                 for (int i = 0; i < setOperationRelation.getRelationFields().getAllFields().size(); ++i) {
                     Type outputType = setOperationRelation.getRelationFields().getFieldByIndex(i).getType();
-                    if (!outputType.equals(relation.getRelationFields().getFieldByIndex(i).getType())
-                            && !((ConstantOperator) row.get(i)).isNull()) {
+                    Type relationType = relation.getRelationFields().getFieldByIndex(i).getType();
+                    if (!outputType.equals(relationType)) {
                         try {
-                            row.set(i, ((ConstantOperator) row.get(i)).castTo(outputType));
+                            if (relationType.isNull()) {
+                                row.get(i).setType(outputType);
+                            } else {
+                                row.set(i, ((ConstantOperator) row.get(i)).castTo(outputType));
+                            }
                             valuesOperator.getColumnRefSet().get(i).setType(outputType);
                         } catch (Exception e) {
                             throw new SemanticException(e.toString());
@@ -384,13 +388,6 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
         OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
                 new ExpressionMapping(node.getScope(), outputVariables));
         return new LogicalPlan(scanBuilder, outputVariables, null);
-        /*
-        LogicalProjectOperator projectOperator =
-                new LogicalProjectOperator(outputVariables.stream().distinct()
-                        .collect(Collectors.toMap(Function.identity(), Function.identity())));
-
-        return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, null);
-         */
     }
 
     @Override

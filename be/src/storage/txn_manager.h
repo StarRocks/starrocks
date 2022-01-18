@@ -71,46 +71,46 @@ public:
 
     ~TxnManager() = default;
 
-    OLAPStatus prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                           const PUniqueId& load_id);
+    Status prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                       const PUniqueId& load_id);
 
-    OLAPStatus commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                          const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery);
+    Status commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                      const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery);
 
-    OLAPStatus publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                           const Version& version);
+    Status publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                       const Version& version);
 
     // publish_txn for updatable tablet
-    OLAPStatus publish_txn2(TTransactionId transaction_id, TPartitionId partition_id, const TabletSharedPtr& tablet,
-                            int64_t version);
+    Status publish_txn2(TTransactionId transaction_id, TPartitionId partition_id, const TabletSharedPtr& tablet,
+                        int64_t version);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
-    OLAPStatus rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id);
+    Status rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id);
 
-    OLAPStatus delete_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id);
+    Status delete_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id);
 
     // add a txn to manager
     // partition id is useful in publish version stage because version is associated with partition
-    OLAPStatus prepare_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                           SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id);
+    Status prepare_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                       SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id);
 
-    OLAPStatus commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                          SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id,
-                          const RowsetSharedPtr& rowset_ptr, bool is_recovery);
+    Status commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                      SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id,
+                      const RowsetSharedPtr& rowset_ptr, bool is_recovery);
 
     // remove a txn from txn manager & persist rowset meta
-    OLAPStatus publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                           SchemaHash schema_hash, const TabletUid& tablet_uid, const Version& version);
+    Status publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                       SchemaHash schema_hash, const TabletUid& tablet_uid, const Version& version);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
-    OLAPStatus rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                            SchemaHash schema_hash, const TabletUid& tablet_uid);
+    Status rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                        SchemaHash schema_hash, const TabletUid& tablet_uid);
 
     // remove the txn from txn manager
     // delete the related rowset if it is not null
     // delete rowset related data if it is not null
-    OLAPStatus delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                          SchemaHash schema_hash, const TabletUid& tablet_uid);
+    Status delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                      SchemaHash schema_hash, const TabletUid& tablet_uid);
 
     void get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                  int64_t* partition_id, std::set<int64_t>* transaction_ids);

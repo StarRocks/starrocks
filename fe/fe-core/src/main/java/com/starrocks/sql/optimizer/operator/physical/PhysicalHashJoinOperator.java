@@ -17,12 +17,12 @@ import java.util.Set;
 
 public class PhysicalHashJoinOperator extends PhysicalOperator {
     private final JoinOperator joinType;
-    private final ScalarOperator joinPredicate;
+    private final ScalarOperator onPredicate;
     private final String joinHint;
     private final ColumnRefSet outputColumns;
 
     public PhysicalHashJoinOperator(JoinOperator joinType,
-                                    ScalarOperator joinPredicate,
+                                    ScalarOperator onPredicate,
                                     String joinHint,
                                     long limit,
                                     ScalarOperator predicate,
@@ -30,7 +30,7 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
                                     ColumnRefSet outputColumns) {
         super(OperatorType.PHYSICAL_HASH_JOIN);
         this.joinType = joinType;
-        this.joinPredicate = joinPredicate;
+        this.onPredicate = onPredicate;
         this.joinHint = joinHint;
         this.limit = limit;
         this.predicate = predicate;
@@ -42,8 +42,8 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
         return joinType;
     }
 
-    public ScalarOperator getJoinPredicate() {
-        return joinPredicate;
+    public ScalarOperator getOnPredicate() {
+        return onPredicate;
     }
 
     public String getJoinHint() {
@@ -64,7 +64,7 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
     public String toString() {
         return "PhysicalHashJoinOperator{" +
                 "joinType=" + joinType +
-                ", joinPredicate=" + joinPredicate +
+                ", joinPredicate=" + onPredicate +
                 ", limit=" + limit +
                 ", predicate=" + predicate +
                 '}';
@@ -73,8 +73,8 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
     @Override
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet refs = super.getUsedColumns();
-        if (joinPredicate != null) {
-            refs.union(joinPredicate.getUsedColumns());
+        if (onPredicate != null) {
+            refs.union(onPredicate.getUsedColumns());
         }
         return refs;
     }
@@ -91,13 +91,13 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
             return false;
         }
         PhysicalHashJoinOperator that = (PhysicalHashJoinOperator) o;
-        return joinType == that.joinType && Objects.equals(joinPredicate, that.joinPredicate) &&
+        return joinType == that.joinType && Objects.equals(onPredicate, that.onPredicate) &&
                 Objects.equals(outputColumns, that.outputColumns);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), joinType, joinPredicate, outputColumns);
+        return Objects.hash(super.hashCode(), joinType, onPredicate, outputColumns);
     }
 
     @Override
@@ -112,7 +112,7 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
             return false;
         }
 
-        if (joinPredicate != null && joinPredicate.getUsedColumns().isIntersect(dictSet)) {
+        if (onPredicate != null && onPredicate.getUsedColumns().isIntersect(dictSet)) {
             return false;
         }
 
@@ -124,8 +124,8 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
             columnRefSet.union(predicate.getUsedColumns());
         }
 
-        if (joinPredicate != null) {
-            columnRefSet.union(joinPredicate.getUsedColumns());
+        if (onPredicate != null) {
+            columnRefSet.union(onPredicate.getUsedColumns());
         }
     }
 

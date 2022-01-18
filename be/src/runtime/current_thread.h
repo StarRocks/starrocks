@@ -11,8 +11,22 @@
 #include "util/defer_op.h"
 #include "util/uid_util.h"
 
+#define SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, check)                             \
+    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker); \
+    auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check);
+
 #define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker) \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker)
+
+#define SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(check) \
+    auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check)
+
+#define CHECK_MEM_LIMIT(err_msg)                                                     \
+    do {                                                                             \
+        if (tls_thread_status.check_mem_limit()) {                                   \
+            RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit(err_msg)); \
+        }                                                                            \
+    } while (0)
 
 namespace starrocks {
 
@@ -46,6 +60,14 @@ public:
         tls_mem_tracker = mem_tracker;
         return prev;
     }
+
+    bool set_check_mem_limit(bool check) {
+        bool prev_check = _check;
+        _check = check;
+        return prev_check;
+    }
+
+    bool check_mem_limit() { return _check; }
 
     static starrocks::MemTracker* mem_tracker() {
         if (UNLIKELY(tls_mem_tracker == nullptr)) {
@@ -132,6 +154,7 @@ private:
     int64_t _cache_size = 0;
     TUniqueId _query_id;
     bool _is_catched = false;
+    bool _check = true;
 };
 
 inline thread_local CurrentThread tls_thread_status;
@@ -151,6 +174,23 @@ public:
 
 private:
     MemTracker* _old_mem_tracker;
+};
+
+class CurrentThreadCheckMemLimitSetter {
+public:
+    explicit CurrentThreadCheckMemLimitSetter(bool check) {
+        _prev_check = tls_thread_status.set_check_mem_limit(check);
+    }
+
+    ~CurrentThreadCheckMemLimitSetter() { (void)tls_thread_status.set_check_mem_limit(_prev_check); }
+
+    CurrentThreadCheckMemLimitSetter(const CurrentThreadCheckMemLimitSetter&) = delete;
+    void operator=(const CurrentThreadCheckMemLimitSetter&) = delete;
+    CurrentThreadCheckMemLimitSetter(CurrentThreadCheckMemLimitSetter&&) = delete;
+    void operator=(CurrentThreadCheckMemLimitSetter&&) = delete;
+
+private:
+    bool _prev_check;
 };
 
 #define TRY_CATCH_BAD_ALLOC(stmt)                                            \

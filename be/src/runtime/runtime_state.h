@@ -191,17 +191,9 @@ public:
 
     std::vector<std::string>& output_files() { return _output_files; }
 
-    void set_import_label(const std::string& import_label) { _import_label = import_label; }
-
-    const std::string& import_label() { return _import_label; }
-
     const std::vector<std::string>& export_output_files() const { return _export_output_files; }
 
     void add_export_output_file(const std::string& file) { _export_output_files.push_back(file); }
-
-    void set_db_name(const std::string& db_name) { _db_name = db_name; }
-
-    const std::string& db_name() { return _db_name; }
 
     void set_load_job_id(int64_t job_id) { _load_job_id = job_id; }
 
@@ -363,8 +355,6 @@ private:
 
     std::vector<std::string> _export_output_files;
 
-    std::string _import_label;
-    std::string _db_name;
     int64_t _load_job_id = 0;
     std::unique_ptr<TLoadErrorHubInfo> _load_error_hub_info;
 

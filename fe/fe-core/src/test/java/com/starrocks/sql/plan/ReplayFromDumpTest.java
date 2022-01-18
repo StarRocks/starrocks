@@ -292,7 +292,7 @@ public class ReplayFromDumpTest {
 
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/cross_reorder"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("  14:CROSS JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("  13:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates: (2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2), " +
                 "CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1'\n"));
@@ -304,9 +304,8 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder"), null, TExplainLevel.NORMAL);
         System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("  |  <slot 40> : CAST(15: id_smallint AS INT)\n" +
-                "  |  <slot 41> : CAST(23: id_date AS DATETIME)\n" +
-                "  |  \n" +
-                "  5:OlapScanNode\n" +
+                "  |  <slot 41> : CAST(23: id_date AS DATETIME)\n"));
+        Assert.assertTrue(replayPair.second.contains("  5:OlapScanNode\n" +
                 "     TABLE: external_es_table_without_null"));
     }
 
@@ -328,12 +327,12 @@ public class ReplayFromDumpTest {
     }
 
     @Test
-    public void test() throws Exception {
+    public void testDecodeLimitWithProject() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("  12:Decode\n" +
+        Assert.assertTrue(replayPair.second.contains("  11:Decode\n" +
                 "  |  <dict id 42> : <string id 18>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
     }

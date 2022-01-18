@@ -5,7 +5,7 @@ package com.starrocks.sql.optimizer.rule.join;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -59,13 +59,20 @@ public class MultiJoinNode {
     private static void flattenJoinNode(OptExpression node, LinkedHashSet<OptExpression> atoms,
                                         List<ScalarOperator> predicates,
                                         Map<ColumnRefOperator, ScalarOperator> expressionMap) {
-        Operator operator = node.getOp();
-        if (!(operator instanceof LogicalProjectJoinOperator)) {
+        if (node.arity() == 0) {
             atoms.add(node);
             return;
         }
 
-        LogicalProjectJoinOperator joinOperator = (LogicalProjectJoinOperator) operator;
+        if (!(node.getOp() instanceof LogicalProjectOperator) ||
+                !(node.inputAt(0).getOp() instanceof LogicalJoinOperator)) {
+            atoms.add(node);
+            return;
+        }
+
+        LogicalProjectOperator projectOperator = (LogicalProjectOperator) node.getOp();
+        LogicalJoinOperator joinOperator = (LogicalJoinOperator) node.inputAt(0).getOp();
+
         if (!joinOperator.isInnerOrCrossJoin()) {
             atoms.add(node);
             return;
@@ -83,25 +90,21 @@ public class MultiJoinNode {
             return;
         }
 
-        if (joinOperator.getProjectOperator() != null) {
-            LogicalProjectOperator projection = joinOperator.getProjectOperator();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap().entrySet()) {
+            if (!entry.getValue().isColumnRef()
+                    && entry.getValue().getUsedColumns().isIntersect(node.inputAt(0).inputAt(0).getOutputColumns())
+                    && entry.getValue().getUsedColumns().isIntersect(node.inputAt(0).inputAt(1).getOutputColumns())) {
+                atoms.add(node);
+                return;
+            }
 
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
-                if (!entry.getValue().isColumnRef()
-                        && entry.getValue().getUsedColumns().isIntersect(node.inputAt(0).getOutputColumns())
-                        && entry.getValue().getUsedColumns().isIntersect(node.inputAt(1).getOutputColumns())) {
-                    atoms.add(node);
-                    return;
-                }
-
-                if (!entry.getValue().isColumnRef()) {
-                    expressionMap.put(entry.getKey(), entry.getValue());
-                }
+            if (!entry.getValue().isColumnRef()) {
+                expressionMap.put(entry.getKey(), entry.getValue());
             }
         }
 
-        flattenJoinNode(node.inputAt(0), atoms, predicates, expressionMap);
-        flattenJoinNode(node.inputAt(1), atoms, predicates, expressionMap);
+        flattenJoinNode(node.inputAt(0).inputAt(0), atoms, predicates, expressionMap);
+        flattenJoinNode(node.inputAt(0).inputAt(1), atoms, predicates, expressionMap);
         predicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
         Preconditions.checkState(!JoinPredicateUtils.isEqualBinaryPredicate(joinPredicate));
         predicates.addAll(Utils.extractConjuncts(joinPredicate));

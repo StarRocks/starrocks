@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -30,20 +29,6 @@ public class PruneJoinColumnsRule extends TransformationRule {
         ColumnRefSet requiredColumns = context.getTaskContext().get(0).getRequiredColumns();
         ColumnRefSet outputColumns = (ColumnRefSet) joinOperator.getOutputColumns(new ExpressionContext(input)).clone();
         outputColumns.intersect(requiredColumns);
-        if (outputColumns.isEmpty()) {
-            Preconditions.checkState(false);
-            /*
-            ColumnRefSet columnRefSet = new ColumnRefSet();
-            columnRefSet.union(input.inputAt(0).getOutputColumns());
-            columnRefSet.union(input.inputAt(1).getOutputColumns());
-
-            ColumnRefOperator columnRefOperator = Utils.findSmallestColumnRef(
-                    joinOperator.getRequiredChildInputColumns()
-                            .getStream().mapToObj(c ->
-                                    context.getColumnRefFactory().getColumnRef(c)).collect(Collectors.toList()));
-            outputColumns.union(columnRefOperator);
-             */
-        }
 
         if (!outputColumns.equals(joinOperator.getOutputColumns())) {
             LogicalJoinOperator newJoin = new LogicalJoinOperator.Builder()

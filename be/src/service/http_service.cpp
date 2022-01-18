@@ -164,7 +164,7 @@ Status HttpService::start() {
     _http_handlers.emplace_back(show_compaction_action);
 
     CompactionAction* run_compaction_action = new CompactionAction(CompactionActionType::RUN_COMPACTION);
-    _ev_http_server->register_handler(HttpMethod::POST, "/api/compaction/run", run_compaction_action);
+    _ev_http_server->register_handler(HttpMethod::POST, "/api/compact", run_compaction_action);
     _http_handlers.emplace_back(run_compaction_action);
 
     UpdateConfigAction* update_config_action = new UpdateConfigAction(_env);

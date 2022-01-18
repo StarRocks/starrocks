@@ -300,7 +300,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
             if (MetastoreConf.getVar(conf, ConfVars.THRIFT_URI_SELECTION).equalsIgnoreCase("RANDOM")) {
                 List<URI> uriList = Arrays.asList(metastoreUris);
                 Collections.shuffle(uriList);
-                metastoreUris = (URI[]) uriList.toArray();
+                metastoreUris = uriList.toArray(metastoreUris);
             }
         } catch (IllegalArgumentException e) {
             throw (e);

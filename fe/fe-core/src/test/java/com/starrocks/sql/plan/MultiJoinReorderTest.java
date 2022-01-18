@@ -32,11 +32,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
     }
 
     @Test
-    public void test() throws Exception {
-        String sql = "select v1,v4,v7 from t0 inner join t1 on v2 = v5 inner join t2 on v v3 = v8";
-    }
-
-    @Test
     public void testCrossJoinReorderGreedy() throws Exception {
         connectContext.getSessionVariable().disableDPJoinReorder();
 
@@ -325,6 +320,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "left join (select t1.v5 from t1 join t3 on t1.v4 = t3.v1 join t0 join t2) a " +
                 "on t1.v6 = a.v5";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  16:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)"));
 

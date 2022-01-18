@@ -90,6 +90,10 @@ public class ExecPlan {
         return physicalPlan;
     }
 
+    public List<ColumnRefOperator> getOutputColumns() {
+        return outputColumns;
+    }
+
     public String getExplainString(TExplainLevel level) {
         StringBuilder str = new StringBuilder();
         if (level == null) {

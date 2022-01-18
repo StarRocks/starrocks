@@ -53,6 +53,8 @@ public:
 
     Status on_rowset_finished(Tablet* tablet, Rowset* rowset);
 
+    void on_rowset_cancel(Tablet* tablet, Rowset* rowset);
+
     ThreadPool* apply_thread_pool() { return _apply_thread_pool.get(); }
 
     DynamicCache<uint64_t, PrimaryIndex>& index_cache() { return _index_cache; }

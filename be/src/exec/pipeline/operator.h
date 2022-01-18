@@ -227,6 +227,8 @@ public:
 
     RuntimeState* runtime_state() { return _state; }
 
+    RowDescriptor* row_desc() { return &_row_desc; }
+
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state) {
         auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);

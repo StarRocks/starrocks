@@ -82,7 +82,7 @@ public final class SqlToScalarOperatorTranslator {
                     Map.Entry::getKey).orElse(null);
             Preconditions.checkNotNull(columnRef);
         } else {
-            columnRef = columnRefFactory.create(expression, expression.getType(), expression.isNullable());
+            columnRef = columnRefFactory.create(expression, expression.getType(), scalarOperator.isNullable());
         }
         projections.put(columnRef, scalarOperator);
         return columnRef;

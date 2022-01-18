@@ -495,7 +495,6 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "               ORDER  BY state) \n" +
                 "ORDER  BY hiredate";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  4:Decode\n" +
                 "  |  <dict id 10> : <string id 2>"));
 

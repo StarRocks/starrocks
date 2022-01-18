@@ -3,8 +3,7 @@ select k from (select v1 + 1 as k from t0) a
 [result]
 logical project (col)
     logical project (col + 1)
-        logical project (col,col,col)
-            logical scan
+        logical scan
 [end]
 
 [sql]
@@ -13,8 +12,7 @@ select * from (select k2 from (select v1 as k1, v2 as k2 from t0) a) b
 logical project (col)
     logical project (col)
         logical project (col,col)
-            logical project (col,col,col)
-                logical scan
+            logical scan
 [end]
 
 [sql]
@@ -22,11 +20,9 @@ select v1 from t0 where v2 in (select td from tall)
 [result]
 logical project (col)
     logical apply (col IN (col))
-        logical project (col,col,col)
-            logical scan
+        logical scan
         logical project (col)
-            logical project (col,col,col,col,col,col,col,col,col)
-                logical scan
+            logical scan
 [end]
 
 [sql]
@@ -34,12 +30,10 @@ select v1 from t0 where exists (select td from tall where tc = v3)
 [result]
 logical project (col)
     logical apply (EXISTS col)
-        logical project (col,col,col)
-            logical scan
+        logical scan
         logical project (col)
             logical filter (cast(col as bigint(20)) = col)
-                logical project (col,col,col,col,col,col,col,col,col)
-                    logical scan
+                logical scan
 [end]
 
 [sql]
@@ -48,12 +42,10 @@ select v1 from t0 where v2 in (select td from tall where tc = v3) and v1 > 10
 logical project (col)
     logical filter (col > 10)
         logical apply (col IN (col))
-            logical project (col,col,col)
-                logical scan
+            logical scan
             logical project (col)
                 logical filter (cast(col as bigint(20)) = col)
-                    logical project (col,col,col,col,col,col,col,col,col)
-                        logical scan
+                    logical scan
 [end]
 
 [sql]
@@ -63,14 +55,11 @@ logical project (col)
     logical apply (col IN (col))
         logical project (col,col,col,col,col,col)
             logical cross join
-                logical project (col,col,col)
-                    logical scan
-                logical project (col,col,col)
-                    logical scan
+                logical scan
+                logical scan
         logical project (col)
             logical filter (col = col)
-                logical project (col,col,col)
-                    logical scan
+                logical scan
 [end]
 
 [sql]
@@ -78,16 +67,13 @@ select v1 from t0 where v2 in (select v4 from t1 where v5 = v3 and v6 in (select
 [result]
 logical project (col)
     logical apply (col IN (col))
-        logical project (col,col,col)
-            logical scan
+        logical scan
         logical project (col)
             logical filter (col = col)
                 logical apply (col IN (col))
-                    logical project (col,col,col)
-                        logical scan
+                    logical scan
                     logical project (col)
-                        logical project (col,col,col)
-                            logical scan
+                        logical scan
 [end]
 
 [sql]
@@ -96,14 +82,11 @@ select v1 from t0 where v2 in (select v4 from t1) and v3 in (select v7 from t2);
 logical project (col)
     logical apply (col IN (col))
         logical apply (col IN (col))
-            logical project (col,col,col)
-                logical scan
+            logical scan
             logical project (col)
-                logical project (col,col,col)
-                    logical scan
-        logical project (col)
-            logical project (col,col,col)
                 logical scan
+        logical project (col)
+            logical scan
 [end]
 
 [sql]
@@ -112,11 +95,9 @@ select v1 from t0 where v2 in (select v4 from t1) and v3 in (1, 2, 3);
 logical project (col)
     logical filter (col IN (1, 2, 3))
         logical apply (col IN (col))
-            logical project (col,col,col)
-                logical scan
+            logical scan
             logical project (col)
-                logical project (col,col,col)
-                    logical scan
+                logical scan
 [end]
 
 [sql]
@@ -125,15 +106,12 @@ select v1 from t0 where v2 in (select v4 from t1) and exists (select v7 from t2 
 logical project (col)
     logical apply (EXISTS col)
         logical apply (col IN (col))
-            logical project (col,col,col)
-                logical scan
+            logical scan
             logical project (col)
-                logical project (col,col,col)
-                    logical scan
+                logical scan
         logical project (col)
             logical filter (col = col)
-                logical project (col,col,col)
-                    logical scan
+                logical scan
 [end]
 
 [sql]
@@ -143,16 +121,13 @@ logical project (col)
     logical filter (col = col AND col = col)
         logical apply (col)
             logical apply (col)
-                logical project (col,col,col)
-                    logical scan
+                logical scan
                 logical project (col)
-                    logical project (col,col,col)
-                        logical scan
+                    logical scan
             logical project (col)
                 logical aggregate () (sum(col))
                     logical project (col)
-                        logical project (col,col,col)
-                            logical scan
+                        logical scan
 [end]
 
 [sql]
@@ -172,14 +147,12 @@ select * from t0 where exists (select sum(v4) from t1 where v2= v4);
 [result]
 logical project (col,col,col)
     logical apply (EXISTS col)
-        logical project (col,col,col)
-            logical scan
+        logical scan
         logical project (col)
             logical aggregate () (sum(col))
                 logical project (col)
                     logical filter (col = col)
-                        logical project (col,col,col)
-                            logical scan
+                        logical scan
 [end]
 
 [sql]

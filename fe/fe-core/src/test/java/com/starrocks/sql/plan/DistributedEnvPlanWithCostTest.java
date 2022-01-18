@@ -261,7 +261,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     tabletRatio=3/3\n" +
                 "     tabletList=10042,10044,10046\n" +
                 "     cardinality=5\n" +
-                "     avgRowSize=10.0\n" +
+                "     avgRowSize=2.0\n" +
                 "     numNodes=0\n" +
                 "     limit: 5"));
     }
@@ -413,7 +413,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "group by supp_nation, cust_nation, l_year order by supp_nation, cust_nation, l_year;";
         String plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("     probe runtime filters:\n"
-                + "     - filter_id = 2, probe_expr = (11: L_SUPPKEY)\n"));
+                + "     - filter_id = 3, probe_expr = (11: L_SUPPKEY)\n"));
     }
 
     @Test
@@ -522,15 +522,42 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testCrossJoinPruneChildByProject() throws Exception {
         String sql = "SELECT t2.v7 FROM  t0 right SEMI JOIN t1 on t0.v1=t1.v4, t2";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("7:CROSS JOIN\n" +
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("  6:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v4-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * v7-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                 "  |  \n" +
-                "  |----6:EXCHANGE\n" +
+                "  |----5:EXCHANGE\n" +
+                "  |       cardinality: 1\n" +
                 "  |    \n" +
-                "  4:Project\n" +
-                "  |  <slot 1> : 1: v1"));
+                "  3:HASH JOIN\n" +
+                "  |  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: [1: v1, BIGINT, true] = [4: v4, BIGINT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v4), remote = false\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * v4-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |       cardinality: 1\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     table: t0, rollup: t0\n" +
+                "     preAggregation: on\n" +
+                "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                "     tabletList=10006,10008,10010\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
+                "     cardinality: 1\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: v1)\n" +
+                "     column statistics: \n" +
+                "     * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
     }
 
     @Test

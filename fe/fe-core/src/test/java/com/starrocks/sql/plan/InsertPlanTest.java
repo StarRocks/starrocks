@@ -79,7 +79,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
+                "     avgRowSize=1.0\n" +
                 "     numNodes=0"));
     }
 
@@ -257,7 +257,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=4.0\n" +
+                "     avgRowSize=2.0\n" +
                 "     numNodes=0"));
 
         sql = "insert into test.mysql_table(k1) select v1 from t0";
@@ -281,7 +281,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
+                "     avgRowSize=1.0\n" +
                 "     numNodes=0"));
     }
 

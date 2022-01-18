@@ -228,7 +228,8 @@ public class ExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
-            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp().isEquivalence(), type1, type2);
+            Type compatibleType =
+                    TypeManager.getCompatibleTypeForBinary(node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
             if (!canCast(type1, compatibleType)) {
                 throw new SemanticException(

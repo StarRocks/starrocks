@@ -31,23 +31,21 @@ namespace starrocks {
 // add "Engine" as task prefix to prevent duplicate name with agent task
 class EngineStorageMigrationTask : public EngineTask {
 public:
-    OLAPStatus execute() override;
+    Status execute() override;
 
 public:
     EngineStorageMigrationTask(TTabletId tablet_id, TSchemaHash schema_hash, DataDir* dest_store);
     ~EngineStorageMigrationTask() override = default;
 
 private:
-    OLAPStatus _storage_migrate(TabletSharedPtr tablet);
+    Status _storage_migrate(TabletSharedPtr tablet);
 
     void _generate_new_header(DataDir* store, const uint64_t new_shard, const TabletSharedPtr& tablet,
                               const std::vector<RowsetSharedPtr>& consistent_rowsets,
                               const TabletMetaSharedPtr& new_tablet_meta);
 
-    // TODO: hkp
-    // rewrite this function
-    OLAPStatus _copy_index_and_data_files(const std::string& header_path, const TabletSharedPtr& ref_tablet,
-                                          const std::vector<RowsetSharedPtr>& consistent_rowsets) const;
+    Status _copy_index_and_data_files(const std::string& header_path, const TabletSharedPtr& ref_tablet,
+                                      const std::vector<RowsetSharedPtr>& consistent_rowsets) const;
 
 private:
     TTabletId _tablet_id;

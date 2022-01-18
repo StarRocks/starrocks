@@ -156,8 +156,6 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
         _resource_pool = exec_env->thread_mgr()->register_pool();
         DCHECK(_resource_pool != nullptr);
     }
-    _db_name = "insert_stmt";
-    _import_label = print_id(fragment_instance_id);
     _runtime_filter_port = _obj_pool->add(new RuntimeFilterPort(this));
 
     return Status::OK();
@@ -262,8 +260,7 @@ Status RuntimeState::check_mem_limit(const std::string& msg) {
 const int64_t MAX_ERROR_NUM = 50;
 
 Status RuntimeState::create_error_log_file() {
-    _exec_env->load_path_mgr()->get_load_error_file_name(_db_name, _import_label, _fragment_instance_id,
-                                                         &_error_log_file_path);
+    _exec_env->load_path_mgr()->get_load_error_file_name(_fragment_instance_id, &_error_log_file_path);
     std::string error_log_absolute_path =
             _exec_env->load_path_mgr()->get_load_error_absolute_path(_error_log_file_path);
     _error_log_file = new std::ofstream(error_log_absolute_path, std::ifstream::out);
