@@ -5970,8 +5970,6 @@ public class Catalog {
                     } else {
                         olapTable.setHasForbitGlobalDict(false);
                     }
-                    // just for debug 
-                    LOG.warn("modify setHasForbitGlobalDict:{} ", enAble);
                 }
             } else {
                 TableProperty tableProperty = olapTable.getTableProperty();

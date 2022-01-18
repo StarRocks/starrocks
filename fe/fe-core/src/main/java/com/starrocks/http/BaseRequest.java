@@ -108,10 +108,12 @@ public class BaseRequest {
         if (decoder == null) {
             decoder = new QueryStringDecoder(uri);
         }
+
         List<String> values = decoder.parameters().get(key);
         if (values != null && values.size() > 0) {
             return values.get(0);
         }
+        
         return params.get(key);
     }
 
