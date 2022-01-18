@@ -28,10 +28,10 @@ Operator::Operator(OperatorFactory* factory, int32_t id, const std::string& name
     }
     _runtime_profile = std::make_shared<RuntimeProfile>(profile_name);
     _runtime_profile->set_metadata(_id);
-    _mem_tracker = std::make_unique<MemTracker>(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr);
 }
 
 Status Operator::prepare(RuntimeState* state) {
+    _mem_tracker = state->instance_mem_tracker();
     _total_timer = ADD_TIMER(_runtime_profile, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_runtime_profile, "PushTotalTime");
     _pull_timer = ADD_TIMER(_runtime_profile, "PullTotalTime");
