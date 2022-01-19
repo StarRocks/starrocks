@@ -378,7 +378,6 @@ public class TimestampArithmeticExpr extends Expr {
         return strBuilder.toString();
     }
 
-
     // Time units supported in timestamp arithmetic.
     public enum TimeUnit {
         YEAR("YEAR"),                               // YEARS
