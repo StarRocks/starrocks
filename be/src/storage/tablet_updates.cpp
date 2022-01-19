@@ -1035,7 +1035,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         _compaction_state.reset();
         std::string msg = Substitute("_commit_compaction error: load compaction state failed: $0 $1",
                                      status.to_string(), debug_string());
-        LOG(ERROR) << msg;
+        LOG(WARNING) << msg;
         return status;
     }
     std::lock_guard wl(_lock);
