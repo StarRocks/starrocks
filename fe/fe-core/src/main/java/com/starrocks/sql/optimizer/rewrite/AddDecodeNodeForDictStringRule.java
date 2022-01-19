@@ -99,7 +99,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         ColumnRefSet disableDictOptimizeColumns;
         // For multi-stage aggregation of count distinct, in addition to local aggregation,
         // other stages need to be rewritten as well
-        Set<Integer> needRewriteAgg;
+        Set<Integer> needRewriteMultiCountDistinctColumns;
 
         public DecodeContext(Map<Long, List<Integer>> tableIdToStringColumnIds, ColumnRefFactory columnRefFactory) {
             this.tableIdToStringColumnIds = tableIdToStringColumnIds;
@@ -109,7 +109,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             globalDicts = Lists.newArrayList();
             disableDictOptimizeColumns = new ColumnRefSet();
             allStringColumnIds = Sets.newHashSet();
-            needRewriteAgg = Sets.newHashSet();
+            needRewriteMultiCountDistinctColumns = Sets.newHashSet();
             for (List<Integer> ids : tableIdToStringColumnIds.values()) {
                 allStringColumnIds.addAll(ids);
             }
@@ -119,7 +119,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             stringColumnIdToDictColumnIds.clear();
             stringFunctions.clear();
             hasEncoded = false;
-            needRewriteAgg.clear();
+            needRewriteMultiCountDistinctColumns.clear();
         }
 
         public DecodeContext merge(DecodeContext other) {
@@ -444,10 +444,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 if (canApplyDictDecodeOpt) {
                     CallOperator oldCall = kv.getValue();
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
-                    if (context.needRewriteAgg.contains(columnId)) {
+                    if (context.needRewriteMultiCountDistinctColumns.contains(columnId)) {
                         // we only need rewrite TFunction
-                        Type[] newTypes = new Type[1];
-                        newTypes[0] = ID_TYPE;
+                        Type[] newTypes = new Type[] {ID_TYPE};
                         AggregateFunction newFunction =
                                 (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -499,7 +498,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
                             outputColumn = newDictColumn;
                         } else if (fnName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) {
-                            context.needRewriteAgg.add(outputColumn.getId());
+                            context.needRewriteMultiCountDistinctColumns.add(outputColumn.getId());
                         }
 
                         CallOperator newCall = new CallOperator(oldCall.getFnName(), newReturnType,
@@ -602,14 +601,12 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
             boolean needRewrite =
-                    context.needRewriteAgg.isEmpty() ? false : aggOperator.couldApplyStringDict(context.needRewriteAgg);
+                    !context.needRewriteMultiCountDistinctColumns.isEmpty() &&
+                            aggOperator.couldApplyStringDict(context.needRewriteMultiCountDistinctColumns);
+            needRewrite = needRewrite || (!context.stringColumnIdToDictColumnIds.keySet().isEmpty() &&
+                    aggOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet()));
             if (context.hasEncoded || needRewrite) {
-                boolean couldApplyStringDict = needRewrite;
-                if (!needRewrite) {
-                    couldApplyStringDict =
-                            aggOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet());
-                }
-                if (couldApplyStringDict) {
+                if (needRewrite) {
                     PhysicalHashAggregateOperator newAggOper = rewriteAggOperator(aggOperator,
                             context);
                     OptExpression result = OptExpression.create(newAggOper, newChildExpr);
