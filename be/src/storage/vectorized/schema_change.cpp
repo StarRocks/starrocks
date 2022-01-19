@@ -685,7 +685,7 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
             if (status.is_end_of_file()) {
                 break;
             } else {
-                LOG(WARNING) << "tablet reader failed to get next chunk, status: " << status.to_string();
+                LOG(WARNING) << "tablet reader failed to get next chunk, status: " << status.get_error_msg();
                 return false;
             }
         }
