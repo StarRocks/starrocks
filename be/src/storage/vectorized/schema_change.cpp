@@ -707,7 +707,7 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
 
         if (!status.ok()) {
             if (!status.is_end_of_file()) {
-                LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
+                LOG(WARNING) << "failed to get next chunk, status is:" << status.get_error_msg();
                 return false;
             } else {
                 break;
