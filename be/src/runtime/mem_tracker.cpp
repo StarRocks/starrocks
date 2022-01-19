@@ -214,7 +214,7 @@ Status MemTracker::check_mem_limit(const std::string& msg) const {
 
 std::string MemTracker::err_msg(const std::string& msg) const {
     std::stringstream str;
-    str << "Memory exceed limit. " << msg << " ";
+    str << "Memory of " << label() << " exceed limit. " << msg << " ";
     str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
     switch (type()) {
     case MemTracker::NO_SET:
@@ -234,6 +234,9 @@ std::string MemTracker::err_msg(const std::string& msg) const {
         break;
     case MemTracker::CONSISTENCY:
         str << "Mem usage has exceed the limit of consistency";
+        break;
+    case MemTracker::SCHEMA_CHANGE_TASK:
+        str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]";
         break;
     default:
         break;

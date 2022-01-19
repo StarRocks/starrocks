@@ -372,35 +372,38 @@ private:
     vectorized::GlobalDictMaps _load_global_dicts;
 };
 
-#define LIMIT_EXCEEDED(tracker, state, msg)                                                       \
-    do {                                                                                          \
-        stringstream str;                                                                         \
-        str << "Memory exceed limit. " << msg << " ";                                             \
-        str << "Backend: " << BackendOptions::get_localhost() << ", ";                            \
-        if (state != nullptr) {                                                                   \
-            str << "fragment: " << print_id(state->fragment_instance_id()) << " ";                \
-        }                                                                                         \
-        str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";     \
-        switch (tracker->type()) {                                                                \
-        case MemTracker::NO_SET:                                                                  \
-            break;                                                                                \
-        case MemTracker::QUERY:                                                                   \
-            str << "Mem usage has exceed the limit of single query, You can change the limit by " \
-                   "set session variable exec_mem_limit.";                                        \
-            break;                                                                                \
-        case MemTracker::PROCESS:                                                                 \
-            str << "Mem usage has exceed the limit of BE";                                        \
-            break;                                                                                \
-        case MemTracker::QUERY_POOL:                                                              \
-            str << "Mem usage has exceed the limit of query pool";                                \
-            break;                                                                                \
-        case MemTracker::LOAD:                                                                    \
-            str << "Mem usage has exceed the limit of load";                                      \
-            break;                                                                                \
-        default:                                                                                  \
-            break;                                                                                \
-        }                                                                                         \
-        return Status::MemoryLimitExceeded(str.str());                                            \
+#define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \
+    do {                                                                                                            \
+        stringstream str;                                                                                           \
+        str << "Memory of " << tracker->label() << " exceed limit. " << msg << " ";                                 \
+        str << "Backend: " << BackendOptions::get_localhost() << ", ";                                              \
+        if (state != nullptr) {                                                                                     \
+            str << "fragment: " << print_id(state->fragment_instance_id()) << " ";                                  \
+        }                                                                                                           \
+        str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";                       \
+        switch (tracker->type()) {                                                                                  \
+        case MemTracker::NO_SET:                                                                                    \
+            break;                                                                                                  \
+        case MemTracker::QUERY:                                                                                     \
+            str << "Mem usage has exceed the limit of single query, You can change the limit by "                   \
+                   "set session variable exec_mem_limit.";                                                          \
+            break;                                                                                                  \
+        case MemTracker::PROCESS:                                                                                   \
+            str << "Mem usage has exceed the limit of BE";                                                          \
+            break;                                                                                                  \
+        case MemTracker::QUERY_POOL:                                                                                \
+            str << "Mem usage has exceed the limit of query pool";                                                  \
+            break;                                                                                                  \
+        case MemTracker::LOAD:                                                                                      \
+            str << "Mem usage has exceed the limit of load";                                                        \
+            break;                                                                                                  \
+        case MemTracker::SCHEMA_CHANGE_TASK:                                                                        \
+            str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]"; \
+            break;                                                                                                  \
+        default:                                                                                                    \
+            break;                                                                                                  \
+        }                                                                                                           \
+        return Status::MemoryLimitExceeded(str.str());                                                              \
     } while (false)
 
 #define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \
