@@ -84,6 +84,7 @@ public:
     // Input parameters:
     // * task: the task need callback thread to do
     void submit_task(const TAgentTaskRequest& task);
+    void submit_tasks(std::vector<TAgentTaskRequest>* task);
 
 private:
     bool _register_task_info(const TTaskType::type task_type, int64_t signature);

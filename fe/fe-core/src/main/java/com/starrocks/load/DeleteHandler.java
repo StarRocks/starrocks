@@ -116,17 +116,24 @@ public class DeleteHandler implements Writable {
     // so it does not need to protect, although removeOldDeleteInfo only be called in one thread
     // but other thread may call deleteInfoList.add(deleteInfo) so deleteInfoList is not thread safe.
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final Map<Long, Integer> killJobMap;
 
     public DeleteHandler() {
         idToDeleteJob = Maps.newConcurrentMap();
         dbToDeleteInfos = Maps.newConcurrentMap();
+        killJobMap = Maps.newConcurrentMap();
+    }
+
+    public void killJob(long jobId) {
+        killJobMap.put(jobId, 1);
     }
 
     private enum CancelType {
         METADATA_MISSING,
         TIMEOUT,
         COMMIT_FAIL,
-        UNKNOWN
+        UNKNOWN,
+        USER
     }
 
     public void process(DeleteStmt stmt) throws DdlException, QueryStateException {
@@ -191,8 +198,7 @@ public class DeleteHandler implements Writable {
 
                 // generate label
                 String label = "delete_" + UUID.randomUUID();
-                //generate jobId
-                long jobId = Catalog.getCurrentCatalog().getNextId();
+                long jobId = stmt.getJobId();
                 // begin txn here and generate txn id
                 transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                         Lists.newArrayList(table.getId()), label, null,
@@ -284,7 +290,30 @@ public class DeleteHandler implements Writable {
             LOG.info("waiting delete Job finish, signature: {}, timeout: {}", transactionId, timeoutMs);
             boolean ok = false;
             try {
-                ok = countDownLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+                long countDownTime = timeoutMs;
+                while (countDownTime > 0) {
+                    if (countDownTime > 1000) {
+                        countDownTime -= 1000;
+                        if (killJobMap.containsKey(deleteJob.getId())) {
+                            Iterator<Long> iterator = killJobMap.keySet().iterator();
+                            while (iterator.hasNext()) {
+                                if (iterator.next().equals(deleteJob.getId())) {
+                                    iterator.remove();
+                                    break;
+                                }
+                            }
+                            cancelJob(deleteJob, CancelType.USER, "user cancelled");
+                            throw new DdlException("Cancelled");
+                        }
+                        ok = countDownLatch.await(1, TimeUnit.SECONDS);
+                        if (ok) {
+                            break;
+                        }
+                    } else {
+                        ok = countDownLatch.await(countDownTime, TimeUnit.MILLISECONDS);
+                        break;
+                    }
+                }
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
             }
@@ -470,6 +499,18 @@ public class DeleteHandler implements Writable {
         }
         LOG.info("start to cancel delete job, transactionId: {}, cancelType: {}", job.getTransactionId(),
                 cancelType.name());
+
+        // create push task for each backends
+        List<Long> backendIds = Catalog.getCurrentSystemInfo().getBackendIds(true);
+        for (Long backendId : backendIds) {
+            PushTask pushTask = new PushTask(backendId, TPushType.CANCEL_DELETE, TPriority.HIGH,
+                    TTaskType.REALTIME_PUSH, job.getTransactionId(),
+                    Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId());
+            AgentTaskQueue.removePushTaskByTransactionId(backendId, job.getTransactionId(),
+                    TPushType.DELETE, TTaskType.REALTIME_PUSH);
+            AgentTaskQueue.addTask(pushTask);
+        }
+
         GlobalTransactionMgr globalTransactionMgr = Catalog.getCurrentGlobalTransactionMgr();
         try {
             globalTransactionMgr.abortTransaction(job.getDeleteInfo().getDbId(), job.getTransactionId(), reason);
