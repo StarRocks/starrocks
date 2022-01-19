@@ -236,8 +236,7 @@ std::string MemTracker::err_msg(const std::string& msg) const {
         str << "Mem usage has exceed the limit of consistency";
         break;
     case MemTracker::SCHEMA_CHANGE_TASK:
-        str << "Mem usage has exceed the limit of single schema change task, You can change the limit by modify BE "
-               "config [memory_limitation_per_thread_for_schema_change]";
+        str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]";
         break;
     default:
         break;
