@@ -503,7 +503,7 @@ Status ChunkAllocator::allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema
     if (_memory_limitation > 0 && _memory_allocated + mem_size > _memory_limitation) {
         LOG(WARNING) << "ChunkAllocator::allocate() memory exceed. "
                      << "m_memory_allocated=" << _memory_allocated;
-        return Status::InternalError("allocate chunk failed because of memory limit");
+        return Status::MemoryLimitExceeded("Fail to allocate chunk due to exceed memory limit");
     }
 
     chunk = ChunkHelper::new_chunk(schema, num_rows);
