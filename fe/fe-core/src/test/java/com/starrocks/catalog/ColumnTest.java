@@ -150,7 +150,7 @@ public class ColumnTest {
         }
 
         try {
-            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
                     CURRENT_TIMESTAMP_VALUE, "");
             Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
                     NOT_SET, "");

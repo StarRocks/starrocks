@@ -342,7 +342,7 @@ public class Column implements Writable {
 
         // default value should same
         if (thisDefaultValueType == DefaultValueType.VARY) {
-            if (!this.getDefaultExpr().getExpr().equals(other.getDefaultExpr().getExpr())) {
+            if (!this.getDefaultExpr().getExpr().equalsIgnoreCase(other.getDefaultExpr().getExpr())) {
                 throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
             }
         } else if (this.getDefaultValueType() == DefaultValueType.CONST) {
@@ -351,7 +351,7 @@ public class Column implements Writable {
                     throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
                 }
             } else if (this.getDefaultExpr() != null && other.getDefaultExpr() != null) {
-                if (!this.getDefaultExpr().getExpr().equals(other.getDefaultExpr().getExpr())) {
+                if (!this.getDefaultExpr().getExpr().equalsIgnoreCase(other.getDefaultExpr().getExpr())) {
                     throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
                 }
             } else {
