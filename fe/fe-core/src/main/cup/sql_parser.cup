@@ -794,10 +794,12 @@ alter_stmt ::=
     {:
         RESULT = new AlterUserStmt(user);
     :}
-    | KW_ALTER KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel opt_properties:jobProperties
+    | KW_ALTER KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel
+      opt_load_property_list:loadPropertyList
+      opt_properties:jobProperties
       opt_datasource_properties:datasourceProperties
     {:
-        RESULT = new AlterRoutineLoadStmt(jobLabel, jobProperties, datasourceProperties);
+        RESULT = new AlterRoutineLoadStmt(jobLabel, loadPropertyList, jobProperties, datasourceProperties);
     :}
     ;
 

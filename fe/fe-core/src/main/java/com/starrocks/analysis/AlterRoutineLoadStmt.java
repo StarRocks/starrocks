@@ -28,7 +28,9 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.load.RoutineLoadDesc;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -59,6 +61,8 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .build();
 
     private final LabelName labelName;
+    private final List<ParseNode> loadPropertyList;
+    private RoutineLoadDesc routineLoadDesc;
     private final Map<String, String> jobProperties;
     private final RoutineLoadDataSourceProperties dataSourceProperties;
 
@@ -66,9 +70,11 @@ public class AlterRoutineLoadStmt extends DdlStmt {
     // analyzed data source properties are saved in dataSourceProperties.
     private Map<String, String> analyzedJobProperties = Maps.newHashMap();
 
-    public AlterRoutineLoadStmt(LabelName labelName, Map<String, String> jobProperties,
+    public AlterRoutineLoadStmt(LabelName labelName, List<ParseNode> loadPropertyList,
+                                Map<String, String> jobProperties,
                                 RoutineLoadDataSourceProperties dataSourceProperties) {
         this.labelName = labelName;
+        this.loadPropertyList = loadPropertyList;
         this.jobProperties = jobProperties != null ? jobProperties : Maps.newHashMap();
         this.dataSourceProperties = dataSourceProperties;
     }
@@ -93,18 +99,27 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         return dataSourceProperties;
     }
 
+    public RoutineLoadDesc getRoutineLoadDesc() {
+        return routineLoadDesc;
+    }
+
+    public List<ParseNode> getLoadPropertyList() {
+        return loadPropertyList;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
 
         labelName.analyze(analyzer);
         FeNameFormat.checkCommonName(NAME_TYPE, labelName.getLabelName());
+        routineLoadDesc = CreateRoutineLoadStmt.buildLoadDesc(loadPropertyList);
         // check routine load job properties include desired concurrent number etc.
         checkJobProperties();
         // check data source properties
         checkDataSourceProperties();
 
-        if (analyzedJobProperties.isEmpty() && !dataSourceProperties.hasAnalyzedProperties()) {
+        if (routineLoadDesc == null && analyzedJobProperties.isEmpty() && !dataSourceProperties.hasAnalyzedProperties()) {
             throw new AnalysisException("No properties are specified");
         }
     }
@@ -174,8 +189,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
 
         if (jobProperties.containsKey(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY)) {
             boolean stripOuterArray = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY));
-            analyzedJobProperties.put(jobProperties.get(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY),
-                    String.valueOf(stripOuterArray));
+            analyzedJobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, String.valueOf(stripOuterArray));
         }
     }
 
