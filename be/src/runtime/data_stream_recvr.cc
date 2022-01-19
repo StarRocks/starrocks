@@ -628,6 +628,8 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
                 // This chunks may contains different driver_sequence
                 if (item.driver_sequence >= 0 && _short_circuit_driver_sequences.find(item.driver_sequence) !=
                                                          _short_circuit_driver_sequences.end()) {
+                    // We may buffered closure in last reception, but the branch of the driver_sequence may
+                    // become short-circuit now, so we make sure to invoke the closure
                     if (item.closure != nullptr) {
                         item.closure->Run();
                     }
