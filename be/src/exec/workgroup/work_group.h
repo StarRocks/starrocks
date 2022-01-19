@@ -40,8 +40,9 @@ public:
     ~IoWorkGroupQueue() = default;
     void add(const WorkGroupPtr& wg) override {}
     void remove(const WorkGroupPtr& wg) override {}
-    WorkGroupPtr pick_next() override;
+    WorkGroupPtr pick_next() override { return nullptr; };
 
+    PriorityThreadPool::Task pick_next_task();
     bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
 
 private:
@@ -115,8 +116,7 @@ public:
 
     static constexpr int DEFAULT_WG_ID = 0;
     bool try_offer_io_task(const PriorityThreadPool::Task& task);
-    void pick_and_run_io_task();
-
+    PriorityThreadPool::Task pick_io_task();
 public:
     // Return current io task queue size
     // need be lock when invoking
@@ -159,7 +159,8 @@ private:
 
     // Queue on which work items are held until a thread is available to process them in
     // FIFO order.
-    BlockingPriorityQueue<PriorityThreadPool::Task> _io_work_queue;
+    // BlockingPriorityQueue<PriorityThreadPool::Task> _io_work_queue;
+    std::queue<PriorityThreadPool::Task> _io_work_queue;
 
     std::atomic<double> _cpu_expect_use_ratio;
     std::atomic<double> _cpu_actual_use_ratio;
@@ -203,6 +204,10 @@ public:
     size_t get_sum_cpu_limit() const { return _sum_cpu_limit; }
     void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
     int64_t get_sum_cpu_runtime_ns() const { return _sum_cpu_runtime_ns; }
+    void increment_sum_unadjusted_cpu_runtime_ns(int64_t cpu_runtime_ns) {
+        _sum_unadjusted_cpu_runtime_ns += cpu_runtime_ns;
+    }
+    int64_t get_sum_unadjusted_cpu_runtime_ns() const { return _sum_unadjusted_cpu_runtime_ns; }
 private:
     std::mutex _mutex;
     std::unordered_map<int, WorkGroupPtr> _workgroups;
@@ -210,6 +215,7 @@ private:
 
     std::atomic<size_t> _sum_cpu_limit = 0;
     std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
+    std::atomic<int64_t> _sum_unadjusted_cpu_runtime_ns = 0;
 };
 
 class DefaultWorkGroupInitialization {

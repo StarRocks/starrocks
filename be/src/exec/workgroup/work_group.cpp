@@ -159,15 +159,14 @@ void WorkGroup::update_cur_select_factor(double value) {
 }
 
 void WorkGroup::estimate_trend_factor_period() {
-    // maybe should add a guard
-
-    // Exapmle
-    // during a schedule period, actually this WorkGroup consume 70 chunk and use cpu resource percent 80
-    // but this WorkGroup cpu limit to percent 80
-    // meanwhile, WorkGroup read 200 chunk from io_threads, so we calculate some factor bellow
+    // As an example
+    // During the execution period, This WorkGroup actually consumes 70 chunks and uses 80% of the cpu resources
+    // But in reality, the WorkGroup's cpu resources are limited to 70% of
+    // At the same time, the WorkGroup reads 200 chunks from io_threads
+    // Therefore, we calculate the correlation factor as follows
     // decrease_factor = 70 / 0.8 * (0.7 / 0.8)
     // increase_factor = 200 / 0.7
-    // _expect_factor mean we except io resource ratio of this WorkGroup to suit to 70 percent cpu limit
+    // _expect_factor indicates the percentage of io resources we expect the WorkGroup to use so that it meets the 70% cpu limit
     // so _expect_factor = decrease_factor / increase_factor * 70
 
     double decrease_factor = _decrease_chunk_num_period / get_cpu_actual_use_ratio() * get_cpu_expected_use_ratio() /
@@ -176,23 +175,13 @@ void WorkGroup::estimate_trend_factor_period() {
 
     _expect_factor = decrease_factor / increase_factor * get_cpu_expected_use_ratio();
 
-    // diff_factor mean diff between actually need io resource percent and limit percent of cpu
-    // if it is nagative, it mean resouse less and need more
-    // if it is positive, it mean resouse is enough and can be reduce
+    // diff_factor indicates the difference between the actual percentage of io resources used and the limited cpu percentage
+    // If it is negative, it means that there are not enough resources and more resources are needed
+    // If it is positive, it means that its resources are sufficient and can be reduced by a fraction
     //_diff_factor = get_cpu_expected_use_ratio() - _expect_factor;
     _diff_factor = _select_factor - _expect_factor;
 
-    // just for debug
-    // LOG(WARNING) << "estimate_trend_factor_period: " << name()
-    //             << " decrease_chunk_num_period: " << _decrease_chunk_num_period
-    //             << " get_cpu_actual_use_ratio: " << get_cpu_actual_use_ratio()
-    //             << " get_cpu_expected_use_ratio: " << get_cpu_expected_use_ratio()
-    //             << " increase_chunk_num_period: " << _increase_chunk_num_period << " expect_factor: " << _expect_factor
-    //             << " decrease_factor: " << decrease_factor << " increase_factor: " << increase_factor
-    //             << " diff_factor: " << _diff_factor;
-
-    // it only use for this period to calculate factors
-    // over calculate, it must be reset to zero for next period
+    // reset
     _decrease_chunk_num_period = 1;
     _increase_chunk_num_period = 1;
 }
@@ -206,12 +195,6 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         return;
     }
 
-    bool expect = false;
-    if (!_is_scheduled.compare_exchange_strong(expect, true)) {
-        // maybe has other thread do it
-        return;
-    }
-
     _io_wgs.clear();
     for (const auto& wg : _ready_wgs) {
         _io_wgs.push_back(wg);
@@ -222,8 +205,8 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         wg->estimate_trend_factor_period();
     }
 
-    // positive_total_diff_factor count all workgroup which is short of io resource
-    // negative_total_diff_factor count all workgroup which over pay in io resource
+    // negative_total_diff_factor Accumulate All Under-resourced WorkGroup 
+    // positive_total_diff_factor Cumulative All Resource Excess WorkGroup 
     double positive_total_diff_factor = 0.0;
     double negative_total_diff_factor = 0.0;
     for (auto const& wg : _io_wgs) {
@@ -240,12 +223,8 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         _cur_schedule_num_period = _schedule_num_period;
     }
 
-    // just for debug
-    // LOG(WARNING) << "positive_total_diff_factor: " << positive_total_diff_factor
-    //            << " negative_total_diff_factor: " << negative_total_diff_factor;
-
-    // If positive_total_diff_factor <= 0, it mean not exist workgroup which over pay io resource
-    // so it don't need adjust, just keep
+    // If positive_total_diff_factor <= 0, it This means that all WorkGs have no excess resources
+    // So we don't need to adjust it and keep the original limit
     if (positive_total_diff_factor <= 0) {
         for (auto const& wg : _io_wgs) {
             wg->set_select_factor(wg->get_cpu_expected_use_ratio());
@@ -256,17 +235,17 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         return;
     }
 
-    // Example:
-    // there is two workgroup A and B
+    // As an example
+    // There are two WorkGroups A and B
     // A _expect_factor : 0.18757812499999998, and _cpu_expect_use_ratio : 0.7, _diff_factor : 0.512421875
     // B _expect_factor : 0.6749999999999999, and _cpu_expect_use_ratio : 0.3, _diff_factor :  -0.37499999999999994
     // so 0.18757812499999998 + 0.6749999999999999 < 1.0, it mean resource is enough, and available is  -0.37499999999999994 + 0.512421875
 
     if (positive_total_diff_factor + negative_total_diff_factor > 0) {
         // if positive_total_diff_factor + negative_total_diff_factor > 0
-        // it mean available resource more than short of resource
-        // so we just reduce resource of the workgroup which it over pay by ratio
-        // and add resource of the workgroup which it short of
+        // This means that the resources are sufficient
+        // So we can reduce the proportion of resources in the WorkGroup that are over-resourced
+        // Then increase the proportion of resources for those WorkGs that are under-resourced
         for (auto const& wg : _io_wgs) {
             if (wg->get_diff_factor() < 0) {
                 wg->update_select_factor(0 - negative_total_diff_factor * wg->get_diff_factor() /
@@ -278,9 +257,9 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         }
     } else {
         // if positive_total_diff_factor + negative_total_diff_factor <= 0
-        // it mean available resource less than short of resource, but exist some workgroup which over pay
-        // so we just reduce resource of the workgroup which it over pay by ratio
-        // and add resource of the workgroup which it short of
+        // This means that there are not enough resources, but some WorkGs are still over-resourced 
+        // So we can reduce the proportion of resources in the WorkGroup that are over-resourced
+        // Then increase the proportion of resources for those WorkGs that are under-resourced
         for (auto const& wg : _io_wgs) {
             if (wg->get_diff_factor() < 0) {
                 wg->update_select_factor(positive_total_diff_factor * wg->get_diff_factor() /
@@ -292,19 +271,13 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         }
     }
 
-    // just for debug
-    // LOG(WARNING) << "adjust weigth ==========================";
-    // for (auto const& wg : _io_wgs) {
-    //    LOG(WARNING) << "name " << wg->name() << " select_factor: " << wg->get_select_factor();
-    // }
-
     schedule_io_task();
     _cur_schedule_num = _cur_schedule_num_period;
     _is_scheduled.store(false, std::memory_order_release);
 }
 
 void IoWorkGroupQueue::schedule_io_task() {
-    // during schedule period, we pre calculate next period wg for speed up
+    // In a scheduling period, we calculate in advance
     for (size_t i = 0; i < _cur_schedule_num_period; i++) {
         size_t idx = get_next_wg_index();
         _cur_wait_run_wgs[i] = _io_wgs[idx];
@@ -313,7 +286,6 @@ void IoWorkGroupQueue::schedule_io_task() {
 }
 
 size_t IoWorkGroupQueue::get_next_wg_index() {
-    // we use Weighted round robin
     int index = -1;
     double total = 0;
     for (int i = 0; i < _io_wgs.size(); i++) {
@@ -352,8 +324,6 @@ PriorityThreadPool::Task IoWorkGroupQueue::pick_next_task() {
     }
     _total_task_num--;
 
-    // just for debug
-    // LOG(WARNING) << "select: " << wg->name();
     return wg->pick_io_task();
 
 }
