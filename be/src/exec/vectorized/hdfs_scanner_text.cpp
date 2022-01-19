@@ -46,22 +46,7 @@ Status HdfsScannerCSVReader::next_record(Record* record) {
     if (_should_stop_scan) {
         return Status::EndOfFile("Should stop for this reader!");
     }
-    char* d;
-    size_t pos = 0;
-    while ((d = _buff.find(_record_delimiter, pos)) == nullptr) {
-        pos = _buff.available();
-        _buff.compact();
-        if (_buff.free_space() == 0) {
-            RETURN_IF_ERROR(_expand_buffer());
-        }
-        RETURN_IF_ERROR(_fill_buffer());
-    }
-    size_t l = d - _buff.position();
-    *record = Record(_buff.position(), l);
-    _buff.skip(l + 1);
-    //               ^^ skip record delimiter.
-    _parsed_bytes += l + 1;
-    return Status::OK();
+    return CSVReader::next_record(record);
 }
 
 Status HdfsScannerCSVReader::_fill_buffer() {
