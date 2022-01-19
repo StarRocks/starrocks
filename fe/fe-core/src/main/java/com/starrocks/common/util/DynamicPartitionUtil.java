@@ -358,7 +358,7 @@ public class DynamicPartitionUtil {
             return DATE_FORMAT;
         } else if (column.getPrimitiveType().equals(PrimitiveType.DATETIME)) {
             return DATETIME_FORMAT;
-        } else if (PrimitiveType.getIntegerTypes().contains(column.getPrimitiveType())) {
+        } else if (PrimitiveType.getIntegerTypeList().contains(column.getPrimitiveType())) {
             // TODO: For Integer Type, only support format it as yyyyMMdd now
             return TIMESTAMP_FORMAT;
         } else {
