@@ -269,6 +269,12 @@ void JoinHashTable::create(const HashTableParam& param) {
             _table_items->output_build_tuple_ids.emplace_back(tuple_desc->id());
         }
     }
+    for (const auto& slot_id : param.output_slots) {
+        _table_items->output_slots.emplace_back(slot_id);
+    }
+    for (const auto& slot_id : param.predicate_slots) {
+        _table_items->predicate_slots.emplace_back(slot_id);
+    }
 }
 
 Status JoinHashTable::build(RuntimeState* state) {

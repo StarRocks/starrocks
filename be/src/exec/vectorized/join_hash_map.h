@@ -75,6 +75,8 @@ struct JoinHashTableItems {
     Columns key_columns;
     Buffer<SlotDescriptor*> build_slots;
     Buffer<SlotDescriptor*> probe_slots;
+    Buffer<SlotId> output_slots;
+    Buffer<SlotId> predicate_slots;
     Buffer<TupleId> output_build_tuple_ids;
     Buffer<TupleId> output_probe_tuple_ids;
     const RowDescriptor* row_desc;
@@ -155,6 +157,8 @@ struct HashTableParam {
     const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
+    std::vector<SlotId> output_slots;
+    std::vector<SlotId> predicate_slots;
     std::vector<JoinKeyDesc> join_keys;
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;

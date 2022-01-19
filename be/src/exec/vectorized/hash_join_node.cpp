@@ -98,6 +98,11 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.__isset.need_create_tuple_columns) {
         _need_create_tuple_columns = tnode.need_create_tuple_columns;
     }
+
+    if (tnode.hash_join_node.__isset.output_columns) {
+        _output_slots.insert(_output_slots.end(), tnode.hash_join_node.output_columns.begin(),
+                             tnode.hash_join_node.output_columns.end());
+    }
     return Status::OK();
 }
 
@@ -155,6 +160,20 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->output_build_column_timer = _output_build_column_timer;
     param->output_probe_column_timer = _output_probe_column_timer;
     param->output_tuple_column_timer = _output_tuple_column_timer;
+
+    param->output_slots = _output_slots;
+    std::vector<SlotId> predicate_slots;
+    for (ExprContext* expr_context : _conjunct_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(predicate_slots.end(), expr_slots.begin(), expr_slots.end());
+    }
+    for (ExprContext* expr_context : _other_join_conjunct_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(predicate_slots.end(), expr_slots.begin(), expr_slots.end());
+    }
+    param->predicate_slots = predicate_slots;
 
     for (auto i = 0; i < _probe_expr_ctxs.size(); i++) {
         param->join_keys.emplace_back(JoinKeyDesc{_probe_expr_ctxs[i]->root()->type().type, _is_null_safes[i]});
@@ -446,7 +465,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     HashJoinerParam param(pool, _hash_join_node, _id, _type, limit(), _is_null_safes, _build_expr_ctxs,
                           _probe_expr_ctxs, _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(),
                           child(0)->row_desc(), _row_descriptor, child(1)->type(), child(0)->type(),
-                          child(1)->conjunct_ctxs().empty(), _build_runtime_filters);
+                          child(1)->conjunct_ctxs().empty(), _build_runtime_filters, _output_slots);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param, num_partitions);
 
     // add placeholder into RuntimeFilterHub, HashJoinBuildOperator will generate runtime filters and fill it,

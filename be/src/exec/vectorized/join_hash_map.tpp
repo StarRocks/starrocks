@@ -394,11 +394,28 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chun
 
     for (size_t i = 0; i < _table_items->probe_column_count; i++) {
         SlotDescriptor* slot = _table_items->probe_slots[i];
-        auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
-        if (!column->is_nullable()) {
-            _copy_probe_column(&column, chunk, slot, to_nullable);
+        auto &column = (*probe_chunk)->get_column_by_slot_id(slot->id());
+
+        if (_table_items->output_slots.empty()
+                || std::find(_table_items->output_slots.begin(), _table_items->output_slots.end(), slot->id()) != _table_items->output_slots.end()
+                || std::find(_table_items->predicate_slots.begin(), _table_items->predicate_slots.end(), slot->id()) != _table_items->predicate_slots.end()) {
+
+            if (!column->is_nullable()) {
+                _copy_probe_column(&column, chunk, slot, to_nullable);
+            } else {
+                _copy_probe_nullable_column(&column, chunk, slot);
+            }
         } else {
-            _copy_probe_nullable_column(&column, chunk, slot);
+            ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable());
+            if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
+                default_column->append_default(column->size());
+            } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
+                column->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
+                default_column->append_default(column->size());
+            } else {
+                default_column->append_default(_probe_state->count);
+            }
+            (*chunk)->append_column(std::move(default_column), slot->id());
         }
     }
 
@@ -455,11 +472,20 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
     bool to_nullable = _table_items->right_to_nullable;
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         SlotDescriptor* slot = _table_items->build_slots[i];
-        ColumnPtr& column = _table_items->build_chunk->columns()[i];
-        if (!column->is_nullable()) {
-            _copy_build_column(column, chunk, slot, to_nullable);
+        ColumnPtr &column = _table_items->build_chunk->columns()[i];
+
+        if (_table_items->output_slots.empty()
+                || std::find(_table_items->output_slots.begin(), _table_items->output_slots.end(), slot->id()) != _table_items->output_slots.end()
+                || std::find(_table_items->predicate_slots.begin(), _table_items->predicate_slots.end(), slot->id()) != _table_items->predicate_slots.end()) {
+            if (!column->is_nullable()) {
+                _copy_build_column(column, chunk, slot, to_nullable);
+            } else {
+                _copy_build_nullable_column(column, chunk, slot);
+            }
         } else {
-            _copy_build_nullable_column(column, chunk, slot);
+            ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable());
+            default_column->append_default(_probe_state->count);
+            (*chunk)->append_column(std::move(default_column), slot->id());
         }
     }
 
