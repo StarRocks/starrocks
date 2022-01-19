@@ -178,9 +178,8 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
                         strings::Substitute("task(signature=$0) has wrong request member", signature));
                 break;
             }
-            if (task.push_req.push_type == TPushType::LOAD_V2 ||
-                    task.push_req.push_type == TPushType::DELETE ||
-                       task.push_req.push_type == TPushType::CANCEL_DELETE) {
+            if (task.push_req.push_type == TPushType::LOAD_V2 || task.push_req.push_type == TPushType::DELETE ||
+                task.push_req.push_type == TPushType::CANCEL_DELETE) {
                 push_divider[task.push_req.push_type].push_back(task);
             } else {
                 ret_st = Status::InvalidArgument(
@@ -219,56 +218,84 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
     }
 
     // batch submit tasks
-    for(const auto& task_item: task_divider) {
+    for (const auto& task_item : task_divider) {
         const auto& task_type = task_item.first;
         auto all_tasks = task_item.second;
         switch (task_type) {
-            case TTaskType::CREATE: _create_tablet_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::DROP:   _drop_tablet_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::PUBLISH_VERSION: {
-                for (const auto& task: all_tasks) {
-                    _publish_version_workers->submit_task(task);
-                }
-                break;
+        case TTaskType::CREATE:
+            _create_tablet_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::DROP:
+            _drop_tablet_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::PUBLISH_VERSION: {
+            for (const auto& task : all_tasks) {
+                _publish_version_workers->submit_task(task);
             }
-            case TTaskType::CLEAR_TRANSACTION_TASK:  _clear_transaction_task_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::CLONE:                   _clone_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::STORAGE_MEDIUM_MIGRATE:  _storage_medium_migrate_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::CHECK_CONSISTENCY:       _check_consistency_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::UPLOAD:                  _upload_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::DOWNLOAD:                _download_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::MAKE_SNAPSHOT:           _make_snapshot_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::RELEASE_SNAPSHOT:        _release_snapshot_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::MOVE:                    _move_dir_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::UPDATE_TABLET_META_INFO: _update_tablet_meta_info_workers->submit_tasks(&all_tasks); break;
-            case TTaskType::REALTIME_PUSH:
-            case TTaskType::PUSH: {
-                // should not run here
-                break;
-            }
-            case TTaskType::ALTER: _create_tablet_workers->submit_tasks(&all_tasks); break;
-            default:
-                ret_st = Status::InvalidArgument(
-                        strings::Substitute("tasks(type=$0) has wrong task type", task_type));
-                LOG(WARNING) << "fail to batch submit task. reason: " << ret_st.get_error_msg();
+            break;
+        }
+        case TTaskType::CLEAR_TRANSACTION_TASK:
+            _clear_transaction_task_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::CLONE:
+            _clone_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::STORAGE_MEDIUM_MIGRATE:
+            _storage_medium_migrate_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::CHECK_CONSISTENCY:
+            _check_consistency_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::UPLOAD:
+            _upload_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::DOWNLOAD:
+            _download_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::MAKE_SNAPSHOT:
+            _make_snapshot_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::RELEASE_SNAPSHOT:
+            _release_snapshot_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::MOVE:
+            _move_dir_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::UPDATE_TABLET_META_INFO:
+            _update_tablet_meta_info_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::REALTIME_PUSH:
+        case TTaskType::PUSH: {
+            // should not run here
+            break;
+        }
+        case TTaskType::ALTER:
+            _create_tablet_workers->submit_tasks(&all_tasks);
+            break;
+        default:
+            ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0) has wrong task type", task_type));
+            LOG(WARNING) << "fail to batch submit task. reason: " << ret_st.get_error_msg();
         }
     }
 
     // batch submit push tasks
     if (!push_divider.empty()) {
         LOG(INFO) << "begin batch submit task: " << tasks[0].task_type;
-        for (const auto& push_item: push_divider) {
+        for (const auto& push_item : push_divider) {
             const auto& push_type = push_item.first;
             auto all_push_tasks = push_item.second;
             switch (push_type) {
-                case TPushType::LOAD_V2: _push_workers->submit_tasks(&all_push_tasks); break;
-                case TPushType::DELETE:
-                case TPushType::CANCEL_DELETE: _delete_workers->submit_tasks(&all_push_tasks); break;
-                default:
-                    ret_st = Status::InvalidArgument(
-                            strings::Substitute("tasks(type=$0, push_type=$1) has wrong task type",
-                                                TTaskType::PUSH, push_type));
-                    LOG(WARNING) << "fail to batch submit push task. reason: " << ret_st.get_error_msg();
+            case TPushType::LOAD_V2:
+                _push_workers->submit_tasks(&all_push_tasks);
+                break;
+            case TPushType::DELETE:
+            case TPushType::CANCEL_DELETE:
+                _delete_workers->submit_tasks(&all_push_tasks);
+                break;
+            default:
+                ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0, push_type=$1) has wrong task type",
+                                                                     TTaskType::PUSH, push_type));
+                LOG(WARNING) << "fail to batch submit push task. reason: " << ret_st.get_error_msg();
             }
         }
     }

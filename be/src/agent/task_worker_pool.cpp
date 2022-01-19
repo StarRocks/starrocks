@@ -198,7 +198,6 @@ void TaskWorkerPool::submit_task(const TAgentTaskRequest& task) {
 }
 
 void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
-
     DCHECK(!tasks->empty());
     std::string type_str;
     const TTaskType::type task_type = (*tasks)[0].task_type;
@@ -211,7 +210,7 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
             LOG(INFO) << "submitting task. type=" << type_str << ", signature=" << signature;
 
             // batch register task info
-            std::set<int64_t> &signature_set = _s_task_signatures[task_type];
+            std::set<int64_t>& signature_set = _s_task_signatures[task_type];
             if (signature_set.insert(signature).second) {
                 (const_cast<TAgentTaskRequest&>(task_req)).__set_recv_time(time(nullptr));
                 ++it;
@@ -224,8 +223,8 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
 
     {
         std::unique_lock l(_worker_thread_lock);
-        if (UNLIKELY(task_type == TTaskType::REALTIME_PUSH
-                     && (*tasks)[0].push_req.push_type == TPushType::CANCEL_DELETE)) {
+        if (UNLIKELY(task_type == TTaskType::REALTIME_PUSH &&
+                     (*tasks)[0].push_req.push_type == TPushType::CANCEL_DELETE)) {
             for (auto const& task : *tasks) {
                 _tasks.push_front(task);
             }
@@ -240,7 +239,8 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
         int64_t signature = task.signature;
 
         LOG(INFO) << "success to submit task. type=" << type_str << ", signature=" << signature
-                  << ", task_count_in_queue=" << _tasks.size();;
+                  << ", task_count_in_queue=" << _tasks.size();
+        ;
     }
 }
 
@@ -600,9 +600,8 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 
             int num_of_remove_task = 0;
             if (push_req.push_type == TPushType::CANCEL_DELETE) {
-
                 LOG(INFO) << "get push task. remove delete task transaction_id: " << push_req.transaction_id
-                << " priority: " << priority << " push_type: " << push_req.push_type;
+                          << " priority: " << priority << " push_type: " << push_req.push_type;
 
                 const auto& tasks = worker_pool_this->_tasks;
                 for (auto it = tasks.begin(); it != tasks.end();) {
@@ -619,8 +618,8 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
                     }
                 }
                 LOG(INFO) << "finish remove delete task transaction_id: " << push_req.transaction_id
-                << " num_of_remove_task: " << num_of_remove_task << " priority: " << priority
-                << " push_type: " << push_req.push_type;
+                          << " num_of_remove_task: " << num_of_remove_task << " priority: " << priority
+                          << " push_type: " << push_req.push_type;
             }
         } while (false);
 
