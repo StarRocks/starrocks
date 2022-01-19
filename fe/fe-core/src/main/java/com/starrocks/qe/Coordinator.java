@@ -1252,7 +1252,7 @@ public class Coordinator {
                     }
                 }
                 // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
-                if (dopAdaptionEnabled && fragment.isNeedsLocalShuffle()) {
+                if (dopAdaptionEnabled && (leftMostNode instanceof OlapScanNode) && fragment.isNeedsLocalShuffle()) {
                     int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
                     FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
                     int numBackends = param.scanRangeAssignment.size();
