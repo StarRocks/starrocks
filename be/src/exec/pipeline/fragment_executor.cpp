@@ -246,6 +246,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                if (wg) {
+                    scan_operator->set_workgroup(wg);
+                }
                 setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }

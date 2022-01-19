@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "exec/pipeline/olap_chunk_source.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -11,6 +12,8 @@
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
+
+using starrocks::workgroup::WorkGroupManager;
 
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
@@ -120,7 +123,9 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         if (chunk_source != nullptr && chunk_source->has_output()) {
             auto&& chunk = chunk_source->get_next_chunk_from_buffer();
             eval_runtime_bloom_filters(chunk.value().get());
-
+            if (_workgroup != nullptr) {
+              _workgroup->decrease_chunk_num(1);
+            }
             return std::move(chunk);
         }
     }
@@ -161,6 +166,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
             _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
+            if (this->_workgroup != nullptr) {
+                // TODO (by laotan332): More detailed information is needed
+                this->_workgroup->increase_chunk_num(_buffer_size);
+            }
         }
 
         _num_running_io_tasks--;
@@ -168,10 +177,20 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
-
-    if (_io_threads->try_offer(task)) {
-        _io_task_retry_cnt = 0;
+    bool assign_ok = false;
+    if (_workgroup != nullptr) {
+        if (WorkGroupManager::instance()->try_offer_io_task(_workgroup, task)) {
+            _io_task_retry_cnt = 0;
+            assign_ok = true;
+        }
     } else {
+        if (_io_threads->try_offer(task)) {
+            _io_task_retry_cnt = 0;
+            assign_ok = true;
+        }
+    }
+
+    if (!assign_ok) {
         _num_running_io_tasks--;
         _is_io_task_running[chunk_source_index] = false;
         // TODO(hcf) set a proper retry times
@@ -183,6 +202,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     }
 
     return Status::OK();
+}
+
+void ScanOperator::set_workgroup(starrocks::workgroup::WorkGroupPtr wg) {
+    _workgroup = wg;
 }
 
 Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
