@@ -225,6 +225,42 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
+    public void testDecodeNodeRewriteDistinct() throws Exception {
+        String sql;
+        String plan;
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        sql = "select count(distinct S_ADDRESS) from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([10: S_ADDRESS, INT, false]); args: INT; result: BIGINT; args nullable: false; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  3:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(3);
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  4:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: count[([10: S_ADDRESS, INT, false]); args: INT; result: BIGINT; args nullable: false; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(4);
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  6:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: count[([9: count, BIGINT, false]); args: VARCHAR; result: BIGINT; args nullable: true; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testDecodeNodeRewriteTwoPaseDistinct() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select count(distinct S_ADDRESS), count(distinct S_NATIONKEY) from supplier";
+        String plan = getVerboseExplain(sql);
+        System.out.println("plan = " + plan);
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false], " +
+                "multi_distinct_count[([10: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
     public void testDecodeNodeRewriteTwoPhaseAgg() throws Exception {
         String sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by a,b";
         connectContext.getSessionVariable().setNewPlanerAggStage(2);

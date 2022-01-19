@@ -97,6 +97,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         // When parent operator must need origin string column, we need to disable
         // global dict optimization for this column
         ColumnRefSet disableDictOptimizeColumns;
+        // For multi-stage aggregation of count distinct, in addition to local aggregation,
+        // other stages need to be rewritten as well
+        Set<Integer> needRewriteAgg;
 
         public DecodeContext(Map<Long, List<Integer>> tableIdToStringColumnIds, ColumnRefFactory columnRefFactory) {
             this.tableIdToStringColumnIds = tableIdToStringColumnIds;
@@ -106,6 +109,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             globalDicts = Lists.newArrayList();
             disableDictOptimizeColumns = new ColumnRefSet();
             allStringColumnIds = Sets.newHashSet();
+            needRewriteAgg = Sets.newHashSet();
             for (List<Integer> ids : tableIdToStringColumnIds.values()) {
                 allStringColumnIds.addAll(ids);
             }
@@ -115,6 +119,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             stringColumnIdToDictColumnIds.clear();
             stringFunctions.clear();
             hasEncoded = false;
+            needRewriteAgg.clear();
         }
 
         public DecodeContext merge(DecodeContext other) {
@@ -439,7 +444,20 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 if (canApplyDictDecodeOpt) {
                     CallOperator oldCall = kv.getValue();
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
-                    if (context.stringColumnIdToDictColumnIds.containsKey(columnId)) {
+                    if (context.needRewriteAgg.contains(columnId)) {
+                        // we only need rewrite TFunction
+                        Type[] newTypes = new Type[1];
+                        newTypes[0] = ID_TYPE;
+                        AggregateFunction newFunction =
+                                (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
+                                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                        ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
+                        CallOperator newCall = new CallOperator(oldCall.getFnName(), newFunction.getReturnType(),
+                                Collections.singletonList(dictColumn), newFunction,
+                                oldCall.isDistinct());
+                        ColumnRefOperator outputColumn = kv.getKey();
+                        newAggMap.put(outputColumn, newCall);
+                    } else if (context.stringColumnIdToDictColumnIds.containsKey(columnId)) {
                         Integer dictColumnId = context.stringColumnIdToDictColumnIds.get(columnId);
                         ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(dictColumnId);
 
@@ -480,6 +498,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             }
 
                             outputColumn = newDictColumn;
+                        } else if (fnName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) {
+                            context.needRewriteAgg.add(outputColumn.getId());
                         }
 
                         CallOperator newCall = new CallOperator(oldCall.getFnName(), newReturnType,
@@ -581,8 +601,15 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             context.hasEncoded = false;
 
             OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
-            if (context.hasEncoded) {
-                if (aggOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
+            boolean needRewrite =
+                    context.needRewriteAgg.isEmpty() ? false : aggOperator.couldApplyStringDict(context.needRewriteAgg);
+            if (context.hasEncoded || needRewrite) {
+                boolean couldApplyStringDict = needRewrite;
+                if (!needRewrite) {
+                    couldApplyStringDict =
+                            aggOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet());
+                }
+                if (couldApplyStringDict) {
                     PhysicalHashAggregateOperator newAggOper = rewriteAggOperator(aggOperator,
                             context);
                     OptExpression result = OptExpression.create(newAggOper, newChildExpr);
