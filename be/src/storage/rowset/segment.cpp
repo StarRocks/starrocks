@@ -73,7 +73,7 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, fs::Bl
 }
 
 Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                     uint64_t* segment_data_size) {
+                                     FooterPointerPB* partial_rowset_footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     uint64_t file_size;
     RETURN_IF_ERROR(rblock->size(&file_size));
@@ -86,10 +86,19 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
     size_t hint_size = footer_length_hint ? *footer_length_hint : 4096;
     size_t footer_read_size = std::min<size_t>(hint_size, file_size);
 
+    if (partial_rowset_footer != nullptr) {
+        if (file_size < partial_rowset_footer->position() + partial_rowset_footer->size()) {
+            return Status::Corruption(
+                    strings::Substitute("Bad partial segment file $0: file size $1 < $2", rblock->path(), file_size,
+                                        partial_rowset_footer->position() + partial_rowset_footer->size()));
+        }
+        footer_read_size = partial_rowset_footer->size();
+    }
     std::string buff;
     raw::stl_string_resize_uninitialized(&buff, footer_read_size);
+    size_t read_pos = partial_rowset_footer ? partial_rowset_footer->position() : file_size - buff.size();
 
-    RETURN_IF_ERROR(rblock->read(file_size - buff.size(), buff));
+    RETURN_IF_ERROR(rblock->read(read_pos, buff));
 
     const uint32_t footer_length = UNALIGNED_LOAD32(buff.data() + buff.size() - 12);
     const uint32_t checksum = UNALIGNED_LOAD32(buff.data() + buff.size() - 8);
@@ -123,6 +132,7 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
                     strings::Substitute("Bad segment file $0: failed to parse footer", rblock->path()));
         }
     } else { // Need read file again.
+        DCHECK(partial_rowset_footer == nullptr);
         g_open_segments << 1;
         g_open_segments_io << 2;
 
@@ -148,10 +158,6 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
         return Status::Corruption(
                 strings::Substitute("Bad segment file $0: footer checksum not match, actual=$1 vs expect=$2",
                                     rblock->path(), actual_checksum, checksum));
-    }
-
-    if (segment_data_size) {
-        *segment_data_size = file_size - footer_length - 12;
     }
 
     return Status::OK();

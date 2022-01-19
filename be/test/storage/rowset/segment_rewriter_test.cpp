@@ -10,6 +10,7 @@
 #include "column/datum_tuple.h"
 #include "common/logging.h"
 #include "env/env_memory.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -131,10 +132,22 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         }
     }
 
-    ASSERT_OK(SegmentRewriter::rewrite(file_name, dst_file_name, tablet_schema, read_column_ids, write_columns,
-                                       partial_segment->id()));
+    FooterPointerPB partial_rowset_footer;
+    partial_rowset_footer.set_position(footer_position);
+    partial_rowset_footer.set_size(file_size - footer_position);
 
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, dst_file_name, 0, &tablet_schema);
+    // add useless string to partial segment
+    std::unique_ptr<fs::WritableBlock> wblock_tmp;
+    fs::CreateBlockOptions wblock_opts_tmp({file_name});
+    wblock_opts_tmp.mode = Env::MUST_EXIST;
+    ASSERT_OK(_block_mgr->create_block(wblock_opts_tmp, &wblock_tmp));
+    for (int i = 0; i < 10; i++) {
+        wblock_tmp->append("test");
+    }
+
+    ASSERT_OK(SegmentRewriter::rewrite(file_name, tablet_schema, read_column_ids, write_columns, partial_segment->id(),
+                                       partial_rowset_footer));
+    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, &tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
@@ -153,6 +166,10 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         auto st = seg_iterator->get_next(chunk.get());
         if (st.is_end_of_file()) {
             break;
+        }
+        if (!st.ok()) {
+            LOG(INFO) << "get next failed, error msg is " << st.to_string();
+            ASSERT_TRUE(false);
         }
         ASSERT_FALSE(!st.ok());
         for (auto i = 0; i < chunk->num_rows(); ++i) {

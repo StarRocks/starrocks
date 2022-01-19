@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "storage/fs/block_manager.h"
@@ -80,7 +81,7 @@ public:
                                                    size_t* footer_length_hint = nullptr);
 
     static Status parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                       uint64_t* segment_data_size);
+                                       FooterPointerPB* partial_rowset_footer);
 
     Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
             const TabletSchema* tablet_schema);

@@ -11,6 +11,7 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/crc32c.h"
+#include "util/filesystem_util.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -19,36 +20,26 @@ SegmentRewriter::SegmentRewriter() {}
 
 SegmentRewriter::~SegmentRewriter() {}
 
-Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
+Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema& tschema,
                                 std::vector<uint32_t>& column_ids,
-                                std::vector<std::unique_ptr<vectorized::Column>>& columns, size_t segment_id) {
+                                std::vector<std::unique_ptr<vectorized::Column>>& columns, size_t segment_id,
+                                FooterPointerPB& partial_rowset_footer) {
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({dest_path});
-    wblock_opts.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
-    RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
-
     std::unique_ptr<fs::ReadableBlock> rblock;
     RETURN_IF_ERROR(block_mgr->open_block(src_path, &rblock));
 
     SegmentFooterPB footer;
-    uint64_t remaining = 0;
-    RETURN_IF_ERROR(Segment::parse_segment_footer(rblock.get(), &footer, nullptr, &remaining));
+    RETURN_IF_ERROR(Segment::parse_segment_footer(rblock.get(), &footer, nullptr, &partial_rowset_footer));
 
-    std::string read_buffer;
-    raw::stl_string_resize_uninitialized(&read_buffer, 4096);
-    uint64_t offset = 0;
-    while (remaining > 0) {
-        if (remaining < 4096) {
-            raw::stl_string_resize_uninitialized(&read_buffer, remaining);
-        }
+    int64_t trunc_len = partial_rowset_footer.position() + partial_rowset_footer.size();
+    RETURN_IF_ERROR(FileSystemUtil::resize_file(src_path, trunc_len));
+    block_mgr->erase_block_cache(src_path);
 
-        RETURN_IF_ERROR(rblock->read(offset, read_buffer));
-        RETURN_IF_ERROR(wblock->append(read_buffer));
-
-        offset += read_buffer.size();
-        remaining -= read_buffer.size();
-    }
+    std::unique_ptr<fs::WritableBlock> wblock;
+    fs::CreateBlockOptions wblock_opts({src_path});
+    wblock_opts.mode = Env::MUST_EXIST;
+    RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
+    wblock->set_bytes_appended(trunc_len);
 
     SegmentWriterOptions opts;
     opts.storage_format_version = config::storage_format_version;

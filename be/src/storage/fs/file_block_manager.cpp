@@ -86,6 +86,9 @@ public:
 
     size_t bytes_appended() const override;
 
+    // in function SegmentRewrite::rewrite,
+    void set_bytes_appended(size_t bytes_appended) override { _bytes_appended = bytes_appended; }
+
     State state() const override;
 
     void handle_error(const Status& s) const;
