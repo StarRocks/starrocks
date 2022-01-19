@@ -478,7 +478,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
             return Status::OK();
         }
 
-        size_t original_size = _chunk_queue.size();
+        const auto original_size = _chunk_queue.size();
         for (auto& item : chunks) {
             // This chunks may contains different driver_sequence
             if (item.driver_sequence >= 0 &&
@@ -487,7 +487,8 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
             }
             _chunk_queue.emplace_back(std::move(item));
         }
-        if (_chunk_queue.size() > original_size && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+        bool has_new_chunks = _chunk_queue.size() > original_size;
+        if (has_new_chunks && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             _chunk_queue.back().closure = *done;
             *done = nullptr;
         }
