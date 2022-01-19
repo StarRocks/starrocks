@@ -126,13 +126,13 @@ public class ColumnTest {
 
         oldColumn = new Column("user", ScalarType.createType(PrimitiveType.VARCHAR), true, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
-        newColumn = new Column("user1", ScalarType.createType(PrimitiveType.VARCHAR), true, null, false,
+        newColumn = new Column("user", ScalarType.createType(PrimitiveType.VARCHAR), true, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         oldColumn.checkSchemaChangeAllowed(newColumn);
 
         oldColumn = new Column("user", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
                 CURRENT_TIMESTAMP_VALUE, "");
-        newColumn = new Column("user1", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+        newColumn = new Column("user", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
                 CURRENT_TIMESTAMP_VALUE, "");
         oldColumn.checkSchemaChangeAllowed(newColumn);
     }
@@ -200,7 +200,7 @@ public class ColumnTest {
         }
 
         try {
-            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
                     CURRENT_TIMESTAMP_VALUE, "");
             Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
                     new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
