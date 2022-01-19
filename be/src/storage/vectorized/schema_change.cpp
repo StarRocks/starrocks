@@ -501,9 +501,11 @@ Status ChunkAllocator::allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema
     size_t mem_size = _row_len * num_rows;
 
     if (_memory_limitation > 0 && _memory_allocated + mem_size > _memory_limitation) {
-        LOG(WARNING) << "ChunkAllocator::allocate() memory exceed. "
-                     << "m_memory_allocated=" << _memory_allocated;
-        return Status::MemoryLimitExceeded("Fail to allocate chunk due to exceed memory limit");
+        std::string msg =
+                Substitute("ChunkAllocator::allocate() memory exceed, memory_limitation:$0, memory_allocate:$1 ",
+                           _memory_limitation, _memory_allocated + mem_size);
+        LOG(WARNING) << msg;
+        return Status::MemoryLimitExceeded(msg);
     }
 
     chunk = ChunkHelper::new_chunk(schema, num_rows);
