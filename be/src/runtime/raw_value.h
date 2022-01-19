@@ -27,7 +27,6 @@
 #include "runtime/string_value.h"
 #include "runtime/types.h"
 #include "util/hash_util.hpp"
-#include "util/types.h"
 
 namespace starrocks {
 

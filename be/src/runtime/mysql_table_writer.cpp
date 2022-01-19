@@ -40,7 +40,6 @@
 
 #include "exprs/expr.h"
 #include "runtime/mysql_table_writer.h"
-#include "util/types.h"
 
 namespace starrocks {
 
