@@ -105,6 +105,8 @@ public:
     // Must be called once to cleanup any queued resources.
     void close();
 
+    void clean_buffer_queues();
+
     void short_circuit_for_pipeline(const int32_t driver_sequence);
 
     bool has_output_for_pipeline(const int32_t driver_sequence) const;
@@ -476,6 +478,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
             return Status::OK();
         }
 
+        const auto original_size = _chunk_queue.size();
         for (auto& item : chunks) {
             // This chunks may contains different driver_sequence
             if (item.driver_sequence >= 0 &&
@@ -484,7 +487,8 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
             }
             _chunk_queue.emplace_back(std::move(item));
         }
-        if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+        bool has_new_chunks = _chunk_queue.size() > original_size;
+        if (has_new_chunks && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             _chunk_queue.back().closure = *done;
             *done = nullptr;
         }
@@ -624,6 +628,11 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
                 // This chunks may contains different driver_sequence
                 if (item.driver_sequence >= 0 && _short_circuit_driver_sequences.find(item.driver_sequence) !=
                                                          _short_circuit_driver_sequences.end()) {
+                    // We may buffered closure in last reception, but the branch of the driver_sequence may
+                    // become short-circuit now, so we make sure to invoke the closure
+                    if (item.closure != nullptr) {
+                        item.closure->Run();
+                    }
                     continue;
                 }
                 _chunk_queue.emplace_back(std::move(item));
@@ -705,22 +714,7 @@ void DataStreamRecvr::SenderQueue::cancel() {
 
     {
         std::lock_guard<std::mutex> l(_lock);
-        for (auto& item : _chunk_queue) {
-            if (item.closure != nullptr) {
-                item.closure->Run();
-            }
-        }
-        _chunk_queue.clear();
-        for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
-            for (auto& [_, chunk_queue] : chunk_queues) {
-                for (auto& item : chunk_queue) {
-                    if (item.closure != nullptr) {
-                        item.closure->Run();
-                    }
-                }
-            }
-        }
-        _buffered_chunk_queues.clear();
+        clean_buffer_queues();
     }
 }
 
@@ -732,23 +726,27 @@ void DataStreamRecvr::SenderQueue::close() {
         std::lock_guard<std::mutex> l(_lock);
         _is_cancelled = true;
 
-        for (auto& item : _chunk_queue) {
-            if (item.closure != nullptr) {
-                item.closure->Run();
-            }
+        clean_buffer_queues();
+    }
+}
+
+void DataStreamRecvr::SenderQueue::clean_buffer_queues() {
+    for (auto& item : _chunk_queue) {
+        if (item.closure != nullptr) {
+            item.closure->Run();
         }
-        _chunk_queue.clear();
-        for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
-            for (auto& [_, chunk_queue] : chunk_queues) {
-                for (auto& item : chunk_queue) {
-                    if (item.closure != nullptr) {
-                        item.closure->Run();
-                    }
+    }
+    _chunk_queue.clear();
+    for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
+        for (auto& [_, chunk_queue] : chunk_queues) {
+            for (auto& item : chunk_queue) {
+                if (item.closure != nullptr) {
+                    item.closure->Run();
                 }
             }
         }
-        _buffered_chunk_queues.clear();
     }
+    _buffered_chunk_queues.clear();
 }
 
 Status DataStreamRecvr::create_merger(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
