@@ -125,18 +125,6 @@ public class ArrayExpr extends Expr {
     }
 
     @Override
-    protected boolean canCastTo(Type targetType) {
-        if (this.type.isNull()) {
-            return true;
-        }
-        if (!targetType.isArrayType()) {
-            return false;
-        }
-        ArrayType targetArrayType = (ArrayType) targetType;
-        return this.children.stream().allMatch(child -> child.canCastTo(targetArrayType.getItemType()));
-    }
-
-    @Override
     public <R, C> R accept(ExprVisitor<R, C> visitor, C context) {
         return visitor.visitArrayExpr(this, context);
     }

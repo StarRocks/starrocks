@@ -250,7 +250,7 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean isStringType() {
-        return isScalarType(PrimitiveType.VARCHAR) || isScalarType(PrimitiveType.CHAR);
+        return PrimitiveType.STRING_TYPE_LIST.contains(this.getPrimitiveType());
     }
 
     // only metric types have the following constraint:
@@ -293,9 +293,7 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean isFixedPointType() {
-        return isScalarType(PrimitiveType.TINYINT) || isScalarType(PrimitiveType.SMALLINT) ||
-                isScalarType(PrimitiveType.INT) || isScalarType(PrimitiveType.BIGINT) ||
-                isScalarType(PrimitiveType.LARGEINT);
+        return PrimitiveType.INTEGER_TYPE_LIST.contains(getPrimitiveType());
     }
 
     public boolean isFloatingPointType() {
@@ -505,11 +503,16 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    public static boolean canCastTo(Type t1, Type t2) {
-        if (t1.isScalarType() && t2.isScalarType()) {
-            return ScalarType.canCastTo((ScalarType) t1, (ScalarType) t2);
+    public static boolean canCastTo(Type from, Type to) {
+        if (from.isNull()) {
+            return true;
+        } else if (from.isScalarType() && to.isScalarType()) {
+            return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
+        } else if (from.isArrayType() && to.isArrayType()) {
+            return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
+        } else {
+            return false;
         }
-        return t1.isNull();
     }
 
     /**
