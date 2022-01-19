@@ -205,8 +205,8 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         wg->estimate_trend_factor_period();
     }
 
-    // negative_total_diff_factor Accumulate All Under-resourced WorkGroup 
-    // positive_total_diff_factor Cumulative All Resource Excess WorkGroup 
+    // negative_total_diff_factor Accumulate All Under-resourced WorkGroup
+    // positive_total_diff_factor Cumulative All Resource Excess WorkGroup
     double positive_total_diff_factor = 0.0;
     double negative_total_diff_factor = 0.0;
     for (auto const& wg : _io_wgs) {
@@ -256,7 +256,7 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         }
     } else {
         // if positive_total_diff_factor + negative_total_diff_factor <= 0
-        // This means that there are not enough resources, but some WorkGs are still over-resourced 
+        // This means that there are not enough resources, but some WorkGs are still over-resourced
         // So we can reduce the proportion of resources in the WorkGroup that are over-resourced
         // Then increase the proportion of resources for those WorkGs that are under-resourced
         for (auto const& wg : _io_wgs) {
@@ -323,7 +323,6 @@ PriorityThreadPool::Task IoWorkGroupQueue::pick_next_task() {
     _total_task_num--;
 
     return wg->pick_io_task();
-
 }
 
 PriorityThreadPool::Task WorkGroupManager::pick_next_task_for_io() {

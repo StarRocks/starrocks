@@ -26,7 +26,7 @@ void IoDispatcher::run() {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
-        
+
         auto task = WorkGroupManager::instance()->pick_next_task_for_io();
         task.work_function();
     }

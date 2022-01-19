@@ -34,9 +34,7 @@ public:
 
 class IoWorkGroupQueue final : public WorkGroupQueue {
 public:
-    IoWorkGroupQueue() : _schedule_num_period(1024) {
-        _cur_wait_run_wgs.resize(_schedule_num_period, nullptr);
-    };
+    IoWorkGroupQueue() : _schedule_num_period(1024) { _cur_wait_run_wgs.resize(_schedule_num_period, nullptr); };
     ~IoWorkGroupQueue() = default;
     void add(const WorkGroupPtr& wg) override {}
     void remove(const WorkGroupPtr& wg) override {}
@@ -116,6 +114,7 @@ public:
     static constexpr int DEFAULT_WG_ID = 0;
     bool try_offer_io_task(const PriorityThreadPool::Task& task);
     PriorityThreadPool::Task pick_io_task();
+
 public:
     // Return current io task queue size
     // need be lock when invoking
@@ -207,6 +206,7 @@ public:
         _sum_unadjusted_cpu_runtime_ns += cpu_runtime_ns;
     }
     int64_t get_sum_unadjusted_cpu_runtime_ns() const { return _sum_unadjusted_cpu_runtime_ns; }
+
 private:
     std::mutex _mutex;
     std::unordered_map<int, WorkGroupPtr> _workgroups;

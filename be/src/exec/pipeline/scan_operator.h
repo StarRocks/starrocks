@@ -5,11 +5,11 @@
 #include <optional>
 
 #include "exec/pipeline/source_operator.h"
+#include "exec/workgroup/work_group.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "runtime/global_dicts.h"
 #include "util/blocking_queue.hpp"
 #include "util/priority_thread_pool.hpp"
-#include "exec/workgroup/work_group.h"
 
 namespace starrocks {
 namespace workgroup {
