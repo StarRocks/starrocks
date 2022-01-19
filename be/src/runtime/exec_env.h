@@ -67,6 +67,10 @@ namespace pipeline {
 class DriverDispatcher;
 }
 
+namespace workgroup {
+class IoDispatcher;
+}
+
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
 // singleton services. Clients must call StartServices exactly
@@ -137,6 +141,8 @@ public:
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
     LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
+
+    starrocks::workgroup::IoDispatcher* io_dispatcher() { return _io_dispatcher; }
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
     void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
@@ -225,6 +231,8 @@ private:
     PluginMgr* _plugin_mgr = nullptr;
 
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
+
+    starrocks::workgroup::IoDispatcher* _io_dispatcher = nullptr;
 };
 
 template <>

@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_dispatcher.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/workgroup/io_dispatcher.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
@@ -138,6 +139,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                                                    ? std::thread::hardware_concurrency()
                                                                    : config::pipeline_scan_thread_pool_thread_num,
                                                            config::pipeline_scan_thread_pool_queue_size);
+
     _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool("elt", config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _fragment_mgr = new FragmentMgr(this);
@@ -156,6 +158,19 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .build(&driver_dispatcher_thread_pool));
     _driver_dispatcher = new pipeline::GlobalDriverDispatcher(std::move(driver_dispatcher_thread_pool));
     _driver_dispatcher->initialize(max_thread_num);
+
+    int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
+                                 ? std::thread::hardware_concurrency()
+                                 : config::pipeline_scan_thread_pool_thread_num;
+    std::unique_ptr<ThreadPool> io_dispatcher_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("io_dispatcher") // io dispatcher
+                            .set_min_threads(0)
+                            .set_max_threads(num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&io_dispatcher_thread_pool));
+    _io_dispatcher = new workgroup::IoDispatcher(std::move(io_dispatcher_thread_pool));
+    _io_dispatcher->initialize(num_io_threads);
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
@@ -336,6 +351,10 @@ void ExecEnv::_destroy() {
         delete _driver_dispatcher;
         _driver_dispatcher = nullptr;
     }
+    if (_io_dispatcher) {
+        delete _io_dispatcher;
+        _io_dispatcher = nullptr;
+    }
     if (_fragment_mgr) {
         delete _fragment_mgr;
         _fragment_mgr = nullptr;
@@ -347,6 +366,10 @@ void ExecEnv::_destroy() {
     if (_pipeline_scan_io_thread_pool) {
         delete _pipeline_scan_io_thread_pool;
         _pipeline_scan_io_thread_pool = nullptr;
+    }
+    if (_io_dispatcher) {
+        delete _io_dispatcher;
+        _io_dispatcher = nullptr;
     }
     if (_thread_pool) {
         delete _thread_pool;
