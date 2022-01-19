@@ -163,10 +163,8 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
                 workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(diff_real_runtime_ns);
             }
         }
-
         _ready_wgs.emplace(wg);
     }
-
     wg->driver_queue()->put_back(driver);
     _cv.notify_one();
 }

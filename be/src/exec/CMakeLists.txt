@@ -187,6 +187,7 @@ set(EXEC_FILES
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
     workgroup/work_group.cpp
+    workgroup/io_dispatcher.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
