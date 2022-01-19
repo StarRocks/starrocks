@@ -270,7 +270,7 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
             break;
         }
         case TTaskType::ALTER:
-            _create_tablet_workers->submit_tasks(&all_tasks);
+            _alter_tablet_workers->submit_tasks(&all_tasks);
             break;
         default:
             ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0) has wrong task type", task_type));
