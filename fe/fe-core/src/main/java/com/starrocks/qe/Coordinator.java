@@ -935,6 +935,9 @@ public class Coordinator {
         }
         int dop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
         for (FragmentExecParams params : fragmentExecParamsMap.values()) {
+            if (!params.fragment.getPlanRoot().canUsePipeLine()) {
+                continue;
+            }
             List<PlanNode> scanNodes = new LinkedList<>();
             params.fragment.getOlapScanNodes(params.fragment.getPlanRoot(), scanNodes);
             for (PlanNode node : scanNodes) {
@@ -1087,11 +1090,13 @@ public class Coordinator {
         // the latter might inherit the set of hosts from the former
         // compute hosts *bottom up*.
 
-        boolean dopAdaptionEnabled = ConnectContext.get() != null &&
-                ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
         for (int i = fragments.size() - 1; i >= 0; --i) {
             PlanFragment fragment = fragments.get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
+
+            boolean dopAdaptionEnabled = ConnectContext.get() != null &&
+                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
+                    fragment.getPlanRoot().canUsePipeLine();
 
             if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
                 Reference<Long> backendIdRef = new Reference<>();
@@ -1476,7 +1481,8 @@ public class Coordinator {
             }
         }
         boolean dopAdaptionEnabled = ConnectContext.get() != null &&
-                ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
+                ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
+                params.fragment.getPlanRoot().canUsePipeLine();
         // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
         if (dopAdaptionEnabled && params.fragment.isNeedsLocalShuffle()) {
             int numInstances = params.instanceExecParams.size();

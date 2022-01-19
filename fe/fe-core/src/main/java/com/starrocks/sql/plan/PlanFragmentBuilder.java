@@ -1128,7 +1128,8 @@ public class PlanFragmentBuilder {
             boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
                     hasNoExchangeNodes(inputFragment.getPlanRoot());
             boolean pipelineDopEnabled = ConnectContext.get() != null &&
-                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
+                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
+                    inputFragment.getPlanRoot().canUsePipeLine();
             if (pipelineDopEnabled && notNeedLocalShuffle) {
                 inputFragment.setNeedsLocalShuffle(false);
             }
