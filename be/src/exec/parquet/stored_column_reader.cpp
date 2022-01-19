@@ -267,6 +267,7 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
         levels_pos++;
     }
 
+    // TODO(@DorianZheng) 这里有问题
     size_t rows_read = 0;
     for (; levels_pos < _levels_decoded && rows_read < *num_rows; ++levels_pos) {
         rows_read += _rep_levels[levels_pos] == 0;

@@ -5,6 +5,7 @@
 #include <memory>
 #include <utility>
 
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -574,7 +575,7 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
                               size_t num_levels, int32_t* offsets, int8_t* is_nulls, size_t* num_offsets) {
     size_t offset_pos = 0;
     for (int i = 0; i < num_levels; ++i) {
-        // when dev_level is less than immediate_repeated_ancestor_def_level, it means that level
+        // when def_level is less than immediate_repeated_ancestor_def_level, it means that level
         // will affect its ancestor.
         // when rep_level is greater than max_rep_level, this means that level affects its
         // descendants.
@@ -594,9 +595,9 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
             offsets[offset_pos]++;
         }
 
-        // when del_level equals with max_def_level, this is a null element or a required element
-        // when del_level equals with (max_def_level - 1), this indicates a empty array
-        // when del_level less than (max_def_level - 1) it means this array is null
+        // when def_level equals with max_def_level, this is a non null element or a required element
+        // when def_level equals with (max_def_level - 1), this indicates an empty array
+        // when def_level less than (max_def_level - 1) it means this array is null
         if (def_levels[i] >= level_info.max_def_level - 1) {
             is_nulls[offset_pos - 1] = 0;
         } else {
@@ -618,10 +619,13 @@ public:
     }
 
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
-        return _element_reader->prepare_batch(num_records, content_type, dst);
-    }
+        auto* real_dst = (vectorized::NullableColumn*)dst;
 
-    Status finish_batch() override {
+        // TODO(@DorianZheng) num_records 要修正
+        auto st = _element_reader->prepare_batch(
+                num_records, content_type,
+                ((vectorized::ArrayColumn*)real_dst->data_column().get())->elements_column().get());
+
         level_t* def_levels = nullptr;
         level_t* rep_levels = nullptr;
         size_t num_levels = 0;
@@ -634,8 +638,16 @@ public:
         offsets[0] = 0;
         def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
                           &num_offsets);
-        return Status::OK();
+
+        for (int i = 1; i <= num_offsets; i++) {
+            ((vectorized::ArrayColumn*)real_dst->data_column().get())->offsets_column()->append(offsets[i]);
+            real_dst->mutable_null_column()->append(is_nulls[i - 1]);
+        }
+
+        return st;
     }
+
+    Status finish_batch() override { return Status::OK(); }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
@@ -656,8 +668,8 @@ Status ColumnReader::create(RandomAccessFile* file, const ParquetField* field, c
     }
     if (field->type.type == TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
-        RETURN_IF_ERROR(
-                ColumnReader::create(file, &field->children[0], row_group, col_type, opts, chunk_size, &child_reader));
+        RETURN_IF_ERROR(ColumnReader::create(file, &field->children[0], row_group, col_type.children[0], opts,
+                                             chunk_size, &child_reader));
         std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
         *output = std::move(reader);

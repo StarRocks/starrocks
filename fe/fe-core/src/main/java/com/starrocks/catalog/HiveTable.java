@@ -381,11 +381,13 @@ public class HiveTable extends Table {
             if (hiveColumn == null) {
                 throw new DdlException("column [" + column.getName() + "] not exists in hive");
             }
+            /*
             Set<PrimitiveType> validColumnTypes = getValidColumnType(hiveColumn.getType());
             if (!validColumnTypes.contains(column.getPrimitiveType())) {
                 throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "]");
             }
+             */
             if (!column.isAllowNull() && !isTypeRead) {
                 throw new DdlException(
                         "hive extern table not support no-nullable column: [" + hiveColumn.getName() + "]");
