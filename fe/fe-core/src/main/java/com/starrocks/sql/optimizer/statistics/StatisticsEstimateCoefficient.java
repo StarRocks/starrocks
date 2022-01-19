@@ -23,4 +23,7 @@ public class StatisticsEstimateCoefficient {
     public static final double OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT = 0.5;
     // used in compute extra cost for multi distinct function, estimate whether to trigger streaming
     public static final double STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT = 0.8;
+
+    // used in compute cte choose reuse or inline
+    public static double DEFAULT_CTE_INLINE_COST_RATE = 1.5;
 }
