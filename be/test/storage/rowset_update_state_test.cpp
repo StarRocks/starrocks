@@ -321,6 +321,19 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     state.test_check_conflict(_tablet.get(), partial_rowset.get(), partial_rowset->rowset_meta()->get_rowset_seg_id(),
                               latest_applied_version, read_column_ids, index);
 
+    auto manager = StorageEngine::instance()->update_manager();
+    auto state_entry =
+            manager->update_state_cache().get(Substitute("$0_$1", _tablet->tablet_id(), rowset_id.to_string()));
+    ASSERT_TRUE(state_entry != nullptr);
+    auto& build_state = state_entry->value();
+    const std::vector<PartialUpdateState>& build_parital_update_states = build_state.parital_update_states();
+    ASSERT_EQ(build_parital_update_states.size(), 1);
+    ASSERT_EQ(build_parital_update_states[0].src_rss_rowids.size(), N);
+    ASSERT_EQ(build_parital_update_states[0].write_columns.size(), 1);
+    for (size_t i = 0; i < keys.size(); i++) {
+        ASSERT_EQ((int32_t)(keys[i] % 1000 + 2), build_parital_update_states[0].write_columns[0]->get(i).get_int32());
+    }
+
     // check data of write column
     const std::vector<PartialUpdateState>& new_parital_update_states = state.parital_update_states();
     ASSERT_EQ(new_parital_update_states.size(), 1);

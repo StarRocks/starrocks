@@ -37,6 +37,7 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
+#include "storage/update_manager.h"
 #include "storage/vectorized/aggregate_iterator.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/merge_iterator.h"
@@ -144,6 +145,29 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     RETURN_IF_ERROR(
             RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, _rowset_meta, &rowset));
     _already_built = true;
+
+    // if rowset is partial rowset, build rowset_update_state in advance to reduce cost time of apply
+    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+        auto manager = StorageEngine::instance()->update_manager();
+        auto state_entry = manager->update_state_cache().get_or_create(
+                Substitute("$0_$1", _context.tablet_id, rowset->rowset_id().to_string()));
+        state_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+        auto& state = state_entry->value();
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
+        auto st = state.load(tablet.get(), rowset.get());
+        manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
+        if (!st.ok()) {
+            manager->update_state_cache().remove(state_entry);
+            std::string msg = Substitute(
+                    "build rowset error: load rowset update state failed, #tablet_id:$0 #rowset_id:$1 #error_msg:$2",
+                    _context.tablet_id, rowset->rowset_id().to_string(), st.to_string());
+            LOG(ERROR) << msg;
+            return Status::InternalError(msg);
+        }
+        // update state colud be used in rowset_apply, so keep in cache
+        manager->update_state_cache().release(state_entry);
+    }
+
     return rowset;
 }
 
