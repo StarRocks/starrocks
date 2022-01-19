@@ -1,0 +1,43 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+syntax = "proto3";
+
+package starrocks;
+
+import "olap_common.proto";
+
+message L0SnapshotMetaPB {
+    EditVersionPB version = 1;
+    PagePointerPB data = 2;
+}
+
+message L0WalMetaPB {
+    EditVersionPB version = 1;
+    PagePointerPB data = 2;
+}
+
+message L0MetaPB {
+    L0SnapshotMetaPB snapshot = 2;
+    repeated L0WalMetaPB wals = 3;
+}
+
+message L1ShardMetaPB {
+    uint64 size = 1;
+    uint64 npage = 2;
+    PagePointerPB data = 3;
+}
+
+message L1MetaPB {
+    EditVersionPB version = 1;
+    uint64 size = 2;
+    repeated L1ShardMetaPB shards = 3;
+}
+
+message PersistentIndexMetaPB {
+    EditVersionPB version = 1;
+    uint64 key_size = 2;
+    uint64 size = 3;
+    L0MetaPB l0_meta = 4;
+    // l1's meta stored in l1 file
+    // only store a version to get file name
+    EditVersionPB l1_version = 5;
+}

@@ -42,6 +42,7 @@ add_library(Storage STATIC
     olap_server.cpp
     options.cpp
     page_cache.cpp
+    persistent_index.cpp
     primary_index.cpp
     primary_key_encoder.cpp
     protobuf_file.cpp
