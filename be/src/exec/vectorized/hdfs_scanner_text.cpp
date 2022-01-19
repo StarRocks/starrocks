@@ -175,7 +175,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     csv::Converter::Options options;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
-        status = dynamic_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
+        status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
         if (status.is_end_of_file()) {
             if (_current_range_index == _scanner_params.scan_ranges.size() - 1) {
                 break;
@@ -243,13 +243,13 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
                 std::make_unique<HdfsScannerCSVReader>(_scanner_params.fs, _record_delimiter, _field_delimiter,
                                                        scan_range->offset, scan_range->length, scan_range->file_length);
     } else {
-        dynamic_cast<HdfsScannerCSVReader*>(_reader.get())->reset(scan_range->offset, scan_range->length);
+        down_cast<HdfsScannerCSVReader*>(_reader.get())->reset(scan_range->offset, scan_range->length);
     }
     if (scan_range->offset != 0) {
         // Always skip first record of scan range with non-zero offset.
         // Notice that the first record will read by previous scan range.
         CSVReader::Record dummy;
-        RETURN_IF_ERROR(dynamic_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&dummy));
+        RETURN_IF_ERROR(down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&dummy));
     }
     return Status::OK();
 }
