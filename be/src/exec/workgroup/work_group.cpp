@@ -16,14 +16,13 @@ WorkGroup::WorkGroup(const std::string& name, int id, size_t cpu_limit, size_t m
           _cpu_limit(cpu_limit),
           _memory_limit(memory_limit),
           _concurrency(concurrency),
-          _type(type),
-          _io_work_queue(1024) {
+          _type(type) {
     _expect_factor = _cpu_expect_use_ratio;
     _select_factor = _expect_factor;
     _cur_select_factor = _select_factor;
 }
 
-WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id), _io_work_queue(1024) {
+WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     if (twg.__isset.cpu_limit) {
         _cpu_limit = twg.cpu_limit;
     } else {
@@ -110,14 +109,14 @@ void WorkGroupManager::remove_workgroup(int wg_id) {
 }
 
 bool WorkGroup::try_offer_io_task(const PriorityThreadPool::Task& task) {
-    return _io_work_queue.try_put(task);
+    _io_work_queue.emplace(std::move(task));
+    return true;
 }
 
-void WorkGroup::pick_and_run_io_task() {
-    PriorityThreadPool::Task task;
-    if (_io_work_queue.blocking_get(&task)) {
-        task.work_function();
-    }
+PriorityThreadPool::Task WorkGroup::pick_io_task() {
+    PriorityThreadPool::Task task = std::move(_io_work_queue.front());
+    _io_work_queue.pop();
+    return task;
 }
 
 // shuold be call when read chunk_num from disk
@@ -184,13 +183,13 @@ void WorkGroup::estimate_trend_factor_period() {
     _diff_factor = _select_factor - _expect_factor;
 
     // just for debug
-    LOG(WARNING) << "estimate_trend_factor_period: " << name()
-                 << " decrease_chunk_num_period: " << _decrease_chunk_num_period
-                 << " get_cpu_actual_use_ratio: " << get_cpu_actual_use_ratio()
-                 << " get_cpu_expected_use_ratio: " << get_cpu_expected_use_ratio()
-                 << " increase_chunk_num_period: " << _increase_chunk_num_period << " expect_factor: " << _expect_factor
-                 << " decrease_factor: " << decrease_factor << " increase_factor: " << increase_factor
-                 << " diff_factor: " << _diff_factor;
+    // LOG(WARNING) << "estimate_trend_factor_period: " << name()
+    //             << " decrease_chunk_num_period: " << _decrease_chunk_num_period
+    //             << " get_cpu_actual_use_ratio: " << get_cpu_actual_use_ratio()
+    //             << " get_cpu_expected_use_ratio: " << get_cpu_expected_use_ratio()
+    //             << " increase_chunk_num_period: " << _increase_chunk_num_period << " expect_factor: " << _expect_factor
+    //             << " decrease_factor: " << decrease_factor << " increase_factor: " << increase_factor
+    //             << " diff_factor: " << _diff_factor;
 
     // it only use for this period to calculate factors
     // over calculate, it must be reset to zero for next period
@@ -199,7 +198,7 @@ void WorkGroup::estimate_trend_factor_period() {
 }
 
 size_t WorkGroup::io_task_queue_size() {
-    return _io_work_queue.get_size();
+    return _io_work_queue.size();
 }
 
 void IoWorkGroupQueue::adjust_weight_if_need() {
@@ -213,7 +212,6 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         return;
     }
 
-    // lock
     _io_wgs.clear();
     for (const auto& wg : _ready_wgs) {
         _io_wgs.push_back(wg);
@@ -243,8 +241,8 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
     }
 
     // just for debug
-    LOG(WARNING) << "positive_total_diff_factor: " << positive_total_diff_factor
-                 << " negative_total_diff_factor: " << negative_total_diff_factor;
+    // LOG(WARNING) << "positive_total_diff_factor: " << positive_total_diff_factor
+    //            << " negative_total_diff_factor: " << negative_total_diff_factor;
 
     // If positive_total_diff_factor <= 0, it mean not exist workgroup which over pay io resource
     // so it don't need adjust, just keep
@@ -295,30 +293,14 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
     }
 
     // just for debug
-    LOG(WARNING) << "adjust weigth ==========================";
-    for (auto const& wg : _io_wgs) {
-        LOG(WARNING) << "name " << wg->name() << " select_factor: " << wg->get_select_factor();
-    }
+    // LOG(WARNING) << "adjust weigth ==========================";
+    // for (auto const& wg : _io_wgs) {
+    //    LOG(WARNING) << "name " << wg->name() << " select_factor: " << wg->get_select_factor();
+    // }
 
     schedule_io_task();
     _cur_schedule_num = _cur_schedule_num_period;
     _is_scheduled.store(false, std::memory_order_release);
-}
-
-WorkGroupPtr IoWorkGroupQueue::get_next_wg() {
-    size_t index = _cur_index;
-    while (!_cur_index.compare_exchange_strong(index, index + 1)) {
-        index = _cur_index;
-        if (index >= _cur_schedule_num_period) {
-            break;
-        }
-    }
-
-    if (index < _cur_schedule_num_period) {
-        return _cur_wait_run_wgs[index];
-    }
-
-    return nullptr;
 }
 
 void IoWorkGroupQueue::schedule_io_task() {
@@ -332,7 +314,7 @@ void IoWorkGroupQueue::schedule_io_task() {
 
 size_t IoWorkGroupQueue::get_next_wg_index() {
     // we use Weighted round robin
-    size_t index = -1;
+    int index = -1;
     double total = 0;
     for (int i = 0; i < _io_wgs.size(); i++) {
         _io_wgs[i]->update_cur_select_factor(_io_wgs[i]->get_select_factor());
@@ -345,7 +327,16 @@ size_t IoWorkGroupQueue::get_next_wg_index() {
     return index;
 }
 
-WorkGroupPtr IoWorkGroupQueue::pick_next() {
+WorkGroupPtr IoWorkGroupQueue::get_next_wg() {
+    int index = _cur_index++;
+    if (index < _cur_schedule_num_period) {
+        return _cur_wait_run_wgs[index];
+    }
+
+    return nullptr;
+}
+
+PriorityThreadPool::Task IoWorkGroupQueue::pick_next_task() {
     std::unique_lock<std::mutex> lock(_global_io_mutex);
     while (_ready_wgs.empty()) {
         _cv.wait(lock);
@@ -354,7 +345,7 @@ WorkGroupPtr IoWorkGroupQueue::pick_next() {
     do {
         adjust_weight_if_need();
         wg = get_next_wg();
-    } while (wg->io_task_queue_size() == 0);
+    } while (wg == nullptr || wg->io_task_queue_size() == 0);
 
     if (wg->io_task_queue_size() == 1) {
         _ready_wgs.erase(wg);
@@ -362,13 +353,13 @@ WorkGroupPtr IoWorkGroupQueue::pick_next() {
     _total_task_num--;
 
     // just for debug
-    LOG(WARNING) << "select: " << wg->name();
-    return wg;
+    // LOG(WARNING) << "select: " << wg->name();
+    return wg->pick_io_task();
 
 }
 
-WorkGroupPtr WorkGroupManager::pick_next_wg_for_io() {
-    return _wg_io_queue.pick_next();
+PriorityThreadPool::Task WorkGroupManager::pick_next_task_for_io() {
+    return _wg_io_queue.pick_next_task();
 }
 
 WorkGroupQueue& WorkGroupManager::get_io_queue() {
@@ -377,22 +368,14 @@ WorkGroupQueue& WorkGroupManager::get_io_queue() {
 
 bool IoWorkGroupQueue::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
     std::lock_guard<std::mutex> lock(_global_io_mutex);
-    bool is_ok = false;
+    wg->try_offer_io_task(task);
     if (_ready_wgs.find(wg) == _ready_wgs.end()) {
-        is_ok = wg->try_offer_io_task(task);
-        if (is_ok) {
-            _ready_wgs.emplace(wg);
-        }
-    } else {
-        is_ok = wg->try_offer_io_task(task);
+        _ready_wgs.emplace(wg);
     }
 
-    if (is_ok) {
-        _total_task_num++;
-        _cv.notify_one();
-    }
-
-    return is_ok;
+    _total_task_num++;
+    _cv.notify_one();
+    return true;
 }
 
 bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {

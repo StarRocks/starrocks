@@ -26,12 +26,9 @@ void IoDispatcher::run() {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
-
-        auto wg = WorkGroupManager::instance()->pick_next_wg_for_io();
-        if (wg == nullptr) {
-            continue;
-        }
-        wg->pick_and_run_io_task();
+        
+        auto task = WorkGroupManager::instance()->pick_next_task_for_io();
+        task.work_function();
     }
 }
 

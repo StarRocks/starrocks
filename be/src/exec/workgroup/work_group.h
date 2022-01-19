@@ -40,7 +40,9 @@ public:
     ~IoWorkGroupQueue() = default;
     void add(const WorkGroupPtr& wg) override {}
     void remove(const WorkGroupPtr& wg) override {}
-    WorkGroupPtr pick_next() override;
+    WorkGroupPtr pick_next() override { return nullptr; }
+
+    PriorityThreadPool::Task pick_next_task();
 
     bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
 
@@ -115,7 +117,7 @@ public:
 
     static constexpr int DEFAULT_WG_ID = 0;
     bool try_offer_io_task(const PriorityThreadPool::Task& task);
-    void pick_and_run_io_task();
+    PriorityThreadPool::Task pick_io_task();
 
 public:
     // Return current io task queue size
@@ -159,7 +161,8 @@ private:
 
     // Queue on which work items are held until a thread is available to process them in
     // FIFO order.
-    BlockingPriorityQueue<PriorityThreadPool::Task> _io_work_queue;
+    // BlockingPriorityQueue<PriorityThreadPool::Task> _io_work_queue; 
+    std::queue<PriorityThreadPool::Task> _io_work_queue;
 
     std::atomic<double> _cpu_expect_use_ratio;
     std::atomic<double> _cpu_actual_use_ratio;
@@ -193,7 +196,8 @@ public:
     void remove_workgroup(int wg_id);
 
     // get next workgroup for io
-    WorkGroupPtr pick_next_wg_for_io();
+    // WorkGroupPtr pick_next_wg_for_io();
+    PriorityThreadPool::Task pick_next_task_for_io();
     bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
 
     WorkGroupQueue& get_cpu_queue();
