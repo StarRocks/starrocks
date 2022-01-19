@@ -518,9 +518,11 @@ Status ChunkAllocator::allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema
     size_t mem_size = _row_len * num_rows;
 
     if (_memory_limitation > 0 && _memory_allocated + mem_size > _memory_limitation) {
-        LOG(INFO) << "ChunkAllocator::allocate() memory exceed. "
-                  << "m_memory_allocated=" << _memory_allocated;
-        return Status::OK();
+        std::string msg =
+                Substitute("ChunkAllocator::allocate() memory exceed, memory_limitation:$0, memory_allocate:$1 ",
+                           _memory_limitation, _memory_allocated + mem_size);
+        LOG(WARNING) << msg;
+        return Status::MemoryLimitExceeded(msg);
     }
 
     chunk = ChunkHelper::new_chunk(schema, num_rows);
@@ -1182,6 +1184,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                 static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
         sc_procedure = std::make_unique<SchemaChangeWithSorting>(chunk_changer, memory_limitation);
     } else if (sc_directly) {
+        LOG(INFO) << "doing directly schema change for base_tablet " << sc_params.base_tablet->full_name();
         sc_procedure = std::make_unique<SchemaChangeDirectly>(chunk_changer);
     } else {
         LOG(INFO) << "doing linked schema change for base_tablet " << sc_params.base_tablet->full_name();
