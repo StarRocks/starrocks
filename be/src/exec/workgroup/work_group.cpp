@@ -231,7 +231,6 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         }
         schedule_io_task();
         _cur_schedule_num = _cur_schedule_num_period;
-        _is_scheduled.store(false, std::memory_order_release);
         return;
     }
 
@@ -273,7 +272,6 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
 
     schedule_io_task();
     _cur_schedule_num = _cur_schedule_num_period;
-    _is_scheduled.store(false, std::memory_order_release);
 }
 
 void IoWorkGroupQueue::schedule_io_task() {

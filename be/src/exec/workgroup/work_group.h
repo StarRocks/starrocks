@@ -61,7 +61,6 @@ private:
     std::atomic<size_t> _total_task_num = 0;
     std::atomic<size_t> _cur_index = 0;
     std::vector<WorkGroupPtr> _cur_wait_run_wgs;
-    std::atomic<bool> _is_scheduled = false;
 
     const size_t _schedule_num_period;
     std::atomic<int> _cur_schedule_num = 0;
