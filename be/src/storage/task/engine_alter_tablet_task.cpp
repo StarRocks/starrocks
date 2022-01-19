@@ -39,7 +39,8 @@ EngineAlterTabletTask::EngineAlterTabletTask(MemTracker* mem_tracker, const TAlt
           _error_msgs(error_msgs),
           _process_name(process_name) {
     size_t mem_limit = static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
-    _mem_tracker = std::make_unique<MemTracker>(mem_limit, "schema change task", mem_tracker);
+    _mem_tracker =
+            std::make_unique<MemTracker>(MemTracker::SCHEMA_CHANGE_TASK, mem_limit, "schema change task", mem_tracker);
 }
 
 OLAPStatus EngineAlterTabletTask::execute() {
