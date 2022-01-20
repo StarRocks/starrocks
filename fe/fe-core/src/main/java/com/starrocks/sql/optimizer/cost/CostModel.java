@@ -18,7 +18,6 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -71,7 +70,7 @@ public class CostModel {
                 costEstimate.getNetworkCost() * networkCostWeight;
     }
 
-    public static class CostEstimator extends OperatorVisitor<CostEstimate, ExpressionContext> {
+    private static class CostEstimator extends OperatorVisitor<CostEstimate, ExpressionContext> {
         @Override
         public CostEstimate visitOperator(Operator node, ExpressionContext context) {
             return CostEstimate.zero();
@@ -107,7 +106,7 @@ public class CostModel {
             // Disable one phased sort, Currently, we always use two phase sort
             if (!node.isEnforced() && !node.isSplit()
                     && node.getSortPhase().isFinal()
-                    && !((LogicalOperator) context.getChildOperator(0)).hasLimit()) {
+                    && !context.getChildOperator(0).hasLimit()) {
                 return CostEstimate.infinite();
             }
 
@@ -345,7 +344,6 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
-            //TODO: Add cost estimate
             return CostEstimate.zero();
         }
 
@@ -371,9 +369,6 @@ public class CostModel {
         public CostEstimate visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
-
-            // @TODO:
-            //  there only compute CTEConsume output columns, but we need compute CTEProduce output columns in fact
             return CostEstimate.of(statistics.getComputeSize(), 0, statistics.getComputeSize());
         }
 

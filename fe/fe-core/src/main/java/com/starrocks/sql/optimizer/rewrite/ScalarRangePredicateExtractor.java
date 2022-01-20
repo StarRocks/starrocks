@@ -88,7 +88,7 @@ public class ScalarRangePredicateExtractor {
             }
         }
 
-        if (extractExpr != null && !conjuncts.contains(extractExpr)) {
+        if (!conjuncts.contains(extractExpr)) {
             result.forEach(f -> f.setFromPredicateRangeDerive(true));
             result.stream().filter(predicateOperator -> !checkStatisticsEstimateValid(predicateOperator))
                     .forEach(f -> f.setNotEvalEstimate(true));
