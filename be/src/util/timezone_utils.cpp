@@ -56,10 +56,10 @@ bool TimezoneUtils::find_cctz_time_zone(const std::string& timezone, cctz::time_
     }
 }
 
-bool TimezoneUtils::find_cctz_time_zone(HsScanUtils hsScanUtils, const std::string& timezone, cctz::time_zone& ctz) {
+bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, const std::string& timezone, cctz::time_zone& ctz) {
     bool v = false;
     hs_scan(
-    hsScanUtils.database, timezone.c_str(), timezone.size(), 0, hsScanUtils.scratch,
+    timezone_hsscan.database, timezone.c_str(), timezone.size(), 0, timezone_hsscan.scratch,
     [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
        void* ctx) -> int {
         *((bool*)ctx) = true;
@@ -70,11 +70,11 @@ bool TimezoneUtils::find_cctz_time_zone(HsScanUtils hsScanUtils, const std::stri
     if (v) {
         bool positive = (timezone.substr(0,1) != "-");
         auto t1 = timezone.substr(1, 2);
-  
+
         //Regular expression guarantees hour and minute mush be int
         int hour = std::stoi(timezone.substr(1, 2));
         int minute = std::stoi(timezone.substr(4, 5));
-   
+
         // timezone offsets around the world extended from -12:00 to +14:00
         if (!positive && hour > 12) {
             return false;
