@@ -287,6 +287,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
     }
     int64_t t_get_rowids = MonotonicMillis();
 
+    std::string log_str;
     for (uint32_t i = 0; i < num_segments; ++i) {
         int64_t t_resolve_conflict_start = MonotonicMillis();
         uint32_t num_rows = new_rss_rowids[i].size();
@@ -324,20 +325,17 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
             for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
                 new_write_columns[col_idx]->append_selective(*read_columns[col_idx], read_idxes.data(), 0,
                                                              read_idxes.size());
-            }
-
-            for (size_t col_idx = 0; col_idx < _partial_update_states[i].write_columns.size(); col_idx++) {
                 RETURN_IF_ERROR(_partial_update_states[i].write_columns[col_idx]->update_rows(
                         *new_write_columns[col_idx], conflict_idxes.data()));
             }
         }
         int64_t t_resolve_conflict_end = MonotonicMillis();
-        LOG(INFO) << Substitute(
-                "check partial rowset conflict tablet:$0 rowset:$1 seg:$2 #column:$3 #conflict_rows:$4 getrowid:$5ms "
-                "#resolve_conflict $6ms",
-                tablet->tablet_id(), rowset_id, i, read_column_ids.size(), conflict_idxes.size(),
-                (t_get_rowids - t_start) / 1000000, (t_resolve_conflict_end - t_resolve_conflict_start) / 1000000);
+        strings::SubstituteAndAppend(&log_str, "#seg:$0 #column:$1 #conflict_rows:$2 #resolve_conflict $3ms ", i,
+                                     read_column_ids.size(), conflict_idxes.size(),
+                                     (t_resolve_conflict_end - t_resolve_conflict_start) / 1000000);
     }
+    LOG(INFO) << Substitute("check partial rowset conflict tablet:$0 rowset:$1 #getrowid:$2ms $3", tablet->tablet_id(),
+                            rowset_id, (t_get_rowids - t_start) / 1000000, log_str);
 
     return Status::OK();
 }
