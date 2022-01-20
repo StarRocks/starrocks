@@ -27,66 +27,52 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.thrift.TDateLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeFieldType;
-import org.joda.time.DateTimeZone;
-import org.joda.time.LocalDateTime;
-import org.joda.time.format.DateTimeFormatter;
-import org.joda.time.format.DateTimeFormatterBuilder;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.TimeZone;
-import java.util.regex.Pattern;
 
 public class DateLiteral extends LiteralExpr {
     private static final Logger LOG = LogManager.getLogger(DateLiteral.class);
 
-    private static final DateLiteral MIN_DATE = new DateLiteral(0000, 1, 1);
+    private static final DateLiteral MIN_DATE = new DateLiteral(0, 1, 1);
     private static final DateLiteral MAX_DATE = new DateLiteral(9999, 12, 31);
-    private static final DateLiteral MIN_DATETIME = new DateLiteral(0000, 1, 1, 0, 0, 0);
+    private static final DateLiteral MIN_DATETIME = new DateLiteral(0, 1, 1, 0, 0, 0);
     private static final DateLiteral MAX_DATETIME = new DateLiteral(9999, 12, 31, 23, 59, 59);
-    public static final DateLiteral UNIX_EPOCH_TIME = new DateLiteral(1970, 01, 01, 00, 00, 00);
 
-    private static DateTimeFormatter DATE_TIME_FORMATTER = null;
-    private static DateTimeFormatter DATE_FORMATTER = null;
-    private static DateTimeFormatter DATE_NO_SPLIT_FORMATTER = null;
+    private static final DateTimeFormatter DATE_TIME_FORMATTER;
+    private static final DateTimeFormatter DATE_FORMATTER;
+    private static final DateTimeFormatter DATE_NO_SPLIT_FORMATTER;
     /*
      * Dates containing two-digit year values are ambiguous because the century is unknown.
      * MySQL interprets two-digit year values using these rules:
      * Year values in the range 70-99 are converted to 1970-1999.
      * Year values in the range 00-69 are converted to 2000-2069.
      * */
-    private static DateTimeFormatter DATE_TIME_FORMATTER_TWO_DIGIT = null;
-    private static DateTimeFormatter DATE_FORMATTER_TWO_DIGIT = null;
+    private static final DateTimeFormatter DATE_TIME_FORMATTER_TWO_DIGIT;
+    private static final DateTimeFormatter DATE_FORMATTER_TWO_DIGIT;
 
     static {
-        try {
-            DATE_TIME_FORMATTER = formatBuilder("%Y-%m-%d %H:%i:%s").toFormatter();
-            DATE_FORMATTER = formatBuilder("%Y-%m-%d").toFormatter();
-            DATE_TIME_FORMATTER_TWO_DIGIT = formatBuilder("%y-%m-%d %H:%i:%s").toFormatter();
-            DATE_FORMATTER_TWO_DIGIT = formatBuilder("%y-%m-%d").toFormatter();
-            DATE_NO_SPLIT_FORMATTER = formatBuilder("%Y%m%d").toFormatter();
-        } catch (AnalysisException e) {
-            LOG.error("invalid date format", e);
-            System.exit(-1);
-        }
+        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s").toFormatter();
+        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d").toFormatter();
+        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%d %H:%i:%s").toFormatter();
+        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%d").toFormatter();
+        DATE_NO_SPLIT_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y%m%d").toFormatter();
     }
-
-    //Regex used to determine if the TIME field exists int date_format
-    private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
 
     //Date Literal persist type in meta
     private enum DateLiteralType {
@@ -133,24 +119,6 @@ public class DateLiteral extends LiteralExpr {
         analysisDone();
     }
 
-    public DateLiteral(long unixTimestamp, TimeZone timeZone, Type type) {
-        DateTime dt = new DateTime(unixTimestamp, DateTimeZone.forTimeZone(timeZone));
-        year = dt.getYear();
-        month = dt.getMonthOfYear();
-        day = dt.getDayOfMonth();
-        hour = dt.getHourOfDay();
-        minute = dt.getMinuteOfHour();
-        second = dt.getSecondOfMinute();
-        if (type.isDate()) {
-            hour = 0;
-            minute = 0;
-            second = 0;
-            this.type = Type.DATE;
-        } else {
-            this.type = Type.DATETIME;
-        }
-    }
-
     public DateLiteral(long year, long month, long day) {
         this.hour = 0;
         this.minute = 0;
@@ -173,11 +141,11 @@ public class DateLiteral extends LiteralExpr {
 
     public DateLiteral(LocalDateTime dateTime, Type type) throws AnalysisException {
         this.year = dateTime.getYear();
-        this.month = dateTime.getMonthOfYear();
+        this.month = dateTime.getMonthValue();
         this.day = dateTime.getDayOfMonth();
-        this.hour = dateTime.getHourOfDay();
-        this.minute = dateTime.getMinuteOfHour();
-        this.second = dateTime.getSecondOfMinute();
+        this.hour = dateTime.getHour();
+        this.minute = dateTime.getMinute();
+        this.second = dateTime.getSecond();
         this.type = type;
 
         if (isNullable()) {
@@ -207,27 +175,27 @@ public class DateLiteral extends LiteralExpr {
             LocalDateTime dateTime;
             if (type.isDate()) {
                 if (s.split("-")[0].length() == 2) {
-                    dateTime = DATE_FORMATTER_TWO_DIGIT.parseLocalDateTime(s);
+                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_FORMATTER_TWO_DIGIT);
                 } else if (s.length() == 8) {
                     // 20200202
-                    dateTime = DATE_NO_SPLIT_FORMATTER.parseLocalDateTime(s);
+                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_NO_SPLIT_FORMATTER);
                 } else {
-                    dateTime = DATE_FORMATTER.parseLocalDateTime(s);
+                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_FORMATTER);
                 }
             } else {
                 if (s.split("-")[0].length() == 2) {
-                    dateTime = DATE_TIME_FORMATTER_TWO_DIGIT.parseLocalDateTime(s);
+                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_TIME_FORMATTER_TWO_DIGIT);
                 } else {
-                    dateTime = DATE_TIME_FORMATTER.parseLocalDateTime(s);
+                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_TIME_FORMATTER);
                 }
             }
 
             year = dateTime.getYear();
-            month = dateTime.getMonthOfYear();
+            month = dateTime.getMonthValue();
             day = dateTime.getDayOfMonth();
-            hour = dateTime.getHourOfDay();
-            minute = dateTime.getMinuteOfHour();
-            second = dateTime.getSecondOfMinute();
+            hour = dateTime.getHour();
+            minute = dateTime.getMinute();
+            second = dateTime.getSecond();
             this.type = type;
         } catch (Exception ex) {
             throw new AnalysisException("date literal [" + s + "] is invalid");
@@ -436,185 +404,8 @@ public class DateLiteral extends LiteralExpr {
     }
 
     public long unixTimestamp(TimeZone timeZone) {
-        DateTime dt = new DateTime((int) year, (int) month, (int) day, (int) hour, (int) minute, (int) second,
-                DateTimeZone.forTimeZone(timeZone));
-        return dt.getMillis();
-    }
-
-    public static DateLiteral dateParser(String date, String pattern) throws AnalysisException {
-        LocalDateTime dateTime = formatBuilder(pattern).toFormatter().parseLocalDateTime(date);
-        DateLiteral dateLiteral = new DateLiteral(
-                dateTime.getYear(),
-                dateTime.getMonthOfYear(),
-                dateTime.getDayOfMonth(),
-                dateTime.getHourOfDay(),
-                dateTime.getMinuteOfHour(),
-                dateTime.getSecondOfMinute());
-        if (HAS_TIME_PART.matcher(pattern).matches()) {
-            dateLiteral.setType(Type.DATETIME);
-        } else {
-            dateLiteral.setType(Type.DATE);
-        }
-        return dateLiteral;
-    }
-
-    //Return the date stored in the dateliteral as pattern format.
-    //eg : "%Y-%m-%d" or "%Y-%m-%d %H:%i:%s"
-    public String dateFormat(String pattern) throws AnalysisException {
-        if (type.isDate()) {
-            return DATE_FORMATTER.parseLocalDateTime(getStringValue())
-                    .toString(formatBuilder(pattern).toFormatter());
-        } else {
-            return DATE_TIME_FORMATTER.parseLocalDateTime(getStringValue())
-                    .toString(formatBuilder(pattern).toFormatter());
-        }
-    }
-
-    private static DateTimeFormatterBuilder formatBuilder(String pattern) throws AnalysisException {
-        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
-        boolean escaped = false;
-        for (int i = 0; i < pattern.length(); i++) {
-            char character = pattern.charAt(i);
-            if (escaped) {
-                switch (character) {
-                    case 'a': // %a Abbreviated weekday name (Sun..Sat)
-                        builder.appendDayOfWeekShortText();
-                        break;
-                    case 'b': // %b Abbreviated month name (Jan..Dec)
-                        builder.appendMonthOfYearShortText();
-                        break;
-                    case 'c': // %c Month, numeric (0..12)
-                        builder.appendMonthOfYear(1);
-                        break;
-                    case 'd': // %d Day of the month, numeric (00..31)
-                        builder.appendDayOfMonth(2);
-                        break;
-                    case 'e': // %e Day of the month, numeric (0..31)
-                        builder.appendDayOfMonth(1);
-                        break;
-                    case 'H': // %H Hour (00..23)
-                        builder.appendHourOfDay(2);
-                        break;
-                    case 'h': // %h Hour (01..12)
-                    case 'I': // %I Hour (01..12)
-                        builder.appendClockhourOfHalfday(2);
-                        break;
-                    case 'i': // %i Minutes, numeric (00..59)
-                        builder.appendMinuteOfHour(2);
-                        break;
-                    case 'j': // %j Day of year (001..366)
-                        builder.appendDayOfYear(3);
-                        break;
-                    case 'k': // %k Hour (0..23)
-                        builder.appendHourOfDay(1);
-                        break;
-                    case 'l': // %l Hour (1..12)
-                        builder.appendClockhourOfHalfday(1);
-                        break;
-                    case 'M': // %M Month name (January..December)
-                        builder.appendMonthOfYearText();
-                        break;
-                    case 'm': // %m Month, numeric (00..12)
-                        builder.appendMonthOfYear(2);
-                        break;
-                    case 'p': // %p AM or PM
-                        builder.appendHalfdayOfDayText();
-                        break;
-                    case 'r': // %r Time, 12-hour (hh:mm:ss followed by AM or PM)
-                        builder.appendClockhourOfHalfday(2)
-                                .appendLiteral(':')
-                                .appendMinuteOfHour(2)
-                                .appendLiteral(':')
-                                .appendSecondOfMinute(2)
-                                .appendLiteral(' ')
-                                .appendHalfdayOfDayText();
-                        break;
-                    case 'S': // %S Seconds (00..59)
-                    case 's': // %s Seconds (00..59)
-                        builder.appendSecondOfMinute(2);
-                        break;
-                    case 'T': // %T Time, 24-hour (hh:mm:ss)
-                        builder.appendHourOfDay(2)
-                                .appendLiteral(':')
-                                .appendMinuteOfHour(2)
-                                .appendLiteral(':')
-                                .appendSecondOfMinute(2);
-                        break;
-                    case 'v': // %v Week (01..53), where Monday is the first day of the week; used with %x
-                        builder.appendWeekOfWeekyear(2);
-                        break;
-                    case 'x': // %x Year for the week, where Monday is the first day of the week, numeric, four digits; used with %v
-                        builder.appendWeekyear(4, 4);
-                        break;
-                    case 'W': // %W Weekday name (Sunday..Saturday)
-                        builder.appendDayOfWeekText();
-                        break;
-                    case 'Y': // %Y Year, numeric, four digits
-                        builder.appendYear(4, 4);
-                        break;
-                    case 'y': // %y Year, numeric (two digits)
-                        builder.appendTwoDigitYear(2020);
-                        break;
-                    case 'w': // %w Day of the week (0=Sunday..6=Saturday)
-                        builder.appendDayOfWeek(0);
-                        break;
-                    case 'f': // %f Microseconds (000000..999999)
-                    case 'U': // %U Week (00..53), where Sunday is the first day of the week
-                    case 'u': // %u Week (00..53), where Monday is the first day of the week
-                    case 'V': // %V Week (01..53), where Sunday is the first day of the week; used with %X
-                    case 'X': // %X Year for the week where Sunday is the first day of the week, numeric, four digits; used with %V
-                    case 'D': // %D Day of the month with English suffix (0th, 1st, 2nd, 3rd, ...)
-                        throw new AnalysisException(
-                                String.format("%%%s not supported in date format string", character));
-                    case '%': // %% A literal "%" character
-                        builder.appendLiteral('%');
-                        break;
-                    default: // %<x> The literal character represented by <x>
-                        builder.appendLiteral(character);
-                        break;
-                }
-                escaped = false;
-            } else if (character == '%') {
-                escaped = true;
-            } else {
-                builder.appendLiteral(character);
-            }
-        }
-        return builder;
-    }
-
-    public LocalDateTime getTimeFormatter() throws AnalysisException {
-        if (type.isDate()) {
-            return DATE_FORMATTER.parseLocalDateTime(getStringValue());
-        } else if (type.isDatetime()) {
-            return DATE_TIME_FORMATTER.parseLocalDateTime(getStringValue());
-        } else {
-            throw new AnalysisException("Not support date literal type");
-        }
-    }
-
-    public DateLiteral plusYears(int year) throws AnalysisException {
-        return new DateLiteral(getTimeFormatter().plusYears(year), type);
-    }
-
-    public DateLiteral plusMonths(int month) throws AnalysisException {
-        return new DateLiteral(getTimeFormatter().plusMonths(month), type);
-    }
-
-    public DateLiteral plusDays(int day) throws AnalysisException {
-        return new DateLiteral(getTimeFormatter().plusDays(day), type);
-    }
-
-    public DateLiteral plusHours(int hour) throws AnalysisException {
-        return new DateLiteral(getTimeFormatter().plusHours(hour), type);
-    }
-
-    public DateLiteral plusMinutes(int minute) throws AnalysisException {
-        return new DateLiteral(getTimeFormatter().plusMinutes(minute), type);
-    }
-
-    public DateLiteral plusSeconds(int second) throws AnalysisException {
-        return new DateLiteral(getTimeFormatter().plusSeconds(second), type);
+        return LocalDateTime.of((int) year, (int) month, (int) day, (int) hour, (int) minute, (int) second)
+                .atZone(timeZone.toZoneId()).toEpochSecond() * 1000;
     }
 
     public long getYear() {

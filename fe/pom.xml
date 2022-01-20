@@ -20,7 +20,7 @@ under the License.
 -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.starrocks</groupId>
@@ -308,13 +308,6 @@ under the License.
                 <artifactId>jmockit</artifactId>
                 <version>1.48</version>
                 <scope>test</scope>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/joda-time/joda-time -->
-            <dependency>
-                <groupId>joda-time</groupId>
-                <artifactId>joda-time</artifactId>
-                <version>2.10.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
