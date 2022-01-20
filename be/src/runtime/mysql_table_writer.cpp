@@ -31,6 +31,7 @@
 #include "common/status.h"
 #include "fmt/compile.h"
 #include "fmt/core.h"
+#include "runtime/primitive_type_infra.h"
 #include "storage/null_predicate.h"
 #include "util/radix_sort.h"
 #include "util/slice.h"
@@ -100,15 +101,14 @@ Status MysqlTableWriter::_build_viewers(vectorized::Columns& columns) {
         if (!is_scalar_primitive_type(type.type)) {
             return Status::InternalError(fmt::format("unsupported type in mysql sink:{}", type.type));
         }
-
+        
         switch (type.type) {
 #define M(NAME)                                                                           \
     case PrimitiveType::NAME: {                                                           \
         _viewers.emplace_back(vectorized::ColumnViewer<PrimitiveType::NAME>(columns[i])); \
         break;                                                                            \
     }
-            APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
-            APPLY_FOR_ALL_NULL_TYPE(M)
+            APPLY_FOR_ALL_PRIMITIVE_TYPE_WITH_NULL(M)
 #undef M
         case PrimitiveType::TYPE_TIME: {
             columns[i] = vectorized::ColumnHelper::convert_time_column_from_double_to_str(columns[i]);
