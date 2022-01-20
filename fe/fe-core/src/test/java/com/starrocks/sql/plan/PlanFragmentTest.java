@@ -2003,6 +2003,15 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select [][1]";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+
+        sql = "select [v1,v2] from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:Project\n" +
+                "  |  <slot 4> : ARRAY<bigint(20)>[1: v1,2: v2]"));
+
+        sql = "select [v1 = 1, v2 = 2, true] from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("<slot 4> : ARRAY<boolean>[1: v1 = 1,2: v2 = 2,TRUE]"));
     }
 
     @Test
