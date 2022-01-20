@@ -3,16 +3,13 @@
 #pragma once
 
 #include "io/writable.h"
+#include "util/slice.h"
 
 namespace starrocks::io {
 
 class OutputStream : public Writable {
 public:
-    struct Buffer {
-        uint8_t* data;
-        int64_t size;
-    };
-
+    using Buffer = Slice;
     using Position = uint8_t*;
 
     ~OutputStream() override = default;
