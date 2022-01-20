@@ -16,9 +16,9 @@ using vectorized::Columns;
 
 class DictDecodeOperator final : public Operator {
 public:
-    DictDecodeOperator(int32_t id, int32_t plan_node_id,
-                       std::vector<int32_t>& encode_column_cids, std::vector<int32_t>& decode_column_cids,
-                       std::vector<DefaultDecoderPtr>& decoders, std::vector<ExprContext*>& expr_ctxs,
+    DictDecodeOperator(int32_t id, int32_t plan_node_id, std::vector<int32_t>& encode_column_cids,
+                       std::vector<int32_t>& decode_column_cids, std::vector<DefaultDecoderPtr>& decoders,
+                       std::vector<ExprContext*>& expr_ctxs,
                        std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>& string_functions,
                        DictOptimizeParser& dict_optimize_parser)
             : Operator(id, "dict_decode", plan_node_id),
