@@ -103,6 +103,11 @@ auto type_dispatch_all(PrimitiveType ptype, Functor fun) {
     M(TYPE_TIME)                    \
     M(TYPE_BINARY)
 
+#define APPLY_FOR_SORTABLE_TYPE(M) \
+    APPLY_FOR_ALL_PRIMITIVE_TYPE(M) \
+    M(TYPE_TIME)                    \
+    
+
 #define APPLY_FOR_ALL_PRIMITIVE_TYPE_WITH_NULL(M) \
     APPLY_FOR_ALL_PRIMITIVE_TYPE(M)               \
     M(TYPE_NULL)
