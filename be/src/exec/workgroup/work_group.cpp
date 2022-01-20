@@ -65,6 +65,14 @@ double WorkGroup::get_cpu_expected_use_ratio() const {
     return static_cast<double>(_cpu_limit) / WorkGroupManager::instance()->get_sum_cpu_limit();
 }
 
+double WorkGroup::get_cpu_unadjusted_actual_use_ratio() const {
+    int64_t sum_cpu_runtime_ns = WorkGroupManager::instance()->get_sum_unadjusted_cpu_runtime_ns();
+    if (sum_cpu_runtime_ns == 0) {
+        return 0;
+    }
+    return static_cast<double>(_unadjusted_real_runtime_ns) / sum_cpu_runtime_ns;
+}
+
 double WorkGroup::get_cpu_actual_use_ratio() const {
     int64_t sum_cpu_runtime_ns = WorkGroupManager::instance()->get_sum_cpu_runtime_ns();
     if (sum_cpu_runtime_ns == 0) {
@@ -347,6 +355,23 @@ bool IoWorkGroupQueue::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPo
 
 bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
     return _wg_io_queue.try_offer_io_task(wg, task);
+}
+
+void WorkGroupManager::log_cpu() {
+    LOG(WARNING) << "[TEST] ===============================";
+    for (auto [_, wg] : _workgroups) {
+        LOG(WARNING) << "[TEST] cpu "
+                     << "[wg=" << wg->name() << "] "
+                     << "[cpu_limit=" << wg->get_cpu_limit() << "] "
+                     << "[runtime=" << wg->get_real_runtime_ns() / 1000'000.0L << "] "
+                     << "[vruntime=" << wg->get_vruntime_ns() / 1000'000.0L << "] "
+                     << "[expected_ratio=" << wg->get_cpu_expected_use_ratio() << "] "
+                     << "[real_ratio=" << wg->get_cpu_unadjusted_actual_use_ratio() << "] ";
+        LOG(WARNING) << "[TEST] io "
+                     << "select_factor: " << wg->get_select_factor() << " cur_hold_total_chunk_num "
+                     << wg->get_cur_hold_total_chunk_num();
+    }
+    LOG(WARNING) << "[TEST] ===============================";
 }
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {

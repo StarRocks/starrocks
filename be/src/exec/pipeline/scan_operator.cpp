@@ -124,7 +124,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
             auto&& chunk = chunk_source->get_next_chunk_from_buffer();
             eval_runtime_bloom_filters(chunk.value().get());
             if (_workgroup != nullptr) {
-              _workgroup->decrease_chunk_num(1);
+                _workgroup->decrease_chunk_num(1);
             }
             return std::move(chunk);
         }
@@ -165,10 +165,12 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.work_function = [this, state, chunk_source_index]() {
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-            _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
+            size_t read_size = 0;
+            _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished,
+                                                                                  &read_size);
             if (this->_workgroup != nullptr) {
                 // TODO (by laotan332): More detailed information is needed
-                this->_workgroup->increase_chunk_num(_buffer_size);
+                this->_workgroup->increase_chunk_num(read_size);
             }
         }
 
