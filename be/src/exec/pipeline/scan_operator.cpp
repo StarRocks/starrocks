@@ -132,10 +132,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state) {
     task.work_function = [this, state]() {
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-            _chunk_source->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
+            size_t read_size = 0;
+            _chunk_source->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished, &read_size);
             if (this->_workgroup != nullptr) {
                 // TODO (by laotan332): More detailed information is needed
-                this->_workgroup->increase_chunk_num(_buffer_size);
+                this->_workgroup->increase_chunk_num(read_size);
             }
         }
         _is_io_task_active.store(false, std::memory_order_release);
