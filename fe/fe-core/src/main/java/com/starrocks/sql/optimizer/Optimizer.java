@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -25,8 +26,8 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
+import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
-import com.starrocks.sql.optimizer.task.CTEContext;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -66,15 +67,9 @@ public class Optimizer {
         Memo memo = new Memo();
         memo.init(logicOperatorTree);
 
-        CTEContext cteContext = new CTEContext();
-        cteContext.collectCTEColumns(logicOperatorTree);
-        context = new OptimizerContext(memo, columnRefFactory, connectContext, cteContext);
-
-        ColumnRefSet requiredColumnsWithFullCteColumns = ((ColumnRefSet) requiredColumns.clone());
-        requiredColumnsWithFullCteColumns.union(cteContext.getAllRequiredColumns());
-
+        context = new OptimizerContext(memo, columnRefFactory, connectContext);
         TaskContext rootTaskContext =
-                new TaskContext(context, requiredProperty, requiredColumnsWithFullCteColumns, Double.MAX_VALUE);
+                new TaskContext(context, requiredProperty, (ColumnRefSet) requiredColumns.clone(), Double.MAX_VALUE);
         context.addTaskContext(rootTaskContext);
 
         // Note: root group of memo maybe change after rewrite,
@@ -109,17 +104,12 @@ public class Optimizer {
     }
 
     void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {
-        // Derive cte consume statistics, join order depend on cost model
-        context.getTaskScheduler().pushTask(new DeriveStatsTask(
-                rootTaskContext, memo.getRootGroup().getFirstLogicalExpression()));
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
-
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
 
         // Join reorder
-        if (!connectContext.getSessionVariable().isDisableJoinReorder()) {
-            if (Utils.countInnerJoinNodeSize(tree) >
-                    connectContext.getSessionVariable().getCboMaxReorderNodeUseExhaustive()) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        if (!sessionVariable.isDisableJoinReorder()) {
+            if (Utils.countInnerJoinNodeSize(tree) > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
                 new ReorderJoinRule().transform(tree, context);
                 context.getRuleSet().addJoinCommutativityWithOutInnerRule();
             } else {
@@ -154,6 +144,22 @@ public class Optimizer {
     }
 
     void logicalRuleRewrite(Memo memo, TaskContext rootTaskContext) {
+        CTEContext cteContext = context.getCteContext();
+
+        CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
+        // inline CTE if consume use once
+        while (cteContext.hasInlineCTE()) {
+            ruleRewriteIterative(memo, rootTaskContext, RuleSetType.INLINE_ONE_CTE);
+            CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
+        }
+
+        cleanUpMemoGroup(memo);
+
+        // Add full cte required columns, and save orig required columns
+        // If cte was inline, the columns don't effect normal prune
+        ColumnRefSet requiredColumns = (ColumnRefSet) rootTaskContext.getRequiredColumns().clone();
+        rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
+
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
@@ -162,6 +168,8 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownAggToMetaScanRule());
+
+        cleanUpMemoGroup(memo);
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
@@ -182,6 +190,28 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_SET_OPERATOR);
 
+        if (cteContext.needOptimizeCTE()) {
+            cteContext.reset();
+            ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.COLLECT_CTE);
+
+            // Prune CTE produce plan columns
+            requiredColumns.union(cteContext.getAllRequiredColumns());
+            rootTaskContext.setRequiredColumns(requiredColumns);
+            ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+
+            if (cteContext.needPushLimit() || cteContext.needPushPredicate()) {
+                ruleRewriteOnlyOnce(memo, rootTaskContext, new PushLimitAndFilterToCTEProduceRule());
+            }
+
+            if (cteContext.needPushPredicate()) {
+                ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+            }
+
+            if (cteContext.needPushLimit()) {
+                ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.MERGE_LIMIT);
+            }
+        }
+
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         tree = new MaterializedViewRule().transform(tree, context).get(0);
         memo.replaceRewriteExpression(memo.getRootGroup(), tree);
@@ -189,15 +219,27 @@ public class Optimizer {
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteOnlyOnce(memo, rootTaskContext, LimitPruneTabletsRule.getInstance());
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
+
+        cleanUpMemoGroup(memo);
+        if (cteContext.needOptimizeCTE()) {
+            CTEUtils.collectCteOperators(memo, context);
+        }
+
+        // compute CTE inline by costs
+        while (cteContext.needOptimizeCTE() && cteContext.hasInlineCTE()) {
+            ruleRewriteIterative(memo, rootTaskContext, RuleSetType.INLINE_CTE);
+            CTEUtils.collectCteOperators(memo, context);
+        }
+
+        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ReorderIntersectRule());
 
-        // reset cte context
-        CTEContext cteContext = new CTEContext();
-        cteContext.collectCTEColumns(tree);
-        context.setCteContext(cteContext);
+        cleanUpMemoGroup(memo);
+    }
 
+    private void cleanUpMemoGroup(Memo memo) {
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
         memo.removeUnreachableGroup();

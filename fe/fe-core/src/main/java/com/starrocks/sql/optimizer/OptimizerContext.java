@@ -10,7 +10,6 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
-import com.starrocks.sql.optimizer.task.CTEContext;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
@@ -38,8 +37,7 @@ public class OptimizerContext {
         this.sessionVariable = VariableMgr.newSessionVariable();
     }
 
-    public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext,
-                            CTEContext cteContext) {
+    public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
         this.memo = memo;
         this.ruleSet = new RuleSet();
         this.catalog = Catalog.getCurrentCatalog();
@@ -48,7 +46,9 @@ public class OptimizerContext {
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = connectContext.getSessionVariable();
         this.dumpInfo = connectContext.getDumpInfo();
-        this.cteContext = cteContext;
+        this.cteContext = new CTEContext();
+        cteContext.reset();
+        this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
     }
 
     public Memo getMemo() {
@@ -89,10 +89,6 @@ public class OptimizerContext {
 
     public DumpInfo getDumpInfo() {
         return dumpInfo;
-    }
-
-    public void setCteContext(CTEContext cteContext) {
-        this.cteContext = cteContext;
     }
 
     public CTEContext getCteContext() {

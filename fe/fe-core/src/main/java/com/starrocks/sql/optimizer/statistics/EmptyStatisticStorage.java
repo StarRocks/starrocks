@@ -16,7 +16,7 @@ public class EmptyStatisticStorage implements StatisticStorage {
 
     @Override
     public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
-        return columns.stream().map(k -> ColumnStatistic.unknown()).collect(Collectors.toList());
+        return columns.stream().map(k -> getColumnStatistic(table, k)).collect(Collectors.toList());
     }
 
     @Override

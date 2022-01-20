@@ -2003,6 +2003,15 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select [][1]";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+
+        sql = "select [v1,v2] from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:Project\n" +
+                "  |  <slot 4> : ARRAY<bigint(20)>[1: v1,2: v2]"));
+
+        sql = "select [v1 = 1, v2 = 2, true] from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("<slot 4> : ARRAY<boolean>[1: v1 = 1,2: v2 = 2,TRUE]"));
     }
 
     @Test
@@ -2683,7 +2692,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: expr = 3: expr"));
+                "  |  equal join conjunct: 5: expr = 7: expr"));
         Assert.assertTrue(plan.contains("2:UNION\n" +
                 "     constant exprs: \n" +
                 "         2 | 'mike'"));
@@ -3677,7 +3686,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql =
                 "WITH t_temp AS (select join1.id as id1,  join2.id as id2 from join1 join join2 on join1.id = join2.id) select * from t_temp";
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("equal join conjunct: 2: id = 5: id"));
+        Assert.assertTrue(explainString.contains("equal join conjunct: 8: id = 11: id"));
         Assert.assertTrue(explainString.contains("  |----2:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +

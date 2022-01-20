@@ -922,15 +922,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     preAggregation: on\n" +
                 "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                 "     tabletList=10015,10017,10019\n" +
-                "     actualRows=0, avgRowSize=3.0\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
                 "     cardinality: 400000"));
 
-        Assert.assertTrue(plan.contains("  6:EXCHANGE\n" +
+        Assert.assertTrue(plan.contains("5:EXCHANGE\n" +
                 "     cardinality: 400000\n" +
                 "     probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (1: v4)"));
 
-        Assert.assertTrue(plan.contains("  11:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("  10:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [10: v4, BIGINT, true] = [7: v7, BIGINT, true]\n" +
                 "  |  build runtime filters:\n" +

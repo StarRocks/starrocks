@@ -119,7 +119,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
@@ -195,7 +194,6 @@ public class Coordinator {
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
-    private final Map<PlanNodeId, Set<PlanNodeId>> exchangeIds = new HashMap<>();
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
@@ -1054,35 +1052,6 @@ public class Coordinator {
         return new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
     }
 
-    private Set<PlanNodeId> getExchangeNodes(PlanNode node) {
-        if (exchangeIds.containsKey(node.getId())) {
-            return exchangeIds.get(node.getId());
-        }
-        Set<PlanNodeId> ids = new HashSet<>();
-        for (PlanNode child : node.getChildren()) {
-            ids.addAll(getExchangeNodes(child));
-        }
-        exchangeIds.put(node.getId(), ids);
-        return ids;
-    }
-
-    private DataStreamSink getDataStreamSink(PlanFragment fragment, PlanFragment destFragment) {
-        DataSink sink = fragment.getSink();
-        if (sink instanceof DataStreamSink) {
-            return (DataStreamSink) sink;
-        } else if (sink instanceof MultiCastDataSink) {
-            MultiCastDataSink multiCastDataSink = (MultiCastDataSink) sink;
-            Set<PlanNodeId> fragmentExchIds = getExchangeNodes(destFragment.getPlanRoot());
-            List<DataStreamSink> sinks = multiCastDataSink.getDataStreamSinks().stream()
-                    .filter(s -> fragmentExchIds.contains(s.getExchNodeId())).collect(Collectors.toList());
-            List<DataStreamSink> partitionedSinks = sinks.stream()
-                    .filter(s -> s.getOutputPartition().isPartitioned()).collect(Collectors.toList());
-            return partitionedSinks.isEmpty() ? sinks.get(0) : partitionedSinks.get(0);
-        } else {
-            return null;
-        }
-    }
-
     // For each fragment in fragments, computes hosts on which to run the instances
     // and stores result in fragmentExecParams.hosts.
     private void computeFragmentHosts() throws Exception {
@@ -1156,12 +1125,10 @@ public class Coordinator {
                 if (dopAdaptionEnabled) {
                     int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
                     Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
-                    DataSink sink = getDataStreamSink(maxParallelismFragmentExecParams.fragment, fragment);
-                    Preconditions.checkArgument(sink != null);
                     // If the maximum parallel child fragment send data to the current PlanFragment via UNPARTITIONED
                     // DataStreamSink, then fragment instance parallelization is leveraged, otherwise, pipeline parallelization
                     // is adopted.
-                    if (sink.getOutputPartition().isPartitioned()) {
+                    if (maxParallelismFragmentExecParams.fragment.isPartitioned()) {
                         // fragment instance parallelization (numInstances=N, pipelineDop=1)
                         maxParallelism = Math.min(hostSet.size() * degreeOfParallelism, maxParallelism);
                         fragment.setPipelineDop(1);
@@ -1272,7 +1239,8 @@ public class Coordinator {
                     }
 
                     float inputBytes = numRows * scanNode.getAvgRowSize();
-                    long maxBytesPerOperator = ConnectContext.get().getSessionVariable().getPipelineMaxInputBytesPerOperator();
+                    long maxBytesPerOperator =
+                            ConnectContext.get().getSessionVariable().getPipelineMaxInputBytesPerOperator();
                     int numOperatorsPerInstance = Math.max(1, (int) (inputBytes / maxBytesPerOperator / numInstances));
                     int pipelineDop =
                             Math.max(1, degreeOfParallelism / Math.max(1, numInstances / Math.max(1, numBackends)));
@@ -2007,8 +1975,11 @@ public class Coordinator {
                     SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
 
                     if (isEnablePipelineEngine) {
-                        params.setIs_pipeline(
-                                fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
+                        boolean isPipeline = fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine();
+                        params.setIs_pipeline(isPipeline);
+                        if (isPipeline) {
+                            queryOptions.setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE); 
+                        }
                         params.setPipeline_dop(fragment.getPipelineDop());
                         params.setPer_scan_node_dop(instanceExecParam.perScanNodeDop);
                     }

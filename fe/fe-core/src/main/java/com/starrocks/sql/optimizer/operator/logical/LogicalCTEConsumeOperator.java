@@ -107,6 +107,11 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
             this.cteOutputColumnRefMap = operator.cteOutputColumnRefMap;
             return this;
         }
+
+        public Builder setCteOutputColumnRefMap(Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
+            this.cteOutputColumnRefMap = cteOutputColumnRefMap;
+            return this;
+        }
     }
 
     private LogicalCTEConsumeOperator(LogicalCTEConsumeOperator.Builder builder) {

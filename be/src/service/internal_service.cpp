@@ -187,8 +187,8 @@ Status PInternalServiceImpl<T>::_exec_plan_fragment(brpc::Controller* cntl) {
     }
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
     LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
-              << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num << " is_pipeline "
-              << is_pipeline;
+              << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num
+              << ", is_pipeline=" << is_pipeline << ", chunk_size=" << t_request.query_options.batch_size;
     if (is_pipeline) {
         auto fragment_executor = std::make_unique<starrocks::pipeline::FragmentExecutor>();
         auto status = fragment_executor->prepare(_exec_env, t_request);
