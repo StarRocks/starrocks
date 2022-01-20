@@ -30,8 +30,6 @@ namespace starrocks {
 class HsScanUtils {
 public:
     const std::string hs_reg_pattern = "[+|-]{1}\\d{2}\\:\\d{2}";
-    const int HS_SCAN_SUCCESS = 1;
-    const int HS_SCAN_NO_RESULT = 0;
 
     Status compile() {
         if (hs_compile(hs_reg_pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SINGLEMATCH,
@@ -62,10 +60,12 @@ public:
             hs_free_database(database);
         }
     }
-//private:
+
     hs_database_t* database = nullptr;
-    hs_compile_error_t* compile_err = nullptr;
     hs_scratch_t* scratch = nullptr;
+
+private:
+    hs_compile_error_t* compile_err = nullptr;
 };
 } // namespace starrocks
 
