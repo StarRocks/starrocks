@@ -167,10 +167,6 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         if (st.is_end_of_file()) {
             break;
         }
-        if (!st.ok()) {
-            LOG(INFO) << "get next failed, error msg is " << st.to_string();
-            ASSERT_TRUE(false);
-        }
         ASSERT_FALSE(!st.ok());
         for (auto i = 0; i < chunk->num_rows(); ++i) {
             EXPECT_EQ(count, chunk->get(i)[0].get_int32());
