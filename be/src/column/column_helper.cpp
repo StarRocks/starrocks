@@ -5,8 +5,10 @@
 #include <runtime/types.h>
 
 #include "column/array_column.h"
+#include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "gutil/casts.h"
+#include "runtime/primitive_type.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "util/date_func.h"
@@ -176,6 +178,35 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     return create_column(type_desc, nullable, false, 0);
 }
 
+struct ColumnBuilder {
+    const TypeDescriptor& type_desc;
+    
+    ColumnBuilder(const TypeDescriptor& type_desc): type_desc(type_desc) {}
+    
+    template <PrimitiveType ptype>
+    ColumnPtr operator()() {
+        switch (ptype) {
+        case INVALID_TYPE:
+        case TYPE_NULL:
+        case TYPE_BINARY:
+        case TYPE_DECIMAL:
+        case TYPE_STRUCT:
+        case TYPE_MAP:
+            LOG(FATAL) << "Unsupported column type" << ptype;
+        case TYPE_DECIMAL32:
+            return Decimal32Column::create(type_desc.precision, type_desc.scale);
+        case TYPE_DECIMAL64:
+            return Decimal64Column::create(type_desc.precision, type_desc.scale);
+        case TYPE_DECIMAL128:
+            return Decimal128Column::create(type_desc.precision, type_desc.scale);
+        default: ;
+        }
+
+        return RunTimeColumnType<ptype>::create();
+    }
+    
+};
+
 ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size) {
     auto type = type_desc.type;
     if (VLOG_ROW_IS_ON) {
@@ -192,85 +223,14 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
             return NullableColumn::create(BooleanColumn::create(), NullColumn::create());
         }
     }
-
-    ColumnPtr p;
-    switch (type_desc.type) {
-    case TYPE_BOOLEAN:
-        p = BooleanColumn::create();
-        break;
-    case TYPE_TINYINT:
-        p = Int8Column::create();
-        break;
-    case TYPE_SMALLINT:
-        p = Int16Column::create();
-        break;
-    case TYPE_INT:
-        p = Int32Column::create();
-        break;
-    case TYPE_BIGINT:
-        p = Int64Column::create();
-        break;
-    case TYPE_LARGEINT:
-        p = Int128Column::create();
-        break;
-    case TYPE_FLOAT:
-        p = FloatColumn::create();
-        break;
-    case TYPE_DOUBLE:
-        p = DoubleColumn::create();
-        break;
-    case TYPE_DECIMALV2:
-        p = DecimalColumn::create();
-        break;
-    case TYPE_DATE:
-        p = DateColumn::create();
-        break;
-    case TYPE_DATETIME:
-        p = TimestampColumn::create();
-        break;
-    case TYPE_TIME:
-        p = DoubleColumn::create();
-        break;
-    case TYPE_VARCHAR:
-    case TYPE_CHAR:
-        p = BinaryColumn::create();
-        break;
-    case TYPE_HLL:
-        p = HyperLogLogColumn::create();
-        break;
-    case TYPE_OBJECT:
-        p = BitmapColumn::create();
-        break;
-    case TYPE_DECIMAL32: {
-        p = Decimal32Column::create(type_desc.precision, type_desc.scale);
-        break;
-    }
-    case TYPE_DECIMAL64: {
-        p = Decimal64Column::create(type_desc.precision, type_desc.scale);
-        break;
-    }
-    case TYPE_DECIMAL128: {
-        p = Decimal128Column::create(type_desc.precision, type_desc.scale);
-        break;
-    }
-    case TYPE_PERCENTILE:
-        p = PercentileColumn::create();
-        break;
-    case TYPE_ARRAY: {
+    
+    if (type_desc.type == TYPE_ARRAY) {
         auto offsets = UInt32Column::create();
         auto data = create_column(type_desc.children[0], true);
-        p = ArrayColumn::create(std::move(data), std::move(offsets));
-        break;
+        return ArrayColumn::create(std::move(data), std::move(offsets));
     }
-    case INVALID_TYPE:
-    case TYPE_NULL:
-    case TYPE_BINARY:
-    case TYPE_DECIMAL:
-    case TYPE_STRUCT:
-    case TYPE_MAP:
-        CHECK(false) << "unreachable path: " << type_desc.type;
-        return nullptr;
-    }
+
+    ColumnPtr p = type_dispatch_all(type_desc.type, ColumnBuilder(type_desc));
 
     if (is_const) {
         return ConstColumn::create(p);
