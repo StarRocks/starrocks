@@ -114,12 +114,23 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         // 3. caseClause is constant, remove not equals when/Then Clause or return directly when equals
         Set<Integer> removeArgumentsSet = Sets.newHashSet();
         int whenStart = operator.getWhenStart();
-        for (int i = 0; i < operator.getWhenClauseSize(); i++) {
+        boolean allWhenClausConstant = true;
+        for (int i = 0; i < operator.getWhenClauseSize(); ++i) {
+            if (!operator.getWhenClause(i).isConstantRef()) {
+                allWhenClausConstant = false;
+                break;
+            }
+        }
+
+        for (int i = 0; i < operator.getWhenClauseSize(); ++i) {
             if (operator.getWhenClause(i).isConstantRef()) {
                 ConstantOperator when = (ConstantOperator) operator.getWhenClause(i);
 
                 if (0 == caseOp.compareTo(when)) {
-                    return operator.getThenClause(i);
+                    // only when all when clause is constant or first when equals, return directly
+                    if (allWhenClausConstant || i == 0) {
+                        return operator.getThenClause(i);
+                    }
                 } else {
                     // record argument index that should be removed.
                     removeArgumentsSet.add(2 * i + whenStart);
