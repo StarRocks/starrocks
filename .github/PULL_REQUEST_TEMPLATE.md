@@ -2,9 +2,14 @@
 - [ ] bug
 - [ ] feature
 - [ ] enhancement
+- [ ] others
 
-## Proposed changes(Required)
-Issues Number: close #xxx
+## Which issues of this PR fixes:
+<!--
+Usage: `Fixes #<issue number>`, or `Fixes (paste link of issue)`.
+_If PR is about `failing-tests or flakes`, please post the related issues/tests in a comment and do not use `Fixes`_*
+-->
+Fixes #
 
 ## Problem Summary(Required)
-<!-- (Please describe the overview of changes.How do you solve it and when you find it?) -->
+<!-- (Please describe the overview of changes. And when you find it? How do you solve it？why we need it？) -->
