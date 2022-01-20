@@ -7,6 +7,8 @@
 
 namespace starrocks::io {
 
+// OutputStream is the superclass of all classes representing an output stream of
+// bytes. An output stream accepts output bytes and sends them to some sink.
 class OutputStream : public Writable {
 public:
     using Buffer = Slice;

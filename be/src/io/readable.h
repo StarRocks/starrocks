@@ -6,6 +6,8 @@
 
 namespace starrocks::io {
 
+// A Readable is a source of bytes. Bytes from a Readable are made available
+// to callers of the read method via a byte array.
 class Readable {
 public:
     virtual ~Readable() = default;

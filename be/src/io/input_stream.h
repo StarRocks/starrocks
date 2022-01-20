@@ -8,6 +8,7 @@
 
 namespace starrocks::io {
 
+// InputStream is the superclass of all classes representing an input stream of bytes.
 class InputStream : public Readable {
 public:
     ~InputStream() override = default();
