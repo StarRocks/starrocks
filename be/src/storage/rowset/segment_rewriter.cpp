@@ -39,6 +39,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema&
     fs::CreateBlockOptions wblock_opts({src_path});
     wblock_opts.mode = Env::MUST_EXIST;
     RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
+    // set bytes_appended to src file size to ensure the correctness of new_segment_footer
     wblock->set_bytes_appended(trunc_len);
 
     SegmentWriterOptions opts;
