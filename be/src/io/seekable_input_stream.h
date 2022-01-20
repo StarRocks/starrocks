@@ -21,7 +21,7 @@ public:
 
     // Returns the current offset location as measured in bytes from
     // the beginning of the InputStream
-    virtual StatusOr<int64_t> position() = 0;
+    virtual int64_t position() = 0;
 };
 
 } // namespace starrocks::io
