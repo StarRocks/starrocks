@@ -12,4 +12,4 @@ _If PR is about `failing-tests or flakes`, please post the related issues/tests 
 Fixes #
 
 ## Problem Summary(Required) ：
-<!-- (Please describe the overview of changes. If it is a bug, under what circumstances would such a problem be triggered? And how did you fixed it？) -->
+<!-- (Please describe the changes you have made. In which scenarios will this bug be triggered and what measures have you taken to fix the bug?) -->
