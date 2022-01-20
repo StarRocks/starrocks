@@ -23,8 +23,8 @@
 
 #include <fmt/format.h>
 #include <sys/prctl.h>
-#include <sys/types.h>
 #include <sys/resource.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <boost/asio/spawn.hpp>
