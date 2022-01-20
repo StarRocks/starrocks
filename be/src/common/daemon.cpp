@@ -28,6 +28,7 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/minidump.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
@@ -110,6 +111,14 @@ void gc_tcmalloc_memory(void* arg_this) {
         }
         MallocExtension::instance()->MarkThreadIdle();
 #endif
+    }
+}
+
+void log_workgroup(void* arg_this) {
+    Daemon* daemon = static_cast<Daemon*>(arg_this);
+    while (!daemon->stopped()) {
+        workgroup::WorkGroupManager::instance()->log_cpu();
+        sleep(1); // 1 second
     }
 }
 
@@ -275,6 +284,10 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
         Thread::set_thread_name(calculate_metrics_thread, "metrics_daemon");
         _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
     }
+
+    std::thread log_workgroup_thread(log_workgroup, this);
+    Thread::set_thread_name(log_workgroup_thread, "log_workgroup");
+    _daemon_threads.emplace_back(std::move(log_workgroup_thread));
 
     init_signals();
     init_minidump();
