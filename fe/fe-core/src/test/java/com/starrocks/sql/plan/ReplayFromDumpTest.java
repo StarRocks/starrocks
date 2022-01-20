@@ -178,8 +178,8 @@ public class ReplayFromDumpTest {
                 "  |    \n" +
                 "  18:UNION\n" +
                 "  |  child exprs:\n" +
-                "  |      [143, INT, true] | [164, DECIMAL64(7,2), true]\n" +
-                "  |      [177, INT, true] | [198, DECIMAL64(7,2), true]"));
+                "  |      [325, INT, true] | [346, DECIMAL64(7,2), true]\n" +
+                "  |      [359, INT, true] | [380, DECIMAL64(7,2), true]"));
     }
 
     @Test
@@ -241,15 +241,15 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
         Assert.assertTrue(replayPair.second.contains("3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n" +
-                "  |  equal join conjunct: [1: ss_item_sk, INT, false] = [24: sr_item_sk, INT, true]\n" +
-                "  |  other predicates: 25: sr_ticket_number IS NULL\n" +
+                "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
+                "  |  equal join conjunct: [256: ss_item_sk, INT, false] = [279: sr_item_sk, INT, true]\n" +
+                "  |  other predicates: 280: sr_ticket_number IS NULL\n" +
                 "  |  cardinality: 39142590"));
         Assert.assertTrue(replayPair.second.contains("16:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [76: ws_order_number, INT, false] = [110: wr_order_number, INT, true]\n" +
-                "  |  equal join conjunct: [75: ws_item_sk, INT, false] = [109: wr_item_sk, INT, true]\n" +
-                "  |  other predicates: 110: wr_order_number IS NULL\n" +
+                "  |  equal join conjunct: [331: ws_order_number, INT, false] = [365: wr_order_number, INT, true]\n" +
+                "  |  equal join conjunct: [330: ws_item_sk, INT, false] = [364: wr_item_sk, INT, true]\n" +
+                "  |  other predicates: 365: wr_order_number IS NULL\n" +
                 "  |  cardinality: 7916106"));
     }
 
