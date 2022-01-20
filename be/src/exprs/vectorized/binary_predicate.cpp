@@ -6,6 +6,7 @@
 #include "column/column_viewer.h"
 #include "exprs/vectorized/binary_function.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 
 namespace starrocks::vectorized {
 
@@ -106,20 +107,11 @@ static Expr* create_binary_predicate(const TExprNode& node) {
     return nullptr;
 }
 
-struct BinaryPredicateCreator {
-    const TExprNode& node;
-    BinaryPredicateCreator(const TExprNode& node): node(node) {}
-    
-    template <PrimitiveType ptype>
-    Expr* operator()() {
-        return create_binary_predicate<ptype>(node);
-    }
-};
 
 Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     PrimitiveType type = thrift_to_type(node.child_type);
 
-    return type_dispatch_all(type, BinaryPredicateCreator(node));
+    return TYPE_DISPATCH_ALL(create_binary_predicate, type, node);
 }
 
 } // namespace starrocks::vectorized

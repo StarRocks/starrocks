@@ -6,6 +6,7 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/in_iterator_predicate.hpp"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 
 namespace starrocks::vectorized {
 
@@ -41,11 +42,11 @@ Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
     switch (node.opcode) {
     case TExprOpcode::FILTER_IN:
     case TExprOpcode::FILTER_NOT_IN: {
-        return type_dispatch_all(child_type, InConstPredicateBuilder(node));
+        return TYPE_DISPATCH_ALL(new VectorizedInConstPredicate, child_type, node);
     }
     case TExprOpcode::FILTER_NEW_IN:
     case TExprOpcode::FILTER_NEW_NOT_IN: {
-        return type_dispatch_all(child_type, InIteratorBuilder(node));
+        return TYPE_DISPATCH_ALL(new VectorizedInIteratorPredicate, child_type, node);
     }
 
     default:

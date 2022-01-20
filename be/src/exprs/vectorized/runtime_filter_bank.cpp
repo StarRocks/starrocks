@@ -7,9 +7,12 @@
 #include "column/column.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
+#include "exprs/vectorized/runtime_filter.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/primitive_type_infra.h"
 #include "simd/simd.h"
 #include "util/time.h"
+
 namespace starrocks::vectorized {
 
 // 0x1. initial global runtime filter impl
@@ -35,17 +38,7 @@ static const uint8_t RF_VERSION = 0x2;
     M(TYPE_BOOLEAN)
 
 JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, PrimitiveType type) {
-    JoinRuntimeFilter* filter = nullptr;
-    switch (type) {
-#define M(NAME)                                                 \
-    case PrimitiveType::NAME: {                                 \
-        filter = new RuntimeBloomFilter<PrimitiveType::NAME>(); \
-        break;                                                  \
-    }
-        APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
-#undef M
-    default:;
-    }
+    JoinRuntimeFilter* filter = TYPE_DISPATCH_ALL(new RuntimeBloomFilter, type);
     if (pool != nullptr && filter != nullptr) {
         return pool->add(filter);
     } else {
