@@ -223,8 +223,6 @@ public class DynamicPartitionTableTest {
 
     @Test
     public void testMissBuckets() throws Exception {
-        expectedException.expect(DdlException.class);
-        expectedException.expectMessage("Must assign dynamic_partition.buckets properties");
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_buckets` (\n" +
                 "  `k1` date NULL COMMENT \"\",\n" +
                 "  `k2` int NULL COMMENT \"\",\n" +
