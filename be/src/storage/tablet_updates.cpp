@@ -1030,7 +1030,14 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
 Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo, const RowsetSharedPtr& rowset,
                                          EditVersion* commit_version) {
     _compaction_state = std::make_unique<vectorized::CompactionState>();
-    RETURN_IF_ERROR(_compaction_state->load(rowset.get()));
+    const auto status = _compaction_state->load(rowset.get());
+    if (!status.ok()) {
+        _compaction_state.reset();
+        std::string msg = Substitute("_commit_compaction error: load compaction state failed: $0 $1",
+                                     status.to_string(), debug_string());
+        LOG(WARNING) << msg;
+        return status;
+    }
     std::lock_guard wl(_lock);
     EditVersionMetaPB edit;
     auto lastv = _edit_version_infos.back().get();
