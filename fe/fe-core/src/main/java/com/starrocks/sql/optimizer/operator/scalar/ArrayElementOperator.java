@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.operator.OperatorType.ARRAY_ELEMENT;
 
 public class ArrayElementOperator extends ScalarOperator {
-    private List<ScalarOperator> arguments = Lists.newArrayList();
+    private final List<ScalarOperator> arguments = Lists.newArrayList();
 
     public ArrayElementOperator(Type type, ScalarOperator arrayOperator, ScalarOperator subscriptOperator) {
         super(ARRAY_ELEMENT, type);
