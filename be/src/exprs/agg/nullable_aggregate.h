@@ -487,8 +487,8 @@ public:
                                                                      i + 1);
                 } else if constexpr (!IgnoreNull) {
                     this->data(state).is_null = false;
-                    this->nested_function->update_batch_single_state_null(ctx, this->data(state).mutable_nest_state(),
-                                                                          peer_group_start, peer_group_end);
+                    this->nested_function->update_single_state_null(ctx, this->data(state).mutable_nest_state(),
+                                                                    peer_group_start, peer_group_end);
                 }
             }
         } else {

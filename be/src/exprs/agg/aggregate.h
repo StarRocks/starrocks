@@ -110,8 +110,8 @@ public:
     // A peer group is all of the rows that are peers within the specified ordering.
     // Rows are peers if they compare equal to each other using the specified ordering expression.
     // Update batch single state with null
-    virtual void update_batch_single_state_null(FunctionContext* ctx, AggDataPtr __restrict state,
-                                                int64_t peer_group_start, int64_t peer_group_end) const {}
+    virtual void update_single_state_null(FunctionContext* ctx, AggDataPtr __restrict state, int64_t peer_group_start,
+                                          int64_t peer_group_end) const {}
 
     // Contains a loop with calls to "merge" function.
     // You can collect arguments into array "states"
