@@ -130,6 +130,7 @@ public:
     double get_expect_factor() const;
     double get_diff_factor() const;
     double get_select_factor() const;
+    int64_t get_cur_hold_total_chunk_num() const { return _cur_hold_total_chunk_num; }
     void set_select_factor(double value);
     void update_select_factor(double value);
     double get_cur_select_factor() const;
@@ -164,7 +165,7 @@ private:
     std::atomic<double> _cpu_actual_use_ratio;
 
     //  some variables for io schedule
-    std::atomic<size_t> _cur_hold_total_chunk_num = 0; // total chunk num wait for consume
+    std::atomic<int64_t> _cur_hold_total_chunk_num = 0; // total chunk num wait for consume
     std::atomic<size_t> _increase_chunk_num_period = 1;
     std::atomic<size_t> _decrease_chunk_num_period = 1;
 
@@ -206,6 +207,9 @@ public:
         _sum_unadjusted_cpu_runtime_ns += cpu_runtime_ns;
     }
     int64_t get_sum_unadjusted_cpu_runtime_ns() const { return _sum_unadjusted_cpu_runtime_ns; }
+    double get_cpu_unadjusted_actual_use_ratio() const;
+
+    void log_cpu();
 
 private:
     std::mutex _mutex;
