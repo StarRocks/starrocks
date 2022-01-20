@@ -52,19 +52,6 @@ public:
         return Status::OK();
     }
 
-    int scan(std::string timezone) {
-        bool v = false;
-        auto status = hs_scan(
-        database, timezone.c_str(), timezone.size(), 0, scratch,
-        [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
-           void* ctx) -> int {
-            *((bool*)ctx) = true;
-            return 1;
-        },
-        &v);
-        return status;
-    }
-
     HsScanUtils() {}
     ~HsScanUtils() {
         if (scratch != nullptr) {
