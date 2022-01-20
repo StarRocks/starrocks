@@ -88,9 +88,8 @@ Status DictDecodeNode::open(RuntimeState* state) {
         int need_encode_cid = _encode_column_cids[i];
         auto dict_iter = global_dict.find(need_encode_cid);
         auto dict_not_contains_cid = dict_iter == global_dict.end();
-        auto input_has_string_function = _string_functions.find(need_encode_cid) != _string_functions.end();
 
-        if (dict_not_contains_cid && !input_has_string_function) {
+        if (dict_not_contains_cid) {
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
         }
         DefaultDecoderPtr decoder = std::make_unique<DefaultDecoder>();
