@@ -19,7 +19,7 @@ public:
     DictDecodeOperator(int32_t id, int32_t plan_node_id, std::vector<int32_t>& encode_column_cids,
                        std::vector<int32_t>& decode_column_cids, std::vector<DefaultDecoderPtr>& decoders,
                        std::vector<ExprContext*>& expr_ctxs,
-                       std::unordered_map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>& string_functions,
+                       std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>& string_functions,
                        DictOptimizeParser& dict_optimize_parser)
             : Operator(id, "dict_decode", plan_node_id),
               _encode_column_cids(encode_column_cids),
@@ -53,7 +53,7 @@ private:
     const std::vector<DefaultDecoderPtr>& _decoders;
 
     const std::vector<ExprContext*>& _expr_ctxs;
-    const std::unordered_map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>& _string_functions;
+    const std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>& _string_functions;
     const DictOptimizeParser& _dict_optimize_parser;
 
     bool _is_finished = false;
@@ -62,10 +62,9 @@ private:
 
 class DictDecodeOperatorFactory final : public OperatorFactory {
 public:
-    DictDecodeOperatorFactory(
-            int32_t id, int32_t plan_node_id, std::vector<int32_t>&& encode_column_cids,
-            std::vector<int32_t>&& decode_column_cids, std::vector<ExprContext*>&& expr_ctxs,
-            std::unordered_map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>&& string_functions)
+    DictDecodeOperatorFactory(int32_t id, int32_t plan_node_id, std::vector<int32_t>&& encode_column_cids,
+                              std::vector<int32_t>&& decode_column_cids, std::vector<ExprContext*>&& expr_ctxs,
+                              std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>&& string_functions)
             : OperatorFactory(id, "dict_decode", plan_node_id),
               _encode_column_cids(std::move(encode_column_cids)),
               _decode_column_cids(std::move(decode_column_cids)),
@@ -88,7 +87,7 @@ private:
     std::vector<DefaultDecoderPtr> _decoders;
 
     std::vector<ExprContext*> _expr_ctxs;
-    std::unordered_map<SlotId, std::pair<ExprContext*, DictOptimizeContext>> _string_functions;
+    std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>> _string_functions;
     DictOptimizeParser _dict_optimize_parser;
 };
 
