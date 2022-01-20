@@ -9,6 +9,7 @@
 #include "common/config.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "util/date_func.h"

@@ -23,11 +23,13 @@
 
 #include <cmath>
 
+#include "column/type_traits.h"
 #include "common/logging.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/datetime_value.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 #include "storage/tuple.h"
 
 namespace starrocks {
@@ -41,44 +43,13 @@ inline bool compare_large(const void* lhs, const void* rhs) {
 
 inline CompareLargeFunc get_compare_func(PrimitiveType type) {
     switch (type) {
-    case TYPE_BOOLEAN:
-        return compare_large<bool>;
-
-    case TYPE_TINYINT:
-        return compare_large<int8_t>;
-
-    case TYPE_SMALLINT:
-        return compare_large<int16_t>;
-
-    case TYPE_INT:
-        return compare_large<int32_t>;
-
-    case TYPE_BIGINT:
-        return compare_large<int64_t>;
-
-    case TYPE_LARGEINT:
-        return compare_large<__int128>;
-
-    case TYPE_FLOAT:
-        return compare_large<float>;
-
-    case TYPE_DOUBLE:
-        return compare_large<double>;
-
-    case TYPE_DATE:
-    case TYPE_DATETIME:
-        return compare_large<DateTimeValue>;
-
-    case TYPE_DECIMAL:
-        return compare_large<DecimalValue>;
-
-    case TYPE_DECIMALV2:
-        return compare_large<DecimalV2Value>;
-
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-        return compare_large<StringValue>;
-
+#define M(name)                                           \
+    case name: {                                          \
+        using CppType = vectorized::RunTimeCppType<name>; \
+        return compare_large<CppType>;                    \
+    }
+        APPLY_FOR_SORTABLE_TYPE(M)
+#undef M
     default:
         CHECK(false) << "Unsupported Compare type";
     }

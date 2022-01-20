@@ -21,7 +21,7 @@ namespace starrocks::vectorized {
 static const uint8_t RF_VERSION = 0x2;
 
 JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, PrimitiveType type) {
-    JoinRuntimeFilter* filter = TYPE_DISPATCH_ALL(new RuntimeBloomFilter, type);
+    JoinRuntimeFilter* filter = TYPE_DISPATCH_PREDICATE_TYPE((JoinRuntimeFilter*)new RuntimeBloomFilter, type);
     if (pool != nullptr && filter != nullptr) {
         return pool->add(filter);
     } else {
@@ -106,9 +106,9 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, P
                                                       JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
     JoinRuntimeFilter* expr = filter;
     if (!column->is_nullable()) {
-        TYPE_DISPATCH_ALL(init_filter_not_null, type, column, column_offset, expr);
+        TYPE_DISPATCH_PREDICATE_TYPE(init_filter_not_null, type, column, column_offset, expr);
     } else {
-        TYPE_DISPATCH_ALL(init_filter_nullable, type, column, column_offset, expr, eq_null);
+        TYPE_DISPATCH_PREDICATE_TYPE(init_filter_nullable, type, column, column_offset, expr, eq_null);
     }
 
     return Status::OK();

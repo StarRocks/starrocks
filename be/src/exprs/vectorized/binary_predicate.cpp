@@ -111,7 +111,7 @@ static Expr* create_binary_predicate(const TExprNode& node) {
 Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     PrimitiveType type = thrift_to_type(node.child_type);
 
-    return TYPE_DISPATCH_ALL(create_binary_predicate, type, node);
+    return TYPE_DISPATCH_PREDICATE_TYPE(create_binary_predicate, type, node);
 }
 
 } // namespace starrocks::vectorized

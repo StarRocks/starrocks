@@ -42,11 +42,11 @@ Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
     switch (node.opcode) {
     case TExprOpcode::FILTER_IN:
     case TExprOpcode::FILTER_NOT_IN: {
-        return TYPE_DISPATCH_ALL(new VectorizedInConstPredicate, child_type, node);
+        return TYPE_DISPATCH_PREDICATE_TYPE((Expr*)new VectorizedInConstPredicate, child_type, node);
     }
     case TExprOpcode::FILTER_NEW_IN:
     case TExprOpcode::FILTER_NEW_NOT_IN: {
-        return TYPE_DISPATCH_ALL(new VectorizedInIteratorPredicate, child_type, node);
+        return TYPE_DISPATCH_PREDICATE_TYPE((Expr*)new VectorizedInIteratorPredicate, child_type, node);
     }
 
     default:
