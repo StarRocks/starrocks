@@ -138,7 +138,7 @@ public class ColumnTest {
     }
 
     @Test
-    public void testSchemaChangeAllowedDefaultValue() throws DdlException {
+    public void testSchemaChangeAllowedDefaultValue() {
         try {
             Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
                     new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
@@ -150,9 +150,9 @@ public class ColumnTest {
         }
 
         try {
-            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+            Column oldColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
                     CURRENT_TIMESTAMP_VALUE, "");
-            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column newColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
                     NOT_SET, "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
             Assert.fail("No exception throws.");
@@ -200,9 +200,9 @@ public class ColumnTest {
         }
 
         try {
-            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+            Column oldColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
                     CURRENT_TIMESTAMP_VALUE, "");
-            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column newColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
                     new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
             Assert.fail("No exception throws.");
