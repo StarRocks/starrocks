@@ -1538,6 +1538,14 @@ bool DateTimeValue::date_add_interval(const TimeInterval& interval, TimeUnit uni
     return true;
 }
 
+bool DateTimeValue::unix_timestamp(HsScanUtils hsScanUtils, int64_t* timestamp, const std::string& timezone) const {
+    cctz::time_zone ctz;
+    if (!TimezoneUtils::find_cctz_time_zone(hsScanUtils, timezone, ctz)) {
+        return false;
+    }
+    return unix_timestamp(timestamp, ctz);
+}
+
 bool DateTimeValue::unix_timestamp(int64_t* timestamp, const std::string& timezone) const {
     cctz::time_zone ctz;
     if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
@@ -1550,6 +1558,14 @@ bool DateTimeValue::unix_timestamp(int64_t* timestamp, const cctz::time_zone& ct
     const auto tp = cctz::convert(cctz::civil_second(_year, _month, _day, _hour, _minute, _second), ctz);
     *timestamp = tp.time_since_epoch().count();
     return true;
+}
+
+bool DateTimeValue::from_unixtime(HsScanUtils hsScanUtils, int64_t timestamp, const std::string& timezone) {
+    cctz::time_zone ctz;
+    if (!TimezoneUtils::find_cctz_time_zone(hsScanUtils, timezone, ctz)) {
+        return false;
+    }
+    return from_unixtime(timestamp, ctz);
 }
 
 bool DateTimeValue::from_unixtime(int64_t timestamp, const std::string& timezone) {

@@ -157,6 +157,8 @@ ColumnPtr TimeFunctions::convert_tz_general(FunctionContext* context, const Colu
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
+    HsScanUtils hsScanUtils;
+    hsScanUtils.compile();
     for (int row = 0; row < size; ++row) {
         if (time_viewer.is_null(row) || from_str.is_null(row) || to_str.is_null(row)) {
             result.append_null();
@@ -173,13 +175,13 @@ ColumnPtr TimeFunctions::convert_tz_general(FunctionContext* context, const Colu
 
         int64_t timestamp;
         // TODO find a better approach to replace datetime_value.unix_timestamp
-        if (!ts_value.unix_timestamp(&timestamp, std::string(from_format.data, from_format.size))) {
+        if (!ts_value.unix_timestamp(hsScanUtils, &timestamp, std::string(from_format.data, from_format.size))) {
             result.append_null();
             continue;
         }
         DateTimeValue ts_value2;
         // TODO find a better approach to replace datetime_value.from_unixtime
-        if (!ts_value2.from_unixtime(timestamp, std::string(to_format.data, to_format.size))) {
+        if (!ts_value2.from_unixtime(hsScanUtils, timestamp, std::string(to_format.data, to_format.size))) {
             result.append_null();
             continue;
         }

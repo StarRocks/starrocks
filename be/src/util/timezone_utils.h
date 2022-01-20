@@ -25,12 +25,16 @@
 #include <re2/re2.h>
 
 #include "cctz/time_zone.h"
+#include "udf/udf.h"
+#include "common/status.h"
+#include "util/hs_scan_utils.h"
 
 namespace starrocks {
 
 class TimezoneUtils {
 public:
     static bool find_cctz_time_zone(const std::string& timezone, cctz::time_zone& ctz);
+    static bool find_cctz_time_zone(HsScanUtils hsScanUtils, const std::string& timezone, cctz::time_zone& ctz);
     static int64_t to_utc_offset(const cctz::time_zone& ctz); // timezone offset in seconds.
 
 public:
