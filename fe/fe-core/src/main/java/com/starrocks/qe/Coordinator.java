@@ -2046,8 +2046,11 @@ public class Coordinator {
                     SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
 
                     if (isEnablePipelineEngine) {
-                        params.setIs_pipeline(
-                                fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
+                        boolean isPipeline = fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine();
+                        params.setIs_pipeline(isPipeline);
+                        if (isPipeline) {
+                            queryOptions.setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE); 
+                        }
                         params.setPipeline_dop(fragment.getPipelineDop());
                         params.setPer_scan_node_dop(instanceExecParam.perScanNodeDop);
                     }
