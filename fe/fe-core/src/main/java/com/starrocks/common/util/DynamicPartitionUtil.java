@@ -354,8 +354,10 @@ public class DynamicPartitionUtil {
     }
 
     public static void checkAndSetDynamicPartitionBuckets(Map<String, String> properties, int bucketNum) {
-        if (properties != null && !properties.isEmpty()
-                && Strings.isNullOrEmpty(properties.get(DynamicPartitionProperty.ENABLE))) {
+        if (properties == null || properties.isEmpty()) {
+            return;
+        }
+        if (!Strings.isNullOrEmpty(properties.get(DynamicPartitionProperty.ENABLE))) {
             properties.putIfAbsent(DynamicPartitionProperty.BUCKETS, String.valueOf(bucketNum));
         }
     }
