@@ -307,12 +307,9 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         }
         if (!conflict_idxes.empty()) {
             std::vector<std::unique_ptr<vectorized::Column>> read_columns;
-            std::vector<std::unique_ptr<vectorized::Column>> new_write_columns;
             read_columns.resize(_partial_update_states[i].write_columns.size());
-            new_write_columns.resize(_partial_update_states[i].write_columns.size());
-            for (uint32_t j = 0; j < new_write_columns.size(); ++j) {
+            for (uint32_t j = 0; j < read_columns.size(); ++j) {
                 read_columns[j] = _partial_update_states[i].write_columns[j]->clone_empty();
-                new_write_columns[j] = _partial_update_states[i].write_columns[j]->clone_empty();
             }
             size_t num_default = 0;
             std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
@@ -323,10 +320,11 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
                                                                  &read_columns));
 
             for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
-                new_write_columns[col_idx]->append_selective(*read_columns[col_idx], read_idxes.data(), 0,
-                                                             read_idxes.size());
-                RETURN_IF_ERROR(_partial_update_states[i].write_columns[col_idx]->update_rows(
-                        *new_write_columns[col_idx], conflict_idxes.data()));
+                std::unique_ptr<vectorized::Column> new_write_column =
+                        _partial_update_states[i].write_columns[col_idx]->clone_empty();
+                new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
+                RETURN_IF_ERROR(_partial_update_states[i].write_columns[col_idx]->update_rows(*new_write_column,
+                                                                                              conflict_idxes.data()));
             }
         }
         int64_t t_resolve_conflict_end = MonotonicMillis();
