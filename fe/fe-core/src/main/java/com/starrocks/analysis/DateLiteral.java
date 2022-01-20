@@ -67,10 +67,10 @@ public class DateLiteral extends LiteralExpr {
     private static final DateTimeFormatter DATE_FORMATTER_TWO_DIGIT;
 
     static {
-        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s").toFormatter();
-        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d").toFormatter();
-        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%d %H:%i:%s").toFormatter();
-        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%d").toFormatter();
+        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s").toFormatter();
+        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e").toFormatter();
+        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s").toFormatter();
+        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e").toFormatter();
         DATE_NO_SPLIT_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y%m%d").toFormatter();
     }
 
@@ -198,6 +198,7 @@ public class DateLiteral extends LiteralExpr {
             second = dateTime.getSecond();
             this.type = type;
         } catch (Exception ex) {
+            System.out.println(ex);
             throw new AnalysisException("date literal [" + s + "] is invalid");
         }
     }

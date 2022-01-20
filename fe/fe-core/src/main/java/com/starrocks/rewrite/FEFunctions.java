@@ -21,11 +21,13 @@
 
 package com.starrocks.rewrite;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 
@@ -303,5 +305,15 @@ public class FEFunctions {
         }
         BigInteger result = left.mod(right);
         return new LargeIntLiteral(result.toString());
+    }
+
+    @FEFunction(name = "concat", argTypes = {"VARCHAR"}, returnType = "VARCHAR")
+    public static StringLiteral concat(StringLiteral... values) throws AnalysisException {
+        Preconditions.checkArgument(values.length > 0);
+        final StringBuilder resultBuilder = new StringBuilder();
+        for (StringLiteral value : values) {
+            resultBuilder.append(value.getStringValue());
+        }
+        return new StringLiteral(resultBuilder.toString());
     }
 }

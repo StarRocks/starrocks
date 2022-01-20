@@ -119,7 +119,7 @@ public class DateUtils {
                         builder.appendValue(ChronoField.YEAR, 4);
                         break;
                     case 'y': // %y Year, numeric (two digits)
-                        builder.appendValueReduced(ChronoField.YEAR_OF_ERA, 2, 2, 2020);
+                        builder.appendValueReduced(ChronoField.YEAR_OF_ERA, 2, 2, 1970);
                         break;
                     case 'w': // %w Day of the week (0=Sunday..6=Saturday)
                         builder.appendValue(ChronoField.DAY_OF_WEEK, 1);
