@@ -5,6 +5,7 @@
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "exprs/vectorized/binary_function.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
 
@@ -105,38 +106,20 @@ static Expr* create_binary_predicate(const TExprNode& node) {
     return nullptr;
 }
 
+struct BinaryPredicateCreator {
+    const TExprNode& node;
+    BinaryPredicateCreator(const TExprNode& node): node(node) {}
+    
+    template <PrimitiveType ptype>
+    Expr* operator()() {
+        return create_binary_predicate<ptype>(node);
+    }
+};
+
 Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     PrimitiveType type = thrift_to_type(node.child_type);
 
-#define CASE_SWITCH_OP(TYPE) \
-    case TYPE:               \
-        return create_binary_predicate<TYPE>(node)
-
-    switch (type) {
-        CASE_SWITCH_OP(TYPE_BOOLEAN);
-        CASE_SWITCH_OP(TYPE_TINYINT);
-        CASE_SWITCH_OP(TYPE_SMALLINT);
-        CASE_SWITCH_OP(TYPE_INT);
-        CASE_SWITCH_OP(TYPE_BIGINT);
-        CASE_SWITCH_OP(TYPE_LARGEINT);
-        CASE_SWITCH_OP(TYPE_FLOAT);
-        CASE_SWITCH_OP(TYPE_DOUBLE);
-        CASE_SWITCH_OP(TYPE_DECIMALV2);
-        CASE_SWITCH_OP(TYPE_TIME);
-        CASE_SWITCH_OP(TYPE_DATE);
-        CASE_SWITCH_OP(TYPE_DATETIME);
-        CASE_SWITCH_OP(TYPE_CHAR);
-        CASE_SWITCH_OP(TYPE_VARCHAR);
-        CASE_SWITCH_OP(TYPE_DECIMAL32);
-        CASE_SWITCH_OP(TYPE_DECIMAL64);
-        CASE_SWITCH_OP(TYPE_DECIMAL128);
-    default:
-        break;
-    }
-    DCHECK(false) << "Unsupported binary predicate: " << node.opcode << " type: " << type;
-    return nullptr;
+    return type_dispatch_all(type, BinaryPredicateCreator(node));
 }
-
-#undef CASE_SWITCH_OP
 
 } // namespace starrocks::vectorized
