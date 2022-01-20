@@ -653,6 +653,11 @@ CONF_Int64(pipeline_io_buffer_size, "64");
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // the degree of parallelism of brpc
 CONF_Int64(pipeline_sink_brpc_dop, "8");
+
+CONF_Int16(wg0_cpu_limit, "1");
+CONF_Int16(wg1_cpu_limit, "2");
+CONF_Int16(wg2_cpu_limit, "4");
+
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
 // max hdfs file handle

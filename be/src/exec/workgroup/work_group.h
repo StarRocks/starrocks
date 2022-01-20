@@ -136,6 +136,10 @@ public:
     double get_cur_select_factor() const;
     void update_cur_select_factor(double value);
 
+    // TODO(ZiheLiu): remove them. They are just for test.
+    std::atomic<int> num_selected_io_times = 0;
+    std::atomic<int> num_real_selected_io_times = 0;
+
 private:
     std::string _name;
     int _id;
@@ -209,6 +213,7 @@ public:
     int64_t get_sum_unadjusted_cpu_runtime_ns() const { return _sum_unadjusted_cpu_runtime_ns; }
     double get_cpu_unadjusted_actual_use_ratio() const;
 
+    // TODO(ZiheLiu): remove it. It is just for test.
     void log_cpu();
 
 private:

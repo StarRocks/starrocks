@@ -323,7 +323,9 @@ PriorityThreadPool::Task IoWorkGroupQueue::pick_next_task() {
     do {
         adjust_weight_if_need();
         wg = get_next_wg();
+        wg->num_selected_io_times++;
     } while (wg == nullptr || wg->io_task_queue_size() == 0);
+    wg->num_real_selected_io_times++;
 
     if (wg->io_task_queue_size() == 1) {
         _ready_wgs.erase(wg);
@@ -368,18 +370,25 @@ void WorkGroupManager::log_cpu() {
                      << "[expected_ratio=" << wg->get_cpu_expected_use_ratio() << "] "
                      << "[real_ratio=" << wg->get_cpu_unadjusted_actual_use_ratio() << "] ";
         LOG(WARNING) << "[TEST] io "
-                     << "select_factor: " << wg->get_select_factor() << " cur_hold_total_chunk_num "
-                     << wg->get_cur_hold_total_chunk_num();
+                     << "[select_factor=" << wg->get_select_factor() << "] "
+                     << "[cur_hold_total_chunk_num " << wg->get_cur_hold_total_chunk_num() << "] "
+                     << "[selected_io_times=" << wg->num_selected_io_times << "] "
+                     << "[real_selected_io_times=" << wg->num_real_selected_io_times << "] ";
     }
     LOG(WARNING) << "[TEST] ===============================";
 }
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
-    auto default_wg = std::make_shared<WorkGroup>("default_wg", 0, 1, 20L * (1L << 30), 10, WorkGroupType::WG_DEFAULT);
+    auto default_wg = std::make_shared<WorkGroup>("default_wg", 0, config::wg0_cpu_limit, 20L * (1L << 30), 10,
+                                                  WorkGroupType::WG_DEFAULT);
+
+    // TODO: remove them except default_wg. They are just for test.
     default_wg->init();
-    auto wg1 = std::make_shared<WorkGroup>("wg1", 1, 2, 10L * (1L << 30), 10, WorkGroupType::WG_NORMAL);
+    auto wg1 = std::make_shared<WorkGroup>("wg1", 1, config::wg1_cpu_limit, 10L * (1L << 30), 10,
+                                           WorkGroupType::WG_NORMAL);
     wg1->init();
-    auto wg2 = std::make_shared<WorkGroup>("wg2", 2, 4, 30L * (1L << 30), 10, WorkGroupType::WG_NORMAL);
+    auto wg2 = std::make_shared<WorkGroup>("wg2", 2, config::wg2_cpu_limit, 30L * (1L << 30), 10,
+                                           WorkGroupType::WG_NORMAL);
     wg2->init();
     WorkGroupManager::instance()->add_workgroup(default_wg);
     WorkGroupManager::instance()->add_workgroup(wg1);
