@@ -429,8 +429,18 @@ struct CppTypeTraits<OLAP_FIELD_TYPE_TINYINT> {
     using UnsignedCppType = uint8_t;
 };
 template <>
+struct CppTypeTraits<OLAP_FIELD_TYPE_UNSIGNED_TINYINT> {
+    using CppType = uint8_t;
+    using UnsignedCppType = uint8_t;
+};
+template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_SMALLINT> {
     using CppType = int16_t;
+    using UnsignedCppType = uint16_t;
+};
+template <>
+struct CppTypeTraits<OLAP_FIELD_TYPE_UNSIGNED_SMALLINT> {
+    using CppType = uint16_t;
     using UnsignedCppType = uint16_t;
 };
 template <>

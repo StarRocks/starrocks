@@ -4,63 +4,107 @@
 
 #include "storage/olap_common.h"
 
+
+// Infra to build the type system:
+// 1. Macro `APPLY_FOR*` to build generic codes
+// 2. field_type_dispatch* function dynamic dispatch types
+
 namespace starrocks {
-    
+
 // These types should be synced with FieldType in olap_common.h
 #define APPLY_FOR_BASIC_OLAP_FIELD_TYPE(M) \
-    M(OLAP_FIELD_TYPE_TINYINT)           \
-    M(OLAP_FIELD_TYPE_SMALLINT)          \
-    M(OLAP_FIELD_TYPE_INT)               \
-    M(OLAP_FIELD_TYPE_BIGINT)            \
-    M(OLAP_FIELD_TYPE_LARGEINT)          \
-    M(OLAP_FIELD_TYPE_FLOAT)             \
-    M(OLAP_FIELD_TYPE_DOUBLE)            \
-    M(OLAP_FIELD_TYPE_CHAR)              \
-    M(OLAP_FIELD_TYPE_DATE)              \
-    M(OLAP_FIELD_TYPE_DATE_V2)           \
-    M(OLAP_FIELD_TYPE_DATETIME)          \
-    M(OLAP_FIELD_TYPE_VARCHAR)           \
-    M(OLAP_FIELD_TYPE_BOOL)              \
-    M(OLAP_FIELD_TYPE_DECIMAL)           \
-    M(OLAP_FIELD_TYPE_DECIMAL32)         \
-    M(OLAP_FIELD_TYPE_DECIMAL64)         \
-    M(OLAP_FIELD_TYPE_DECIMAL128)        \
-    M(OLAP_FIELD_TYPE_TIMESTAMP)         \
-    M(OLAP_FIELD_TYPE_DECIMAL_V2)
+    M(OLAP_FIELD_TYPE_TINYINT)             \
+    M(OLAP_FIELD_TYPE_SMALLINT)            \
+    M(OLAP_FIELD_TYPE_INT)                 \
+    M(OLAP_FIELD_TYPE_BIGINT)              \
+    M(OLAP_FIELD_TYPE_LARGEINT)            \
+    M(OLAP_FIELD_TYPE_FLOAT)               \
+    M(OLAP_FIELD_TYPE_DOUBLE)              \
+    M(OLAP_FIELD_TYPE_CHAR)                \
+    M(OLAP_FIELD_TYPE_DATE)                \
+    M(OLAP_FIELD_TYPE_DATE_V2)             \
+    M(OLAP_FIELD_TYPE_DATETIME)            \
+    M(OLAP_FIELD_TYPE_VARCHAR)             \
+    M(OLAP_FIELD_TYPE_BOOL)                \
+    M(OLAP_FIELD_TYPE_DECIMAL)             \
+    M(OLAP_FIELD_TYPE_DECIMAL32)           \
+    M(OLAP_FIELD_TYPE_DECIMAL64)           \
+    M(OLAP_FIELD_TYPE_DECIMAL128)          \
+    M(OLAP_FIELD_TYPE_DECIMAL_V2)          \
+    M(OLAP_FIELD_TYPE_TIMESTAMP)
 
-// type_dispatch_all:
+#define APPLY_FOR_UNSIGN_OLAP_FIELD_TYPE(M) \
+    M(OLAP_FIELD_TYPE_UNSIGNED_INT)         \
+    M(OLAP_FIELD_TYPE_UNSIGNED_TINYINT)     \
+    M(OLAP_FIELD_TYPE_UNSIGNED_SMALLINT)    \
+    M(OLAP_FIELD_TYPE_UNSIGNED_BIGINT)
+
+#define APPLY_FOR_COMPLEX_OLAP_FIELD_TYPE(M) \
+    M(OLAP_FIELD_TYPE_HLL)                   \
+    M(OLAP_FIELD_TYPE_STRUCT)                \
+    M(OLAP_FIELD_TYPE_MAP)                   \
+    M(OLAP_FIELD_TYPE_OBJECT)                \
+    M(OLAP_FIELD_TYPE_PERCENTILE)
+
+#define APPLY_FOR_SUPPORTED_FIELD_TYPE(M) \
+    APPLY_FOR_BASIC_OLAP_FIELD_TYPE(M)    \
+    APPLY_FOR_UNSIGN_OLAP_FIELD_TYPE(M)   \
+    M(OLAP_FIELD_TYPE_HLL)                \
+    M(OLAP_FIELD_TYPE_OBJECT)             \
+    M(OLAP_FIELD_TYPE_PERCENTILE)
+
+#define APPLY_FOR_EXTRA_OLAP_FIELD_TYPE(M) \
+    APPLY_FOR_UNSIGN_OLAP_FIELD_TYPE(M)    \
+    APPLY_FOR_COMPLEX_OLAP_FIELD_TYPE(M)   \
+    M(OLAP_FIELD_TYPE_DISCRETE_DOUBLE)     \
+    M(OLAP_FIELD_TYPE_ARRAY)
+
+#define _TYPE_DISPATCH_CASE(type) \
+    case type:                    \
+        return fun.template operator()<type>(args...);
+
 // Dispatch dynamic ptype to static template instance Functor
 template <class Functor, class... Args>
-auto field_type_dispatch_all(FieldType ftype, Functor fun, Args... args) {
-#define _TYPE_DISPATCH_CASE(type) \
-    case type: return fun.template operator()<type>(args...);
-
+auto field_type_dispatch_basic(FieldType ftype, Functor fun, Args... args) {
     switch (ftype) {
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_TINYINT)           \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_SMALLINT)          \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_INT)               \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_BIGINT)            \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_LARGEINT)          \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_FLOAT)             \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_DOUBLE)            \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_CHAR)              \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_DATE)              \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_DATE_V2)           \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_DATETIME)          \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_VARCHAR)           \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_BOOL)              \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_DECIMAL)           \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_DECIMAL32)         \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_DECIMAL64)         \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_DECIMAL128)        \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_TIMESTAMP)         \
-    _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_DECIMAL_V2)
+        APPLY_FOR_BASIC_OLAP_FIELD_TYPE(_TYPE_DISPATCH_CASE)
+    default:
+        CHECK(false) << "unknown type " << ftype;
+        __builtin_unreachable();
+    }
+}
 
+template <class Functor, class... Args>
+auto field_type_dispatch_all_extra(FieldType ftype, Functor fun, Args... args) {
+    switch (ftype) {
+        APPLY_FOR_BASIC_OLAP_FIELD_TYPE(_TYPE_DISPATCH_CASE)
+        APPLY_FOR_EXTRA_OLAP_FIELD_TYPE(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "Unknown type: " << ftype;
+        __builtin_unreachable();
     }
+}
+
+template <class Functor, class... Args>
+auto field_type_dispatch_bitmap_index(FieldType ftype, Functor fun, Args... args) {
+    switch (ftype) {
+        APPLY_FOR_BASIC_OLAP_FIELD_TYPE(_TYPE_DISPATCH_CASE)
+    default:
+        CHECK(false) << "Unknown type for bitmap: " << ftype;
+        __builtin_unreachable();
+    }
+}
+
+template <class Functor, class... Args>
+auto field_type_dispatch_supported(FieldType ftype, Functor fun, Args... args) {
+    switch (ftype) {
+        APPLY_FOR_SUPPORTED_FIELD_TYPE(_TYPE_DISPATCH_CASE)
+    default:
+        CHECK(false) << "Unsupported type: " << ftype;
+        __builtin_unreachable();
+    }
+}
 
 #undef _TYPE_DISPATCH_CASE
-}
 
 } // namespace starrocks

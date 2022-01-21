@@ -5,6 +5,12 @@
 #include "common/logging.h"
 #include "runtime/primitive_type.h"
 
+// Infra to build the type system:
+// 1. Macro `APPLY_FOR*` to build generic codes
+// 2. Macro `TYPE_DISPATCH*` to dispatch type 
+// 2. Function `field_type_dispatch*` to dynamic dispatch with better customlization
+
+
 namespace starrocks {
 
 #define APPLY_FOR_ALL_NUMBER_TYPE(M) \
@@ -128,8 +134,7 @@ namespace starrocks {
 #define TYPE_DISPATCH_CAST_TYPE(TEMPLATEF_FUNC, typeFrom, typeTo, ...)        \
     [&]() {                                                                   \
         switch (typeFrom) {                                                   \
-        case TYPE_INT:                                                        \
-            TYPE_DISPATCH_PREDICATE_TYPE(TEMPLATE_FUNC, typeTo, __VA_ARGS__); \
+        TYPE_DISPATCH_PREDICATE_TYPE(TEMPLATE_FUNC, typeTo, __VA_ARGS__); \
         default:;                                                             \
         }                                                                     \
     }
@@ -154,32 +159,7 @@ auto type_dispatch_all(PrimitiveType ptype, Functor fun, Args... args) {
         return fun.template operator()<type>(args...);
 
     switch (ptype) {
-        _TYPE_DISPATCH_CASE(TYPE_NULL)
-        _TYPE_DISPATCH_CASE(TYPE_BOOLEAN)
-        _TYPE_DISPATCH_CASE(TYPE_TINYINT)
-        _TYPE_DISPATCH_CASE(TYPE_SMALLINT)
-        _TYPE_DISPATCH_CASE(TYPE_INT)
-        _TYPE_DISPATCH_CASE(TYPE_BIGINT)
-        _TYPE_DISPATCH_CASE(TYPE_LARGEINT)
-        _TYPE_DISPATCH_CASE(TYPE_FLOAT)
-        _TYPE_DISPATCH_CASE(TYPE_DOUBLE)
-        _TYPE_DISPATCH_CASE(TYPE_VARCHAR)
-        _TYPE_DISPATCH_CASE(TYPE_DATE)
-        _TYPE_DISPATCH_CASE(TYPE_DATETIME)
-        // _TYPE_DISPATCH_CASE(TYPE_BINARY)
-        // _TYPE_DISPATCH_CASE(TYPE_DECIMAL)
-        _TYPE_DISPATCH_CASE(TYPE_CHAR)
-        // _TYPE_DISPATCH_CASE(TYPE_STRUCT)
-        // _TYPE_DISPATCH_CASE(TYPE_ARRAY)
-        // _TYPE_DISPATCH_CASE(TYPE_MAP)
-        _TYPE_DISPATCH_CASE(TYPE_HLL)
-        _TYPE_DISPATCH_CASE(TYPE_TIME)
-        _TYPE_DISPATCH_CASE(TYPE_OBJECT)
-        _TYPE_DISPATCH_CASE(TYPE_PERCENTILE)
-        _TYPE_DISPATCH_CASE(TYPE_DECIMALV2)
-        _TYPE_DISPATCH_CASE(TYPE_DECIMAL32)
-        _TYPE_DISPATCH_CASE(TYPE_DECIMAL64)
-        _TYPE_DISPATCH_CASE(TYPE_DECIMAL128)
+        APPLY_FOR_ALL_PRIMITIVE_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "Unknown type: " << ptype;
     }

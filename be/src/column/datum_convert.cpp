@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #include "column/datum_convert.h"
 
+#include "exec/vectorized/join_hash_map.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
@@ -52,7 +53,7 @@ struct DatumFromStringBuilder {
 Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str, MemPool* mem_pool) {
     const auto type = type_info->type();
     
-    return field_type_dispatch_all(type, DatumFromStringBuilder(), type_info, dst, str, mem_pool);
+    return field_type_dispatch_supported(type, DatumFromStringBuilder(), type_info, dst, str, mem_pool);
 }
 
 struct DatumToStringBuilder {
@@ -69,7 +70,7 @@ std::string datum_to_string(TypeInfo* type_info, const Datum& datum) {
     if (datum.is_null()) {
         return "null";
     }
-    return field_type_dispatch_all(type_info->type(), DatumToStringBuilder(), type_info, datum);
+    return field_type_dispatch_supported(type_info->type(), DatumToStringBuilder(), type_info, datum);
 }
 
 } // namespace starrocks::vectorized

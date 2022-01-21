@@ -20,8 +20,8 @@
 // under the License.
 
 #include "storage/types.h"
-
 #include "storage/decimal_type_info.h"
+#include "storage/olap_type_infra.h"
 
 namespace starrocks {
 
@@ -65,27 +65,9 @@ void ScalarTypeInfoResolver::add_mapping() {
 }
 
 ScalarTypeInfoResolver::ScalarTypeInfoResolver() {
-    add_mapping<OLAP_FIELD_TYPE_TINYINT>();
-    add_mapping<OLAP_FIELD_TYPE_SMALLINT>();
-    add_mapping<OLAP_FIELD_TYPE_INT>();
-    add_mapping<OLAP_FIELD_TYPE_UNSIGNED_INT>();
-    add_mapping<OLAP_FIELD_TYPE_BOOL>();
-    add_mapping<OLAP_FIELD_TYPE_BIGINT>();
-    add_mapping<OLAP_FIELD_TYPE_UNSIGNED_BIGINT>();
-    add_mapping<OLAP_FIELD_TYPE_LARGEINT>();
-    add_mapping<OLAP_FIELD_TYPE_FLOAT>();
-    add_mapping<OLAP_FIELD_TYPE_DOUBLE>();
-    add_mapping<OLAP_FIELD_TYPE_DECIMAL>();
-    add_mapping<OLAP_FIELD_TYPE_DECIMAL_V2>();
-    add_mapping<OLAP_FIELD_TYPE_DATE>();
-    add_mapping<OLAP_FIELD_TYPE_DATE_V2>();
-    add_mapping<OLAP_FIELD_TYPE_DATETIME>();
-    add_mapping<OLAP_FIELD_TYPE_TIMESTAMP>();
-    add_mapping<OLAP_FIELD_TYPE_CHAR>();
-    add_mapping<OLAP_FIELD_TYPE_VARCHAR>();
-    add_mapping<OLAP_FIELD_TYPE_HLL>();
-    add_mapping<OLAP_FIELD_TYPE_OBJECT>();
-    add_mapping<OLAP_FIELD_TYPE_PERCENTILE>();
+#define M(ftype) add_mapping<ftype>(); 
+    APPLY_FOR_SUPPORTED_FIELD_TYPE(M)
+#undef M
     add_mapping<OLAP_FIELD_TYPE_NONE>();
 }
 
