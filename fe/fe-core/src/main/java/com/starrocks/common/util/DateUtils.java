@@ -65,8 +65,6 @@ public class DateUtils {
                         builder.appendValue(ChronoField.MONTH_OF_YEAR, 2);
                         break;
                     case 'd': // %d Day of the month, numeric (00..31)
-                        builder.appendValue(ChronoField.DAY_OF_MONTH, 2);
-                        break;
                     case 'e': // %e Day of the month, numeric (0..31)
                         builder.appendValue(ChronoField.DAY_OF_MONTH, 1, 2, SignStyle.NORMAL);
                         break;
@@ -103,7 +101,7 @@ public class DateUtils {
                         break;
                     case 'S': // %S Seconds (00..59)
                     case 's': // %s Seconds (00..59)
-                        builder.appendValue(ChronoField.SECOND_OF_MINUTE, 2);
+                        builder.appendValue(ChronoField.SECOND_OF_MINUTE, 1, 2, SignStyle.NORMAL);
                         break;
                     case 'T': // %T Time, 24-hour (hh:mm:ss)
                         builder.appendValue(ChronoField.HOUR_OF_DAY, 2)
@@ -125,7 +123,7 @@ public class DateUtils {
                         builder.appendValue(ChronoField.DAY_OF_WEEK, 1);
                         break;
                     case 'f': // %f Microseconds (000000..999999)
-                        builder.appendValue(ChronoField.MICRO_OF_SECOND, 6);
+                        builder.appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL);
                         break;
                     case 'u': // %u Week (00..53), where Monday is the first day of the week
                         builder.appendValueReduced(ChronoField.ALIGNED_WEEK_OF_YEAR, 2, 2, 0);
