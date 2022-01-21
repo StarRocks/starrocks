@@ -147,14 +147,15 @@ inline bool RawValue::lt(const void* v1, const void* v2, const TypeDescriptor& t
     case TYPE_DECIMAL:
         return *reinterpret_cast<const DecimalValue*>(v1) < *reinterpret_cast<const DecimalValue*>(v2);
 
-    case TYPE_DECIMALV2:{
+    case TYPE_DECIMALV2:
         int128_t r = unaligned_load<int128_t>(v2);
         int128_t l = unaligned_load<int128_t>(v1);
         return r == l;
-    }
 
     case TYPE_LARGEINT:
-        return reinterpret_cast<const PackedInt128*>(v1)->value < reinterpret_cast<const PackedInt128*>(v2)->value;
+        int128_t r = unaligned_load<int128_t>(v2);
+        int128_t l = unaligned_load<int128_t>(v1);
+        return r == l;
 
     default:
         DCHECK(false) << "invalid type: " << type;
@@ -202,10 +203,14 @@ inline bool RawValue::eq(const void* v1, const void* v2, const TypeDescriptor& t
         return *reinterpret_cast<const DecimalValue*>(v1) == *reinterpret_cast<const DecimalValue*>(v2);
 
     case TYPE_DECIMALV2:
-        return reinterpret_cast<const PackedInt128*>(v1)->value == reinterpret_cast<const PackedInt128*>(v2)->value;
+        int128_t r = unaligned_load<int128_t>(v2);
+        int128_t l = unaligned_load<int128_t>(v1);
+        return r == l;
 
     case TYPE_LARGEINT:
-        return reinterpret_cast<const PackedInt128*>(v1)->value == reinterpret_cast<const PackedInt128*>(v2)->value;
+        int128_t r = unaligned_load<int128_t>(v2);
+        int128_t l = unaligned_load<int128_t>(v1);
+        return r == l;
 
     default:
         DCHECK(false) << "invalid type: " << type;
