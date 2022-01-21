@@ -26,6 +26,7 @@
 #include "storage/column_block.h"
 #include "storage/fs/block_manager.h"
 #include "storage/olap_define.h"
+#include "storage/olap_type_infra.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
@@ -152,63 +153,15 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
     return Status::OK();
 }
 
-std::unique_ptr<ZoneMapIndexWriter> ZoneMapIndexWriter::create(starrocks::Field* field) {
-    switch (field->type()) {
-    case OLAP_FIELD_TYPE_BOOL:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_BOOL>>(field);
-    case OLAP_FIELD_TYPE_TINYINT:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_TINYINT>>(field);
-    case OLAP_FIELD_TYPE_SMALLINT:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_SMALLINT>>(field);
-    case OLAP_FIELD_TYPE_INT:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_INT>>(field);
-    case OLAP_FIELD_TYPE_BIGINT:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_BIGINT>>(field);
-    case OLAP_FIELD_TYPE_LARGEINT:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_LARGEINT>>(field);
-    case OLAP_FIELD_TYPE_FLOAT:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_FLOAT>>(field);
-    case OLAP_FIELD_TYPE_DOUBLE:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_DOUBLE>>(field);
-    case OLAP_FIELD_TYPE_DECIMAL:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL>>(field);
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL_V2>>(field);
-    case OLAP_FIELD_TYPE_DECIMAL32:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL32>>(field);
-    case OLAP_FIELD_TYPE_DECIMAL64:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL64>>(field);
-    case OLAP_FIELD_TYPE_DECIMAL128:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL128>>(field);
-    case OLAP_FIELD_TYPE_CHAR:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_CHAR>>(field);
-    case OLAP_FIELD_TYPE_DATE:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_DATE>>(field);
-    case OLAP_FIELD_TYPE_DATE_V2:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_DATE_V2>>(field);
-    case OLAP_FIELD_TYPE_DATETIME:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_DATETIME>>(field);
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_TIMESTAMP>>(field);
-    case OLAP_FIELD_TYPE_VARCHAR:
-        return std::make_unique<ZoneMapIndexWriterImpl<OLAP_FIELD_TYPE_VARCHAR>>(field);
-    case OLAP_FIELD_TYPE_STRUCT:
-    case OLAP_FIELD_TYPE_ARRAY:
-    case OLAP_FIELD_TYPE_MAP:
-    case OLAP_FIELD_TYPE_UNKNOWN:
-    case OLAP_FIELD_TYPE_NONE:
-    case OLAP_FIELD_TYPE_HLL:
-    case OLAP_FIELD_TYPE_OBJECT:
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-    case OLAP_FIELD_TYPE_PERCENTILE:
-    case OLAP_FIELD_TYPE_MAX_VALUE:
-        break;
+struct ZoneMapIndexWriterBuilder {
+    template <FieldType ftype>
+    std::unique_ptr<ZoneMapIndexWriter> operator()(Field* field) {
+        return std::make_unique<ZoneMapIndexWriterImpl<ftype>>(field);
     }
-    return nullptr;
+};
+
+std::unique_ptr<ZoneMapIndexWriter> ZoneMapIndexWriter::create(starrocks::Field* field) {
+    return field_type_dispatch_bitmap_index(field->type(), ZoneMapIndexWriterBuilder(), field);
 }
 
 template <FieldType type>
