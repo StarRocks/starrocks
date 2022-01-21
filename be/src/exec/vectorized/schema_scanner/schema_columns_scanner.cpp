@@ -66,10 +66,13 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
         }
     }
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
+    {
+        SCOPED_TIMER(_param->_rpc_timer);
+        if (nullptr != _param->ip && 0 != _param->port) {
+            RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
+        } else {
+            return Status::InternalError("IP or port doesn't exists");
+        }
     }
 
     return Status::OK();
@@ -422,19 +425,23 @@ Status SchemaColumnsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (nullptr == chunk || nullptr == eos) {
         return Status::InternalError("input parameter is nullptr.");
     }
-    while (_column_index >= _desc_result.columns.size()) {
-        if (_table_index >= _table_result.tables.size()) {
-            if (_db_index < _db_result.dbs.size()) {
-                RETURN_IF_ERROR(get_new_table());
+    {
+        SCOPED_TIMER(_param->_rpc_timer);
+        while (_column_index >= _desc_result.columns.size()) {
+            if (_table_index >= _table_result.tables.size()) {
+                if (_db_index < _db_result.dbs.size()) {
+                    RETURN_IF_ERROR(get_new_table());
+                } else {
+                    *eos = true;
+                    return Status::OK();
+                }
             } else {
-                *eos = true;
-                return Status::OK();
+                RETURN_IF_ERROR(get_new_desc());
             }
-        } else {
-            RETURN_IF_ERROR(get_new_desc());
         }
     }
 
+    SCOPED_TIMER(_param->_fill_chunk_timer);
     *eos = false;
     return fill_chunk(chunk);
 }
