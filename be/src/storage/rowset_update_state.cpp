@@ -290,7 +290,13 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     }
     size_t num_segments = rowset->num_segments();
     DCHECK(num_segments == _upserts.size());
-
+    vector<std::pair<string, string>> rewrite_files;
+    DeferOp clean_temp_files([&] {
+        for (auto& e : rewrite_files) {
+            Env::Default()->delete_file(e.second);
+        }
+    });
+    bool is_rewrite = config::rewrite_partial_segment;
     for (size_t i = 0; i < num_segments; i++) {
         auto& pks = *_upserts[i];
         int64_t t_start = MonotonicMillis();
@@ -311,10 +317,20 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         }
         int64_t t_get_column_values = MonotonicMillis();
         auto src_path = BetaRowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
+        auto dest_path = BetaRowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
+        rewrite_files.emplace_back(src_path, dest_path);
 
         FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(i);
-        RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, tablet->tablet_schema(), read_column_ids, write_columns, i,
-                                                 partial_rowset_footer));
+        // if is_rewrite is true, rewrite partial segment file into dest_path first, then append write_columns
+        // if is_rewrite is false, append write_columns into src_path and rebuild segment footer
+        if (is_rewrite) {
+            RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
+                                                     write_columns, i, partial_rowset_footer));
+        } else {
+            RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, tablet->tablet_schema(), read_column_ids, write_columns,
+                                                     i, partial_rowset_footer));
+        }
+
         int64_t t_rewrite = MonotonicMillis();
         LOG(INFO) << Substitute(
                 "apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #default:$4 getrowid:$5ms #read:$6($7ms) "
@@ -324,6 +340,13 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
                 (t_get_column_values - t_get_rowids) / 1000000, (t_rewrite - t_get_column_values) / 1000000,
                 (t_rewrite - t_start) / 1000000);
     }
+    if (is_rewrite) {
+        for (size_t i = 0; i < num_segments; i++) {
+            RETURN_IF_ERROR(Env::Default()->rename_file(rewrite_files[i].second, rewrite_files[i].first));
+        }
+    }
+    // clean this to prevent DeferOp clean files
+    rewrite_files.clear();
     auto beta_rowset = down_cast<BetaRowset*>(rowset);
     RETURN_IF_ERROR(beta_rowset->reload());
     return Status::OK();
