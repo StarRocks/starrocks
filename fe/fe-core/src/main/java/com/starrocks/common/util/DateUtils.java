@@ -65,6 +65,8 @@ public class DateUtils {
                         builder.appendValue(ChronoField.MONTH_OF_YEAR, 2);
                         break;
                     case 'd': // %d Day of the month, numeric (00..31)
+                        builder.appendValue(ChronoField.DAY_OF_MONTH, 2);
+                        break;
                     case 'e': // %e Day of the month, numeric (0..31)
                         builder.appendValue(ChronoField.DAY_OF_MONTH, 1, 2, SignStyle.NORMAL);
                         break;
@@ -101,7 +103,7 @@ public class DateUtils {
                         break;
                     case 'S': // %S Seconds (00..59)
                     case 's': // %s Seconds (00..59)
-                        builder.appendValue(ChronoField.SECOND_OF_MINUTE, 1, 2, SignStyle.NORMAL);
+                        builder.appendValue(ChronoField.SECOND_OF_MINUTE, 2);
                         break;
                     case 'T': // %T Time, 24-hour (hh:mm:ss)
                         builder.appendValue(ChronoField.HOUR_OF_DAY, 2)

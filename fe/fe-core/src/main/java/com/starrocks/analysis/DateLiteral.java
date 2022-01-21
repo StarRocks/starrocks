@@ -68,10 +68,10 @@ public class DateLiteral extends LiteralExpr {
 
     static {
         DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s").toFormatter();
-        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d").toFormatter();
-        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%d %H:%i:%s").toFormatter();
-        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%d").toFormatter();
-        DATE_NO_SPLIT_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y%m%d").toFormatter();
+        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e").toFormatter();
+        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s").toFormatter();
+        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e").toFormatter();
+        DATE_NO_SPLIT_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y%m%e").toFormatter();
     }
 
     //Date Literal persist type in meta

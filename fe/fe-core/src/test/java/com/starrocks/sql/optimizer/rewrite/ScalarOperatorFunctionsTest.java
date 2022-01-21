@@ -16,7 +16,9 @@ import org.junit.Test;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.DateTimeException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Locale;
 
@@ -353,7 +355,8 @@ public class ScalarOperatorFunctionsTest {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
         ctx.setStartTime();
-        assertEquals("2022-01-20T00:00", ScalarOperatorFunctions.curDate().getDate().toString());
+        LocalDateTime now = LocalDateTime.of(LocalDate.now(), LocalTime.of(0, 0, 0));
+        assertEquals(now, ScalarOperatorFunctions.curDate().getDate());
     }
 
     @Test
