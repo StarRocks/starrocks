@@ -180,12 +180,9 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
 }
 
 struct ColumnBuilder {
-    const TypeDescriptor& type_desc;
-    
-    ColumnBuilder(const TypeDescriptor& type_desc): type_desc(type_desc) {}
     
     template <PrimitiveType ptype>
-    ColumnPtr operator()() {
+    ColumnPtr operator()(const TypeDescriptor& type_desc) {
         switch (ptype) {
         case INVALID_TYPE:
         case TYPE_NULL:
@@ -232,7 +229,7 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         return ArrayColumn::create(std::move(data), std::move(offsets));
     }
 
-    ColumnPtr p = type_dispatch_all(type_desc.type, ColumnBuilder(type_desc));
+    ColumnPtr p = type_dispatch_all(type_desc.type, ColumnBuilder(), type_desc);
 
     if (is_const) {
         return ConstColumn::create(p);

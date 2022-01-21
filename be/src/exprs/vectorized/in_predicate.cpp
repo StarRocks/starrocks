@@ -11,21 +11,17 @@
 namespace starrocks::vectorized {
 
 struct InConstPredicateBuilder {
-    const TExprNode& node;
-    InConstPredicateBuilder(const TExprNode& node): node(node) {}
     
     template <PrimitiveType ptype>
-    Expr* operator()() {
+    Expr* operator()(const TExprNode& node) {
         return new VectorizedInConstPredicate<ptype>(node);
     }
 };
 
 struct InIteratorBuilder {
-    const TExprNode& node;
-    InIteratorBuilder(const TExprNode& node): node(node) {}
     
     template <PrimitiveType ptype>
-    Expr* operator()() {
+    Expr* operator()(const TExprNode& node) {
         return new VectorizedInIteratorPredicate<ptype>(node);
     }
 };
@@ -41,14 +37,11 @@ Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
 
     switch (node.opcode) {
     case TExprOpcode::FILTER_IN:
-    case TExprOpcode::FILTER_NOT_IN: {
-        return TYPE_DISPATCH_PREDICATE_TYPE((Expr*)new VectorizedInConstPredicate, child_type, node);
-    }
+    case TExprOpcode::FILTER_NOT_IN:
+        return type_dispatch_all(child_type, InConstPredicateBuilder(), node);
     case TExprOpcode::FILTER_NEW_IN:
-    case TExprOpcode::FILTER_NEW_NOT_IN: {
-        return TYPE_DISPATCH_PREDICATE_TYPE((Expr*)new VectorizedInIteratorPredicate, child_type, node);
-    }
-
+    case TExprOpcode::FILTER_NEW_NOT_IN:
+        return type_dispatch_all(child_type, InIteratorBuilder(), node);
     default:
         LOG(WARNING) << "vectorized engine in predicate not support: " << node.opcode;
         return nullptr;
