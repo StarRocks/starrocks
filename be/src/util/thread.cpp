@@ -23,6 +23,7 @@
 
 #include <fmt/format.h>
 #include <sys/prctl.h>
+#include <sys/resource.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -185,6 +186,18 @@ int64_t Thread::tid() const {
         return _tid;
     }
     return wait_for_tid();
+}
+
+Status Thread::set_os_priority(int32_t new_os_thread_priority) {
+    int64_t os_tid = tid();
+#if defined(OS_LINUX)
+    if (new_os_thread_priority) {
+        if (0 != setpriority(PRIO_PROCESS, os_tid, new_os_thread_priority)) {
+            return Status::NotSupported("Cannot setpriority");
+        }
+    }
+#endif
+    return Status::OK();
 }
 
 pthread_t Thread::pthread_id() const {

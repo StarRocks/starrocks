@@ -199,6 +199,8 @@ public:
         return _num_threads + _num_threads_pending_start;
     }
 
+    void set_os_priority(int32_t new_os_thread_priority);
+
 private:
     friend class ThreadPoolBuilder;
     friend class ThreadPoolToken;
