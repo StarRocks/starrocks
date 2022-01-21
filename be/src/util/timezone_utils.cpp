@@ -56,7 +56,8 @@ bool TimezoneUtils::find_cctz_time_zone(const std::string& timezone, cctz::time_
     }
 }
 
-bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, const std::string& timezone,                                    cctz::time_zone& ctz) {
+bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, const std::string& timezone,
+                                        cctz::time_zone& ctz) {
     bool v = false;
     hs_scan(
         timezone_hsscan.database, timezone.c_str(), timezone.size(), 0, timezone_hsscan.scratch,
