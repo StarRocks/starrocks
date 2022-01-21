@@ -267,14 +267,18 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     std::vector<int32_t> column_indexes = {0, 1};
     std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
     RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, keys, column_indexes, partial_schema);
-    RowsetUpdateState state;
-    state.load(_tablet.get(), partial_rowset.get());
-    const std::vector<PartialUpdateState>& parital_update_states = state.parital_update_states();
-    ASSERT_EQ(parital_update_states.size(), 1);
-    ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
-    ASSERT_EQ(parital_update_states[0].write_columns.size(), 1);
+    // check rowset_update_states
+    auto manager = StorageEngine::instance()->update_manager();
+    auto state_entry = manager->update_state_cache().get(
+            Substitute("$0_$1", _tablet->tablet_id(), partial_rowset->rowset_id().to_string()));
+    ASSERT_TRUE(state_entry != nullptr);
+    auto& build_state = state_entry->value();
+    const std::vector<PartialUpdateState>& build_parital_update_states = build_state.parital_update_states();
+    ASSERT_EQ(build_parital_update_states.size(), 1);
+    ASSERT_EQ(build_parital_update_states[0].src_rss_rowids.size(), N);
+    ASSERT_EQ(build_parital_update_states[0].write_columns.size(), 1);
     for (size_t i = 0; i < keys.size(); i++) {
-        ASSERT_EQ((int32_t)(keys[i] % 1000 + 2), parital_update_states[0].write_columns[0]->get(i).get_int32());
+        ASSERT_EQ((int32_t)(keys[i] % 1000 + 2), build_parital_update_states[0].write_columns[0]->get(i).get_int32());
     }
 
     // create new rowset to make conflict
@@ -313,29 +317,16 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
 
     // check and resolve conflict
     EditVersion latest_applied_version(3, 0);
-    auto manager = StorageEngine::instance()->update_manager();
     auto index_entry = manager->index_cache().get_or_create(_tablet->tablet_id());
     auto& index = index_entry->value();
     st = index.load(_tablet.get());
     std::vector<uint32_t> read_column_ids = {2};
-    state.test_check_conflict(_tablet.get(), partial_rowset.get(), partial_rowset->rowset_meta()->get_rowset_seg_id(),
-                              latest_applied_version, read_column_ids, index);
-
-    auto manager = StorageEngine::instance()->update_manager();
-    auto state_entry =
-            manager->update_state_cache().get(Substitute("$0_$1", _tablet->tablet_id(), rowset_id.to_string()));
-    ASSERT_TRUE(state_entry != nullptr);
-    auto& build_state = state_entry->value();
-    const std::vector<PartialUpdateState>& build_parital_update_states = build_state.parital_update_states();
-    ASSERT_EQ(build_parital_update_states.size(), 1);
-    ASSERT_EQ(build_parital_update_states[0].src_rss_rowids.size(), N);
-    ASSERT_EQ(build_parital_update_states[0].write_columns.size(), 1);
-    for (size_t i = 0; i < keys.size(); i++) {
-        ASSERT_EQ((int32_t)(keys[i] % 1000 + 2), build_parital_update_states[0].write_columns[0]->get(i).get_int32());
-    }
+    build_state.test_check_conflict(_tablet.get(), partial_rowset.get(),
+                                    partial_rowset->rowset_meta()->get_rowset_seg_id(), latest_applied_version,
+                                    read_column_ids, index);
 
     // check data of write column
-    const std::vector<PartialUpdateState>& new_parital_update_states = state.parital_update_states();
+    const std::vector<PartialUpdateState>& new_parital_update_states = build_state.parital_update_states();
     ASSERT_EQ(new_parital_update_states.size(), 1);
     ASSERT_EQ(new_parital_update_states[0].src_rss_rowids.size(), N);
     ASSERT_EQ(new_parital_update_states[0].write_columns.size(), 1);
