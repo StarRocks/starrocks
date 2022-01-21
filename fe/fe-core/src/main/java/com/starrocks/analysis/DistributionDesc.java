@@ -47,6 +47,10 @@ public class DistributionDesc implements Writable {
         throw new NotImplementedException();
     }
 
+    public int getBuckets() {
+        throw new NotImplementedException();
+    }
+
     public String toSql() {
         throw new NotImplementedException();
     }
