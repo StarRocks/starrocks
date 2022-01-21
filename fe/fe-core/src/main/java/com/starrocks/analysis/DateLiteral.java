@@ -558,7 +558,6 @@ public class DateLiteral extends LiteralExpr {
                         builder.appendDayOfWeek(0);
                         break;
                     case 'f': // %f Microseconds (000000..999999)
-                        builder.appendMillisOfSecond(6);
                     case 'U': // %U Week (00..53), where Sunday is the first day of the week
                     case 'u': // %u Week (00..53), where Monday is the first day of the week
                     case 'V': // %V Week (01..53), where Sunday is the first day of the week; used with %X
