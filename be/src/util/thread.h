@@ -98,6 +98,8 @@ public:
     // started.
     int64_t tid() const;
 
+    Status set_os_priority(int32_t new_os_thread_priority);
+
     // Returns the thread's pthread ID.
     pthread_t pthread_id() const;
 

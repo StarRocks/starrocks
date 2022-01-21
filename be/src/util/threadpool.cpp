@@ -443,6 +443,13 @@ bool ThreadPool::wait_for(const MonoDelta& delta) {
                                [&]() { return _total_queued_tasks <= 0 && _active_threads <= 0; });
 }
 
+void ThreadPool::set_os_priority(int32_t new_os_thread_priority) {
+    std::unique_lock l(_lock);
+    for (auto& thread : _threads) {
+        thread->set_os_priority(new_os_thread_priority);
+    }
+}
+
 void ThreadPool::dispatch_thread() {
     std::unique_lock l(_lock);
     InsertOrDie(&_threads, Thread::current_thread());
