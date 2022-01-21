@@ -60,7 +60,7 @@ using vectorized::ChunkUniquePtr;
 // rows from all senders are placed in the same queue.
 class DataStreamRecvr::SenderQueue {
 public:
-    SenderQueue(DataStreamRecvr* parent_recvr, int num_senders);
+    SenderQueue(DataStreamRecvr* parent_recvr, int32_t num_senders, int32_t degree_of_parallelism);
 
     ~SenderQueue() = default;
 
@@ -109,15 +109,14 @@ public:
 
     void short_circuit_for_pipeline(const int32_t driver_sequence);
 
-    bool has_output_for_pipeline(const int32_t driver_sequence) const;
+    bool has_output_for_pipeline(const int32_t driver_sequence);
 
     bool is_finished() const;
 
 private:
     struct ChunkItem {
         int64_t chunk_bytes = 0;
-        // -1 means disable pipeline level shuffle
-        // >=0 means enable pipeline level shuffle
+        // Invalid if SenderQueue::_is_pipeline_level_shuffle is false
         int32_t driver_sequence = -1;
         ChunkUniquePtr chunk_ptr;
         // When the memory of the ChunkQueue exceeds the limit,
@@ -148,6 +147,8 @@ private:
 
     typedef std::list<ChunkItem> ChunkQueue;
     ChunkQueue _chunk_queue;
+    bool _is_pipeline_level_shuffle = false;
+    std::vector<bool> _has_chunks_per_driver_sequence;
     serde::ProtobufChunkMeta _chunk_meta;
 
     std::unordered_set<int> _sender_eos_set;          // sender_id
@@ -165,8 +166,12 @@ private:
     std::unordered_set<int32_t> _short_circuit_driver_sequences;
 };
 
-DataStreamRecvr::SenderQueue::SenderQueue(DataStreamRecvr* parent_recvr, int num_senders)
-        : _recvr(parent_recvr), _is_cancelled(false), _num_remaining_senders(num_senders) {}
+DataStreamRecvr::SenderQueue::SenderQueue(DataStreamRecvr* parent_recvr, int32_t num_senders,
+                                          int32_t degree_of_parallelism)
+        : _recvr(parent_recvr),
+          _is_cancelled(false),
+          _num_remaining_senders(num_senders),
+          _has_chunks_per_driver_sequence(degree_of_parallelism, false) {}
 
 void DataStreamRecvr::SenderQueue::short_circuit_for_pipeline(const int32_t driver_sequence) {
     std::lock_guard<std::mutex> l(_lock);
@@ -174,7 +179,7 @@ void DataStreamRecvr::SenderQueue::short_circuit_for_pipeline(const int32_t driv
 
     auto iter = _chunk_queue.begin();
     while (iter != _chunk_queue.end()) {
-        if (iter->driver_sequence == driver_sequence) {
+        if (_is_pipeline_level_shuffle && iter->driver_sequence == driver_sequence) {
             if (iter->closure != nullptr) {
                 iter->closure->Run();
             }
@@ -185,25 +190,50 @@ void DataStreamRecvr::SenderQueue::short_circuit_for_pipeline(const int32_t driv
     }
 }
 
-bool DataStreamRecvr::SenderQueue::has_output_for_pipeline(const int32_t driver_sequence) const {
-    std::lock_guard<std::mutex> l(_lock);
-    if (_is_cancelled) {
-        return false;
-    }
-
-    if (_chunk_queue.empty()) {
-        return false;
-    }
-
-    auto iter = _chunk_queue.begin();
-    while (iter != _chunk_queue.end()) {
-        if (iter->driver_sequence == -1 || iter->driver_sequence == driver_sequence) {
-            return true;
+bool DataStreamRecvr::SenderQueue::has_output_for_pipeline(const int32_t driver_sequence) {
+    // First check without lock to avoid competition
+    // This method may be invoked by PipelineDriverPoller and GlobalDriverDispatcher simultaneously
+    // when some of the driver_sequences has no chunks to get but the others do, then GlobalDriverDispatcher
+    // may be starved because PipelineDriverPoller will call this method repeatedly with almost no interval
+    // Both false positives and false negatives are allowed here
+    {
+        if (_is_cancelled) {
+            return false;
         }
-        ++iter;
+        if (_is_pipeline_level_shuffle && !_has_chunks_per_driver_sequence[driver_sequence]) {
+            return false;
+        }
+        if (_chunk_queue.empty()) {
+            return false;
+        }
     }
 
-    return false;
+    // Second check under lock
+    {
+        std::lock_guard<std::mutex> l(_lock);
+
+        if (_is_cancelled) {
+            return false;
+        }
+        if (_is_pipeline_level_shuffle && !_has_chunks_per_driver_sequence[driver_sequence]) {
+            return false;
+        }
+
+        if (_chunk_queue.empty()) {
+            return false;
+        }
+
+        for (auto& item : _chunk_queue) {
+            if (!_is_pipeline_level_shuffle || item.driver_sequence == driver_sequence) {
+                return true;
+            }
+        }
+
+        if (_is_pipeline_level_shuffle) {
+            _has_chunks_per_driver_sequence[driver_sequence] = false;
+        }
+        return false;
+    }
 }
 
 bool DataStreamRecvr::SenderQueue::is_finished() const {
@@ -300,7 +330,7 @@ Status DataStreamRecvr::SenderQueue::get_chunk_for_pipeline(vectorized::Chunk** 
 
     auto iter = _chunk_queue.begin();
     while (iter != _chunk_queue.end()) {
-        if (iter->driver_sequence == -1 || iter->driver_sequence == driver_sequence) {
+        if (!_is_pipeline_level_shuffle || iter->driver_sequence == driver_sequence) {
             *chunk = iter->chunk_ptr.release();
             auto* closure = iter->closure;
             _recvr->_num_buffered_bytes -= iter->chunk_bytes;
@@ -430,6 +460,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
     ChunkQueue chunks;
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
+    _is_pipeline_level_shuffle = request.has_driver_sequence();
     int32_t driver_sequence = request.has_driver_sequence() ? request.driver_sequence() : -1;
 
     if (use_pass_through) {
@@ -481,9 +512,13 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
         const auto original_size = _chunk_queue.size();
         for (auto& item : chunks) {
             // This chunks may contains different driver_sequence
-            if (item.driver_sequence >= 0 &&
-                _short_circuit_driver_sequences.find(item.driver_sequence) != _short_circuit_driver_sequences.end()) {
-                continue;
+            if (_is_pipeline_level_shuffle) {
+                // Some pipelines may be short-circuit, so we just drop the chunk we received
+                if (_short_circuit_driver_sequences.find(item.driver_sequence) !=
+                    _short_circuit_driver_sequences.end()) {
+                    continue;
+                }
+                _has_chunks_per_driver_sequence[item.driver_sequence] = true;
             }
             _chunk_queue.emplace_back(std::move(item));
         }
@@ -551,6 +586,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     ChunkQueue local_chunk_queue;
+    _is_pipeline_level_shuffle = request.has_driver_sequence();
     int32_t driver_sequence = request.has_driver_sequence() ? request.driver_sequence() : -1;
 
     if (use_pass_through) {
@@ -625,15 +661,20 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
             // Now, all the packets with sequance <= unprocessed_sequence have been received
             // so chunks of unprocessed_sequence can be flushed to ready queue
             for (auto& item : unprocessed_chunk_queue) {
-                // This chunks may contains different driver_sequence
-                if (item.driver_sequence >= 0 && _short_circuit_driver_sequences.find(item.driver_sequence) !=
-                                                         _short_circuit_driver_sequences.end()) {
-                    // We may buffered closure in last reception, but the branch of the driver_sequence may
-                    // become short-circuit now, so we make sure to invoke the closure
-                    if (item.closure != nullptr) {
-                        item.closure->Run();
+                // This chunks may contains different driver_sequence when enable local pass through
+                // So we use driver_sequence of each chunk instead of request's driver_sequence
+                if (_is_pipeline_level_shuffle) {
+                    // Some pipelines may be short-circuit, so we just drop the chunk we received
+                    if (_short_circuit_driver_sequences.find(item.driver_sequence) !=
+                        _short_circuit_driver_sequences.end()) {
+                        // We may buffered closure in last reception, but the branch of the driver_sequence may
+                        // become short-circuit now, so we make sure to invoke the closure
+                        if (item.closure != nullptr) {
+                            item.closure->Run();
+                        }
+                        continue;
                     }
-                    continue;
+                    _has_chunks_per_driver_sequence[item.driver_sequence] = true;
                 }
                 _chunk_queue.emplace_back(std::move(item));
             }
@@ -812,7 +853,8 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
                                  std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
-                                 bool is_pipeline, bool keep_order, PassThroughChunkBuffer* pass_through_chunk_buffer)
+                                 bool is_pipeline, int32_t degree_of_parallelism, bool keep_order,
+                                 PassThroughChunkBuffer* pass_through_chunk_buffer)
         : _mgr(stream_mgr),
           _fragment_instance_id(fragment_instance_id),
           _dest_node_id(dest_node_id),
@@ -826,6 +868,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
           _instance_mem_tracker(runtime_state->instance_mem_tracker_ptr()),
           _sub_plan_query_statistics_recvr(std::move(sub_plan_query_statistics_recvr)),
           _is_pipeline(is_pipeline),
+          _degree_of_parallelism(degree_of_parallelism),
           _keep_order(keep_order),
           _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id) {
     // Create one queue per sender if is_merging is true.
@@ -833,7 +876,8 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     _sender_queues.reserve(num_queues);
     int num_sender_per_queue = is_merging ? 1 : num_senders;
     for (int i = 0; i < num_queues; ++i) {
-        SenderQueue* queue = _sender_queue_pool.add(new SenderQueue(this, num_sender_per_queue));
+        SenderQueue* queue =
+                _sender_queue_pool.add(new SenderQueue(this, num_sender_per_queue, _degree_of_parallelism));
         _sender_queues.push_back(queue);
     }
 
