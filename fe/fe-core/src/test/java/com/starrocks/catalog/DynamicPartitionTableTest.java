@@ -223,8 +223,6 @@ public class DynamicPartitionTableTest {
 
     @Test
     public void testMissBuckets() throws Exception {
-        expectedException.expect(DdlException.class);
-        expectedException.expectMessage("Must assign dynamic_partition.buckets properties");
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_buckets` (\n" +
                 "  `k1` date NULL COMMENT \"\",\n" +
                 "  `k2` int NULL COMMENT \"\",\n" +
@@ -249,13 +247,16 @@ public class DynamicPartitionTableTest {
                 "\"dynamic_partition.time_unit\" = \"day\",\n" +
                 "\"dynamic_partition.prefix\" = \"p\"\n" +
                 ");");
+        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        OlapTable table = (OlapTable) db.getTable("dynamic_partition_buckets");
+        Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getBuckets(), 32);
     }
 
     @Test
     public void testNotAllowed() throws Exception {
         expectedException.expect(DdlException.class);
         expectedException.expectMessage("Only support dynamic partition properties on range partition table");
-        starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_buckets` (\n" +
+        starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_non_range` (\n" +
                 "  `k1` date NULL COMMENT \"\",\n" +
                 "  `k2` int NULL COMMENT \"\",\n" +
                 "  `k3` smallint NULL COMMENT \"\",\n" +
