@@ -206,9 +206,8 @@ public class ScalarOperatorFunctions {
     }
 
     @FEFunction(name = "timestamp", argTypes = {"DATETIME"}, returnType = "DATETIME")
-    public static ConstantOperator timestamp(ConstantOperator arg) throws AnalysisException{
-        LocalDateTime timestamp = arg.getDatetime();
-        return ConstantOperator.createDatetime(timestamp);
+    public static ConstantOperator timestamp(ConstantOperator arg) throws AnalysisException{;
+        return arg;
     }
 
     @FEFunction.List(list = {
