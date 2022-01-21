@@ -384,6 +384,13 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void timestamp() throws AnalysisException {
+        LocalDateTime of = LocalDateTime.of(2013, 5, 17, 12, 35, 10);
+        ConstantOperator original = ConstantOperator.createDatetime(of);
+        Assert.assertEquals(original, ScalarOperatorFunctions.timestamp(original));
+    }
+
+    @Test
     public void unixTimestamp() throws AnalysisException {
         DateLiteral dl = new DateLiteral(2050, 3, 23, 9, 23, 55);
         ConstantOperator codt = ConstantOperator.createDatetime(LocalDateTime.of(2050, 3, 23, 9, 23, 55));

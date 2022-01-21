@@ -205,6 +205,11 @@ public class ScalarOperatorFunctions {
         return unixTimestamp(now());
     }
 
+    @FEFunction(name = "timestamp", argTypes = {"DATETIME"}, returnType = "DATETIME")
+    public static ConstantOperator timestamp(ConstantOperator arg) throws AnalysisException{;
+        return arg;
+    }
+
     @FEFunction.List(list = {
             @FEFunction(name = "unix_timestamp", argTypes = {"DATETIME"}, returnType = "INT"),
             @FEFunction(name = "unix_timestamp", argTypes = {"DATE"}, returnType = "INT")
@@ -446,7 +451,7 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDecimal(result, type);
     }
 
-    private static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern) {
+    public static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern) {
         DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
         boolean escaped = false;
         for (int i = 0; i < pattern.length(); i++) {
@@ -520,7 +525,7 @@ public class ScalarOperatorFunctions {
                         builder.appendValue(ChronoField.DAY_OF_WEEK, 1);
                         break;
                     case 'f': // %f Microseconds (000000..999999)
-                        builder.appendValue(ChronoField.MICRO_OF_SECOND, 6);
+                        builder.appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL);
                         break;
                     case 'u': // %u Week (00..53), where Monday is the first day of the week
                         builder.appendValueReduced(ChronoField.ALIGNED_WEEK_OF_YEAR, 2, 2, 0);

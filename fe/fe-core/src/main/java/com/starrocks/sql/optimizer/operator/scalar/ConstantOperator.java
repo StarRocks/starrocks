@@ -13,11 +13,19 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.SignStyle;
+import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalAccessor;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -49,8 +57,20 @@ import static java.util.Collections.emptyList;
  * TYPE_PERCENTILE |    NOT_SUPPORT
  */
 public final class ConstantOperator extends ScalarOperator implements Comparable<ConstantOperator> {
+    private static final Logger LOG = LogManager.getLogger(ConstantOperator.class);
+
     private static final LocalDateTime MAX_DATETIME = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
     private static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
+    private static java.time.format.DateTimeFormatter DATE_TIME_FORMATTER_MS = null;
+
+    static {
+        try {
+            DATE_TIME_FORMATTER_MS = ScalarOperatorFunctions.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
+        } catch (Exception e) {
+            LOG.error("invalid date format", e);
+            System.exit(-1);
+        }
+    }
 
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
         if (null == dateTime || dateTime.isBefore(MIN_DATETIME) || dateTime.isAfter(MAX_DATETIME)) {
@@ -361,10 +381,19 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return ConstantOperator.createDouble(Double.parseDouble(childString));
         } else if (desc.isDate() || desc.isDatetime()) {
             DateLiteral literal;
+            LocalDateTime localDateTime;
             try {
                 // DateLiteral will throw Exception if cast failed
                 // 1.try cast by format "yyyy-MM-dd HH:mm:ss"
-                literal = new DateLiteral(childString, Type.DATETIME);
+                if (childString.length() <= "yyyy-MM-dd HH:mm:ss".length()) {
+                    literal = new DateLiteral(childString, Type.DATETIME);
+                } else {
+                    // try cast by format "yyyy-MM-dd HH:mm:ss.SSS"
+                    TemporalAccessor parse = DATE_TIME_FORMATTER_MS.parse(childString);
+                    localDateTime = LocalDateTime.from(parse);
+                    ConstantOperator datetime = ConstantOperator.createDatetime(localDateTime, desc);
+                    return datetime;
+                }
             } catch (Exception e) {
                 // 2.try cast by format "yyyy-MM-dd", will original operator if failed
                 literal = new DateLiteral(childString, Type.DATE);
@@ -373,7 +402,6 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             if (Type.DATE.equals(desc)) {
                 literal.castToDate();
             }
-
             return ConstantOperator.createDatetime(literal.toLocalDateTime(), desc);
         } else if (desc.isDecimalV2()) {
             return ConstantOperator.createDecimal(BigDecimal.valueOf(Double.parseDouble(childString)), Type.DECIMALV2);

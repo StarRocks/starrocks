@@ -10,6 +10,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 //
@@ -67,6 +69,15 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         }
 
         ScalarOperator castChild = child1.getChild(0);
+        // optimize cast
+        boolean isConstantOperator = child2 instanceof ConstantOperator;
+        if (child1 instanceof CastOperator && isConstantOperator) {
+            boolean isDateType = castChild.getType().isDate();
+            boolean isDatetimeType = child2.getType().isDatetime();
+            if (isDateType && isDatetimeType) {
+                return optimizeCastDateTimeToDate(operator);
+            }
+        }
 
         // BinaryPredicate involving Decimal
         if (castChild.getType().isDecimalOfAnyVersion()
@@ -103,5 +114,59 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         Type childCompatibleType = Type.getAssignmentCompatibleType(grandChild, child, true);
         Type parentCompatibleType = Type.getAssignmentCompatibleType(child, parent, true);
         return childCompatibleType != Type.INVALID && parentCompatibleType != Type.INVALID;
+    }
+
+    public ScalarOperator optimizeCastDateTimeToDate(BinaryPredicateOperator operator) {
+        ScalarOperator child1 = operator.getChild(0);
+        ScalarOperator child2 = operator.getChild(1);
+        if (!(child1 instanceof CastOperator && child2.isConstantRef())) {
+            return operator;
+        }
+        ScalarOperator castChild = child1.getChild(0);
+        LocalDateTime originalDateTime = ((ConstantOperator) child2).getDatetime();
+        LocalDateTime bottomLocalDateTime = ((ConstantOperator) child2).getDatetime().toLocalDate().atTime(0, 0, 0, 0);
+        LocalDateTime targetLocalDateTime;
+        BinaryPredicateOperator.BinaryType binaryType = operator.getBinaryType();
+        int offset;
+        if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE)) {
+            if (originalDateTime.isEqual(bottomLocalDateTime)) {
+                offset = 0;
+            } else {
+                offset = 1;
+            }
+            targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
+            ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
+            BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
+            return binaryPredicateOperator;
+        } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT)) {
+            offset = 1;
+            targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
+            ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
+            BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
+            return binaryPredicateOperator;
+        } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE)) {
+            offset = 0;
+            targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
+            ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
+            BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
+            return binaryPredicateOperator;
+        } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT)) {
+            offset = -1;
+            targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
+            ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
+            BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
+            return binaryPredicateOperator;
+        } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.EQ)) {
+            if (!originalDateTime.isEqual(bottomLocalDateTime)) {
+                return operator;
+            } else {
+                ConstantOperator newDate = ConstantOperator.createDate(bottomLocalDateTime.truncatedTo(ChronoUnit.DAYS));
+                BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, castChild, newDate);
+                return binaryPredicateOperator;
+            }
+        } else {
+            // current not support !=
+            return operator;
+        }
     }
 }
