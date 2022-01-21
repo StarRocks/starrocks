@@ -93,7 +93,6 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
 
     _scanner_param._rpc_timer = ADD_TIMER(_runtime_profile, "FERPC");
     _scanner_param._fill_chunk_timer = ADD_TIMER(_runtime_profile, "FillChunk");
-    _scanner_read_timer = ADD_TIMER(_runtime_profile, "ScannerRead");
 
     // new one scanner
     _schema_scanner = SchemaScanner::create(schema_table->schema_table_type());
@@ -188,6 +187,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
 
     for (auto& slot_desc : src_slot_descs) {
         ColumnPtr column = vectorized::ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        column->reserve(state->chunk_size());
         chunk_src->append_column(std::move(column), slot_desc->id());
     }
 
@@ -207,10 +207,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
 
     while (!scanner_eos && chunk_dst->is_empty()) {
         while (row_num < runtime_state()->chunk_size()) {
-            {
-                SCOPED_TIMER(_scanner_read_timer);
-                RETURN_IF_ERROR(_schema_scanner->get_next(&chunk_src, &scanner_eos));
-            }
+            RETURN_IF_ERROR(_schema_scanner->get_next(&chunk_src, &scanner_eos));
 
             if (scanner_eos) {
                 _is_finished = true;
@@ -228,8 +225,8 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         if (!src_slot_descs.empty()) {
             for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
                 int j = _index_map[i];
-                ColumnPtr src_column = chunk_src->get_column_by_slot_id(src_slot_descs[j]->id());
-                ColumnPtr dst_column = chunk_dst->get_column_by_slot_id(dest_slot_descs[i]->id());
+                ColumnPtr& src_column = chunk_src->get_column_by_slot_id(src_slot_descs[j]->id());
+                ColumnPtr& dst_column = chunk_dst->get_column_by_slot_id(dest_slot_descs[i]->id());
                 dst_column->append(*src_column);
             }
         }
@@ -239,6 +236,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk_dst.get());
         }
         row_num = chunk_dst->num_rows();
+        chunk_src->reset();
     }
     _num_rows_returned += chunk_dst->num_rows();
     if (reached_limit()) {
