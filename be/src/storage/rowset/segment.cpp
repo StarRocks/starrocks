@@ -73,7 +73,7 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, fs::Bl
 }
 
 Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                     FooterPointerPB* partial_rowset_footer) {
+                                     const FooterPointerPB* partial_rowset_footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     uint64_t file_size;
     RETURN_IF_ERROR(rblock->size(&file_size));

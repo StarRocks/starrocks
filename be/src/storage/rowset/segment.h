@@ -81,7 +81,7 @@ public:
                                                    size_t* footer_length_hint = nullptr);
 
     static Status parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                       FooterPointerPB* partial_rowset_footer);
+                                       const FooterPointerPB* partial_rowset_footer);
 
     Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
             const TabletSchema* tablet_schema);

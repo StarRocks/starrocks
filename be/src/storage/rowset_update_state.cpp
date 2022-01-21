@@ -382,10 +382,12 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         // if is_rewrite is false, append write_columns into src_path and rebuild segment footer
         if (is_rewrite) {
             RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
-                                                     write_columns, i, partial_rowset_footer));
+                                                     _partial_update_states[i].write_columns, i,
+                                                     partial_rowset_footer));
         } else {
-            RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, tablet->tablet_schema(), read_column_ids, write_columns,
-                                                     i, partial_rowset_footer));
+            RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, tablet->tablet_schema(), read_column_ids,
+                                                     _partial_update_states[i].write_columns, i,
+                                                     partial_rowset_footer));
         }
         int64_t t_rewrite_end = MonotonicMillis();
         LOG(INFO) << Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
