@@ -5,8 +5,8 @@
 #include "column/type_traits.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
-#include "runtime/runtime_state.h"
 #include "runtime/primitive_type_infra.h"
+#include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
 
