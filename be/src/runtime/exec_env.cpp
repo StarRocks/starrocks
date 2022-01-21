@@ -159,6 +159,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
     _broker_mgr = new BrokerMgr(this);
+    _bfd_parser = BfdParser::create();
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache();
