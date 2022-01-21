@@ -192,6 +192,7 @@ struct ColumnBuilder {
         case TYPE_BINARY:
         case TYPE_DECIMAL:
         case TYPE_STRUCT:
+        case TYPE_ARRAY:
         case TYPE_MAP:
             LOG(FATAL) << "Unsupported column type" << ptype;
         case TYPE_DECIMAL32:
