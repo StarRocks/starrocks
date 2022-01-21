@@ -78,8 +78,9 @@ std::string type_to_string(PrimitiveType t) {
     switch (t) {
     case INVALID_TYPE: return "INVALID";
     case TYPE_NULL: return "NULL";
-#define M(ptype) case ptype: return #ptype;
-    APPLY_FOR_ALL_TYPE(M)
+#define M(ttype) case TYPE_##ttype: return #ttype;
+    APPLY_FOR_ALL_THRIFT_TYPE(M)
+    APPLY_FOR_COMPLEX_THRIFT_TYPE(M)
 #undef M
     }
     return "";

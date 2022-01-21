@@ -196,7 +196,7 @@ struct BitmapIndexWriterBuilder {
     
     template <FieldType ftype>
     std::unique_ptr<BitmapIndexWriter> operator()(const TypeInfoPtr& typeinfo) {
-        return std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_TINYINT>>(typeinfo);
+        return std::make_unique<BitmapIndexWriterImpl<ftype>>(typeinfo);
     }
 };
 

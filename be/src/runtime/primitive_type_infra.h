@@ -58,6 +58,11 @@ namespace starrocks {
     APPLY_FOR_ALL_PRIMITIVE_TYPE(M)               \
     M(TYPE_NULL)
 
+#define APPLY_FOR_COMPLEX_THRIFT_TYPE(M) \
+    M(STRUCT)                            \
+    M(MAP)                               \
+    M(ARRAY)
+
 #define APPLY_FOR_ALL_THRIFT_TYPE(M) \
     M(BOOLEAN)                       \
     M(TINYINT)                       \
