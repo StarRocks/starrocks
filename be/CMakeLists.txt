@@ -452,7 +452,13 @@ if (WITH_HDFS)
     set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
         hdfs
         jvm
-        )
+    )
+    set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
+    add_library(jvm SHARED IMPORTED)
+    FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/jre/lib/*/libjvm.so)
+    set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
+    include_directories(${JAVA_HOME}/include)
+    include_directories(${JAVA_HOME}/include/linux)
 endif()
 
 # Set thirdparty libraries

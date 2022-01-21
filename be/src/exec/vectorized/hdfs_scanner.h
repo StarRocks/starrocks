@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -18,6 +18,20 @@ namespace starrocks::vectorized {
 class HdfsScanNode;
 class RuntimeFilterProbeCollector;
 
+class HdfsIOProfile {
+public:
+    RuntimeProfile::Counter* bytes_total_read = nullptr;
+    RuntimeProfile::Counter* bytes_read_local = nullptr;
+    RuntimeProfile::Counter* bytes_read_short_circuit = nullptr;
+    RuntimeProfile::Counter* bytes_read_dn_cache = nullptr;
+    RuntimeProfile::Counter* bytes_read_remote = nullptr;
+
+    void init(RuntimeProfile* root);
+
+private:
+    RuntimeProfile::Counter* _toplev = nullptr;
+};
+
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t expr_filter_ns = 0;
@@ -25,10 +39,13 @@ struct HdfsScanStats {
     int64_t io_count = 0;
     int64_t bytes_read = 0;
     int64_t column_read_ns = 0;
+    int64_t column_convert_ns = 0;
+
+    // parquet only!
+    // read & decode
     int64_t level_decode_ns = 0;
     int64_t value_decode_ns = 0;
     int64_t page_read_ns = 0;
-    int64_t column_convert_ns = 0;
     // reader init
     int64_t footer_read_ns = 0;
     int64_t column_reader_init_ns = 0;
@@ -185,11 +202,16 @@ public:
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
 
+    void enter_pending_queue();
+    // how long it stays inside pending queue.
+    uint64_t exit_pending_queue();
+
 private:
     bool _is_open = false;
     bool _is_closed = false;
     bool _keep_priority = false;
     void _build_file_read_param();
+    MonotonicStopWatch _pending_queue_sw;
 
 protected:
     std::atomic_bool _pending_token = false;
@@ -206,25 +228,6 @@ protected:
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
     // predicate which havs min/max
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
-};
-
-class HdfsParquetScanner final : public HdfsScanner {
-public:
-    HdfsParquetScanner() = default;
-    ~HdfsParquetScanner() override {
-        if (_runtime_state != nullptr) {
-            close(_runtime_state);
-        }
-    }
-
-    void update_counter();
-    Status do_open(RuntimeState* runtime_state) override;
-    void do_close(RuntimeState* runtime_state) noexcept override;
-    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
-    Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
-
-private:
-    std::shared_ptr<parquet::FileReader> _reader = nullptr;
 };
 
 } // namespace starrocks::vectorized

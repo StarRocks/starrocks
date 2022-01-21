@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/hdfs_scanner_orc.h"
 
@@ -325,14 +325,15 @@ void HdfsOrcScanner::update_counter() {
     COUNTER_UPDATE(_scanner_params.parent->_bytes_read_counter, _stats.bytes_read);
     COUNTER_UPDATE(_scanner_params.parent->_column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(_scanner_params.parent->_column_convert_timer, _stats.column_convert_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_value_decode_timer, _stats.value_decode_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_level_decode_timer, _stats.level_decode_ns);
 #endif
 }
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_scanner_params.fs,
                                                             _scanner_params.scan_ranges[0]->file_length, &_stats);
+#ifndef BE_TEST
+    SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
+#endif
     std::unique_ptr<orc::Reader> reader;
     try {
         orc::ReaderOptions options;
@@ -408,16 +409,9 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     {
         SCOPED_RAW_TIMER(&_stats.column_convert_ns);
         ChunkPtr ptr = _orc_adapter->create_chunk();
-        // reuse these counter.
-        {
-            SCOPED_RAW_TIMER(&_stats.value_decode_ns);
-            RETURN_IF_ERROR(_orc_adapter->fill_chunk(&ptr));
-        }
-        {
-            SCOPED_RAW_TIMER(&_stats.level_decode_ns);
-            ChunkPtr result = _orc_adapter->cast_chunk(&ptr);
-            *chunk = std::move(result);
-        }
+        RETURN_IF_ERROR(_orc_adapter->fill_chunk(&ptr));
+        ChunkPtr result = _orc_adapter->cast_chunk(&ptr);
+        *chunk = std::move(result);
     }
     ChunkPtr ck = *chunk;
     // important to add columns before evaluation

@@ -48,8 +48,7 @@ public:
 
     void get_load_data_path(std::vector<std::string>* data_paths);
 
-    Status get_load_error_file_name(const std::string& db, const std::string& label,
-                                    const TUniqueId& fragment_instance_id, std::string* error_path);
+    Status get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path);
     std::string get_load_error_absolute_path(const std::string& file_path);
     const std::string& get_load_error_file_dir() const { return _error_log_dir; }
 

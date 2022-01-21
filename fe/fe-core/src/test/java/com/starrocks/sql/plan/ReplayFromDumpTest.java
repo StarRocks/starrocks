@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
@@ -178,8 +178,8 @@ public class ReplayFromDumpTest {
                 "  |    \n" +
                 "  18:UNION\n" +
                 "  |  child exprs:\n" +
-                "  |      [143, INT, true] | [164, DECIMAL64(7,2), true]\n" +
-                "  |      [177, INT, true] | [198, DECIMAL64(7,2), true]"));
+                "  |      [325, INT, true] | [346, DECIMAL64(7,2), true]\n" +
+                "  |      [359, INT, true] | [380, DECIMAL64(7,2), true]"));
     }
 
     @Test
@@ -241,15 +241,15 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
         Assert.assertTrue(replayPair.second.contains("3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n" +
-                "  |  equal join conjunct: [1: ss_item_sk, INT, false] = [24: sr_item_sk, INT, true]\n" +
-                "  |  other predicates: 25: sr_ticket_number IS NULL\n" +
+                "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
+                "  |  equal join conjunct: [256: ss_item_sk, INT, false] = [279: sr_item_sk, INT, true]\n" +
+                "  |  other predicates: 280: sr_ticket_number IS NULL\n" +
                 "  |  cardinality: 39142590"));
         Assert.assertTrue(replayPair.second.contains("16:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [76: ws_order_number, INT, false] = [110: wr_order_number, INT, true]\n" +
-                "  |  equal join conjunct: [75: ws_item_sk, INT, false] = [109: wr_item_sk, INT, true]\n" +
-                "  |  other predicates: 110: wr_order_number IS NULL\n" +
+                "  |  equal join conjunct: [331: ws_order_number, INT, false] = [365: wr_order_number, INT, true]\n" +
+                "  |  equal join conjunct: [330: ws_item_sk, INT, false] = [364: wr_item_sk, INT, true]\n" +
+                "  |  other predicates: 365: wr_order_number IS NULL\n" +
                 "  |  cardinality: 7916106"));
     }
 
@@ -292,9 +292,9 @@ public class ReplayFromDumpTest {
 
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/cross_reorder"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("  15:CROSS JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("  14:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates: (CAST(2: v2 AS DOUBLE) = CAST(8: v2 AS DOUBLE)) OR (3: v3 = 8: v2), " +
+                "  |  predicates: (2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2), " +
                 "CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1'\n"));
     }
 
@@ -314,7 +314,7 @@ public class ReplayFromDumpTest {
     public void testMultiCountDistinct() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains(" 33:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(replayPair.second.contains("  32:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone), multi_distinct_count(128: case), max(103: count)"));
     }
@@ -328,7 +328,7 @@ public class ReplayFromDumpTest {
     }
 
     @Test
-    public void test() throws Exception {
+    public void testDecodeLimitWithProject() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null,
@@ -336,5 +336,18 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("  12:Decode\n" +
                 "  |  <dict id 42> : <string id 18>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
+    }
+
+    @Test
+    public void testCountDistinctWithLimit() throws Exception {
+        // check use two stage agg
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/count_distinct_limit"), null, TExplainLevel.NORMAL);
+       Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
+               "  |  STREAMING\n" +
+               "  |  output: multi_distinct_count(5: lo_suppkey)"));
+       Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)\n" +
+               "  |  output: multi_distinct_count(18: count)\n" +
+               "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
     }
 }

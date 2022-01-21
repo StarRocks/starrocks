@@ -1,8 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -80,9 +79,15 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             }
         }
 
-        // Cast is allowed to change the precision in Decimal, so it should not be allowed to eliminate Cast
-        if (castChild.getType().isDecimalOfAnyVersion()) {
-            return operator;
+        // BinaryPredicate involving Decimal
+        if (castChild.getType().isDecimalOfAnyVersion()
+                || child1.getType().isDecimalOfAnyVersion()
+                || child2.getType().isDecimalOfAnyVersion()) {
+            Optional<ScalarOperator> resultChild2 =
+                    Utils.tryDecimalCastConstant((CastOperator) child1, (ConstantOperator) child2);
+            return resultChild2
+                    .map(scalarOperator -> new BinaryPredicateOperator(operator.getBinaryType(), castChild, scalarOperator))
+                    .orElse(operator);
         }
 
         if (!(castChild.getType().isNumericType() && child2.getType().isNumericType())) {
@@ -106,11 +111,9 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         if (parentSlotSize > childSlotSize && grandChildSlotSize > childSlotSize) {
             return false;
         }
-        PrimitiveType childCompatibleType =
-                PrimitiveType.getAssignmentCompatibleType(grandChild.getPrimitiveType(), child.getPrimitiveType());
-        PrimitiveType parentCompatibleType =
-                PrimitiveType.getAssignmentCompatibleType(child.getPrimitiveType(), parent.getPrimitiveType());
-        return childCompatibleType != PrimitiveType.INVALID_TYPE && parentCompatibleType != PrimitiveType.INVALID_TYPE;
+        Type childCompatibleType = Type.getAssignmentCompatibleType(grandChild, child, true);
+        Type parentCompatibleType = Type.getAssignmentCompatibleType(child, parent, true);
+        return childCompatibleType != Type.INVALID && parentCompatibleType != Type.INVALID;
     }
 
     public ScalarOperator optimizeCastDateTimeToDate(BinaryPredicateOperator operator) {

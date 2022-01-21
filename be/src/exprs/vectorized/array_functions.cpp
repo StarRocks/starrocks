@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/array_functions.h"
 
@@ -342,6 +342,9 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
     return ArrayRemoveImpl::evaluate(*arg0, *arg1);
 }
 
+// If PositionEnabled=true and ReturnType=UInt32, it is function array_position and it will return index of elemt if the array contain it or 0 if not contain.
+// If PositionEnabled=false and ReturnType=UInt8, it is function array_contains and it will return 1 if contain or 0 if not contain.
+template <bool PositionEnabled, typename ReturnType>
 class ArrayContainsImpl {
 public:
     static ColumnPtr evaluate(const Column& array, const Column& element) {
@@ -355,7 +358,7 @@ private:
                               const NullColumn::Container* null_map_elements,
                               const NullColumn::Container* null_map_targets) {
         const size_t num_array = offsets.size() - 1;
-        auto result = UInt8Column::create();
+        auto result = ReturnType::create();
         result->resize(num_array);
 
         auto* result_ptr = result->get_data().data();
@@ -376,6 +379,7 @@ private:
             size_t offset = offsets_ptr[i];
             size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
             uint8_t found = 0;
+            size_t position = 0;
             for (size_t j = 0; j < array_size; j++) {
                 if constexpr (NullableElement && !NullableTarget) {
                     if (is_null(null_map_elements, offset + j)) {
@@ -394,6 +398,7 @@ private:
                         continue;
                     }
                     if (null_element) {
+                        position = j + 1;
                         found = 1;
                         break;
                     }
@@ -406,10 +411,11 @@ private:
                     found = (elements_ptr[offset + j] == targets_ptr[i]);
                 }
                 if (found) {
+                    position = j + 1;
                     break;
                 }
             }
-            result_ptr[i] = found;
+            result_ptr[i] = PositionEnabled ? position : found;
         }
         return result;
     }
@@ -488,7 +494,7 @@ private:
             targets = nullable->has_null() ? targets : nullable->data_column().get();
         }
         if (targets->only_null() && !nullable_element) {
-            auto result = UInt8Column::create();
+            auto result = ReturnType::create();
             result->resize(array.size());
             return result;
         }
@@ -543,7 +549,14 @@ ColumnPtr ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* conte
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayContainsImpl::evaluate(*arg0, *arg1);
+    return ArrayContainsImpl<false, UInt8Column>::evaluate(*arg0, *arg1);
+}
+
+ColumnPtr ArrayFunctions::array_position([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+    const ColumnPtr& arg0 = columns[0]; // array
+    const ColumnPtr& arg1 = columns[1]; // element
+
+    return ArrayContainsImpl<true, UInt32Column>::evaluate(*arg0, *arg1);
 }
 
 class ArrayArithmeticImpl {

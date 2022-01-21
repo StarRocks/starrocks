@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/const_column.h"
 
@@ -32,6 +32,10 @@ void ConstColumn::append_selective(const Column& src, const uint32_t* indexes, u
 
 void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     append(src, index, size);
+}
+
+Status ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    return Status::NotSupported("ConstColumn does not support update");
 }
 
 void ConstColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {

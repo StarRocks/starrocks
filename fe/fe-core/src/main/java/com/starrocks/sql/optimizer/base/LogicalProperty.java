@@ -1,8 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.base;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -85,8 +86,11 @@ public class LogicalProperty implements Property {
             if (node instanceof LogicalOlapScanOperator) {
                 return ((LogicalOlapScanOperator) node).getSelectedTabletId().size();
             } else {
-                // other scan operator, this is not 1 because avoid to generate 1 phase agg
-                return 2;
+                // It's very hard to estimate how many tablets scanned by this operator,
+                // because some operator even does not have the concept of tablets.
+                // The value should not be too low, otherwise it will make cost optimizer to underestimate the cost of broadcast.
+                // A thing to be noted that, this tablet number is better not to be 1, to avoid generate 1 phase agg.
+                return FeConstants.default_tablet_number;
             }
         }
 

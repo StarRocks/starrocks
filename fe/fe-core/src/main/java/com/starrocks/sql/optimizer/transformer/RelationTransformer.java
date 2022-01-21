@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
@@ -125,8 +125,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
         }
 
         OptExprBuilder optExprBuilder;
-        if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()
-                && session.getSessionVariable().isCboCteReuse()) {
+        if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()) {
             Pair<OptExprBuilder, OptExprBuilder> cteRootAndMostDeepAnchor =
                     buildCTEAnchorAndProducer((QueryRelation) relation);
             optExprBuilder = cteRootAndMostDeepAnchor.first;
@@ -214,10 +213,14 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
                 List<ScalarOperator> row = valuesOperator.getRows().get(0);
                 for (int i = 0; i < setOperationRelation.getRelationFields().getAllFields().size(); ++i) {
                     Type outputType = setOperationRelation.getRelationFields().getFieldByIndex(i).getType();
-                    if (!outputType.equals(relation.getRelationFields().getFieldByIndex(i).getType())
-                            && !((ConstantOperator) row.get(i)).isNull()) {
+                    Type relationType = relation.getRelationFields().getFieldByIndex(i).getType();
+                    if (!outputType.equals(relationType)) {
                         try {
-                            row.set(i, ((ConstantOperator) row.get(i)).castTo(outputType));
+                            if (relationType.isNull()) {
+                                row.get(i).setType(outputType);
+                            } else {
+                                row.set(i, ((ConstantOperator) row.get(i)).castTo(outputType));
+                            }
                             valuesOperator.getColumnRefSet().get(i).setType(outputType);
                         } catch (Exception e) {
                             throw new SemanticException(e.toString());
@@ -392,29 +395,26 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
 
     @Override
     public LogicalPlan visitCTE(CTERelation node, ExpressionMapping context) {
-        if (session.getSessionVariable().isCboCteReuse()) {
-            ExpressionMapping expressionMapping = cteContext.get(node.getCteId());
-            List<ColumnRefOperator> cteOutputs = new ArrayList<>();
-            Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
-            for (ColumnRefOperator columnRefOperator : expressionMapping.getFieldMappings()) {
-                ColumnRefOperator c = columnRefFactory.create(columnRefOperator, columnRefOperator.getType(),
-                        columnRefOperator.isNullable());
-                cteOutputs.add(c);
-                cteOutputColumnRefMap.put(c, columnRefOperator);
-            }
+        LogicalPlan childPlan = visit(node.getCteQuery());
+        ExpressionMapping expressionMapping = cteContext.get(node.getCteId());
+        Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
 
-            return new LogicalPlan(
-                    new OptExprBuilder(new LogicalCTEConsumeOperator(node.getCteId(), cteOutputColumnRefMap),
-                            Collections.emptyList(), new ExpressionMapping(node.getScope(), cteOutputs)),
-                    null, null);
-        } else {
-            LogicalPlan logicalPlan = visit(node.getCteQuery());
-            return new LogicalPlan(
-                    new OptExprBuilder(logicalPlan.getRoot().getOp(), logicalPlan.getRootBuilder().getInputs(),
-                            new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn())),
-                    logicalPlan.getOutputColumn(),
-                    logicalPlan.getCorrelation());
+        Preconditions.checkState(childPlan.getOutputColumn().size() == expressionMapping.getFieldMappings().size());
+
+        for (int i = 0; i < expressionMapping.getFieldMappings().size(); i++) {
+            ColumnRefOperator childColumn = childPlan.getOutputColumn().get(i);
+            ColumnRefOperator produceColumn = expressionMapping.getFieldMappings().get(i);
+
+            Preconditions.checkState(childColumn.getType().equals(produceColumn.getType()));
+            Preconditions.checkState(childColumn.isNullable() == produceColumn.isNullable());
+
+            cteOutputColumnRefMap.put(childColumn, produceColumn);
         }
+
+        LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(node.getCteId(), cteOutputColumnRefMap);
+        OptExprBuilder consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
+                new ExpressionMapping(node.getScope(), childPlan.getOutputColumn()));
+        return new LogicalPlan(consumeBuilder, null, null);
     }
 
     @Override

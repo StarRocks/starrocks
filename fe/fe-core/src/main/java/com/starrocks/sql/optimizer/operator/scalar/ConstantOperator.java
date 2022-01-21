@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.analysis.DateLiteral;
@@ -344,7 +344,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     @Override
     public boolean isNullable() {
-        return type.equals(Type.NULL);
+        return type.equals(Type.NULL) || isNull;
     }
 
     public ConstantOperator castTo(Type desc) throws Exception {
@@ -407,21 +407,20 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return ConstantOperator.createDecimal(BigDecimal.valueOf(Double.parseDouble(childString)), Type.DECIMALV2);
         } else if (desc.isDecimalV3()) {
             BigDecimal decimal = new BigDecimal(childString);
+            ScalarType scalarType = (ScalarType) desc;
             try {
-                ScalarType scalarType = (ScalarType) desc;
                 DecimalLiteral.checkLiteralOverflow(decimal, scalarType);
+            } catch (AnalysisException ignored) {
+                return ConstantOperator.createNull(desc);
+            }
+            int realScale = DecimalLiteral.getRealScale(decimal);
+            int scale = scalarType.getScalarScale();
+            if (scale <= realScale) {
+                decimal = decimal.setScale(scale, RoundingMode.HALF_UP);
+            }
 
-                int realScale = DecimalLiteral.getRealScale(decimal);
-                int scale = scalarType.getScalarScale();
-                if (scale <= realScale) {
-                    decimal = decimal.setScale(scale, RoundingMode.HALF_UP);
-                }
-
-                if (scalarType.getScalarScale() == 0 && scalarType.getScalarPrecision() == 0) {
-                    throw new SemanticException("Forbidden cast to decimal(precision=0, scale=0)");
-                }
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
+            if (scalarType.getScalarScale() == 0 && scalarType.getScalarPrecision() == 0) {
+                throw new SemanticException("Forbidden cast to decimal(precision=0, scale=0)");
             }
 
             return ConstantOperator.createDecimal(decimal, desc);

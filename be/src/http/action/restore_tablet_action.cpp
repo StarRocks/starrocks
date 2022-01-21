@@ -113,9 +113,9 @@ Status RestoreTabletAction::_reload_tablet(const std::string& key, const std::st
     TCloneReq clone_req;
     clone_req.__set_tablet_id(tablet_id);
     clone_req.__set_schema_hash(schema_hash);
-    OLAPStatus res = OLAPStatus::OLAP_SUCCESS;
+    Status res = Status::OK();
     res = _exec_env->storage_engine()->load_header(shard_path, clone_req, /*restore=*/true, _is_primary_key);
-    if (res != OLAPStatus::OLAP_SUCCESS) {
+    if (!res.ok()) {
         LOG(WARNING) << "load header failed. status: " << res << ", signature: " << tablet_id;
         // remove tablet data path in data path
         // path: /root_path/data/shard/tablet_id
@@ -124,7 +124,7 @@ Status RestoreTabletAction::_reload_tablet(const std::string& key, const std::st
         if (!FileUtils::remove_all(tablet_path).ok()) {
             LOG(WARNING) << "remove invalid tablet schema hash path:" << tablet_path << " failed";
         }
-        return Status::InternalError("command executor load header failed");
+        return res;
     } else {
         std::string trash_tablet_schema_hash_dir;
         {

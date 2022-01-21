@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
@@ -257,7 +257,8 @@ public class CreateTableAnalyzer {
 
         for (ColumnDef columnDef : columnDefs) {
             Column col = columnDef.toColumn();
-            if (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS) {
+            if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
+                    || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS || keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
                 if (!col.isKey()) {
                     col.setAggregationTypeImplicit(true);
                 }

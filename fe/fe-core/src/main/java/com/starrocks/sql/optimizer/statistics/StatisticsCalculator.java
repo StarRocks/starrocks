@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -604,6 +604,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         //Update the statistics of the GroupBy column
         Map<ColumnRefOperator, ColumnStatistic> groupStatisticsMap = new HashMap<>();
+        double rowCount = computeGroupByStatistics(groupBys, inputStatistics, groupStatisticsMap);
+
+        //Update Node Statistics
+        builder.addColumnStatistics(groupStatisticsMap);
+        rowCount = min(inputStatistics.getOutputRowCount(), rowCount);
+        builder.setOutputRowCount(rowCount);
+        // use inputStatistics and aggregateNode cardinality to estimate aggregate call operator column statistics.
+        // because of we need cardinality to estimate count function.
+        double estimateCount = rowCount;
+        aggregations.forEach((key, value) -> builder
+                .addColumnStatistic(key,
+                        ExpressionStatisticCalculator.calculate(value, inputStatistics, estimateCount)));
+
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
+    }
+
+    public static double computeGroupByStatistics(List<ColumnRefOperator> groupBys, Statistics inputStatistics,
+                                         Map<ColumnRefOperator, ColumnStatistic> groupStatisticsMap) {
         for (ColumnRefOperator groupByColumn : groupBys) {
             ColumnStatistic groupByColumnStatics = inputStatistics.getColumnStatistic(groupByColumn);
             ColumnStatistic.Builder statsBuilder = buildFrom(groupByColumnStatics);
@@ -648,36 +667,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 }
             }
         }
-
-        //Update Node Statistics
-        builder.addColumnStatistics(groupStatisticsMap);
-        rowCount = min(inputStatistics.getOutputRowCount(), rowCount);
-        builder.setOutputRowCount(rowCount);
-        // use inputStatistics and aggregateNode cardinality to estimate aggregate call operator column statistics.
-        // because of we need cardinality to estimate count function.
-        double estimateCount = rowCount;
-        aggregations.forEach((key, value) -> builder
-                .addColumnStatistic(key,
-                        ExpressionStatisticCalculator.calculate(value, inputStatistics, estimateCount)));
-
-        context.setStatistics(builder.build());
-        return visitOperator(node, context);
+        return rowCount;
     }
 
     @Override
     public Void visitLogicalJoin(LogicalJoinOperator node, ExpressionContext context) {
-        return computeJoinNode(context, node.getOnPredicate(), node.getPredicate(), node.getJoinType(),
-                node.getLimit());
+        return computeJoinNode(context, node.getJoinType(), node.getOnPredicate());
     }
 
     @Override
     public Void visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
-        return computeJoinNode(context, node.getJoinPredicate(), node.getPredicate(), node.getJoinType(),
-                node.getLimit());
+        return computeJoinNode(context, node.getJoinType(), node.getOnPredicate());
     }
 
-    private Void computeJoinNode(ExpressionContext context, ScalarOperator joinOnPredicate, ScalarOperator predicate,
-                                 JoinOperator joinType, long limit) {
+    private Void computeJoinNode(ExpressionContext context, JoinOperator joinType, ScalarOperator joinOnPredicate) {
         Preconditions.checkState(context.arity() == 2);
 
         Statistics leftStatistics = context.getChildStatistics(0);
@@ -772,7 +775,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         List<ScalarOperator> notEqJoin = Utils.extractConjuncts(joinOnPredicate);
         notEqJoin.removeAll(eqOnPredicates);
-        notEqJoin.add(predicate);
 
         Statistics estimateStatistics = estimateStatistics(notEqJoin, joinStats);
         context.setStatistics(estimateStatistics);
@@ -1248,6 +1250,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                    Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
         OptExpression produce = optimizerContext.getCteContext().getCTEProduce(cteId);
         Statistics produceStatistics = produce.getGroupExpression().getGroup().getStatistics();
+        if (null == produceStatistics) {
+            produceStatistics = produce.getStatistics();
+        }
+
+        Preconditions.checkNotNull(produce.getStatistics());
 
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator ref : columnRefMap.keySet()) {

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/fragment_executor.h"
 
@@ -67,6 +67,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     const auto& t_desc_tbl = request.desc_tbl;
     const auto& fragment = request.fragment;
 
+    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
     auto&& existing_query_ctx = QueryContextManager::instance()->get(query_id);
@@ -105,10 +107,24 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id) << " backend_num=" << backend_num;
 
-    _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+    int32_t degree_of_parallelism = 1;
+    if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
+        degree_of_parallelism = request.pipeline_dop;
+    } else {
+        // default dop is a half of the number of hardware threads.
+        degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
+    }
+
+    if (query_options.__isset.mem_limit) {
+        auto copy_query_options = query_options;
+        copy_query_options.mem_limit *= degree_of_parallelism;
+        _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(query_id, fragment_instance_id,
+                                                                        copy_query_options, query_globals, exec_env));
+    } else {
+        _fragment_ctx->set_runtime_state(
+                std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+    }
     auto* runtime_state = _fragment_ctx->runtime_state();
-    runtime_state->set_chunk_size(query_options.batch_size);
     runtime_state->init_mem_trackers(query_id);
     runtime_state->set_be_number(backend_num);
 
@@ -147,14 +163,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         static_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
 
-    int32_t degree_of_parallelism = 1;
-    if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
-        degree_of_parallelism = request.pipeline_dop;
-    } else {
-        // default dop is a half of the number of hardware threads.
-        degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
-    }
-
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;
@@ -165,11 +173,16 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
+        DCHECK_GT(morsel_queues.count(scan_node->id()), 0);
         Morsels morsels = convert_scan_range_to_morsel(scan_ranges, scan_node->id());
         morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
     }
 
-    PipelineBuilderContext context(_fragment_ctx, degree_of_parallelism);
+    std::remove_cv_t<typeof(request.per_scan_node_dop)> per_scan_node_dop;
+    if (request.__isset.per_scan_node_dop) {
+        per_scan_node_dop = request.per_scan_node_dop;
+    }
+    PipelineBuilderContext context(_fragment_ctx, degree_of_parallelism, std::move(per_scan_node_dop));
     PipelineBuilder builder(context);
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
     // Set up sink, if required
@@ -273,13 +286,23 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
         if (t_stream_sink.__isset.is_merge && t_stream_sink.is_merge) {
             is_dest_merge = true;
         }
-        std::shared_ptr<SinkBuffer> sink_buffer = std::make_shared<SinkBuffer>(
-                _fragment_ctx->runtime_state(), sender->destinations(), is_dest_merge, dop);
+        bool is_pipeline_level_shuffle = false;
+        int32_t dest_dop = -1;
+        if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
+            sender->get_partition_type() == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+            is_pipeline_level_shuffle = true;
+            dest_dop = t_stream_sink.dest_dop;
+            DCHECK_GT(dest_dop, 0);
+        }
+
+        std::shared_ptr<SinkBuffer> sink_buffer =
+                std::make_shared<SinkBuffer>(_fragment_ctx, sender->destinations(), is_dest_merge, dop);
 
         OpFactoryPtr exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
                 context->next_operator_id(), t_stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
-                sender->destinations(), sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(),
-                sender->get_enable_exchange_pass_through(), _fragment_ctx);
+                sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
+                sender->get_dest_node_id(), sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(),
+                _fragment_ctx);
         _fragment_ctx->pipelines().back()->add_op_factory(exchange_sink);
 
     } else if (typeid(*datasink) == typeid(starrocks::MultiCastDataStreamSink)) {
@@ -316,6 +339,9 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
             OpFactories ops;
             // it's okary to set arbitrary dop.
             const size_t dop = 1;
+            // TODO(hcf) set dest dop properly
+            bool is_pipeline_level_shuffle = false;
+            auto dest_dop = context->degree_of_parallelism();
             bool is_dest_merge = false;
             auto& t_stream_sink = t_multi_case_stream_sink.sinks[i];
             if (t_stream_sink.__isset.is_merge && t_stream_sink.is_merge) {
@@ -328,12 +354,11 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
             source_op->set_degree_of_parallelism(dop);
 
             // sink op
-            auto sink_buffer = std::make_shared<SinkBuffer>(_fragment_ctx->runtime_state(), sender->destinations(),
-                                                            is_dest_merge, dop);
+            auto sink_buffer = std::make_shared<SinkBuffer>(_fragment_ctx, sender->destinations(), is_dest_merge, dop);
             auto sink_op = std::make_shared<ExchangeSinkOperatorFactory>(
                     context->next_operator_id(), -1, sink_buffer, sender->get_partition_type(), sender->destinations(),
-                    sender->sender_id(), sender->get_dest_node_id(), sender->get_partition_exprs(),
-                    sender->get_enable_exchange_pass_through(), _fragment_ctx);
+                    is_pipeline_level_shuffle, dest_dop, sender->sender_id(), sender->get_dest_node_id(),
+                    sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(), _fragment_ctx);
 
             ops.emplace_back(source_op);
             ops.emplace_back(sink_op);

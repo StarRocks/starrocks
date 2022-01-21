@@ -50,20 +50,20 @@ using google::protobuf::RepeatedPtrField;
 
 namespace starrocks {
 
-OLAPStatus DeleteConditionHandler::generate_delete_predicate(const TabletSchema& schema,
-                                                             const std::vector<TCondition>& conditions,
-                                                             DeletePredicatePB* del_pred) {
+Status DeleteConditionHandler::generate_delete_predicate(const TabletSchema& schema,
+                                                         const std::vector<TCondition>& conditions,
+                                                         DeletePredicatePB* del_pred) {
     if (conditions.empty()) {
         LOG(WARNING) << "invalid parameters for store_cond."
                      << " condition_size=" << conditions.size();
-        return OLAP_ERR_DELETE_INVALID_PARAMETERS;
+        return Status::InvalidArgument("Invalid parameters for store_cond");
     }
 
     // check delete condition meet the requirements
     for (const TCondition& condition : conditions) {
-        if (check_condition_valid(schema, condition) != OLAP_SUCCESS) {
+        if (!check_condition_valid(schema, condition).ok()) {
             LOG(WARNING) << "invalid condition. condition=" << ThriftDebugString(condition);
-            return OLAP_ERR_DELETE_INVALID_CONDITION;
+            return Status::InvalidArgument("Invalid condition");
         }
     }
 
@@ -89,7 +89,7 @@ OLAPStatus DeleteConditionHandler::generate_delete_predicate(const TabletSchema&
     }
     del_pred->set_version(-1);
 
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 std::string DeleteConditionHandler::construct_sub_predicates(const TCondition& condition) {
@@ -157,13 +157,13 @@ bool DeleteConditionHandler::is_condition_value_valid(const TabletColumn& column
     return valid_condition;
 }
 
-OLAPStatus DeleteConditionHandler::check_condition_valid(const TabletSchema& schema, const TCondition& cond) {
+Status DeleteConditionHandler::check_condition_valid(const TabletSchema& schema, const TCondition& cond) {
     // Checks for the existence of the specified column name
     int field_index = _get_field_index(schema, cond.column_name);
 
     if (field_index < 0) {
-        LOG(WARNING) << "field is not existent. field_index=" << field_index;
-        return OLAP_ERR_DELETE_INVALID_CONDITION;
+        LOG(WARNING) << "field is not exist. field_index=" << field_index;
+        return Status::InvalidArgument("Field is not exist");
     }
 
     // Checks that the specified column is a key, is it type float or double.
@@ -173,7 +173,7 @@ OLAPStatus DeleteConditionHandler::check_condition_valid(const TabletSchema& sch
         column.type() == OLAP_FIELD_TYPE_FLOAT) {
         LOG(WARNING) << "field is not key column, or storage model is not duplicate, or data type "
                         "is float or double.";
-        return OLAP_ERR_DELETE_INVALID_CONDITION;
+        return Status::InvalidArgument("Field is not key column");
     }
 
     // Check that the filter values specified in the delete condition
@@ -187,18 +187,18 @@ OLAPStatus DeleteConditionHandler::check_condition_valid(const TabletSchema& sch
     //    the length specified when creating the table
     if ("*=" != cond.condition_op && "!*=" != cond.condition_op && cond.condition_values.size() != 1) {
         LOG(WARNING) << "invalid condition value size " << cond.condition_values.size();
-        return OLAP_ERR_DELETE_INVALID_CONDITION;
+        return Status::InvalidArgument("Invalid condition.");
     }
 
     for (int i = 0; i < cond.condition_values.size(); i++) {
         const string& value_str = cond.condition_values[i];
         if (!is_condition_value_valid(column, cond, value_str)) {
             LOG(WARNING) << "invalid condition value. [value=" << value_str << "]";
-            return OLAP_ERR_DELETE_INVALID_CONDITION;
+            return Status::InvalidArgument("Invalid condition");
         }
     }
 
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 bool DeleteHandler::parse_condition(const std::string& condition_str, TCondition* condition) {

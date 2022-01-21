@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -196,7 +196,7 @@ public:
         }
 
         if (lhs->is_constant()) {
-            return ConstColumn::create(result, 1);
+            return ConstColumn::create(result, size);
         }
         return result;
     }

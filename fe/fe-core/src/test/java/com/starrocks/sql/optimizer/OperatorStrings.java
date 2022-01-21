@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer;
 
@@ -267,7 +267,7 @@ public class OperatorStrings {
 
             PhysicalHashJoinOperator join = (PhysicalHashJoinOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("").append(join.getJoinType()).append(" (");
-            sb.append("join-predicate [").append(join.getJoinPredicate()).append("] ");
+            sb.append("join-predicate [").append(join.getOnPredicate()).append("] ");
             sb.append("post-join-predicate [").append(join.getPredicate()).append("]");
             sb.append(")");
 

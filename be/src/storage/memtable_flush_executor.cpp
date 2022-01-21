@@ -36,7 +36,7 @@ public:
     ~MemtableFlushTask() = default;
 
     void run() override {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_memtable->mem_tracker());
+        SCOPED_THREAD_LOCAL_MEM_SETTER(_memtable->mem_tracker(), false);
 
         _flush_token->_stats.cur_flush_count++;
         _flush_token->_flush_memtable(_memtable.get());
@@ -58,7 +58,7 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
 Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable) {
     RETURN_IF_ERROR(status());
     // Does not acount the size of MemtableFlushTask into any memory tracker
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(nullptr, false);
     auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable));
     return _flush_token->submit(std::move(task));
 }

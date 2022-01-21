@@ -91,6 +91,7 @@ set(EXEC_FILES
     vectorized/intersect_node.cpp
     vectorized/hdfs_scanner.cpp
     vectorized/hdfs_scanner_orc.cpp
+    vectorized/hdfs_scanner_parquet.cpp
     vectorized/hdfs_scanner_text.cpp
     vectorized/json_scanner.cpp
     vectorized/project_node.cpp
@@ -170,7 +171,6 @@ set(EXEC_FILES
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
-    pipeline/analysis/analytor_factory.cpp
     pipeline/table_function_operator.cpp
     pipeline/assert_num_rows_operator.cpp
     pipeline/set/union_passthrough_operator.cpp

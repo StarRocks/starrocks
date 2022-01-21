@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.operator.logical;
 
@@ -105,6 +105,11 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
             super.withOperator(operator);
             this.cteId = operator.cteId;
             this.cteOutputColumnRefMap = operator.cteOutputColumnRefMap;
+            return this;
+        }
+
+        public Builder setCteOutputColumnRefMap(Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
+            this.cteOutputColumnRefMap = cteOutputColumnRefMap;
             return this;
         }
     }

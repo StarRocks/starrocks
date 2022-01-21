@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -14,8 +14,11 @@ namespace pipeline {
 
 class PipelineBuilderContext {
 public:
-    PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism)
-            : _fragment_context(fragment_context), _degree_of_parallelism(degree_of_parallelism) {}
+    PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism,
+                           std::map<TPlanNodeId, int>&& per_scan_node_dop)
+            : _fragment_context(fragment_context),
+              _degree_of_parallelism(degree_of_parallelism),
+              _per_scan_node_dop(std::move(per_scan_node_dop)) {}
 
     void add_pipeline(const OpFactories& operators) {
         _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipe_id(), operators));
@@ -35,8 +38,9 @@ public:
     // It is used to parallelize complex operators. For example, the build Hash Table (HT) operator can partition
     // the input chunks to build multiple partition HTs, and the probe HT operator can also partition the input chunks
     // and probe on multiple partition HTs in parallel.
-    OpFactories maybe_interpolate_local_shuffle_exchange(RuntimeState* state, OpFactories& pred_operators,
-                                                         const std::vector<ExprContext*>& partition_expr_ctxs);
+    OpFactories maybe_interpolate_local_shuffle_exchange(
+            RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs,
+            const TPartitionType::type part_type = TPartitionType::type::HASH_PARTITIONED);
 
     // Uses local exchange to gather the output chunks of multiple predecessor pipelines
     // into a new pipeline, which the successor operator belongs to.
@@ -57,6 +61,14 @@ public:
 
     FragmentContext* fragment_context() { return _fragment_context; }
 
+    size_t get_dop_of_scan_node(TPlanNodeId id) const {
+        if (_per_scan_node_dop.count(id)) {
+            return _per_scan_node_dop.at(id);
+        } else {
+            return _degree_of_parallelism;
+        }
+    }
+
 private:
     FragmentContext* _fragment_context;
     Pipelines _pipelines;
@@ -64,6 +76,7 @@ private:
     uint32_t _next_operator_id = 0;
     int32_t _next_pseudo_plan_node_id = Operator::s_pseudo_plan_node_id_upper_bound;
     size_t _degree_of_parallelism = 1;
+    std::map<TPlanNodeId, int> _per_scan_node_dop;
 };
 
 class PipelineBuilder {

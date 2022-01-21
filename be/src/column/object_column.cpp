@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/object_column.h"
 
@@ -122,6 +122,18 @@ void ObjectColumn<T>::append_default(size_t count) {
     for (int i = 0; i < count; ++i) {
         append_default();
     }
+}
+
+template <typename T>
+Status ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
+    const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
+    size_t replace_num = src.size();
+    for (size_t i = 0; i < replace_num; i++) {
+        DCHECK_LT(indexes[i], _pool.size());
+        _pool[indexes[i]] = *obj_col.get_object(i);
+    }
+    _cache_ok = false;
+    return Status::OK();
 }
 
 template <typename T>

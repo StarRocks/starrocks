@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
@@ -109,7 +110,17 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public boolean isNullable() {
-        return fn == null || fn.isNullable();
+        // check if fn always return non null
+        if (fn != null && !fn.isNullable()) {
+            return false;
+        }
+        // check children nullable
+        if (FunctionCallExpr.nullableSameWithChildrenFunctions.contains(fnName)) {
+            // decimal operation may overflow
+            return arguments.stream()
+                    .anyMatch(argument -> argument.isNullable() || argument.getType().isDecimalOfAnyVersion());
+        }
+        return true;
     }
 
     public ColumnRefSet getUsedColumns() {

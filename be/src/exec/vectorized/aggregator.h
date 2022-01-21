@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -151,7 +151,7 @@ private:
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
 
-    const TPlanNode& _tnode;
+    const TPlanNode _tnode;
 
     MemTracker* _mem_tracker = nullptr;
 
@@ -264,7 +264,7 @@ public:
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
                     RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
-                        _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
+                        _agg_functions[i]->create(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i]);
                     }
                     return agg_state;
                 },
@@ -280,7 +280,7 @@ public:
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
                     RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
-                        _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
+                        _agg_functions[i]->create(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i]);
                     }
                     return agg_state;
                 },
@@ -333,8 +333,8 @@ public:
                 }
             } else {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    _agg_functions[i]->batch_serialize(read_index, _tmp_agg_states, _agg_states_offsets[i],
-                                                       agg_result_column[i].get());
+                    _agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
+                                                       _agg_states_offsets[i], agg_result_column[i].get());
                 }
             }
         }
@@ -479,7 +479,7 @@ private:
             auto end = hash_map_with_key->hash_map.end();
             while (it != end) {
                 for (int i = 0; i < _agg_functions.size(); i++) {
-                    _agg_functions[i]->destroy(it->second + _agg_states_offsets[i]);
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], it->second + _agg_states_offsets[i]);
                 }
                 ++it;
             }

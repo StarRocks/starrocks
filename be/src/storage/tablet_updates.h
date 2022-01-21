@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -68,6 +68,8 @@ public:
     Status init();
 
     bool is_error() const { return _error; }
+
+    std::string get_error_msg() const { return _error_msg; }
 
     using IteratorList = std::vector<std::shared_ptr<vectorized::ChunkIterator>>;
 
@@ -309,7 +311,7 @@ private:
 
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 
-    void _set_error();
+    void _set_error(const string& msg);
 
     Status _load_from_pb(const TabletUpdatesPB& updates);
 
@@ -381,6 +383,7 @@ private:
     // keep the scene(internal state) unchanged for further investigation, and don't crash
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
+    std::string _error_msg;
 
     TabletUpdates(const TabletUpdates&) = delete;
     const TabletUpdates& operator=(const TabletUpdates&) = delete;

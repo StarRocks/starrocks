@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -81,6 +81,11 @@ private:
     std::vector<ExprContext*> _build_expr_ctxs;
     std::vector<ExprContext*> _other_join_conjunct_ctxs;
     std::vector<bool> _is_null_safes;
+
+    // If distribution type is SHUFFLE_HASH_BUCKET, local shuffle can use the
+    // equivalence of ExchagneNode's partition colums
+    std::vector<ExprContext*> _probe_equivalence_partition_expr_ctxs;
+    std::vector<ExprContext*> _build_equivalence_partition_expr_ctxs;
 
     std::list<ExprContext*> _runtime_in_filters;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;

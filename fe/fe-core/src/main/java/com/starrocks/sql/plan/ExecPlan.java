@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Maps;
@@ -88,6 +88,10 @@ public class ExecPlan {
 
     public OptExpression getPhysicalPlan() {
         return physicalPlan;
+    }
+
+    public List<ColumnRefOperator> getOutputColumns() {
+        return outputColumns;
     }
 
     public String getExplainString(TExplainLevel level) {

@@ -75,6 +75,7 @@ add_library(Storage STATIC
     rowset/column_iterator.cpp
     rowset/column_reader.cpp
     rowset/column_writer.cpp
+    rowset/column_decoder.cpp
     rowset/default_value_column_iterator.cpp
     rowset/dictcode_column_iterator.cpp
     rowset/encoding_info.cpp

@@ -74,9 +74,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // mem limit can't smaller than bufferpool's default page size
     public static final int MIN_EXEC_MEM_LIMIT = 2097152;
     public static final String BATCH_SIZE = "batch_size";
+    public static final String CHUNK_SIZE = "chunk_size";
     public static final String DISABLE_STREAMING_PREAGGREGATIONS = "disable_streaming_preaggregations";
     public static final String STREAMING_PREAGGREGATION_MODE = "streaming_preaggregation_mode";
     public static final String DISABLE_COLOCATE_JOIN = "disable_colocate_join";
+    public static final String DISABLE_BUCKET_JOIN = "disable_bucket_join";
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILLING = "enable_spilling";
@@ -115,6 +117,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_DOP = "pipeline_dop";
 
+    public static final String PIPELINE_MAX_INPUT_BYTES_PER_OPERATOR = "pipeline_max_input_bytes_per_operator";
+
     public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
 
     // hash join right table push down
@@ -123,7 +127,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // disable join reorder
     public static final String DISABLE_JOIN_REORDER = "disable_join_reorder";
 
-    public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE = "enable_filter_unused_columns_in_scan_stage";
+    public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE =
+            "enable_filter_unused_columns_in_scan_stage";
 
     // the maximum time, in seconds, waiting for an insert statement's transaction state
     // transfer from COMMITTED to VISIBLE.
@@ -278,9 +283,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CODEGEN_LEVEL)
     private int codegenLevel = 0;
 
-    @VariableMgr.VarAttr(name = BATCH_SIZE, alias = "chunk_size", flag = VariableMgr.INVISIBLE)
-    private int batchSize = 4096;
-    private static final int PIPELINE_BATCH_SIZE = 16384;
+    @VariableMgr.VarAttr(name = BATCH_SIZE, flag = VariableMgr.INVISIBLE)
+    private int batchSize = 0;
+
+    @VariableMgr.VarAttr(name = CHUNK_SIZE, flag = VariableMgr.INVISIBLE)
+    private int chunkSize = 4096;
+
+    public static final int PIPELINE_BATCH_SIZE = 16384;
 
     @VariableMgr.VarAttr(name = DISABLE_STREAMING_PREAGGREGATIONS)
     private boolean disableStreamPreaggregations = false;
@@ -290,6 +299,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
+
+    @VariableMgr.VarAttr(name = DISABLE_BUCKET_JOIN, flag = VariableMgr.INVISIBLE)
+    private boolean disableBucketJoin = false;
 
     @VariableMgr.VarAttr(name = CBO_USE_CORRELATED_JOIN_ESTIMATE)
     private boolean useCorrelatedJoinEstimate = true;
@@ -309,6 +321,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
+
+    @VariableMgr.VarAttr(name = PIPELINE_MAX_INPUT_BYTES_PER_OPERATOR, flag = VariableMgr.INVISIBLE)
+    private long pipelineMaxInputBytesPerOperator = 100000000;
 
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
     private String pipelineProfileMode = "brief";
@@ -537,6 +552,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return disableColocateJoin;
     }
 
+    public boolean isDisableBucketJoin() {
+        return disableBucketJoin;
+    }
+
     public int getParallelExecInstanceNum() {
         return parallelExecInstanceNum;
     }
@@ -717,6 +736,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.pipelineDop;
     }
 
+    public long getPipelineMaxInputBytesPerOperator() {
+        return pipelineMaxInputBytesPerOperator;
+    }
+
     public boolean isEnableReplicationJoin() {
         return enableReplicationJoin;
     }
@@ -761,7 +784,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableExchangePassThrough;
     }
 
-
     /**
      * check cbo_cte_reuse && enable_pipeline
      */
@@ -787,11 +809,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setIs_report_success(isReportSucc);
         tResult.setCodegen_level(codegenLevel);
-        if (isEnablePipelineEngine()) {
-            tResult.setBatch_size(PIPELINE_BATCH_SIZE);
-        } else {
-            tResult.setBatch_size(batchSize);
-        }
+        tResult.setBatch_size(chunkSize);
         tResult.setDisable_stream_preaggregations(disableStreamPreaggregations);
         tResult.setLoad_mem_limit(loadMemLimit);
 

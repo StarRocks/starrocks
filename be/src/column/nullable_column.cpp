@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/nullable_column.h"
 
@@ -149,6 +149,23 @@ size_t NullableColumn::append_numbers(const void* buff, size_t length) {
 void NullableColumn::append_value_multiple_times(const void* value, size_t count) {
     _data_column->append_value_multiple_times(value, count);
     null_column_data().insert(null_column_data().end(), count, 0);
+}
+
+Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+    size_t replace_num = src.size();
+    if (src.is_nullable()) {
+        const auto& c = down_cast<const NullableColumn&>(src);
+        RETURN_IF_ERROR(_null_column->update_rows(*c._null_column, indexes));
+        RETURN_IF_ERROR(_data_column->update_rows(*c._data_column, indexes));
+    } else {
+        auto new_null_column = NullColumn::create();
+        new_null_column->get_data().insert(new_null_column->get_data().end(), replace_num, 0);
+        RETURN_IF_ERROR(_null_column->update_rows(*new_null_column.get(), indexes));
+        RETURN_IF_ERROR(_data_column->update_rows(src, indexes));
+    }
+
+    return Status::OK();
 }
 
 size_t NullableColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {

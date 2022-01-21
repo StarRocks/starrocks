@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -56,8 +56,8 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
-    void batch_serialize(size_t chunk_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
-                         Column* to) const override {
+    void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                         size_t state_offset, Column* to) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 

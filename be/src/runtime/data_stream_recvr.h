@@ -72,10 +72,13 @@ class SortExecExprs;
 // recvr instance from the tracking structure of its DataStreamMgr in all cases.
 class DataStreamRecvr {
 public:
+    const static int32_t INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE = 0;
+
+public:
     ~DataStreamRecvr();
 
     Status get_chunk(std::unique_ptr<vectorized::Chunk>* chunk);
-    Status get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk);
+    Status get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk, const int32_t driver_sequence);
 
     // Deregister from DataStreamMgr instance, which shares ownership of this instance.
     void close();
@@ -101,7 +104,9 @@ public:
         _sub_plan_query_statistics_recvr->insert(statistics, sender_id);
     }
 
-    bool has_output() const;
+    void short_circuit_for_pipeline(const int32_t driver_sequence);
+
+    bool has_output_for_pipeline(const int32_t driver_sequence) const;
 
     bool is_finished() const;
 
@@ -115,7 +120,7 @@ private:
                     const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders, bool is_merging,
                     int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
                     std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline,
-                    bool keep_order, PassThroughChunkBuffer* pass_through_chunk_buffer);
+                    int32_t degree_of_parallelism, bool keep_order, PassThroughChunkBuffer* pass_through_chunk_buffer);
 
     // If receive queue is full, done is enqueue pending, and return with *done is nullptr
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
@@ -190,6 +195,8 @@ private:
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
     bool _is_pipeline;
+    // Invalid if _is_pipeline is false
+    int32_t _degree_of_parallelism;
 
     // Invalid if _is_pipeline is false
     // Pipeline will send packets out-of-order

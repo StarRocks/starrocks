@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -9,6 +9,8 @@
 #include "exec/scan_node.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
+#include "exec/vectorized/hdfs_scanner_parquet.h"
+#include "exec/vectorized/hdfs_scanner_text.h"
 #include "hdfs/hdfs.h"
 
 namespace starrocks::vectorized {
@@ -47,6 +49,7 @@ private:
     friend HdfsScanner;
     friend HdfsParquetScanner;
     friend HdfsOrcScanner;
+    friend HdfsTextScanner;
     int kMaxConcurrency = config::max_hdfs_scanner_num;
 
     template <typename T>
@@ -90,6 +93,8 @@ private:
     Status _get_status();
     void _fill_chunk_pool(int count);
     void _close_pending_scanners();
+    void _push_pending_scanner(HdfsScanner* scanner);
+    HdfsScanner* _pop_pending_scanner();
     static int _compute_priority(int32_t num_submitted_tasks);
 
     void _init_counter(RuntimeState* state);
@@ -160,6 +165,7 @@ private:
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
 
     RuntimeProfile::Counter* _scan_timer = nullptr;
+    RuntimeProfile::Counter* _scanner_queue_timer = nullptr;
     RuntimeProfile::Counter* _scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* _scan_files_counter = nullptr;
     RuntimeProfile::Counter* _reader_init_timer = nullptr;
@@ -169,24 +175,9 @@ private:
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _io_counter = nullptr;
     RuntimeProfile::Counter* _column_read_timer = nullptr;
-    RuntimeProfile::Counter* _level_decode_timer = nullptr;
-    RuntimeProfile::Counter* _value_decode_timer = nullptr;
-    RuntimeProfile::Counter* _page_read_timer = nullptr;
     RuntimeProfile::Counter* _column_convert_timer = nullptr;
 
-    RuntimeProfile::Counter* _bytes_total_read = nullptr;
-    RuntimeProfile::Counter* _bytes_read_local = nullptr;
-    RuntimeProfile::Counter* _bytes_read_short_circuit = nullptr;
-    RuntimeProfile::Counter* _bytes_read_dn_cache = nullptr;
-    RuntimeProfile::Counter* _bytes_read_remote = nullptr;
-
-    // reader init
-    RuntimeProfile::Counter* _footer_read_timer = nullptr;
-    RuntimeProfile::Counter* _column_reader_init_timer = nullptr;
-
-    // dict filter
-    RuntimeProfile::Counter* _group_chunk_read_timer = nullptr;
-    RuntimeProfile::Counter* _group_dict_filter_timer = nullptr;
-    RuntimeProfile::Counter* _group_dict_decode_timer = nullptr;
+    HdfsIOProfile _hdfs_io_profile;
+    HdfsParquetProfile _parquet_profile;
 };
 } // namespace starrocks::vectorized

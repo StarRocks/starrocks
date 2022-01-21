@@ -76,6 +76,8 @@ public:
 
     Status open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) override;
 
+    void erase_block_cache(const std::string& path) override;
+
     Status get_all_block_ids(std::vector<BlockId>* block_ids) override {
         // TODO(lingbin): to be implemented after we assign each block an id
         return Status::OK();

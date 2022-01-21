@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/update_compaction_state.h"
 
@@ -8,6 +8,7 @@
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "util/stack_util.h"
 
 namespace starrocks::vectorized {
 
@@ -15,13 +16,26 @@ CompactionState::CompactionState() = default;
 
 CompactionState::~CompactionState() {
     StorageEngine::instance()->update_manager()->compaction_state_mem_tracker()->release(_memory_usage);
+    if (!_status.ok()) {
+        LOG(WARNING) << "bad CompactionState, status:" << _status;
+    }
 }
 
 Status CompactionState::load(Rowset* rowset) {
     if (UNLIKELY(!_status.ok())) {
         return _status;
     }
-    std::call_once(_load_once_flag, [&] { _status = _do_load(rowset); });
+    std::call_once(_load_once_flag, [&] {
+        _status = _do_load(rowset);
+        if (!_status.ok()) {
+            LOG(WARNING) << "load CompactionState error: " << _status
+                         << " tablet:" << rowset->rowset_meta()->tablet_id() << " stack:\n"
+                         << get_stack_trace();
+            if (_status.is_mem_limit_exceeded()) {
+                LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
+            }
+        }
+    });
     return _status;
 }
 

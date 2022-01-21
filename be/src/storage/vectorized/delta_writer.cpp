@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/delta_writer.h"
 
@@ -15,7 +15,7 @@ namespace starrocks::vectorized {
 
 StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
     std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, false);
     RETURN_IF_ERROR(writer->_init());
     return std::move(writer);
 }
@@ -33,7 +33,7 @@ DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
           _flush_token(nullptr) {}
 
 DeltaWriter::~DeltaWriter() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     switch (_get_state()) {
     case kUninitialized:
     case kCommitted:
@@ -50,7 +50,7 @@ DeltaWriter::~DeltaWriter() {
 }
 
 void DeltaWriter::_garbage_collection() {
-    OLAPStatus rollback_status = OLAP_SUCCESS;
+    Status rollback_status = Status::OK();
     if (_tablet != nullptr) {
         TxnManager* txn_mgr = _storage_engine->txn_manager();
         rollback_status = txn_mgr->rollback_txn(_opt.partition_id, _tablet, _opt.txn_id);
@@ -58,13 +58,13 @@ void DeltaWriter::_garbage_collection() {
     // has to check rollback status, because the rowset maybe committed in this thread and
     // published in another thread, then rollback will failed.
     // when rollback failed should not delete rowset
-    if (rollback_status == OLAP_SUCCESS) {
+    if (rollback_status.ok()) {
         _storage_engine->add_unused_rowset(_cur_rowset);
     }
 }
 
 Status DeltaWriter::_init() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {
@@ -78,15 +78,18 @@ Status DeltaWriter::_init() {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
             _set_state(kAborted);
-            auto msg = Substitute("Update memory limit exceed tablet:$0 $1 > $2", _tablet->tablet_id(),
-                                  tracker->consumption(), tracker->limit());
+            auto msg = Substitute("Update memory limit exceed tablet:$0 $1 > $2 top_tablets:$3", _tablet->tablet_id(),
+                                  tracker->consumption(), tracker->limit(),
+                                  _storage_engine->update_manager()->topn_memory_stats(5));
             LOG(WARNING) << msg;
             return Status::MemoryLimitExceeded(msg);
         }
         if (_tablet->updates()->is_error()) {
             _set_state(kAborted);
-            LOG(WARNING) << "Fail to init delta writer. tablet in error tablet:" << _tablet->tablet_id();
-            return Status::ServiceUnavailable("Tablet in error state");
+            auto msg = Substitute("Fail to init delta writer. tablet $0 error: $1", _tablet->tablet_id(),
+                                  _tablet->updates()->get_error_msg());
+            LOG(WARNING) << msg;
+            return Status::ServiceUnavailable(msg);
         }
     }
     if (_tablet->version_count() > config::tablet_max_versions) {
@@ -120,9 +123,9 @@ Status DeltaWriter::_init() {
         }
 
         std::lock_guard push_lock(_tablet->get_push_lock());
-        OLAPStatus olap_status =
+        Status olap_status =
                 _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
-        if (olap_status != OLAPStatus::OLAP_SUCCESS) {
+        if (!olap_status.ok()) {
             _set_state(kAborted);
             std::stringstream ss;
             ss << "Fail to prepare transaction. tablet_id=" << _opt.tablet_id << " err=" << olap_status;
@@ -189,7 +192,7 @@ Status DeltaWriter::_init() {
 }
 
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     Status st;
     auto state = _get_state();
     switch (state) {
@@ -220,7 +223,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
 }
 
 Status DeltaWriter::close() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     Status st;
     auto state = _get_state();
     switch (state) {
@@ -254,7 +257,7 @@ void DeltaWriter::_reset_mem_table() {
 }
 
 Status DeltaWriter::commit() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     auto state = _get_state();
     switch (state) {
     case kUninitialized:
@@ -282,12 +285,7 @@ Status DeltaWriter::commit() {
     }
 
     _cur_rowset->set_schema(&_tablet->tablet_schema());
-    auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
-                                                          _cur_rowset, false);
-    if (res != OLAP_SUCCESS && res != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
-        _set_state(kAborted);
-        return Status::InternalError("Fail to commit transaction");
-    }
+
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
         if (!st.ok()) {
@@ -296,6 +294,17 @@ Status DeltaWriter::commit() {
         }
     }
 
+    auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
+                                                          _cur_rowset, false);
+
+    if (!res.ok()) {
+        _storage_engine->update_manager()->on_rowset_cancel(_tablet.get(), _cur_rowset.get());
+    }
+
+    if (!res.ok() && !res.is_already_exist()) {
+        _set_state(kAborted);
+        return Status::InternalError("Fail to commit transaction");
+    }
     State curr_state = kClosed;
     if (!_state.compare_exchange_strong(curr_state, kCommitted, std::memory_order_acq_rel)) {
         return Status::InternalError("delta writer has been aborted");

@@ -117,7 +117,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // an empty set (e.g. count).
     public static final Predicate<Expr>
             NON_NULL_EMPTY_AGG = (com.google.common.base.Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
-                    ((FunctionCallExpr) arg).returnsNonNullOnEmpty();
+            ((FunctionCallExpr) arg).returnsNonNullOnEmpty();
 
     // Returns true if an Expr is a builtin aggregate function.
     public static final Predicate<Expr> CORRELATED_SUBQUERY_SUPPORT_AGG_FN =
@@ -1238,14 +1238,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 && (this.type.isStringType() || this.type.isHllType())) {
             return this;
         }
-        if (!canCastTo(targetType)) {
+        if (!Type.canCastTo(this.type, targetType)) {
             throw new AnalysisException("Cannot cast '" + this.toSql() + "' from " + this.type + " to " + targetType);
         }
         return uncheckedCastTo(targetType);
-    }
-
-    protected boolean canCastTo(Type targetType) {
-        return Type.canCastTo(this.type, targetType);
     }
 
     /**

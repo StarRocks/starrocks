@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/type_traits.h"
 #include "exec/olap_common.h"
@@ -142,6 +142,19 @@ TEST(NormalizeRangeTest, ExtendScanKeyTest) {
         OlapScanKeys scan_keys;
         scan_keys._begin_scan_keys.emplace_back();
         scan_keys._begin_scan_keys.emplace_back();
+        bool res = scan_keys.extend_scan_key(range, 1024).ok();
+        ASSERT_TRUE(res);
+    }
+    {
+        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
+                                        std::numeric_limits<CppType>::max());
+        range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, std::numeric_limits<CppType>::max());
+        range.add_range(SQLFilterOp::FILTER_LESS_OR_EQUAL, std::numeric_limits<CppType>::max());
+        OlapScanKeys scan_keys;
+        scan_keys._begin_scan_keys.emplace_back();
+        scan_keys._begin_scan_keys.emplace_back();
+        scan_keys._end_scan_keys.emplace_back();
+        scan_keys._end_scan_keys.emplace_back();
         bool res = scan_keys.extend_scan_key(range, 1024).ok();
         ASSERT_TRUE(res);
     }

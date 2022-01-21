@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/file_scanner.h"
 
@@ -186,7 +186,7 @@ ChunkPtr FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src, st
                     std::stringstream error_msg;
                     error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
-                    _state->append_error_msg_to_file("", error_msg.str());
+                    _state->append_error_msg_to_file(src->debug_row(i), error_msg.str());
                 }
             }
 

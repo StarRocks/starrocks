@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rewrite;
 
@@ -13,6 +13,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
@@ -96,6 +97,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         // When parent operator must need origin string column, we need to disable
         // global dict optimization for this column
         ColumnRefSet disableDictOptimizeColumns;
+        // For multi-stage aggregation of count distinct, in addition to local aggregation,
+        // other stages need to be rewritten as well
+        Set<Integer> needRewriteMultiCountDistinctColumns;
 
         public DecodeContext(Map<Long, List<Integer>> tableIdToStringColumnIds, ColumnRefFactory columnRefFactory) {
             this.tableIdToStringColumnIds = tableIdToStringColumnIds;
@@ -105,6 +109,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             globalDicts = Lists.newArrayList();
             disableDictOptimizeColumns = new ColumnRefSet();
             allStringColumnIds = Sets.newHashSet();
+            needRewriteMultiCountDistinctColumns = Sets.newHashSet();
             for (List<Integer> ids : tableIdToStringColumnIds.values()) {
                 allStringColumnIds.addAll(ids);
             }
@@ -114,6 +119,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             stringColumnIdToDictColumnIds.clear();
             stringFunctions.clear();
             hasEncoded = false;
+            needRewriteMultiCountDistinctColumns.clear();
         }
 
         public DecodeContext merge(DecodeContext other) {
@@ -438,7 +444,19 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 if (canApplyDictDecodeOpt) {
                     CallOperator oldCall = kv.getValue();
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
-                    if (context.stringColumnIdToDictColumnIds.containsKey(columnId)) {
+                    if (context.needRewriteMultiCountDistinctColumns.contains(columnId)) {
+                        // we only need rewrite TFunction
+                        Type[] newTypes = new Type[] {ID_TYPE};
+                        AggregateFunction newFunction =
+                                (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
+                                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                        ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
+                        CallOperator newCall = new CallOperator(oldCall.getFnName(), newFunction.getReturnType(),
+                                Collections.singletonList(dictColumn), newFunction,
+                                oldCall.isDistinct());
+                        ColumnRefOperator outputColumn = kv.getKey();
+                        newAggMap.put(outputColumn, newCall);
+                    } else if (context.stringColumnIdToDictColumnIds.containsKey(columnId)) {
                         Integer dictColumnId = context.stringColumnIdToDictColumnIds.get(columnId);
                         ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(dictColumnId);
 
@@ -479,6 +497,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             }
 
                             outputColumn = newDictColumn;
+                        } else if (fnName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) {
+                            context.needRewriteMultiCountDistinctColumns.add(outputColumn.getId());
                         }
 
                         CallOperator newCall = new CallOperator(oldCall.getFnName(), newReturnType,
@@ -580,8 +600,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             context.hasEncoded = false;
 
             OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
-            if (context.hasEncoded) {
-                if (aggOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
+            boolean needRewrite =
+                    !context.needRewriteMultiCountDistinctColumns.isEmpty() &&
+                            aggOperator.couldApplyStringDict(context.needRewriteMultiCountDistinctColumns);
+            needRewrite = needRewrite || (!context.stringColumnIdToDictColumnIds.keySet().isEmpty() &&
+                    aggOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet()));
+            if (context.hasEncoded || needRewrite) {
+                if (needRewrite) {
                     PhysicalHashAggregateOperator newAggOper = rewriteAggOperator(aggOperator,
                             context);
                     OptExpression result = OptExpression.create(newAggOper, newChildExpr);
@@ -642,6 +667,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             OlapTable table = (OlapTable) scanOperator.getTable();
             long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
                     .max(Long::compareTo).orElse(0L);
+
+            if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
+                continue;
+            }
+            if (table.hasForbitGlobalDict()) {
+                continue;
+            }
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
                 // Condition 1:
                 if (!column.getType().isVarchar()) {

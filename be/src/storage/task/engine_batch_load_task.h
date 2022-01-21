@@ -46,7 +46,7 @@ public:
                         AgentStatus* res_status, MemTracker* mem_tracker);
     ~EngineBatchLoadTask() override;
 
-    OLAPStatus execute() override;
+    Status execute() override;
 
 private:
     // The initial function of pusher
@@ -65,10 +65,9 @@ private:
     // @param [in] request specify tablet and delete conditions
     // @param [out] tablet_info_vec return tablet lastest status, which
     //              include version info, row count, data size, etc
-    // @return OLAP_SUCCESS if submit delete_data success
-    virtual OLAPStatus _delete_data(const TPushReq& request, vector<TTabletInfo>* tablet_info_vec);
+    virtual Status _delete_data(const TPushReq& request, vector<TTabletInfo>* tablet_info_vec);
 
-    OLAPStatus _push(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec);
+    Status _push(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec);
 
     std::unique_ptr<MemTracker> _mem_tracker;
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -108,7 +108,7 @@ public:
     RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
 
     virtual std::string get_name() const {
-        return strings::Substitute("$0_$1($2)", _name, this, is_finished() ? "X" : "O");
+        return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
     }
 
     const LocalRFWaitingSet& rf_waiting_set() const;
@@ -141,7 +141,7 @@ protected:
     // Which plan node this operator belongs to
     const int32_t _plan_node_id;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
-    std::unique_ptr<MemTracker> _mem_tracker;
+    MemTracker* _mem_tracker = nullptr;
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
@@ -182,7 +182,7 @@ public:
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
     virtual void close(RuntimeState* state);
-    std::string get_name() const { return _name + "_" + std::to_string(_id); }
+    std::string get_name() const { return _name + "_" + std::to_string(_plan_node_id); }
 
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
     // util the corresponding local rf generated.
@@ -226,6 +226,8 @@ public:
     void set_runtime_state(RuntimeState* state) { this->_state = state; }
 
     RuntimeState* runtime_state() { return _state; }
+
+    RowDescriptor* row_desc() { return &_row_desc; }
 
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state) {

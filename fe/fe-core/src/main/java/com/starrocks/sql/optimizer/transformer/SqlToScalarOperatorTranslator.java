@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
@@ -82,7 +82,7 @@ public final class SqlToScalarOperatorTranslator {
                     Map.Entry::getKey).orElse(null);
             Preconditions.checkNotNull(columnRef);
         } else {
-            columnRef = columnRefFactory.create(expression, expression.getType(), expression.isNullable());
+            columnRef = columnRefFactory.create(expression, expression.getType(), scalarOperator.isNullable());
         }
         projections.put(columnRef, scalarOperator);
         return columnRef;

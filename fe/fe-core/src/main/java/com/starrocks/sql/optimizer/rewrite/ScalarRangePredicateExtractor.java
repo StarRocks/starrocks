@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
@@ -88,7 +88,7 @@ public class ScalarRangePredicateExtractor {
             }
         }
 
-        if (extractExpr != null && !conjuncts.contains(extractExpr)) {
+        if (!conjuncts.contains(extractExpr)) {
             result.forEach(f -> f.setFromPredicateRangeDerive(true));
             result.stream().filter(predicateOperator -> !checkStatisticsEstimateValid(predicateOperator))
                     .forEach(f -> f.setNotEvalEstimate(true));

@@ -408,6 +408,11 @@ Status FileBlockManager::open_block(const std::string& path, std::unique_ptr<Rea
     return Status::OK();
 }
 
+void FileBlockManager::erase_block_cache(const std::string& path) {
+    VLOG(1) << "erasing block cache with path at " << path;
+    _file_cache->erase(path);
+}
+
 // TODO(lingbin): We should do something to ensure that deletion can only be done
 // after the last reader or writer has finished
 Status FileBlockManager::_delete_block(const string& path) {

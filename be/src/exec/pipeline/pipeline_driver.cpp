@@ -100,7 +100,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         size_t num_chunk_moved = 0;
         bool should_yield = false;
         size_t num_operators = _operators.size();
-        size_t _new_first_unfinished = _first_unfinished;
+        size_t new_first_unfinished = _first_unfinished;
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
                 SCOPED_RAW_TIMER(&time_spent);
@@ -114,7 +114,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                         _mark_operator_finishing(curr_op, runtime_state);
                     }
                     _mark_operator_finishing(next_op, runtime_state);
-                    _new_first_unfinished = i + 1;
+                    new_first_unfinished = i + 1;
                     continue;
                 }
 
@@ -174,7 +174,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                         _mark_operator_finishing(curr_op, runtime_state);
                     }
                     _mark_operator_finishing(next_op, runtime_state);
-                    _new_first_unfinished = i + 1;
+                    new_first_unfinished = i + 1;
                     continue;
                 }
             }
@@ -186,10 +186,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             }
         }
         // close finished operators and update _first_unfinished index
-        for (auto i = _first_unfinished; i < _new_first_unfinished; ++i) {
+        for (auto i = _first_unfinished; i < new_first_unfinished; ++i) {
             _mark_operator_finished(_operators[i], runtime_state);
         }
-        _first_unfinished = _new_first_unfinished;
+        _first_unfinished = new_first_unfinished;
 
         if (sink_operator()->is_finished()) {
             finish_operators(runtime_state);

@@ -55,6 +55,19 @@ typedef UniqueId TabletUid;
 
 enum CompactionType { BASE_COMPACTION = 1, CUMULATIVE_COMPACTION = 2, UPDATE_COMPACTION = 3 };
 
+inline std::string to_string(CompactionType type) {
+    switch (type) {
+    case BASE_COMPACTION:
+        return "base";
+    case CUMULATIVE_COMPACTION:
+        return "cumulative";
+    case UPDATE_COMPACTION:
+        return "update";
+    default:
+        return "unknown";
+    }
+}
+
 struct DataDirInfo {
     DataDirInfo() {}
 

@@ -35,6 +35,7 @@ import com.google.common.collect.Sets;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
+import com.starrocks.StarRocksFE;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
@@ -753,7 +754,7 @@ public class Catalog {
                     // to see which thread held this lock for long time.
                     Thread owner = lock.getOwner();
                     if (owner != null) {
-                        LOG.warn("catalog lock is held by: {}", Util.dumpThread(owner, 10));
+                        LOG.warn("catalog lock is held by: {}", Util.dumpThread(owner, 50));
                     }
 
                     if (mustLock) {
@@ -806,16 +807,38 @@ public class Catalog {
         getHelperNodes(args);
 
         // 1. check and create dirs and files
+        //      if metaDir is the default config: StarRocksFE.STARROCKS_HOME_DIR + "/meta",
+        //      we should check whether both the new default dir (STARROCKS_HOME_DIR + "/meta")
+        //      and the old default dir (DORIS_HOME_DIR + "/doris-meta") are present. If both are present,
+        //      we need to let users keep only one to avoid starting from outdated metadata.
+        String oldDefaultMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
+        String newDefaultMetaDir = StarRocksFE.STARROCKS_HOME_DIR + "/meta";
+        if (metaDir.equals(newDefaultMetaDir)) {
+            File oldMeta = new File(oldDefaultMetaDir);
+            File newMeta = new File(newDefaultMetaDir);
+            if (oldMeta.exists() && newMeta.exists()) {
+                LOG.error("New default meta dir: {} and Old default meta dir: {} are both present. " +
+                        "Please make sure {} has the latest data, and remove the another one.",
+                        newDefaultMetaDir, oldDefaultMetaDir, newDefaultMetaDir);
+                System.exit(-1);
+            }
+        }
         File meta = new File(metaDir);
         if (!meta.exists()) {
-            String oldMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
-            File oldMeta = new File(oldMetaDir);
+            // If metaDir is not the default config, it means the user has specified the other directory
+            // We should not use the oldDefaultMetaDir.
+            // Just exit in this case
+            if (!metaDir.equals(newDefaultMetaDir)) {
+                LOG.error("meta dir {} dose not exist, will exit", metaDir);
+                System.exit(-1);
+            }
+            File oldMeta = new File(oldDefaultMetaDir);
             if (oldMeta.exists()) {
                 // For backward compatible
-                Config.meta_dir = oldMetaDir;
+                Config.meta_dir = oldDefaultMetaDir;
                 setMetaDir();
             } else {
-                LOG.error("{} does not exist, will exit", meta.getAbsolutePath());
+                LOG.error("meta dir {} does not exist, will exit", meta.getAbsolutePath());
                 System.exit(-1);
             }
         }
@@ -4054,7 +4077,15 @@ public class Catalog {
                         }
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                                 DataProperty.DEFAULT_DATA_PROPERTY);
+                        DynamicPartitionUtil.checkAndSetDynamicPartitionBuckets(properties, distributionDesc.getBuckets());
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
+                        if (olapTable.dynamicPartitionExists() && olapTable.getColocateGroup() != null) {
+                            HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
+                            if (info.getBucketNum() != olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
+                                throw new DdlException("dynamic_partition.buckets should equal the distribution buckets"
+                                                       + " if creating a colocate table");
+                            }
+                        }
                         if (hasMedium) {
                             olapTable.setStorageMedium(dataProperty.getStorageMedium());
                         }
@@ -5897,6 +5928,31 @@ public class Catalog {
         editLog.logModifyInMemory(info);
     }
 
+    public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
+        Map<String, String> property = new HashMap<>();
+        Database db = getDb(dbName);
+        if (db == null) {
+            throw new DdlException("the DB " + dbName + "isn't  exist");
+        }
+
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            throw new DdlException("the DB " + dbName +  " table: " + tableName + "isn't  exist"); 
+        }
+
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            olapTable.setHasForbitGlobalDict(isForbit);
+            if (isForbit) {
+                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
+            } else {
+                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
+            }
+            ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
+            editLog.logSetHasForbitGlobalDict(info);
+        }
+    }
+
     public void replayModifyTableProperty(short opCode, ModifyTablePropertyOperationLog info) {
         long dbId = info.getDbId();
         long tableId = info.getTableId();
@@ -5906,27 +5962,39 @@ public class Catalog {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            TableProperty tableProperty = olapTable.getTableProperty();
-            if (tableProperty == null) {
-                olapTable.setTableProperty(new TableProperty(properties).buildProperty(opCode));
-            } else {
-                tableProperty.modifyTableProperties(properties);
-                tableProperty.buildProperty(opCode);
-            }
-
-            // need to replay partition info meta
-            if (opCode == OperationType.OP_MODIFY_IN_MEMORY) {
-                for (Partition partition : olapTable.getPartitions()) {
-                    olapTable.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
+            if (opCode == OperationType.OP_SET_FORBIT_GLOBAL_DICT) {
+                String enAble = properties.get(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE);
+                Preconditions.checkState(enAble != null);
+                if (olapTable != null) {
+                    if (enAble == PropertyAnalyzer.DISABLE_LOW_CARD_DICT) {
+                        olapTable.setHasForbitGlobalDict(true);
+                    } else {
+                        olapTable.setHasForbitGlobalDict(false);
+                    }
                 }
-            } else if (opCode == OperationType.OP_MODIFY_REPLICATION_NUM) {
-                // update partition replication num if this table is unpartitioned table
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    String partitionName = olapTable.getName();
-                    Partition partition = olapTable.getPartition(partitionName);
-                    if (partition != null) {
-                        partitionInfo.setReplicationNum(partition.getId(), tableProperty.getReplicationNum());
+            } else {
+                TableProperty tableProperty = olapTable.getTableProperty();
+                if (tableProperty == null) {
+                    olapTable.setTableProperty(new TableProperty(properties).buildProperty(opCode));
+                } else {
+                    tableProperty.modifyTableProperties(properties);
+                    tableProperty.buildProperty(opCode);
+                }
+
+                // need to replay partition info meta
+                if (opCode == OperationType.OP_MODIFY_IN_MEMORY) {
+                    for (Partition partition : olapTable.getPartitions()) {
+                        olapTable.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
+                    }
+                } else if (opCode == OperationType.OP_MODIFY_REPLICATION_NUM) {
+                    // update partition replication num if this table is unpartitioned table
+                    PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                    if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                        String partitionName = olapTable.getName();
+                        Partition partition = olapTable.getPartition(partitionName);
+                        if (partition != null) {
+                            partitionInfo.setReplicationNum(partition.getId(), tableProperty.getReplicationNum());
+                        }
                     }
                 }
             }

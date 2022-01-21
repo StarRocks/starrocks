@@ -501,9 +501,11 @@ Status ChunkAllocator::allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema
     size_t mem_size = _row_len * num_rows;
 
     if (_memory_limitation > 0 && _memory_allocated + mem_size > _memory_limitation) {
-        LOG(INFO) << "ChunkAllocator::allocate() memory exceed. "
-                  << "m_memory_allocated=" << _memory_allocated;
-        return Status::OK();
+        std::string msg =
+                Substitute("ChunkAllocator::allocate() memory exceed, memory_limitation:$0, memory_allocate:$1 ",
+                           _memory_limitation, _memory_allocated + mem_size);
+        LOG(WARNING) << msg;
+        return Status::MemoryLimitExceeded(msg);
     }
 
     chunk = ChunkHelper::new_chunk(schema, num_rows);
@@ -685,7 +687,7 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
             if (status.is_end_of_file()) {
                 break;
             } else {
-                LOG(WARNING) << "tablet reader failed to get next chunk, status: " << status.to_string();
+                LOG(WARNING) << "tablet reader failed to get next chunk, status: " << status.get_error_msg();
                 return false;
             }
         }
@@ -1078,16 +1080,16 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         return status;
     }
 
-    OLAPStatus res = OLAP_SUCCESS;
+    Status res = Status::OK();
     {
         // set state to ready
         std::unique_lock new_wlock(new_tablet->get_header_lock());
         res = new_tablet->set_tablet_state(TabletState::TABLET_RUNNING);
-        if (res != OLAP_SUCCESS) {
+        if (!res.ok()) {
             LOG(WARNING) << "failed to alter tablet. base_tablet=" << base_tablet->full_name()
                          << ", drop new_tablet=" << new_tablet->full_name();
             // do not drop the new tablet and its data. GC thread will
-            return Status::InternalError("failed to set tablet state");
+            return res;
         }
         new_tablet->save_meta();
     }
@@ -1137,6 +1139,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         sc_procedure = std::make_unique<SchemaChangeWithSorting>(
                 chunk_changer, config::memory_limitation_per_thread_for_schema_change * 1024 * 1024 * 1024);
     } else if (sc_params.sc_directly) {
+        LOG(INFO) << "doing directly schema change for base_tablet " << sc_params.base_tablet->full_name();
         sc_procedure = std::make_unique<SchemaChangeDirectly>(chunk_changer);
     } else {
         LOG(INFO) << "doing linked schema change for base_tablet " << sc_params.base_tablet->full_name();

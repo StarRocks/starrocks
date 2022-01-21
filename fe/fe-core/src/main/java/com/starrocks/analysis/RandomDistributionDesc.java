@@ -52,6 +52,11 @@ public class RandomDistributionDesc extends DistributionDesc {
     }
 
     @Override
+    public int getBuckets() {
+        return numBucket;
+    }
+
+    @Override
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("DISTRIBUTED BY RANDOM\n")

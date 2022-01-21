@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql;
 
@@ -306,7 +306,7 @@ public class Explain {
             PhysicalHashJoinOperator join = (PhysicalHashJoinOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- ").append(join.getJoinType());
             if (!join.getJoinType().isCrossJoin()) {
-                sb.append(" [").append(new ExpressionPrinter().print(join.getJoinPredicate())).append("]");
+                sb.append(" [").append(new ExpressionPrinter().print(join.getOnPredicate())).append("]");
             }
             sb.append(buildOutputColumns(join, ""));
             sb.append("\n");

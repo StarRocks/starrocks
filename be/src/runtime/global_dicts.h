@@ -44,6 +44,15 @@ inline std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map)
     return stream;
 }
 
+inline std::ostream& operator<<(std::ostream& stream, const GlobalDictMap& map) {
+    stream << "[";
+    for (const auto& [k, v] : map) {
+        stream << "(" << k << "," << v << "),";
+    }
+    stream << "]";
+    return stream;
+}
+
 // column-name -> GlobalDictMap
 using GlobalDictByNameMaps = phmap::flat_hash_map<std::string, GlobalDictMap>;
 

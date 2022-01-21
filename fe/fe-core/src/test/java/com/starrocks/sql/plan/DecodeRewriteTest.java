@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
@@ -215,12 +215,47 @@ public class DecodeRewriteTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
         Assert.assertTrue(plan.contains("7:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(12: count), multi_distinct_count(13: count)"));
+                "  |  output: multi_distinct_count(13: count), multi_distinct_count(12: count)"));
 
         sql = "select count(distinct S_ADDRESS), count(distinct S_COMMENT) from supplier;";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(" multi_distinct_count(11: S_ADDRESS), " +
                 "multi_distinct_count(12: S_COMMENT)"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testDecodeNodeRewriteDistinct() throws Exception {
+        String sql;
+        String plan;
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        sql = "select count(distinct S_ADDRESS) from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([10: S_ADDRESS, INT, false]); args: INT; result: BIGINT; args nullable: false; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  3:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(3);
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  4:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: count[([10: S_ADDRESS, INT, false]); args: INT; result: BIGINT; args nullable: false; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(4);
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  6:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: count[([9: count, BIGINT, false]); args: VARCHAR; result: BIGINT; args nullable: true; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testDecodeNodeRewriteTwoPaseDistinct() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select count(distinct S_ADDRESS), count(distinct S_NATIONKEY) from supplier";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false], " +
+                "multi_distinct_count[([10: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -520,8 +555,9 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "dict_string_id_to_int_ids:{20=28}"));
         Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
-        Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]), is_merge:false)), " +
-                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
+        Assert.assertTrue(
+                plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]), is_merge:false, dest_dop:0)), " +
+                        "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
     }
 
     @Test
@@ -615,7 +651,6 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <dict id 15> : <string id 10>"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
-
     }
 
     @Test
@@ -653,7 +688,8 @@ public class DecodeRewriteTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: count[(NULL); args: BOOLEAN; result: BIGINT; args nullable: true; result nullable: false]\n" +
                 "  |  group by: [10: S_ADDRESS, INT, false]\n" +
-                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH + ")) = ''"));
+                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH +
+                ")) = ''"));
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
                 "  |  cardinality: 1"));

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.planner;
 
@@ -22,6 +22,7 @@ public class MultiCastDataSink extends DataSink {
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
         StringBuilder sb = new StringBuilder();
 
+        sb.append(prefix).append("MultiCastDataSinks\n");
         for (DataStreamSink dataStreamSink : dataStreamSinks) {
             sb.append(dataStreamSink.getExplainString(prefix, explainLevel));
         }
@@ -33,6 +34,7 @@ public class MultiCastDataSink extends DataSink {
     public String getVerboseExplain(String prefix) {
         StringBuilder sb = new StringBuilder();
 
+        sb.append(prefix).append("MultiCastDataSinks:\n");
         for (DataStreamSink dataStreamSink : dataStreamSinks) {
             sb.append(dataStreamSink.getVerboseExplain(prefix));
         }

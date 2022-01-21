@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/binary_column.h"
 
@@ -184,6 +184,48 @@ void BinaryColumn::_build_slices() const {
     }
 
     _slices_cache = true;
+}
+
+Status BinaryColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    const auto& src_column = down_cast<const BinaryColumn&>(src);
+    size_t replace_num = src.size();
+    bool need_resize = false;
+    for (size_t i = 0; i < replace_num; ++i) {
+        DCHECK_LT(indexes[i], _offsets.size());
+        uint32_t cur_len = _offsets[indexes[i] + 1] - _offsets[indexes[i]];
+        uint32_t new_len = src_column._offsets[i + 1] - src_column._offsets[i];
+        if (cur_len != new_len) {
+            need_resize = true;
+            break;
+        }
+    }
+
+    if (!need_resize) {
+        auto* dest_bytes = _bytes.data();
+        const auto& src_bytes = src_column.get_bytes();
+        const auto& src_offsets = src_column.get_offset();
+        for (size_t i = 0; i < replace_num; ++i) {
+            uint32_t str_size = src_offsets[i + 1] - src_offsets[i];
+            strings::memcpy_inlined(dest_bytes + _offsets[indexes[i]], src_bytes.data() + src_offsets[i], str_size);
+        }
+    } else {
+        auto new_binary_column = BinaryColumn::create();
+        size_t idx_begin = 0;
+        for (size_t i = 0; i < replace_num; i++) {
+            DCHECK_GE(_offsets.size() - 1, indexes[i]);
+            size_t count = indexes[i] - idx_begin;
+            new_binary_column->append(*this, idx_begin, count);
+            new_binary_column->append(src, i, 1);
+            idx_begin = indexes[i] + 1;
+        }
+        int32_t remain_count = _offsets.size() - idx_begin - 1;
+        if (remain_count > 0) {
+            new_binary_column->append(*this, idx_begin, remain_count);
+        }
+        swap_column(*new_binary_column.get());
+    }
+
+    return Status::OK();
 }
 
 void BinaryColumn::assign(size_t n, size_t idx) {

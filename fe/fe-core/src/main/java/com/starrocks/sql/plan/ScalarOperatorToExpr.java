@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
@@ -47,6 +47,8 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.thrift.TExprOpcode;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -55,6 +57,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class ScalarOperatorToExpr {
+    private static final Logger LOG = LogManager.getLogger(ScalarOperatorToExpr.class);
     public static Expr buildExecExpression(ScalarOperator expression, FormatterContext descTbl) {
         return expression.accept(new Formatter(), descTbl);
     }

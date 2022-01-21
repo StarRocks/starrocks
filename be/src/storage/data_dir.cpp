@@ -328,8 +328,8 @@ Status DataDir::_add_version_info_to_cluster_id(const std::string& path) {
 void DataDir::health_check() {
     // check disk
     if (_is_used) {
-        OLAPStatus res = OLAP_SUCCESS;
-        if ((res = _read_and_write_test_file()) != OLAP_SUCCESS) {
+        Status res = _read_and_write_test_file();
+        if (!res.ok()) {
             LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path;
             if (is_io_error(res)) {
                 _is_used = false;
@@ -338,12 +338,12 @@ void DataDir::health_check() {
     }
 }
 
-OLAPStatus DataDir::_read_and_write_test_file() {
+Status DataDir::_read_and_write_test_file() {
     std::string test_file = _path + kTestFilePath;
     return read_write_test_file(test_file);
 }
 
-OLAPStatus DataDir::get_shard(uint64_t* shard) {
+Status DataDir::get_shard(uint64_t* shard) {
     std::stringstream shard_path_stream;
     uint32_t next_shard = 0;
     {
@@ -354,12 +354,11 @@ OLAPStatus DataDir::get_shard(uint64_t* shard) {
     shard_path_stream << _path << DATA_PREFIX << "/" << next_shard;
     std::string shard_path = shard_path_stream.str();
     if (!FileUtils::check_exist(shard_path)) {
-        RETURN_CODE_IF_ERROR_WITH_WARN(FileUtils::create_dir(shard_path), OLAP_ERR_CANNOT_CREATE_DIR,
-                                       "fail to create path. path=" + shard_path);
+        RETURN_IF_ERROR(FileUtils::create_dir(shard_path));
     }
 
     *shard = next_shard;
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 void DataDir::register_tablet(Tablet* tablet) {
@@ -419,7 +418,7 @@ std::string DataDir::get_root_path_from_schema_hash_path_in_trash(const std::str
 }
 
 // TODO(ygl): deal with rowsets and tablets when load failed
-OLAPStatus DataDir::load() {
+Status DataDir::load() {
     LOG(INFO) << "start to load tablets from " << _path;
     // load rowset meta from meta env and create rowset
     // COMMITTED: add to txn manager
@@ -510,12 +509,9 @@ OLAPStatus DataDir::load() {
             continue;
         }
         RowsetSharedPtr rowset;
-        OLAPStatus create_status =
-                RowsetFactory::create_rowset(&tablet->tablet_schema(), tablet->schema_hash_path(), rowset_meta, &rowset)
-                                .ok()
-                        ? OLAP_SUCCESS
-                        : OLAP_ERR_OTHER_ERROR;
-        if (create_status != OLAP_SUCCESS) {
+        Status create_status = RowsetFactory::create_rowset(&tablet->tablet_schema(), tablet->schema_hash_path(),
+                                                            rowset_meta, &rowset);
+        if (!create_status.ok()) {
             LOG(WARNING) << "Fail to create rowset from rowsetmeta,"
                          << " rowset=" << rowset_meta->rowset_id() << " type=" << rowset_meta->rowset_type()
                          << " state=" << rowset_meta->rowset_state();
@@ -523,10 +519,10 @@ OLAPStatus DataDir::load() {
         }
         if (rowset_meta->rowset_state() == RowsetStatePB::COMMITTED &&
             rowset_meta->tablet_uid() == tablet->tablet_uid()) {
-            OLAPStatus commit_txn_status = _txn_manager->commit_txn(
+            Status commit_txn_status = _txn_manager->commit_txn(
                     _kv_store, rowset_meta->partition_id(), rowset_meta->txn_id(), rowset_meta->tablet_id(),
                     rowset_meta->tablet_schema_hash(), rowset_meta->tablet_uid(), rowset_meta->load_id(), rowset, true);
-            if (commit_txn_status != OLAP_SUCCESS && commit_txn_status != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
+            if (!commit_txn_status.ok() && !commit_txn_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add committed rowset=" << rowset_meta->rowset_id()
                              << " tablet=" << rowset_meta->tablet_id() << " txn=" << rowset_meta->txn_id();
             } else {
@@ -536,11 +532,8 @@ OLAPStatus DataDir::load() {
             }
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
-            Status st = tablet->add_rowset(rowset, false);
-            OLAPStatus publish_status =
-                    st.ok() ? OLAP_SUCCESS
-                            : st.is_already_exist() ? OLAP_ERR_PUSH_VERSION_ALREADY_EXIST : OLAP_ERR_OTHER_ERROR;
-            if (publish_status != OLAP_SUCCESS && publish_status != OLAP_ERR_PUSH_VERSION_ALREADY_EXIST) {
+            Status publish_status = tablet->add_rowset(rowset, false);
+            if (!publish_status.ok() && !publish_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add visible rowset=" << rowset->rowset_id()
                              << " to tablet=" << rowset_meta->tablet_id() << " txn id=" << rowset_meta->txn_id()
                              << " start version=" << rowset_meta->version().first
@@ -553,7 +546,7 @@ OLAPStatus DataDir::load() {
                          << " current valid tablet uid=" << tablet->tablet_uid();
         }
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 // gc unused tablet schemahash dir

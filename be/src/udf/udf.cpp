@@ -30,9 +30,10 @@
 #include "runtime/decimalv2_value.h"
 #include "storage/hll.h"
 
-// Be careful what this includes since this needs to be linked into the UDF's
-// binary. For example, it would be unfortunate if they had a random dependency
-// on libhdfs.
+#ifdef STARROCKS_WITH_HDFS
+#include "exprs/agg/java_udaf_function.h"
+#endif
+
 #include "udf/udf_internal.h"
 #include "util/debug_util.h"
 
@@ -92,6 +93,8 @@ FunctionContextImpl::FunctionContextImpl(starrocks_udf::FunctionContext* parent)
           _fragment_local_fn_state(nullptr),
           _external_bytes_tracked(0),
           _closed(false) {}
+
+FunctionContextImpl::~FunctionContextImpl() = default;
 
 void FunctionContextImpl::close() {
     if (_closed) {
@@ -170,6 +173,9 @@ starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
     ctx->_impl->_varargs_buffer = reinterpret_cast<uint8_t*>(malloc(varargs_buffer_size));
     ctx->_impl->_varargs_buffer_size = varargs_buffer_size;
     ctx->_impl->_debug = debug;
+#ifdef STARROCKS_WITH_HDFS
+    ctx->_impl->_jvm_udaf_ctxs = std::make_unique<vectorized::JavaUDAFContext>();
+#endif
     VLOG_ROW << "Created FunctionContext: " << ctx << " with pool " << ctx->_impl->_pool;
     return ctx;
 }

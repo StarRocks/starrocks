@@ -1,10 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
 #include <utility>
 
-#include "exec/pipeline/analysis/analytor_factory.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/vectorized/analytor.h"
 

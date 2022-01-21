@@ -27,6 +27,7 @@
 #include "runtime/string_value.hpp"
 #include "storage/utils.h"
 #include "util/types.h"
+#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -168,11 +169,11 @@ void RawValue::print_value(const void* value, const TypeDescriptor& type, int sc
         break;
 
     case TYPE_DECIMALV2:
-        *stream << reinterpret_cast<const PackedInt128*>(value)->value;
+        *stream << unaligned_load<int128_t>(value);
         break;
 
     case TYPE_LARGEINT:
-        *stream << reinterpret_cast<const PackedInt128*>(value)->value;
+        *stream << unaligned_load<int128_t>(value);
         break;
 
     default:
@@ -261,7 +262,8 @@ void RawValue::write(const void* value, void* dst, const TypeDescriptor& type, M
     }
 
     case TYPE_LARGEINT: {
-        *reinterpret_cast<PackedInt128*>(dst) = *reinterpret_cast<const PackedInt128*>(value);
+        int128_t tmp = unaligned_load<int128_t>(value);
+        unaligned_store<int128_t>(dst, tmp);
         break;
     }
 
@@ -285,9 +287,11 @@ void RawValue::write(const void* value, void* dst, const TypeDescriptor& type, M
         *reinterpret_cast<DecimalValue*>(dst) = *reinterpret_cast<const DecimalValue*>(value);
         break;
 
-    case TYPE_DECIMALV2:
-        *reinterpret_cast<PackedInt128*>(dst) = *reinterpret_cast<const PackedInt128*>(value);
+    case TYPE_DECIMALV2: {
+        int128_t tmp = unaligned_load<int128_t>(value);
+        unaligned_store<int128_t>(dst, tmp);
         break;
+    }
 
     case TYPE_OBJECT:
     case TYPE_HLL:
@@ -333,9 +337,13 @@ void RawValue::write(const void* value, const TypeDescriptor& type, void* dst, u
     case TYPE_BIGINT:
         *reinterpret_cast<int64_t*>(dst) = *reinterpret_cast<const int64_t*>(value);
         break;
-    case TYPE_LARGEINT:
-        *reinterpret_cast<PackedInt128*>(dst) = *reinterpret_cast<const PackedInt128*>(value);
+
+    case TYPE_LARGEINT: {
+        int128_t tmp = unaligned_load<int128_t>(value);
+        unaligned_store<int128_t>(dst, tmp);
         break;
+    }
+
     case TYPE_FLOAT:
         *reinterpret_cast<float*>(dst) = *reinterpret_cast<const float*>(value);
         break;
@@ -361,9 +369,11 @@ void RawValue::write(const void* value, const TypeDescriptor& type, void* dst, u
         *reinterpret_cast<DecimalValue*>(dst) = *reinterpret_cast<const DecimalValue*>(value);
         break;
 
-    case TYPE_DECIMALV2:
-        *reinterpret_cast<PackedInt128*>(dst) = *reinterpret_cast<const PackedInt128*>(value);
+    case TYPE_DECIMALV2: {
+        int128_t tmp = unaligned_load<int128_t>(value);
+        unaligned_store<int128_t>(dst, tmp);
         break;
+    }
 
     default:
         DCHECK(false) << "RawValue::write(): bad type: " << type.debug_string();

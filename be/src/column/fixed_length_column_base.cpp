@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <gutil/strings/fastmem.h>
 
@@ -40,6 +40,17 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
     for (size_t i = 0; i < size; ++i) {
         _data[orig_size + i] = src_data[index];
     }
+}
+
+template <typename T>
+Status FixedLengthColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
+    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    size_t replace_num = src.size();
+    for (uint32_t i = 0; i < replace_num; ++i) {
+        DCHECK_LT(indexes[i], _data.size());
+        _data[indexes[i]] = src_data[i];
+    }
+    return Status::OK();
 }
 
 template <typename T>

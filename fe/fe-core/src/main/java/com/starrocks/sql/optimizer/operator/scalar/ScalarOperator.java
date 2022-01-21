@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.catalog.Type;
@@ -104,9 +104,7 @@ public abstract class ScalarOperator implements Cloneable {
      * Return the columns that this scalar operator used.
      * For a + b, the used columns are a and b.
      */
-    public ColumnRefSet getUsedColumns() {
-        return new ColumnRefSet();
-    }
+    public abstract ColumnRefSet getUsedColumns();
 
     public String debugString() {
         return toString();

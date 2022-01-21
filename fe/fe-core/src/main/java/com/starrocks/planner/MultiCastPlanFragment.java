@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.planner;
 
@@ -29,7 +29,8 @@ public class MultiCastPlanFragment extends PlanFragment {
     }
 
     public MultiCastPlanFragment(PlanFragment planFragment) {
-        super(planFragment.fragmentId, planFragment.planRoot, DataPartition.RANDOM);
+        super(planFragment.fragmentId, planFragment.planRoot, planFragment.getDataPartition());
+        this.outputPartition = planFragment.getOutputPartition();
         this.children.addAll(planFragment.getChildren());
     }
 
