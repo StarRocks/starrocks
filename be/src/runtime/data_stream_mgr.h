@@ -81,7 +81,7 @@ public:
                                                   int num_senders, int buffer_size,
                                                   const std::shared_ptr<RuntimeProfile>& profile, bool is_merging,
                                                   std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
-                                                  bool is_pipeline, bool keep_order);
+                                                  bool is_pipeline, int32_t degree_of_parallelism, bool keep_order);
 
     Status transmit_data(const PTransmitDataParams* request, ::google::protobuf::Closure** done);
 
