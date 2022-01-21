@@ -1250,6 +1250,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                    Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
         OptExpression produce = optimizerContext.getCteContext().getCTEProduce(cteId);
         Statistics produceStatistics = produce.getGroupExpression().getGroup().getStatistics();
+        if (null == produceStatistics) {
+            produceStatistics = produce.getStatistics();
+        }
+
+        Preconditions.checkNotNull(produce.getStatistics());
 
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator ref : columnRefMap.keySet()) {

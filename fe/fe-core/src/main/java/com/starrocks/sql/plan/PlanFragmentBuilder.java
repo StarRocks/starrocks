@@ -1128,7 +1128,8 @@ public class PlanFragmentBuilder {
             boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
                     hasNoExchangeNodes(inputFragment.getPlanRoot());
             boolean pipelineDopEnabled = ConnectContext.get() != null &&
-                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled();
+                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
+                    inputFragment.getPlanRoot().canUsePipeLine();
             if (pipelineDopEnabled && notNeedLocalShuffle) {
                 inputFragment.setNeedsLocalShuffle(false);
             }
@@ -2101,6 +2102,23 @@ public class PlanFragmentBuilder {
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
             consume.getCteOutputColumnRefMap().forEach(projectMap::put);
             buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
+
+            // add filter node
+            if (consume.getPredicate() != null) {
+                List<Expr> predicates = Utils.extractConjuncts(consume.getPredicate()).stream()
+                        .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        .collect(Collectors.toList());
+                SelectNode selectNode =
+                        new SelectNode(context.getPlanCtx().getNextNodeId(), consumeFragment.getPlanRoot(), predicates);
+                selectNode.computeStatistics(optExpression.getStatistics());
+                consumeFragment.setPlanRoot(selectNode);
+            }
+
+            // set limit
+            if (consume.hasLimit()) {
+                consumeFragment.getPlanRoot().setLimit(consume.getLimit());
+            }
 
             cteFragment.getDestNodeList().add(exchangeNode);
             consumeFragment.addChild(cteFragment);
