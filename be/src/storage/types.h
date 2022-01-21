@@ -590,6 +590,10 @@ struct CppColumnTraits<OLAP_FIELD_TYPE_PERCENTILE> {
     using ColumnType = vectorized::PercentileColumn;
 };
 
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_OBJECT> {
+    using ColumnType = vectorized::BitmapColumn;
+};
 
 template <FieldType field_type>
 struct BaseFieldtypeTraits : public CppTypeTraits<field_type> {
