@@ -470,33 +470,16 @@ private:
     }
 };
 
-#define CASE_FOR_NULLABLE_COLUMN_SORT(PrimitiveTypeName, ColumnPtr, Permutation)                                    \
-    case PrimitiveTypeName: {                                                                                       \
-        SortHelper::sort_on_nullable_column<RunTimeTypeTraits<PrimitiveTypeName>::ColumnType,                       \
-                                            RunTimeTypeTraits<PrimitiveTypeName>::CppType>(ColumnPtr, Permutation); \
-        break;                                                                                                      \
-    }
-
-#define CASE_FOR_NOT_NULL_COLUMN_SORT(PrimitiveTypeName, ColumnPtr, Permutation)                                    \
-    case PrimitiveTypeName: {                                                                                       \
-        SortHelper::sort_on_not_null_column<RunTimeTypeTraits<PrimitiveTypeName>::ColumnType,                       \
-                                            RunTimeTypeTraits<PrimitiveTypeName>::CppType>(ColumnPtr, Permutation); \
-        break;                                                                                                      \
-    }
-
 void MemTable::_sort_chunk_by_columns() {
     for (int i = _tablet_schema->num_key_columns() - 1; i >= 0; --i) {
         Column* column = _chunk->get_column_by_index(i).get();
+        PrimitiveType slot_type = (*_slot_descs)[i]->type().type;
         if (column->is_nullable()) {
-            switch ((*_slot_descs)[i]->type().type) {
-                
-#define M(ptype)                                        \
-    case ptype: {                                       \
-        SortHelper::sort_on_not_null_column<            \
-        RunTimeTypeTraits<ptype>::ColumnType,           \
-        RunTimeTypeTraits<ptype>::CppType>(             \
-                column, &_permutations);                \
-        break;                                          \
+            switch (slot_type) {
+#define M(ptype)                                                                                                      \
+    case ptype: {                                                                                                     \
+        SortHelper::sort_on_nullable_column<RunTimeColumnType<ptype>, RunTimeCppType<ptype>>(column, &_permutations); \
+        break;                                                                                                        \
     }
                 APPLY_FOR_SORTABLE_TYPE(M)
 #undef M
@@ -507,11 +490,10 @@ void MemTable::_sort_chunk_by_columns() {
             }
             }
         } else {
-            switch ((*_slot_descs)[i]->type().type) {
+            switch (slot_type) {
 #define M(ptype)                                                                                                      \
     case ptype: {                                                                                                     \
-        SortHelper::sort_on_nullable_column<RunTimeTypeTraits<ptype>::ColumnType, RunTimeTypeTraits<ptype>::CppType>( \
-                column, &_permutations);                                                                              \
+        SortHelper::sort_on_not_null_column<RunTimeColumnType<ptype>, RunTimeCppType<ptype>>(column, &_permutations); \
         break;                                                                                                        \
     }
                 APPLY_FOR_SORTABLE_TYPE(M)
