@@ -670,7 +670,7 @@ CONF_Int64(max_segment_file_size, "1073741824");
 CONF_Bool(use_hdfs_pread, "true");
 
 // rewrite partial semgent or not
-// if true, partial segment will be rewrite into new segment file firset and append other column data
+// if true, partial segment will be rewrite into new segment file first and append other column data
 // if false, the data of other column will be append into partial segment file and rebuild segment footer
 // we may need the both implementations for perf test for now, so use it to decide which implementations to use
 // default: true
