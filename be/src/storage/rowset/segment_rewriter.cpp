@@ -23,7 +23,7 @@ SegmentRewriter::~SegmentRewriter() {}
 Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
                                 std::vector<uint32_t>& column_ids,
                                 std::vector<std::unique_ptr<vectorized::Column>>& columns, size_t segment_id,
-                                FooterPointerPB& partial_rowset_footer) {
+                                const FooterPointerPB& partial_rowset_footer) {
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
     std::unique_ptr<fs::WritableBlock> wblock;
     fs::CreateBlockOptions wblock_opts({dest_path});
@@ -73,7 +73,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema& tschema,
                                 std::vector<uint32_t>& column_ids,
                                 std::vector<std::unique_ptr<vectorized::Column>>& columns, size_t segment_id,
-                                FooterPointerPB& partial_rowset_footer) {
+                                const FooterPointerPB& partial_rowset_footer) {
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
     std::unique_ptr<fs::ReadableBlock> rblock;
     RETURN_IF_ERROR(block_mgr->open_block(src_path, &rblock));

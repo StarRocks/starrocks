@@ -132,7 +132,6 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
                     strings::Substitute("Bad segment file $0: failed to parse footer", rblock->path()));
         }
     } else { // Need read file again.
-        DCHECK(partial_rowset_footer == nullptr);
         g_open_segments << 1;
         g_open_segments_io << 2;
 
