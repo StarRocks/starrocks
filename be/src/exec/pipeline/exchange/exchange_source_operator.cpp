@@ -44,7 +44,7 @@ std::shared_ptr<DataStreamRecvr> ExchangeSourceOperatorFactory::create_stream_re
     }
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
-            config::exchg_node_buffer_size_bytes, profile, false, nullptr, true, false);
+            config::exchg_node_buffer_size_bytes, profile, false, nullptr, true, _degree_of_parallelism, false);
     return _stream_recvr;
 }
 
