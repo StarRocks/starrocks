@@ -24,6 +24,8 @@
 
 #include <re2/re2.h>
 
+#include <string_view>
+
 #include "cctz/time_zone.h"
 #include "util/timezone_hsscan.h"
 
@@ -31,9 +33,11 @@ namespace starrocks {
 
 class TimezoneUtils {
 public:
-    static bool find_cctz_time_zone(const std::string& timezone, cctz::time_zone& ctz);
-    static bool find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, const std::string& timezone,
+    static bool find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, const std::string_view& timezone,
                                     cctz::time_zone& ctz);
+    static void init_time_zones();
+    static bool find_cctz_time_zone(const std::string_view& timezone, cctz::time_zone& ctz);
+    static bool timezone_offsets(const std::string_view& src, const std::string_view& dst, int64_t* offset);
     static int64_t to_utc_offset(const cctz::time_zone& ctz); // timezone offset in seconds.
 
 public:
