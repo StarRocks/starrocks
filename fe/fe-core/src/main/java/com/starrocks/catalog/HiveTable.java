@@ -419,8 +419,7 @@ public class HiveTable extends Table {
         }
 
         // for type with length, like char(10), we only check the type and ignore the length
-        hiveType = Utils.getTypeKeyword(hiveType);
-        String typeUpperCase = hiveType.toUpperCase();
+        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
         switch (typeUpperCase) {
             case "TINYINT":
                 return type.getPrimitiveType() == PrimitiveType.TINYINT;

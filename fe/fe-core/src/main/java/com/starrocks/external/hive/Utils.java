@@ -117,9 +117,9 @@ public class Utils {
     public static String getTypeKeyword(String type) {
         String keyword = type;
         int parenthesesIndex;
-        if ((parenthesesIndex = keyword.indexOf('(')) >= 0) {
+        if ((parenthesesIndex = keyword.indexOf('<')) >= 0) {
             keyword = keyword.substring(0, parenthesesIndex).trim();
-        } else if ((parenthesesIndex = keyword.indexOf('<')) >= 0) {
+        } else if ((parenthesesIndex = keyword.indexOf('(')) >= 0) {
             keyword = keyword.substring(0, parenthesesIndex).trim();
         }
         return keyword;
