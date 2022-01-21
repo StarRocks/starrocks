@@ -66,7 +66,7 @@ public:
                 nested_function->merge(ctx, data_column, this->data(state).mutable_nest_state(), row_num);
             } else if constexpr (!IgnoreNull) {
                 this->data(state).is_null = false;
-                nested_function->merge_null(ctx, this->data(state).mutable_nest_state());
+                nested_function->process_null(ctx, this->data(state).mutable_nest_state());
             }
         } else {
             this->data(state).is_null = false;
@@ -247,7 +247,7 @@ public:
                     if constexpr (!IgnoreNull) {
                         for (size_t i = offset; i < offset + batch_nums; i++) {
                             this->data(states[i] + state_offset).is_null = false;
-                            this->nested_function->update_null(
+                            this->nested_function->process_null(
                                     ctx, this->data(states[i] + state_offset).mutable_nest_state());
                         }
                     }
@@ -259,7 +259,7 @@ public:
                                                           this->data(states[i] + state_offset).mutable_nest_state(), i);
                         } else if constexpr (!IgnoreNull) {
                             this->data(states[i] + state_offset).is_null = false;
-                            this->nested_function->update_null(
+                            this->nested_function->process_null(
                                     ctx, this->data(states[i] + state_offset).mutable_nest_state());
                         }
                     }
@@ -274,7 +274,7 @@ public:
                                                   this->data(states[i] + state_offset).mutable_nest_state(), i);
                 } else if constexpr (!IgnoreNull) {
                     this->data(states[i] + state_offset).is_null = false;
-                    this->nested_function->update_null(ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                    this->nested_function->process_null(ctx, this->data(states[i] + state_offset).mutable_nest_state());
                 }
             }
         } else {
@@ -319,7 +319,7 @@ public:
                     if constexpr (!IgnoreNull) {
                         for (size_t i = offset; i < offset + batch_nums; i++) {
                             this->data(states[i] + state_offset).is_null = false;
-                            this->nested_function->update_null(
+                            this->nested_function->process_null(
                                     ctx, this->data(states[i] + state_offset).mutable_nest_state());
                         }
                     }
@@ -333,7 +333,7 @@ public:
                                             ctx, &data_column,
                                             this->data(states[i] + state_offset).mutable_nest_state(), i);
                                 } else {
-                                    this->nested_function->update_null(
+                                    this->nested_function->process_null(
                                             ctx, this->data(states[i] + state_offset).mutable_nest_state());
                                 }
                             }
@@ -359,7 +359,7 @@ public:
                             this->nested_function->update(ctx, &data_column,
                                                           this->data(states[i] + state_offset).mutable_nest_state(), i);
                         } else {
-                            this->nested_function->update_null(
+                            this->nested_function->process_null(
                                     ctx, this->data(states[i] + state_offset).mutable_nest_state());
                         }
                     }
@@ -418,7 +418,7 @@ public:
                     if constexpr (!IgnoreNull) {
                         this->data(state).is_null = false;
                         for (size_t i = offset; i < offset + batch_nums; i++) {
-                            this->nested_function->update_null(ctx, this->data(state).mutable_nest_state());
+                            this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
                         }
                     }
                 } else {
@@ -429,7 +429,7 @@ public:
                         } else {
                             if constexpr (!IgnoreNull) {
                                 this->data(state).is_null = false;
-                                this->nested_function->update_null(ctx, this->data(state).mutable_nest_state());
+                                this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
                             }
                         }
                     }
@@ -444,7 +444,7 @@ public:
                     this->data(state).is_null = false;
                 } else if constexpr (!IgnoreNull) {
                     this->data(state).is_null = false;
-                    this->nested_function->update_null(ctx, this->data(state).mutable_nest_state());
+                    this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
                 }
             }
         } else {

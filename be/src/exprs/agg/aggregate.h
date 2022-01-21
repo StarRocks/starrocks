@@ -39,8 +39,8 @@ public:
     virtual void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                         size_t row_num) const = 0;
 
-    // Update the aggregation state with null
-    virtual void update_null(FunctionContext* ctx, AggDataPtr __restrict state) const {}
+    // Update/Merge the aggregation state with null
+    virtual void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const {}
 
     // Merge the aggregation state
     // columns points to columns containing merge input,
@@ -48,9 +48,6 @@ public:
     // row_num is number of row which should be merged.
     virtual void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
                        size_t row_num) const = 0;
-
-    // Merge the aggregation state with null
-    virtual void merge_null(FunctionContext* ctx, AggDataPtr __restrict state) const {}
 
     // When transmit data over network, we need to serialize agg data.
     // We serialize the agg data to |to| column
