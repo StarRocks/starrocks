@@ -381,13 +381,10 @@ public class HiveTable extends Table {
             if (hiveColumn == null) {
                 throw new DdlException("column [" + column.getName() + "] not exists in hive");
             }
-            /*
-            Set<PrimitiveType> validColumnTypes = getValidColumnType(hiveColumn.getType());
-            if (!validColumnTypes.contains(column.getPrimitiveType())) {
+            if (!validateColumnType(hiveColumn.getType(), column.getType())) {
                 throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "]");
             }
-             */
             if (!column.isAllowNull() && !isTypeRead) {
                 throw new DdlException(
                         "hive extern table not support no-nullable column: [" + hiveColumn.getName() + "]");
@@ -416,9 +413,9 @@ public class HiveTable extends Table {
         }
     }
 
-    private Set<PrimitiveType> getValidColumnType(String hiveType) {
+    private boolean validateColumnType(String hiveType, Type type) {
         if (hiveType == null) {
-            return Sets.newHashSet();
+            return false;
         }
 
         // for type with length, like char(10), we only check the type and ignore the length
@@ -426,37 +423,45 @@ public class HiveTable extends Table {
         String typeUpperCase = hiveType.toUpperCase();
         switch (typeUpperCase) {
             case "TINYINT":
-                return Sets.newHashSet(PrimitiveType.TINYINT);
+                return type.getPrimitiveType() == PrimitiveType.TINYINT;
             case "SMALLINT":
-                return Sets.newHashSet(PrimitiveType.SMALLINT);
+                return type.getPrimitiveType() == PrimitiveType.SMALLINT;
             case "INT":
             case "INTEGER":
-                return Sets.newHashSet(PrimitiveType.INT);
+                return type.getPrimitiveType() == PrimitiveType.INT;
             case "BIGINT":
-                return Sets.newHashSet(PrimitiveType.BIGINT);
+                return type.getPrimitiveType() == PrimitiveType.BIGINT;
             case "FLOAT":
-                return Sets.newHashSet(PrimitiveType.FLOAT);
+                return type.getPrimitiveType() == PrimitiveType.FLOAT;
             case "DOUBLE":
             case "DOUBLE PRECISION":
-                return Sets.newHashSet(PrimitiveType.DOUBLE);
+                return type.getPrimitiveType() == PrimitiveType.DOUBLE;
             case "DECIMAL":
             case "NUMERIC":
-                return Sets.newHashSet(PrimitiveType.DECIMALV2, PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64,
-                        PrimitiveType.DECIMAL128);
+                return type.getPrimitiveType() == PrimitiveType.DECIMALV2 || type.getPrimitiveType() ==
+                        PrimitiveType.DECIMAL32 || type.getPrimitiveType() == PrimitiveType.DECIMAL64 ||
+                        type.getPrimitiveType() == PrimitiveType.DECIMAL128;
             case "TIMESTAMP":
-                return Sets.newHashSet(PrimitiveType.DATETIME);
+                return type.getPrimitiveType() == PrimitiveType.DATETIME;
             case "DATE":
-                return Sets.newHashSet(PrimitiveType.DATE);
+                return type.getPrimitiveType() == PrimitiveType.DATE;
             case "STRING":
             case "VARCHAR":
             case "BINARY":
-                return Sets.newHashSet(PrimitiveType.VARCHAR);
+                return type.getPrimitiveType() == PrimitiveType.VARCHAR;
             case "CHAR":
-                return Sets.newHashSet(PrimitiveType.CHAR, PrimitiveType.VARCHAR);
+                return type.getPrimitiveType() == PrimitiveType.CHAR ||
+                        type.getPrimitiveType() == PrimitiveType.VARCHAR;
             case "BOOLEAN":
-                return Sets.newHashSet(PrimitiveType.BOOLEAN);
+                return type.getPrimitiveType() == PrimitiveType.BOOLEAN;
+            case "ARRAY":
+                if (!type.isArrayType()) {
+                    return false;
+                }
+                return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
+                        ((ArrayType) type).getItemType());
             default:
-                return Sets.newHashSet();
+                return false;
         }
     }
 
