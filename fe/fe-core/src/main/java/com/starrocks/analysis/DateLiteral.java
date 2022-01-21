@@ -35,7 +35,6 @@ import com.starrocks.thrift.TExprNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.joda.time.DateTime;
-import org.joda.time.DateTimeFieldType;
 import org.joda.time.DateTimeZone;
 import org.joda.time.LocalDateTime;
 import org.joda.time.format.DateTimeFormatter;
@@ -61,7 +60,6 @@ public class DateLiteral extends LiteralExpr {
     public static final DateLiteral UNIX_EPOCH_TIME = new DateLiteral(1970, 01, 01, 00, 00, 00);
 
     private static DateTimeFormatter DATE_TIME_FORMATTER = null;
-    private static java.time.format.DateTimeFormatter DATE_TIME_FORMATTER_MS = null;
     private static DateTimeFormatter DATE_FORMATTER = null;
     private static DateTimeFormatter DATE_NO_SPLIT_FORMATTER = null;
     /*
@@ -76,7 +74,6 @@ public class DateLiteral extends LiteralExpr {
     static {
         try {
             DATE_TIME_FORMATTER = formatBuilder("%Y-%m-%d %H:%i:%s").toFormatter();
-            DATE_TIME_FORMATTER_MS = ScalarOperatorFunctions.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
             DATE_FORMATTER = formatBuilder("%Y-%m-%d").toFormatter();
             DATE_TIME_FORMATTER_TWO_DIGIT = formatBuilder("%y-%m-%d %H:%i:%s").toFormatter();
             DATE_FORMATTER_TWO_DIGIT = formatBuilder("%y-%m-%d").toFormatter();
