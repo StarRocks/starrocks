@@ -65,11 +65,6 @@ public class TPCHPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void test() throws Exception {
-        System.out.println(getFragmentPlan("select t1d from test_all_type where id_datetime = cast(cast('2020-01-1' as date) as datetime)"));
-    }
-
-    @Test
     public void testSetOperation() {
         runFileUnitTest("optimized-plan/set-operation");
     }
