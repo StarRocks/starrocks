@@ -15,6 +15,7 @@
 #include "column/object_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "storage/olap_type_infra.h"
 #include "storage/schema.h"
 
 namespace starrocks {
@@ -102,70 +103,6 @@ inline std::shared_ptr<Chunk> ChunkHelper::new_chunk(const std::vector<SlotDescr
         chunk->append_column(column, slot->id());
     }
     return chunk;
-}
-
-inline ColumnPtr ChunkHelper::column_from_field_type(FieldType type, bool nullable) {
-    auto NullableIfNeed = [&](ColumnPtr col) -> ColumnPtr {
-        return nullable ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
-    };
-
-    switch (type) {
-    case OLAP_FIELD_TYPE_DECIMAL:
-        return NullableIfNeed(FixedLengthColumn<decimal12_t>::create());
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
-        return NullableIfNeed(DecimalColumn::create());
-    case OLAP_FIELD_TYPE_HLL:
-        return NullableIfNeed(HyperLogLogColumn::create());
-    case OLAP_FIELD_TYPE_OBJECT:
-        return NullableIfNeed(BitmapColumn::create());
-    case OLAP_FIELD_TYPE_PERCENTILE:
-        return NullableIfNeed(PercentileColumn::create());
-    case OLAP_FIELD_TYPE_CHAR:
-    case OLAP_FIELD_TYPE_VARCHAR:
-        return NullableIfNeed(BinaryColumn::create());
-    case OLAP_FIELD_TYPE_BOOL:
-        return NullableIfNeed(FixedLengthColumn<uint8_t>::create());
-    case OLAP_FIELD_TYPE_TINYINT:
-        return NullableIfNeed(FixedLengthColumn<int8_t>::create());
-    case OLAP_FIELD_TYPE_SMALLINT:
-        return NullableIfNeed(FixedLengthColumn<int16_t>::create());
-    case OLAP_FIELD_TYPE_INT:
-        return NullableIfNeed(FixedLengthColumn<int32_t>::create());
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
-        return NullableIfNeed(FixedLengthColumn<uint32_t>::create());
-    case OLAP_FIELD_TYPE_BIGINT:
-        return NullableIfNeed(FixedLengthColumn<int64_t>::create());
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-        return NullableIfNeed(FixedLengthColumn<uint64_t>::create());
-    case OLAP_FIELD_TYPE_LARGEINT:
-        return NullableIfNeed(FixedLengthColumn<int128_t>::create());
-    case OLAP_FIELD_TYPE_FLOAT:
-        return NullableIfNeed(FixedLengthColumn<float>::create());
-    case OLAP_FIELD_TYPE_DOUBLE:
-        return NullableIfNeed(FixedLengthColumn<double>::create());
-    case OLAP_FIELD_TYPE_DATE:
-        return NullableIfNeed(FixedLengthColumn<uint24_t>::create());
-    case OLAP_FIELD_TYPE_DATE_V2:
-        return NullableIfNeed(DateColumn::create());
-    case OLAP_FIELD_TYPE_DATETIME:
-        return NullableIfNeed(FixedLengthColumn<int64_t>::create());
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-        return NullableIfNeed(TimestampColumn::create());
-    case OLAP_FIELD_TYPE_DECIMAL32:
-    case OLAP_FIELD_TYPE_DECIMAL64:
-    case OLAP_FIELD_TYPE_DECIMAL128:
-    case OLAP_FIELD_TYPE_ARRAY:
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-    case OLAP_FIELD_TYPE_STRUCT:
-    case OLAP_FIELD_TYPE_MAP:
-    case OLAP_FIELD_TYPE_UNKNOWN:
-    case OLAP_FIELD_TYPE_NONE:
-    case OLAP_FIELD_TYPE_MAX_VALUE:
-        break;
-    }
-    return nullptr;
 }
 
 inline ColumnPtr ChunkHelper::column_from_field(const Field& field) {
