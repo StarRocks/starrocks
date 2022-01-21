@@ -15,13 +15,13 @@ namespace starrocks {
     M(TYPE_LARGEINT)                 \
     M(TYPE_FLOAT)                    \
     M(TYPE_DOUBLE)                   \
-    M(TYPE_DECIMALV2)                \
     M(TYPE_DECIMAL32)                \
     M(TYPE_DECIMAL64)                \
     M(TYPE_DECIMAL128)
 
 #define APPLY_FOR_ALL_PRIMITIVE_TYPE(M) \
     APPLY_FOR_ALL_NUMBER_TYPE(M)        \
+    M(TYPE_DECIMALV2)                   \
     M(TYPE_VARCHAR)                     \
     M(TYPE_CHAR)                        \
     M(TYPE_DATE)                        \
