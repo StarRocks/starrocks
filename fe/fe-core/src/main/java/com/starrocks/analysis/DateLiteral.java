@@ -28,6 +28,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.thrift.TDateLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -46,7 +47,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.TimeZone;
 import java.util.regex.Pattern;
@@ -61,6 +61,7 @@ public class DateLiteral extends LiteralExpr {
     public static final DateLiteral UNIX_EPOCH_TIME = new DateLiteral(1970, 01, 01, 00, 00, 00);
 
     private static DateTimeFormatter DATE_TIME_FORMATTER = null;
+    private static java.time.format.DateTimeFormatter DATE_TIME_FORMATTER_MS = null;
     private static DateTimeFormatter DATE_FORMATTER = null;
     private static DateTimeFormatter DATE_NO_SPLIT_FORMATTER = null;
     /*
@@ -75,6 +76,7 @@ public class DateLiteral extends LiteralExpr {
     static {
         try {
             DATE_TIME_FORMATTER = formatBuilder("%Y-%m-%d %H:%i:%s").toFormatter();
+            DATE_TIME_FORMATTER_MS = ScalarOperatorFunctions.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
             DATE_FORMATTER = formatBuilder("%Y-%m-%d").toFormatter();
             DATE_TIME_FORMATTER_TWO_DIGIT = formatBuilder("%y-%m-%d %H:%i:%s").toFormatter();
             DATE_FORMATTER_TWO_DIGIT = formatBuilder("%y-%m-%d").toFormatter();
@@ -559,6 +561,7 @@ public class DateLiteral extends LiteralExpr {
                         builder.appendDayOfWeek(0);
                         break;
                     case 'f': // %f Microseconds (000000..999999)
+                        builder.appendMillisOfSecond(6);
                     case 'U': // %U Week (00..53), where Sunday is the first day of the week
                     case 'u': // %u Week (00..53), where Monday is the first day of the week
                     case 'V': // %V Week (01..53), where Sunday is the first day of the week; used with %X
