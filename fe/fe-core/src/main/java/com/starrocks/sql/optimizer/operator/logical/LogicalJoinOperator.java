@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.operator.logical;
 
@@ -8,6 +8,7 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -24,7 +25,7 @@ public class LogicalJoinOperator extends LogicalOperator {
     private boolean hasPushDownJoinOnClause = false;
 
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate) {
-        this(joinType, onPredicate, "", -1, null, false);
+        this(joinType, onPredicate, "", Operator.DEFAULT_LIMIT, null, false);
     }
 
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, String joinHint,

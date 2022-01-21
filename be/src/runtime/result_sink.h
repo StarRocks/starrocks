@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_RESULT_SINK_H
-#define STARROCKS_BE_RUNTIME_RESULT_SINK_H
+#pragma once
 
 #include "common/status.h"
 #include "exec/data_sink.h"
@@ -31,7 +30,6 @@
 namespace starrocks {
 
 class ObjectPool;
-class RowBatch;
 class ObjectPool;
 class RuntimeState;
 class RuntimeProfile;
@@ -84,4 +82,3 @@ private:
 };
 
 } // namespace starrocks
-#endif

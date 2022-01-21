@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.join;
 
@@ -216,7 +216,7 @@ public abstract class JoinOrder {
 
         ExpressionContext expressionContext = new ExpressionContext(expr);
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                expressionContext, context.getColumnRefFactory(), context.getDumpInfo());
+                expressionContext, context.getColumnRefFactory(), context);
         statisticsCalculator.estimatorStats();
         expr.setStatistics(expressionContext.getStatistics());
     }
@@ -256,53 +256,28 @@ public abstract class JoinOrder {
             // If entry.getValue is Constant, then this ColumnRef does not belong to any child.
             // Then you can add this constant mapping on any child
             if (predicates.first != null && predicates.first.getUsedColumns().contains(entry.getKey())) {
-                if (leftExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                if (leftExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
                         || entry.getValue() instanceof ConstantOperator) {
                     leftExpression.put(entry.getKey(), entry.getValue());
-                } else if (rightExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                } else if (rightExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
                         || entry.getValue() instanceof ConstantOperator) {
                     rightExpression.put(entry.getKey(), entry.getValue());
                 }
             }
 
             if (predicates.second != null && predicates.second.getUsedColumns().contains(entry.getKey())) {
-                if (leftExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                if (leftExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
                         || entry.getValue() instanceof ConstantOperator) {
                     leftExpression.put(entry.getKey(), entry.getValue());
-                } else if (rightExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                } else if (rightExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
                         || entry.getValue() instanceof ConstantOperator) {
                     rightExpression.put(entry.getKey(), entry.getValue());
                 }
             }
         }
 
-        if (!leftExpression.isEmpty()) {
-            Map<ColumnRefOperator, ScalarOperator> projection = leftExprInfo.expr.getOutputColumns()
-                    .getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
-                    .collect(Collectors.toMap(Function.identity(), Function.identity()));
-            projection.putAll(leftExpression);
-            Operator.Builder builder = OperatorBuilderFactory.build(leftExprInfo.expr.getOp());
-            leftExprInfo.expr = OptExpression.create(
-                    builder.withOperator(leftExprInfo.expr.getOp()).setProjection(new Projection(projection)).build(),
-                    leftExprInfo.expr.getInputs()
-
-            );
-            leftExprInfo.expr.deriveLogicalPropertyItself();
-        }
-
-        if (!rightExpression.isEmpty()) {
-            Map<ColumnRefOperator, ScalarOperator> projection = rightExprInfo.expr.getOutputColumns()
-                    .getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
-                    .collect(Collectors.toMap(Function.identity(), Function.identity()));
-            projection.putAll(rightExpression);
-            Operator.Builder builder = OperatorBuilderFactory.build(rightExprInfo.expr.getOp());
-            rightExprInfo.expr = OptExpression.create(
-                    builder.withOperator(rightExprInfo.expr.getOp()).setProjection(new Projection(projection)).build(),
-                    rightExprInfo.expr.getInputs()
-
-            );
-            rightExprInfo.expr.deriveLogicalPropertyItself();
-        }
+        pushRequiredColumns(leftExprInfo, leftExpression);
+        pushRequiredColumns(rightExprInfo, rightExpression);
 
         // In StarRocks, we only support hash join.
         // So we always use small table as right child
@@ -315,6 +290,25 @@ public abstract class JoinOrder {
                     rightExprInfo.expr);
             return new ExpressionInfo(joinExpr, leftGroup, rightGroup);
         }
+    }
+
+    private void pushRequiredColumns(ExpressionInfo exprInfo, Map<ColumnRefOperator, ScalarOperator> expression) {
+        if (expression.isEmpty()) {
+            return;
+        }
+
+        Map<ColumnRefOperator, ScalarOperator> projection = exprInfo.expr.getOutputColumns()
+                .getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+                .collect(Collectors.toMap(Function.identity(), Function.identity()));
+        projection.putAll(expression);
+        if (exprInfo.expr.getOp().getProjection() != null) {
+            projection.putAll(exprInfo.expr.getOp().getProjection().getColumnRefMap());
+        }
+        Operator.Builder builder = OperatorBuilderFactory.build(exprInfo.expr.getOp());
+        exprInfo.expr = OptExpression.create(
+                builder.withOperator(exprInfo.expr.getOp()).setProjection(new Projection(projection)).build(),
+                exprInfo.expr.getInputs());
+        exprInfo.expr.deriveLogicalPropertyItself();
     }
 
     private Pair<ScalarOperator, ScalarOperator> buildInnerJoinPredicate(BitSet left, BitSet right) {

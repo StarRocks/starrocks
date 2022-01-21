@@ -19,12 +19,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_WRAPPER_FIELD_H
-#define STARROCKS_BE_SRC_OLAP_WRAPPER_FIELD_H
+#pragma once
 
 #include "storage/field.h"
 #include "storage/olap_define.h"
-#include "storage/row_cursor_cell.h"
 #include "storage/tablet_schema.h"
 #include "util/hash_util.hpp"
 
@@ -38,10 +36,6 @@ public:
 
     WrapperField(Field* rep, size_t variable_len, bool is_string_type);
 
-    // only used to wrapped content of row cursor cell to find element in wrapped field set
-    // do not delete rep, should call release_field before deconstructed
-    WrapperField(Field* rep, const RowCursorCell& row_cursor_cell);
-
     virtual ~WrapperField() {
         delete _rep;
         delete[] _owned_buf;
@@ -53,7 +47,7 @@ public:
 
     // Construct from a serialized string which is terminated by '\0'
     // do not include the null flag
-    OLAPStatus from_string(const std::string& value_string) {
+    Status from_string(const std::string& value_string) {
         if (_is_string_type) {
             if (value_string.size() > _var_length) {
                 Slice* slice = reinterpret_cast<Slice*>(cell_ptr());
@@ -113,5 +107,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

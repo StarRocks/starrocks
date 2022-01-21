@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
@@ -1513,6 +1513,12 @@ public class ViewPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void test311() throws Exception {
+        String sql = "SELECT v1 FROM t0 WHERE NOT ((v2 > 93 AND v1 < 27) OR v1 >= 22);";
+        testView(sql);
+    }
+
+    @Test
     public void testArray() throws Exception {
         String sql = "select split('1,2,3', ',') from t1;";
         testView(sql);
@@ -1595,14 +1601,14 @@ public class ViewPlanTest extends PlanTestBase {
         String viewPlan = getFragmentPlan("select * from " + viewName);
 
         Assert.assertTrue(sqlPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[2, 4], [4]]") || sqlPlan.contains("" +
+                "  |  repeat: repeat 1 lines [[3, 4], [4]]") || sqlPlan.contains("" +
                 "  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[4], [2, 4]]"));
+                "  |  repeat: repeat 1 lines [[4], [3, 4]]"));
 
         Assert.assertTrue(viewPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[2, 4], [4]]") || viewPlan.contains("" +
+                "  |  repeat: repeat 1 lines [[3, 4], [4]]") || viewPlan.contains("" +
                 "  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[4], [2, 4]]"));
+                "  |  repeat: repeat 1 lines [[4], [3, 4]]"));
 
         starRocksAssert.dropView(viewName);
     }
@@ -1619,13 +1625,13 @@ public class ViewPlanTest extends PlanTestBase {
         String viewPlan = getFragmentPlan("select * from " + viewName);
 
         Assert.assertTrue(sqlPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 3 lines [[], [2], [4], [2, 4]]\n") ||
+                "  |  repeat: repeat 3 lines [[], [3], [4], [3, 4]]\n") ||
                 sqlPlan.contains("  6:REPEAT_NODE\n" +
-                        "  |  repeat: repeat 3 lines [[], [4], [2], [2, 4]]\n"));
+                        "  |  repeat: repeat 3 lines [[], [4], [3], [3, 4]]"));
         Assert.assertTrue(viewPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 3 lines [[], [2], [4], [2, 4]]\n") ||
+                "  |  repeat: repeat 3 lines [[], [3], [4], [3, 4]]\n") ||
                 viewPlan.contains("  6:REPEAT_NODE\n" +
-                        "  |  repeat: repeat 3 lines [[], [4], [2], [2, 4]]\n"));
+                        "  |  repeat: repeat 3 lines [[], [4], [3], [3, 4]]\n"));
         starRocksAssert.dropView(viewName);
     }
 

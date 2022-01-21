@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_SNAPSHOT_MANAGER_H
-#define STARROCKS_BE_SRC_OLAP_SNAPSHOT_MANAGER_H
+#pragma once
 
 #include <condition_variable>
 #include <ctime>
@@ -53,7 +52,7 @@ public:
 
     std::string get_schema_hash_full_path(const TabletSharedPtr& ref_tablet, const std::string& location) const;
 
-    OLAPStatus release_snapshot(const std::string& snapshot_path);
+    Status release_snapshot(const std::string& snapshot_path);
 
     static SnapshotManager* instance();
 
@@ -107,5 +106,3 @@ private:
 }; // SnapshotManager
 
 } // namespace starrocks
-
-#endif

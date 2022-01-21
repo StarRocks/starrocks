@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/tablet_schema_map.h"
 
@@ -25,13 +25,13 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
 
     auto it = shard->map.find(id);
     if (it == shard->map.end()) {
-        auto ptr = std::make_shared<const TabletSchema>(schema_pb, this);
+        auto ptr = TabletSchema::create(_mem_tracker, schema_pb, this);
         shard->map.emplace(id, ptr);
         return std::make_pair(ptr, true);
     } else {
         std::shared_ptr<const TabletSchema> ptr = it->second.lock();
         if (UNLIKELY(!ptr)) {
-            ptr = std::make_shared<const TabletSchema>(schema_pb, this);
+            ptr = TabletSchema::create(_mem_tracker, schema_pb, this);
             it->second = std::weak_ptr<const TabletSchema>(ptr);
             return std::make_pair(ptr, true);
         } else {

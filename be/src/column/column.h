@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -7,6 +7,8 @@
 #include <string>
 #include <type_traits>
 
+#include "column/column_visitor.h"
+#include "column/column_visitor_mutable.h"
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
@@ -121,6 +123,15 @@ public:
     virtual void append(const Column& src, size_t offset, size_t count) = 0;
 
     virtual void append(const Column& src) { append(src, 0, src.size()); }
+
+    // This function will update data from src according to the input indexes. 'indexes' contains
+    // the row index will be update
+    // For example:
+    //      input indexes: [0, 3]
+    //      column data: [0, 1, 2, 3, 4]
+    //      src_column data: [5, 6]
+    // After call this function, column data will be set as [5, 1, 2, 6, 4]
+    virtual Status update_rows(const Column& src, const uint32_t* indexes) = 0;
 
     // This function will append data from src according to the input indexes. 'indexes' contains
     // the row index of the src.
@@ -238,22 +249,10 @@ public:
     // deserialize one data and append to this column
     virtual const uint8_t* deserialize_and_append(const uint8_t* pos) = 0;
 
-    virtual void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) = 0;
+    virtual void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) = 0;
 
     // One element serialize_size
     virtual uint32_t serialize_size(size_t idx) const = 0;
-
-    // The serialize bytes size when serialize by directly copy whole column data
-    virtual size_t serialize_size() const = 0;
-
-    // Serialize whole column data to dst
-    // The return value is dst + column serialize_size
-    virtual uint8_t* serialize_column(uint8_t* dst) = 0;
-
-    // Deserialize whole column from the src
-    // The return value is src + column serialize_size
-    // TODO(kks): validate the input src column data
-    virtual const uint8_t* deserialize_column(const uint8_t* src) = 0;
 
     // return new empty column with the same type
     virtual MutablePtr clone_empty() const = 0;
@@ -338,6 +337,10 @@ public:
 
     virtual bool reach_capacity_limit() const = 0;
 
+    virtual Status accept(ColumnVisitor* visitor) const = 0;
+
+    virtual Status accept_mutable(ColumnVisitorMutable* visitor) = 0;
+
 protected:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
@@ -388,6 +391,12 @@ public:
 
     typename AncestorBaseType::Ptr clone_shared() const override {
         return typename AncestorBase::Ptr(new Derived(*derived()));
+    }
+
+    Status accept(ColumnVisitor* visitor) const override { return visitor->visit(*static_cast<const Derived*>(this)); }
+
+    Status accept_mutable(ColumnVisitorMutable* visitor) override {
+        return visitor->visit(static_cast<Derived*>(this));
     }
 };
 

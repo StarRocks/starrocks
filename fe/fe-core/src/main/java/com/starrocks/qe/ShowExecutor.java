@@ -685,8 +685,9 @@ public class ShowExecutor {
                         final String columnType = col.getType().toString().toLowerCase();
                         final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                         final String isKey = col.isKey() ? "YES" : "NO";
-                        final String defaultValue = col.getDefaultValue();
-                        final String aggType = col.getAggregationType() == null ? "" : col.getAggregationType().toSql();
+                        final String defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
+                        final String aggType = col.getAggregationType() == null
+                                || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().toSql();
                         if (showStmt.isVerbose()) {
                             // Field Type Collation Null Key Default Extra
                             // Privileges Comment

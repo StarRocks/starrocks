@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -42,6 +42,9 @@ public class PruneWindowColumnsRule extends TransformationRule {
 
         windowOperator.getPartitionExpressions().forEach(e -> requiredOutputColumns.union(e.getUsedColumns()));
         windowOperator.getOrderByElements().stream().map(Ordering::getColumnRef).forEach(
+                e -> requiredOutputColumns.union(e.getUsedColumns()));
+
+        windowOperator.getEnforceSortColumns().stream().map(Ordering::getColumnRef).forEach(
                 e -> requiredOutputColumns.union(e.getUsedColumns()));
 
         if (newWindowCall.keySet().equals(windowOperator.getWindowCall().keySet())) {

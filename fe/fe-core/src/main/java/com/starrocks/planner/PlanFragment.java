@@ -87,34 +87,34 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private static final Logger LOG = LogManager.getLogger(PlanFragment.class);
 
     // id for this plan fragment
-    private final PlanFragmentId fragmentId;
+    protected final PlanFragmentId fragmentId;
 
     // root of plan tree executed by this fragment
-    private PlanNode planRoot;
+    protected PlanNode planRoot;
 
     // exchange node to which this fragment sends its output
     private ExchangeNode destNode;
 
     // if null, outputs the entire row produced by planRoot
-    private ArrayList<Expr> outputExprs;
+    protected ArrayList<Expr> outputExprs;
 
     // created in finalize() or set in setSink()
-    private DataSink sink;
+    protected DataSink sink;
 
     // specification of the partition of the input of this fragment;
     // an UNPARTITIONED fragment is executed on only a single node
     // TODO: improve this comment, "input" is a bit misleading
-    private final DataPartition dataPartition;
+    protected final DataPartition dataPartition;
 
     // specification of how the output of this fragment is partitioned (i.e., how
     // it's sent to its destination);
     // if the output is UNPARTITIONED, it is being broadcast
-    private DataPartition outputPartition;
+    protected DataPartition outputPartition;
 
     // Whether query statistics is sent with every batch. In order to get the query
     // statistics correctly when query contains limit, it is necessary to send query 
     // statistics with every batch, or only in close.
-    private boolean transferQueryStatisticsWithEveryBatch;
+    protected boolean transferQueryStatisticsWithEveryBatch;
 
     // TODO: SubstitutionMap outputSmap;
     // substitution map to remap exprs onto the output of this fragment, to be applied
@@ -122,13 +122,21 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     // specification of the number of parallel when fragment is executed
     // default value is 1
-    private int parallelExecNum = 1;
+    protected int parallelExecNum = 1;
+    protected int pipelineDop = 1;
+    protected boolean dopEstimated = false;
 
-    private final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
-    private final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
+    // if ScanNode is followed directly by a global AggregateNode that needs no finalization,
+    // then in pipeline engine(dop adaptation enabled), needsLocalShuffle is set to be false to
+    // indicate that the pipelineDop should be 1 to prevent local shuffle interpolated between
+    // ScanOperator and AggregateBlockSourceOperator/DistinctBlockSourceOperator.
+    private boolean needsLocalShuffle = true;
 
-    private List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
-    private List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
+    protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
+    protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
+
+    protected List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
+    protected List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
 
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
@@ -139,7 +147,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.dataPartition = partition;
         this.outputPartition = DataPartition.UNPARTITIONED;
         this.transferQueryStatisticsWithEveryBatch = false;
+        // when dop adaptation is enabled, parallelExecNum and pipelineDop set to degreeOfParallelism and 1 respectively
+        // in default. these values just a hint to help determine numInstances and pipelineDop of a PlanFragment.
         setParallelExecNumIfExists();
+        setPipelineDopIfPipelineEngineEnabled();
         setFragmentInPlanTree(planRoot);
     }
 
@@ -167,8 +178,39 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     public void setParallelExecNumIfExists() {
         if (ConnectContext.get() != null) {
-            parallelExecNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
+            int pipelineDop = ConnectContext.get().getSessionVariable().getPipelineDop();
+            int instanceNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
+            int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+
+            if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+                parallelExecNum = pipelineDop > 0 ? instanceNum : degreeOfParallelism;
+            } else {
+                parallelExecNum = instanceNum;
+            }
         }
+    }
+
+    public ExchangeNode getDestNode() {
+        return destNode;
+    }
+
+    public void getOlapScanNodes(PlanNode root, List<PlanNode> scanNodes) {
+        if (root instanceof OlapScanNode) {
+            scanNodes.add(root);
+            return;
+        }
+
+        for (PlanNode child : root.getChildren()) {
+            getOlapScanNodes(child, scanNodes);
+        }
+    }
+
+    public ArrayList<Expr> getOutputExprs() {
+        return outputExprs;
+    }
+
+    public DataPartition getOutputPartition() {
+        return outputPartition;
     }
 
     /**
@@ -176,6 +218,38 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     public void setParallelExecNum(int parallelExecNum) {
         this.parallelExecNum = parallelExecNum;
+    }
+
+    public void setPipelineDopIfPipelineEngineEnabled() {
+        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            return;
+        }
+        int dop = ConnectContext.get().getSessionVariable().getPipelineDop();
+        this.pipelineDop = dop > 0 ? dop : 1;
+    }
+
+    public void setPipelineDop(int dop) {
+        this.pipelineDop = dop;
+    }
+
+    public int getPipelineDop() {
+        return pipelineDop;
+    }
+
+    public void setDopEstimated() {
+        dopEstimated = true;
+    }
+
+    public boolean isDopEstimated() {
+        return dopEstimated;
+    }
+
+    public void setNeedsLocalShuffle(boolean need) {
+        this.needsLocalShuffle = need;
+    }
+
+    public boolean isNeedsLocalShuffle() {
+        return needsLocalShuffle;
     }
 
     public void setOutputExprs(List<Expr> outputExprs) {
@@ -194,6 +268,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             // we're streaming to an exchange node
             DataStreamSink streamSink = new DataStreamSink(destNode.getId());
             streamSink.setPartition(outputPartition);
+            streamSink.setMerge(destNode.isMerge());
             streamSink.setFragment(this);
             sink = streamSink;
         } else {
@@ -216,6 +291,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             // we're streaming to an exchange node
             DataStreamSink streamSink = new DataStreamSink(destNode.getId());
             streamSink.setPartition(outputPartition);
+            streamSink.setMerge(destNode.isMerge());
             streamSink.setFragment(this);
             sink = streamSink;
         } else {
@@ -381,10 +457,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return dataPartition;
     }
 
-    public DataPartition getOutputPartition() {
-        return outputPartition;
-    }
-
     public void setOutputPartition(DataPartition outputPartition) {
         this.outputPartition = outputPartition;
     }
@@ -503,5 +575,21 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public void setLoadGlobalDicts(
             List<Pair<Integer, ColumnDict>> loadGlobalDicts) {
         this.loadGlobalDicts = loadGlobalDicts;
+    }
+
+    public boolean hashLocalBucketShuffleRightOrFullJoin(PlanNode planRoot) {
+        if (planRoot instanceof HashJoinNode) {
+            HashJoinNode joinNode = (HashJoinNode) planRoot;
+            if (joinNode.isLocalHashBucket() &&
+                    (joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin())) {
+                return true;
+            }
+        }
+        for (PlanNode childNode : planRoot.getChildren()) {
+            if (hashLocalBucketShuffleRightOrFullJoin(childNode)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

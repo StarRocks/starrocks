@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -14,20 +14,16 @@ public:
     explicit ConstColumn(ColumnPtr data_column);
     ConstColumn(ColumnPtr data_column, size_t size);
 
-    // Copy constructor
     ConstColumn(const ConstColumn& rhs) : _data(rhs._data->clone_shared()), _size(rhs._size) {}
 
-    // Move constructor
     ConstColumn(ConstColumn&& rhs) noexcept : _data(std::move(rhs._data)), _size(rhs._size) {}
 
-    // Copy assignment
     ConstColumn& operator=(const ConstColumn& rhs) {
         ConstColumn tmp(rhs);
         this->swap_column(tmp);
         return *this;
     }
 
-    // Move assignment
     ConstColumn& operator=(ConstColumn&& rhs) noexcept {
         ConstColumn tmp(std::move(rhs));
         this->swap_column(tmp);
@@ -119,6 +115,8 @@ public:
 
     void append_default(size_t count) override { _size += count; }
 
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
+
     uint32_t serialize(size_t idx, uint8_t* pos) override { return _data->serialize(0, pos); }
 
     uint32_t serialize_default(uint8_t* pos) override { return _data->serialize_default(pos); }
@@ -139,14 +137,14 @@ public:
         return pos + _data->serialize_size(0);
     }
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) override {
-        _size += batch_size;
+    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override {
+        _size += chunk_size;
         if (_data->empty()) {
             _data->deserialize_and_append((uint8_t*)srcs[0].data);
         }
         uint32_t serialize_size = _data->serialize_size(0);
         // Note: we must update the pos
-        for (size_t i = 0; i < batch_size; i++) {
+        for (size_t i = 0; i < chunk_size; i++) {
             srcs[0].data = srcs[0].data + serialize_size;
         }
     }
@@ -154,12 +152,6 @@ public:
     uint32_t max_one_element_serialize_size() const override { return _data->max_one_element_serialize_size(); }
 
     uint32_t serialize_size(size_t idx) const override { return _data->serialize_size(0); }
-
-    size_t serialize_size() const override { return _data->serialize_size() + sizeof(size_t); }
-
-    uint8_t* serialize_column(uint8_t* dst) override;
-
-    const uint8_t* deserialize_column(const uint8_t* src) override;
 
     MutableColumnPtr clone_empty() const override { return create_mutable(_data->clone_empty(), 0); }
 
@@ -223,7 +215,7 @@ public:
 
 private:
     ColumnPtr _data;
-    size_t _size;
+    uint64_t _size;
 };
 
 } // namespace starrocks::vectorized

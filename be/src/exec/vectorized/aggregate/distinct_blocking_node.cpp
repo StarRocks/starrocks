@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/aggregate/distinct_blocking_node.h"
 
@@ -7,6 +7,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks::vectorized {
 
@@ -41,7 +42,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
         if (chunk->is_empty()) {
             continue;
         }
-        DCHECK_LE(chunk->num_rows(), config::vector_chunk_size);
+        DCHECK_LE(chunk->num_rows(), runtime_state()->chunk_size());
 
         _aggregator->evaluate_exprs(chunk.get());
 
@@ -49,12 +50,17 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             if (false) {
             }
-#define HASH_SET_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME)                       \
-            _aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, chunk->num_rows());
+#define HASH_SET_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) {                                     \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
+                *_aggregator->hash_set_variant().NAME, chunk->num_rows()));                                            \
+    }
             APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
+
+            _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
+                              _aggregator->mem_pool()->total_reserved_bytes());
+            TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
             _aggregator->update_num_input_rows(chunk->num_rows());
             if (limit_with_no_agg) {
@@ -99,7 +105,7 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = config::vector_chunk_size;
+    int32_t chunk_size = runtime_state()->chunk_size();
 
     if (false) {
     }
@@ -110,10 +116,10 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
+    size_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
 
     // For having
-    size_t old_size = (*chunk)->num_rows();
     ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
     _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
 
@@ -127,9 +133,6 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    // Parallelism must be 1
-    size_t degree_of_parallelism = 1;
-    operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
@@ -137,12 +140,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // shared by sink operator and source operator
     AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
 
-    auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(context->next_operator_id(),
-                                                                                        id(), aggregator_factory);
+    auto partition_expr_ctxs = std::move(_group_by_expr_ctxs);
+    auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(
+            context->next_operator_id(), id(), aggregator_factory, partition_expr_ctxs);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
-    operators_with_sink.push_back(std::move(sink_operator));
-    context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
     auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(context->next_operator_id(),
@@ -150,8 +152,13 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
+    operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), operators_with_sink,
+                                                                            partition_expr_ctxs);
+    operators_with_sink.push_back(std::move(sink_operator));
+    context->add_pipeline(operators_with_sink);
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
+    auto degree_of_parallelism = ((SourceOperatorFactory*)(operators_with_sink[0].get()))->degree_of_parallelism();
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;

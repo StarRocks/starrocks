@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_DYNAMIC_UTIL_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_DYNAMIC_UTIL_H
+#pragma once
 
 #include "common/status.h"
 
@@ -42,5 +41,3 @@ Status dynamic_open(const char* library, void** handle);
 void dynamic_close(void* handle);
 
 } // namespace starrocks
-
-#endif

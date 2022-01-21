@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -12,7 +12,7 @@ namespace starrocks {
 // Now this is not thread-safe.
 class HdfsRandomAccessFile : public RandomAccessFile {
 public:
-    HdfsRandomAccessFile(hdfsFS fs, std::string filename);
+    HdfsRandomAccessFile(hdfsFS fs, std::string filename, bool usePread);
     virtual ~HdfsRandomAccessFile() noexcept;
 
     Status open();
@@ -31,6 +31,7 @@ private:
     hdfsFS _fs;
     hdfsFile _file;
     std::string _filename;
+    bool _usePread;
 };
 
 } // namespace starrocks

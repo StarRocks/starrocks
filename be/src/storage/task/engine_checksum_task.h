@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TASK_ENGINE_CHECKSUM_TASK_H
-#define STARROCKS_BE_SRC_OLAP_TASK_ENGINE_CHECKSUM_TASK_H
+#pragma once
 
 #include "gen_cpp/AgentService_types.h"
 #include "storage/olap_define.h"
@@ -32,7 +31,7 @@ namespace starrocks {
 // add "Engine" as task prefix to prevent duplicate name with agent task
 class EngineChecksumTask : public EngineTask {
 public:
-    OLAPStatus execute() override;
+    Status execute() override;
 
     EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TSchemaHash schema_hash, TVersion version,
                        uint32_t* checksum);
@@ -40,7 +39,7 @@ public:
     ~EngineChecksumTask() override = default;
 
 private:
-    OLAPStatus _compute_checksum();
+    Status _compute_checksum();
 
     std::unique_ptr<MemTracker> _mem_tracker;
 
@@ -51,4 +50,3 @@ private:
 }; // EngineTask
 
 } // namespace starrocks
-#endif //STARROCKS_BE_SRC_OLAP_TASK_ENGINE_CHECKSUM_TASK_H

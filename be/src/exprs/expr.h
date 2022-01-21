@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXPRS_EXPR_H
-#define STARROCKS_BE_SRC_QUERY_EXPRS_EXPR_H
+#pragma once
 
 #include <memory>
 #include <string>
@@ -36,8 +35,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/string_value.h"
 #include "runtime/string_value.hpp"
-#include "runtime/tuple.h"
-#include "runtime/tuple_row.h"
 #include "runtime/types.h"
 #include "udf/udf.h"
 
@@ -190,10 +187,6 @@ public:
 
     static Expr* copy(ObjectPool* pool, Expr* old_expr);
 
-    // Returns true ifi expr support vectorized process
-    // The default implementation returns true if all the children was supported
-    virtual bool is_vectorized() const;
-
     // for vector query engine
     virtual ColumnPtr evaluate_const(ExprContext* context);
 
@@ -250,7 +243,7 @@ protected:
     virtual void close();
 
     /// Cache entry for the library implementing this function.
-    UserFunctionCacheEntry* _cache_entry = nullptr;
+    std::shared_ptr<UserFunctionCacheEntry> _cache_entry = nullptr;
 
     // function opcode
 
@@ -281,6 +274,7 @@ protected:
     /// doesn't call RegisterFunctionContext().
     int _fn_context_index;
 
+    std::once_flag _constant_column_evaluate_once;
     ColumnPtr _constant_column;
 
     /// Simple debug string that provides no expr subclass-specific information
@@ -296,5 +290,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

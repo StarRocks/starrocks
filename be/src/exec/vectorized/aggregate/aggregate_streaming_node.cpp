@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/aggregate/aggregate_streaming_node.h"
 
@@ -6,6 +6,7 @@
 #include "exec/pipeline/aggregate/aggregate_streaming_source_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "runtime/current_thread.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {
@@ -41,7 +42,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
         (*chunk)->reset();
     }
 
-#ifndef NDEBUG
+#ifdef DEBUG
     static int loop = 0;
 #endif
 
@@ -69,10 +70,11 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
                 if (false) {
                 }
-#define HASH_MAP_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME)                       \
-            _aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, input_chunk_size);
+#define HASH_MAP_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) {                                     \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
+                *_aggregator->hash_map_variant().NAME, input_chunk_size));                                             \
+    }
                 APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                 else {
@@ -87,7 +89,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
 
                 _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
                                   _aggregator->mem_pool()->total_reserved_bytes());
-                _aggregator->try_convert_to_two_level_map();
+                TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
 
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
 
@@ -97,10 +99,12 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                 size_t real_capacity =
                         _aggregator->hash_map_variant().capacity() - _aggregator->hash_map_variant().capacity() / 8;
                 size_t remain_size = real_capacity - _aggregator->hash_map_variant().size();
-                bool ht_needs_expansion = remain_size < input_chunk_size;
+                [[maybe_unused]] bool ht_needs_expansion = remain_size < input_chunk_size;
 
-#ifndef NDEBUG
-                // chaos test for streaming or agg, The results have to be consistent
+#ifdef DEBUG
+                // chaos test for streaming or agg, The results have to be consistent
+                // when group by type of double, it maybe cause dissonant result because of precision loss for double
+                // thus, so check case will fail, so it only work under DEBUG mode
                 loop++;
                 if (loop % 2 == 0) {
 #else
@@ -114,10 +118,11 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
                     if (false) {
                     }
-#define HASH_MAP_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME)                       \
-            _aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, input_chunk_size);
+#define HASH_MAP_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) {                                     \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
+                *_aggregator->hash_map_variant().NAME, input_chunk_size));                                             \
+    }
                     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                     else {
@@ -132,7 +137,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
 
                     _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
                                       _aggregator->mem_pool()->total_reserved_bytes());
-                    _aggregator->try_convert_to_two_level_map();
+                    TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
 
                     continue;
@@ -142,10 +147,12 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
                         if (false) {
                         }
-#define HASH_MAP_METHOD(NAME)                                                                                       \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) _aggregator                        \
-            ->build_hash_map_with_selection<typename decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, input_chunk_size);
+#define HASH_MAP_METHOD(NAME)                                                             \
+    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) {        \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection<typename decltype( \
+                                    _aggregator->hash_map_variant().NAME)::element_type>( \
+                *_aggregator->hash_map_variant().NAME, input_chunk_size));                \
+    }
                         APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                         else {
@@ -231,7 +238,7 @@ void AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
 #define HASH_MAP_METHOD(NAME)                                                                                     \
     else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME)                                  \
             _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, config::vector_chunk_size, chunk);
+                    *_aggregator->hash_map_variant().NAME, runtime_state()->chunk_size(), chunk);
     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {

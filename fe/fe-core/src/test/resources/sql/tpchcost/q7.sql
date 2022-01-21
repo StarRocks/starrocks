@@ -49,7 +49,7 @@ cardinality: 250
 column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-* year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+* year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 * sum-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
@@ -59,23 +59,23 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 25
 
 24:SORT
-|  order by: [46, VARCHAR, false] ASC, [51, VARCHAR, false] ASC, [55, INT, true] ASC
+|  order by: [46, VARCHAR, false] ASC, [51, VARCHAR, false] ASC, [55, SMALLINT, true] ASC
 |  offset: 0
 |  cardinality: 250
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+|  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
 23:AGGREGATE (merge finalize)
 |  aggregate: sum[([57: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
-|  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, INT, true]
+|  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, true]
 |  cardinality: 250
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+|  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
 22:EXCHANGE
@@ -90,25 +90,25 @@ OutPut Exchange Id: 22
 21:AGGREGATE (update serialize)
 |  STREAMING
 |  aggregate: sum[([56: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
-|  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, INT, true]
+|  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, true]
 |  cardinality: 297
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+|  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
 20:Project
 |  output columns:
 |  46 <-> [46: N_NAME, VARCHAR, false]
 |  51 <-> [51: N_NAME, CHAR, false]
-|  55 <-> year[(cast([19: L_SHIPDATE, DATE, false] as DATETIME)); args: DATETIME; result: INT; args nullable: true; result nullable: true]
+|  55 <-> year[(cast([19: L_SHIPDATE, DATE, false] as DATETIME)); args: DATETIME; result: SMALLINT; args nullable: true; result nullable: true]
 |  56 <-> [14: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [15: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 554645
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+|  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
 19:HASH JOIN
@@ -126,7 +126,7 @@ OutPut Exchange Id: 22
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0] ESTIMATE
+|  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
 |----18:EXCHANGE
@@ -318,7 +318,7 @@ OutPut Exchange Id: 06
 |  column statistics:
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
-|  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
+|  * C_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |
 |----3:EXCHANGE

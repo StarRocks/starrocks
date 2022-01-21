@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -24,6 +25,7 @@ public class OptimizerContext {
     private final ColumnRefFactory columnRefFactory;
     private SessionVariable sessionVariable;
     private DumpInfo dumpInfo;
+    private CTEContext cteContext;
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -35,16 +37,18 @@ public class OptimizerContext {
         this.sessionVariable = VariableMgr.newSessionVariable();
     }
 
-    public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, SessionVariable sessionVariable,
-                            DumpInfo dumpInfo) {
+    public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
         this.memo = memo;
         this.ruleSet = new RuleSet();
         this.catalog = Catalog.getCurrentCatalog();
         this.taskContext = Lists.newArrayList();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
-        this.sessionVariable = sessionVariable;
-        this.dumpInfo = dumpInfo;
+        this.sessionVariable = connectContext.getSessionVariable();
+        this.dumpInfo = connectContext.getDumpInfo();
+        this.cteContext = new CTEContext();
+        cteContext.reset();
+        this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
     }
 
     public Memo getMemo() {
@@ -85,5 +89,9 @@ public class OptimizerContext {
 
     public DumpInfo getDumpInfo() {
         return dumpInfo;
+    }
+
+    public CTEContext getCteContext() {
+        return cteContext;
     }
 }

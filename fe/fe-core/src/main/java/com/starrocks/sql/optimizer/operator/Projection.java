@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator;
 
 import com.google.common.base.Preconditions;
@@ -48,6 +48,29 @@ public class Projection {
         return commonSubOperatorMap;
     }
 
+    // For sql: select *, to_bitmap(S_SUPPKEY) from table, we needn't apply global dict optimization
+    // This method differ from `couldApplyStringDict` method is for ColumnRefOperator, we return false.
+    public boolean needApplyStringDict(Set<Integer> childDictColumns) {
+        Preconditions.checkState(!childDictColumns.isEmpty());
+        ColumnRefSet dictSet = new ColumnRefSet();
+        for (Integer id : childDictColumns) {
+            dictSet.union(id);
+        }
+
+        for (ScalarOperator operator : columnRefMap.values()) {
+            if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet)) {
+                return true;
+            }
+        }
+
+        for (ScalarOperator operator : commonSubOperatorMap.values()) {
+            if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
         Preconditions.checkState(!childDictColumns.isEmpty());
         ColumnRefSet dictSet = new ColumnRefSet();
@@ -87,13 +110,23 @@ public class Projection {
     }
 
     public void fillDisableDictOptimizeColumns(ColumnRefSet columnRefSet) {
-        for (ScalarOperator operator : columnRefMap.values()) {
-            fillDisableDictOptimizeColumns(operator, columnRefSet);
+        columnRefMap.forEach((k, v) -> {
+            if (columnRefSet.contains(k.getId())) {
+                columnRefSet.union(v.getUsedColumns());
+            }
+            fillDisableDictOptimizeColumns(v, columnRefSet);
+        });
+    }
+
+    public boolean hasUnsupportedDictOperator(Set<Integer> stringColumnIds) {
+        ColumnRefSet stringColumnRefSet = new ColumnRefSet();
+        for (Integer stringColumnId : stringColumnIds) {
+            stringColumnRefSet.union(stringColumnId);
         }
 
-        for (ScalarOperator operator : commonSubOperatorMap.values()) {
-            fillDisableDictOptimizeColumns(operator, columnRefSet);
-        }
+        ColumnRefSet columnRefSet = new ColumnRefSet();
+        this.fillDisableDictOptimizeColumns(columnRefSet);
+        return columnRefSet.isIntersect(stringColumnRefSet);
     }
 
     private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet) {

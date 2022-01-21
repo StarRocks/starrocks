@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_HTTP_ACTION_META_ACTION_H
-#define STARROCKS_BE_SRC_HTTP_ACTION_META_ACTION_H
+#pragma once
 
 #include "common/status.h"
 #include "http/http_handler.h"
@@ -36,7 +35,7 @@ enum META_TYPE {
 // Get Meta Info
 class MetaAction : public HttpHandler {
 public:
-    MetaAction(META_TYPE meta_type) : _meta_type(meta_type) {}
+    explicit MetaAction(META_TYPE meta_type) : _meta_type(meta_type) {}
 
     ~MetaAction() override = default;
 
@@ -49,5 +48,3 @@ private:
 };
 
 } // end namespace starrocks
-
-#endif // STARROCKS_BE_SRC_HTTP_ACTION_META_ACTION_H

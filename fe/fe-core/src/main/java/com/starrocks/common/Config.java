@@ -305,6 +305,13 @@ public class Config extends ConfigBase {
     public static long max_bdbje_clock_delta_ms = 5000; // 5s
 
     /**
+     * bdb je log level
+     * If you want to print all levels of logs, set to ALL
+     */
+    @ConfField
+    public static String bdbje_log_level = "INFO";
+
+    /**
      * the max txn number which bdbje can rollback when trying to rejoin the group
      */
     @ConfField
@@ -1154,6 +1161,35 @@ public class Config extends ConfigBase {
     public static String auth_token = "";
 
     /**
+     * If set to true and the jar that use to authentication is loaded in fe, kerberos authentication is supported.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_authentication_kerberos = false;
+
+    /**
+     * If kerberos authentication is enabled, the configuration must be filled.
+     * like "starrocks-fe/<HOSTNAME>@STARROCKS.COM".
+     *
+     * Service principal name (SPN) is sent to clients that attempt to authenticate using Kerberos.
+     * The SPN must be present in the database managed by the KDC server, and its key file
+     * needs to be exported and configured. See authentication_kerberos_service_key_tab for details.
+     */
+    @ConfField(mutable = true)
+    public static String authentication_kerberos_service_principal = "";
+
+    /**
+     * If kerberos authentication is enabled, the configuration must be filled.
+     * like "$HOME/path/to/your/starrocks-fe.keytab"
+     *
+     * The keytab file for authenticating tickets received from clients.
+     * This file must exist and contain a valid key for the SPN or authentication of clients will fail.
+     * Export keytab file requires KDC administrator to operate.
+     * for example: ktadd -norandkey -k /path/to/starrocks-fe.keytab starrocks-fe/<HOSTNAME>@STARROCKS.COM
+     */
+    @ConfField(mutable = true)
+    public static String authentication_kerberos_service_key_tab = "";
+
+    /**
      * In some cases, some tablets may have all replicas damaged or lost.
      * At this time, the data has been lost, and the damaged tablets
      * will cause the entire query to fail, and the remaining healthy tablets cannot be queried.
@@ -1288,7 +1324,7 @@ public class Config extends ConfigBase {
     /**
      * connection and socket timeout for broker client
      */
-    @ConfField()
+    @ConfField
     public static int broker_client_timeout_ms = 10000;
 
     /**
@@ -1304,5 +1340,21 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField(mutable = true)
     public static boolean enable_vectorized_file_load = true;
-}
 
+    /**
+     * Whether to collect routine load process metrics.
+     * Be careful to turn this on, because this will call kafka api to get the partition's latest offset.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_routine_load_lag_metrics = false;
+
+    @ConfField(mutable = true)
+    public static boolean enable_collect_query_detail_info = false;
+
+    /**
+     * Min lag of routine load job to show in metrics
+     * Only show the routine load job whose lag is larger than min_routine_load_lag_for_metrics
+     */
+    @ConfField(mutable = true)
+    public static long min_routine_load_lag_for_metrics = 10000;
+}

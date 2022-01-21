@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_BE_RUNTIME_STRING_BUFFER_H
-#define STARROCKS_BE_SRC_QUERY_BE_RUNTIME_STRING_BUFFER_H
+#pragma once
 
 #include "runtime/mem_pool.h"
 #include "runtime/string_value.h"
@@ -113,6 +112,7 @@ private:
     // TODO: some kind of doubling strategy?
     void grow_buffer(int new_len) {
         char* new_buffer = reinterpret_cast<char*>(_pool->allocate(new_len));
+        assert(new_buffer != nullptr);
 
         if (_string_value.len > 0) {
             memcpy(new_buffer, _string_value.ptr, _string_value.len);
@@ -128,5 +128,3 @@ private:
 };
 
 }
-
-#endif

@@ -476,6 +476,7 @@ public final class SparkDpp implements java.io.Serializable {
                         List<Tuple2<List<Object>, Object[]>> result = new ArrayList<>();
                         List<Object> keyColumns = new ArrayList<>();
                         List<Object> valueColumns = new ArrayList<>(valueColumnNames.size());
+                        List<Object> allColumns = new ArrayList<>();
                         for (int i = 0; i < keyColumnNames.size(); i++) {
                             String columnName = keyColumnNames.get(i);
                             Object columnObject = row.get(row.fieldIndex(columnName));
@@ -484,6 +485,7 @@ public final class SparkDpp implements java.io.Serializable {
                                 return result.iterator();
                             }
                             keyColumns.add(columnObject);
+                            allColumns.add(columnObject);
                         }
 
                         for (int i = 0; i < valueColumnNames.size(); i++) {
@@ -495,11 +497,11 @@ public final class SparkDpp implements java.io.Serializable {
                                 return result.iterator();
                             }
                             valueColumns.add(columnObject);
+                            allColumns.add(columnObject);
                             loadEstimateSizeAcc.add(SizeEstimator.estimate(columnObject));
                         }
 
-                        DppColumns key = new DppColumns(keyColumns);
-                        int pid = partitioner.getPartition(key);
+                        int pid = partitioner.getPartition(new DppColumns(allColumns));
                         if (pid < 0) {
                             abnormalRowAcc.add(1);
                             LOG.warn("invalid partition for row:" + row + ", abnormal rows num:" +
@@ -781,7 +783,7 @@ public final class SparkDpp implements java.io.Serializable {
 
     // This method is to keep the splitting consistent with broker load / mini load
     private String[] splitLine(String line, char sep) {
-        if (line == null || line.equals("")) {
+        if (line == null || line.isEmpty()) {
             return new String[0];
         }
         int index = 0;
@@ -862,12 +864,19 @@ public final class SparkDpp implements java.io.Serializable {
         List<StarRocksRangePartitioner.PartitionRangeKey> partitionRangeKeys = new ArrayList<>();
         for (EtlJobConfig.EtlPartition partition : partitionInfo.partitions) {
             StarRocksRangePartitioner.PartitionRangeKey partitionRangeKey = new StarRocksRangePartitioner.PartitionRangeKey();
-            List<Object> startKeyColumns = new ArrayList<>();
-            for (int i = 0; i < partition.startKeys.size(); i++) {
-                Object value = partition.startKeys.get(i);
-                startKeyColumns.add(convertPartitionKey(value, partitionKeySchema.get(i)));
+
+            if (!partition.isMinPartition) {
+                partitionRangeKey.isMinPartition = false;
+                List<Object> startKeyColumns = new ArrayList<>();
+                for (int i = 0; i < partition.startKeys.size(); i++) {
+                    Object value = partition.startKeys.get(i);
+                    startKeyColumns.add(convertPartitionKey(value, partitionKeySchema.get(i)));
+                }
+                partitionRangeKey.startKeys = new DppColumns(startKeyColumns);
+            } else {
+                partitionRangeKey.isMinPartition = true;
             }
-            partitionRangeKey.startKeys = new DppColumns(startKeyColumns);
+
             if (!partition.isMaxPartition) {
                 partitionRangeKey.isMaxPartition = false;
                 List<Object> endKeyColumns = new ArrayList<>();
@@ -879,6 +888,7 @@ public final class SparkDpp implements java.io.Serializable {
             } else {
                 partitionRangeKey.isMaxPartition = true;
             }
+
             partitionRangeKeys.add(partitionRangeKey);
         }
         return partitionRangeKeys;
@@ -1217,13 +1227,13 @@ public final class SparkDpp implements java.io.Serializable {
         String outputPath = etlJobConfig.getOutputPath();
         String resultFilePath = outputPath + "/" + DPP_RESULT_FILE;
         URI uri = new URI(outputPath);
-        FileSystem fs = FileSystem.get(uri, serializableHadoopConf.value());
         Path filePath = new Path(resultFilePath);
-        FSDataOutputStream outputStream = fs.create(filePath);
-        Gson gson = new Gson();
-        outputStream.write(gson.toJson(dppResult).getBytes());
-        outputStream.write('\n');
-        outputStream.close();
+        try (FileSystem fs = FileSystem.get(uri, serializableHadoopConf.value());
+                FSDataOutputStream outputStream = fs.create(filePath)) {
+            Gson gson = new Gson();
+            outputStream.write(gson.toJson(dppResult).getBytes());
+            outputStream.write('\n');
+        }
     }
 
     public void doDpp() throws Exception {

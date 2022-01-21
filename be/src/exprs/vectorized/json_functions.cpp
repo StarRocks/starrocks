@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/json_functions.h"
 
@@ -162,22 +162,6 @@ void JsonFunctions::parse_json_paths(const std::string& path_string, std::vector
     _get_parsed_paths(paths, parsed_paths);
 }
 
-Status JsonFunctions::minify_json_to_string(simdjson::ondemand::value& val, std::unique_ptr<char[]>& buf,
-                                            size_t& buflen) {
-    std::string_view sv;
-    auto err = simdjson::to_json_string(val).get(sv);
-    if (err) {
-        return Status::InvalidArgument(strings::Substitute("Invalid json : $0", simdjson::error_message(err)));
-    }
-
-    buf.reset(new char[sv.size()]);
-    err = simdjson::minify(sv.data(), sv.size(), buf.get(), buflen);
-    if (err) {
-        return Status::InvalidArgument(strings::Substitute("Invalid json : $0", simdjson::error_message(err)));
-    }
-    return Status::OK();
-}
-
 JsonFunctionType JsonTypeTraits<TYPE_INT>::JsonType = JSON_FUN_INT;
 JsonFunctionType JsonTypeTraits<TYPE_DOUBLE>::JsonType = JSON_FUN_DOUBLE;
 JsonFunctionType JsonTypeTraits<TYPE_VARCHAR>::JsonType = JSON_FUN_STRING;
@@ -189,8 +173,8 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
 
     simdjson::ondemand::parser parser;
 
-    ColumnBuilder<primitive_type> result;
     auto size = columns[0]->size();
+    ColumnBuilder<primitive_type> result(size);
     for (int row = 0; row < size; ++row) {
         if (json_viewer.is_null(row) || path_viewer.is_null(row)) {
             result.append_null();

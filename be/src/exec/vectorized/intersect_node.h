@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -26,6 +26,12 @@ namespace starrocks::vectorized {
 class IntersectNode final : public ExecNode {
 public:
     IntersectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
+
+    ~IntersectNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;

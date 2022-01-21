@@ -1,5 +1,5 @@
 #!/bin/bash
-# This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #####################################################
 # Download url, filename and unpaced filename

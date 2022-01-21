@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/meta_reader.h"
 
@@ -6,8 +6,8 @@
 
 #include "column/datum_convert.h"
 #include "storage/rowset/beta_rowset.h"
-#include "storage/rowset/segment_v2/column_iterator.h"
-#include "storage/rowset/segment_v2/column_reader.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/chunk_helper.h"
 
@@ -103,7 +103,7 @@ Status MetaReader::_build_collect_context(const MetaReaderParams& read_params) {
 }
 
 Status MetaReader::_init_seg_meta_collecters(const MetaReaderParams& params) {
-    std::vector<segment_v2::SegmentSharedPtr> segments;
+    std::vector<SegmentSharedPtr> segments;
     RETURN_IF_ERROR(_get_segments(params.tablet, params.version, &segments));
 
     for (auto& segment : segments) {
@@ -118,7 +118,7 @@ Status MetaReader::_init_seg_meta_collecters(const MetaReaderParams& params) {
 }
 
 Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& version,
-                                 std::vector<segment_v2::SegmentSharedPtr>* segments) {
+                                 std::vector<SegmentSharedPtr>* segments) {
     if (tablet->updates() != nullptr) {
         LOG(INFO) << "Skipped Update tablet";
         return Status::OK();
@@ -215,7 +215,7 @@ bool MetaReader::has_more() {
     return _has_more;
 }
 
-SegmentMetaCollecter::SegmentMetaCollecter(segment_v2::SegmentSharedPtr segment) : _segment(segment) {}
+SegmentMetaCollecter::SegmentMetaCollecter(SegmentSharedPtr segment) : _segment(segment) {}
 
 SegmentMetaCollecter::~SegmentMetaCollecter() {}
 
@@ -276,7 +276,7 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vec
 // collect dict
 Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* column, FieldType type) {
     if (!_column_iterators[cid]) {
-        return Status::InvalidArgument("Invalid Collet Params.");
+        return Status::InvalidArgument("Invalid Collect Params.");
     }
 
     std::vector<Slice> words;

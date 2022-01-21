@@ -18,8 +18,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
-#ifndef IMPALA_UTIL_BIT_STREAM_UTILS_INLINE_H
-#define IMPALA_UTIL_BIT_STREAM_UTILS_INLINE_H
+#pragma once
 
 #include <algorithm>
 
@@ -247,5 +246,3 @@ inline int BatchedBitReader::unpack_batch(int bit_width, int num_values, T* v) {
 }
 
 } // namespace starrocks
-
-#endif

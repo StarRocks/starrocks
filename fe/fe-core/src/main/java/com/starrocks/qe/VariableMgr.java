@@ -38,7 +38,6 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
-import org.apache.commons.lang.SerializationUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -227,12 +226,12 @@ public class VariableMgr {
     }
 
     public static SessionVariable newSessionVariable() {
-        wlock.lock();
         try {
-            return (SessionVariable) SerializationUtils.clone(defaultSessionVariable);
-        } finally {
-            wlock.unlock();
+            return (SessionVariable) defaultSessionVariable.clone();
+        } catch (CloneNotSupportedException e) {
+            LOG.warn(e);
         }
+        return null;
     }
 
     // Check if this setVar can be set correctly
@@ -252,7 +251,7 @@ public class VariableMgr {
     // Input:
     //      sessionVariable: the variable of current session
     //      setVar: variable information that needs to be set
-    public static void setVar(SessionVariable sessionVariable, SetVar setVar) throws DdlException {
+    public static void setVar(SessionVariable sessionVariable, SetVar setVar, boolean onlySetSessionVar) throws DdlException {
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable());
@@ -273,7 +272,7 @@ public class VariableMgr {
             }
         }
 
-        if (setVar.getType() == SetType.GLOBAL) {
+        if (!onlySetSessionVar && setVar.getType() == SetType.GLOBAL) {
             wlock.lock();
             try {
                 setValue(ctx.getObj(), ctx.getField(), value);

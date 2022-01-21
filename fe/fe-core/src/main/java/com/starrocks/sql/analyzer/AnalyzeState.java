@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AnalyticExpr;
@@ -6,8 +6,8 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 
 import java.util.HashMap;
 import java.util.List;
@@ -65,15 +65,17 @@ public class AnalyzeState {
         return columnReferences;
     }
 
-    public QuerySpecification build() {
-        return new QuerySpecification(
+    public SelectRelation build() {
+        SelectRelation selectRelation = new SelectRelation(
                 outputExpressions, columnOutputNames, isDistinct,
-                outputScope, orderScope, orderSourceExpressions,
+                orderScope, orderSourceExpressions,
                 relation, predicate, limit,
                 groupBy, aggregate, groupingSetsList, groupingFunctionCallExprs,
                 orderBy, having,
                 outputAnalytic, orderByAnalytic,
                 columnReferences);
+        selectRelation.setScope(new Scope(RelationId.of(selectRelation), outputScope.getRelationFields()));
+        return selectRelation;
     }
 
     public void setOrderScope(Scope orderScope) {

@@ -30,7 +30,13 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/udf")
 # Build this library twice. Once to be linked into the main StarRocks. This version
 # can have dependencies on our other libs. The second version is shipped as part
 # of the UDF sdk, which can't use other libs.
-add_library(Udf udf.cpp udf_ir.cpp)
+IF (WITH_HDFS)
+    set(UDF_FILES
+      java/java_udf.cpp
+    )
+endif()
+
+add_library(Udf udf.cpp udf_ir.cpp ${UDF_FILES})
 add_library(StarRocksUdf udf.cpp udf_ir.cpp)
 set_target_properties(StarRocksUdf PROPERTIES COMPILE_FLAGS "-DSTARROCKS_UDF_SDK_BUILD")
 
@@ -51,7 +57,7 @@ set (UDF_TEST_LINK_LIBS
   -lboost_date_time
   gtest)
   
-set_target_properties(StarRocksUdf PROPERTIES PUBLIC_HEADER "udf.h;uda_test_harness.h")
+set_target_properties(StarRocksUdf PROPERTIES PUBLIC_HEADER "udf.h")
 INSTALL(TARGETS StarRocksUdf
         ARCHIVE DESTINATION ${OUTPUT_DIR}/udf
         LIBRARY DESTINATION ${OUTPUT_DIR}/udf/lib

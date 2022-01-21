@@ -1409,6 +1409,14 @@ public:
         return 1;
     }
 
+    template <class K = key_type>
+    size_type erase_with_hash(const key_arg<K>& key, size_t hashval) {
+        auto it = find(key, hashval);
+        if (it == end()) return 0;
+        _erase(it);
+        return 1;
+    }
+
     iterator erase(const_iterator cit) { return erase(cit.inner_); }
 
     // Erases the element pointed to by `it`.  Unlike `std::unordered_set::erase`,
@@ -1811,8 +1819,10 @@ private:
         auto layout = MakeLayout(capacity_);
         // Unpoison before returning the memory to the allocator.
         SanitizerUnpoisonMemoryRegion(slots_, sizeof(slot_type) * capacity_);
-        Deallocate<Layout::Alignment()>(&alloc_ref(), ctrl_, layout.AllocSize());
-        ctrl_ = EmptyGroup();
+        if (ctrl_ != EmptyGroup()) {
+            Deallocate<Layout::Alignment()>(&alloc_ref(), ctrl_, layout.AllocSize());
+            ctrl_ = EmptyGroup();
+        }
         slots_ = nullptr;
         size_ = 0;
         capacity_ = 0;
@@ -2907,6 +2917,11 @@ public:
     template <class K = key_type>
     size_type erase(const key_arg<K>& key) {
         auto hashval = this->hash(key);
+        return erase_with_hash(key, hashval);
+    }
+
+    template <class K = key_type>
+    size_type erase_with_hash(const key_arg<K>& key, size_t hashval) {
         Inner& inner = sets_[subidx(hashval)];
         auto& set = inner.set_;
         typename Lockable::UpgradeLock m(inner);
@@ -4073,6 +4088,7 @@ public:
     using Base::size;
     using Base::clear; // may shrink - To avoid shrinking `erase(begin(), end())`
     using Base::erase;
+    using Base::erase_with_hash;
     using Base::insert;
     using Base::emplace;
     using Base::emplace_hint;
@@ -4314,6 +4330,7 @@ public:
     using Base::size;
     using Base::clear;
     using Base::erase;
+    using Base::erase_with_hash;
     using Base::insert;
     using Base::emplace;
     using Base::emplace_hint;

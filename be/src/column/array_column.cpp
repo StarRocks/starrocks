@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/array_column.h"
 
@@ -123,6 +123,49 @@ void ArrayColumn::append_default(size_t count) {
     _offsets->append_value_multiple_times(&offset, count);
 }
 
+Status ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    const auto& array_column = down_cast<const ArrayColumn&>(src);
+
+    const UInt32Column& src_offsets = array_column.offsets();
+    size_t replace_num = src.size();
+    bool need_resize = false;
+    for (size_t i = 0; i < replace_num; ++i) {
+        if (_offsets->get_data()[indexes[i] + 1] - _offsets->get_data()[indexes[i]] !=
+            src_offsets.get_data()[i + 1] - src_offsets.get_data()[i]) {
+            need_resize = true;
+            break;
+        }
+    }
+
+    if (!need_resize) {
+        std::vector<uint32_t> element_idxes;
+        for (size_t i = 0; i < replace_num; ++i) {
+            size_t element_count = src_offsets.get_data()[i + 1] - src_offsets.get_data()[i];
+            size_t element_offset = _offsets->get_data()[indexes[i]];
+            for (size_t j = 0; j < element_count; j++) {
+                element_idxes.emplace_back(element_offset + j);
+            }
+        }
+        RETURN_IF_ERROR(_elements->update_rows(array_column.elements(), element_idxes.data()));
+    } else {
+        MutableColumnPtr new_array_column = clone_empty();
+        size_t idx_begin = 0;
+        for (size_t i = 0; i < replace_num; ++i) {
+            size_t count = indexes[i] - idx_begin;
+            new_array_column->append(*this, idx_begin, count);
+            new_array_column->append(src, i, 1);
+            idx_begin = indexes[i] + 1;
+        }
+        int32_t remain_count = _offsets->size() - idx_begin - 1;
+        if (remain_count > 0) {
+            new_array_column->append(*this, idx_begin, remain_count);
+        }
+        swap_column(*new_array_column.get());
+    }
+
+    return Status::OK();
+}
+
 uint32_t ArrayColumn::serialize(size_t idx, uint8_t* pos) {
     uint32_t offset = _offsets->get_data()[idx];
     uint32_t array_size = _offsets->get_data()[idx + 1] - offset;
@@ -181,27 +224,11 @@ void ArrayColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, s
     }
 }
 
-void ArrayColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) {
-    reserve(batch_size);
-    for (size_t i = 0; i < batch_size; ++i) {
+void ArrayColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+    reserve(chunk_size);
+    for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
     }
-}
-
-size_t ArrayColumn::serialize_size() const {
-    return _offsets->serialize_size() + _elements->serialize_size();
-}
-
-uint8_t* ArrayColumn::serialize_column(uint8_t* dst) {
-    dst = _offsets->serialize_column(dst);
-    dst = _elements->serialize_column(dst);
-    return dst;
-}
-
-const uint8_t* ArrayColumn::deserialize_column(const uint8_t* src) {
-    src = _offsets->deserialize_column(src);
-    src = _elements->deserialize_column(src);
-    return src;
 }
 
 MutableColumnPtr ArrayColumn::clone_empty() const {

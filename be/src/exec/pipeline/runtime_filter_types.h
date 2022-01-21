@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 #include <memory>
@@ -46,6 +46,30 @@ struct RuntimeFilterCollector {
 
     RuntimeBloomFilters& get_bloom_filters() { return _bloom_filters; }
     RuntimeInFilters& get_in_filters() { return _in_filters; }
+
+    // In-filters are constructed by a node and may be pushed down to its descendant node.
+    // Different tuple id and slot id between descendant and ancestor nodes may be referenced to the same column,
+    // such as ProjectNode, so we need use ancestor's tuple slot mappings to rewrite in filters.
+    void rewrite_in_filters(const std::vector<TupleSlotMapping>& mappings) {
+        std::vector<TupleId> tuple_ids(1);
+        for (const auto& mapping : mappings) {
+            tuple_ids[0] = mapping.to_tuple_id;
+
+            for (auto in_filter : _in_filters) {
+                if (!in_filter->root()->is_bound(tuple_ids)) {
+                    continue;
+                }
+
+                DCHECK(nullptr != dynamic_cast<vectorized::ColumnRef*>(in_filter->root()->get_child(0)));
+                auto column = ((vectorized::ColumnRef*)in_filter->root()->get_child(0));
+
+                if (column->slot_id() == mapping.to_slot_id) {
+                    column->set_slot_id(mapping.from_slot_id);
+                    column->set_tuple_id(mapping.from_tuple_id);
+                }
+            }
+        }
+    }
 
     std::vector<RuntimeInFilterPtr> get_in_filters_bounded_by_tuple_ids(const std::vector<TupleId>& tuple_ids) {
         std::vector<ExprContext*> selected_in_filters;
@@ -227,7 +251,7 @@ public:
             if (k < i) {
                 _partial_in_filters[k] = std::move(_partial_in_filters[i]);
             }
-            num_rows += _ht_row_counts[i];
+            num_rows = std::max(num_rows, _ht_row_counts[i]);
         }
 
         can_merge_in_filters = can_merge_in_filters && (num_rows <= 1024) && k >= 0;
@@ -272,7 +296,7 @@ public:
             desc->set_is_pipeline(true);
             // skip if it does not have consumer.
             if (!desc->has_consumer()) continue;
-            // skip if ht.size() > limit and it's only for local.
+            // skip if ht.size() > limit, and it's only for local.
             if (!desc->has_remote_targets() && row_count > _limit) continue;
             PrimitiveType build_type = desc->build_expr_type();
             vectorized::JoinRuntimeFilter* filter =
@@ -289,7 +313,7 @@ public:
             while (param_it != params.end()) {
                 auto& desc = *(desc_it++);
                 auto& param = *(param_it++);
-                if (desc->runtime_filter() == nullptr) {
+                if (desc->runtime_filter() == nullptr || param.column == nullptr) {
                     continue;
                 }
                 auto status = vectorized::RuntimeFilterHelper::fill_runtime_bloom_filter(

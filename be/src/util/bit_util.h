@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UITL_BIT_UTIL_H
-#define STARROCKS_BE_SRC_COMMON_UITL_BIT_UTIL_H
+#pragma once
 
 #include <endian.h>
 
@@ -360,5 +359,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif

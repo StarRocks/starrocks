@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
@@ -228,12 +229,12 @@ public class SplitAggregateRule extends TransformationRule {
     private CallOperator rewriteDistinctAggFn(CallOperator fnCall) {
         final String functionName = fnCall.getFnName();
         if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
-            return new CallOperator("MULTI_DISTINCT_COUNT", fnCall.getType(), fnCall.getChildren(),
-                    Expr.getBuiltinFunction("MULTI_DISTINCT_COUNT", new Type[] {fnCall.getChild(0).getType()},
+            return new CallOperator(FunctionSet.MULTI_DISTINCT_COUNT, fnCall.getType(), fnCall.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
         } else if (functionName.equalsIgnoreCase("SUM")) {
-            return new CallOperator("MULTI_DISTINCT_SUM", fnCall.getType(), fnCall.getChildren(),
-                    Expr.getBuiltinFunction("MULTI_DISTINCT_SUM", new Type[] {fnCall.getChild(0).getType()},
+            return new CallOperator(FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
         }
         return null;
@@ -260,7 +261,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .setType(AggType.LOCAL)
                 .setAggregations(createNormalAgg(AggType.LOCAL, newAggMap))
                 .setPredicate(null)
-                .setLimit(-1)
+                .setLimit(Operator.DEFAULT_LIMIT)
                 .setProjection(null)
                 .build();
         OptExpression localOptExpression = OptExpression.create(local, input.getInputs());
@@ -335,7 +336,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .setPartitionByColumns(partitionColumns)
                 .setSingleDistinctFunctionPos(singleDistinctFunctionPos)
                 .setPredicate(null)
-                .setLimit(-1)
+                .setLimit(Operator.DEFAULT_LIMIT)
                 .setProjection(null)
                 .build();
         OptExpression distinctLocalExpression = OptExpression.create(distinctLocal, distinctGlobalExpression);

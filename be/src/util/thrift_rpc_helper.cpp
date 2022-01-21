@@ -55,7 +55,7 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
     Status status;
     ClientConnection<T> client(_s_exec_env->get_client_cache<T>(), address, timeout_ms, &status);
     if (!status.ok()) {
-        LOG(WARNING) << "Connect frontent failed, address=" << address << ", status=" << status.get_error_msg();
+        LOG(WARNING) << "Connect frontend failed, address=" << address << ", status=" << status.get_error_msg();
         return status;
     }
     try {
@@ -67,7 +67,7 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
             SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms));
             status = client.reopen(timeout_ms);
             if (!status.ok()) {
-                LOG(WARNING) << "client repoen failed. address=" << address << ", status=" << status.get_error_msg();
+                LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << status.get_error_msg();
                 return status;
             }
             callback(client);

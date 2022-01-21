@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -6,6 +6,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/sort_exec_exprs.h"
+#include "exec/vectorized/chunk_sorter_heapsorter.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
@@ -85,15 +86,14 @@ private:
 
 class PartitionSortSinkOperatorFactory final : public OperatorFactory {
 public:
-    PartitionSortSinkOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<SortContext> sort_context,
-                                     SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order,
-                                     std::vector<bool> is_null_first, int64_t offset, int64_t limit,
-                                     const std::vector<OrderByType>& order_by_types,
-                                     TupleDescriptor* materialized_tuple_desc,
-                                     const RowDescriptor& parent_node_row_desc,
-                                     const RowDescriptor& parent_node_child_row_desc)
+    PartitionSortSinkOperatorFactory(
+            int32_t id, int32_t plan_node_id, std::shared_ptr<SortContextFactory> sort_context_factory,
+            SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
+            int64_t offset, int64_t limit, const std::vector<OrderByType>& order_by_types,
+            TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
+            const RowDescriptor& parent_node_child_row_desc, const std::vector<ExprContext*>& analytic_partition_exprs)
             : OperatorFactory(id, "partition_sort_sink", plan_node_id),
-              _sort_context(sort_context),
+              _sort_context_factory(sort_context_factory),
               _sort_exec_exprs(sort_exec_exprs),
               _is_asc_order(is_asc_order),
               _is_null_first(is_null_first),
@@ -102,37 +102,18 @@ public:
               _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
               _parent_node_row_desc(parent_node_row_desc),
-              _parent_node_child_row_desc(parent_node_child_row_desc) {}
+              _parent_node_child_row_desc(parent_node_child_row_desc),
+              _analytic_partition_exprs(analytic_partition_exprs) {}
 
     ~PartitionSortSinkOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        static const uint SIZE_OF_CHUNK_FOR_TOPN = 3000;
-        static const uint SIZE_OF_CHUNK_FOR_FULL_SORT = 5000;
-
-        std::shared_ptr<ChunksSorter> chunks_sorter;
-        if (_limit >= 0) {
-            chunks_sorter = std::make_unique<vectorized::ChunksSorterTopn>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                           &_is_asc_order, &_is_null_first, _offset,
-                                                                           _limit, SIZE_OF_CHUNK_FOR_TOPN);
-        } else {
-            chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(
-                    &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    SIZE_OF_CHUNK_FOR_FULL_SORT);
-        }
-
-        _sort_context->add_partition_chunks_sorter(chunks_sorter);
-        auto ope = std::make_shared<PartitionSortSinkOperator>(
-                this, _id, _plan_node_id, chunks_sorter, _sort_exec_exprs, _order_by_types, _materialized_tuple_desc,
-                _parent_node_row_desc, _parent_node_child_row_desc, _sort_context.get());
-        return ope;
-    }
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
 private:
-    std::shared_ptr<SortContext> _sort_context;
+    std::shared_ptr<SortContextFactory> _sort_context_factory;
     // _sort_exec_exprs contains the ordering expressions
     SortExecExprs& _sort_exec_exprs;
     std::vector<bool> _is_asc_order;
@@ -147,6 +128,7 @@ private:
     // Used to get needed data from TopNNode.
     const RowDescriptor& _parent_node_row_desc;
     const RowDescriptor& _parent_node_child_row_desc;
+    std::vector<ExprContext*> _analytic_partition_exprs;
 };
 
 } // namespace pipeline

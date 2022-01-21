@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/rowset/vectorized/segment_iterator.h"
 
 #include <algorithm>
 #include <memory>
+#include <stack>
 #include <unordered_map>
 
 #include "column/binary_column.h"
@@ -15,19 +16,18 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
+#include "runtime/external_scan_context_mgr.h"
 #include "simd/simd.h"
 #include "storage/del_vector.h"
 #include "storage/fs/fs_util.h"
-#include "storage/row_block2.h"
-#include "storage/rowset/segment_v2/bitmap_index_reader.h"
-#include "storage/rowset/segment_v2/column_decoder.h"
-#include "storage/rowset/segment_v2/column_reader.h"
-#include "storage/rowset/segment_v2/common.h"
-#include "storage/rowset/segment_v2/default_value_column_iterator.h"
-#include "storage/rowset/segment_v2/dictcode_column_iterator.h"
-#include "storage/rowset/segment_v2/row_ranges.h"
-#include "storage/rowset/segment_v2/scalar_column_iterator.h"
-#include "storage/rowset/segment_v2/segment.h"
+#include "storage/rowset/bitmap_index_reader.h"
+#include "storage/rowset/column_decoder.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/common.h"
+#include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/dictcode_column_iterator.h"
+#include "storage/rowset/scalar_column_iterator.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/vectorized/rowid_column_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
@@ -45,12 +45,6 @@
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::vectorized {
-
-using segment_v2::BitmapIndexIterator;
-using segment_v2::ColumnIterator;
-using segment_v2::ColumnIteratorOptions;
-using segment_v2::rowid_t;
-using segment_v2::Segment;
 
 constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
 
@@ -103,6 +97,7 @@ private:
             _read_chunk.reset();
             _dict_chunk.reset();
             _final_chunk.reset();
+            _adapt_global_dict_chunk.reset();
         }
 
         Status seek_columns(ordinal_t pos) {
@@ -123,13 +118,28 @@ private:
             return Status::OK();
         }
 
+        Status read_columns(Chunk* chunk, const vectorized::SparseRange& range) {
+            bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
+            for (size_t i = 0; i < _column_iterators.size(); i++) {
+                const ColumnPtr& col = chunk->get_column_by_index(i);
+                RETURN_IF_ERROR(_column_iterators[i]->next_batch(range, col.get()));
+                may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
+            }
+            chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+            return Status::OK();
+        }
+
         int64_t memory_usage() const {
             int64_t usage = 0;
             usage += (_read_chunk != nullptr) ? _read_chunk->memory_usage() : 0;
             usage += (_dict_chunk.get() != _read_chunk.get()) ? _dict_chunk->memory_usage() : 0;
             usage += (_final_chunk.get() != _dict_chunk.get()) ? _final_chunk->memory_usage() : 0;
+            usage += (_adapt_global_dict_chunk.get() != _final_chunk.get()) ? _adapt_global_dict_chunk->memory_usage()
+                                                                            : 0;
             return usage;
         }
+
+        size_t column_size() { return _column_iterators.size(); }
 
         Schema _read_schema;
         Schema _dict_decode_schema;
@@ -145,6 +155,7 @@ private:
         std::shared_ptr<Chunk> _read_chunk;
         std::shared_ptr<Chunk> _dict_chunk;
         std::shared_ptr<Chunk> _final_chunk;
+        std::shared_ptr<Chunk> _adapt_global_dict_chunk;
 
         // true iff |_is_dict_column| contains at least one `true`, i.e,
         // |_column_iterators| contains at least one `DictCodeColumnIterator`.
@@ -153,11 +164,15 @@ private:
         // if true, the last item of |_column_iterators| is a `RowIdColumnIterator` and
         // the last item of |_read_schema| and |_dict_decode_schema| is a row id field.
         bool _late_materialize{false};
+
+        // not all dict encdoe
+        bool _has_force_dict_encode{false};
     };
 
     Status _init();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
+    template <bool check_global_dict>
     Status _init_column_iterators(const Schema& schema);
     Status _get_row_ranges_by_keys();
     Status _get_row_ranges_by_zone_map();
@@ -180,6 +195,8 @@ private:
     template <bool late_materialization>
     Status _build_context(ScanContext* ctx);
 
+    Status _init_global_dict_decoder();
+
     void _rewrite_predicates();
 
     Status _decode_dict_codes(ScanContext* ctx);
@@ -189,6 +206,8 @@ private:
     Status _finish_late_materialization(ScanContext* ctx);
 
     Status _build_final_chunk(ScanContext* ctx);
+
+    Status _encode_to_global_id(ScanContext* ctx);
 
     void _switch_context(ScanContext* to);
 
@@ -203,17 +222,22 @@ private:
 
     Status _apply_bitmap_index();
 
+    Status _apply_del_vector();
+
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
+    Status _read_by_column(size_t n, Chunk* result, vector<rowid_t>* rowids);
+
 private:
+    using RawColumnIterators = std::vector<ColumnIterator*>;
+    using ColumnDecoders = std::vector<ColumnDecoder>;
     std::shared_ptr<Segment> _segment;
     vectorized::SegmentReadOptions _opts;
-    std::vector<ColumnIterator*> _column_iterators;
-    std::vector<ColumnDecoder> _column_decoders;
+    RawColumnIterators _column_iterators;
+    ColumnDecoders _column_decoders;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
 
     DelVectorPtr _del_vec;
-    rowid_t _chunk_rowid_start = 0;
     roaring_uint32_iterator_t _roaring_iter;
 
     // block for file to read
@@ -259,7 +283,6 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::S
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
-
           _predicate_columns(_opts.predicates.size()) {}
 
 Status SegmentIterator::_init() {
@@ -296,11 +319,12 @@ Status SegmentIterator::_init() {
     // The main task is to do some initialization,
     // initialize the iterator and check if certain optimizations can be applied
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
-    RETURN_IF_ERROR(_init_column_iterators(_schema));
+    RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
     // filter by index stage
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_init_bitmap_index_iterators());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
+    RETURN_IF_ERROR(_apply_del_vector());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
@@ -314,12 +338,15 @@ Status SegmentIterator::_init() {
     return Status::OK();
 }
 
+template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
 
-    const size_t n = 1 + ChunkHelper::max_column_id(schema);
+    const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
     _column_iterators.resize(n, nullptr);
-    _column_decoders.resize(n);
+    if constexpr (check_global_dict) {
+        _column_decoders.resize(n);
+    }
 
     bool has_predicate = !_opts.predicates.empty();
     _predicate_need_rewrite.resize(n, false);
@@ -341,7 +368,6 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             }
 
             RETURN_IF_ERROR(_segment->new_column_iterator(cid, &_column_iterators[cid]));
-            _column_decoders[cid].set_iterator(_column_iterators[cid]);
 
             _obj_pool.add(_column_iterators[cid]);
             ColumnIteratorOptions iter_opts;
@@ -352,10 +378,13 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             iter_opts.reader_type = _opts.reader_type;
             RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
 
-            // we have a global dict map but column was not encode by dict
-            if (_opts.global_dictmaps->count(cid) && !_column_iterators[cid]->all_page_dict_encoded()) {
-                DCHECK(false) << "column was not dict encode, but segment_iterator has a global dict map";
-                return Status::InternalError(fmt::format("cid:{} column has a non-dictionary coding page", cid));
+            if constexpr (check_global_dict) {
+                _column_decoders[cid].set_iterator(_column_iterators[cid]);
+                _column_decoders[cid].set_all_page_dict_encoded(_column_iterators[cid]->all_page_dict_encoded());
+                if (_opts.global_dictmaps->count(cid)) {
+                    _column_decoders[cid].set_global_dict(_opts.global_dictmaps->find(cid)->second);
+                    _column_decoders[cid].check_global_dict();
+                }
             }
 
             // turn off low cardinality if not all data pages are dict-encoded.
@@ -396,17 +425,17 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         return Status::OK();
     }
     DCHECK_EQ(0, _scan_range.span_size());
-    RETURN_IF_ERROR(_segment->_load_index());
+    RETURN_IF_ERROR(_segment->_load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
 
         if (!range.upper().empty()) {
-            _init_column_iterators(range.lower().schema());
+            _init_column_iterators<false>(range.lower().schema());
             RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
         }
         if (!range.lower().empty() && upper_rowid > 0) {
-            _init_column_iterators(range.lower().schema());
+            _init_column_iterators<false>(range.lower().schema());
             RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
         }
         if (lower_rowid <= upper_rowid) {
@@ -557,28 +586,40 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
     return Status::OK();
 }
 
-inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowid, size_t n) {
-    Range r = _range_iter.next(n);
-    size_t nread = r.span_size();
-    if (_cur_rowid != r.begin() || _cur_rowid == 0) {
-        _cur_rowid = r.begin();
+inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size_t n) {
+    size_t read_num = 0;
+    SparseRange range;
+    size_t cur_rowid = _cur_rowid;
+
+    if (_cur_rowid != _range_iter.begin() || _cur_rowid == 0) {
+        _cur_rowid = _range_iter.begin();
         _opts.stats->block_seek_num += 1;
         SCOPED_RAW_TIMER(&_opts.stats->block_seek_ns);
         RETURN_IF_ERROR(_context->seek_columns(_cur_rowid));
     }
+
+    _range_iter.next_range(n, &range);
+    read_num += range.span_size();
+
     {
         _opts.stats->blocks_load += 1;
         SCOPED_RAW_TIMER(&_opts.stats->block_fetch_ns);
-        RETURN_IF_ERROR(_context->read_columns(chunk, nread));
+        RETURN_IF_ERROR(_context->read_columns(chunk, range));
     }
-    _chunk_rowid_start = _cur_rowid;
-    if (rowid != nullptr) {
-        for (uint32_t i = _cur_rowid; i < _cur_rowid + nread; i++) {
-            rowid->push_back(i);
+
+    if (rowids != nullptr) {
+        rowids->reserve(rowids->size() + n);
+        vectorized::SparseRangeIterator iter = range.new_iterator();
+        while (iter.has_more()) {
+            vectorized::Range r = iter.next(n);
+            for (uint32_t i = r.begin(); i < r.end(); i++) {
+                rowids->push_back(i);
+            }
         }
     }
-    _cur_rowid += nread;
-    _opts.stats->raw_rows_read += nread;
+
+    _cur_rowid = cur_rowid;
+    _opts.stats->raw_rows_read += read_num;
     chunk->check_or_die();
     return Status::OK();
 }
@@ -625,6 +666,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     _context->_read_chunk->reset();
     _context->_dict_chunk->reset();
     _context->_final_chunk->reset();
+    _context->_adapt_global_dict_chunk->reset();
 
     Chunk* chunk = _context->_read_chunk.get();
 
@@ -633,7 +675,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk->check_or_die();
         size_t next_start = chunk->num_rows();
 
-        if (has_predicate || _del_vec) {
+        if (has_predicate) {
             next_start = _filter(chunk, rowid, chunk_start, next_start);
             chunk->check_or_die();
         }
@@ -705,6 +747,11 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
     }
 
+    if (_context->_has_force_dict_encode) {
+        RETURN_IF_ERROR(_encode_to_global_id(_context));
+        chunk = _context->_adapt_global_dict_chunk.get();
+    }
+
     result->swap_chunk(*chunk);
 
     if (need_switch_context) {
@@ -736,7 +783,26 @@ void SegmentIterator::_switch_context(ScanContext* to) {
     }
 
     DCHECK_GT(this->output_schema().num_fields(), 0);
-    to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size);
+
+    if (to->_has_force_dict_encode) {
+        // rebuild encoded schema
+        _encoded_schema.clear();
+        for (const auto& field : schema().fields()) {
+            if (_can_using_global_dict(field)) {
+                _encoded_schema.append(Field::convert_to_dict_field(*field));
+            } else {
+                _encoded_schema.append(field);
+            }
+        }
+        to->_final_chunk = ChunkHelper::new_chunk(this->_encoded_schema, _opts.chunk_size);
+    } else {
+        to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size);
+    }
+
+    to->_adapt_global_dict_chunk = to->_has_force_dict_encode
+                                           ? ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size)
+                                           : to->_final_chunk;
+
     _context = to;
 }
 
@@ -790,25 +856,6 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
         }
     }
 
-    int64_t del_vec_filtered = 0;
-    if (_del_vec) {
-        if (_vectorized_preds.empty() && _branchless_preds.empty()) {
-            // setup selection vector
-            memset(_selection.data() + from, 1, to - from);
-        }
-        // TODO: filter del_vec early if most of the rows are deleted
-        uint32_t& cur_value = _roaring_iter.current_value;
-        while (_roaring_iter.has_value && cur_value < _cur_rowid) {
-            if (cur_value >= _chunk_rowid_start) {
-                // valid delete
-                auto& del = _selection[cur_value - _chunk_rowid_start + from];
-                del_vec_filtered += del;
-                del = 0;
-            }
-            roaring_advance_uint32_iterator(&_roaring_iter);
-        }
-    }
-
     auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
     uint16_t chunk_size = to;
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
@@ -825,8 +872,7 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
             rowid->resize(size);
         }
     }
-    _opts.stats->rows_del_vec_filtered += del_vec_filtered;
-    _opts.stats->rows_vec_cond_filtered += (to - chunk_size) - del_vec_filtered;
+    _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
     return chunk_size;
 }
 
@@ -874,7 +920,9 @@ inline bool SegmentIterator::_can_using_dict_code(const FieldPtr& field) const {
 }
 
 bool SegmentIterator::_can_using_global_dict(const FieldPtr& field) const {
-    return _opts.global_dictmaps->find(field->id()) != _opts.global_dictmaps->end();
+    auto cid = field->id();
+    return _opts.global_dictmaps->find(cid) != _opts.global_dictmaps->end() &&
+           !_column_decoders[cid].need_force_encode_to_global_id();
 }
 
 template <bool late_materialization>
@@ -913,15 +961,14 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
         if (use_dict_code || use_global_dict_code) {
             // create FixedLengthColumn<int64_t> for saving dict codewords.
-            const std::string& name = f->name();
-            auto f2 = std::make_shared<Field>(cid, name, kDictCodeType, -1, -1, f->is_nullable());
+            auto f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
-                iter = new segment_v2::GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
-                                                                    _opts.global_dictmaps->at(cid));
-                _column_decoders[cid].set_iterator(iter);
+                iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
+                                                        _column_decoders[cid].code_convert_data(),
+                                                        _opts.global_dictmaps->at(cid));
             } else {
-                iter = new segment_v2::DictCodeColumnIterator(cid, _column_iterators[cid]);
+                iter = new DictCodeColumnIterator(cid, _column_iterators[cid]);
             }
 
             _obj_pool.add(iter);
@@ -966,6 +1013,12 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_skip_dict_decode_indexes.push_back(false);
     }
 
+    for (size_t i = 0; i < num_fields; ++i) {
+        const FieldPtr& f = _schema.field(i);
+        const ColumnId cid = f->id();
+        ctx->_has_force_dict_encode |= _column_decoders[cid].need_force_encode_to_global_id();
+    }
+
     // build index map
     DCHECK_LE(output_schema().num_fields(), _schema.num_fields());
     // map _read_schema[cid, index] to output_schema[cid index]
@@ -988,6 +1041,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 Status SegmentIterator::_init_context() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     _late_materialization_ratio = config::late_materialization_ratio;
+
+    RETURN_IF_ERROR(_init_global_dict_decoder());
 
     if (_predicate_columns == 0 || _predicate_columns >= _schema.num_fields()) {
         // non or all field has predicate, disable late materialization.
@@ -1019,6 +1074,23 @@ Status SegmentIterator::_init_context() {
     return Status::OK();
 }
 
+Status SegmentIterator::_init_global_dict_decoder() {
+    // init decoder for all columns
+    // in some case _build_context<false> won't be called
+    for (int i = 0; i < _schema.num_fields(); ++i) {
+        const FieldPtr& f = _schema.field(i);
+        const ColumnId cid = f->id();
+        if (_can_using_global_dict(f)) {
+            auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
+                                                         _column_decoders[cid].code_convert_data(),
+                                                         _opts.global_dictmaps->at(cid));
+            _obj_pool.add(iter);
+            _column_decoders[cid].set_iterator(iter);
+        }
+    }
+    return Status::OK();
+}
+
 void SegmentIterator::_rewrite_predicates() {
     //
     ColumnPredicateRewriter rewriter(_column_iterators, _opts.predicates, _schema, _predicate_need_rewrite,
@@ -1029,8 +1101,15 @@ void SegmentIterator::_rewrite_predicates() {
     // If the global dictionary optimization is enabled for the column,
     // then the output column is of type INT, and we need to rewrite the delete condition
     // so that the input is of type INT (the original input is of type String)
+    std::vector<uint8_t> disable_dict_rewrites(_column_decoders.size());
+    for (size_t i = 0; i < _schema.num_fields(); i++) {
+        const FieldPtr& field = _schema.field(i);
+        ColumnId cid = field->id();
+        disable_dict_rewrites[cid] = _column_decoders[cid].need_force_encode_to_global_id();
+    }
+
     for (auto& conjunct_predicate : _opts.delete_predicates.predicate_list()) {
-        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps);
+        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps, &disable_dict_rewrites);
         crewriter.rewrite_predicate(&_obj_pool);
     }
 }
@@ -1130,6 +1209,24 @@ Status SegmentIterator::_build_final_chunk(ScanContext* ctx) {
     }
     bool may_has_del_row = ctx->_dict_chunk->delete_state() != DEL_NOT_SATISFIED;
     ctx->_final_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    return Status::OK();
+}
+
+Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
+    int num_columns = ctx->_final_chunk->num_columns();
+    auto final_chunk = ctx->_final_chunk;
+
+    for (size_t i = 0; i < num_columns; i++) {
+        const FieldPtr& f = _schema.field(i);
+        const ColumnId cid = f->id();
+        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(i);
+        ColumnPtr& dst = ctx->_adapt_global_dict_chunk->get_column_by_index(i);
+        if (_column_decoders[cid].need_force_encode_to_global_id()) {
+            RETURN_IF_ERROR(_column_decoders[cid].encode_to_global_id(col.get(), dst.get()));
+        } else {
+            col->swap_column(*dst);
+        }
+    }
     return Status::OK();
 }
 
@@ -1241,6 +1338,18 @@ Status SegmentIterator::_apply_bitmap_index() {
     return Status::OK();
 }
 
+Status SegmentIterator::_apply_del_vector() {
+    if (_opts.is_primary_keys && _opts.version > 0 && _del_vec && !_del_vec->empty()) {
+        Roaring row_bitmap = range2roaring(_scan_range);
+        size_t input_rows = row_bitmap.cardinality();
+        row_bitmap -= *(_del_vec->roaring());
+        _scan_range = roaring2range(row_bitmap);
+        size_t filtered_rows = row_bitmap.cardinality();
+        _opts.stats->rows_del_vec_filtered += input_rows - filtered_rows;
+    }
+    return Status::OK();
+}
+
 Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
     RETURN_IF(_opts.predicates.empty(), Status::OK());
     size_t prev_size = _scan_range.span_size();
@@ -1258,6 +1367,7 @@ void SegmentIterator::close() {
     _obj_pool.clear();
     _rblock.reset();
     _segment.reset();
+    _column_decoders.clear();
 
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
@@ -1287,8 +1397,8 @@ inline Schema reorder_schema(const Schema& input, const std::unordered_map<Colum
     return output;
 }
 
-ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<segment_v2::Segment>& segment,
-                                      const vectorized::Schema& schema, const vectorized::SegmentReadOptions& options) {
+ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const vectorized::Schema& schema,
+                                      const vectorized::SegmentReadOptions& options) {
     if (options.predicates.empty() || options.predicates.size() >= schema.num_fields()) {
         return std::make_shared<SegmentIterator>(segment, schema, options);
     } else {

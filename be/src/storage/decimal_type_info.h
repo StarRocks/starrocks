@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -46,10 +46,10 @@ public:
     }
 
     template <typename From, typename To>
-    static inline OLAPStatus to_decimal(const From* src, To* dst, int src_precision, int src_scale, int dst_precision,
-                                        int dst_scale) {
+    static inline Status to_decimal(const From* src, To* dst, int src_precision, int src_scale, int dst_precision,
+                                    int dst_scale) {
         if (dst_scale < src_scale || dst_precision - dst_scale < src_precision - src_scale) {
-            return OLAPStatus::OLAP_ERR_INVALID_SCHEMA;
+            return Status::InvalidArgument("Fail to cast to decimal.");
         }
         int adjust_scale = dst_scale - src_scale;
         if (adjust_scale == 0) {
@@ -61,11 +61,11 @@ public:
             const auto scale_factor = get_scale_factor<From>(-adjust_scale);
             DecimalV3Cast::to_decimal<From, To, From, false, false>(*src, scale_factor, dst);
         }
-        return OLAPStatus::OLAP_SUCCESS;
+        return Status::OK();
     }
 
-    static inline OLAPStatus to_decimal(FieldType src_type, FieldType dst_type, const void* src, void* dst,
-                                        int src_precision, int src_scale, int dst_precision, int dst_scale) {
+    static inline Status to_decimal(FieldType src_type, FieldType dst_type, const void* src, void* dst,
+                                    int src_precision, int src_scale, int dst_precision, int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                               \
                                                                                                              \
     if (src_type == OLAP_FIELD_TYPE_DECIMAL##n && dst_type == OLAP_FIELD_TYPE_DECIMAL##m) {                  \
@@ -90,12 +90,11 @@ public:
         TO_DECIMAL_MACRO(128, 128)
 #pragma GCC diagnostic pop
 #undef TO_DECIMAL_MACRO
-        return OLAP_ERR_INVALID_SCHEMA;
+        return Status::InvalidArgument("Fail to cast to decimal.");
     }
 
     //convert and deep copy value from other type's source
-    OLAPStatus convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                            MemPool* mem_pool) const override {
+    Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const override {
         switch (src_type->type()) {
         case OLAP_FIELD_TYPE_CHAR:
         case OLAP_FIELD_TYPE_VARCHAR: {
@@ -105,10 +104,10 @@ public:
             auto fail = DecimalV3Cast::from_string<CppType>(&result, precision(), scale(), src_value->data,
                                                             src_value->size);
             if (UNLIKELY(fail)) {
-                return OLAPStatus::OLAP_ERR_INVALID_SCHEMA;
+                return Status::InvalidArgument("Fail to cast to decimal.");
             }
             memcpy(dest, &result, sizeof(CppType));
-            return OLAPStatus::OLAP_SUCCESS;
+            return Status::OK();
         }
         case OLAP_FIELD_TYPE_DECIMAL32:
         case OLAP_FIELD_TYPE_DECIMAL64:
@@ -116,13 +115,12 @@ public:
             return to_decimal(src_type->type(), type(), src, dest, src_type->precision(), src_type->scale(),
                               precision(), scale());
         default:
-            return OLAPStatus::OLAP_ERR_INVALID_SCHEMA;
+            return Status::InvalidArgument("Fail to cast to decimal.");
         }
     }
 
-    static inline OLAPStatus to_decimal(FieldType src_type, FieldType dst_type, const Datum& src_datum,
-                                        Datum& dst_datum, int src_precision, int src_scale, int dst_precision,
-                                        int dst_scale) {
+    static inline Status to_decimal(FieldType src_type, FieldType dst_type, const Datum& src_datum, Datum& dst_datum,
+                                    int src_precision, int src_scale, int dst_precision, int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                           \
                                                                                                          \
     if (src_type == OLAP_FIELD_TYPE_DECIMAL##n && dst_type == OLAP_FIELD_TYPE_DECIMAL##m) {              \
@@ -146,11 +144,11 @@ public:
         TO_DECIMAL_MACRO(128, 128)
 #pragma GCC diagnostic pop
 #undef TO_DECIMAL_MACRO
-        return OLAP_ERR_INVALID_SCHEMA;
+        return Status::InvalidArgument("Fail to cast to decimal.");
     }
 
     //convert and deep copy value from other type's source
-    OLAPStatus convert_from(Datum& dest, const Datum& src, const TypeInfoPtr& src_type) const {
+    Status convert_from(Datum& dest, const Datum& src, const TypeInfoPtr& src_type) const {
         switch (src_type->type()) {
         case OLAP_FIELD_TYPE_DECIMAL32:
         case OLAP_FIELD_TYPE_DECIMAL64:
@@ -158,11 +156,11 @@ public:
             return to_decimal(src_type->type(), type(), src, dest, src_type->precision(), src_type->scale(),
                               precision(), scale());
         default:
-            return OLAPStatus::OLAP_ERR_INVALID_SCHEMA;
+            return Status::InternalError("Fail to cast to decimal.");
         }
     }
 
-    OLAPStatus from_string(void* buf, const std::string& scan_key) const override {
+    Status from_string(void* buf, const std::string& scan_key) const override {
         CppType* data_ptr = reinterpret_cast<CppType*>(buf);
         // Decimal strings in some predicates use decimal_precision_limit as precision,
         // when converted into decimal values, a smaller precision is used, DecimalTypeInfo::from_string
@@ -171,9 +169,9 @@ public:
         auto err = DecimalV3Cast::from_string<CppType>(data_ptr, decimal_precision_limit<CppType>, _scale,
                                                        scan_key.c_str(), scan_key.size());
         if (err) {
-            return OLAP_ERR_INVALID_SCHEMA;
+            return Status::InvalidArgument("Fail to cast to decimal.");
         }
-        return OLAP_SUCCESS;
+        return Status::OK();
     }
 
     std::string to_string(const void* src) const override {

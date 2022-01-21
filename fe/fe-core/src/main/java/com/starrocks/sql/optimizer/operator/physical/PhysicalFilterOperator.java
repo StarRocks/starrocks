@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
@@ -20,24 +20,6 @@ public class PhysicalFilterOperator extends PhysicalOperator {
 
     public ScalarOperator getPredicate() {
         return predicate;
-    }
-
-    @Override
-    public int hashCode() {
-        return predicate.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalFilterOperator)) {
-            return false;
-        }
-        PhysicalFilterOperator rhs = (PhysicalFilterOperator) obj;
-        if (this == rhs) {
-            return true;
-        }
-
-        return predicate.equals(rhs.getPredicate());
     }
 
     @Override

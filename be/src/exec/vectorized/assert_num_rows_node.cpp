@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/assert_num_rows_node.h"
 
@@ -6,7 +6,6 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -54,6 +53,20 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
             _num_rows_returned += chunk->num_rows();
             _input_chunks.emplace_back(std::move(chunk));
         }
+    }
+
+    // assert num rows node only use for un-correlate scalar subquery, return empty chunk is error, least fill one rows
+    if (_assertion == TAssertion::LE && _num_rows_returned == 0) {
+        _input_chunks.clear();
+
+        vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+        for (const auto& desc : row_desc().tuple_descriptors()) {
+            for (const auto& slot : desc->slots()) {
+                chunk->append_column(ColumnHelper::create_const_null_column(_desired_num_rows), slot->id());
+            }
+        }
+
+        _input_chunks.emplace_back(std::move(chunk));
     }
 
     int64_t usage = 0;
@@ -136,8 +149,8 @@ pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::Pipelin
     using namespace pipeline;
 
     OpFactories operator_before_assert_num_rows_source = _children[0]->decompose_to_pipeline(context);
-    operator_before_assert_num_rows_source =
-            context->maybe_interpolate_local_passthrough_exchange(operator_before_assert_num_rows_source);
+    operator_before_assert_num_rows_source = context->maybe_interpolate_local_passthrough_exchange(
+            runtime_state(), operator_before_assert_num_rows_source);
 
     auto source_factory = std::make_shared<AssertNumRowsOperatorFactory>(
             context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion));

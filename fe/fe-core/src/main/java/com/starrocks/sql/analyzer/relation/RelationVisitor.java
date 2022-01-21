@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer.relation;
 
 public abstract class RelationVisitor<R, C> {
@@ -14,7 +14,7 @@ public abstract class RelationVisitor<R, C> {
         return null;
     }
 
-    public R visitQuerySpecification(QuerySpecification node, C context) {
+    public R visitSelect(SelectRelation node, C context) {
         return null;
     }
 

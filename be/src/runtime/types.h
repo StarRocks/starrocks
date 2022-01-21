@@ -42,7 +42,7 @@ struct TypeDescriptor {
     PrimitiveType type{INVALID_TYPE};
     /// Only meaningful for type TYPE_CHAR/TYPE_VARCHAR/TYPE_HLL
     int len{-1};
-    static constexpr int MAX_VARCHAR_LENGTH = 65533;
+    static constexpr int MAX_VARCHAR_LENGTH = 1048576;
     static constexpr int MAX_CHAR_LENGTH = 255;
     static constexpr int MAX_CHAR_INLINE_LENGTH = 128;
 
@@ -188,6 +188,13 @@ struct TypeDescriptor {
         } else {
             return type == o.type;
         }
+    }
+
+    bool is_implicit_castable(const TypeDescriptor& from) const {
+        if (is_decimal_type()) {
+            return precision == from.precision && scale == from.scale;
+        }
+        return false;
     }
 
     bool operator==(const TypeDescriptor& o) const {

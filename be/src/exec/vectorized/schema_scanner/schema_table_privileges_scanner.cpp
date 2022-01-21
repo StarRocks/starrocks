@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/schema_scanner/schema_table_privileges_scanner.h"
 
@@ -36,7 +36,7 @@ Status SchemaTablePrivilegesScanner::start(RuntimeState* state) {
         RETURN_IF_ERROR(
                 SchemaHelper::get_table_privs(*(_param->ip), _param->port, table_privs_params, &_table_privs_result));
     } else {
-        return Status::InternalError("IP or port dosn't exists");
+        return Status::InternalError("IP or port doesn't exists");
     }
     return Status::OK();
 }

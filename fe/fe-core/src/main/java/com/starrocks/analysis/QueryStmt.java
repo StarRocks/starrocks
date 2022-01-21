@@ -30,7 +30,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rewrite.ExprRewriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,7 +38,6 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Abstract base class for any statement that returns results
@@ -261,15 +259,16 @@ public abstract class QueryStmt extends StatementBase {
     }
 
     protected Expr rewriteQueryExprByMvColumnExpr(Expr expr, Analyzer analyzer) throws AnalysisException {
-        if (forbiddenMVRewrite) {
-            return expr;
-        }
-        if (expr.isBoundByTupleIds(disableTuplesMVRewriter.stream().collect(Collectors.toList()))) {
-            return expr;
-        }
-        ExprRewriter rewriter = analyzer.getMVExprRewriter();
-        rewriter.reset();
-        return rewriter.rewrite(expr, analyzer);
+        return expr;
+//        if (forbiddenMVRewrite) {
+//            return expr;
+//        }
+//        if (expr.isBoundByTupleIds(new ArrayList<>(disableTuplesMVRewriter))) {
+//            return expr;
+//        }
+//        ExprRewriter rewriter = analyzer.getMVExprRewriter();
+//        rewriter.reset();
+//        return rewriter.rewrite(expr, analyzer);
     }
 
     /**
@@ -296,7 +295,7 @@ public abstract class QueryStmt extends StatementBase {
             // create copies, we don't want to modify the original parse node, in case
             // we need to print it
             orderingExprs.add(orderByElement.getExpr().clone());
-            isAscOrder.add(Boolean.valueOf(orderByElement.getIsAsc()));
+            isAscOrder.add(orderByElement.getIsAsc());
             nullsFirstParams.add(orderByElement.getNullsFirstParam());
         }
         substituteOrdinalsAliases(orderingExprs, "ORDER BY", analyzer);
@@ -573,24 +572,12 @@ public abstract class QueryStmt extends StatementBase {
         resultExprs = Expr.substituteList(resultExprs, smap, analyzer, true);
     }
 
-    public boolean isForbiddenMVRewrite() {
-        return forbiddenMVRewrite;
-    }
-
     public void forbiddenMVRewrite() {
         this.forbiddenMVRewrite = true;
     }
 
     public void updateDisableTuplesMVRewriter(TupleId tupleId) {
         disableTuplesMVRewriter.add(tupleId);
-    }
-
-    public void updateDisableTuplesMVRewriter(Set<TupleId> tupleIds) {
-        disableTuplesMVRewriter.addAll(tupleIds);
-    }
-
-    public Set<TupleId> getDisableTuplesMVRewriter() {
-        return disableTuplesMVRewriter;
     }
 
     /**
@@ -638,6 +625,10 @@ public abstract class QueryStmt extends StatementBase {
 
     public OutFileClause cloneOutfileCluse() {
         return outFileClause != null ? outFileClause.clone() : null;
+    }
+
+    public String toDigest() {
+        return "";
     }
 
     /**

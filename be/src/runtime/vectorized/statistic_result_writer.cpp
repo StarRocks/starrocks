@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "runtime/vectorized/statistic_result_writer.h"
 
@@ -8,7 +8,6 @@
 #include "gen_cpp/Data_types.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/primitive_type.h"
-#include "runtime/row_batch.h"
 #include "util/thrift_util.h"
 #include "util/types.h"
 
@@ -36,10 +35,6 @@ void StatisticResultWriter::_init_profile() {
     _total_timer = ADD_TIMER(_parent_profile, "TotalSendTime");
     _serialize_timer = ADD_CHILD_TIMER(_parent_profile, "SerializeTime", "TotalSendTime");
     _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
-}
-
-Status StatisticResultWriter::append_row_batch(const RowBatch* batch) {
-    return Status::NotSupported("Statistic result writer not support None-vectorized");
 }
 
 Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {

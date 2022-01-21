@@ -41,6 +41,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THashJoinNode;
+import com.starrocks.thrift.TJoinDistributionMode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import org.apache.logging.log4j.LogManager;
@@ -77,6 +78,7 @@ public class HashJoinNode extends PlanNode {
 
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     private final List<Integer> filter_null_value_columns = Lists.newArrayList();
+    private List<Expr> partitionExprs;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -218,12 +220,16 @@ public class HashJoinNode extends PlanNode {
         this.distrMode = distrMode;
     }
 
-    public boolean isLocalHashBucket() {
-        return isLocalHashBucket;
+    public DistributionMode getDistributionMode() {
+        return this.distrMode;
     }
 
-    public boolean isShuffleHashBucket() {
-        return isShuffleHashBucket;
+    public boolean isBroadcast() {
+        return this.distrMode == DistributionMode.BROADCAST;
+    }
+
+    public boolean isLocalHashBucket() {
+        return isLocalHashBucket;
     }
 
     public void setColocate(boolean colocate, String reason) {
@@ -235,8 +241,8 @@ public class HashJoinNode extends PlanNode {
         isLocalHashBucket = localHashBucket;
     }
 
-    public void setShuffleHashBucket(boolean runtimeBucketShuffle) {
-        isShuffleHashBucket = runtimeBucketShuffle;
+    public void setPartitionExprs(List<Expr> exprs) {
+        partitionExprs = exprs;
     }
 
     @Override
@@ -359,6 +365,7 @@ public class HashJoinNode extends PlanNode {
         msg.node_type = TPlanNodeType.HASH_JOIN_NODE;
         msg.hash_join_node = new THashJoinNode();
         msg.hash_join_node.join_op = joinOp.toThrift();
+        msg.hash_join_node.distribution_mode = distrMode.toThrift();
         StringBuilder sqlJoinPredicatesBuilder = new StringBuilder();
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
             TEqJoinCondition eqJoinCondition = new TEqJoinCondition(eqJoinPredicate.getChild(0).treeToThrift(),
@@ -402,6 +409,9 @@ public class HashJoinNode extends PlanNode {
         }
         msg.hash_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
+        if (partitionExprs != null) {
+            msg.hash_join_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
+        }
         msg.setFilter_null_value_columns(filter_null_value_columns);
     }
 
@@ -486,6 +496,25 @@ public class HashJoinNode extends PlanNode {
         @Override
         public String toString() {
             return description;
+        }
+
+        public TJoinDistributionMode toThrift() {
+            switch (this) {
+                case BROADCAST:
+                    return TJoinDistributionMode.BROADCAST;
+                case PARTITIONED:
+                    return TJoinDistributionMode.PARTITIONED;
+                case LOCAL_HASH_BUCKET:
+                    return TJoinDistributionMode.LOCAL_HASH_BUCKET;
+                case SHUFFLE_HASH_BUCKET:
+                    return TJoinDistributionMode.SHUFFLE_HASH_BUCKET;
+                case COLOCATE:
+                    return TJoinDistributionMode.COLOCATE;
+                case REPLICATED:
+                    return TJoinDistributionMode.REPLICATED;
+                default:
+                    return TJoinDistributionMode.NONE;
+            }
         }
     }
 

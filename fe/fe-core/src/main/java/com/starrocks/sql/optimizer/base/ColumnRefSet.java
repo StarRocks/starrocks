@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.base;
 
@@ -143,7 +143,7 @@ public class ColumnRefSet implements Cloneable {
         return bitSet.get(id);
     }
 
-    public boolean contains(ColumnRefSet rhs) {
+    public boolean containsAll(ColumnRefSet rhs) {
         return rhs.bitSet.stream().allMatch(bit -> bitSet.get(bit));
     }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/union_node.h"
 
@@ -16,6 +16,12 @@ UnionNode::UnionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorT
         : ExecNode(pool, tnode, descs),
           _first_materialized_child_idx(tnode.union_node.first_materialized_child_idx),
           _tuple_id(tnode.union_node.tuple_id) {}
+
+UnionNode::~UnionNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status UnionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -370,10 +376,10 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
 
         // Each _const_expr_list is project to one row.
         // Divide _const_expr_lists into several drivers, each of which is going to evaluate
-        // at least *config::vector_chunk_size* _const_expr_list.
-        size_t parallelism =
-                std::min(context->degree_of_parallelism(),
-                         (_const_expr_lists.size() + config::vector_chunk_size - 1) / config::vector_chunk_size);
+        // at least *runtime_state()->chunk_size()* _const_expr_list.
+        size_t parallelism = std::min(
+                context->degree_of_parallelism(),
+                (_const_expr_lists.size() + runtime_state()->chunk_size() - 1) / runtime_state()->chunk_size());
         union_const_source_op->set_degree_of_parallelism(parallelism);
 
         operators_list[i].emplace_back(std::move(union_const_source_op));
@@ -381,7 +387,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
-    return context->gather_pipelines_to_one(operators_list);
+    return context->maybe_gather_pipelines_to_one(runtime_state(), operators_list);
 }
 
 } // namespace starrocks::vectorized

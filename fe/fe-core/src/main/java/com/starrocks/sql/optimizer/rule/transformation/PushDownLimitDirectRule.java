@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -18,6 +18,7 @@ public class PushDownLimitDirectRule extends TransformationRule {
     private static final List<OperatorType> ALLOW_PUSH_DOWN_LIMIT_LIST = ImmutableList.<OperatorType>builder()
             .add(OperatorType.LOGICAL_PROJECT)
             .add(OperatorType.LOGICAL_ASSERT_ONE_ROW)
+            .add(OperatorType.LOGICAL_CTE_CONSUME)
             .build();
 
     public PushDownLimitDirectRule() {

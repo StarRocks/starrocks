@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/merge_iterator.h"
 
@@ -168,7 +168,7 @@ TEST_F(MergeIteratorTest, mask_merge) {
     RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
     mask_buffer.write(source_masks);
     mask_buffer.flush();
-    mask_buffer.flip();
+    mask_buffer.flip_to_read();
     source_masks.clear();
 
     auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3}, &mask_buffer);

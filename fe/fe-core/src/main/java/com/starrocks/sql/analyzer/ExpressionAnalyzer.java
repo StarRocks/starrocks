@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.clearspring.analytics.util.Lists;
@@ -59,7 +59,6 @@ import com.starrocks.sql.analyzer.relation.QueryRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
-import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -214,7 +213,7 @@ public class ExpressionAnalyzer {
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
 
             for (Type type : list) {
-                if (!canCast(type, compatibleType)) {
+                if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "between predicate type " + type.toSql() + " with type " + compatibleType.toSql()
                                     + " is invalid.");
@@ -229,14 +228,15 @@ public class ExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
-            Type compatibleType = TypeManager.getCompatibleTypeForBinary(type1, type2);
+            Type compatibleType =
+                    TypeManager.getCompatibleTypeForBinary(node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
-            if (!canCast(type1, compatibleType)) {
+            if (!Type.canCastTo(type1, compatibleType)) {
                 throw new SemanticException(
                         "binary type " + type1.toSql() + " with type " + compatibleType.toSql() + " is invalid.");
             }
 
-            if (!canCast(type2, compatibleType)) {
+            if (!Type.canCastTo(type2, compatibleType)) {
                 throw new SemanticException(
                         "binary type " + type2.toSql() + " with type " + compatibleType.toSql() + " is invalid.");
             }
@@ -305,13 +305,13 @@ public class ExpressionAnalyzer {
                     commonType = Type.NULL;
                 }
 
-                if (!Type.NULL.equals(node.getChild(0).getType()) && !canCast(t1, commonType)) {
+                if (!Type.NULL.equals(node.getChild(0).getType()) && !Type.canCastTo(t1, commonType)) {
                     throw new SemanticException(
                             "cast type " + node.getChild(0).getType().toSql() + " with type " + commonType.toSql()
                                     + " is invalid.");
                 }
 
-                if (!Type.NULL.equals(node.getChild(1).getType()) && !canCast(t2, commonType)) {
+                if (!Type.NULL.equals(node.getChild(1).getType()) && !Type.canCastTo(t2, commonType)) {
                     throw new SemanticException(
                             "cast type " + node.getChild(1).getType().toSql() + " with type " + commonType.toSql()
                                     + " is invalid.");
@@ -368,7 +368,7 @@ public class ExpressionAnalyzer {
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
 
             for (Type type : list) {
-                if (!canCast(type, compatibleType)) {
+                if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
                                     + " is invalid.");
@@ -446,7 +446,7 @@ public class ExpressionAnalyzer {
             } else {
                 castType = cast.getTargetTypeDef().getType();
             }
-            if (!canCast(cast.getChild(0).getType(), castType)) {
+            if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
                         + cast.getTargetTypeDef().getType().toSql() + " in sql `" +
                         cast.getChild(0).toSql().replace("%", "%%") + "`");
@@ -662,7 +662,7 @@ public class ExpressionAnalyzer {
             }
 
             for (Type type : whenTypes) {
-                if (!canCast(type, compatibleType)) {
+                if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException("Invalid when type cast " + type.toSql()
                             + " to " + compatibleType.toSql());
                 }
@@ -682,7 +682,7 @@ public class ExpressionAnalyzer {
             Type returnType = thenTypes.stream().allMatch(Type.NULL::equals) ? Type.BOOLEAN :
                     TypeManager.getCompatibleTypeForCaseWhen(thenTypes);
             for (Type type : thenTypes) {
-                if (!canCast(type, returnType)) {
+                if (!Type.canCastTo(type, returnType)) {
                     throw new SemanticException("Invalid then type cast " + type.toSql()
                             + " to " + returnType.toSql());
                 }
@@ -703,7 +703,7 @@ public class ExpressionAnalyzer {
             QueryAnalyzer queryAnalyzer = new QueryAnalyzer(catalog, session);
             QueryRelation queryBlock = queryAnalyzer.transformQueryStmt(stmt, context);
             node.setQueryBlock(queryBlock);
-            node.setType(queryBlock.getOutputExpr().get(0).getType());
+            node.setType(queryBlock.getRelationFields().getFieldByIndex(0).getType());
             return null;
         }
 
@@ -768,25 +768,6 @@ public class ExpressionAnalyzer {
             return null;
         }
 
-        private boolean canCast(Type src, Type des) {
-            if (src.isNull() || des.isNull()) {
-                return true;
-            }
-
-            if (src.getPrimitiveType() == des.getPrimitiveType()) {
-                return true;
-            }
-
-            if (src.isOnlyMetricType() || des.isOnlyMetricType()) {
-                return false;
-            }
-
-            if (src.isChar()) {
-                return Type.canCastTo(Type.VARCHAR, des);
-            }
-
-            return Type.canCastTo(src, des);
-        }
     }
 
     public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, Catalog catalog,
@@ -820,11 +801,10 @@ public class ExpressionAnalyzer {
             return null;
         }
 
-        if (Config.enable_udf) {
-            throw UnsupportedException.unsupportedException("CBO Optimizer don't support UDF function: " + fnName);
-        } else {
+        if (!Config.enable_udf) {
             throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
                     ErrorType.USER_ERROR);
         }
+        return fn;
     }
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -21,9 +21,11 @@ public:
     Status reset(RuntimeState* state) override;
     Status close(RuntimeState* state) override;
 
-    void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) override;
+    void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) override;
     void push_down_join_runtime_filter(RuntimeState* state,
                                        vectorized::RuntimeFilterProbeCollector* collector) override;
+    void push_down_tuple_slot_mappings(RuntimeState* state,
+                                       const std::vector<TupleSlotMapping>& parent_mappings) override;
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;

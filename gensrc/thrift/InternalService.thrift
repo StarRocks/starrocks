@@ -80,6 +80,11 @@ struct TLoadErrorHubInfo {
     3: optional TBrokerErrorHubInfo broker_info;
 }
 
+enum TPipelineProfileMode {
+  BRIEF,
+  DETAIL
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   1: optional bool abort_on_error = 0
@@ -150,6 +155,8 @@ struct TQueryOptions {
   53: optional i32 runtime_filter_send_timeout_ms = 400;
   // For pipeline query engine
   54: optional i32 pipeline_dop;
+  // For pipeline query engine
+  55: optional TPipelineProfileMode pipeline_profile_mode;
 }
 
 
@@ -212,6 +219,8 @@ struct TPlanFragmentExecParams {
   // Global runtime filters
   50: optional TRuntimeFilterParams runtime_filter_params
   51: optional i32 instances_number
+  // To enable pass through chunks between sink/exchange if they are in the same process.
+  52: optional bool enable_exchange_pass_through
 }
 
 // Global query parameters assigned by the coordinator.
@@ -285,6 +294,8 @@ struct TExecPlanFragmentParams {
   14: optional TLoadErrorHubInfo load_error_hub_info
 
   50: optional bool is_pipeline
+  51: optional i32 pipeline_dop
+  52: optional map<Types.TPlanNodeId, i32> per_scan_node_dop;
 }
 
 struct TExecPlanFragmentResult {

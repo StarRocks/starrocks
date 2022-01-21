@@ -217,9 +217,6 @@ Status FileWritableBlock::_close(SyncMode mode) {
             _block_manager->_metrics->total_disk_sync->increment(1);
         }
         sync = _writer->sync();
-        if (sync.ok()) {
-            sync = _block_manager->_sync_metadata(_path);
-        }
         WARN_IF_ERROR(sync, strings::Substitute("Failed to sync when closing block $0", _path));
     }
     Status close = _writer->close();
@@ -389,7 +386,7 @@ Status FileBlockManager::create_block(const CreateBlockOptions& opts, std::uniqu
 
     shared_ptr<WritableFile> writer;
     WritableFileOptions wr_opts;
-    wr_opts.mode = Env::MUST_CREATE;
+    wr_opts.mode = opts.mode;
     RETURN_IF_ERROR(env_util::open_file_for_write(wr_opts, _env, opts.path, &writer));
 
     VLOG(1) << "Creating new block at " << opts.path;
@@ -409,6 +406,11 @@ Status FileBlockManager::open_block(const std::string& path, std::unique_ptr<Rea
 
     *block = std::make_unique<internal::FileReadableBlock>(this, path, file_handle);
     return Status::OK();
+}
+
+void FileBlockManager::erase_block_cache(const std::string& path) {
+    VLOG(1) << "erasing block cache with path at " << path;
+    _file_cache->erase(path);
 }
 
 // TODO(lingbin): We should do something to ensure that deletion can only be done

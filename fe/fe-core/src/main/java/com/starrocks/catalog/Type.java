@@ -91,6 +91,7 @@ public abstract class Type implements Cloneable {
             ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
 
     public static final ScalarType VARCHAR = ScalarType.createVarcharType(-1);
+    public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
     public static final ScalarType HLL = ScalarType.createHllType();
     public static final ScalarType CHAR = ScalarType.createCharType(-1);
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
@@ -249,7 +250,7 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean isStringType() {
-        return isScalarType(PrimitiveType.VARCHAR) || isScalarType(PrimitiveType.CHAR);
+        return PrimitiveType.STRING_TYPE_LIST.contains(this.getPrimitiveType());
     }
 
     // only metric types have the following constraint:
@@ -292,9 +293,7 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean isFixedPointType() {
-        return isScalarType(PrimitiveType.TINYINT) || isScalarType(PrimitiveType.SMALLINT) ||
-                isScalarType(PrimitiveType.INT) || isScalarType(PrimitiveType.BIGINT) ||
-                isScalarType(PrimitiveType.LARGEINT);
+        return PrimitiveType.INTEGER_TYPE_LIST.contains(getPrimitiveType());
     }
 
     public boolean isFloatingPointType() {
@@ -312,6 +311,10 @@ public abstract class Type implements Cloneable {
 
     public boolean isNumericType() {
         return isFixedPointType() || isFloatingPointType() || isDecimalV2() || isDecimalV3();
+    }
+
+    public boolean isExactNumericType() {
+        return isFixedPointType() || isDecimalV2() || isDecimalV3();
     }
 
     public boolean isNativeType() {
@@ -413,6 +416,15 @@ public abstract class Type implements Cloneable {
         throw new IllegalStateException("getSlotSize() not implemented for type " + toSql());
     }
 
+    // Return type data size, used for compute optimizer column statistics
+    public int getTypeSize() {
+        // TODO(ywb): compute the collection type size later.
+        if (isCollectionType()) {
+            return 16;
+        }
+        throw new IllegalStateException("getTypeSize() not implemented for type " + toSql());
+    }
+
     public TTypeDesc toThrift() {
         TTypeDesc container = new TTypeDesc();
         container.setTypes(new ArrayList<TTypeNode>());
@@ -457,11 +469,50 @@ public abstract class Type implements Cloneable {
         return false;
     }
 
-    public static boolean canCastTo(Type t1, Type t2) {
-        if (t1.isScalarType() && t2.isScalarType()) {
-            return ScalarType.canCastTo((ScalarType) t1, (ScalarType) t2);
+    // isAssignable means that assigning or casting rhs to lhs never overflows.
+    // only both integer part width and fraction part width of lhs is not narrower than counterparts
+    // of rhs, then rhs can be assigned to lhs. for integer types, integer part width is computed by
+    // calling Type::getPrecision and its scale is 0.
+    public static boolean isAssignable2Decimal(ScalarType lhs, ScalarType rhs) {
+        int lhsIntPartWidth;
+        int lhsScale;
+        int rhsIntPartWidth;
+        int rhsScale;
+        if (lhs.isFixedPointType()) {
+            lhsIntPartWidth = lhs.getPrecision();
+            lhsScale = 0;
+        } else {
+            lhsIntPartWidth = lhs.getScalarPrecision() - lhs.getScalarScale();
+            lhsScale = lhs.getScalarScale();
         }
-        return t1.isNull();
+
+        if (rhs.isFixedPointType()) {
+            rhsIntPartWidth = rhs.getPrecision();
+            rhsScale = 0;
+        } else {
+            rhsIntPartWidth = rhs.getScalarPrecision() - rhs.getScalarScale();
+            rhsScale = rhs.getScalarScale();
+        }
+
+        // when lhs is integer, for instance, tinyint, lhsIntPartWidth is 3, it cannot holds
+        // a DECIMAL(3, 0).
+        if (lhs.isFixedPointType() && rhs.isDecimalOfAnyVersion()) {
+            return lhsIntPartWidth > rhsIntPartWidth && lhsScale >= rhsScale;
+        } else {
+            return lhsIntPartWidth >= rhsIntPartWidth && lhsScale >= rhsScale;
+        }
+    }
+
+    public static boolean canCastTo(Type from, Type to) {
+        if (from.isNull()) {
+            return true;
+        } else if (from.isScalarType() && to.isScalarType()) {
+            return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
+        } else if (from.isArrayType() && to.isArrayType()) {
+            return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -733,6 +784,8 @@ public abstract class Type implements Cloneable {
                 return 10;
             case BIGINT:
                 return 19;
+            case LARGEINT:
+                return 39;
             case FLOAT:
                 return 7;
             case DOUBLE:

@@ -1,9 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer.relation;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.sql.analyzer.RelationFields;
 
 public class JoinRelation extends Relation {
     private final JoinOperator type;
@@ -14,7 +13,6 @@ public class JoinRelation extends Relation {
     private final boolean lateral;
 
     public JoinRelation(JoinOperator type, Relation left, Relation right, Expr onPredicate, boolean isLateral) {
-        super(left.getRelationFields().joinWith(right.getRelationFields()));
         this.type = type;
         this.left = left;
         this.right = right;
@@ -48,17 +46,6 @@ public class JoinRelation extends Relation {
 
     public boolean isLateral() {
         return lateral;
-    }
-
-    @Override
-    public RelationFields getRelationFields() {
-        if (type.isLeftSemiAntiJoin()) {
-            return left.getRelationFields();
-        } else if (type.isRightSemiAntiJoin()) {
-            return right.getRelationFields();
-        } else {
-            return super.getRelationFields();
-        }
     }
 
     @Override

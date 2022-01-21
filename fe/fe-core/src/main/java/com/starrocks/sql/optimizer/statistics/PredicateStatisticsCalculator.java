@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -14,10 +14,12 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import org.apache.commons.math3.util.Precision;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.stream.Collectors;
 
 public class PredicateStatisticsCalculator {
     public static Statistics statisticsCalculate(ScalarOperator predicate, Statistics statistics) {
@@ -85,31 +87,78 @@ public class PredicateStatisticsCalculator {
             if (!checkNeedEvalEstimate(predicate)) {
                 return statistics;
             }
-            double selectivity = 1;
-            int inValueSize = predicate.getChildren().size() - 1;
-            ScalarOperator child = predicate.getChild(0);
-            if (!(child.isColumnRef())) {
-                selectivity = predicate.isNotIn() ?
-                        1 - StatisticsEstimateCoefficient.IN_PREDICATE_DEFAULT_FILTER_COEFFICIENT :
-                        StatisticsEstimateCoefficient.IN_PREDICATE_DEFAULT_FILTER_COEFFICIENT;
-                double rowCount = statistics.getOutputRowCount() * selectivity;
-                return Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build();
-            }
-            ColumnStatistic inColumnStatistic = statistics.getColumnStatistic((ColumnRefOperator) child);
-            if (inColumnStatistic.isUnknown()) {
+            double selectivity;
+
+            ScalarOperator firstChild = getChildForCastOperator(predicate.getChild(0));
+            List<ScalarOperator> otherChildrenList =
+                    predicate.getChildren().stream().skip(1).map(this::getChildForCastOperator)
+                            .collect(Collectors.toList());
+            // 1. compute the inPredicate children column statistics
+            ColumnStatistic inColumnStatistic = getExpressionStatistic(firstChild);
+            List<ColumnStatistic> otherChildrenColumnStatisticList =
+                    otherChildrenList.stream().map(this::getExpressionStatistic).collect(Collectors.toList());
+
+            double columnMaxVal = inColumnStatistic.getMaxValue();
+            double columnMinVal = inColumnStatistic.getMinValue();
+            double columnDistinctValues = inColumnStatistic.getDistinctValuesCount();
+
+            double otherChildrenMaxValue =
+                    otherChildrenColumnStatisticList.stream().mapToDouble(ColumnStatistic::getMaxValue).max()
+                            .orElse(Double.POSITIVE_INFINITY);
+            double otherChildrenMinValue =
+                    otherChildrenColumnStatisticList.stream().mapToDouble(ColumnStatistic::getMinValue).min()
+                            .orElse(Double.NEGATIVE_INFINITY);
+            double otherChildrenDistinctValues =
+                    otherChildrenColumnStatisticList.stream().mapToDouble(ColumnStatistic::getDistinctValuesCount)
+                            .sum();
+            boolean hasOverlap =
+                    Math.max(columnMinVal, otherChildrenMinValue) <= Math.min(columnMaxVal, otherChildrenMaxValue);
+
+            // 2 .compute the in predicate selectivity
+            if (inColumnStatistic.isUnknown() || inColumnStatistic.hasNaNValue() ||
+                    otherChildrenColumnStatisticList.stream().anyMatch(
+                            columnStatistic -> columnStatistic.hasNaNValue() || columnStatistic.isUnknown()) ||
+                    !(firstChild.isColumnRef())) {
+                // use default selectivity if column statistic is unknown or has NaN values.
+                // can not get accurate column statistics if it is not ColumnRef operator
                 selectivity = predicate.isNotIn() ?
                         1 - StatisticsEstimateCoefficient.IN_PREDICATE_DEFAULT_FILTER_COEFFICIENT :
                         StatisticsEstimateCoefficient.IN_PREDICATE_DEFAULT_FILTER_COEFFICIENT;
             } else {
-                selectivity = inValueSize / inColumnStatistic.getDistinctValuesCount();
+                // children column statistics are not unknown.
+                selectivity = hasOverlap ?
+                        Math.min(1.0, otherChildrenDistinctValues / inColumnStatistic.getDistinctValuesCount()) : 0.0;
                 selectivity = predicate.isNotIn() ? 1 - selectivity : selectivity;
             }
+            // avoid not in predicate too small
+            if (predicate.isNotIn() && Precision.equals(selectivity, 0.0, 0.000001d)) {
+                selectivity = 1 - StatisticsEstimateCoefficient.IN_PREDICATE_DEFAULT_FILTER_COEFFICIENT;
+            }
+
             double rowCount = Math.min(statistics.getOutputRowCount() * selectivity, statistics.getOutputRowCount());
-            return computeStatisticsAfterPredicate(Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                    addColumnStatistic((ColumnRefOperator) child,
-                            ColumnStatistic.buildFrom(inColumnStatistic).setDistinctValuesCount(
-                                    predicate.isNotIn() ? inColumnStatistic.getDistinctValuesCount() : inValueSize).
-                                    build()).build(), rowCount);
+
+            // 3. compute the inPredicate first child column statistics after in predicate
+            if (otherChildrenColumnStatisticList.stream()
+                    .noneMatch(columnStatistic -> columnStatistic.hasNaNValue() || columnStatistic.isUnknown()) &&
+                    !predicate.isNotIn() && hasOverlap) {
+                columnMaxVal = Math.min(columnMaxVal, otherChildrenMaxValue);
+                columnMinVal = Math.max(columnMinVal, otherChildrenMinValue);
+                columnDistinctValues = Math.min(columnDistinctValues, otherChildrenDistinctValues);
+            }
+            ColumnStatistic newInColumnStatistic =
+                    ColumnStatistic.buildFrom(inColumnStatistic).setDistinctValuesCount(columnDistinctValues)
+                            .setMinValue(columnMinVal)
+                            .setMaxValue(columnMaxVal).build();
+
+            // only columnRefOperator could add column statistic to statistics
+            Optional<ColumnRefOperator> childOpt =
+                    firstChild.isColumnRef() ? Optional.of((ColumnRefOperator) firstChild) : Optional.empty();
+
+            Statistics inStatistics = childOpt.map(operator ->
+                    Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
+                            addColumnStatistic(operator, newInColumnStatistic).build()).
+                    orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+            return computeStatisticsAfterPredicate(inStatistics, rowCount);
         }
 
         @Override
@@ -155,15 +204,27 @@ public class PredicateStatisticsCalculator {
             ScalarOperator leftChild = predicate.getChild(0);
             ScalarOperator rightChild = predicate.getChild(1);
             Preconditions.checkState(!(leftChild.isConstantRef() && rightChild.isConstantRef()),
-                    "ConstantRef-cmp-ConstantRef not supported here, should be eliminated earlier");
+                    "ConstantRef-cmp-ConstantRef not supported here, should be eliminated earlier: " +
+                            predicate.toString());
             Preconditions.checkState(!(leftChild.isConstant() && rightChild.isVariable()),
-                    "Constant-cmp-Column not supported here, should be deal earlier");
+                    "Constant-cmp-Column not supported here, should be deal earlier: " + predicate.toString());
             // For CastOperator, we need use child as column statistics
             leftChild = getChildForCastOperator(leftChild);
             rightChild = getChildForCastOperator(rightChild);
-
+            // compute left and right column statistics
             ColumnStatistic leftColumnStatistic = getExpressionStatistic(leftChild);
             ColumnStatistic rightColumnStatistic = getExpressionStatistic(rightChild);
+            // do not use NaN to estimate predicate
+            if (leftColumnStatistic.hasNaNValue()) {
+                leftColumnStatistic =
+                        ColumnStatistic.buildFrom(leftColumnStatistic).setMaxValue(Double.POSITIVE_INFINITY)
+                                .setMinValue(Double.NEGATIVE_INFINITY).build();
+            }
+            if (rightColumnStatistic.hasNaNValue()) {
+                rightColumnStatistic =
+                        rightColumnStatistic.buildFrom(rightColumnStatistic).setMaxValue(Double.POSITIVE_INFINITY)
+                                .setMinValue(Double.NEGATIVE_INFINITY).build();
+            }
 
             if (leftChild.isVariable()) {
                 Optional<ColumnRefOperator> leftChildOpt;
@@ -171,8 +232,9 @@ public class PredicateStatisticsCalculator {
                 leftChildOpt = leftChild.isColumnRef() ? Optional.of((ColumnRefOperator) leftChild) : Optional.empty();
 
                 if (rightChild.isConstant()) {
-                    OptionalDouble constant = (rightColumnStatistic.isInfiniteRange()) ? OptionalDouble.empty() :
-                            OptionalDouble.of(rightColumnStatistic.getMaxValue());
+                    OptionalDouble constant =
+                            (rightColumnStatistic.isInfiniteRange()) ?
+                                    OptionalDouble.empty() : OptionalDouble.of(rightColumnStatistic.getMaxValue());
                     Statistics binaryStats =
                             BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(leftChildOpt,
                                     leftColumnStatistic, predicate, constant, statistics);

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/file_scanner.h"
 
@@ -183,11 +183,10 @@ ChunkPtr FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src, st
                     if (_error_counter > 50) {
                         continue;
                     }
-                    _state->append_error_msg_to_file(
-                            src->debug_row(i),
-                            strings::Substitute("column($0) value is incorrect while strict "
-                                                "mode is $1, src value is $2",
-                                                slot->col_name(), _strict_mode, src_col->debug_item(i)));
+                    std::stringstream error_msg;
+                    error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
+                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                    _state->append_error_msg_to_file(src->debug_row(i), error_msg.str());
                 }
             }
 
@@ -206,8 +205,7 @@ ChunkPtr FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src, st
                     }
                     _state->append_error_msg_to_file(
                             src->debug_row(i),
-                            strings::Substitute("column($0)) value is null while columns is not nullable",
-                                                slot->col_name()));
+                            strings::Substitute("NULL value in non-nullable column '$0'", slot->col_name()));
                 }
             }
         }

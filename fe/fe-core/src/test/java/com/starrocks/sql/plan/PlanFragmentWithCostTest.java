@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
@@ -286,6 +286,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "select count(distinct v2) from t0 group by v3";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n"
                 + "  |  output: multi_distinct_count(2: v2)\n"
                 + "  |  group by: 3: v3"));
@@ -320,7 +321,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "SELECT -v3 from t0 group by v3, v2 having -v3 < 63;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  3:Project\n"
+        Assert.assertTrue(planFragment.contains("  4:Project\n"
                 + "  |  <slot 4> : -1 * 3: v3"));
     }
 
@@ -492,12 +493,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) " +
                 "and s_nationkey = n_nationkey and n_name = 'CANADA' order by s_name;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  10:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("  11:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (REPLICATED)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: PS_PARTKEY = 20: P_PARTKEY"));
-        Assert.assertTrue(plan.contains("  13:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("  14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
@@ -661,6 +662,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  0:INTERSECT\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
@@ -670,7 +672,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  2:EXCHANGE\n"));
         Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
-                "    HASH_PARTITIONED: <slot 5>\n" +
+                "    HASH_PARTITIONED: <slot 4>\n" +
                 "\n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t2"));
@@ -760,7 +762,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(unionPlan.contains("  0:UNION\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [11, BIGINT, true] | [9, BIGINT, true] | [10, BIGINT, true]\n" +
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
                     "  |  pass-through-operands: all\n" +
                     "  |  cardinality: 800000"));
             Assert.assertTrue(unionPlan.contains("  4:OlapScanNode\n" +
@@ -771,7 +773,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     actualRows=0, avgRowSize=4.0\n" +
                     "     cardinality: 400000\n" +
                     "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (8: v4 + 2)"));
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(unionPlan.contains("  1:OlapScanNode\n" +
                     "     table: t0, rollup: t0\n" +
                     "     preAggregation: on\n" +
@@ -788,7 +790,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(exceptPlan.contains("  0:EXCEPT\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [11, BIGINT, true] | [9, BIGINT, true] | [10, BIGINT, true]\n" +
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
                     "  |  cardinality: 800000"));
             Assert.assertTrue(exceptPlan.contains("  4:OlapScanNode\n" +
                     "     table: t1, rollup: t1\n" +
@@ -798,7 +800,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     actualRows=0, avgRowSize=4.0\n" +
                     "     cardinality: 400000\n" +
                     "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (8: v4 + 2)"));
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(exceptPlan.contains("  1:OlapScanNode\n" +
                     "     table: t0, rollup: t0\n" +
                     "     preAggregation: on\n" +
@@ -815,7 +817,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(intersectPlan.contains("  0:INTERSECT\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [11, BIGINT, true] | [9, BIGINT, true] | [10, BIGINT, true]\n" +
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
                     "  |  cardinality: 400000"));
             Assert.assertTrue(intersectPlan.contains("  4:OlapScanNode\n" +
                     "     table: t1, rollup: t1\n" +
@@ -825,7 +827,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     actualRows=0, avgRowSize=4.0\n" +
                     "     cardinality: 400000\n" +
                     "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (8: v4 + 2)"));
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(intersectPlan.contains("  1:OlapScanNode\n" +
                     "     table: t0, rollup: t0\n" +
                     "     preAggregation: on\n" +
@@ -854,7 +856,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 result = -1;
                 replica.getBackendId();
                 result = 10001;
-                replica.checkVersionCatchUp(anyLong, anyLong, anyBoolean);
+                replica.checkVersionCatchUp(anyLong, anyBoolean);
                 result = true;
             }
         };
@@ -862,5 +864,80 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("     tabletList=10213\n" +
                 "     cardinality=1"));
+    }
+
+    @Test
+    public void testNullArithmeticExpression() throws Exception {
+        // check constant operator with null
+        String sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL)/(CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        String plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) + (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) - (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+        // check variable operator with null
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (null / supplier.S_NATIONKEY) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY / null) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+
+        sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (null / S_NAME) " +
+                "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
+        plan = getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testNotPushDownRuntimeFilterAcrossCTE() throws Exception {
+        Catalog catalog = connectContext.getCatalog();
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        connectContext.getSessionVariable().setEnablePipelineEngine(true);
+
+
+        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        OlapTable t2 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t2");
+
+        setTableStatistics(t1, 400000);
+        setTableStatistics(t2, 100);
+
+        String sql = " with cte as ( select v4, v5, v6 from t1 )\n" +
+                " select count(*) from (\n" +
+                "    select * from cte union all\n" +
+                "    select cte.v4, cte.v5, cte.v6 from t2 join cte on cte.v4 = t2.v7 and t2.v8 < 10) as t\n";
+        String plan = getVerboseExplain(sql);
+
+        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     table: t1, rollup: t1\n" +
+                "     preAggregation: on\n" +
+                "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                "     tabletList=10015,10017,10019\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
+                "     cardinality: 400000"));
+
+        Assert.assertTrue(plan.contains("5:EXCHANGE\n" +
+                "     cardinality: 400000\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: v4)"));
+
+        Assert.assertTrue(plan.contains("  10:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  equal join conjunct: [10: v4, BIGINT, true] = [7: v7, BIGINT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (7: v7), remote = false\n" +
+                "  |  cardinality: 400000"));
+
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        connectContext.getSessionVariable().setEnablePipelineEngine(false);
     }
 }

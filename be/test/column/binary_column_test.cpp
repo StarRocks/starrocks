@@ -171,23 +171,6 @@ PARALLEL_TEST(BinaryColumnTest, test_compare_at) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(BinaryColumnTest, test_serde) {
-    std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
-    auto c1 = BinaryColumn::create();
-    auto c2 = BinaryColumn::create();
-    c1->append_strings(strings);
-
-    std::vector<uint8_t> buffer;
-    buffer.resize(c1->serialize_size());
-    c1->serialize_column(buffer.data());
-    c2->deserialize_column(buffer.data());
-
-    for (size_t i = 0; i < c1->size(); i++) {
-        ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
-    }
-}
-
-// NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_append_binary) {
     auto c1 = BinaryColumn::create();
     auto c2 = BinaryColumn::create();
@@ -493,6 +476,56 @@ PARALLEL_TEST(BinaryColumnTest, test_clone_empty) {
     c1.reset();
 
     ASSERT_EQ(0, c2->size());
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
+    auto c1 = BinaryColumn::create();
+    c1->append_datum("abc");
+    c1->append_datum("def");
+    c1->append_datum("ghi");
+    c1->append_datum("jkl");
+    c1->append_datum("mno");
+
+    std::vector<uint32_t> replace_idxes = {1, 3};
+    auto c2 = BinaryColumn::create();
+    c2->append_datum("pq");
+    c2->append_datum("rstu");
+    ASSERT_TRUE(c1->update_rows(*c2.get(), replace_idxes.data()).ok());
+
+    auto slices = c1->get_data();
+    EXPECT_EQ(5, c1->size());
+    ASSERT_EQ("abc", slices[0]);
+    ASSERT_EQ("pq", slices[1]);
+    ASSERT_EQ("ghi", slices[2]);
+    ASSERT_EQ("rstu", slices[3]);
+    ASSERT_EQ("mno", slices[4]);
+
+    auto c3 = BinaryColumn::create();
+    c3->append_datum("ab");
+    c3->append_datum("cdef");
+    ASSERT_TRUE(c1->update_rows(*c3.get(), replace_idxes.data()).ok());
+
+    slices = c1->get_data();
+    EXPECT_EQ(5, c1->size());
+    ASSERT_EQ("abc", slices[0]);
+    EXPECT_EQ("ab", slices[1]);
+    ASSERT_EQ("ghi", slices[2]);
+    ASSERT_EQ("cdef", slices[3]);
+    ASSERT_EQ("mno", slices[4]);
+
+    auto c4 = BinaryColumn::create();
+    std::vector<uint32_t> new_replace_idxes = {0, 1};
+    c4->append_datum("ab");
+    c4->append_datum("cdef");
+    ASSERT_TRUE(c1->update_rows(*c4.get(), new_replace_idxes.data()).ok());
+
+    slices = c1->get_data();
+    EXPECT_EQ(5, c1->size());
+    ASSERT_EQ("ab", slices[0]);
+    EXPECT_EQ("cdef", slices[1]);
+    ASSERT_EQ("ghi", slices[2]);
+    ASSERT_EQ("cdef", slices[3]);
+    ASSERT_EQ("mno", slices[4]);
 }
 
 } // namespace starrocks::vectorized

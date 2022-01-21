@@ -19,20 +19,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_COLUMN_PREDICATE_H
-#define STARROCKS_BE_SRC_OLAP_COLUMN_PREDICATE_H
+#pragma once
 
 #include <roaring/roaring.hh>
 
 #include "storage/column_block.h"
-#include "storage/rowset/segment_v2/bitmap_index_reader.h"
+#include "storage/rowset/bitmap_index_reader.h"
 #include "storage/selection_vector.h"
-
-using namespace starrocks::segment_v2;
 
 namespace starrocks {
 
-class VectorizedRowBatch;
 class Schema;
 class ObjectPool;
 
@@ -41,9 +37,6 @@ public:
     explicit ColumnPredicate(uint32_t column_id) : _column_id(column_id) {}
 
     virtual ~ColumnPredicate() = default;
-
-    //evaluate predicate on VectorizedRowBatch
-    virtual void evaluate(VectorizedRowBatch* batch) const = 0;
 
     // evaluate predicate on ColumnBlock
     virtual void evaluate(ColumnBlock* block, uint16_t* sel, uint16_t* size) const = 0;
@@ -62,5 +55,3 @@ protected:
 };
 
 } //namespace starrocks
-
-#endif //STARROCKS_BE_SRC_OLAP_COLUMN_PREDICATE_H

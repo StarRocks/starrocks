@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "chunks_sorter_topn.h"
 
@@ -11,10 +11,10 @@
 
 namespace starrocks::vectorized {
 
-ChunksSorterTopn::ChunksSorterTopn(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                                   const std::vector<bool>* is_null_first, size_t offset, size_t limit,
-                                   size_t size_of_chunk_batch)
-        : ChunksSorter(sort_exprs, is_asc, is_null_first, size_of_chunk_batch),
+ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
+                                   const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
+                                   size_t offset, size_t limit, size_t size_of_chunk_batch)
+        : ChunksSorter(state, sort_exprs, is_asc, is_null_first, size_of_chunk_batch),
           _offset(offset),
           _limit(limit),
           _init_merged_segment(false) {
@@ -31,7 +31,7 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     if (chunk_number <= 0) {
         raw_chunks.push_back(chunk);
         chunk_number++;
-    } else if (raw_chunks[chunk_number - 1]->num_rows() + chunk->num_rows() > config::vector_chunk_size) {
+    } else if (raw_chunks[chunk_number - 1]->num_rows() + chunk->num_rows() > _state->chunk_size()) {
         raw_chunks.push_back(chunk);
         chunk_number++;
     } else {
@@ -84,7 +84,7 @@ void ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
         return;
     }
     *eos = false;
-    size_t count = std::min(size_t(config::vector_chunk_size), _merged_segment.chunk->num_rows() - _next_output_row);
+    size_t count = std::min(size_t(_state->chunk_size()), _merged_segment.chunk->num_rows() - _next_output_row);
     chunk->reset(_merged_segment.chunk->clone_empty(count).release());
     (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
     _next_output_row += count;
@@ -113,7 +113,7 @@ bool ChunksSorterTopn::pull_chunk(ChunkPtr* chunk) {
         *chunk = nullptr;
         return true;
     }
-    size_t count = std::min(size_t(config::vector_chunk_size), _merged_segment.chunk->num_rows() - _next_output_row);
+    size_t count = std::min(size_t(_state->chunk_size()), _merged_segment.chunk->num_rows() - _next_output_row);
     chunk->reset(_merged_segment.chunk->clone_empty(count).release());
     (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
     _next_output_row += count;
@@ -125,7 +125,7 @@ bool ChunksSorterTopn::pull_chunk(ChunkPtr* chunk) {
 }
 
 Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
-    const size_t batch_size = _raw_chunks.size_of_rows;
+    const size_t chunk_size = _raw_chunks.size_of_rows;
 
     // chunks for this batch.
     DataSegments segments;
@@ -144,7 +144,7 @@ Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
 
     // step 2: filter batch-chunks as permutations.first and permutations.second when _init_merged_segment == true.
     // sort part chunks in permutations.first and permutations.second, if _init_merged_segment == false means permutations.first is empty.
-    RETURN_IF_ERROR(_filter_and_sort_data_by_row_cmp(state, permutations, segments, batch_size));
+    RETURN_IF_ERROR(_filter_and_sort_data_by_row_cmp(state, permutations, segments, chunk_size));
 
     // step 3:
     // (1) take permutations.first as BEFORE.
@@ -193,8 +193,8 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
     return Status::OK();
 }
 
-void ChunksSorterTopn::_sort_data_by_row_cmp(
-        Permutation& permutation, size_t rows_to_sort, size_t rows_size,
+Status ChunksSorterTopn::_sort_data_by_row_cmp(
+        RuntimeState* state, Permutation& permutation, size_t rows_to_sort, size_t rows_size,
         const std::function<bool(const PermutationItem& l, const PermutationItem& r)>& cmp_fn) {
     if (rows_to_sort > 0 && rows_to_sort < rows_size / 5) {
         // when Limit >= 1/5 of all data, a full sort will be faster than partial sort.
@@ -204,12 +204,14 @@ void ChunksSorterTopn::_sort_data_by_row_cmp(
         permutation.resize(rows_to_sort);
     } else {
         // full sort
-        pdqsort(permutation.begin(), permutation.end(), cmp_fn);
+        pdqsort(state->cancelled_ref(), permutation.begin(), permutation.end(), cmp_fn);
+        RETURN_IF_CANCELLED(state);
         if (rows_size > rows_to_sort) {
             // for topn, We don't need the data after [0, number_of_rows_to_sort).
             permutation.resize(rows_to_sort);
         }
     }
+    return Status::OK();
 }
 
 void ChunksSorterTopn::_set_permutation_before(Permutation& permutation, size_t size,
@@ -246,7 +248,7 @@ void ChunksSorterTopn::_set_permutation_complete(std::pair<Permutation, Permutat
 }
 
 // In general, we take the first and last row from _merged_segment:
-// step 1: use last row to filter batch_size rows in segments as two parts(rows < lastRow and rows >= lastRow),
+// step 1: use last row to filter chunk_size rows in segments as two parts(rows < lastRow and rows >= lastRow),
 // step 2: use first row to filter all rows < lastRow, result in two parts, the BEFORE is (rows < firstRow), the IN is (rows >= firstRow and rwos < lastRows),
 // step 3: set this result in filter_array, BEOFRE(filter_array's value is 2), IN(filter_array's value is 1), others is give up.
 // all this is done in get_filter_array.
@@ -259,7 +261,7 @@ void ChunksSorterTopn::_set_permutation_complete(std::pair<Permutation, Permutat
 // at last we sort parts datas in permutations.first and permutations.second.
 Status ChunksSorterTopn::_filter_and_sort_data_by_row_cmp(RuntimeState* state,
                                                           std::pair<Permutation, Permutation>& permutations,
-                                                          DataSegments& segments, const size_t batch_size) {
+                                                          DataSegments& segments, const size_t chunk_size) {
     ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
 
     DCHECK(_get_number_of_order_by_columns() > 0) << "order by columns can't be empty";
@@ -331,14 +333,15 @@ Status ChunksSorterTopn::_filter_and_sort_data_by_row_cmp(RuntimeState* state,
     // permutations.second.
     size_t first_size = permutations.first.size();
     if (first_size >= number_of_rows_to_sort) {
-        _sort_data_by_row_cmp(permutations.first, number_of_rows_to_sort, first_size, cmp_fn);
+        RETURN_IF_ERROR(_sort_data_by_row_cmp(state, permutations.first, number_of_rows_to_sort, first_size, cmp_fn));
     } else {
         if (first_size > 0) {
-            pdqsort(permutations.first.begin(), permutations.first.end(), cmp_fn);
+            pdqsort(state->cancelled_ref(), permutations.first.begin(), permutations.first.end(), cmp_fn);
+            RETURN_IF_CANCELLED(state);
         }
 
-        _sort_data_by_row_cmp(permutations.second, number_of_rows_to_sort - first_size, permutations.second.size(),
-                              cmp_fn);
+        RETURN_IF_ERROR(_sort_data_by_row_cmp(state, permutations.second, number_of_rows_to_sort - first_size,
+                                              permutations.second.size(), cmp_fn));
     }
 
     return Status::OK();

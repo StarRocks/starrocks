@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TASK_ENGINE_ALTER_TABLET_TASK_H
-#define STARROCKS_BE_SRC_OLAP_TASK_ENGINE_ALTER_TABLET_TASK_H
+#pragma once
 
 #include "gen_cpp/AgentService_types.h"
 #include "storage/olap_define.h"
@@ -32,7 +31,7 @@ namespace starrocks {
 // add "Engine" as task prefix to prevent duplicate name with agent task
 class EngineAlterTabletTask : public EngineTask {
 public:
-    OLAPStatus execute() override;
+    Status execute() override;
 
 public:
     EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& alter_tablet_request, int64_t signature,
@@ -51,4 +50,3 @@ private:
 }; // EngineTask
 
 } // namespace starrocks
-#endif //STARROCKS_BE_SRC_OLAP_TASK_ENGINE_ALTER_TABLET_TASK_H

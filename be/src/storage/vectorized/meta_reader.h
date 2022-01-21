@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #pragma once
 
 #include <string>
@@ -7,8 +7,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/global_dicts.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/rowset_reader.h"
-#include "storage/rowset/segment_v2/segment.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/segment.h"
 #include "storage/tablet.h"
 
 namespace starrocks {
@@ -107,14 +107,14 @@ private:
     Status _fill_result_chunk(Chunk* chunk);
 
     Status _get_segments(const TabletSharedPtr& tablet, const Version& version,
-                         std::vector<segment_v2::SegmentSharedPtr>* segments);
+                         std::vector<SegmentSharedPtr>* segments);
 
     Status _read(Chunk* chunk, size_t n);
 };
 
 class SegmentMetaCollecter {
 public:
-    SegmentMetaCollecter(segment_v2::SegmentSharedPtr segment);
+    SegmentMetaCollecter(SegmentSharedPtr segment);
     ~SegmentMetaCollecter();
     Status init(const SegmentMetaCollecterParams* params);
     Status collect(std::vector<vectorized::Column*>* dsts);
@@ -134,7 +134,7 @@ private:
     Status _collect_min(ColumnId cid, vectorized::Column* column, FieldType type);
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type);
-    segment_v2::SegmentSharedPtr _segment;
+    SegmentSharedPtr _segment;
     std::vector<ColumnIterator*> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
     std::unique_ptr<fs::ReadableBlock> _rblock;

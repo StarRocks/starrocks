@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_LOAD_ERROR_HUB_H
-#define STARROCKS_BE_SRC_UTIL_LOAD_ERROR_HUB_H
+#pragma once
 
 #include <memory>
 #include <utility>
@@ -66,5 +65,3 @@ protected:
 }; // end class LoadErrorHub
 
 } // end namespace starrocks
-
-#endif // STARROCKS_BE_SRC_UTIL_LOAD_ERROR_HUB_H

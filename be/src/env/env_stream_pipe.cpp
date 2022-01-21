@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "env/env_stream_pipe.h"
 
@@ -19,8 +19,8 @@ Status StreamPipeSequentialFile::read(Slice* result) {
     return _file->read(reinterpret_cast<uint8_t*>(result->data), &(result->size), &eof);
 }
 
-Status StreamPipeSequentialFile::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length) {
-    return _file->read_one_message(buf, length);
+Status StreamPipeSequentialFile::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding) {
+    return _file->read_one_message(buf, length, padding);
 }
 
 Status StreamPipeSequentialFile::skip(uint64_t n) {

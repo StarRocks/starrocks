@@ -25,6 +25,8 @@
 #include <cctype>
 #include <vector>
 
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/vectorized/type_utils.h"
 
@@ -393,6 +395,42 @@ bool TabletColumn::is_format_v2_column() const {
  * TabletSchema
  ******************************************************************/
 
+std::shared_ptr<TabletSchema> TabletSchema::create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb) {
+    auto schema = std::shared_ptr<TabletSchema>(new TabletSchema(schema_pb),
+                                                DeleterWithMemTracker<TabletSchema>(mem_tracker));
+    mem_tracker->consume(schema->mem_usage());
+    return schema;
+}
+
+std::shared_ptr<TabletSchema> TabletSchema::create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
+                                                   TabletSchemaMap* schema_map) {
+    auto schema = std::shared_ptr<TabletSchema>(new TabletSchema(schema_pb, schema_map),
+                                                DeleterWithMemTracker<TabletSchema>(mem_tracker));
+    mem_tracker->consume(schema->mem_usage());
+    return schema;
+}
+
+std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_tablet_schema,
+                                                   const std::vector<int32_t>& referenced_column_ids) {
+    TabletSchemaPB partial_tablet_schema_pb;
+    partial_tablet_schema_pb.set_id(src_tablet_schema.id());
+    partial_tablet_schema_pb.set_next_column_unique_id(src_tablet_schema.next_column_unique_id());
+    partial_tablet_schema_pb.set_compress_kind(src_tablet_schema.compress_kind());
+    partial_tablet_schema_pb.set_num_rows_per_row_block(src_tablet_schema.num_rows_per_row_block());
+    partial_tablet_schema_pb.set_num_short_key_columns(src_tablet_schema.num_short_key_columns());
+    partial_tablet_schema_pb.set_keys_type(src_tablet_schema.keys_type());
+    if (src_tablet_schema.has_bf_fpp()) {
+        partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema.bf_fpp());
+    }
+    for (const auto referenced_column_id : referenced_column_ids) {
+        auto* tablet_column = partial_tablet_schema_pb.add_column();
+        src_tablet_schema.column(referenced_column_id).to_schema_pb(tablet_column);
+    }
+    auto partial_tablet_schema = std::make_shared<TabletSchema>();
+    partial_tablet_schema->init_from_pb(partial_tablet_schema_pb);
+    return partial_tablet_schema;
+}
+
 TabletSchema::~TabletSchema() {
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);
@@ -431,8 +469,7 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
     }
     tablet_schema_pb->set_keys_type(static_cast<KeysType>(_keys_type));
     for (auto& col : _cols) {
-        ColumnPB* column = tablet_schema_pb->add_column();
-        col.to_schema_pb(column);
+        col.to_schema_pb(tablet_schema_pb->add_column());
     }
     tablet_schema_pb->set_num_short_key_columns(_num_short_key_columns);
     tablet_schema_pb->set_num_rows_per_row_block(_num_rows_per_row_block);
@@ -483,7 +520,7 @@ size_t TabletSchema::row_size() const {
     return size;
 }
 
-size_t TabletSchema::field_index(const std::string& field_name) const {
+size_t TabletSchema::field_index(const std::string_view& field_name) const {
     int ordinal = -1;
     for (auto& column : _cols) {
         ordinal++;

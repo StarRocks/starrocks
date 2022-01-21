@@ -22,8 +22,7 @@
 // the following code are modified from RocksDB:
 // https://github.com/facebook/rocksdb/blob/master/util/crc32c.h
 
-#ifndef STARROCKS_BE_SRC_UTIL_CRC32C_H
-#define STARROCKS_BE_SRC_UTIL_CRC32C_H
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -55,5 +54,3 @@ inline uint32_t Value(const std::vector<Slice>& slices) {
 
 } // namespace crc32c
 } // namespace starrocks
-
-#endif //STARROCKS_BE_SRC_UTIL_CRC32C_H

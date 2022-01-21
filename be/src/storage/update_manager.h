@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -53,6 +53,8 @@ public:
 
     Status on_rowset_finished(Tablet* tablet, Rowset* rowset);
 
+    void on_rowset_cancel(Tablet* tablet, Rowset* rowset);
+
     ThreadPool* apply_thread_pool() { return _apply_thread_pool.get(); }
 
     DynamicCache<uint64_t, PrimaryIndex>& index_cache() { return _index_cache; }
@@ -70,6 +72,10 @@ public:
     MemTracker* mem_tracker() const { return _update_mem_tracker; }
 
     string memory_stats();
+
+    string detail_memory_stats();
+
+    string topn_memory_stats(size_t topn);
 
 private:
     // default 6min

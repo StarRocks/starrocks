@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -128,13 +128,13 @@ public:
 
     bool can_vectorized() const override { return SpecColumnOperator::can_vectorized(); }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         return _predicate_operator.seek_bitmap_dictionary(iter, range);
     }
 
     bool support_bloom_filter() const override { return SpecColumnOperator::support_bloom_filter(); }
 
-    bool bloom_filter(const segment_v2::BloomFilter* bf) const override {
+    bool bloom_filter(const BloomFilter* bf) const override {
         DCHECK(support_bloom_filter()) << "Not support bloom filter";
         if constexpr (SpecColumnOperator::support_bloom_filter()) {
             return _predicate_operator.bloom_filter(bf);

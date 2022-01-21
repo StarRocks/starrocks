@@ -114,7 +114,7 @@ public class ConfigBase {
     private static void setFields() throws Exception {
         Field[] fields = confClass.getFields();
         for (Field f : fields) {
-            // ensure that field has "@ConfFiled" annotation
+            // ensure that field has "@ConfField" annotation
             ConfField anno = f.getAnnotation(ConfField.class);
             if (anno == null) {
                 continue;
@@ -133,7 +133,7 @@ public class ConfigBase {
                 sa[i] = sa[i].trim();
             }
 
-            // set config filed
+            // set config field
             switch (f.getType().getSimpleName()) {
                 case "short":
                     f.setShort(null, Short.parseShort(confVal));

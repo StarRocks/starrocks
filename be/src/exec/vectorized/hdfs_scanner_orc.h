@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -14,7 +14,11 @@ class OrcRowReaderFilter;
 class HdfsOrcScanner final : public HdfsScanner {
 public:
     HdfsOrcScanner() = default;
-    ~HdfsOrcScanner() override = default;
+    ~HdfsOrcScanner() override {
+        if (_runtime_state != nullptr) {
+            close(_runtime_state);
+        }
+    }
 
     void update_counter();
     Status do_open(RuntimeState* runtime_state) override;

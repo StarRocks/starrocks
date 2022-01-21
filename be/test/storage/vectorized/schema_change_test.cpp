@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/schema_change.h"
 
@@ -8,6 +8,7 @@
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/convert_helper.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 #include "util/logging.h"
 
@@ -76,9 +77,9 @@ class SchemaChangeTest : public testing::Test {
         writer_context.version = Version(3, 3);
         std::unique_ptr<RowsetWriter> rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
-        EXPECT_EQ(OLAP_SUCCESS, rowset_writer->add_chunk(*base_chunk));
-        EXPECT_EQ(OLAP_SUCCESS, rowset_writer->flush());
-        RowsetSharedPtr new_rowset = rowset_writer->build();
+        CHECK_OK(rowset_writer->add_chunk(*base_chunk));
+        CHECK_OK(rowset_writer->flush());
+        RowsetSharedPtr new_rowset = *rowset_writer->build();
         ASSERT_TRUE(new_rowset != nullptr);
         ASSERT_TRUE(tablet->add_rowset(new_rowset, false).ok());
     }

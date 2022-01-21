@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_FILESYSTEM_UTIL_H
-#define STARROCKS_BE_SRC_UTIL_FILESYSTEM_UTIL_H
+#pragma once
 
 #include "common/status.h"
 
@@ -62,5 +61,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif

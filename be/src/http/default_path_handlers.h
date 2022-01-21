@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_DEFAULT_PATH_HANDLERS_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_DEFAULT_PATH_HANDLERS_H
+#pragma once
 
 #include <cstdio>
 
@@ -33,5 +32,3 @@ class WebPageHandler;
 // logs and configuration flags
 void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* process_mem_tracker);
 } // namespace starrocks
-
-#endif // IMPALA_UTIL_DEFAULT_PATH_HANDLERS_H

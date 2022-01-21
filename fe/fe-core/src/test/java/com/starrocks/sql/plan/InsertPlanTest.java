@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.plan;
 
 import com.starrocks.analysis.SqlParser;
@@ -225,6 +225,64 @@ public class InsertPlanTest extends PlanTestBase {
                         "  |  <slot 6> : to_bitmap(CAST(1: v1 AS VARCHAR))\n" +
                         "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
                         "  |  <slot 8> : CAST(NULL AS BIGINT)\n"));
+
+        explainString = getInsertExecPlan("insert into ti2 select * from ti2");
+        Assert.assertTrue(explainString.contains("  1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 5> : to_bitmap(CAST(2: v2 AS VARCHAR))"));
+    }
+
+    @Test
+    public void testInsertIntoMysqlTable() throws Exception {
+        String sql = "insert into test.mysql_table select v1,v2 from t0";
+        String explainString = getInsertExecPlan(sql);
+        Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: k1 | 5: k2\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  MYSQL TABLE SINK\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : CAST(1: v1 AS INT)\n" +
+                "  |  <slot 5> : CAST(2: v2 AS INT)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=4.0\n" +
+                "     numNodes=0"));
+
+        sql = "insert into test.mysql_table(k1) select v1 from t0";
+        explainString = getInsertExecPlan(sql);
+        Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:5: k1 | 4: expr\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  MYSQL TABLE SINK\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : NULL\n" +
+                "  |  <slot 5> : CAST(1: v1 AS INT)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0"));
     }
 
     @Test

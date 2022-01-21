@@ -49,6 +49,7 @@
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
+#include "util/thread.h"
 #include "util/threadpool.h"
 #include "util/thrift_util.h"
 #include "util/uid_util.h"
@@ -150,8 +151,6 @@ private:
     std::string _group;
 
     int _timeout_second;
-
-    std::unique_ptr<std::thread> _exec_thread;
 };
 
 FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, int backend_num,
@@ -336,13 +335,14 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 
 FragmentMgr::FragmentMgr(ExecEnv* exec_env)
         : _exec_env(exec_env), _stop(false), _cancel_thread([this] { cancel_worker(); }) {
+    Thread::set_thread_name(_cancel_thread, "frag_mgr_cancel");
     REGISTER_GAUGE_STARROCKS_METRIC(plan_fragment_count, [this]() {
         std::lock_guard<std::mutex> lock(_lock);
         return _fragment_map.size();
     });
     // TODO(zc): we need a better thread-pool
     // now one user can use all the thread pool, others have no resource.
-    ThreadPoolBuilder("FragmentMgrThreadPool")
+    ThreadPoolBuilder("fragment_mgr")
             .set_min_threads(config::fragment_pool_thread_num_min)
             .set_max_threads(config::fragment_pool_thread_num_max)
             .set_max_queue_size(config::fragment_pool_queue_size)
@@ -406,6 +406,8 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
                                        const FinishCallback& cb) {
+    RETURN_IF_ERROR(_exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+
     const TUniqueId& fragment_instance_id = params.params.fragment_instance_id;
     std::shared_ptr<FragmentExecState> exec_state;
     {
@@ -521,7 +523,7 @@ void FragmentMgr::cancel_worker() {
         }
         for (auto& id : to_delete) {
             cancel(id, PPlanFragmentCancelReason::TIMEOUT);
-            LOG(INFO) << "FragmentMgr cancel worker going to cancel timouet fragment " << print_id(id);
+            LOG(INFO) << "FragmentMgr cancel worker going to cancel timeout fragment " << print_id(id);
         }
 
         // check every 1 seconds
@@ -600,7 +602,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
     ObjectPool obj_pool;
-    st = DescriptorTbl::create(&obj_pool, t_query_plan_info.desc_tbl, &desc_tbl);
+    st = DescriptorTbl::create(&obj_pool, t_query_plan_info.desc_tbl, &desc_tbl, params.batch_size);
     if (!st.ok()) {
         LOG(WARNING) << "open context error: extract DescriptorTbl failure";
         std::stringstream msg;

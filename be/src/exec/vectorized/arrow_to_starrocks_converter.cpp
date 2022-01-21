@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/arrow_to_starrocks_converter.h"
 
@@ -287,7 +287,7 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, BinaryP
 
                     if (ctx != nullptr) {
                         std::string raw_data = "arrow data is fixed size binary type";
-                        std::string reason = strings::Substitute("type length $0 exeeds max length $1", width,
+                        std::string reason = strings::Substitute("type length $0 exceeds max length $1", width,
                                                                  binary_max_length<PT>);
                         ctx->report_error_message(reason, raw_data);
                     }
@@ -322,7 +322,7 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, BinaryP
                             const char* s_data = reinterpret_cast<const char*>(concrete_array->GetValue(i, &s_size));
                             std::string raw_data = std::string(s_data, s_size);
                             std::string reason =
-                                    strings::Substitute("string length $0 exeeds max length $1", s_size, max_length);
+                                    strings::Substitute("string length $0 exceeds max length $1", s_size, max_length);
                             ctx->report_error_message(reason, raw_data);
                         }
                     }

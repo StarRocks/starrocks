@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -69,13 +69,13 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
             return Utils.compoundAnd(on, derivedPredicate);
         } else if (join.getJoinType().isLeftOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (rightOutputColumns.contains(p.getUsedColumns())) {
+                if (rightOutputColumns.containsAll(p.getUsedColumns())) {
                     pushDown.add(p);
                 }
             }
         } else if (join.getJoinType().isRightOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (leftOutputColumns.contains(p.getUsedColumns())) {
+                if (leftOutputColumns.containsAll(p.getUsedColumns())) {
                     pushDown.add(p);
                 }
             }

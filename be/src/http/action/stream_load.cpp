@@ -157,9 +157,9 @@ void StreamLoadAction::handle(HttpRequest* req) {
 
 Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
     if (ctx->body_bytes > 0 && ctx->receive_bytes != ctx->body_bytes) {
-        LOG(WARNING) << "recevie body don't equal with body bytes, body_bytes=" << ctx->body_bytes
+        LOG(WARNING) << "receive body don't equal with body bytes, body_bytes=" << ctx->body_bytes
                      << ", receive_bytes=" << ctx->receive_bytes << ", id=" << ctx->id;
-        return Status::InternalError("receive body dont't equal with body bytes");
+        return Status::InternalError("receive body don't equal with body bytes");
     }
     if (!ctx->use_streaming) {
         // if we use non-streaming, we need to close file first,
@@ -293,7 +293,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
         return;
     }
 
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->instance_mem_tracker.get());
 
     struct evhttp_request* ev_req = req->get_evhttp_request();
     auto evbuf = evhttp_request_get_input_buffer(ev_req);
@@ -408,7 +408,6 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     if (!http_req->header(HTTP_LOAD_MEM_LIMIT).empty()) {
         try {
             auto load_mem_limit = std::stoll(http_req->header(HTTP_LOAD_MEM_LIMIT));
-            LOG(INFO) << "compaction load_mem_limit:" << load_mem_limit;
             if (load_mem_limit < 0) {
                 return Status::InvalidArgument("load_mem_limit must be equal or greater than 0");
             }
@@ -466,6 +465,14 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     // to process this load
     if (!ctx->use_streaming) {
         return Status::OK();
+    }
+
+    if (!http_req->header(HTTP_EXEC_MEM_LIMIT).empty()) {
+        auto exec_mem_limit = std::stoll(http_req->header(HTTP_EXEC_MEM_LIMIT));
+        if (exec_mem_limit <= 0) {
+            return Status::InvalidArgument("exec_mem_limit must be greater than 0");
+        }
+        ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
 
     return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);

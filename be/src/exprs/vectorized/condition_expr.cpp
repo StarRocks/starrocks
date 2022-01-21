@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/condition_expr.h"
 
@@ -14,6 +14,7 @@
 #include "runtime/primitive_type.h"
 #include "simd/selector.h"
 #include "util/dispatch.h"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 
@@ -75,12 +76,13 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        ColumnBuilder<Type> result(this->type().precision, this->type().scale);
 
         ColumnViewer<Type> lhs_viewer(lhs);
         ColumnViewer<Type> rhs_viewer(rhs);
 
         size_t size = list[0]->size();
+        ColumnBuilder<Type> result(size, this->type().precision, this->type().scale);
+
         for (int row = 0; row < size; ++row) {
             if (lhs_viewer.is_null(row)) {
                 result.append(rhs_viewer.value(row), rhs_viewer.is_null(row));
@@ -111,12 +113,12 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        ColumnBuilder<Type> result(this->type().precision, this->type().scale);
 
         ColumnViewer<Type> lhs_viewer(lhs);
         ColumnViewer<Type> rhs_viewer(rhs);
 
         size_t size = list[0]->size();
+        ColumnBuilder<Type> result(size, this->type().precision, this->type().scale);
         for (int row = 0; row < size; ++row) {
             if (lhs_viewer.is_null(row)) {
                 result.append_null();
@@ -159,7 +161,6 @@ public:
         }
 
         Columns list = {bhs, lhs, rhs};
-        ColumnBuilder<Type> result(this->type().precision, this->type().scale);
 
         auto bhs_nulls = ColumnHelper::count_nulls(bhs);
         auto lhs_nulls = ColumnHelper::count_nulls(lhs);
@@ -169,6 +170,7 @@ public:
         ColumnViewer<Type> lhs_viewer(lhs);
         ColumnViewer<Type> rhs_viewer(rhs);
         size_t size = list[0]->size();
+        ColumnBuilder<Type> result(size, this->type().precision, this->type().scale);
 
         // optimization for 3 columns all not null.
         if (bhs_nulls == 0 && lhs_nulls == 0 && rhs_nulls == 0) {
@@ -252,9 +254,9 @@ public:
         }
 
         // choose not null
-        ColumnBuilder<Type> builder(this->type().precision, this->type().scale);
         int size = columns[0]->size();
         int col_size = viewers.size();
+        ColumnBuilder<Type> builder(size, this->type().precision, this->type().scale);
 
         for (int row = 0; row < size; ++row) {
             int col;
@@ -298,6 +300,7 @@ public:
     CASE_TYPE(TYPE_DOUBLE, CLASS);     \
     CASE_TYPE(TYPE_CHAR, CLASS);       \
     CASE_TYPE(TYPE_VARCHAR, CLASS);    \
+    CASE_TYPE(TYPE_TIME, CLASS);       \
     CASE_TYPE(TYPE_DATE, CLASS);       \
     CASE_TYPE(TYPE_DATETIME, CLASS);   \
     CASE_TYPE(TYPE_DECIMALV2, CLASS);  \

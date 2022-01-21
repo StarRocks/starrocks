@@ -66,6 +66,7 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.FilePatternVersion;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -294,10 +295,15 @@ public class SparkLoadPendingTask extends LoadTask {
 
         // default value
         String defaultValue = null;
-        if (column.getDefaultValue() != null) {
-            defaultValue = column.getDefaultValue();
+        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+        if (defaultValueType == Column.DefaultValueType.VARY) {
+            throw new SemanticException("Column " + column.getName() + " has unsupported default value:" +
+                    column.getDefaultExpr().getExpr());
         }
-        if (column.isAllowNull() && column.getDefaultValue() == null) {
+        if (defaultValueType == Column.DefaultValueType.CONST) {
+            defaultValue = column.calculatedDefaultValue();
+        }
+        if (column.isAllowNull() && defaultValueType == Column.DefaultValueType.NULL) {
             defaultValue = "\\N";
         }
 
@@ -346,17 +352,21 @@ public class SparkLoadPendingTask extends LoadTask {
                 // bucket num
                 int bucketNum = partition.getDistributionInfo().getBucketNum();
 
-                // is max partition
+                // is min|max partition
                 Range<PartitionKey> range = entry.getValue();
                 boolean isMaxPartition = range.upperEndpoint().isMaxValue();
+                boolean isMinPartition = range.lowerEndpoint().isMinValue();
 
                 // start keys
-                List<LiteralExpr> rangeKeyExprs = range.lowerEndpoint().getKeys();
+                List<LiteralExpr> rangeKeyExprs = null;
                 List<Object> startKeys = Lists.newArrayList();
-                for (int i = 0; i < rangeKeyExprs.size(); ++i) {
-                    LiteralExpr literalExpr = rangeKeyExprs.get(i);
-                    Object keyValue = literalExpr.getRealValue();
-                    startKeys.add(keyValue);
+                if (!isMinPartition) {
+                    rangeKeyExprs = range.lowerEndpoint().getKeys();
+                    for (int i = 0; i < rangeKeyExprs.size(); ++i) {
+                        LiteralExpr literalExpr = rangeKeyExprs.get(i);
+                        Object keyValue = literalExpr.getRealValue();
+                        startKeys.add(keyValue);
+                    }
                 }
 
                 // end keys
@@ -371,7 +381,8 @@ public class SparkLoadPendingTask extends LoadTask {
                     }
                 }
 
-                etlPartitions.add(new EtlPartition(partitionId, startKeys, endKeys, isMaxPartition, bucketNum));
+                etlPartitions.add(
+                        new EtlPartition(partitionId, startKeys, endKeys, isMinPartition, isMaxPartition, bucketNum));
             }
         } else {
             Preconditions.checkState(type == PartitionType.UNPARTITIONED);
@@ -387,7 +398,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 int bucketNum = partition.getDistributionInfo().getBucketNum();
 
                 etlPartitions.add(new EtlPartition(partitionId, Lists.newArrayList(), Lists.newArrayList(),
-                        true, bucketNum));
+                        true, true, bucketNum));
             }
         }
 

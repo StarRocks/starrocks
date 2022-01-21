@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/column_predicate_rewriter.h"
 
@@ -11,14 +11,16 @@
 #include "column/datum.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/object_pool.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "gutil/casts.h"
 #include "runtime/global_dicts.h"
 #include "simd/simd.h"
-#include "storage/rowset/segment_v2/column_reader.h"
-#include "storage/rowset/segment_v2/scalar_column_iterator.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/scalar_column_iterator.h"
 #include "storage/vectorized/column_expr_predicate.h"
 #include "storage/vectorized/column_predicate.h"
 
@@ -32,6 +34,14 @@ void ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
         const FieldPtr& field = _schema.field(i);
         ColumnId cid = field->id();
         if (_need_rewrite[cid]) {
+            // a local dict size may greater than config::vector_chunk_size, so it may cause a overflow
+            // in Expr::evaluate (default s_all_not_null_column size was config::vector_chunk_size)
+            // so we will disable optimization when dict size greater than vector_chunk_size
+            int dict_size = down_cast<ScalarColumnIterator*>(_column_iterators[cid])->dict_size();
+            if (dict_size > config::vector_chunk_size) {
+                _need_rewrite[cid] = false;
+                continue;
+            }
             _rewrite_predicate(pool, field);
         }
     }
@@ -224,13 +234,12 @@ bool ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPt
 // This function is only used to rewrite the LE/LT/GE/GT condition.
 // For the greater than or less than condition,
 // you need to get the values of all ordered dictionaries and rewrite them as `InList` expressions
-void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::string, int>>* dicts,
-                                                segment_v2::ColumnIterator* iter) {
+void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, ColumnIterator* iter) {
     // We already loaded dicts, no need to do once more.
     if (!dicts->empty()) {
         return;
     }
-    auto column_iterator = down_cast<segment_v2::ScalarColumnIterator*>(iter);
+    auto column_iterator = down_cast<ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
     std::iota(dict_codes, dict_codes + dict_size, 0);
@@ -246,9 +255,9 @@ void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::strin
               [](const auto& e1, const auto& e2) { return e1.first.compare(e2.first) < 0; });
 }
 
-void ColumnPredicateRewriter::_get_segment_dict_vec(segment_v2::ColumnIterator* iter, ColumnPtr* dict_column,
+void ColumnPredicateRewriter::_get_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column,
                                                     ColumnPtr* code_column, bool field_nullable) {
-    auto column_iterator = down_cast<segment_v2::ScalarColumnIterator*>(iter);
+    auto column_iterator = down_cast<ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
     std::iota(dict_codes, dict_codes + dict_size, 0);
@@ -310,23 +319,17 @@ bool ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const Co
 
     // TODO(yan): use eq/ne predicates when only one item, but it's very very hard to construct ne/eq expr.
     auto used_values = Int32Column::create();
-    uint8_t sel_value = (true_count < false_count) ? 1 : 0;
     for (int i = 0; i < code_size; i++) {
-        if (selection[i] == sel_value) {
+        if (selection[i]) {
             used_values->append(code_values[i]);
         }
     }
     bool eq_null = true;
     bool null_in_set = false;
-    if (field_nullable) {
-        if (selection[code_size] == sel_value) {
-            null_in_set = true;
-        }
+    if (field_nullable && selection[code_size]) {
+        null_in_set = true;
     }
     bool is_not_in = false;
-    if (sel_value == 0) {
-        is_not_in = true;
-    }
 
     // construct in filter.
     RuntimeState* state = pred->runtime_state();

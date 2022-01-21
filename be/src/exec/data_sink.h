@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_DATA_SINK_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_DATA_SINK_H
+#pragma once
 
 #include <utility>
 #include <vector>
@@ -67,7 +66,7 @@ public:
 
     // Creates a new data sink from thrift_sink. A pointer to the
     // new sink is written to *sink, and is owned by the caller.
-    static Status create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink,
+    static Status create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
                                    const std::vector<TExpr>& output_exprs, const TPlanFragmentExecParams& params,
                                    const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink);
 
@@ -90,4 +89,3 @@ protected:
 };
 
 } // namespace starrocks
-#endif

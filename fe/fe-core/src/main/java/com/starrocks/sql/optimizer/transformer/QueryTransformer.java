@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.collect.ImmutableList;
@@ -13,9 +13,12 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -42,21 +45,24 @@ import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTransla
 
 class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
-    private final ExpressionMapping outer;
+    private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
+    private final Map<String, ExpressionMapping> cteContext;
 
-    QueryTransformer(ColumnRefFactory columnRefFactory, ExpressionMapping outer) {
+    public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
+                            Map<String, ExpressionMapping> cteContext) {
         this.columnRefFactory = columnRefFactory;
-        this.outer = outer;
+        this.session = session;
+        this.cteContext = cteContext;
     }
 
-    public LogicalPlan plan(QuerySpecification queryBlock) {
-        OptExprBuilder builder = planFrom(queryBlock.getRelation());
+    public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
+        OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
+        builder.setExpressionMapping(new ExpressionMapping(builder.getScope(), builder.getFieldMappings(), outer));
 
         builder = filter(builder, queryBlock.getPredicate());
-        builder =
-                aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(), queryBlock.getGroupingSetsList(),
-                        queryBlock.getGroupingFunctionCallExprs());
+        builder = aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(),
+                queryBlock.getGroupingSetsList(), queryBlock.getGroupingFunctionCallExprs());
         builder = filter(builder, queryBlock.getHaving());
         builder = window(builder, queryBlock.getOutputAnalytic());
 
@@ -101,8 +107,13 @@ class QueryTransformer {
         return outputs;
     }
 
-    private OptExprBuilder planFrom(Relation node) {
-        return new RelationTransformer(columnRefFactory).visit(node);
+    private OptExprBuilder planFrom(Relation node, Map<String, ExpressionMapping> cteContext) {
+        // This must be a copy of the context, because the new Relation may contain cte with the same name,
+        // and the internal cte with the same name will overwrite the original mapping
+        Map<String, ExpressionMapping> newCTEContext = Maps.newHashMap(cteContext);
+        return new RelationTransformer(columnRefFactory, session,
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCTEContext).visit(
+                node).getRootBuilder();
     }
 
     private OptExprBuilder projectForOrderWithoutAggregation(OptExprBuilder subOpt, Iterable<Expr> outputExpression,
@@ -151,10 +162,10 @@ class QueryTransformer {
         ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer();
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
         for (Expr expression : expressions) {
-            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression);
+            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression, cteContext);
             ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
                     subOpt.getExpressionMapping(), projections, columnRefFactory);
             outputTranslations.put(expression, columnRef);
@@ -169,11 +180,11 @@ class QueryTransformer {
             return subOpt;
         }
 
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer();
-        subOpt = subqueryTransformer.handleSubqueries(columnRefFactory, subOpt, predicate);
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
+        subOpt = subqueryTransformer.handleSubqueries(columnRefFactory, subOpt, predicate, cteContext);
 
         ScalarOperator scalarPredicate =
-                subqueryTransformer.rewriteSubqueryScalarOperator(predicate, subOpt, outer, correlation);
+                subqueryTransformer.rewriteSubqueryScalarOperator(predicate, subOpt, correlation);
 
         if (scalarPredicate != null) {
             LogicalFilterOperator filterOperator = new LogicalFilterOperator(scalarPredicate);

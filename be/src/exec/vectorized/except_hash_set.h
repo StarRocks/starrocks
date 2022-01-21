@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -46,15 +46,7 @@ public:
 
     ExceptHashSet() = default;
 
-    Status init() {
-        _hash_set = std::make_unique<HashSet>();
-        _mem_pool = std::make_unique<MemPool>();
-        _buffer = _mem_pool->allocate(_max_one_row_size * config::vector_chunk_size);
-        if (UNLIKELY(_buffer == nullptr)) {
-            return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
-        }
-        return Status::OK();
-    }
+    Status init(RuntimeState* state);
 
     Iterator begin() { return _hash_set->begin(); }
 
@@ -64,11 +56,11 @@ public:
 
     size_t size() { return _hash_set->size(); }
 
-    Status build_set(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, MemPool* pool);
+    void build_set(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, MemPool* pool);
 
     Status erase_duplicate_row(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs);
 
-    void deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t batch_size);
+    void deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t chunk_size);
 
     int64_t mem_usage() { return _hash_set->dump_bound() + _mem_pool->total_reserved_bytes(); }
 

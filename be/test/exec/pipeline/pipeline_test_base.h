@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
@@ -46,7 +46,7 @@ protected:
     virtual void _prepare_request() {}
 
     // lambda used to init _pipelines
-    std::function<void()> _pipeline_builder;
+    std::function<void(RuntimeState*)> _pipeline_builder;
     Pipelines _pipelines;
 
 private:

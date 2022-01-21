@@ -25,53 +25,64 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
-add_library(Exprs
+set(EXPR_FILES 
   agg/aggregate_factory.cpp
-  table_function/table_function_factory.cpp
-  base64.cpp
-  expr.cpp
-  expr_context.cpp
-  slot_ref.cpp
   anyval_util.cpp
+  base64.cpp
+  expr_context.cpp
+  expr.cpp
+  slot_ref.cpp
+  table_function/table_function_factory.cpp
   vectorized/arithmetic_expr.cpp
-  vectorized/array_expr.cpp
   vectorized/array_element_expr.cpp
+  vectorized/array_expr.cpp
   vectorized/array_functions.cpp
-  vectorized/compound_predicate.cpp
   vectorized/binary_predicate.cpp
-  vectorized/literal.cpp
+  vectorized/bitmap_functions.cpp
+  vectorized/case_expr.cpp
   vectorized/cast_expr.cpp
+  vectorized/column_ref.cpp
+  vectorized/compound_predicate.cpp
+  vectorized/condition_expr.cpp
+  vectorized/encryption_functions.cpp
+  vectorized/es_functions.cpp
+  vectorized/find_in_set.cpp
   vectorized/function_call_expr.cpp
   vectorized/function_helper.cpp
-  vectorized/math_functions.cpp
-  vectorized/string_functions.cpp
-  vectorized/time_functions.cpp
-  vectorized/condition_expr.cpp
-  vectorized/like_predicate.cpp
-  vectorized/in_predicate.cpp
-  vectorized/case_expr.cpp
-  vectorized/is_null_predicate.cpp
-  vectorized/hyperloglog_functions.cpp
-  vectorized/bitmap_functions.cpp
-  vectorized/json_functions.cpp
-  vectorized/percentile_functions.cpp
-  vectorized/encryption_functions.cpp
   vectorized/geo_functions.cpp
-  vectorized/find_in_set.cpp
+  vectorized/grouping_sets_functions.cpp
+  vectorized/hyperloglog_functions.cpp
+  vectorized/in_const_predicate.cpp
+  vectorized/info_func.cpp
+  vectorized/in_predicate.cpp
+  vectorized/is_null_predicate.cpp
+  vectorized/json_functions.cpp
+  vectorized/like_predicate.cpp
+  vectorized/literal.cpp
   vectorized/locate.cpp
+  vectorized/math_functions.cpp
+  vectorized/percentile_functions.cpp
+  vectorized/runtime_filter_bank.cpp
+  vectorized/runtime_filter.cpp
   vectorized/split.cpp
   vectorized/split_part.cpp
-  vectorized/column_ref.cpp
-  vectorized/grouping_sets_functions.cpp
-  vectorized/es_functions.cpp
+  vectorized/string_functions.cpp
+  vectorized/time_functions.cpp
   vectorized/utility_functions.cpp
-  vectorized/info_func.cpp
-  vectorized/runtime_filter.cpp
-  vectorized/runtime_filter_bank.cpp
-  vectorized/in_const_predicate.cpp
 )
+
+IF (WITH_HDFS)
+    set(EXPR_FILES ${EXPR_FILES}
+      agg/java_udaf_function.cpp
+      vectorized/java_function_call_expr.cpp
+    )
+endif()
+
+add_library(Exprs ${EXPR_FILES})
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
-set_source_files_properties(vectorized/json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-set_source_files_properties(vectorized/json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+  set_source_files_properties(vectorized/json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+  set_source_files_properties(vectorized/json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+endif()

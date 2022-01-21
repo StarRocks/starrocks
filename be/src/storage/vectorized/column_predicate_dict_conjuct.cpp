@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <algorithm>
 #include <cstdint>
@@ -34,7 +34,7 @@ public:
 
     static constexpr bool can_vectorized() { return true; }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const {
         return Status::Cancelled("not implemented");
     }
 

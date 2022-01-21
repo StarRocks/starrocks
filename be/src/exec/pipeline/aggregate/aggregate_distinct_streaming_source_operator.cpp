@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "aggregate_distinct_streaming_source_operator.h"
 
@@ -44,13 +44,14 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_ch
     }
 
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-    _output_chunk_from_hash_set(&chunk);
+    _output_chunk_from_hash_set(&chunk, state);
     eval_runtime_bloom_filters(chunk.get());
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }
 
-void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(vectorized::ChunkPtr* chunk) {
+void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(vectorized::ChunkPtr* chunk,
+                                                                           RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         if (false) {
         }
@@ -70,7 +71,7 @@ void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(vecto
 #define HASH_MAP_METHOD(NAME)                                                                                     \
     else if (_aggregator->hash_set_variant().type == vectorized::HashSetVariant::Type::NAME)                      \
             _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, config::vector_chunk_size, chunk);
+                    *_aggregator->hash_set_variant().NAME, state->chunk_size(), chunk);
     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {

@@ -1,26 +1,33 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/intersect_hash_set.h"
 
 #include "exec/exec_node.h"
+#include "exec/vectorized/aggregate/agg_hash_set.h"
 #include "util/phmap/phmap_dump.h"
 
 namespace starrocks::vectorized {
+template <typename HashSet>
+Status IntersectHashSet<HashSet>::init(RuntimeState* state) {
+    _hash_set = std::make_unique<HashSet>();
+    _mem_pool = std::make_unique<MemPool>();
+    _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size());
+    RETURN_IF_UNLIKELY_NULL(_buffer, Status::MemoryAllocFailed("alloc mem for intersect hash set failed"));
+    return Status::OK();
+}
 
 template <typename HashSet>
-Status IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chunkPtr,
-                                            const std::vector<ExprContext*>& exprs, MemPool* pool) {
+void IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chunkPtr,
+                                          const std::vector<ExprContext*>& exprs, MemPool* pool) {
     size_t chunk_size = chunkPtr->num_rows();
 
-    _slice_sizes.assign(config::vector_chunk_size, 0);
+    _slice_sizes.assign(state->chunk_size(), 0);
     size_t cur_max_one_row_size = _get_max_serialize_size(chunkPtr, exprs);
     if (UNLIKELY(cur_max_one_row_size > _max_one_row_size)) {
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
-        _buffer = _mem_pool->allocate(_max_one_row_size * config::vector_chunk_size);
-        if (UNLIKELY(_buffer == nullptr)) {
-            return Status::InternalError("Mem usage has exceed the limit of BE");
-        }
+        _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size());
+        THROW_BAD_ALLOC_IF_NULL(_buffer);
     }
 
     _serialize_columns(chunkPtr, exprs, chunk_size);
@@ -30,24 +37,23 @@ Status IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr&
         _hash_set->lazy_emplace(key, [&](const auto& ctor) {
             // we must persist the slice before insert
             uint8_t* pos = pool->allocate(key.slice.size);
+            ERASE_AND_THROW_BAD_ALLOC_IF_NULL((*_hash_set), pos, key);
             memcpy(pos, key.slice.data, key.slice.size);
             ctor(pos, key.slice.size);
         });
     }
-    RETURN_IF_LIMIT_EXCEEDED(state, "Intersect, while build hash table.");
-    return Status::OK();
 }
 
 template <typename HashSet>
 Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, const ChunkPtr& chunkPtr,
                                                        const std::vector<ExprContext*>& exprs, const int hit_times) {
     size_t chunk_size = chunkPtr->num_rows();
-    _slice_sizes.assign(config::vector_chunk_size, 0);
+    _slice_sizes.assign(state->chunk_size(), 0);
     size_t cur_max_one_row_size = _get_max_serialize_size(chunkPtr, exprs);
     if (UNLIKELY(cur_max_one_row_size > _max_one_row_size)) {
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
-        _buffer = _mem_pool->allocate(_max_one_row_size * config::vector_chunk_size);
+        _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size());
         if (UNLIKELY(_buffer == nullptr)) {
             return Status::InternalError("Mem usage has exceed the limit of BE");
         }
@@ -67,7 +73,7 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
 }
 
 template <typename HashSet>
-void IntersectHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t batch_size) {
+void IntersectHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t chunk_size) {
     for (const auto& key_column : key_columns) {
         // Because the serialized key is always nullable,
         // drop the null byte of the key if the dest column is non-nullable.
@@ -79,7 +85,7 @@ void IntersectHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, const Co
             continue;
         }
 
-        key_column->deserialize_and_append_batch(keys, batch_size);
+        key_column->deserialize_and_append_batch(keys, chunk_size);
     }
 }
 

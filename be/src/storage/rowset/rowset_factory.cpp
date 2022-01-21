@@ -35,8 +35,10 @@ namespace starrocks {
 Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::string& rowset_path,
                                     const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
     if (rowset_meta->rowset_type() == BETA_ROWSET) {
-        *rowset = std::make_shared<BetaRowset>(schema, rowset_path, rowset_meta);
-        return (*rowset)->init() == OLAP_SUCCESS ? Status::OK() : Status::InternalError("fail to init rowset");
+        *rowset =
+                BetaRowset::create(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), schema, rowset_path, rowset_meta);
+        RETURN_IF_ERROR((*rowset)->init());
+        return Status::OK();
     }
     return Status::NotSupported("unsupported rowset type");
 }
@@ -73,13 +75,13 @@ Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, s
         auto adapter_context = context;
         adapter_context.memory_format_version = memory_format_version;
         *output = std::make_unique<vectorized::RowsetWriterAdapter>(adapter_context);
-    } else if (context.writer_type == HORIZONTAL) {
+    } else if (context.writer_type == kHorizontal) {
         *output = std::make_unique<HorizontalBetaRowsetWriter>(context);
     } else {
-        DCHECK(context.writer_type == VERTICAL);
+        DCHECK(context.writer_type == kVertical);
         *output = std::make_unique<VerticalBetaRowsetWriter>(context);
     }
-    return (*output)->init() == OLAP_SUCCESS ? Status::OK() : Status::InternalError("fail to init rowset writer");
+    return (*output)->init();
 }
 
 } // namespace starrocks

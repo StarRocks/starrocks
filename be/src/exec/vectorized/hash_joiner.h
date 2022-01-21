@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -55,10 +55,10 @@ struct HashJoinerParam {
               _node_type(node_type),
               _limit(limit),
               _is_null_safes(is_null_safes),
-              _build_expr_ctxs(std::move(build_expr_ctxs)),
-              _probe_expr_ctxs(std::move(probe_expr_ctxs)),
-              _other_join_conjunct_ctxs(std::move(other_join_conjunct_ctxs)),
-              _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _build_expr_ctxs(build_expr_ctxs),
+              _probe_expr_ctxs(probe_expr_ctxs),
+              _other_join_conjunct_ctxs(other_join_conjunct_ctxs),
+              _conjunct_ctxs(conjunct_ctxs),
               _build_row_descriptor(build_row_descriptor),
               _probe_row_descriptor(probe_row_descriptor),
               _row_descriptor(row_descriptor),
@@ -74,11 +74,11 @@ struct HashJoinerParam {
     TPlanNodeId _node_id;
     TPlanNodeType::type _node_type;
     int64_t _limit;
-    std::vector<bool> _is_null_safes;
-    std::vector<ExprContext*> _build_expr_ctxs;
-    std::vector<ExprContext*> _probe_expr_ctxs;
-    std::vector<ExprContext*> _other_join_conjunct_ctxs;
-    std::vector<ExprContext*> _conjunct_ctxs;
+    const std::vector<bool> _is_null_safes;
+    const std::vector<ExprContext*> _build_expr_ctxs;
+    const std::vector<ExprContext*> _probe_expr_ctxs;
+    const std::vector<ExprContext*> _other_join_conjunct_ctxs;
+    const std::vector<ExprContext*> _conjunct_ctxs;
     const RowDescriptor _build_row_descriptor;
     const RowDescriptor _probe_row_descriptor;
     const RowDescriptor _row_descriptor;
@@ -91,13 +91,26 @@ struct HashJoinerParam {
 class HashJoiner final : public pipeline::ContextWithDependency {
 public:
     explicit HashJoiner(const HashJoinerParam& param);
-    ~HashJoiner() = default;
+
+    ~HashJoiner() {
+        if (_runtime_state != nullptr) {
+            close(_runtime_state);
+        }
+    }
+
     Status prepare(RuntimeState* state);
     Status close(RuntimeState* state) override;
     bool need_input() const;
     bool has_output() const;
     bool is_build_done() const { return _phase != HashJoinPhase::BUILD; }
     bool is_done() const { return _phase == HashJoinPhase::EOS; }
+
+    void enter_probe_phase() {
+        _short_circuit_break();
+
+        auto old_phase = HashJoinPhase::BUILD;
+        _phase.compare_exchange_strong(old_phase, HashJoinPhase::PROBE);
+    }
     void enter_post_probe_phase() {
         HashJoinPhase old_phase = HashJoinPhase::PROBE;
         if (!_phase.compare_exchange_strong(old_phase, HashJoinPhase::POST_PROBE)) {
@@ -106,6 +119,7 @@ public:
             _phase.compare_exchange_strong(old_phase, HashJoinPhase::EOS);
         }
     }
+    void enter_eos_phase() { _phase = HashJoinPhase::EOS; }
     // build phase
     Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk);
     Status build_ht(RuntimeState* state);
@@ -119,6 +133,8 @@ public:
         return _runtime_bloom_filter_build_params;
     }
     size_t get_ht_row_count() { return _ht.get_row_count(); }
+
+    Status create_runtime_filters(RuntimeState* state);
 
 private:
     static bool _has_null(const ColumnPtr& column);
@@ -158,8 +174,12 @@ private:
 
     void _short_circuit_break() {
         // special cases of short-circuit break.
-        if (_ht.get_row_count() == 0 && (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN)) {
+        if (_ht.get_row_count() == 0 &&
+            (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN ||
+             _join_type == TJoinOp::RIGHT_SEMI_JOIN || _join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+             _join_type == TJoinOp::RIGHT_OUTER_JOIN)) {
             _phase = HashJoinPhase::EOS;
+            set_finished();
         }
 
         if (_ht.get_row_count() > 0) {
@@ -172,6 +192,7 @@ private:
                 // TODO: This reserved field will be removed in the implementation mechanism in the future.
                 // at that time, you can directly use Column::has_null() to judge
                 _phase = HashJoinPhase::EOS;
+                set_finished();
             }
         }
     }
@@ -272,6 +293,9 @@ private:
     }
 
     ObjectPool* _pool;
+
+    RuntimeState* _runtime_state = nullptr;
+
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     const int64_t _limit; // -1: no limit
     int64_t _num_rows_returned;

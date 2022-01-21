@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
@@ -38,6 +38,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.SchemaTable;
@@ -55,9 +56,9 @@ import com.starrocks.sql.analyzer.relation.ExceptRelation;
 import com.starrocks.sql.analyzer.relation.IntersectRelation;
 import com.starrocks.sql.analyzer.relation.JoinRelation;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.QuerySpecification;
 import com.starrocks.sql.analyzer.relation.Relation;
 import com.starrocks.sql.analyzer.relation.RelationVisitor;
+import com.starrocks.sql.analyzer.relation.SelectRelation;
 import com.starrocks.sql.analyzer.relation.SetOperationRelation;
 import com.starrocks.sql.analyzer.relation.SubqueryRelation;
 import com.starrocks.sql.analyzer.relation.TableFunctionRelation;
@@ -68,6 +69,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.SetQualifier;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -76,6 +78,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -107,6 +110,7 @@ public class QueryAnalyzer {
         }
 
         Scope scope = analyzeCTE(stmt, parent);
+        QueryRelation queryRelation;
         if (stmt instanceof SelectStmt) {
             SelectStmt selectStmt = (SelectStmt) stmt;
 
@@ -136,10 +140,12 @@ public class QueryAnalyzer {
 
                 List<Field> fields = new ArrayList<>();
                 for (int fieldIdx = 0; fieldIdx < outputTypes.length; ++fieldIdx) {
-                    fields.add(new Field("column_" + fieldIdx, outputTypes[fieldIdx], null, null));
+                    fields.add(new Field("column_" + fieldIdx, outputTypes[fieldIdx], null, rows.get(0).get(fieldIdx)));
                 }
 
-                return new ValuesRelation(rows, new RelationFields(fields));
+                queryRelation = new ValuesRelation(rows,
+                        fields.stream().map(Field::getName).collect(Collectors.toList()));
+                queryRelation.setScope(new Scope(RelationId.of(queryRelation), new RelationFields(fields)));
             } else if (selectStmt.getTableRefs().size() == 0) {
                 AnalyzeState analyzeState = new AnalyzeState();
 
@@ -152,18 +158,26 @@ public class QueryAnalyzer {
 
                 List<ArrayList<Expr>> rows = new ArrayList<>();
                 rows.add(row);
-                return new ValuesRelation(rows, outputScope.getRelationFields());
+                queryRelation = new ValuesRelation(rows,
+                        outputScope.getRelationFields().getAllFields()
+                                .stream().map(Field::getName).collect(Collectors.toList()));
+                queryRelation.setScope(outputScope);
             } else {
-                return transformSelectStmt((SelectStmt) stmt, scope);
+                queryRelation = transformSelectStmt((SelectStmt) stmt, scope);
             }
         } else if (stmt instanceof SetOperationStmt) {
-            return transformSetOperationStmt((SetOperationStmt) stmt, scope);
+            queryRelation = transformSetOperationStmt((SetOperationStmt) stmt, scope);
         } else {
             throw new StarRocksPlannerException("Error query statement", INTERNAL_ERROR);
         }
+
+        for (Map.Entry<String, CTERelation> entry : scope.getAllCteQueries().entrySet()) {
+            queryRelation.addCTERelation(entry.getValue());
+        }
+        return queryRelation;
     }
 
-    public QuerySpecification transformSelectStmt(SelectStmt stmt, Scope parent) {
+    public SelectRelation transformSelectStmt(SelectStmt stmt, Scope parent) {
         AnalyzeState analyzeState = new AnalyzeState();
         Scope sourceScope = analyzeFrom(stmt, analyzeState, parent);
         sourceScope.setParent(parent);
@@ -225,7 +239,7 @@ public class QueryAnalyzer {
              * group by expressions and aggregation expressions.
              */
             List<FunctionCallExpr> aggregationsInOrderBy = Lists.newArrayList();
-            TreeNode.collect(orderByExpressions, Expr.isAggregatePredicate(), aggregationsInOrderBy);
+            TreeNode.collect(orderByExpressions, Expr.isAggregatePredicate()::apply, aggregationsInOrderBy);
 
             /*
              * Prohibit the use of aggregate sorting for non-aggregated query,
@@ -233,7 +247,7 @@ public class QueryAnalyzer {
              * eg. select 1 from t0 order by sum(v)
              */
             List<FunctionCallExpr> aggregationsInOutput = Lists.newArrayList();
-            TreeNode.collect(sourceExpressions, Expr.isAggregatePredicate(), aggregationsInOutput);
+            TreeNode.collect(sourceExpressions, Expr.isAggregatePredicate()::apply, aggregationsInOutput);
             if (!isAggregate(aggregationsInOutput, groupByExpressions) && !aggregationsInOrderBy.isEmpty()) {
                 throw new SemanticException(
                         "ORDER BY contains aggregate function and applies to the result of a non-aggregated query");
@@ -273,27 +287,26 @@ public class QueryAnalyzer {
             throw new StarRocksPlannerException("Set operation must have multi operand", INTERNAL_ERROR);
         }
 
-        List<QueryRelation> relations = stmt.getOperands().stream()
+        List<QueryRelation> setOpRelations = stmt.getOperands().stream()
                 .map(setOperand -> transformQueryStmt(setOperand.getQueryStmt(), parent))
                 .collect(Collectors.toList());
 
-        QueryRelation setOpRelation = relations.get(0);
-        Type[] outputTypes =
-                setOpRelation.getRelationFields().getAllFields().stream().map(Field::getType).toArray(Type[]::new);
-        int outputSize = setOpRelation.getRelationFields().size();
+        QueryRelation setOpRelation = setOpRelations.get(0);
+        for (int i = 1; i < setOpRelations.size(); ++i) {
+            Type[] outputTypes =
+                    setOpRelation.getRelationFields().getAllFields().stream().map(Field::getType).toArray(Type[]::new);
+            int outputSize = setOpRelation.getRelationFields().size();
 
-        for (int i = 1; i < relations.size(); ++i) {
-            QueryRelation relation = relations.get(i);
-            SetOperationStmt.SetOperand operation = stmt.getOperands().get(i);
+            SetOperationStmt.SetOperand setOperand = stmt.getOperands().get(i);
+            QueryRelation relation = setOpRelations.get(i);
             if (relation.getRelationFields().size() != outputSize) {
                 throw new SemanticException("Operands have unequal number of columns");
             }
-
-            for (int fieldIdx = 0; fieldIdx < relation.getOutputExpr().size(); ++fieldIdx) {
-                Type fieldType = relation.getOutputExpr().get(fieldIdx).getType();
+            for (int fieldIdx = 0; fieldIdx < relation.getRelationFields().size(); ++fieldIdx) {
+                Type fieldType = relation.getRelationFields().getAllFields().get(fieldIdx).getType();
                 if (fieldType.isOnlyMetricType() &&
-                        !((operation.getOperation().equals(SetOperationStmt.Operation.UNION)) &&
-                                (operation.getQualifier().equals(SetOperationStmt.Qualifier.ALL)))) {
+                        !((setOperand.getOperation().equals(SetOperationStmt.Operation.UNION)) &&
+                                (setOperand.getQualifier().equals(SetOperationStmt.Qualifier.ALL)))) {
                     throw new SemanticException("%s not support set operation", fieldType);
                 }
 
@@ -306,92 +319,66 @@ public class QueryAnalyzer {
                 }
                 outputTypes[fieldIdx] = commonType;
             }
-        }
 
-        for (QueryRelation relation : relations) {
-            List<Expr> childOutputExpressions = new ArrayList<>();
-            for (int fieldIdx = 0; fieldIdx < relation.getOutputExpr().size(); ++fieldIdx) {
-                try {
-                    Type fieldType = relation.getOutputExpr().get(fieldIdx).getType();
-
-                    if (!fieldType.equals(outputTypes[fieldIdx])) {
-                        relation.getOutputScope().getRelationFields().getFieldByIndex(fieldIdx)
-                                .setType(outputTypes[fieldIdx]);
-                        childOutputExpressions
-                                .add(relation.getOutputExpr().get(fieldIdx).castTo(outputTypes[fieldIdx]));
-                    } else {
-                        childOutputExpressions.add(relation.getOutputExpr().get(fieldIdx));
-                    }
-                } catch (AnalysisException exception) {
-                    throw new SemanticException(exception.getMessage());
-                }
+            ArrayList<Field> fields = new ArrayList<>();
+            for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
+                Field oldField = setOpRelation.getRelationFields().getFieldByIndex(fieldIdx);
+                fields.add(new Field(oldField.getName(), outputTypes[fieldIdx],
+                        oldField.getRelationAlias(), oldField.getOriginExpression()));
             }
 
-            relation.setOutputExpr(childOutputExpressions);
-        }
-
-        List<Expr> outputExpressions = new ArrayList<>();
-        ArrayList<Field> fields = new ArrayList<>();
-        for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
-            Field oldField = setOpRelation.getRelationFields().getFieldByIndex(fieldIdx);
-            fields.add(new Field(oldField.getName(), outputTypes[fieldIdx],
-                    oldField.getRelationAlias(), oldField.getOriginExpression()));
-
-            SlotRef s = new SlotRef(oldField.getRelationAlias(), oldField.getName());
-            s.setType(outputTypes[fieldIdx]);
-            outputExpressions.add(s);
-        }
-        Scope outputScope = new Scope(RelationId.of(setOpRelation), new RelationFields(fields));
-
-        for (int i = 1; i < relations.size(); ++i) {
-            SetOperationStmt.SetOperand operation = stmt.getOperands().get(i);
-            if (operation.getOperation().equals(SetOperationStmt.Operation.UNION)) {
-                if (setOpRelation instanceof UnionRelation) {
-                    ((UnionRelation) setOpRelation).addRelation(relations.get(i));
+            if (setOperand.getOperation().equals(SetOperationStmt.Operation.UNION)) {
+                if (setOpRelation instanceof UnionRelation && ((UnionRelation) setOpRelation).getQualifier()
+                        .equals(SetQualifier.convert(setOperand.getQualifier()))) {
+                    ((UnionRelation) setOpRelation).addRelation(relation);
                 } else {
-                    setOpRelation = new UnionRelation(Arrays.asList(setOpRelation, relations.get(i)),
-                            SetQualifier.convert(operation.getQualifier()), outputExpressions, outputScope);
+                    setOpRelation = new UnionRelation(Arrays.asList(setOpRelation, relation),
+                            SetQualifier.convert(setOperand.getQualifier()));
                 }
-            } else if (operation.getOperation().equals(SetOperationStmt.Operation.EXCEPT)) {
-                if (operation.getQualifier().equals(SetOperationStmt.Qualifier.ALL)) {
+            } else if (setOperand.getOperation().equals(SetOperationStmt.Operation.EXCEPT)) {
+                if (setOperand.getQualifier().equals(SetOperationStmt.Qualifier.ALL)) {
                     throw new SemanticException("EXCEPT does not support ALL qualifier");
                 }
 
                 if (setOpRelation instanceof ExceptRelation) {
-                    ((ExceptRelation) setOpRelation).addRelation(relations.get(i));
+                    ((ExceptRelation) setOpRelation).addRelation(relation);
                 } else {
-                    setOpRelation = new ExceptRelation(Arrays.asList(setOpRelation, relations.get(i)),
-                            SetQualifier.convert(operation.getQualifier()), outputExpressions, outputScope);
+                    setOpRelation = new ExceptRelation(Arrays.asList(setOpRelation, relation),
+                            SetQualifier.convert(setOperand.getQualifier()));
                 }
-            } else if (operation.getOperation().equals(SetOperationStmt.Operation.INTERSECT)) {
-                if (operation.getQualifier().equals(SetOperationStmt.Qualifier.ALL)) {
+            } else if (setOperand.getOperation().equals(SetOperationStmt.Operation.INTERSECT)) {
+                if (setOperand.getQualifier().equals(SetOperationStmt.Qualifier.ALL)) {
                     throw new SemanticException("INTERSECT does not support ALL qualifier");
                 }
 
                 if (setOpRelation instanceof IntersectRelation) {
-                    ((IntersectRelation) setOpRelation).addRelation(relations.get(i));
+                    ((IntersectRelation) setOpRelation).addRelation(relation);
                 } else {
-                    setOpRelation = new IntersectRelation(Arrays.asList(setOpRelation, relations.get(i)),
-                            SetQualifier.convert(operation.getQualifier()), outputExpressions, outputScope);
+                    setOpRelation = new IntersectRelation(Arrays.asList(setOpRelation, relation),
+                            SetQualifier.convert(setOperand.getQualifier()));
                 }
             } else {
                 throw new StarRocksPlannerException(
                         "Unsupported set operation " + stmt.getOperands().get(i).getOperation(),
                         INTERNAL_ERROR);
             }
+
+            setOpRelation.setScope(new Scope(RelationId.of(setOpRelation), new RelationFields(fields)));
         }
         return (SetOperationRelation) setOpRelation;
     }
 
     private Scope analyzeCTE(QueryStmt stmt, Scope scope) {
-        if (!stmt.hasWithClause()) {
-            return scope;
-        }
-
         Scope cteScope = new Scope(RelationId.anonymous(), new RelationFields());
         cteScope.setParent(scope);
+
+        if (!stmt.hasWithClause()) {
+            return cteScope;
+        }
+
         for (View withQuery : stmt.getWithClause().getViews()) {
-            QueryRelation query = transformQueryStmt(withQuery.getQueryStmt(), cteScope);
+
+            QueryRelation query = transformQueryStmt(withQuery.getQueryStmtWithParse(), cteScope);
 
             /*
              *  Because the analysis of CTE is sensitive to order
@@ -399,15 +386,15 @@ public class QueryAnalyzer {
              *  and the previous CTE can rewrite the existing table name.
              *  So here will save an increasing AnalyzeState to add cte scope
              */
-            cteScope.addCteQueries(withQuery.getName(), query);
 
             /*
              * use cte column name as output scope of subquery relation fields
              */
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-            for (int fieldIdx = 0; fieldIdx < query.getOutputScope().getRelationFields().getAllFields().size();
+            ImmutableList.Builder<String> columnOutputNames = ImmutableList.builder();
+            for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size();
                     ++fieldIdx) {
-                Field originField = query.getOutputScope().getRelationFields().getFieldByIndex(fieldIdx);
+                Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
 
                 String database = originField.getRelationAlias() == null ? session.getDatabase() :
                         originField.getRelationAlias().getDb();
@@ -416,10 +403,19 @@ public class QueryAnalyzer {
                         withQuery.getColLabels() == null ? originField.getName() :
                                 withQuery.getColLabels().get(fieldIdx),
                         originField.getType(),
-                        tableName, originField.getOriginExpression()));
+                        tableName,
+                        originField.getOriginExpression()));
+                columnOutputNames.add(withQuery.getColLabels() == null ? originField.getName() :
+                        withQuery.getColLabels().get(fieldIdx));
             }
-            query.setOutputScope(
-                    new Scope(query.getOutputScope().getRelationId(), new RelationFields(outputFields.build())));
+
+            CTERelation cteRelation = new CTERelation(
+                    String.valueOf(RelationId.of(query).hashCode()),
+                    withQuery.getName(),
+                    columnOutputNames.build(),
+                    query);
+            cteRelation.setScope(new Scope(RelationId.of(cteRelation), new RelationFields(outputFields.build())));
+            cteScope.addCteQueries(withQuery.getName(), cteRelation);
         }
         return cteScope;
     }
@@ -494,7 +490,11 @@ public class QueryAnalyzer {
 
                     @Override
                     public List<String> visitCTE(CTERelation node, Void context) {
-                        return node.getCteQuery().getColumnOutputNames();
+                        if (item.getTblName() == null ||
+                                StringUtils.equals(item.getTblName().getTbl(), node.getName())) {
+                            return node.getColumnOutputNames();
+                        }
+                        return Collections.emptyList();
                     }
                 }.visit(analyzeState.getRelation()));
 
@@ -545,8 +545,9 @@ public class QueryAnalyzer {
             }
         }
 
-        Preconditions.checkArgument(outputExpressionBuilder.build().size() == columnOutputNames.size());
-        analyzeState.setOutputExpression(outputExpressionBuilder.build());
+        List<Expr> outputExpr = outputExpressionBuilder.build();
+        Preconditions.checkArgument(outputExpr.size() == columnOutputNames.size());
+        analyzeState.setOutputExpression(outputExpr);
         analyzeState.setColumnOutputNames(columnOutputNames);
         return outputExpressionBuilder.build();
     }
@@ -557,12 +558,14 @@ public class QueryAnalyzer {
         for (SelectListItem item : stmt.getSelectList().getItems()) {
             if (item.isStar()) {
                 if (item.getTblName() == null) {
-                    outputFields.addAll(scope.getRelationFields().getAllFields().stream().map(f ->
-                            new Field(f.getName(), f.getType(), f.getRelationAlias(), f.getOriginExpression(),
-                                    f.isVisible())).collect(Collectors.toList()));
+                    outputFields.addAll(scope.getRelationFields().getAllFields()
+                            .stream().filter(Field::isVisible)
+                            .map(f -> new Field(f.getName(), f.getType(), f.getRelationAlias(),
+                                    f.getOriginExpression(), f.isVisible())).collect(Collectors.toList()));
                 } else {
                     outputFields.addAll(scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName())
-                            .stream().map(f -> new Field(f.getName(), f.getType(), f.getRelationAlias(),
+                            .stream().filter(Field::isVisible)
+                            .map(f -> new Field(f.getName(), f.getType(), f.getRelationAlias(),
                                     f.getOriginExpression(), f.isVisible())).collect(Collectors.toList()));
                 }
             } else {
@@ -586,12 +589,13 @@ public class QueryAnalyzer {
         return outputScope;
     }
 
-    private Expr analyzeJoinUsing(List<String> usingColNames, Scope left, Scope right,
-                                  TableName leftTableName, TableName rightTableName) {
+    private Expr analyzeJoinUsing(List<String> usingColNames, Scope left, Scope right) {
         Expr joinEqual = null;
         for (String colName : usingColNames) {
-            left.resolveField(new SlotRef(leftTableName, colName));
-            right.resolveField(new SlotRef(rightTableName, colName));
+            TableName leftTableName =
+                    left.resolveField(new SlotRef(null, colName)).getField().getRelationAlias();
+            TableName rightTableName =
+                    right.resolveField(new SlotRef(null, colName)).getField().getRelationAlias();
 
             // create predicate "<left>.colName = <right>.colName"
             BinaryPredicate resolvedUsing = new BinaryPredicate(BinaryPredicate.Operator.EQ,
@@ -641,9 +645,7 @@ public class QueryAnalyzer {
                 Expr joinEqual = tableRef.getOnClause();
                 if (tableRef.getUsingColNames() != null) {
                     Expr resolvedUsing = analyzeJoinUsing(tableRef.getUsingColNames(),
-                            new Scope(RelationId.of(sourceRelation), sourceRelation.getRelationFields()),
-                            new Scope(RelationId.of(relation), relation.getRelationFields()),
-                            lastTableRef.getAliasAsName(), tableRef.getAliasAsName());
+                            sourceRelation.getScope(), relation.getScope());
                     if (joinEqual == null) {
                         joinEqual = resolvedUsing;
                     } else {
@@ -651,8 +653,22 @@ public class QueryAnalyzer {
                     }
                 }
 
-                sourceRelation = new JoinRelation(tableRef.getJoinOp(), sourceRelation, relation, joinEqual,
+                JoinRelation joinRelation = new JoinRelation(tableRef.getJoinOp(), sourceRelation, relation, joinEqual,
                         tableRef.isLateral());
+                /*
+                 * New Scope needs to be constructed for select in semi/anti join
+                 */
+                Scope joinScope;
+                if (tableRef.getJoinOp().isLeftSemiAntiJoin()) {
+                    joinScope = sourceRelation.getScope();
+                } else if (tableRef.getJoinOp().isRightSemiAntiJoin()) {
+                    joinScope = relation.getScope();
+                } else {
+                    joinScope = new Scope(RelationId.of(joinRelation),
+                            sourceRelation.getRelationFields().joinWith(relation.getRelationFields()));
+                }
+                joinRelation.setScope(joinScope);
+                sourceRelation = joinRelation;
 
                 if (tableRef.getJoinHints() != null) {
                     ((JoinRelation) sourceRelation).setJoinHint(tableRef.getJoinHints().get(0));
@@ -693,22 +709,7 @@ public class QueryAnalyzer {
         }
 
         analyzeState.setRelation(sourceRelation);
-
-        if (sourceRelation instanceof JoinRelation) {
-            JoinRelation join = (JoinRelation) sourceRelation;
-            if (join.getType().isSemiAntiJoin()) {
-                /*
-                 * New Scope needs to be constructed for select in semi/anti join
-                 */
-                if (((JoinRelation) sourceRelation).getType().isLeftSemiAntiJoin()) {
-                    scope = new Scope(scope.getRelationId(), join.getLeft().getRelationFields());
-                } else if (join.getType().isRightSemiAntiJoin()) {
-                    scope = new Scope(scope.getRelationId(), join.getRight().getRelationFields());
-                }
-                return scope;
-            }
-        }
-        return new Scope(RelationId.of(sourceRelation), sourceRelation.getRelationFields());
+        return sourceRelation.getScope();
     }
 
     private void analyzeJoinHints(JoinRelation join) {
@@ -741,27 +742,31 @@ public class QueryAnalyzer {
         TableName tableName = tableRef.getAliasAsName();
 
         if (tableRef.getName() != null && Strings.isNullOrEmpty(tableName.getDb())) {
-            Optional<QueryRelation> withQuery = scope.getCteQueries(tableRef.getName().getTbl());
+            Optional<CTERelation> withQuery = scope.getCteQueries(tableRef.getName().getTbl());
             if (withQuery.isPresent()) {
-                QueryRelation qb = withQuery.get();
-
-                /*
-                 * use colLables as output scope of subquery relation fields
-                 */
+                CTERelation cteRelation = withQuery.get();
+                RelationFields withRelationFields = withQuery.get().getRelationFields();
                 ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-                for (int fieldIdx = 0; fieldIdx < qb.getOutputScope().getRelationFields().getAllFields().size();
-                        ++fieldIdx) {
-                    Field originField = qb.getOutputScope().getRelationFields().getAllFields().get(fieldIdx);
+
+                for (int fieldIdx = 0; fieldIdx < withRelationFields.getAllFields().size(); ++fieldIdx) {
+                    Field originField = withRelationFields.getAllFields().get(fieldIdx);
                     outputFields.add(new Field(
                             originField.getName(), originField.getType(), tableName,
                             originField.getOriginExpression()));
                 }
 
-                if (session.getSessionVariable().isCboCteReuse()) {
-                    return new CTERelation(tableRef.getName().getTbl(), tableRef.getAlias(), qb, outputFields.build());
-                } else {
-                    return new SubqueryRelation(tableRef.getAlias(), qb, outputFields.build());
-                }
+                // The CTERelation stored in the Scope is not used directly here, but a new Relation is copied.
+                // It is because we hope to obtain a new RelationId to distinguish multiple cte reuses.
+                // Because the reused cte should not be considered the same relation.
+                // eg: with w as (select * from t0) select v1,sum(v2) from w group by v1 " +
+                //                "having v1 in (select v3 from w where v2 = 2)
+                // cte used in outer query and subquery can't use same relation-id and field
+                CTERelation newCteRelation = new CTERelation(cteRelation.getCteId(), tableName.getTbl(),
+                                cteRelation.getColumnOutputNames(),
+                                cteRelation.getCteQuery());
+                newCteRelation.setScope(
+                        new Scope(RelationId.of(newCteRelation), new RelationFields(outputFields.build())));
+                return newCteRelation;
             }
         }
 
@@ -773,12 +778,15 @@ public class QueryAnalyzer {
 
             QueryRelation query = transformQueryStmt(viewRef.getViewStmt(), scope);
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-            for (Field field : query.getOutputScope().getRelationFields().getAllFields()) {
+            for (Field field : query.getRelationFields().getAllFields()) {
                 outputFields.add(new Field(field.getName(), field.getType(),
                         tableName, field.getOriginExpression()));
             }
 
-            return new SubqueryRelation(tableRef.getAlias(), query, outputFields.build());
+            SubqueryRelation subqueryRelation = new SubqueryRelation(tableRef.getAlias(), query);
+            subqueryRelation.setScope(
+                    new Scope(RelationId.of(subqueryRelation), new RelationFields(outputFields.build())));
+            return subqueryRelation;
         }
 
         if (tableRef instanceof FunctionTableRef) {
@@ -789,6 +797,10 @@ public class QueryAnalyzer {
             for (int i = 0; i < child.size(); ++i) {
                 analyzeExpression(child.get(i), analyzeState, scope);
                 argTypes[i] = child.get(i).getType();
+
+                verifyNoAggregateFunctions(child.get(i), "UNNEST");
+                verifyNoWindowFunctions(child.get(i), "UNNEST");
+                verifyNoGroupingFunctions(child.get(i), "UNNEST");
             }
 
             TableFunction fn =
@@ -806,40 +818,43 @@ public class QueryAnalyzer {
                 fields.add(field);
             }
 
-            return new TableFunctionRelation(fn, child, new RelationFields(fields.build()));
+            TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(fn, child);
+            tableFunctionRelation.setScope(
+                    new Scope(RelationId.of(tableFunctionRelation), new RelationFields(fields.build())));
+            return tableFunctionRelation;
         }
 
         //Olap table
         Table table = resolveTable(tableRef);
-        ImmutableList.Builder<Field> fields = ImmutableList.builder();
-        ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
-
-        for (Column column : table.getFullSchema()) {
-            Field field;
-            if (table.getBaseSchema().contains(column)) {
-                field = new Field(column.getName(), column.getType(), tableName, null, true);
-            } else {
-                field = new Field(column.getName(), column.getType(), tableName, null, false);
-            }
-            columns.put(field, column);
-            fields.add(field);
-        }
-
         if (table instanceof View) {
             View view = (View) table;
-            QueryRelation query = transformQueryStmt(view.getQueryStmt(), scope);
+            QueryRelation query = transformQueryStmt(view.getQueryStmtWithParse(), scope);
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-            for (Field field : query.getOutputScope().getRelationFields().getAllFields()) {
+            for (Field field : query.getRelationFields().getAllFields()) {
                 outputFields.add(new Field(field.getName(), field.getType(),
                         tableName, field.getOriginExpression()));
             }
 
-            return new SubqueryRelation(tableRef.getAlias(), query, outputFields.build());
+            SubqueryRelation subqueryRelation = new SubqueryRelation(tableRef.getAlias(), query);
+            subqueryRelation.setScope(
+                    new Scope(RelationId.of(subqueryRelation), new RelationFields(outputFields.build())));
+            return subqueryRelation;
         } else {
             if (isSupportedTable(table)) {
-                TableRelation tableRelation = new TableRelation(tableName, table, columns.build(), fields.build(),
+                ImmutableList.Builder<Field> fields = ImmutableList.builder();
+                ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
+                for (Column column : table.getFullSchema()) {
+                    Field field = table.getBaseSchema().contains(column) ?
+                            new Field(column.getName(), column.getType(), tableName, null, true) :
+                            new Field(column.getName(), column.getType(), tableName, null, false);
+                    columns.put(field, column);
+                    fields.add(field);
+                }
+                TableRelation tableRelation = new TableRelation(tableName, table, columns.build(),
                         tableRef.getPartitionNames(), tableRef.getTabletIds(), tableRef.isMetaQuery());
+                tableRelation.setScope(new Scope(RelationId.of(tableRelation), new RelationFields(fields.build())));
+
                 session.getDumpInfo().addTable(tableRef.getName().getDb().split(":")[1], tableRelation.getTable());
                 return tableRelation;
             } else {
@@ -850,7 +865,7 @@ public class QueryAnalyzer {
 
     private boolean isSupportedTable(Table table) {
         return table instanceof OlapTable || table instanceof HiveTable || table instanceof SchemaTable ||
-                table instanceof MysqlTable || table instanceof EsTable;
+                table instanceof MysqlTable || table instanceof EsTable || table instanceof IcebergTable;
     }
 
     Table resolveTable(TableRef tableRef) {
@@ -920,7 +935,7 @@ public class QueryAnalyzer {
     private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState, Scope sourceScope,
                                                        List<Expr> outputAndOrderByExpressions) {
         List<FunctionCallExpr> aggregations = Lists.newArrayList();
-        TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate(), aggregations);
+        TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
 
         analyzeState.setAggregate(aggregations);
@@ -934,7 +949,8 @@ public class QueryAnalyzer {
         if (node.getGroupByClause() != null) {
             GroupByClause groupByClause = node.getGroupByClause();
             if (groupByClause.getGroupingType() == GroupByClause.GroupingType.GROUP_BY) {
-                for (Expr groupingExpr : groupByClause.getGroupingExprs()) {
+                List<Expr> groupingExprs = groupByClause.getGroupingExprs();
+                for (Expr groupingExpr : groupingExprs) {
                     if (groupingExpr instanceof IntLiteral) {
                         long ordinal = ((IntLiteral) groupingExpr).getLongValue();
                         if (ordinal < 1 || ordinal > outputExpressions.size()) {
@@ -983,7 +999,7 @@ public class QueryAnalyzer {
 
                     List<List<Expr>> groupingSets =
                             Sets.powerSet(IntStream.range(0, rewriteOriGrouping.size())
-                                            .boxed().collect(Collectors.toSet())).stream()
+                                    .boxed().collect(Collectors.toSet())).stream()
                                     .map(l -> l.stream().map(rewriteOriGrouping::get).collect(Collectors.toList()))
                                     .collect(Collectors.toList());
 
@@ -1084,7 +1100,23 @@ public class QueryAnalyzer {
     }
 
     private Scope computeAndAssignOrderScope(AnalyzeState analyzeState, Scope sourceScope, Scope outputScope) {
-        Scope orderScope = new Scope(outputScope.getRelationId(), outputScope.getRelationFields());
+        // The Scope used by order by allows parsing of the same column,
+        // such as 'select v1 as v, v1 as v from t0 order by v'
+        // but normal parsing does not allow it. So add a de-duplication operation here.
+        List<Field> allFields = new ArrayList<>();
+        for (Field field : outputScope.getRelationFields().getAllFields()) {
+            if (field.getName() != null && field.getOriginExpression() != null &&
+                    allFields.stream().anyMatch(f ->
+                            f.getOriginExpression() != null &&
+                                    f.getName() != null &&
+                                    field.getName().equals(f.getName()) &&
+                                    field.getOriginExpression().equals(f.getOriginExpression()))) {
+                continue;
+            }
+            allFields.add(field);
+        }
+
+        Scope orderScope = new Scope(outputScope.getRelationId(), new RelationFields(allFields));
         /*
          * ORDER BY or HAVING should "see" both output and FROM fields
          * Because output scope and source scope may contain the same columns,

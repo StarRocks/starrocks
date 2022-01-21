@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_ALIGNED_NEW_H_
-#define STARROCKS_BE_SRC_UTIL_ALIGNED_NEW_H_
-
+#pragma once
 #include <memory>
 
 #include "common/compiler_util.h"
@@ -56,5 +54,3 @@ private:
 
 using CacheLineAligned = AlignedNew<CACHE_LINE_SIZE>;
 } // namespace starrocks
-
-#endif

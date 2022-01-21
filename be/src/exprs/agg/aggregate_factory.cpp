@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/agg/aggregate_factory.h"
 
@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "column/type_traits.h"
+#include "exprs/agg/any_value.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/bitmap_union.h"
@@ -88,6 +89,12 @@ AggregateFunctionPtr AggregateFactory::MakeMaxAggregateFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeMinAggregateFunction() {
     return std::make_shared<MaxMinAggregateFunction<PT, MinAggregateData<PT>, MinElement<PT, MinAggregateData<PT>>>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeAnyValueAggregateFunction() {
+    return std::make_shared<
+            AnyValueAggregateFunction<PT, AnyValueAggregateData<PT>, AnyValueElement<PT, AnyValueAggregateData<PT>>>>();
 }
 
 template <typename NestedState>
@@ -364,6 +371,9 @@ public:
             } else if (name == "group_concat") {
                 auto group_count = AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionVariadic<GroupConcatAggregateState>(group_count);
+            } else if (name == "any_value") {
+                auto any_value = AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>>(any_value);
             }
         } else {
             if (name == "count") {
@@ -396,6 +406,8 @@ public:
                 return AggregateFactory::MakeSumDistinctAggregateFunctionV2<ArgPT>();
             } else if (name == "group_concat") {
                 return AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
+            } else if (name == "any_value") {
+                return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
             }
         }
 
@@ -438,6 +450,9 @@ public:
             } else if (name == "group_concat") {
                 auto group_count = AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionVariadic<GroupConcatAggregateState>(group_count);
+            } else if (name == "any_value") {
+                auto any_value = AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>>(any_value);
             }
         } else {
             if (name == "avg") {
@@ -452,6 +467,8 @@ public:
                 return AggregateFactory::MakeCountDistinctAggregateFunctionV2<ArgPT>();
             } else if (name == "group_concat") {
                 return AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
+            } else if (name == "any_value") {
+                return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
             }
         }
 
@@ -516,6 +533,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
 
     ADD_ALL_TYPE("max");
     ADD_ALL_TYPE("min");
+    ADD_ALL_TYPE("any_value");
 
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_count");
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("multi_distinct_count");
@@ -771,8 +789,11 @@ AggregateFuncResolver::AggregateFuncResolver() {
 
 AggregateFuncResolver::~AggregateFuncResolver() = default;
 
+const AggregateFunction* newJavaUDAFFunction(bool input_nullable);
+
 const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
-                                                PrimitiveType return_type, bool is_null, int agg_func_set_version) {
+                                                PrimitiveType return_type, bool is_null,
+                                                TFunctionBinaryType::type binary_type, int agg_func_set_version) {
     std::string func_name = name;
     if (agg_func_set_version > 1) {
         if (name == "multi_distinct_sum") {
@@ -781,7 +802,14 @@ const AggregateFunction* get_aggregate_function(const std::string& name, Primiti
             func_name = "multi_distinct_count2";
         }
     }
-    return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type, is_null);
-}
 
+    if (binary_type == TFunctionBinaryType::BUILTIN) {
+        return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type, is_null);
+    } else if (binary_type == TFunctionBinaryType::SRJAR) {
+#ifdef STARROCKS_WITH_HDFS
+        return newJavaUDAFFunction(is_null);
+#endif
+    }
+    return nullptr;
+}
 } // namespace starrocks::vectorized

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_MULTI_PRECISION_H
-#define STARROCKS_BE_RUNTIME_MULTI_PRECISION_H
+#pragma once
 
 namespace starrocks {
 
@@ -34,4 +33,3 @@ inline uint64_t low_bits(__int128 x) {
 }
 
 } // namespace starrocks
-#endif

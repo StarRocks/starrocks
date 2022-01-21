@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -55,11 +55,11 @@ private:
     // accessing chunk.
     ChunkPtr _curr_chunk;
 
-    // only null columns for reusing, It has config::vector_chunk_size rows.
+    // only null columns for reusing, It has chunk_size rows.
     ColumnPtr _column_null;
 
     // column for grouping_id and virtual columns for grouping()/grouping_id() for reusing.
-    // It has config::vector_chunk_size rows.
+    // It has chunk_size rows.
     std::vector<std::vector<ColumnPtr>> _grouping_columns;
 
     // _grouping_list for gourping_id'value and grouping()/grouping_id()'s value.
@@ -70,8 +70,6 @@ private:
     // Tulple id used for output, it has new slots.
     TupleId _output_tuple_id;
     const TupleDescriptor* _tuple_desc;
-
-    RuntimeState* _runtime_state = nullptr;
 
     // time to append columns for grouping_id column and grouping()/grouping_id()'s virtual columns.
     RuntimeProfile::Counter* _extend_column_timer = nullptr;

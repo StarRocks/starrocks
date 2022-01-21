@@ -24,7 +24,6 @@
 #include <unistd.h>
 
 #include <boost/thread/thread.hpp>
-#include <boost/unordered_map.hpp>
 
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
@@ -146,7 +145,7 @@ int main(int argc, char** argv) {
 
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
-    if (olap_res != starrocks::OLAP_SUCCESS) {
+    if (!olap_res.ok()) {
         LOG(FATAL) << "parse config storage path failed, path=" << starrocks::config::storage_root_path;
         exit(-1);
     }

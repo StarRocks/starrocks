@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator;
 
 import com.starrocks.sql.optimizer.OptExpression;
@@ -8,8 +8,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Objects;
 
 public abstract class Operator {
+    public static final long DEFAULT_LIMIT = -1;
+    public static final long DEFAULT_OFFSET = 0;
+
     protected final OperatorType opType;
-    protected long limit = -1;
+    protected long limit = DEFAULT_LIMIT;
     protected ScalarOperator predicate;
     /**
      * Before entering the Cascades search framework,
@@ -52,7 +55,7 @@ public abstract class Operator {
     }
 
     public boolean hasLimit() {
-        return limit != -1;
+        return limit != DEFAULT_LIMIT;
     }
 
     public ScalarOperator getPredicate() {
@@ -106,7 +109,7 @@ public abstract class Operator {
 
     public abstract static class Builder<O extends Operator, B extends Builder> {
         protected OperatorType opType;
-        protected long limit = -1;
+        protected long limit = DEFAULT_LIMIT;
         protected ScalarOperator predicate;
         protected Projection projection;
 

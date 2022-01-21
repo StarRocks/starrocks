@@ -24,9 +24,7 @@
 #include <rapidjson/prettywriter.h>
 
 #include <future>
-#include <sstream>
 
-#include "common/logging.h"
 #include "common/status.h"
 #include "common/utils.h"
 #include "gen_cpp/BackendService_types.h"
@@ -41,10 +39,12 @@
 
 namespace starrocks {
 
+class RuntimeProfile;
+
 // kafka related info
 class KafkaLoadInfo {
 public:
-    KafkaLoadInfo(const TKafkaLoadInfo& t_info)
+    explicit KafkaLoadInfo(const TKafkaLoadInfo& t_info)
             : brokers(t_info.brokers),
               topic(t_info.topic),
               begin_offset(t_info.partition_begin_offset),
@@ -68,12 +68,6 @@ public:
     std::string brokers;
     std::string topic;
 
-    // the following members control the max progress of a consuming
-    // process. if any of them reach, the consuming will finish.
-    int64_t max_interval_s = 5;
-    int64_t max_batch_rows = 1024;
-    int64_t max_batch_size = 100 * 1024 * 1024; // 100MB
-
     // partition -> begin offset, inclusive.
     std::map<int32_t, int64_t> begin_offset;
     // partiton -> commit offset, inclusive.
@@ -86,7 +80,7 @@ class MessageBodySink;
 
 class StreamLoadContext {
 public:
-    StreamLoadContext(ExecEnv* exec_env) : id(UniqueId::gen_uid()), _exec_env(exec_env), _refs(0) {
+    explicit StreamLoadContext(ExecEnv* exec_env) : id(UniqueId::gen_uid()), _exec_env(exec_env), _refs(0) {
         start_nanos = MonotonicNanos();
     }
 
@@ -100,9 +94,6 @@ public:
     }
 
     std::string to_json() const;
-    // the old mini load result format is not same as stream load.
-    // add this function for compatible with old mini load result format.
-    std::string to_json_for_mini_load() const;
 
     // return the brief info of this context.
     // also print the load source info if detail is set to true
@@ -113,7 +104,15 @@ public:
     bool unref() { return _refs.fetch_sub(1) == 1; }
 
 public:
-    MemTracker* mem_tracker = nullptr;
+    // 1) Before the stream load receiving thread exits, Fragment may have been destructed.
+    // At this time, mem_tracker may have been destructed,
+    // so add shared_ptr here to prevent this from happening.
+    //
+    // 2) query_mem_tracker is the parent of instance_mem_tracker
+    // runtime_profile will be used by [consumption] of mem_tracker to record peak memory
+    std::shared_ptr<RuntimeProfile> runtime_profile;
+    std::shared_ptr<MemTracker> query_mem_tracker;
+    std::shared_ptr<MemTracker> instance_mem_tracker;
     // load type, eg: ROUTINE LOAD/MANUAL LOAD
     TLoadType::type load_type;
     // load data source: eg: KAFKA/RAW
@@ -130,7 +129,6 @@ public:
     std::string table;
     std::string label;
     // optional
-    std::string sub_label;
     double max_filter_ratio = 0.0;
     int32_t timeout_second = -1;
     AuthInfo auth;
@@ -140,11 +138,6 @@ public:
     int64_t max_interval_s = 5;
     int64_t max_batch_rows = 100000;
     int64_t max_batch_size = 100 * 1024 * 1024; // 100MB
-
-    // for parse json-data
-    std::string data_format;
-    std::string jsonpath_file;
-    std::string jsonpath;
 
     // only used to check if we receive whole body
     size_t body_bytes = 0;
@@ -189,10 +182,6 @@ public:
     std::string existing_job_status;
 
     std::unique_ptr<KafkaLoadInfo> kafka_info;
-
-    // consumer_id is used for data consumer cache key.
-    // to identified a specified data consumer.
-    int64_t consumer_id = 0;
 
 public:
     ExecEnv* exec_env() { return _exec_env; }

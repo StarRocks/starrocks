@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer;
 
@@ -24,16 +24,21 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
@@ -115,7 +120,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = context.getChildOutputColumns(1);
         List<BinaryPredicateOperator> equalOnPredicate =
-                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getJoinPredicate()));
+                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
 
         if (Utils.canOnlyDoBroadcast(node, equalOnPredicate, hint)) {
             tryReplicatedCrossJoin(context);
@@ -139,7 +144,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         HashDistributionSpec rightDistribution = DistributionSpec.createHashDistributionSpec(
                 new HashDistributionDesc(rightOnPredicateColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
 
-        doHashShuffle(equalOnPredicate, leftDistribution, rightDistribution);
+        doHashShuffle(leftDistribution, rightDistribution);
 
         // Respect use join hint
         if ("SHUFFLE".equalsIgnoreCase(hint)) {
@@ -168,24 +173,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         return visitJoinRequirements(node, context, canDoColocatedJoin);
     }
 
-    private void doHashShuffle(List<BinaryPredicateOperator> equalOnPredicate, HashDistributionSpec leftDistribution,
-                               HashDistributionSpec rightDistribution) {
-
-        // Need to force shuffle if the on clause contains expression
-        // @Todo: It's a temporary solution
-        if (equalOnPredicate.stream().anyMatch(p -> !isColumnToColumnBinaryPredicate(p))) {
-            PhysicalPropertySet leftProperty = createPropertySetByDistribution(new HashDistributionSpec(
-                    new HashDistributionDesc(leftDistribution.getShuffleColumns(),
-                            HashDistributionDesc.SourceType.FORCE_SHUFFLE_JOIN)));
-
-            PhysicalPropertySet rightProperty = createPropertySetByDistribution(new HashDistributionSpec(
-                    new HashDistributionDesc(rightDistribution.getShuffleColumns(),
-                            HashDistributionDesc.SourceType.FORCE_SHUFFLE_JOIN)));
-
-            outputInputProps.add(OutputInputProperty.emptyOutputOf(leftProperty, rightProperty));
-            return;
-        }
-
+    private void doHashShuffle(HashDistributionSpec leftDistribution, HashDistributionSpec rightDistribution) {
         // shuffle
         PhysicalPropertySet leftInputProperty = createPropertySetByDistribution(leftDistribution);
         PhysicalPropertySet rightInputProperty = createPropertySetByDistribution(rightDistribution);
@@ -207,6 +195,17 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         // Hash shuffle columns must keep same
         boolean checkLeft = leftColumns.containsAll(requiredColumns) && leftColumns.size() == requiredColumns.size();
         boolean checkRight = rightColumns.containsAll(requiredColumns) && rightColumns.size() == requiredColumns.size();
+
+        // @Todo: Modify PlanFragmentBuilder to support complex query
+        // Different joins maybe different on-clause predicate order, so the order of shuffle key is different,
+        // and unfortunately PlanFragmentBuilder doesn't support adjust the order of join shuffle key,
+        // so we must check the shuffle order strict
+        if (checkLeft || checkRight) {
+            for (int i = 0; i < requiredColumns.size(); i++) {
+                checkLeft &= requiredColumns.get(i).equals(leftColumns.get(i));
+                checkRight &= requiredColumns.get(i).equals(rightColumns.get(i));
+            }
+        }
 
         if (checkLeft || checkRight) {
             // Adjust hash shuffle columns orders follow requirement
@@ -426,6 +425,10 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
      * */
     private void tryBucketShuffle(PhysicalHashJoinOperator node, HashDistributionSpec leftShuffleDistribution,
                                   HashDistributionSpec rightShuffleDistribution) {
+        if (ConnectContext.get().getSessionVariable().isDisableBucketJoin()) {
+            return;
+        }
+
         JoinOperator nodeJoinType = node.getJoinType();
         if (nodeJoinType.isCrossJoin()) {
             return;
@@ -569,8 +572,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = context.getChildOutputColumns(1);
 
-        boolean requiredLocalColumnsFromLeft = leftChildColumns.contains(requiredLocalColumns);
-        boolean requiredLocalColumnsFromRight = rightChildColumns.contains(requiredLocalColumns);
+        boolean requiredLocalColumnsFromLeft = leftChildColumns.containsAll(requiredLocalColumns);
+        boolean requiredLocalColumnsFromRight = rightChildColumns.containsAll(requiredLocalColumns);
         boolean isLeftOrFullJoin = node.getJoinType().isLeftOuterJoin() || node.getJoinType().isFullOuterJoin();
         boolean isRightOrFullJoin = node.getJoinType().isRightOuterJoin() || node.getJoinType().isFullOuterJoin();
 
@@ -812,6 +815,15 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
+    public Void visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, ExpressionContext context) {
+        if (getRequiredLocalDesc().isPresent()) {
+            return visitOperator(node, context);
+        }
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY));
+        return visitOperator(node, context);
+    }
+
+    @Override
     public Void visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
             outputInputProps.add(OutputInputProperty.of(distributeRequirements()));
@@ -1002,6 +1014,30 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         outputInputProps.add(OutputInputProperty
                 .of(createLimitGatherProperty(node.getLimit()), createLimitGatherProperty(node.getLimit())));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
+        outputInputProps.add(OutputInputProperty.of(requirements, PhysicalPropertySet.EMPTY, requirements));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, ExpressionContext context) {
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY, PhysicalPropertySet.EMPTY));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
+        outputInputProps.add(OutputInputProperty.of(PhysicalPropertySet.EMPTY));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
+        outputInputProps.add(OutputInputProperty.of(requirements, requirements));
         return visitOperator(node, context);
     }
 

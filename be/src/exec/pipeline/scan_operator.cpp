@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/scan_operator.h"
 
@@ -13,7 +13,7 @@
 namespace starrocks::pipeline {
 
 Status ScanOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    SourceOperator::prepare(state);
     DCHECK(_io_threads != nullptr);
     _state = state;
     auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
@@ -48,6 +48,9 @@ bool ScanOperator::has_output() const {
         return false;
     }
 
+    // _chunk_source init at pull_chunk()
+    // so the the initialization of the first chunk_source needs
+    // to be driven by has_output() returning true
     if (!_chunk_source) {
         return true;
     }
@@ -103,9 +106,9 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     }
 
     auto&& chunk = _chunk_source->get_next_chunk_from_buffer();
-    // If buffer size is smaller than half of batch_size,
+    // If number of cached chunk is smaller than half of buffer_size,
     // we can start the next scan task ahead of time to obtain better continuity
-    if (_chunk_source->get_buffer_size() < (_batch_size >> 1) && !_is_io_task_active.load(std::memory_order_acquire) &&
+    if (_chunk_source->get_buffer_size() < (_buffer_size >> 1) && !_is_io_task_active.load(std::memory_order_acquire) &&
         _chunk_source->has_next_chunk()) {
         RETURN_IF_ERROR(_trigger_next_scan(state));
     }
@@ -123,7 +126,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state) {
     task.work_function = [this, state]() {
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-            _chunk_source->buffer_next_batch_chunks_blocking(_batch_size, _is_finished);
+            _chunk_source->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
         }
         _is_io_task_active.store(false, std::memory_order_release);
     };
@@ -158,11 +161,20 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state) {
     } else {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
+        bool enable_column_expr_predicate = false;
+        if (_olap_scan_node.__isset.enable_column_expr_predicate) {
+            enable_column_expr_predicate = _olap_scan_node.enable_column_expr_predicate;
+        }
         _chunk_source = std::make_shared<OlapChunkSource>(
-                std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, runtime_in_filters(),
-                runtime_bloom_filters(), _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation,
-                &_unused_output_columns, _runtime_profile.get(), _limit);
-        _chunk_source->prepare(state);
+                std::move(morsel), _olap_scan_node.tuple_id, _limit, enable_column_expr_predicate, _conjunct_ctxs,
+                runtime_in_filters(), runtime_bloom_filters(), _olap_scan_node.key_column_name,
+                _olap_scan_node.is_preaggregation, &_unused_output_columns, _runtime_profile.get());
+        auto status = _chunk_source->prepare(state);
+        if (!status.ok()) {
+            _chunk_source = nullptr;
+            _is_finished = true;
+            return status;
+        }
         RETURN_IF_ERROR(_trigger_next_scan(state));
     }
     return Status::OK();

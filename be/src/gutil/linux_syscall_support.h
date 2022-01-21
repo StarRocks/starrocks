@@ -127,8 +127,7 @@
  *      sys_stat64
  *      sys_write
  */
-#ifndef SYS_LINUX_SYSCALL_SUPPORT_H
-#define SYS_LINUX_SYSCALL_SUPPORT_H
+#pragma once
 
 /* We currently only support x86-32, x86-64, ARM, MIPS, PPC/PPC64, Aarch64, s390 and s390x
  * on Linux.
@@ -2721,5 +2720,4 @@ LSS_INLINE int LSS_NAME(ptrace_detach)(pid_t pid) {
 }
 #endif
 
-#endif
 #endif

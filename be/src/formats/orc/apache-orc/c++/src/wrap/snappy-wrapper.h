@@ -16,8 +16,7 @@
  * limitations under the License.
  */
 
-#ifndef SNAPPY_WRAPPER_HH
-#define SNAPPY_WRAPPER_HH
+#pragma once
 
 #include "Adaptor.hh"
 
@@ -30,5 +29,3 @@ DIAGNOSTIC_IGNORE("-Wreserved-id-macro")
 #include <snappy.h>
 
 DIAGNOSTIC_POP
-
-#endif

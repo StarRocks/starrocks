@@ -8,8 +8,7 @@
 #include "gutil/integral_types.h"
 #include "gutil/macros.h"
 
-#ifndef _BITS_H_
-#define _BITS_H_
+#pragma once
 
 class Bits {
 public:
@@ -281,5 +280,3 @@ inline int Bits::CountTrailingZerosNonZero64(uint64_t n) {
 inline int Bits::CountTrailingZeros64(uint64_t n) {
     return n == 0 ? 64 : Bits::CountTrailingZerosNonZero64(n);
 }
-
-#endif // _BITS_H_

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer.relation;
 
 import com.starrocks.analysis.PartitionNames;
@@ -6,7 +6,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.RelationFields;
 
 import java.util.List;
 import java.util.Map;
@@ -22,11 +21,9 @@ public class TableRelation extends Relation {
 
     public TableRelation(TableName name, Table table,
                          Map<Field, Column> columns,
-                         List<Field> relationFields,
                          PartitionNames partitionNames,
                          List<Long> tabletIds,
                          boolean isMetaQuery) {
-        super(new RelationFields(relationFields));
         this.name = name;
         this.table = table;
         this.columns = columns;

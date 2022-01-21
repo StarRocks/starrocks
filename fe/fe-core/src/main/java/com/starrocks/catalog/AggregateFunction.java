@@ -71,6 +71,10 @@ public class AggregateFunction extends Function {
     // empty input in BE).
     private boolean returnsNonNullOnEmpty;
 
+    // The name inside the binary at location_ that contains this particular
+    // function. e.g. org.example.MyUdf.class.
+    private String symbolName;
+
     // only used for serialization
     protected AggregateFunction() {
     }
@@ -141,6 +145,10 @@ public class AggregateFunction extends Function {
         returnsNonNullOnEmpty = false;
     }
 
+    public String getSymbolName() {
+        return symbolName == null ? Strings.EMPTY : symbolName;
+    }
+
     public static class AggregateFunctionBuilder {
         TFunctionBinaryType binaryType;
         FunctionName name;
@@ -149,13 +157,14 @@ public class AggregateFunction extends Function {
         boolean hasVarArgs;
         Type intermediateType;
         String objectFile;
+        String symbolName;
 
         private AggregateFunctionBuilder(TFunctionBinaryType binaryType) {
             this.binaryType = binaryType;
         }
 
-        public static AggregateFunctionBuilder createUdfBuilder() {
-            return new AggregateFunctionBuilder(TFunctionBinaryType.HIVE);
+        public static AggregateFunctionBuilder createUdfBuilder(TFunctionBinaryType binaryType) {
+            return new AggregateFunctionBuilder(binaryType);
         }
 
         public AggregateFunctionBuilder name(FunctionName name) {
@@ -188,10 +197,17 @@ public class AggregateFunction extends Function {
             return this;
         }
 
+        public AggregateFunctionBuilder symbolName(String symbolName) {
+            this.symbolName = symbolName;
+            return this;
+        }
+
         public AggregateFunction build() {
             AggregateFunction fn =
                     new AggregateFunction(name, Lists.newArrayList(argTypes), retType, intermediateType, hasVarArgs);
             fn.setBinaryType(binaryType);
+            fn.symbolName = symbolName;
+            fn.setLocation(new HdfsURI(objectFile));
             return fn;
         }
     }
@@ -227,7 +243,10 @@ public class AggregateFunction extends Function {
             sb.append("IF NOT EXISTS ");
         }
         sb.append(dbName() + "." + signatureString() + "\n")
-                .append(" RETURNS " + getReturnType() + "\n");
+                .append(" RETURNS " + getReturnType() + "\n")
+                .append(" LOCATION '" + getLocation() + "'\n")
+                .append(" SYMBOL='" + getSymbolName() + "'\n");
+
         if (getIntermediateType() != null) {
             sb.append(" INTERMEDIATE " + getIntermediateType() + "\n");
         }
@@ -244,6 +263,7 @@ public class AggregateFunction extends Function {
         } else {
             aggFn.setIntermediate_type(getReturnType().toThrift());
         }
+        aggFn.setSymbol(getSymbolName());
         fn.setAggregate_fn(aggFn);
         return fn;
     }
@@ -260,7 +280,7 @@ public class AggregateFunction extends Function {
         if (hasInterType) {
             ColumnType.write(output, intermediateType);
         }
-        writeOptionString(output, Strings.EMPTY);
+        writeOptionString(output, symbolName);
         writeOptionString(output, Strings.EMPTY);
         writeOptionString(output, Strings.EMPTY);
         writeOptionString(output, Strings.EMPTY);
@@ -280,7 +300,7 @@ public class AggregateFunction extends Function {
         if (input.readBoolean()) {
             intermediateType = ColumnType.read(input);
         }
-        readOptionStringOrNull(input);
+        symbolName = readOptionStringOrNull(input);
         readOptionStringOrNull(input);
         readOptionStringOrNull(input);
         readOptionStringOrNull(input);
@@ -296,8 +316,10 @@ public class AggregateFunction extends Function {
     @Override
     public String getProperties() {
         Map<String, String> properties = Maps.newHashMap();
-        properties.put(CreateFunctionStmt.OBJECT_FILE_KEY, getLocation() == null ? "" : getLocation().toString());
+        properties.put(CreateFunctionStmt.FILE_KEY, getLocation() == null ? "" : getLocation().toString());
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
+        properties.put(CreateFunctionStmt.SYMBOL_KEY, symbolName == null ? "" : symbolName);
+        properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
         return new Gson().toJson(properties);
     }
 }

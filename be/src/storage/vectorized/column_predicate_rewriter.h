@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -7,7 +7,8 @@
 #include "column/schema.h"
 #include "common/object_pool.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/segment_v2/column_reader.h"
+#include "storage/rowset/column_decoder.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/conjunctive_predicates.h"
 
@@ -19,11 +20,11 @@ namespace starrocks::vectorized {
 // column predicate rewrite in SegmentIter->init-> rewrite stage
 class ColumnPredicateRewriter {
 public:
-    using ColumnIterators = std::vector<segment_v2::ColumnIterator*>;
+    using ColumnIterators = std::vector<ColumnIterator*>;
     using PushDownPredicates = std::unordered_map<ColumnId, PredicateList>;
 
     ColumnPredicateRewriter(ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates,
-                            const Schema& schema, const std::vector<uint8_t>& need_rewrite, int column_size,
+                            const Schema& schema, std::vector<uint8_t>& need_rewrite, int column_size,
                             SparseRange& scan_range)
             : _column_iterators(column_iterators),
               _predicates(pushdown_predicates),
@@ -38,14 +39,14 @@ private:
     bool _rewrite_predicate(ObjectPool* pool, const FieldPtr& field);
     bool _rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate*, const ColumnPtr& dict_column,
                                  const ColumnPtr& code_column, bool field_nullable, ColumnPredicate** ptr);
-    void _get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, segment_v2::ColumnIterator* iter);
-    void _get_segment_dict_vec(segment_v2::ColumnIterator* iter, ColumnPtr* dict_column, ColumnPtr* code_column,
+    void _get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, ColumnIterator* iter);
+    void _get_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column, ColumnPtr* code_column,
                                bool field_nullable);
 
     ColumnIterators& _column_iterators;
     PushDownPredicates& _predicates;
     const Schema& _schema;
-    const std::vector<uint8_t>& _need_rewrite;
+    std::vector<uint8_t>& _need_rewrite;
     const int _column_size;
     SparseRange& _scan_range;
 };
@@ -58,15 +59,22 @@ private:
 class ConjunctivePredicatesRewriter {
 public:
     ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps)
-            : _predicates(predicates), _dict_maps(dict_maps) {}
+            : ConjunctivePredicatesRewriter(predicates, dict_maps, nullptr) {}
+    ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps,
+                                  std::vector<uint8_t>* disable_rewrite)
+            : _predicates(predicates), _dict_maps(dict_maps), _disable_dict_rewrite(disable_rewrite) {}
 
     void rewrite_predicate(ObjectPool* pool);
 
-    bool column_need_rewrite(ColumnId cid) { return _dict_maps.count(cid); }
+    bool column_need_rewrite(ColumnId cid) {
+        if (_disable_dict_rewrite && (*_disable_dict_rewrite)[cid]) return false;
+        return _dict_maps.count(cid);
+    }
 
 private:
     ConjunctivePredicates& _predicates;
     const ColumnIdToGlobalDictMap& _dict_maps;
+    std::vector<uint8_t>* _disable_dict_rewrite;
 };
 
 } // namespace starrocks::vectorized

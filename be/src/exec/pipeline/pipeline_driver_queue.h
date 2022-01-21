@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -30,6 +30,7 @@ private:
 class DriverQueue {
 public:
     virtual void put_back(const DriverRawPtr driver) = 0;
+    virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
     virtual StatusOr<DriverRawPtr> take(size_t* queue_index) = 0;
     virtual ~DriverQueue() = default;
     virtual void close() = 0;
@@ -55,8 +56,9 @@ public:
 
     static const size_t QUEUE_SIZE = 8;
     // maybe other value for ratio.
-    static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.7;
+    static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
     void put_back(const DriverRawPtr driver) override;
+    void put_back(const std::vector<DriverRawPtr>& drivers) override;
     // return nullptr if queue is closed;
     StatusOr<DriverRawPtr> take(size_t* queue_index) override;
     SubQuerySharedDriverQueue* get_sub_queue(size_t) override;

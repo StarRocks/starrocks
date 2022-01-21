@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/olap_chunk_source.h"
 
@@ -44,12 +44,8 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     } else {
         max_scan_key_num = config::doris_max_scan_key_num;
     }
-    cm.parse_conjuncts(true, max_scan_key_num);
-
-    // 4. Build olap scanner range
+    RETURN_IF_ERROR(cm.parse_conjuncts(true, max_scan_key_num, _enable_column_expr_predicate));
     RETURN_IF_ERROR(_build_scan_range(_runtime_state));
-
-    // 5. Init olap reader
     RETURN_IF_ERROR(_init_olap_reader(_runtime_state));
     return Status::OK();
 }
@@ -147,22 +143,22 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
     // Improve for select * from table limit x, x is small
-    if (_limit != -1 && _limit < config::vector_chunk_size) {
+    if (_limit != -1 && _limit < _runtime_state->chunk_size()) {
         _params.chunk_size = _limit;
     } else {
-        _params.chunk_size = config::vector_chunk_size;
+        _params.chunk_size = _runtime_state->chunk_size();
     }
 
     PredicateParser parser(_tablet->tablet_schema());
-    std::vector<vectorized::ColumnPredicate*> preds;
+    std::vector<PredicatePtr> preds;
     _conjuncts_manager.get_column_predicates(&parser, &preds);
-    for (auto* p : preds) {
-        _predicate_free_pool.emplace_back(p);
-        if (parser.can_pushdown(p)) {
-            _params.predicates.push_back(p);
+    for (auto& p : preds) {
+        if (parser.can_pushdown(p.get())) {
+            _params.predicates.push_back(p.get());
         } else {
-            _not_push_down_predicates.add(p);
+            _not_push_down_predicates.add(p.get());
         }
+        _predicate_free_pool.emplace_back(std::move(p));
     }
 
     {
@@ -306,7 +302,7 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
 
     for (size_t i = 0; i < batch_size && !can_finish; ++i) {
         ChunkUniquePtr chunk(
-                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
+                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
         _status = _read_chunk_from_storage(_runtime_state, chunk.get());
         if (!_status.ok()) {
             // end of file is normal case, need process chunk

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/aggregate/aggregate_base_node.h"
 
@@ -10,8 +10,17 @@ namespace starrocks::vectorized {
 AggregateBaseNode::AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs), _tnode(tnode) {}
 
-AggregateBaseNode::~AggregateBaseNode() = default;
+AggregateBaseNode::~AggregateBaseNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
+Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs));
+    return Status::OK();
+}
 Status AggregateBaseNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     _aggregator = std::make_shared<Aggregator>(_tnode);
@@ -23,7 +32,8 @@ Status AggregateBaseNode::close(RuntimeState* state) {
         return Status::OK();
     }
     if (_aggregator != nullptr) {
-        RETURN_IF_ERROR(_aggregator->close(state));
+        _aggregator->close(state);
+        _aggregator.reset();
     }
     return ExecNode::close(state);
 }
@@ -31,7 +41,7 @@ Status AggregateBaseNode::close(RuntimeState* state) {
 void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state,
                                                       vectorized::RuntimeFilterProbeCollector* collector) {
     // accept runtime filters from parent if possible.
-    _runtime_filter_collector.push_down(collector, _tuple_ids);
+    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
 
     // check to see if runtime filters can be rewritten
     auto& descriptors = _runtime_filter_collector.descriptors();
@@ -48,7 +58,7 @@ void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state,
         }
 
         bool match = false;
-        for (ExprContext* group_expr_ctx : _aggregator->group_by_expr_ctxs()) {
+        for (ExprContext* group_expr_ctx : _group_by_expr_ctxs) {
             if (group_expr_ctx->root()->is_slotref()) {
                 auto* slot = down_cast<ColumnRef*>(group_expr_ctx->root());
                 if (slot->slot_id() == slot_id) {
@@ -71,6 +81,6 @@ void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state,
         push_down_join_runtime_filter_to_children(state, &pushdown_collector);
         pushdown_collector.close(state);
     }
-};
+}
 
 } // namespace starrocks::vectorized

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/topn_node.h"
 
@@ -10,10 +10,12 @@
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 #include "exec/pipeline/sort/sort_context.h"
+#include "exec/vectorized/chunk_sorter_heapsorter.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "gutil/casts.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks::vectorized {
 
@@ -24,12 +26,21 @@ TopNNode::TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
     _sort_timer = nullptr;
 }
 
-TopNNode::~TopNNode() = default;
+TopNNode::~TopNNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
 
     RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.sort_node.sort_info, _pool));
+    // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
+    if (tnode.sort_node.__isset.analytic_partition_exprs) {
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs, &_analytic_partition_exprs));
+    }
     _is_asc_order = tnode.sort_node.sort_info.is_asc_order;
     _is_null_first = tnode.sort_node.sort_info.nulls_first;
     bool has_outer_join_child = tnode.sort_node.__isset.has_outer_join_child && tnode.sort_node.has_outer_join_child;
@@ -132,19 +143,27 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
 
     ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
     if (_limit > 0) {
-        _chunks_sorter =
-                std::make_unique<ChunksSorterTopn>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
-                                                   &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+        // HeapChunkSorter has higher performance when sorting fewer elements,
+        // after testing we think 1024 is a good threshold
+        if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
+            _chunks_sorter = std::make_unique<HeapChunkSorter>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                               &_is_asc_order, &_is_null_first, _offset, _limit,
+                                                               SIZE_OF_CHUNK_FOR_TOPN);
+        } else {
+            _chunks_sorter = std::make_unique<ChunksSorterTopn>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                                &_is_asc_order, &_is_null_first, _offset, _limit,
+                                                                SIZE_OF_CHUNK_FOR_TOPN);
+        }
+
     } else {
         _chunks_sorter =
-                std::make_unique<ChunksSorterFullSort>(&(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
-                                                       &_is_null_first, SIZE_OF_CHUNK_FOR_FULL_SORT);
+                std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                       &_is_asc_order, &_is_null_first, SIZE_OF_CHUNK_FOR_FULL_SORT);
     }
 
     bool eos = false;
     _chunks_sorter->setup_runtime(runtime_profile(), "ChunksSorter");
     do {
-        RETURN_IF_ERROR(state->check_mem_limit("Sort"));
         RETURN_IF_CANCELLED(state);
         ChunkPtr chunk;
         timer.stop();
@@ -156,10 +175,11 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         if (chunk != nullptr && chunk->num_rows() > 0) {
             ChunkPtr materialize_chunk = ChunksSorter::materialize_chunk_before_sort(
                     chunk.get(), _materialized_tuple_desc, _sort_exec_exprs, _order_by_types);
-            RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk));
+            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk)));
         }
     } while (!eos);
-    RETURN_IF_ERROR(_chunks_sorter->done(state));
+
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->done(state)));
     return Status::OK();
 }
 
@@ -167,28 +187,43 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     using namespace pipeline;
 
     OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
+    bool is_merging = _analytic_partition_exprs.empty();
+
+    if (!is_merging) {
+        // prepend local shuffle to PartitionSortSinkOperator
+        operators_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(
+                runtime_state(), operators_sink_with_sort, _analytic_partition_exprs);
+    }
 
     auto degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
-    auto sort_context = std::make_shared<SortContext>(_limit, degree_of_parallelism, _is_asc_order, _is_null_first);
+    auto sort_context_factory = std::make_shared<SortContextFactory>(
+            runtime_state(), is_merging, _limit, degree_of_parallelism, _is_asc_order, _is_null_first);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     auto partition_sort_sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
-            context->next_operator_id(), id(), sort_context, _sort_exec_exprs, _is_asc_order, _is_null_first, _offset,
-            _limit, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
+            context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order, _is_null_first,
+            _offset, _limit, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor,
+            _analytic_partition_exprs);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(partition_sort_sink_operator.get(), context, rc_rf_probe_collector);
-    operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
-    context->add_pipeline(operators_sink_with_sort);
 
     OpFactories operators_source_with_sort;
     auto local_merge_sort_source_operator = std::make_shared<LocalMergeSortSourceOperatorFactory>(
-            context->next_operator_id(), id(), std::move(sort_context));
+            context->next_operator_id(), id(), sort_context_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(local_merge_sort_source_operator.get(), context, rc_rf_probe_collector);
-    // local_merge_sort_source_operator's instance count must be 1
-    local_merge_sort_source_operator->set_degree_of_parallelism(1);
+
+    operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
+    context->add_pipeline(operators_sink_with_sort);
+    if (is_merging) {
+        // local_merge_sort_source_operator's instance count must be 1
+        local_merge_sort_source_operator->set_degree_of_parallelism(1);
+    } else {
+        // Each PartitionSortSinkOperator has an independent LocalMergeSortSinkOperator respectively
+        local_merge_sort_source_operator->set_degree_of_parallelism(degree_of_parallelism);
+    }
     operators_source_with_sort.emplace_back(std::move(local_merge_sort_source_operator));
 
     return operators_source_with_sort;

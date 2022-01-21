@@ -19,16 +19,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_RECVR_H
-#define STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_RECVR_H
+#pragma once
 
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h"
+#include "runtime/local_pass_through_buffer.h"
 #include "runtime/query_statistics.h"
-#include "util/tuple_row_compare.h"
+#include "util/runtime_profile.h"
 
 namespace google::protobuf {
 class Closure;
@@ -44,6 +44,7 @@ class DataStreamMgr;
 class MemTracker;
 class RuntimeProfile;
 class PTransmitChunkParams;
+class SortExecExprs;
 
 // Single receiver of an m:n data stream.
 // DataStreamRecvr maintains one or more queues of row batches received by a
@@ -71,9 +72,13 @@ class PTransmitChunkParams;
 // recvr instance from the tracking structure of its DataStreamMgr in all cases.
 class DataStreamRecvr {
 public:
+    const static int32_t INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE = 0;
+
+public:
     ~DataStreamRecvr();
 
     Status get_chunk(std::unique_ptr<vectorized::Chunk>* chunk);
+    Status get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk, const int32_t driver_sequence);
 
     // Deregister from DataStreamMgr instance, which shares ownership of this instance.
     void close();
@@ -81,9 +86,9 @@ public:
     // Create a SortedRunMerger instance to merge rows from multiple sender according to the
     // specified row comparator. Fetches the first batches from the individual sender
     // queues. The exprs used in less_than must have already been prepared and opened.
-    Status create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
+    Status create_merger(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                          const std::vector<bool>* is_null_first);
-    Status create_merger_for_pipeline(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
+    Status create_merger_for_pipeline(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                                       const std::vector<bool>* is_null_first);
 
     // Fill output_batch with the next batch of rows obtained by merging the per-sender
@@ -99,7 +104,9 @@ public:
         _sub_plan_query_statistics_recvr->insert(statistics, sender_id);
     }
 
-    bool has_output() const;
+    void short_circuit_for_pipeline(const int32_t driver_sequence);
+
+    bool has_output_for_pipeline(const int32_t driver_sequence) const;
 
     bool is_finished() const;
 
@@ -112,7 +119,8 @@ private:
     DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                     const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders, bool is_merging,
                     int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
-                    std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline);
+                    std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline,
+                    int32_t degree_of_parallelism, bool keep_order, PassThroughChunkBuffer* pass_through_chunk_buffer);
 
     // If receive queue is full, done is enqueue pending, and return with *done is nullptr
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
@@ -124,9 +132,9 @@ private:
     // Empties the sender queues and notifies all waiting consumers of cancellation.
     void cancel_stream();
 
-    // Return true if the addition of a new batch of size 'batch_size' would exceed the
+    // Return true if the addition of a new batch of size 'chunk_size' would exceed the
     // total buffer limit.
-    bool exceeds_limit(int batch_size) { return _num_buffered_bytes + batch_size > _total_buffer_limit; }
+    bool exceeds_limit(int chunk_size) { return _num_buffered_bytes + chunk_size > _total_buffer_limit; }
 
     // DataStreamMgr instance used to create this recvr. (Not owned)
     DataStreamMgr* _mgr;
@@ -172,6 +180,7 @@ private:
 
     // Number of bytes received
     RuntimeProfile::Counter* _bytes_received_counter;
+    RuntimeProfile::Counter* _bytes_pass_through_counter;
 
     // Time series of number of bytes received, samples _bytes_received_counter
     // RuntimeProfile::TimeSeriesCounter* _bytes_received_time_series_counter;
@@ -185,10 +194,15 @@ private:
 
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
-
     bool _is_pipeline;
+    // Invalid if _is_pipeline is false
+    int32_t _degree_of_parallelism;
+
+    // Invalid if _is_pipeline is false
+    // Pipeline will send packets out-of-order
+    // if _keep_order is set to true, then receiver will keep the order according sequence
+    bool _keep_order;
+    PassThroughContext _pass_through_context;
 };
 
 } // end namespace starrocks
-
-#endif // end STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_RECVR_H

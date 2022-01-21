@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/memtable.h"
 
@@ -11,7 +11,6 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/schema.h"
 #include "storage/vectorized/chunk_helper.h"
-#include "util/defer_op.h"
 #include "util/orlp/pdqsort.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -49,7 +48,7 @@ MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const s
     }
 }
 
-MemTable::~MemTable() {}
+MemTable::~MemTable() = default;
 
 size_t MemTable::memory_usage() const {
     size_t size = 0;
@@ -80,7 +79,7 @@ bool MemTable::is_full() const {
     return write_buffer_size() >= config::write_buffer_size;
 }
 
-bool MemTable::insert(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
+bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (_chunk == nullptr) {
         _chunk = ChunkHelper::new_chunk(_vectorized_schema, 0);
     }
@@ -90,14 +89,14 @@ bool MemTable::insert(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint
     // So the chunk can only be accessed by the subscript
     // instead of the column name.
     for (int i = 0; i < _slot_descs->size(); ++i) {
-        ColumnPtr& src = chunk->get_column_by_slot_id((*_slot_descs)[i]->id());
+        const ColumnPtr& src = chunk.get_column_by_slot_id((*_slot_descs)[i]->id());
         ColumnPtr& dest = _chunk->get_column_by_index(i);
         dest->append_selective(*src, indexes, from, size);
     }
 
-    if (chunk->has_rows()) {
-        _chunk_memory_usage += chunk->memory_usage() * size / chunk->num_rows();
-        _chunk_bytes_usage += chunk->bytes_usage() * size / chunk->num_rows();
+    if (chunk.has_rows()) {
+        _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
+        _chunk_bytes_usage += chunk.bytes_usage() * size / chunk.num_rows();
     }
 
     // if memtable is full, push it to the flush executor,
@@ -160,6 +159,9 @@ Status MemTable::finalize() {
             if (_keys_type == PRIMARY_KEYS &&
                 PrimaryKeyEncoder::encode_exceed_limit(_vectorized_schema, *_result_chunk.get(), 0,
                                                        _result_chunk->num_rows(), kPrimaryKeyLimitSize)) {
+                _aggregator.reset();
+                _aggregator_memory_usage = 0;
+                _aggregator_bytes_usage = 0;
                 return Status::Cancelled("primary key size exceed the limit.");
             }
             if (_has_op_slot) {
@@ -182,24 +184,23 @@ Status MemTable::finalize() {
     return Status::OK();
 }
 
-OLAPStatus MemTable::flush() {
-    if (_result_chunk == nullptr) {
-        return OLAP_SUCCESS;
+Status MemTable::flush() {
+    if (UNLIKELY(_result_chunk == nullptr)) {
+        return Status::OK();
     }
-
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
-        if (!_deletes || _deletes->size() == 0) {
-            RETURN_NOT_OK(_rowset_writer->flush_chunk(*_result_chunk));
+        if (!_deletes || _deletes->empty()) {
+            RETURN_IF_ERROR(_rowset_writer->flush_chunk(*_result_chunk));
         } else {
-            RETURN_NOT_OK(_rowset_writer->flush_chunk_with_deletes(*_result_chunk, *_deletes));
+            RETURN_IF_ERROR(_rowset_writer->flush_chunk_with_deletes(*_result_chunk, *_deletes));
         }
     }
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
     StarRocksMetrics::instance()->memtable_flush_duration_us.increment(duration_ns / 1000);
     VLOG(1) << "memtable flush: " << duration_ns / 1000 << "us";
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 void MemTable::_merge() {
@@ -278,7 +279,7 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
     auto op_column = src->get_column_by_index(op_column_id);
     src->remove_column_by_index(op_column_id);
     size_t nrows = src->num_rows();
-    const uint8_t* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+    auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
     size_t ndel = 0;
     for (size_t i = 0; i < nrows; i++) {
         ndel += (ops[i] == TOpType::DELETE);
@@ -382,7 +383,7 @@ private:
         if (end_pos > perm->size()) {
             end_pos = perm->size();
         }
-        pdqsort(perm->begin() + offset, perm->begin() + end_pos, less_fn);
+        pdqsort(false, perm->begin() + offset, perm->begin() + end_pos, less_fn);
     }
 
     template <typename CppTypeName>
@@ -413,7 +414,7 @@ private:
             }
         };
 
-        pdqsort(sort_items.begin(), sort_items.end(), less_fn);
+        pdqsort(false, sort_items.begin(), sort_items.end(), less_fn);
 
         // output permutation
         for (size_t i = 0; i < row_num; ++i) {
@@ -439,7 +440,7 @@ private:
             }
         };
 
-        pdqsort(sort_items.begin(), sort_items.end(), less_fn);
+        pdqsort(false, sort_items.begin(), sort_items.end(), less_fn);
 
         for (size_t i = 0; i < row_num; ++i) {
             (*perm)[i + offset].index_in_chunk = sort_items[i].index_in_chunk;
@@ -464,7 +465,7 @@ private:
         if (end_pos > perm->size()) {
             end_pos = perm->size();
         }
-        pdqsort(perm->begin() + offset, perm->begin() + end_pos, less_fn);
+        pdqsort(false, perm->begin() + offset, perm->begin() + end_pos, less_fn);
     }
 };
 
@@ -543,7 +544,7 @@ void MemTable::_sort_chunk_by_columns() {
 }
 
 void MemTable::_sort_chunk_by_rows() {
-    pdqsort(_permutations.begin(), _permutations.end(),
+    pdqsort(false, _permutations.begin(), _permutations.end(),
             [this](const MemTable::PermutationItem& l, const MemTable::PermutationItem& r) {
                 size_t col_number = _tablet_schema->num_key_columns();
                 int compare_result = 0;

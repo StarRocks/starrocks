@@ -19,16 +19,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_SRC_OLAP_ROWSET_BETA_ROWSET_H_
-#define STARROCKS_SRC_OLAP_ROWSET_BETA_ROWSET_H_
+#pragma once
 
 #include "common/statusor.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
-#include "storage/rowset/rowset_reader.h"
-#include "storage/rowset/segment_v2/segment.h"
+#include "storage/rowset/segment.h"
 
 namespace starrocks {
 
@@ -43,10 +41,21 @@ class KVStore;
 
 class BetaRowset : public Rowset {
 public:
+    static std::shared_ptr<BetaRowset> create(MemTracker* mem_tracker, const TabletSchema* schema,
+                                              std::string rowset_path, RowsetMetaSharedPtr rowset_meta) {
+        auto rowset =
+                std::shared_ptr<BetaRowset>(new BetaRowset(schema, std::move(rowset_path), std::move(rowset_meta)),
+                                            DeleterWithMemTracker<BetaRowset>(mem_tracker));
+        mem_tracker->consume(rowset->mem_usage());
+        return rowset;
+    }
+
     BetaRowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
+
     ~BetaRowset() override {}
 
-    OLAPStatus create_reader(RowsetReaderSharedPtr* result) override;
+    // reload this rowset after the underlying segment file is changed
+    Status reload();
 
     StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                                         const vectorized::RowsetReadOptions& options) override;
@@ -76,19 +85,27 @@ public:
     static std::string segment_srcrssid_file_path(const std::string& segment_dir, const RowsetId& rowset_id,
                                                   int segment_id);
 
-    OLAPStatus remove() override;
+    Status remove() override;
 
     Status link_files_to(const std::string& dir, RowsetId new_rowset_id) override;
 
-    OLAPStatus copy_files_to(const std::string& dir) override;
+    Status copy_files_to(const std::string& dir) override;
 
     bool check_path(const std::string& path) override;
 
-    std::vector<segment_v2::SegmentSharedPtr>& segments() { return _segments; }
+    std::vector<SegmentSharedPtr>& segments() { return _segments; }
+
+    int64_t mem_usage() const {
+        int64_t size = sizeof(BetaRowset);
+        if (_rowset_meta != nullptr) {
+            size += _rowset_meta->mem_usage();
+        }
+        return size;
+    }
 
 protected:
     // init segment groups
-    OLAPStatus init() override;
+    Status init() override;
 
     Status do_load() override;
 
@@ -97,9 +114,7 @@ protected:
 private:
     friend class RowsetFactory;
     friend class BetaRowsetReader;
-    std::vector<segment_v2::SegmentSharedPtr> _segments;
+    std::vector<SegmentSharedPtr> _segments;
 };
 
 } // namespace starrocks
-
-#endif //STARROCKS_SRC_OLAP_ROWSET_BETA_ROWSET_H_

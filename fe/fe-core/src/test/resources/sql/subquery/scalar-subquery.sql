@@ -534,3 +534,17 @@ INNER JOIN (join-predicate [2: v2 = 10: v8 AND 8: expr = 12: sum] post-join-pred
                 AGGREGATE ([LOCAL] aggregate [{12: sum=sum(9: v7)}] group by [[10: v8]] having [null]
                     SCAN (columns[9: v7, 10: v8] predicate[null])
 [end]
+
+[sql]
+select v1 from t0 where v2 = (with cte as (select v4,v5 from t1 order by 2 limit 10) select v4 from cte order by 1 limit 1)
+[result]
+INNER JOIN (join-predicate [2: v2 = 7: v4] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[null])
+    EXCHANGE BROADCAST
+        ASSERT LE 1
+            EXCHANGE GATHER
+                TOP-N (order by [[7: v4 ASC NULLS FIRST]])
+                    TOP-N (order by [[8: v5 ASC NULLS FIRST]])
+                        TOP-N (order by [[8: v5 ASC NULLS FIRST]])
+                            SCAN (columns[7: v4, 8: v5] predicate[null])
+[end]

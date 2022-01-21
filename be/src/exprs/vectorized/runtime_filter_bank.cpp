@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/runtime_filter_bank.h"
 
@@ -173,6 +173,8 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
 Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
                                           TPlanNodeId node_id) {
     _filter_id = desc.filter_id;
+    _is_local = !desc.has_remote_targets;
+    _build_plan_node_id = desc.build_plan_node_id;
     _runtime_filter.store(nullptr);
 
     bool not_found = true;
@@ -386,14 +388,17 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
     }
 }
 
-void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent,
-                                            const std::vector<TupleId>& tuple_ids) {
+void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
+                                            std::set<TPlanNodeId>& local_rf_waiting_set) {
     if (this == parent) return;
     auto iter = parent->_descriptors.begin();
     while (iter != parent->_descriptors.end()) {
         RuntimeFilterProbeDescriptor* desc = iter->second;
         if (desc->is_bound(tuple_ids)) {
             add_descriptor(desc);
+            if (desc->is_local()) {
+                local_rf_waiting_set.insert(desc->build_plan_node_id());
+            }
             iter = parent->_descriptors.erase(iter);
         } else {
             ++iter;

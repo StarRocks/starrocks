@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.analyzer.relation.QueryRelation;
@@ -167,6 +167,12 @@ public class AnalyzeSingleTest {
         analyzeSuccess("with w as (select * from t0) select * from w except select * from w");
         analyzeSuccess("with w as (select * from t0) select * from w intersect select * from w");
         analyzeSuccess(" with w as (select * from t0) select 1 from w");
+
+        /**
+         * Test cte with different relationId
+         */
+        analyzeSuccess("with w as (select * from t0) select v1,sum(v2) from w group by v1 " +
+                "having v1 in (select v3 from w where v2 = 2)");
     }
 
     @Test

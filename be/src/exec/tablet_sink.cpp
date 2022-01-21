@@ -33,15 +33,15 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
-#include "runtime/tuple_row.h"
+#include "serde/protobuf_serde.h"
 #include "service/brpc.h"
 #include "simd/simd.h"
 #include "storage/hll.h"
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/monotime.h"
+#include "util/thread.h"
 #include "util/uid_util.h"
 
 static const uint8_t VALID_SEL_FAILED = 0x0;
@@ -241,7 +241,7 @@ Status NodeChannel::add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_id
         _cur_chunk = chunk->clone_empty_with_slot();
     }
 
-    if (_cur_chunk->num_rows() >= config::vector_chunk_size) {
+    if (_cur_chunk->num_rows() >= _runtime_state->chunk_size()) {
         {
             SCOPED_RAW_TIMER(&_queue_push_lock_ns);
             std::lock_guard<std::mutex> l(_pending_batches_lock);
@@ -352,7 +352,9 @@ int NodeChannel::try_send_chunk_and_fetch_status() {
         request.set_packet_seq(_next_packet_seq);
         if (chunk->num_rows() > 0) {
             SCOPED_RAW_TIMER(&_serialize_batch_ns);
-            chunk->serialize_with_meta(request.mutable_chunk());
+            StatusOr<ChunkPB> chunk_pb = serde::ProtobufChunkSerde::serialize(*chunk);
+            CHECK(chunk_pb.ok()) << chunk_pb.status(); // FIXME
+            request.mutable_chunk()->Swap(&chunk_pb.value());
         }
 
         _add_batch_closure->reset();
@@ -409,7 +411,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPart
     for (const auto& tablet : tablets) {
         auto* location = _parent->_location->find_tablet(tablet.tablet_id);
         if (location == nullptr) {
-            LOG(WARNING) << "unknow tablet, tablet_id=" << tablet.tablet_id;
+            LOG(WARNING) << "unknown tablet, tablet_id=" << tablet.tablet_id;
             return Status::InternalError("unknown tablet");
         }
         std::vector<NodeChannel*> channels;
@@ -470,8 +472,6 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _tuple_desc_id = table_sink.tuple_id;
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
-    _partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
-    RETURN_IF_ERROR(_partition->init());
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
     RETURN_IF_ERROR(_vectorized_partition->init());
     _location = _pool->add(new OlapTableLocationParam(table_sink.location));
@@ -567,7 +567,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _load_mem_limit = state->get_load_mem_limit();
 
     // open all channels
-    const auto& partitions = _partition->get_partitions();
+    const auto& partitions = _vectorized_partition->get_partitions();
     for (int i = 0; i < _schema->indexes().size(); ++i) {
         // collect all tablets belong to this rollup
         std::vector<TTabletWithPartition> tablets;
@@ -616,6 +616,7 @@ Status OlapTableSink::open(RuntimeState* state) {
     }
 
     _sender_thread = std::thread(&OlapTableSink::_send_chunk_process, this);
+    Thread::set_thread_name(_sender_thread, "olap_table_send");
     return Status::OK();
 }
 
@@ -624,7 +625,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
     DCHECK(chunk->num_rows() > 0);
     size_t num_rows = chunk->num_rows();
     _number_input_rows += num_rows;
-    size_t serialize_size = chunk->serialize_size();
+    size_t serialize_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
     // update incrementally so that FE can get the progress.
     // the real 'num_rows_load_total' will be set when sink being closed.
     state->update_num_rows_load_total(num_rows);
@@ -689,10 +690,9 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         _validate_select_idx.resize(selected_size);
 
         if (num_rows_after_validate - _validate_select_idx.size() > 0) {
-            size_t filtered_size = num_rows_after_validate - _validate_select_idx.size();
             std::string debug_row = chunk->debug_row(invalid_row_index);
-            state->append_error_msg_to_file(
-                    debug_row, strings::Substitute("there are $0 rows couldn't find a partition", filtered_size));
+            state->append_error_msg_to_file(debug_row,
+                                            "The row is out of partition ranges. Please add a new partition.");
         }
 
         _number_filtered_rows += (num_rows - _validate_select_idx.size());
@@ -752,7 +752,7 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
             channel->mark_as_failed(node);
         }
         if (channel->has_intolerable_failure()) {
-            return Status::InternalError("index channel has intoleralbe failure");
+            return Status::InternalError("index channel has intolerable failure");
         }
     }
     return Status::OK();
@@ -784,7 +784,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
                     if (!channel_status.ok()) {
                         LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
                                      << ", load_info=" << ch->print_load_info()
-                                     << ", errror_msg=" << channel_status.get_error_msg();
+                                     << ", error_msg=" << channel_status.get_error_msg();
                         index_channel->mark_as_failed(ch);
                     }
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &mem_exceeded_block_ns,
@@ -847,27 +847,27 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
 }
 
 void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc) {
-    std::stringstream ss;
-    ss << "the length of input is too long than schema. "
-       << "column_name: " << desc->col_name() << "; "
-       << "input_str: [" << str.to_string() << "] "
-       << "schema length: " << desc->type().len << "; "
-       << "actual length: " << str.size << "; ";
+    std::string error_str = str.to_string();
+    if (error_str.length() > 100) {
+        error_str = error_str.substr(0, 100);
+        error_str.append("...");
+    }
+    std::string error_msg = strings::Substitute("String '$0'(length=$1) is too long. The max length of '$2' is $3",
+                                                error_str, str.size, desc->col_name(), desc->type().len);
 #if BE_TEST
-    LOG(INFO) << ss.str();
+    LOG(INFO) << error_msg;
 #else
-    state->append_error_msg_to_file("", ss.str());
+    state->append_error_msg_to_file("", error_msg);
 #endif
 }
 
 void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc) {
-    std::stringstream ss;
-    ss << "decimal value is not valid for defination, column=" << desc->col_name() << ", value=" << decimal.to_string()
-       << ", precision=" << desc->type().precision << ", scale=" << desc->type().scale;
+    std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'",
+                                                decimal.to_string(), desc->col_name(), desc->type().debug_string());
 #if BE_TEST
-    LOG(INFO) << ss.str();
+    LOG(INFO) << error_msg;
 #else
-    state->append_error_msg_to_file("", ss.str());
+    state->append_error_msg_to_file("", error_msg);
 #endif
 }
 
@@ -875,12 +875,12 @@ template <PrimitiveType PT, typename CppType = vectorized::RunTimeCppType<PT>>
 void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
     std::stringstream ss;
     auto decimal_str = DecimalV3Cast::to_string<CppType>(decimal, desc->type().precision, desc->type().scale);
-    ss << "decimal value is not valid for definition, column=" << desc->col_name() << ", value=" << decimal_str
-       << ", precision=" << desc->type().precision << ", scale=" << desc->type().scale;
+    std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
+                                                desc->col_name(), desc->type().debug_string());
 #if BE_TEST
-    LOG(INFO) << ss.str();
+    LOG(INFO) << error_msg;
 #else
-    state->append_error_msg_to_file("", ss.str());
+    state->append_error_msg_to_file("", error_msg);
 #endif
 }
 
@@ -938,11 +938,11 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                     if (nulls[j]) {
                         _validate_selection[j] = VALID_SEL_FAILED;
                         std::stringstream ss;
-                        ss << "null value for not null column, column=" << desc->col_name();
+                        ss << "NULL value in non-nullable column '" << desc->col_name() << "'";
 #if BE_TEST
                         LOG(INFO) << ss.str();
 #else
-                        state->append_error_msg_to_file("", ss.str());
+                        state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
 #endif
                     }
                 }

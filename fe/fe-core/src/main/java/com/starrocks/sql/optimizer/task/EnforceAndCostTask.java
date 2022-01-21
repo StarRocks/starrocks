@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.task;
 
@@ -215,7 +215,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         ColumnRefSet leftChildColumns = groupExpression.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = groupExpression.getChildOutputColumns(1);
         List<BinaryPredicateOperator> equalOnPredicate =
-                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getJoinPredicate()));
+                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
         if (Utils.canOnlyDoBroadcast(node, equalOnPredicate, node.getJoinHint())) {
             return true;
         }
@@ -224,7 +224,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // shuffling large left-hand table data
         int parallelExecInstance = Math.max(1,
                 Math.min(groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum(),
-                        ConnectContext.get().getSessionVariable().getParallelExecInstanceNum()));
+                        ConnectContext.get().getSessionVariable().getDegreeOfParallelism()));
         int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
         Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
         Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();
@@ -284,25 +284,29 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (aggStage == 1) {
             return true;
         }
+        // Must do one stage aggregate If the child contains limit
+        if (childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
+            PhysicalDistributionOperator distributionOperator =
+                    (PhysicalDistributionOperator) childBestExpr.getOp();
+            if (distributionOperator.getDistributionSpec().getType().equals(DistributionSpec.DistributionType.GATHER) &&
+                    ((GatherDistributionSpec) distributionOperator.getDistributionSpec()).hasLimit()) {
+                return true;
+            }
+        }
 
         PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) groupExpression.getOp();
         // 1. check the agg node is global aggregation without split and child expr is PhysicalDistributionOperator
         if (aggregate.getType().isGlobal() && !aggregate.isSplit() &&
                 childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
-            // 2. check default column statistics or child output row may not be accurate
+            // 1.1 check default column statistics or child output row may not be accurate
             if (groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
                     .anyMatch(ColumnStatistic::isUnknown) ||
                     childBestExpr.getGroup().getStatistics().isTableRowCountMayInaccurate()) {
-                // 3. check child expr distribution, if it is shuffle or gather without limit, could disable this plan
-                PhysicalDistributionOperator distributionOperator =
-                        (PhysicalDistributionOperator) childBestExpr.getOp();
-                if (distributionOperator.getDistributionSpec().getType()
-                        .equals(DistributionSpec.DistributionType.SHUFFLE) ||
-                        (distributionOperator.getDistributionSpec().getType()
-                                .equals(DistributionSpec.DistributionType.GATHER) &&
-                                !((GatherDistributionSpec) distributionOperator.getDistributionSpec()).hasLimit())) {
-                    return false;
-                }
+                return false;
+            }
+            // 1.2 disable one stage agg with multi group by columns
+            if (aggregate.getGroupBys().size() > 1) {
+                return false;
             }
         }
         return true;
@@ -315,7 +319,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
 
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
-                context.getOptimizerContext().getColumnRefFactory(), context.getOptimizerContext().getDumpInfo());
+                context.getOptimizerContext().getColumnRefFactory(), context.getOptimizerContext());
         statisticsCalculator.estimatorStats();
         groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
         return true;

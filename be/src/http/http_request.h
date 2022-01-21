@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_HTTP_REQUEST_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_HTTP_REQUEST_H
+#pragma once
 
 #include <glog/logging.h>
 
@@ -106,5 +105,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -10,7 +10,12 @@ namespace vectorized {
 class CrossJoinNode final : public ExecNode {
 public:
     CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~CrossJoinNode() override = default;
+
+    ~CrossJoinNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
@@ -74,6 +79,7 @@ private:
     size_t _probe_rows_index = 0;
 
     bool _eos = false;
+    bool _need_create_tuple_columns = true;
 
     Buffer<SlotDescriptor*> _col_types;
     Buffer<TupleId> _output_build_tuple_ids;

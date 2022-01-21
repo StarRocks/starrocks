@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_EXCHANGE_NODE_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_EXCHANGE_NODE_H
+#pragma once
 
 #include "exec/exec_node.h"
 #include "exec/sort_exec_exprs.h"
@@ -70,6 +69,8 @@ private:
     // call to the underlying DataStreamRecvr.
     Status get_next_merging(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
+    const TExchangeNode& _texchange_node;
+
     int _num_senders; // needed for _stream_recvr construction
 
     // created in prepare() and owned by the RuntimeState
@@ -103,5 +104,3 @@ private:
 };
 
 }; // namespace starrocks
-
-#endif

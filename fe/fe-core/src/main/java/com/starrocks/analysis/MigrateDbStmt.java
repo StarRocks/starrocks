@@ -21,15 +21,11 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 
 @Deprecated
 public class MigrateDbStmt extends DdlStmt {
@@ -67,19 +63,6 @@ public class MigrateDbStmt extends DdlStmt {
         if (Config.disable_cluster_feature) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_OPERATION, "MIGRATION CLUSTER");
         }
-
-        src.analyze(analyzer);
-        dest.analyze(analyzer);
-
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                    "ADMIN");
-        }
-
-        srcCluster = src.getCluster();
-        srcDb = ClusterNamespace.getFullName(srcCluster, src.getDb());
-        destCluster = dest.getCluster();
-        destDb = ClusterNamespace.getFullName(destCluster, dest.getDb());
     }
 
     @Override

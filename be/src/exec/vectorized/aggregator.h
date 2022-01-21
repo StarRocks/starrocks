@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -59,7 +59,11 @@ class Aggregator final : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 
-    ~Aggregator() = default;
+    ~Aggregator() {
+        if (_state != nullptr) {
+            close(_state);
+        }
+    }
 
     Status open(RuntimeState* state);
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile, MemTracker* mem_tracker);
@@ -133,6 +137,7 @@ public:
     // we convert the single hash map to two level hash map.
     // two level hash map is better in large data set.
     void try_convert_to_two_level_map();
+    void try_convert_to_two_level_set();
 
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
@@ -143,7 +148,10 @@ public:
 #endif
 
 private:
-    const TPlanNode& _tnode;
+    bool _is_closed = false;
+    RuntimeState* _state = nullptr;
+
+    const TPlanNode _tnode;
 
     MemTracker* _mem_tracker = nullptr;
 
@@ -254,8 +262,9 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
-                        _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
+                        _agg_functions[i]->create(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i]);
                     }
                     return agg_state;
                 },
@@ -269,8 +278,9 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
-                        _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
+                        _agg_functions[i]->create(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i]);
                     }
                     return agg_state;
                 },
@@ -323,8 +333,8 @@ public:
                 }
             } else {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    _agg_functions[i]->batch_serialize(read_index, _tmp_agg_states, _agg_states_offsets[i],
-                                                       agg_result_column[i].get());
+                    _agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
+                                                       _agg_states_offsets[i], agg_result_column[i].get());
                 }
             }
         }
@@ -334,8 +344,8 @@ public:
         // If there is null key, output it last
         if constexpr (HashMapWithKey::has_single_null_key) {
             if (_is_ht_eos && hash_map_with_key.null_key_data != nullptr) {
-                // The output chunk size couldn't larger than config::vector_chunk_size
-                if (read_index < config::vector_chunk_size) {
+                // The output chunk size couldn't larger than _state->chunk_size()
+                if (read_index < _state->chunk_size()) {
                     // For multi group by key, we don't need to special handle null key
                     DCHECK(group_by_columns.size() == 1);
                     DCHECK(group_by_columns[0]->is_nullable());
@@ -409,8 +419,8 @@ public:
         // IF there is null key, output it last
         if constexpr (HashSetWithKey::has_single_null_key) {
             if (_is_ht_eos && hash_set.has_null_key) {
-                // The output chunk size couldn't larger than config::vector_chunk_size
-                if (read_index < config::vector_chunk_size) {
+                // The output chunk size couldn't larger than _state->chunk_size()
+                if (read_index < _state->chunk_size()) {
                     // For multi group by key, we don't need to special handle null key
                     DCHECK(group_by_columns.size() == 1);
                     DCHECK(group_by_columns[0]->is_nullable());
@@ -463,14 +473,16 @@ private:
     void _init_agg_hash_variant(HashVariantType& hash_variant);
 
     template <typename HashMapWithKey>
-    void _release_agg_memory(HashMapWithKey& hash_map_with_key) {
-        auto it = hash_map_with_key.hash_map.begin();
-        auto end = hash_map_with_key.hash_map.end();
-        while (it != end) {
-            for (int i = 0; i < _agg_functions.size(); i++) {
-                _agg_functions[i]->destroy(it->second + _agg_states_offsets[i]);
+    void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
+        if (hash_map_with_key != nullptr) {
+            auto it = hash_map_with_key->hash_map.begin();
+            auto end = hash_map_with_key->hash_map.end();
+            while (it != end) {
+                for (int i = 0; i < _agg_functions.size(); i++) {
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], it->second + _agg_states_offsets[i]);
+                }
+                ++it;
             }
-            ++it;
         }
     }
 };
@@ -494,7 +506,6 @@ public:
 
 private:
     const TPlanNode& _tnode;
-
     std::unordered_map<size_t, AggregatorPtr> _aggregators;
 };
 

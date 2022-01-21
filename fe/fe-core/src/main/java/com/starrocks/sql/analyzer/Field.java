@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.Expr;
@@ -22,11 +22,7 @@ public class Field {
     private final Expr originExpression;
 
     public Field(String name, Type type, TableName relationAlias, Expr originExpression) {
-        this.name = name;
-        this.type = type;
-        this.relationAlias = relationAlias;
-        this.originExpression = originExpression;
-        this.visible = true;
+        this(name, type, relationAlias, originExpression, true);
     }
 
     public Field(String name, Type type, TableName relationAlias, Expr originExpression, boolean visible) {

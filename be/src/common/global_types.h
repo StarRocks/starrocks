@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_COMMON_GLOBAL_TYPES_H
-#define STARROCKS_BE_SRC_COMMON_COMMON_GLOBAL_TYPES_H
-
+#pragma once
 namespace starrocks {
 
 // for now, these are simply ints; if we find we need to generate ids in the
@@ -32,6 +30,27 @@ typedef int SlotId;
 typedef int TableId;
 typedef int PlanNodeId;
 
-}; // namespace starrocks
+// Mapping from input slot to output slot of an ExecNode.
+// It is used for pipeline to rewrite runtime in filters.
+struct TupleSlotMapping {
+    TupleId from_tuple_id;
+    SlotId from_slot_id;
+    TupleId to_tuple_id;
+    SlotId to_slot_id;
 
-#endif
+    TupleSlotMapping() = default;
+    ~TupleSlotMapping() = default;
+
+    TupleSlotMapping(const TupleSlotMapping&) = default;
+    TupleSlotMapping(TupleSlotMapping&&) = default;
+    TupleSlotMapping& operator=(TupleSlotMapping&&) = default;
+    TupleSlotMapping& operator=(const TupleSlotMapping&) = default;
+
+    TupleSlotMapping(TupleId from_tuple_id, SlotId from_slot_id, TupleId to_tuple_id, SlotId to_slot_id)
+            : from_tuple_id(from_tuple_id),
+              from_slot_id(from_slot_id),
+              to_tuple_id(to_tuple_id),
+              to_slot_id(to_slot_id) {}
+};
+
+}; // namespace starrocks

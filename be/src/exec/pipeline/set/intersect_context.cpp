@@ -1,10 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/set/intersect_context.h"
+
+#include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {
 
 Status IntersectContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
+    RETURN_IF_ERROR(_hash_set->init(state));
     _build_pool = std::make_unique<MemPool>();
 
     _dst_tuple_desc = state->desc_tbl().get_tuple_descriptor(_dst_tuple_id);
@@ -26,7 +29,8 @@ Status IntersectContext::close(RuntimeState* state) {
 
 Status IntersectContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,
                                             const std::vector<ExprContext*>& dst_exprs) {
-    return _hash_set->build_set(state, chunk, dst_exprs, _build_pool.get());
+    TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, dst_exprs, _build_pool.get()));
+    return Status::OK();
 }
 
 Status IntersectContext::refine_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,
@@ -35,10 +39,10 @@ Status IntersectContext::refine_chunk_from_ht(RuntimeState* state, const ChunkPt
 }
 
 StatusOr<vectorized::ChunkPtr> IntersectContext::pull_chunk(RuntimeState* state) {
-    // 1. Get at most *config::vector_chunk_size* remained keys from ht.
+    // 1. Get at most *state->chunk_size()* remained keys from ht.
     size_t num_remained_keys = 0;
-    _remained_keys.resize(config::vector_chunk_size);
-    while (_next_processed_iter != _hash_set->end() && num_remained_keys < config::vector_chunk_size) {
+    _remained_keys.resize(state->chunk_size());
+    while (_next_processed_iter != _hash_set->end() && num_remained_keys < state->chunk_size()) {
         if (_next_processed_iter->hit_times == _intersect_times) {
             _remained_keys[num_remained_keys++] = _next_processed_iter->slice;
         }

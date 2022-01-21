@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -42,10 +42,9 @@ public:
     using Iterator = typename HashSet::iterator;
     using KeyVector = typename std::vector<Slice>;
 
-    IntersectHashSet()
-            : _hash_set(std::make_unique<HashSet>()),
-              _mem_pool(std::make_unique<MemPool>()),
-              _buffer(_mem_pool->allocate(_max_one_row_size * config::vector_chunk_size)) {}
+    IntersectHashSet() = default;
+
+    Status init(RuntimeState* state);
 
     Iterator begin() { return _hash_set->begin(); }
 
@@ -53,13 +52,13 @@ public:
 
     bool empty() { return _hash_set->empty(); }
 
-    Status build_set(RuntimeState* state, const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
-                     MemPool* pool);
+    void build_set(RuntimeState* state, const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
+                   MemPool* pool);
 
     Status refine_intersect_row(RuntimeState* state, const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
                                 int hit_times);
 
-    void deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t batch_size);
+    void deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t chunk_size);
 
     int64_t mem_usage() const;
 

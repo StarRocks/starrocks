@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -11,11 +11,10 @@
 
 namespace starrocks {
 
-class RowsetUpdateState;
 class Tablet;
-class TabletMeta;
-using TabletSharedPtr = std::shared_ptr<Tablet>;
 class HashIndex;
+
+const uint64_t ROWID_MASK = 0xffffffff;
 
 // An index to lookup a record's position(rowset->segment->rowid) by primary key.
 // It's only used to handle updates/deletes in the write pipeline for now.
@@ -72,6 +71,8 @@ public:
     //
     // [not thread-safe]
     void erase(const vectorized::Column& pks, DeletesMap* deletes);
+
+    void get(const vectorized::Column& pks, std::vector<uint64_t>* rowids) const;
 
     // [not thread-safe]
     std::size_t memory_usage() const;

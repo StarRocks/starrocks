@@ -19,20 +19,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_MGR_H
-#define STARROCKS_BE_SRC_RUNTIME_DATA_STREAM_MGR_H
+#pragma once
 
-#include <boost/unordered_map.hpp>
-#include <boost/unordered_set.hpp>
 #include <list>
 #include <mutex>
 #include <set>
 
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "runtime/descriptors.h" // for PlanNodeId
+#include "runtime/local_pass_through_buffer.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "util/runtime_profile.h"
@@ -47,7 +46,6 @@ namespace starrocks {
 
 class DescriptorTbl;
 class DataStreamRecvr;
-class RowBatch;
 class RuntimeState;
 class PRowBatch;
 class PUniqueId;
@@ -67,6 +65,7 @@ class PTransmitChunkParams;
 //
 // TODO: The recv buffers used in DataStreamRecvr should count against
 // per-query memory limits.
+
 class DataStreamMgr {
 public:
     DataStreamMgr();
@@ -82,13 +81,17 @@ public:
                                                   int num_senders, int buffer_size,
                                                   const std::shared_ptr<RuntimeProfile>& profile, bool is_merging,
                                                   std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
-                                                  bool is_pipeline = false);
+                                                  bool is_pipeline, int32_t degree_of_parallelism, bool keep_order);
 
     Status transmit_data(const PTransmitDataParams* request, ::google::protobuf::Closure** done);
 
     Status transmit_chunk(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
     // Closes all receivers registered for fragment_instance_id immediately.
     void cancel(const TUniqueId& fragment_instance_id);
+
+    void prepare_pass_through_chunk_buffer(const TUniqueId& query_id);
+    void destroy_pass_through_chunk_buffer(const TUniqueId& query_id);
+    PassThroughChunkBuffer* get_pass_through_chunk_buffer(const TUniqueId& query_id);
 
 private:
     friend class DataStreamRecvr;
@@ -101,7 +104,7 @@ private:
     // create_recvr().
     // we don't want to create a map<pair<TUniqueId, PlanNodeId>, DataStreamRecvr*>,
     // because that requires a bunch of copying of ids for lookup
-    typedef boost::unordered_multimap<uint32_t, std::shared_ptr<DataStreamRecvr> > StreamMap;
+    typedef std::unordered_multimap<uint32_t, std::shared_ptr<DataStreamRecvr> > StreamMap;
     StreamMap _receiver_map;
 
     // less-than ordering for pair<TUniqueId, PlanNodeId>
@@ -135,8 +138,8 @@ private:
     Status deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
 
     inline uint32_t get_hash_value(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
+
+    PassThroughChunkBufferManager _pass_through_chunk_buffer_manager;
 };
 
 } // namespace starrocks
-
-#endif

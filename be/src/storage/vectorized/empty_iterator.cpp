@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/empty_iterator.h"
 
@@ -13,6 +13,9 @@ public:
 protected:
     Status do_get_next(Chunk* chunk) override { return Status::EndOfFile("end of empty iterator"); }
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override {
+        return Status::EndOfFile("end of empty iterator");
+    }
+    Status do_get_next(Chunk* chunk, vector<RowSourceMask>* source_masks) override {
         return Status::EndOfFile("end of empty iterator");
     }
 };

@@ -71,27 +71,6 @@ PARALLEL_TEST(ConstColumnTest, test_compare_at) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(ConstColumnTest, test_serde) {
-    auto create_const_column = [](int32_t value, size_t size) {
-        auto c = Int32Column::create();
-        c->append_numbers(&value, sizeof(value));
-        return ConstColumn::create(c, size);
-    };
-
-    auto c1 = create_const_column(100, 10);
-    auto c2 = create_const_column(101, 10);
-
-    std::vector<uint8_t> buffer;
-    buffer.resize(c1->serialize_size());
-    c1->serialize_column(buffer.data());
-    c2->deserialize_column(buffer.data());
-
-    for (size_t i = 0; i < c1->size(); i++) {
-        ASSERT_EQ(c1->get(i).get_int32(), c2->get(i).get_int32());
-    }
-}
-
-// NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_assign) {
     auto create_const_column = [](int32_t value, size_t size) {
         auto c = Int32Column::create();

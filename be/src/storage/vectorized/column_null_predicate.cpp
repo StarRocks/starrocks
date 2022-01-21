@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <cstring>
 
@@ -6,8 +6,8 @@
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"
-#include "storage/rowset/segment_v2/bitmap_index_reader.h"
-#include "storage/rowset/segment_v2/bloom_filter.h"
+#include "storage/rowset/bitmap_index_reader.h"
+#include "storage/rowset/bloom_filter.h"
 #include "storage/vectorized/column_predicate.h"
 
 namespace starrocks::vectorized {
@@ -54,7 +54,7 @@ public:
         return min.is_null();
     }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         range->clear();
         if (iter->has_null_bitmap()) {
             range->add(Range(iter->bitmap_nums() - 1, iter->bitmap_nums()));
@@ -64,7 +64,7 @@ public:
 
     bool support_bloom_filter() const override { return true; }
 
-    bool bloom_filter(const segment_v2::BloomFilter* bf) const override { return bf->test_bytes(nullptr, 0); }
+    bool bloom_filter(const BloomFilter* bf) const override { return bf->test_bytes(nullptr, 0); }
 
     PredicateType type() const override { return PredicateType::kIsNull; }
 
@@ -122,7 +122,7 @@ public:
         return !max.is_null();
     }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         return Status::Cancelled("not null predicate not support bitmap index");
     }
 

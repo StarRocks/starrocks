@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "butil/file_util.h"
 #include "column/column_helper.h"
@@ -41,7 +41,6 @@ int main(int argc, char** argv) {
     starrocks::MemInfo::init();
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
 
-    starrocks::vectorized::ColumnHelper::init_static_variable();
     starrocks::vectorized::date::init_date_cache();
 
     std::vector<starrocks::StorePath> paths;
@@ -73,8 +72,6 @@ int main(int argc, char** argv) {
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
-    // clear caches in update manager so mem_tracker checks will not fail
-    starrocks::StorageEngine::instance()->update_manager()->clear_cache();
     (void)butil::DeleteFile(storage_root, true);
     starrocks::vectorized::TEST_clear_all_columns_this_thread();
     // delete engine

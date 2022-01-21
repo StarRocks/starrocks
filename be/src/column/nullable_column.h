@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -23,26 +23,22 @@ public:
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
     NullableColumn(ColumnPtr data_column, NullColumnPtr null_column);
 
-    // Copy constructor
     NullableColumn(const NullableColumn& rhs)
             : _data_column(rhs._data_column->clone_shared()),
               _null_column(std::static_pointer_cast<NullColumn>(rhs._null_column->clone_shared())),
               _has_null(rhs._has_null) {}
 
-    // Move constructor
     NullableColumn(NullableColumn&& rhs) noexcept
             : _data_column(std::move(rhs._data_column)),
               _null_column(std::move(rhs._null_column)),
               _has_null(rhs._has_null) {}
 
-    // Copy assignment
     NullableColumn& operator=(const NullableColumn& rhs) {
         NullableColumn tmp(rhs);
         this->swap_column(tmp);
         return *this;
     }
 
-    // Move assignment
     NullableColumn& operator=(NullableColumn&& rhs) noexcept {
         NullableColumn tmp(std::move(rhs));
         this->swap_column(tmp);
@@ -146,6 +142,8 @@ public:
 
     void append_default(size_t count) override { append_nulls(count); }
 
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
+
     uint32_t max_one_element_serialize_size() const override {
         return sizeof(bool) + _data_column->max_one_element_serialize_size();
     }
@@ -159,7 +157,7 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) override;
+    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override {
         if (_null_column->get_data()[idx]) {
@@ -167,12 +165,6 @@ public:
         }
         return sizeof(uint8_t) + _data_column->serialize_size(idx);
     }
-
-    size_t serialize_size() const override { return _data_column->serialize_size() + _null_column->serialize_size(); }
-
-    uint8_t* serialize_column(uint8_t* dst) override;
-
-    const uint8_t* deserialize_column(const uint8_t* src) override;
 
     MutableColumnPtr clone_empty() const override {
         return create_mutable(_data_column->clone_empty(), _null_column->clone_empty());

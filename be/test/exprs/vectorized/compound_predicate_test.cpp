@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/compound_predicate.h"
 
@@ -21,7 +21,6 @@ public:
         expr_node.__isset.opcode = true;
         expr_node.__isset.child_type = true;
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-        ColumnHelper::s_all_not_null_column = NullColumn::create(1024, 0);
     }
 
 public:

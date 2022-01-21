@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -43,6 +43,9 @@ public:
 
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeMinAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeAnyValueAggregateFunction();
 
     template <typename NestedState>
     static AggregateFunctionPtr MakeNullableAggregateFunctionUnary(AggregateFunctionPtr nested_function);
@@ -95,9 +98,9 @@ public:
     static AggregateFunctionPtr MakeLeadLagWindowFunction();
 };
 
-extern const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
-                                                       PrimitiveType return_type, bool is_null,
-                                                       int agg_func_set_version = 1);
+extern const AggregateFunction* get_aggregate_function(
+        const std::string& name, PrimitiveType arg_type, PrimitiveType return_type, bool is_null,
+        TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN, int agg_func_set_version = 1);
 
 } // namespace vectorized
 } // namespace starrocks

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_SCAN_NODE_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_SCAN_NODE_H
+#pragma once
 
 #include <string>
 
@@ -66,7 +65,6 @@ public:
     RuntimeProfile::Counter* rows_read_counter() const { return _rows_read_counter; }
     RuntimeProfile::Counter* read_timer() const { return _read_timer; }
     RuntimeProfile::Counter* total_throughput_counter() const { return _total_throughput_counter; }
-    RuntimeProfile::Counter* per_read_thread_throughput_counter() const { return _per_read_thread_throughput_counter; }
     RuntimeProfile::Counter* materialize_tuple_timer() const { return _materialize_tuple_timer; }
     RuntimeProfile::ThreadCounters* scanner_thread_counters() const { return _scanner_thread_counters; }
 
@@ -75,7 +73,6 @@ public:
     static const std::string _s_rows_read_counter;
     static const std::string _s_total_read_timer;
     static const std::string _s_total_throughput_counter;
-    static const std::string _s_per_read_thread_throughput_counter;
     static const std::string _s_num_disks_accessed_counter;
     static const std::string _s_materialize_tuple_timer;
     static const std::string _s_scanner_thread_counters_prefix;
@@ -91,7 +88,6 @@ protected:
     // Wall based aggregate read throughput [bytes/sec]
     RuntimeProfile::Counter* _total_throughput_counter;
     // Per thread read throughput [bytes/sec]
-    RuntimeProfile::Counter* _per_read_thread_throughput_counter;
     RuntimeProfile::Counter* _num_disks_accessed_counter;
     RuntimeProfile::Counter* _materialize_tuple_timer; // time writing tuple slots
     // Aggregated scanner thread counters
@@ -100,5 +96,3 @@ protected:
 };
 
 } // namespace starrocks
-
-#endif

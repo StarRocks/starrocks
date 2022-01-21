@@ -19,9 +19,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_H
-#define STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_H
+#pragma once
 
+#include "common/statusor.h"
 #include "gen_cpp/types.pb.h"
 #include "gutil/macros.h"
 #include "runtime/global_dicts.h"
@@ -30,9 +30,6 @@
 #include "storage/rowset/rowset_writer_context.h"
 
 namespace starrocks {
-
-struct ContiguousRow;
-class RowCursor;
 
 namespace vectorized {
 class Chunk;
@@ -47,15 +44,7 @@ class Column;
 //      RowsetFactory::create_rowset_writer(writer_context, &writer);
 //
 //      // write data
-//      // 1. serial add row
-//      // should ensure the order of data between rows
-//      // flush segment when size or number of rows reaches certain condition
-//      writer->add_row(row1);
-//      writer->add_row(row2);
-//      ...
-//      writer->flush();
-//
-//      // 2. serial add chunk
+//      // 1. serial add chunk
 //      // should ensure the order of data between chunks
 //      // flush segment when size or number of rows reaches certain condition
 //      writer->add_chunk(chunk1);
@@ -63,11 +52,11 @@ class Column;
 //      ...
 //      writer->flush();
 //
-//      // 3. parallel add chunk
+//      // 2. parallel add chunk
 //      // each chunk generates a segment
 //      writer->flush_chunk(chunk);
 //
-//      // 4. add chunk by columns
+//      // 3. add chunk by columns
 //      for (column_group : column_groups) {
 //          writer->add_columns(chunk, column_group, is_key);
 //          writer->add_columns(chunk, column_group, is_key);
@@ -84,62 +73,59 @@ public:
     RowsetWriter() = default;
     virtual ~RowsetWriter() = default;
 
-    virtual OLAPStatus init() = 0;
+    RowsetWriter(const RowsetWriter&) = delete;
+    const RowsetWriter& operator=(const RowsetWriter&) = delete;
 
-    // Memory note: input `row` is guaranteed to be copied into writer's internal buffer, including all slice data
-    // referenced by `row`. That means callers are free to de-allocate memory for `row` after this method returns.
-    virtual OLAPStatus add_row(const RowCursor& row) { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
-    virtual OLAPStatus add_row(const ContiguousRow& row) { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
+    virtual Status init() = 0;
 
-    virtual OLAPStatus add_chunk(const vectorized::Chunk& chunk) { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
+    virtual Status add_chunk(const vectorized::Chunk& chunk) { return Status::NotSupported("RowsetWriter::add_chunk"); }
 
     // Used for updatable tablet compaction (BetaRowsetWriter), need to write src rssid with segment
-    virtual OLAPStatus add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
-        return OLAP_ERR_FUNC_NOT_IMPLEMENTED;
+    virtual Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
+        return Status::NotSupported("RowsetWriter::add_chunk_with_rssid");
     }
 
     // Used for vertical compaction
     // |Chunk| contains partial columns data corresponding to |column_indexes|.
-    virtual OLAPStatus add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                                   bool is_key) {
-        return OLAP_ERR_FUNC_NOT_IMPLEMENTED;
+    virtual Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                               bool is_key) {
+        return Status::NotSupported("RowsetWriter::add_columns");
     }
 
-    virtual OLAPStatus add_columns_with_rssid(const vectorized::Chunk& chunk,
-                                              const std::vector<uint32_t>& column_indexes,
-                                              const std::vector<uint32_t>& rssid) {
-        return OLAP_ERR_FUNC_NOT_IMPLEMENTED;
+    virtual Status add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                                          const std::vector<uint32_t>& rssid) {
+        return Status::NotSupported("RowsetWriter::add_columns_with_rssid");
     }
 
-    // This routine is free to modify the content of |chunk|.
-    virtual OLAPStatus flush_chunk(const vectorized::Chunk& chunk) { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
+    virtual Status flush_chunk(const vectorized::Chunk& chunk) {
+        return Status::NotSupported("RowsetWriter::flush_chunk");
+    }
 
-    virtual OLAPStatus flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) {
-        return OLAP_ERR_FUNC_NOT_IMPLEMENTED;
+    virtual Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) {
+        return Status::NotSupported("RowsetWriter::flush_chunk_with_deletes");
     }
 
     // Precondition: the input `rowset` should have the same type of the rowset we're building
-    virtual OLAPStatus add_rowset(RowsetSharedPtr rowset) { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
+    virtual Status add_rowset(RowsetSharedPtr rowset) { return Status::NotSupported("RowsetWriter::add_rowset"); }
 
     // Precondition: the input `rowset` should have the same type of the rowset we're building
-    virtual OLAPStatus add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
-                                                           const SchemaMapping& schema_mapping) {
-        return OLAP_ERR_FUNC_NOT_IMPLEMENTED;
+    virtual Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset, const SchemaMapping& schema_mapping) {
+        return Status::NotSupported("RowsetWriter::add_rowset_for_linked_schema_change");
     }
 
     // explicit flush all buffered rows into segment file.
-    // note that `add_row` could also trigger flush when certain conditions are met
-    virtual OLAPStatus flush() { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
+    virtual Status flush() { return Status::NotSupported("RowsetWriter::flush"); }
 
     // Used for vertical compaction
     // flush columns data and index
-    virtual OLAPStatus flush_columns() { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
+    virtual Status flush_columns() { return Status::NotSupported("RowsetWriter::flush_columns"); }
+
     // flush segments footer
-    virtual OLAPStatus final_flush() { return OLAP_ERR_FUNC_NOT_IMPLEMENTED; }
+    virtual Status final_flush() { return Status::NotSupported("RowsetWriter::final_flush"); }
 
     // finish building and return pointer to the built rowset (guaranteed to be inited).
     // return nullptr when failed
-    virtual RowsetSharedPtr build() = 0;
+    virtual StatusOr<RowsetSharedPtr> build() = 0;
 
     virtual Version version() = 0;
 
@@ -149,18 +135,12 @@ public:
 
     virtual RowsetId rowset_id() = 0;
 
-    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() {
+    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
         return _global_dict_columns_valid_info;
     }
 
 protected:
     vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
-
-private:
-    RowsetWriter(const RowsetWriter&) = delete;
-    const RowsetWriter& operator=(const RowsetWriter&) = delete;
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_WRITER_H

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/project_node.h"
 
@@ -34,7 +34,11 @@ ProjectNode::ProjectNode(starrocks::ObjectPool* pool, const starrocks::TPlanNode
                          const starrocks::DescriptorTbl& desc)
         : ExecNode(pool, node, desc) {}
 
-ProjectNode::~ProjectNode() = default;
+ProjectNode::~ProjectNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -198,7 +202,7 @@ Status ProjectNode::close(RuntimeState* state) {
     return Status::OK();
 }
 
-void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
+void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {
     for (const auto& ctx : (*expr_ctxs)) {
         if (!ctx->root()->is_bound(_tuple_ids)) {
             continue;
@@ -221,13 +225,31 @@ void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext
         }
     }
 
-    ExecNode::push_down_predicate(state, expr_ctxs, is_vectorized);
+    ExecNode::push_down_predicate(state, expr_ctxs);
+}
+
+void ProjectNode::push_down_tuple_slot_mappings(RuntimeState* state,
+                                                const std::vector<TupleSlotMapping>& parent_mappings) {
+    _tuple_slot_mappings = parent_mappings;
+
+    DCHECK(_tuple_ids.size() == 1);
+    for (int i = 0; i < _slot_ids.size(); ++i) {
+        if (_expr_ctxs[i]->root()->is_slotref()) {
+            DCHECK(nullptr != dynamic_cast<vectorized::ColumnRef*>(_expr_ctxs[i]->root()));
+            auto ref = ((vectorized::ColumnRef*)_expr_ctxs[i]->root());
+            _tuple_slot_mappings.emplace_back(ref->tuple_id(), ref->slot_id(), _tuple_ids[0], _slot_ids[i]);
+        }
+    }
+
+    for (auto& child : _children) {
+        child->push_down_tuple_slot_mappings(state, _tuple_slot_mappings);
+    }
 }
 
 void ProjectNode::push_down_join_runtime_filter(RuntimeState* state,
                                                 vectorized::RuntimeFilterProbeCollector* collector) {
     // accept runtime filters from parent if possible.
-    _runtime_filter_collector.push_down(collector, _tuple_ids);
+    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
 
     // check to see if runtime filters can be rewritten
     auto& descriptors = _runtime_filter_collector.descriptors();

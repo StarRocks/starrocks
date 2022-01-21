@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/es_http_scan_node.h"
 
@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"
@@ -14,19 +15,23 @@
 #include "runtime/current_thread.h"
 #include "util/defer_op.h"
 #include "util/spinlock.h"
+#include "util/thread.h"
 
 namespace starrocks::vectorized {
 EsHttpScanNode::EsHttpScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : starrocks::ScanNode(pool, tnode, descs),
           _tuple_id(-1),
-          _runtime_state(nullptr),
           _tuple_desc(nullptr),
           _num_running_scanners(0),
           _eos(false),
           _scan_finished(false),
           _result_chunks(config::doris_scanner_queue_size) {}
 
-EsHttpScanNode::~EsHttpScanNode() = default;
+EsHttpScanNode::~EsHttpScanNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status EsHttpScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -52,7 +57,6 @@ Status EsHttpScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 Status EsHttpScanNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::prepare(state));
 
-    _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
 
     if (_tuple_desc == nullptr) {
@@ -186,8 +190,11 @@ void EsHttpScanNode::_try_skip_constant_conjuncts() {
     // TODO: skip constant true
     for (auto& _conjunct_ctx : _conjunct_ctxs) {
         if (_conjunct_ctx->root()->is_constant()) {
-            void* value = _conjunct_ctx->get_value(nullptr);
-            if (value == nullptr || *reinterpret_cast<bool*>(value) == false) {
+            // unreachable path
+            // The new optimizer will rewrite `where always false` to `EMPTY_SET`
+            ColumnPtr value = _conjunct_ctx->evaluate(nullptr);
+            DCHECK(value->is_constant());
+            if (value->only_null() || value->get(0).get_uint8() == 0) {
                 _eos = true;
             }
         }
@@ -212,7 +219,7 @@ Status EsHttpScanNode::_normalize_conjuncts() {
 
     for (int i = _predicate_idx.size() - 1; i >= 0; i--) {
         int conjunct_index = _predicate_idx[i];
-        _conjunct_ctxs[conjunct_index]->close(_runtime_state);
+        _conjunct_ctxs[conjunct_index]->close(runtime_state());
         _conjunct_ctxs.erase(_conjunct_ctxs.begin() + conjunct_index);
     }
     return Status::OK();
@@ -233,6 +240,7 @@ Status EsHttpScanNode::_start_scan_thread(RuntimeState* state) {
     for (int i = 0; i < _scan_ranges.size(); i++) {
         _scanner_threads.emplace_back(&EsHttpScanNode::_scanner_scan, this, std::move(scanners[i]),
                                       std::ref(_scanners_status[i]));
+        Thread::set_thread_name(_scanner_threads.back(), "es_http_scan");
     }
     return Status::OK();
 }
@@ -254,7 +262,7 @@ static std::string get_host_port(const std::vector<TNetworkAddress>& es_hosts) {
 
 Status EsHttpScanNode::_create_scanner(int scanner_idx, std::unique_ptr<EsHttpScanner>* res) {
     std::vector<ExprContext*> scanner_expr_ctxs;
-    auto status = Expr::clone_if_not_exists(_conjunct_ctxs, _runtime_state, &scanner_expr_ctxs);
+    auto status = Expr::clone_if_not_exists(_conjunct_ctxs, runtime_state(), &scanner_expr_ctxs);
     RETURN_IF_ERROR(status);
 
     const TEsScanRange& es_scan_range = _scan_ranges[scanner_idx].scan_range.es_scan_range;
@@ -265,10 +273,10 @@ Status EsHttpScanNode::_create_scanner(int scanner_idx, std::unique_ptr<EsHttpSc
         properties[ESScanReader::KEY_TYPE] = es_scan_range.type;
     }
     properties[ESScanReader::KEY_SHARD] = std::to_string(es_scan_range.shard_id);
-    properties[ESScanReader::KEY_BATCH_SIZE] = std::to_string(_runtime_state->batch_size());
+    properties[ESScanReader::KEY_BATCH_SIZE] = std::to_string(runtime_state()->chunk_size());
     properties[ESScanReader::KEY_HOST_PORT] = get_host_port(es_scan_range.es_hosts);
     // push down limit to Elasticsearch
-    if (limit() != -1 && limit() <= _runtime_state->batch_size()) {
+    if (limit() != -1 && limit() <= runtime_state()->chunk_size()) {
         properties[ESScanReader::KEY_TERMINATE_AFTER] = std::to_string(limit());
     }
 
@@ -276,7 +284,7 @@ Status EsHttpScanNode::_create_scanner(int scanner_idx, std::unique_ptr<EsHttpSc
     properties[ESScanReader::KEY_QUERY] =
             ESScrollQueryBuilder::build(properties, _column_names, _predicates, _docvalue_context, &doc_value_mode);
 
-    *res = std::make_unique<EsHttpScanner>(_runtime_state, runtime_profile(), _tuple_id, std::move(properties),
+    *res = std::make_unique<EsHttpScanner>(runtime_state(), runtime_profile(), _tuple_id, std::move(properties),
                                            scanner_expr_ctxs, _docvalue_context, doc_value_mode);
     return Status::OK();
 }
@@ -312,10 +320,10 @@ Status EsHttpScanNode::_acquire_chunks(EsHttpScanner* scanner) {
         ChunkPtr chunk;
         // fill chunk
         while (!scanner_eof) {
-            if (UNLIKELY(_runtime_state->is_cancelled())) {
+            if (UNLIKELY(runtime_state()->is_cancelled())) {
                 return Status::Cancelled("Cancelled because of runtime state is cancelled");
             }
-            RETURN_IF_ERROR(scanner->get_next(_runtime_state, &chunk, &scanner_eof));
+            RETURN_IF_ERROR(scanner->get_next(runtime_state(), &chunk, &scanner_eof));
             if (chunk != nullptr && chunk->has_rows()) {
                 break;
             }

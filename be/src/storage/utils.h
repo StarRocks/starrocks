@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_UTILS_H
-#define STARROCKS_BE_SRC_OLAP_UTILS_H
+#pragma once
 
 #include <fcntl.h>
 #include <pthread.h>
@@ -41,9 +40,6 @@
 
 #include "common/logging.h"
 #include "common/status.h"
-#if defined(__i386) || defined(__x86_64__)
-#include "storage/bhp_lib.h"
-#endif
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 
@@ -77,13 +73,13 @@ Status gen_timestamp_string(std::string* out_string);
 // move file to storage_root/trash, file can be a directory
 Status move_to_trash(const std::filesystem::path& tablet_id_path);
 
-OLAPStatus copy_file(const std::string& src, const std::string& dest);
+Status copy_file(const std::string& src, const std::string& dest);
 
-OLAPStatus copy_dir(const std::string& src_dir, const std::string& dst_dir);
+Status copy_dir(const std::string& src_dir, const std::string& dst_dir);
 
 bool check_datapath_rw(const std::string& path);
 
-OLAPStatus read_write_test_file(const std::string& test_file_path);
+Status read_write_test_file(const std::string& test_file_path);
 
 class Errno {
 public:
@@ -96,10 +92,8 @@ private:
     static __thread char _buf[BUF_SIZE];
 };
 
-inline bool is_io_error(OLAPStatus status) {
-    return (((OLAP_ERR_IO_ERROR == status || OLAP_ERR_READ_UNENOUGH == status) && errno == EIO) ||
-            OLAP_ERR_CHECKSUM_ERROR == status || OLAP_ERR_FILE_DATA_ERROR == status ||
-            OLAP_ERR_TEST_FILE_ERROR == status || OLAP_ERR_ROWBLOCK_READ_INFO_ERROR == status);
+inline bool is_io_error(Status status) {
+    return status.is_io_error();
 }
 
 // check if int8_t, int16_t, int32_t, int64_t value is overflow
@@ -166,5 +160,3 @@ bool valid_bool(const std::string& value_str);
     } while (0)
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_UTILS_H

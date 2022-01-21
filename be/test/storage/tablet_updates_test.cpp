@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/tablet_updates.h"
 
@@ -26,6 +26,8 @@
 #include "storage/vectorized/empty_iterator.h"
 #include "storage/vectorized/schema_change.h"
 #include "storage/vectorized/union_iterator.h"
+#include "storage/wrapper_field.h"
+#include "testutil/assert.h"
 #include "util/defer_op.h"
 #include "util/path_util.h"
 
@@ -53,19 +55,50 @@ public:
         auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
-        for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(vectorized::Datum(keys[i]));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
+        for (int64_t key : keys) {
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk(*chunk));
+            CHECK_OK(writer->flush_chunk(*chunk));
         } else if (one_delete == nullptr) {
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush());
+            CHECK_OK(writer->flush());
         } else if (one_delete != nullptr) {
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk_with_deletes(*chunk, *one_delete));
+            CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
         }
-        return writer->build();
+        return *writer->build();
+    }
+
+    RowsetSharedPtr create_rowsets(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                                   std::size_t max_rows_per_segment) {
+        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_type = BETA_ROWSET;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = &tablet->tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+        for (std::size_t written_rows = 0; written_rows < keys.size(); written_rows += max_rows_per_segment) {
+            auto chunk = vectorized::ChunkHelper::new_chunk(schema, max_rows_per_segment);
+            auto& cols = chunk->columns();
+            for (size_t i = 0; i < max_rows_per_segment; i++) {
+                cols[0]->append_datum(vectorized::Datum(keys[written_rows + i]));
+                cols[1]->append_datum(vectorized::Datum((int16_t)(keys[written_rows + i] % 100 + 1)));
+                cols[2]->append_datum(vectorized::Datum((int32_t)(keys[written_rows + i] % 1000 + 2)));
+            }
+            CHECK_OK(writer->flush_chunk(*chunk));
+        }
+        return *writer->build();
     }
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
@@ -178,15 +211,18 @@ public:
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
-    void SetUp() override { _compaction_mem_tracker.reset(new MemTracker(-1)); }
+    void SetUp() override {
+        _compaction_mem_tracker.reset(new MemTracker(-1));
+        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+    }
 
     void TearDown() override {
         if (_tablet2) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id(), false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id());
             _tablet2.reset();
         }
         if (_tablet) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             _tablet.reset();
         }
     }
@@ -285,9 +321,10 @@ protected:
     TabletSharedPtr _tablet;
     TabletSharedPtr _tablet2;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
+    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
 };
 
-static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet) {
+static TabletSharedPtr load_same_tablet_from_store(MemTracker* mem_tracker, const TabletSharedPtr& tablet) {
     auto data_dir = tablet->data_dir();
     auto tablet_id = tablet->tablet_id();
     auto schema_hash = tablet->schema_hash();
@@ -303,7 +340,7 @@ static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet
     CHECK(tablet_meta->deserialize(serialized_meta).ok());
 
     // Create a new tablet instance from the latest snapshot.
-    auto tablet1 = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
+    auto tablet1 = Tablet::create_tablet_from_meta(mem_tracker, tablet_meta, data_dir);
     CHECK(tablet1 != nullptr);
     CHECK(tablet1->init().ok());
     CHECK(tablet1->init_succeeded());
@@ -513,7 +550,7 @@ TEST_F(TabletUpdatesTest, noncontinous_meta_save_load) {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     _tablet->save_meta();
 
-    auto tablet1 = load_same_tablet_from_store(_tablet);
+    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
 
     ASSERT_EQ(2, tablet1->updates()->num_pending());
     ASSERT_EQ(2, tablet1->updates()->max_version());
@@ -542,7 +579,7 @@ TEST_F(TabletUpdatesTest, save_meta) {
 
     _tablet->save_meta();
 
-    auto tablet1 = load_same_tablet_from_store(_tablet);
+    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
     ASSERT_EQ(31, tablet1->updates()->version_history_count());
     ASSERT_EQ(31, tablet1->updates()->max_version());
 
@@ -606,7 +643,7 @@ TEST_F(TabletUpdatesTest, remove_expired_versions) {
     EXPECT_EQ(-1, read_tablet(_tablet, 2));
     EXPECT_EQ(-1, read_tablet(_tablet, 1));
 
-    auto tablet1 = load_same_tablet_from_store(_tablet);
+    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
     EXPECT_EQ(1, tablet1->updates()->version_history_count());
     EXPECT_EQ(4, tablet1->updates()->max_version());
     EXPECT_EQ(N, read_tablet(tablet1, 4));
@@ -644,7 +681,7 @@ TEST_F(TabletUpdatesTest, apply) {
 
     // Ensure the persistent meta is correct.
     auto max_version = rowsets.size() + 1;
-    auto tablet1 = load_same_tablet_from_store(_tablet);
+    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
     EXPECT_EQ(max_version, tablet1->updates()->max_version());
     EXPECT_EQ(max_version, tablet1->updates()->version_history_count());
     for (int i = 2; i <= max_version; i++) {
@@ -716,7 +753,7 @@ TEST_F(TabletUpdatesTest, concurrent_write_read_and_gc) {
     EXPECT_EQ(version.load(), _tablet->updates()->max_version());
 
     // Ensure the persistent meta is correct.
-    auto tablet1 = load_same_tablet_from_store(_tablet);
+    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
     EXPECT_EQ(1, tablet1->updates()->version_history_count());
     EXPECT_EQ(version.load(), tablet1->updates()->max_version());
     EXPECT_EQ(N, read_tablet(tablet1, version.load()));
@@ -782,7 +819,38 @@ TEST_F(TabletUpdatesTest, compaction_score_enough_normal) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(TabletUpdatesTest, compaction) {
+TEST_F(TabletUpdatesTest, horizontal_compaction) {
+    config::vertical_compaction_max_columns_per_group = 5;
+
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < 100; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
+    const auto& best_tablet =
+            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
+    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
+    ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 3, keys));
+    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    // the time interval is not enough after last compaction
+    EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+}
+
+TEST_F(TabletUpdatesTest, vertical_compaction) {
+    config::vertical_compaction_max_columns_per_group = 1;
+
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
     std::vector<int64_t> keys;
@@ -927,7 +995,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental) {
     ASSERT_EQ(6, tablet1->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet1, 6));
 
-    auto tablet2 = load_same_tablet_from_store(tablet1);
+    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
     ASSERT_EQ(6, tablet2->updates()->max_version());
     ASSERT_EQ(6, tablet2->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet2, 6));
@@ -941,8 +1009,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_ignore_already_committed_ver
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -991,7 +1059,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_ignore_already_committed_ver
     ASSERT_EQ(6, tablet1->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet1, 6));
 
-    auto tablet2 = load_same_tablet_from_store(tablet1);
+    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
     ASSERT_EQ(6, tablet2->updates()->max_version());
     ASSERT_EQ(6, tablet2->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet2, 6));
@@ -1005,8 +1073,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_mismatched_tablet_id) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1056,8 +1124,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_data_file_not_exist) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1109,8 +1177,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_incorrect_version) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1165,8 +1233,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_full) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1188,7 +1256,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_full) {
     EXPECT_EQ(keys0.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the tablet state is valid after process restarted.
-    auto tablet2 = load_same_tablet_from_store(tablet1);
+    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
     ASSERT_EQ(11, tablet2->updates()->max_version());
     ASSERT_EQ(1, tablet2->updates()->version_history_count());
     EXPECT_EQ(keys0.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
@@ -1202,8 +1270,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_file_not_exist) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1248,7 +1316,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_file_not_exist) {
     EXPECT_EQ(keys1.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the persistent meta is still valid.
-    auto tablet2 = load_same_tablet_from_store(tablet1);
+    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
     ASSERT_EQ(3, tablet2->updates()->max_version());
     ASSERT_EQ(3, tablet2->updates()->version_history_count());
     EXPECT_EQ(keys1.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
@@ -1262,8 +1330,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_mismatched_tablet_id) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1314,8 +1382,8 @@ TEST_F(TabletUpdatesTest, test_issue_4193) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1342,7 +1410,7 @@ TEST_F(TabletUpdatesTest, test_issue_4193) {
     EXPECT_EQ(keys0.size() + keys1.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the tablet state is valid after process restarted.
-    auto tablet2 = load_same_tablet_from_store(tablet1);
+    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
     ASSERT_EQ(13, tablet2->updates()->max_version());
     EXPECT_EQ(keys0.size() + keys1.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
 }
@@ -1355,8 +1423,8 @@ TEST_F(TabletUpdatesTest, test_issue_4181) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
@@ -1385,7 +1453,7 @@ TEST_F(TabletUpdatesTest, test_issue_4181) {
     EXPECT_EQ(keys0.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the tablet state is valid after process restarted.
-    auto tablet2 = load_same_tablet_from_store(tablet1);
+    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
     ASSERT_EQ(11, tablet2->updates()->max_version());
     EXPECT_EQ(keys0.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
 }
@@ -1397,7 +1465,7 @@ TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)FileUtils::remove_all(tablet0->schema_hash_path());
     });
 
@@ -1415,7 +1483,7 @@ TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset) {
 
     DeferOp defer2([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet1->schema_hash_path());
     });
 
@@ -1439,6 +1507,63 @@ TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset) {
     }
     ASSERT_EQ(12, tablet1->updates()->max_version());
     EXPECT_EQ(keys0.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
+}
+
+TEST_F(TabletUpdatesTest, get_column_values) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    std::size_t max_rows_per_segment = 1000;
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowsets(_tablet, keys, max_rows_per_segment)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowsets(_tablet, keys, max_rows_per_segment)).ok());
+    std::vector<uint32_t> read_column_ids = {1, 2};
+    std::vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
+    const auto& tablet_schema = _tablet->tablet_schema();
+    for (auto i = 0; i < read_column_ids.size(); i++) {
+        const auto read_column_id = read_column_ids[i];
+        auto tablet_column = tablet_schema.column(read_column_id);
+        auto column =
+                vectorized::ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        read_columns[i] = column->clone_empty();
+    }
+    std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+    int num_segments = N / max_rows_per_segment;
+    for (auto i = 0; i < num_segments; i++) {
+        const int num_rowids = rand() % max_rows_per_segment;
+        std::vector<uint32_t> rowids;
+        for (auto i = 0; i < num_rowids; i++) {
+            rowids.push_back(rand() % max_rows_per_segment);
+        }
+        std::sort(rowids.begin(), rowids.end());
+        rowids_by_rssid.emplace(i, rowids);
+    }
+    _tablet->updates()->get_column_values(read_column_ids, false, rowids_by_rssid, &read_columns);
+    auto values_str_generator = [&rowids_by_rssid](const int modulus, const int base) {
+        std::stringstream ss;
+        ss << "[";
+        for (const auto& [rssid, rowids] : rowids_by_rssid) {
+            for (const auto rowid : rowids) {
+                ss << rowid % modulus + base << ", ";
+            }
+        }
+        std::string values_str = ss.str();
+        values_str.pop_back();
+        values_str.pop_back();
+        values_str.append("]");
+        return values_str;
+    };
+    ASSERT_EQ(values_str_generator(100, 1), read_columns[0]->debug_string());
+    ASSERT_EQ(values_str_generator(1000, 2), read_columns[1]->debug_string());
+    for (const auto& read_column : read_columns) {
+        read_column->reset_column();
+    }
+    _tablet->updates()->get_column_values(read_column_ids, true, rowids_by_rssid, &read_columns);
+    ASSERT_EQ(std::string("[0, ") + values_str_generator(100, 1).substr(1), read_columns[0]->debug_string());
+    ASSERT_EQ(std::string("[0, ") + values_str_generator(1000, 2).substr(1), read_columns[1]->debug_string());
 }
 
 } // namespace starrocks

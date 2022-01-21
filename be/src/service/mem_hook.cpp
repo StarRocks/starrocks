@@ -1,10 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <gperftools/nallocx.h>
 #include <gperftools/tcmalloc.h>
 
+#include <atomic>
 #include <iostream>
 #include <new>
+
+#include "common/compiler_util.h"
 
 #ifndef BE_TEST
 #include "runtime/current_thread.h"
@@ -171,26 +174,69 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 
 #ifndef BE_TEST
 #define TC_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
-#define MEMORY_CONSUME_PTR(ptr) starrocks::tls_thread_status.mem_consume(tc_malloc_size(ptr))
-#define MEMORY_RELEASE_PTR(ptr) starrocks::tls_thread_status.mem_release(tc_malloc_size(ptr))
-#define MEMORY_CONSUME_SIZE(size) starrocks::tls_thread_status.mem_consume(size)
+#define MEMORY_CONSUME_SIZE(size)                                      \
+    do {                                                               \
+        if (LIKELY(starrocks::tls_is_thread_status_init)) {            \
+            starrocks::tls_thread_status.mem_consume(size);            \
+        } else {                                                       \
+            starrocks::CurrentThread::mem_consume_without_cache(size); \
+        }                                                              \
+    } while (0)
+#define MEMORY_RELEASE_SIZE(size)                                      \
+    do {                                                               \
+        if (LIKELY(starrocks::tls_is_thread_status_init)) {            \
+            starrocks::tls_thread_status.mem_release(size);            \
+        } else {                                                       \
+            starrocks::CurrentThread::mem_release_without_cache(size); \
+        }                                                              \
+    } while (0)
+#define MEMORY_CONSUME_PTR(ptr) MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr))
+#define MEMORY_RELEASE_PTR(ptr) MEMORY_RELEASE_SIZE(TC_MALLOC_SIZE(ptr))
+#define TRY_MEM_CONSUME(size, err_ret)                                                                   \
+    do {                                                                                                 \
+        if (LIKELY(starrocks::tls_is_thread_status_init)) {                                              \
+            RETURN_IF_UNLIKELY(!starrocks::tls_thread_status.try_mem_consume(size), err_ret);            \
+        } else {                                                                                         \
+            RETURN_IF_UNLIKELY(!starrocks::CurrentThread::try_mem_consume_without_cache(size), err_ret); \
+        }                                                                                                \
+    } while (0)
+#define SET_EXCEED_MEM_TRACKER() \
+    starrocks::tls_exceed_mem_tracker = starrocks::ExecEnv::GetInstance()->process_mem_tracker()
+#define IS_BAD_ALLOC_CATCHED() starrocks::tls_thread_status.is_catched()
 #else
-#define TC_MALLOC_SIZE(ptr) 0
-#define MEMORY_CONSUME_PTR(ptr) (void)(ptr)
-#define MEMORY_RELEASE_PTR(ptr) (void)(ptr)
-#define MEMORY_CONSUME_SIZE(size) (void)(size)
+std::atomic<int64_t> g_mem_usage(0);
+#define TC_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
+#define MEMORY_CONSUME_SIZE(size) g_mem_usage.fetch_add(size)
+#define MEMORY_RELEASE_SIZE(size) g_mem_usage.fetch_sub(size)
+#define MEMORY_CONSUME_PTR(ptr) g_mem_usage.fetch_add(tc_malloc_size(ptr))
+#define MEMORY_RELEASE_PTR(ptr) g_mem_usage.fetch_sub(tc_malloc_size(ptr))
+#define TRY_MEM_CONSUME(size, err_ret) g_mem_usage.fetch_add(size)
+#define SET_EXCEED_MEM_TRACKER() (void)0
+#define IS_BAD_ALLOC_CATCHED() false
 #endif
 
 extern "C" {
 // malloc
-void* my_alloc(size_t size) __THROW {
-    void* ptr = tc_malloc(size);
-    // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
-    // call the `my_alloc`, and result in a deadloop.
-#ifndef BE_TEST
-    MEMORY_CONSUME_SIZE(tc_nallocx(size, 0));
-#endif
-    return ptr;
+void* my_malloc(size_t size) __THROW {
+    if (IS_BAD_ALLOC_CATCHED()) {
+        // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
+        // call the `my_malloc`, and result in a deadloop.
+        TRY_MEM_CONSUME(tc_nallocx(size, 0), nullptr);
+        void* ptr = tc_malloc(size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(tc_nallocx(size, 0));
+        }
+        return ptr;
+    } else {
+        void* ptr = tc_malloc(size);
+        // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
+        // call the `my_malloc`, and result in a deadloop.
+        if (LIKELY(ptr != nullptr)) {
+            MEMORY_CONSUME_SIZE(tc_nallocx(size, 0));
+        }
+        return ptr;
+    }
 }
 
 // free
@@ -201,23 +247,57 @@ void my_free(void* p) __THROW {
 
 // realloc
 void* my_realloc(void* p, size_t size) __THROW {
-    int64_t old_size = TC_MALLOC_SIZE(p);
-    void* ptr = tc_realloc(p, size);
-    if (ptr != nullptr) {
-        int64_t new_size = TC_MALLOC_SIZE(ptr);
-        MEMORY_CONSUME_SIZE(new_size - old_size);
-    } else {
-        // nothing to do.
-        // If tc_realloc() fails the original block is left untouched; it is not freed or moved
+    // If new_size is zero, the behavior is implementation defined
+    // (null pointer may be returned (in which case the old memory block may or may not be freed),
+    // or some non-null pointer may be returned that may not be used to access storage)
+    if (UNLIKELY(size == 0)) {
+        return nullptr;
     }
-    return ptr;
+    int64_t old_size = TC_MALLOC_SIZE(p);
+
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(tc_nallocx(size, 0) - old_size, nullptr);
+        void* ptr = tc_realloc(p, size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(tc_nallocx(size, 0) - old_size);
+        }
+        return ptr;
+    } else {
+        void* ptr = tc_realloc(p, size);
+        if (ptr != nullptr) {
+            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - old_size);
+        } else {
+            // nothing to do.
+            // If tc_realloc() fails the original block is left untouched; it is not freed or moved
+        }
+        return ptr;
+    }
 }
 
 // calloc
 void* my_calloc(size_t n, size_t size) __THROW {
-    void* ptr = tc_calloc(n, size);
-    MEMORY_CONSUME_PTR(ptr);
-    return ptr;
+    // If size is zero, the behavior is implementation defined (null pointer may be returned
+    // or some non-null pointer may be returned that may not be used to access storage)
+    if (UNLIKELY(size == 0)) {
+        return nullptr;
+    }
+
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(n * size, nullptr);
+        void* ptr = tc_calloc(n, size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(n * size);
+        } else {
+            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - n * size);
+        }
+        return ptr;
+    } else {
+        void* ptr = tc_calloc(n, size);
+        MEMORY_CONSUME_PTR(ptr);
+        return ptr;
+    }
 }
 
 void my_cfree(void* ptr) __THROW {
@@ -227,42 +307,102 @@ void my_cfree(void* ptr) __THROW {
 
 // memalign
 void* my_memalign(size_t align, size_t size) __THROW {
-    void* ptr = tc_memalign(align, size);
-    MEMORY_CONSUME_PTR(ptr);
-    return ptr;
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(size, nullptr);
+        void* ptr = tc_memalign(align, size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(size);
+        } else {
+            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
+        }
+        return ptr;
+    } else {
+        void* ptr = tc_memalign(align, size);
+        MEMORY_CONSUME_PTR(ptr);
+        return ptr;
+    }
 }
 
 // aligned_alloc
 void* my_aligned_alloc(size_t align, size_t size) __THROW {
-    void* ptr = tc_memalign(align, size);
-    MEMORY_CONSUME_PTR(ptr);
-    return ptr;
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(size, nullptr);
+        void* ptr = tc_memalign(align, size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(size);
+        } else {
+            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
+        }
+        return ptr;
+    } else {
+        void* ptr = tc_memalign(align, size);
+        MEMORY_CONSUME_PTR(ptr);
+        return ptr;
+    }
 }
 
 // valloc
 void* my_valloc(size_t size) __THROW {
-    void* ptr = tc_valloc(size);
-    MEMORY_CONSUME_PTR(ptr);
-    return ptr;
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(size, nullptr);
+        void* ptr = tc_valloc(size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(size);
+        } else {
+            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
+        }
+        return ptr;
+    } else {
+        void* ptr = tc_valloc(size);
+        MEMORY_CONSUME_PTR(ptr);
+        return ptr;
+    }
 }
 
 // pvalloc
 void* my_pvalloc(size_t size) __THROW {
-    void* ptr = tc_pvalloc(size);
-    MEMORY_CONSUME_PTR(ptr);
-    return ptr;
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(size, nullptr);
+        void* ptr = tc_valloc(size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(size);
+        } else {
+            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
+        }
+        return ptr;
+    } else {
+        void* ptr = tc_pvalloc(size);
+        MEMORY_CONSUME_PTR(ptr);
+        return ptr;
+    }
 }
 
 // posix_memalign
-int my_posix_memalign(void** r, size_t a, size_t s) __THROW {
-    int ret = tc_posix_memalign(r, a, s);
-    if (ret == 0) {
-        MEMORY_CONSUME_PTR(*r);
+int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
+    if (IS_BAD_ALLOC_CATCHED()) {
+        TRY_MEM_CONSUME(size, ENOMEM);
+        int ret = tc_posix_memalign(r, align, size);
+        if (UNLIKELY(ret != 0)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(size);
+        } else {
+            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(*r) - size);
+        }
+        return ret;
+    } else {
+        int ret = tc_posix_memalign(r, align, size);
+        if (ret == 0) {
+            MEMORY_CONSUME_PTR(*r);
+        }
+        return ret;
     }
-    return ret;
 }
 
-void* malloc(size_t size) __THROW ALIAS(my_alloc);
+void* malloc(size_t size) __THROW ALIAS(my_malloc);
 void free(void* p) __THROW ALIAS(my_free);
 void* realloc(void* p, size_t size) __THROW ALIAS(my_realloc);
 void* calloc(size_t n, size_t size) __THROW ALIAS(my_calloc);

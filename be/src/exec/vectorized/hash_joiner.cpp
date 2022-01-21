@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/hash_joiner.h"
 
@@ -16,7 +16,9 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_filter_worker.h"
 #include "simd/simd.h"
+#include "util/debug_util.h"
 #include "util/runtime_profile.h"
+
 namespace starrocks::vectorized {
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
@@ -25,10 +27,10 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _limit(param._limit),
           _num_rows_returned(0),
           _is_null_safes(param._is_null_safes),
-          _build_expr_ctxs(std::move(param._build_expr_ctxs)),
-          _probe_expr_ctxs(std::move(param._probe_expr_ctxs)),
-          _other_join_conjunct_ctxs(std::move(param._other_join_conjunct_ctxs)),
-          _conjunct_ctxs(std::move(param._conjunct_ctxs)),
+          _build_expr_ctxs(param._build_expr_ctxs),
+          _probe_expr_ctxs(param._probe_expr_ctxs),
+          _other_join_conjunct_ctxs(param._other_join_conjunct_ctxs),
+          _conjunct_ctxs(param._conjunct_ctxs),
           _build_row_descriptor(param._build_row_descriptor),
           _probe_row_descriptor(param._probe_row_descriptor),
           _row_descriptor(param._row_descriptor),
@@ -47,7 +49,7 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
     }
 
     std::string name = strings::Substitute("$0 (id=$1)", print_plan_node_type(param._node_type), param._node_id);
-    _runtime_profile.reset(new RuntimeProfile(std::move(name)));
+    _runtime_profile = std::make_shared<RuntimeProfile>(std::move(name));
     _runtime_profile->set_metadata(param._node_id);
 
     if (param._hash_join_node.__isset.sql_join_predicates) {
@@ -59,6 +61,8 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
 }
 
 Status HashJoiner::prepare(RuntimeState* state) {
+    _runtime_state = state;
+
     _build_timer = ADD_TIMER(_runtime_profile, "BuildTime");
 
     _copy_right_table_chunk_timer = ADD_CHILD_TIMER(_runtime_profile, "1-CopyRightTableChunkTime", "BuildTime");
@@ -96,6 +100,8 @@ Status HashJoiner::prepare(RuntimeState* state) {
 }
 
 void HashJoiner::_init_hash_table_param(HashTableParam* param) {
+    // Pipeline query engine always needn't create tuple columns
+    param->need_create_tuple_columns = false;
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
@@ -133,34 +139,8 @@ Status HashJoiner::build_ht(RuntimeState* state) {
         RETURN_IF_ERROR(_build(state));
         COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
-        _short_circuit_break();
-        auto old_phase = HashJoinPhase::BUILD;
-        // _phase may be set to HashJoinPhase::EOS because HashJoinProbeOperator finishes prematurely.
-        uint64_t runtime_join_filter_pushdown_limit = 1024000;
-        if (state->query_options().__isset.runtime_join_filter_pushdown_limit) {
-            runtime_join_filter_pushdown_limit = state->query_options().runtime_join_filter_pushdown_limit;
-        }
-
-        if (_is_push_down) {
-            if (_probe_node_type == TPlanNodeType::EXCHANGE_NODE && _build_node_type == TPlanNodeType::EXCHANGE_NODE) {
-                _is_push_down = false;
-            } else if (_ht.get_row_count() > runtime_join_filter_pushdown_limit) {
-                _is_push_down = false;
-            }
-
-            if (_is_push_down || _build_conjunct_ctxs_is_empty) {
-                // In filter could be used to fast compute segment row range in storage engine
-                RETURN_IF_ERROR(_create_runtime_in_filters(state));
-            }
-        }
-
-        // it's quite critical to put publish runtime filters before short-circuit of
-        // "inner-join with empty right table". because for global runtime filter
-        // merge node is waiting for all partitioned runtime filter, so even hash row count is zero
-        // we still have to build it.
-        RETURN_IF_ERROR(_create_runtime_bloom_filters(state, runtime_join_filter_pushdown_limit));
-        _phase.compare_exchange_strong(old_phase, HashJoinPhase::PROBE);
     }
+
     return Status::OK();
 }
 
@@ -199,27 +179,7 @@ void HashJoiner::push_chunk(RuntimeState* state, ChunkPtr&& chunk) {
 
 StatusOr<ChunkPtr> HashJoiner::pull_chunk(RuntimeState* state) {
     DCHECK(_phase != HashJoinPhase::BUILD);
-
-    auto&& maybe_chunk = _pull_probe_output_chunk(state);
-    if (UNLIKELY(!maybe_chunk.ok())) {
-        return std::move(maybe_chunk);
-    }
-
-    ChunkPtr chunk = std::move(maybe_chunk.value());
-    if (!chunk || chunk->is_empty()) {
-        return std::move(chunk);
-    }
-
-    auto num_rows = chunk->num_rows();
-    _num_rows_returned += num_rows;
-    if (_reached_limit()) {
-        chunk->set_num_rows(num_rows - (_num_rows_returned - _limit));
-        _num_rows_returned = _limit;
-        _phase = HashJoinPhase::EOS;
-        // _ht is useless in this point, so deallocate its memory.
-        _ht.close();
-    }
-    return std::move(chunk);
+    return _pull_probe_output_chunk(state);
 }
 
 StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
@@ -230,7 +190,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
     if (_phase == HashJoinPhase::PROBE || _probe_input_chunk != nullptr) {
         DCHECK(_ht_has_remain && _probe_input_chunk);
 
-        RETURN_IF_ERROR(_ht.probe(_key_columns, &_probe_input_chunk, &chunk, &_ht_has_remain));
+        RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probe_input_chunk, &chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
             _probe_input_chunk = nullptr;
         }
@@ -242,15 +202,13 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 
     if (_phase == HashJoinPhase::POST_PROBE) {
         if (!_need_post_probe()) {
-            _phase = HashJoinPhase::EOS;
-            _ht.close();
+            enter_eos_phase();
             return chunk;
         }
 
-        RETURN_IF_ERROR(_ht.probe_remain(&chunk, &_ht_has_remain));
+        RETURN_IF_ERROR(_ht.probe_remain(state, &chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
-            _phase = HashJoinPhase::EOS;
-            _ht.close();
+            enter_eos_phase();
         }
 
         _filter_post_probe_output_chunk(chunk);
@@ -264,6 +222,36 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 Status HashJoiner::close(RuntimeState* state) {
     _ht.close();
     return Status::OK();
+}
+
+Status HashJoiner::create_runtime_filters(RuntimeState* state) {
+    if (_phase != HashJoinPhase::BUILD) {
+        return Status::OK();
+    }
+
+    uint64_t runtime_join_filter_pushdown_limit = 1024000;
+    if (state->query_options().__isset.runtime_join_filter_pushdown_limit) {
+        runtime_join_filter_pushdown_limit = state->query_options().runtime_join_filter_pushdown_limit;
+    }
+
+    if (_is_push_down) {
+        if (_probe_node_type == TPlanNodeType::EXCHANGE_NODE && _build_node_type == TPlanNodeType::EXCHANGE_NODE) {
+            _is_push_down = false;
+        } else if (_ht.get_row_count() > runtime_join_filter_pushdown_limit) {
+            _is_push_down = false;
+        }
+
+        if (_is_push_down || _build_conjunct_ctxs_is_empty) {
+            // In filter could be used to fast compute segment row range in storage engine
+            RETURN_IF_ERROR(_create_runtime_in_filters(state));
+        }
+    }
+
+    // it's quite critical to put publish runtime filters before short-circuit of
+    // "inner-join with empty right table". because for global runtime filter
+    // merge node is waiting for all partitioned runtime filter, so even hash row count is zero
+    // we still have to build it.
+    return _create_runtime_bloom_filters(state, runtime_join_filter_pushdown_limit);
 }
 
 bool HashJoiner::_has_null(const ColumnPtr& column) {

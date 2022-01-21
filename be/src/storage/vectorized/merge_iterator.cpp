@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/merge_iterator.h"
 
@@ -9,7 +9,6 @@
 #include "boost/heap/skew_heap.hpp"
 #include "column/chunk.h"
 #include "common/config.h"
-#include "storage/iterators.h" // StorageReadOptions
 #include "storage/vectorized/chunk_helper.h"
 
 namespace starrocks::vectorized {

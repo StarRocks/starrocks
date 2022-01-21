@@ -40,8 +40,6 @@
 
 #include "exprs/expr.h"
 #include "runtime/mysql_table_writer.h"
-#include "runtime/row_batch.h"
-#include "runtime/tuple_row.h"
 #include "util/types.h"
 
 namespace starrocks {
@@ -53,8 +51,8 @@ std::string MysqlConnInfo::debug_string() const {
     return ss.str();
 }
 
-MysqlTableWriter::MysqlTableWriter(const std::vector<ExprContext*>& output_expr_ctxs, int batch_size)
-        : _output_expr_ctxs(output_expr_ctxs), _batch_size(batch_size) {}
+MysqlTableWriter::MysqlTableWriter(const std::vector<ExprContext*>& output_expr_ctxs, int chunk_size)
+        : _output_expr_ctxs(output_expr_ctxs), _chunk_size(chunk_size) {}
 
 MysqlTableWriter::~MysqlTableWriter() {
     if (_mysql_conn) {
@@ -100,7 +98,7 @@ Status MysqlTableWriter::_build_viewers(vectorized::Columns& columns) {
         auto* ctx = _output_expr_ctxs[i];
         const auto& type = ctx->root()->type();
         if (!is_scalar_primitive_type(type.type)) {
-            return Status::InternalError(fmt::format("unsupport type in mysql sink:{}", type.type));
+            return Status::InternalError(fmt::format("unsupported type in mysql sink:{}", type.type));
         }
 
         switch (type.type) {
@@ -119,7 +117,7 @@ Status MysqlTableWriter::_build_viewers(vectorized::Columns& columns) {
         }
 
         default:
-            return Status::InternalError(fmt::format("unsupport type in mysql sink:{}", type.type));
+            return Status::InternalError(fmt::format("unsupported type in mysql sink:{}", type.type));
         }
     }
 
@@ -204,14 +202,14 @@ Status MysqlTableWriter::append(vectorized::Chunk* chunk) {
 
     int num_rows = chunk->num_rows();
     int i = 0;
-    while (i + _batch_size < num_rows) {
+    while (i + _chunk_size < num_rows) {
         std::string_view insert_stmt;
-        RETURN_IF_ERROR(_build_insert_sql(i, i + _batch_size, &insert_stmt));
+        RETURN_IF_ERROR(_build_insert_sql(i, i + _chunk_size, &insert_stmt));
         if (mysql_real_query(_mysql_conn, insert_stmt.data(), insert_stmt.length())) {
             return Status::InternalError(fmt::format("Insert to mysql server({}) failed, err:{}",
                                                      mysql_get_host_info(_mysql_conn), mysql_error(_mysql_conn)));
         }
-        i += _batch_size;
+        i += _chunk_size;
     }
 
     std::string_view insert_stmt;

@@ -21,9 +21,12 @@
 
 #include "storage/task/engine_clone_task.h"
 
+#include <sys/stat.h>
+
 #include <filesystem>
 #include <set>
 
+#include "common/status.h"
 #include "env/env.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_constants.h"
@@ -66,7 +69,7 @@ EngineCloneTask::EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& clone
     _mem_tracker = std::make_unique<MemTracker>(-1, "clone task", mem_tracker);
 }
 
-OLAPStatus EngineCloneTask::execute() {
+Status EngineCloneTask::execute() {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
@@ -77,10 +80,10 @@ OLAPStatus EngineCloneTask::execute() {
     if (tablet != nullptr) {
         std::shared_lock rlock(tablet->get_migration_lock(), std::try_to_lock);
         if (!rlock.owns_lock()) {
-            return OLAP_ERR_RWLOCK_ERROR;
+            return Status::Corruption("Fail to get lock");
         }
         if (Tablet::check_migrate(tablet)) {
-            return OLAP_ERR_OTHER_ERROR;
+            return Status::Corruption("Fail to check migrate tablet");
         }
         auto st = _do_clone(tablet.get());
         _set_tablet_info(st, false);
@@ -89,7 +92,7 @@ OLAPStatus EngineCloneTask::execute() {
         _set_tablet_info(st, true);
     }
     tablet_manager->unregister_clone_tablet(_clone_req.tablet_id);
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 Status EngineCloneTask::_do_clone(Tablet* tablet) {
@@ -139,11 +142,11 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
         }
         auto ost = StorageEngine::instance()->obtain_shard_path(_clone_req.storage_medium, dest_path_hash, &shard_path,
                                                                 &store);
-        if (ost != OLAP_SUCCESS) {
+        if (!ost.ok()) {
             LOG(WARNING) << "Fail to obtain shard path. tablet_id=" << _clone_req.tablet_id
                          << " signature=" << _signature;
             _error_msgs->push_back("fail to obtain shard path");
-            return Status::InternalError("fail to obtain shard path");
+            return ost;
         }
 
         auto tablet_manager = StorageEngine::instance()->tablet_manager();
@@ -590,7 +593,8 @@ Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta
     }
 
     // clone_data to tablet
-    Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+    Status st = tablet->revise_tablet_meta(ExecEnv::GetInstance()->storage_engine()->tablet_meta_mem_tracker(),
+                                           rowsets_to_clone, versions_to_delete);
     LOG(INFO) << "finish to incremental clone. [tablet=" << tablet->full_name() << " status=" << st << "]";
     return st;
 }
@@ -670,7 +674,8 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     // 2. local tablet has error in push
     // 3. local tablet cloned rowset from other nodes
     // 4. if cleared alter task info, then push will not write to new tablet, the report info is error
-    Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+    Status st = tablet->revise_tablet_meta(ExecEnv::GetInstance()->storage_engine()->tablet_meta_mem_tracker(),
+                                           rowsets_to_clone, versions_to_delete);
     LOG(INFO) << "finish to full clone. tablet=" << tablet->full_name() << ", res=" << st;
     // in previous step, copy all files from CLONE_DIR to tablet dir
     // but some rowset is useless, so that remove them here
@@ -682,7 +687,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
             LOG(WARNING) << "failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
             continue;
         }
-        if (auto ost = rowset_to_remove->remove(); ost != OLAP_SUCCESS) {
+        if (auto ost = rowset_to_remove->remove(); !ost.ok()) {
             LOG(WARNING) << "failed to remove rowset " << rs_meta_ptr->rowset_id().to_string() << ", res=" << ost;
         }
     }

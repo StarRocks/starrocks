@@ -80,10 +80,20 @@ public class CompoundPredicate extends Predicate {
     public String toSqlImpl() {
         if (children.size() == 1) {
             Preconditions.checkState(op == Operator.NOT);
-            return "NOT " + getChild(0).toSql();
+            return "NOT (" + getChild(0).toSql() + ")";
         } else {
             return "(" + getChild(0).toSql() + ")" + " " + op.toString() + " " + "(" + getChild(
                     1).toSql() + ")";
+        }
+    }
+
+    @Override
+    public String toDigestImpl() {
+        if (children.size() == 1) {
+            return "not " + getChild(0).toDigest();
+        } else {
+            return "(" + getChild(0).toDigest() + ")" + " " + op.toString().toLowerCase() + " " + "(" + getChild(
+                    1).toDigest() + ")";
         }
     }
 
@@ -234,16 +244,6 @@ public class CompoundPredicate extends Predicate {
     @Override
     public int hashCode() {
         return 31 * super.hashCode() + Objects.hashCode(op);
-    }
-
-    @Override
-    public boolean isStrictPredicate() {
-        if (op == Operator.NOT) {
-            return false; // Always return false for NOT
-        }
-        Expr left = getChild(0);
-        Expr right = getChild(1);
-        return left.isStrictPredicate() && right.isStrictPredicate();
     }
 
     /**

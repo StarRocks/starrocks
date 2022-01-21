@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_RECORD_BATCH_QUEUE_H
-#define STARROCKS_RECORD_BATCH_QUEUE_H
+#pragma once
 
 #include <util/spinlock.h>
 
@@ -63,5 +62,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif //STARROCKS_RECORD_BATCH_QUEUE_H

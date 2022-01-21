@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_BASE_TABLET_H
-#define STARROCKS_BE_SRC_OLAP_BASE_TABLET_H
+#pragma once
 
 #include <memory>
 
@@ -61,7 +60,7 @@ public:
     std::string tablet_id_path() const;
 
     TabletState tablet_state() const { return _state; }
-    OLAPStatus set_tablet_state(TabletState state);
+    Status set_tablet_state(TabletState state);
 
     // Property encapsulated in TabletMeta
     inline const TabletMetaSharedPtr tablet_meta();
@@ -158,5 +157,3 @@ inline const TabletSchema& BaseTablet::tablet_schema() const {
 }
 
 } /* namespace starrocks */
-
-#endif /* STARROCKS_BE_SRC_OLAP_BASE_TABLET_H */

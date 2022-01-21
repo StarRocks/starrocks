@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -36,7 +36,7 @@ struct TabletScannerParams {
 class TabletScanner {
 public:
     explicit TabletScanner(OlapScanNode* parent);
-    ~TabletScanner() = default;
+    ~TabletScanner();
 
     TabletScanner(const TabletScanner&) = delete;
     TabletScanner(TabletScanner&&) = delete;

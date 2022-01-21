@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -22,10 +22,7 @@ struct TabletVars {
 class PushBrokerReader {
 public:
     PushBrokerReader() = default;
-    ~PushBrokerReader() {
-        _counter.reset();
-        _scanner.reset();
-    }
+    ~PushBrokerReader();
 
     Status init(const TBrokerScanRange& t_scan_range, const TDescriptorTable& t_desc_tbl);
     Status next_chunk(ChunkPtr* chunk);

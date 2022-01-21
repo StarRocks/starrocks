@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.clone;
 
@@ -1309,7 +1309,6 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     tablet.getHealthStatusWithPriority(infoService,
                             db.getClusterName(),
                             partition.getVisibleVersion(),
-                            partition.getVisibleVersionHash(),
                             replicaNum,
                             aliveBeIds);
 

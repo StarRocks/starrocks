@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_UDF_UDF_H
-#define STARROCKS_BE_UDF_UDF_H
+#pragma once
 
 #include <cstdint>
 #include <cstring>
@@ -199,7 +198,7 @@ public:
     starrocks::FunctionContextImpl* impl() { return _impl; }
 
     /// Methods for maintaining state across UDF/UDA function calls. SetFunctionState() can
-    /// be used to store a pointer that can then be retreived via GetFunctionState(). If
+    /// be used to store a pointer that can then be retrieved via GetFunctionState(). If
     /// GetFunctionState() is called when no pointer is set, it will return
     /// NULL. SetFunctionState() does not take ownership of 'ptr'; it is up to the UDF/UDA
     /// to clean up any function state if necessary.
@@ -784,5 +783,3 @@ using starrocks_udf::DecimalV2Val;
 using starrocks_udf::DateTimeVal;
 using starrocks_udf::HllVal;
 using starrocks_udf::FunctionContext;
-
-#endif

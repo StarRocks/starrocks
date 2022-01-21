@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -6,7 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -22,7 +22,7 @@ public class CTEProduceImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         PhysicalCTEProduceOperator produce =
-                new PhysicalCTEProduceOperator(((LogicalCTEConsumeOperator) input.getOp()).getCteId());
+                new PhysicalCTEProduceOperator(((LogicalCTEProduceOperator) input.getOp()).getCteId());
         return Lists.newArrayList(OptExpression.create(produce, input.getInputs()));
     }
 }

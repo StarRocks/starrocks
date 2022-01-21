@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/column_helper.h"
 
@@ -16,12 +16,6 @@ namespace starrocks::vectorized {
 NullColumnPtr ColumnHelper::one_size_not_null_column = NullColumn::create(1, 0);
 
 NullColumnPtr ColumnHelper::one_size_null_column = NullColumn::create(1, 1);
-
-NullColumnPtr ColumnHelper::s_all_not_null_column = nullptr;
-
-void ColumnHelper::init_static_variable() {
-    ColumnHelper::s_all_not_null_column = NullColumn::create(config::vector_chunk_size, 0);
-}
 
 Column::Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
@@ -260,7 +254,7 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         break;
     }
     case TYPE_PERCENTILE:
-        p = PercentileColumn ::create();
+        p = PercentileColumn::create();
         break;
     case TYPE_ARRAY: {
         auto offsets = UInt32Column::create();

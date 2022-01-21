@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_PLUGIN_PLUGIN_LOADER_H
-#define STARROCKS_BE_PLUGIN_PLUGIN_LOADER_H
+#pragma once
 
 #include <memory>
 #include <string>
@@ -110,4 +109,3 @@ public:
 };
 
 } // namespace starrocks
-#endif //STARROCKS_BE_PLUGIN_PLUGIN_LOADER_H

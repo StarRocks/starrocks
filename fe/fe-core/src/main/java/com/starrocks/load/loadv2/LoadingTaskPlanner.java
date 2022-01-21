@@ -35,6 +35,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
@@ -76,6 +77,7 @@ public class LoadingTaskPlanner {
     private final long timeoutS;    // timeout of load job, in second
     private final boolean partialUpdate;
     private final int parallelInstanceNum;
+    private final long startTime;
 
     // Something useful
     // ConnectContext here is just a dummy object to avoid some NPE problem, like ctx.getDatabase()
@@ -90,7 +92,8 @@ public class LoadingTaskPlanner {
 
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
                               BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
-                              boolean strictMode, String timezone, long timeoutS, boolean partialUpdate) {
+                              boolean strictMode, String timezone, long timeoutS,
+                              long startTime, boolean partialUpdate) {
         this.loadJobId = loadJobId;
         this.txnId = txnId;
         this.dbId = dbId;
@@ -102,7 +105,7 @@ public class LoadingTaskPlanner {
         this.timeoutS = timeoutS;
         this.partialUpdate = partialUpdate;
         this.parallelInstanceNum = Config.load_parallel_instance_num;
-
+        this.startTime = startTime;
         this.analyzer.setUDFAllowed(false);
     }
 
@@ -111,8 +114,25 @@ public class LoadingTaskPlanner {
         // Generate tuple descriptor
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        // use full schema to fill the descriptor table
-        for (Column col : table.getFullSchema()) {
+        List<Column> destColumns = Lists.newArrayList();
+        boolean isPrimaryKey = table.getKeysType() == KeysType.PRIMARY_KEYS;
+        if (isPrimaryKey && partialUpdate) {
+            if (fileGroups.size() > 1) {
+                throw new DdlException("partial update only support single filegroup.");
+            } else if (fileGroups.size() == 1) {
+                if (fileGroups.get(0).isNegative()) {
+                    throw new DdlException("Primary key table does not support negative load");
+                }
+                destColumns = Load.getPartialUpateColumns(table, fileGroups.get(0).getColumnExprList());
+            } else {
+                throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
+            }
+        } else if (!isPrimaryKey && partialUpdate) {
+            throw new DdlException("Only primary key table support partial update");
+        } else {
+            destColumns = table.getFullSchema();
+        }
+        for (Column col : destColumns) {
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
             slotDesc.setColumn(col);
@@ -124,7 +144,7 @@ public class LoadingTaskPlanner {
                 globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict));
             }
         }
-        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+        if (isPrimaryKey) {
             // add op type column
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
@@ -170,6 +190,10 @@ public class LoadingTaskPlanner {
             }
         }
         Collections.reverse(fragments);
+    }
+
+    public long getStartTime() {
+        return startTime;
     }
 
     public DescriptorTable getDescTable() {

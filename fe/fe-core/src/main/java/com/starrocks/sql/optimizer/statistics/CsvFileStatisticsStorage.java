@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -162,7 +162,7 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
 
         public void setValue(String[] row) {
             if (row.length != 12) {
-                Log.warn("row miss some filed");
+                Log.warn("row miss some field");
                 return;
             }
             this.tableId = row[0];

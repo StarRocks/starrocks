@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/datum.h"
 
@@ -14,7 +14,7 @@ template <FieldType type>
 Status datum_from_string(Datum* dst, const std::string& str) {
     static TypeInfoPtr type_info = get_type_info(type);
     typename CppTypeTraits<type>::CppType value;
-    if (type_info->from_string(&value, str) != OLAP_SUCCESS) {
+    if (!(type_info->from_string(&value, str).ok())) {
         return Status::InvalidArgument(Substitute("Failed to convert $0 to type $1", str, type));
     }
     dst->set(value);
@@ -27,8 +27,8 @@ Status datum_from_string(Datum* dst, FieldType type, const std::string& str, Mem
         static TypeInfoPtr type_info = get_type_info(OLAP_FIELD_TYPE_BOOL);
         bool v;
         auto st = type_info->from_string(&v, str);
-        if (st != OLAP_SUCCESS) {
-            return Status::InvalidArgument(Substitute("Failed to conert $0 to Bool type", str));
+        if (!st.ok()) {
+            return Status::InvalidArgument(Substitute("Failed to convert $0 to Bool type", str));
         }
         dst->set_int8(v);
         return Status::OK();

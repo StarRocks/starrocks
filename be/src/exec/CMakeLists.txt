@@ -19,7 +19,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8.12)
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
@@ -71,6 +71,7 @@ set(EXEC_FILES
     vectorized/join_hash_map.cpp
     vectorized/topn_node.cpp
     vectorized/chunks_sorter.cpp
+    vectorized/chunk_sorter_heapsorter.cpp
     vectorized/chunks_sorter_topn.cpp
     vectorized/chunks_sorter_full_sort.cpp
     vectorized/cross_join_node.cpp
@@ -90,6 +91,8 @@ set(EXEC_FILES
     vectorized/intersect_node.cpp
     vectorized/hdfs_scanner.cpp
     vectorized/hdfs_scanner_orc.cpp
+    vectorized/hdfs_scanner_parquet.cpp
+    vectorized/hdfs_scanner_text.cpp
     vectorized/json_scanner.cpp
     vectorized/project_node.cpp
     vectorized/dict_decode_node.cpp
@@ -132,6 +135,8 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange.cpp
     pipeline/exchange/local_exchange_sink_operator.cpp
     pipeline/exchange/local_exchange_source_operator.cpp
+    pipeline/exchange/multi_cast_local_exchange.cpp
+    pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
     pipeline/operator_with_dependency.cpp
@@ -147,6 +152,7 @@ set(EXEC_FILES
     pipeline/crossjoin/cross_join_left_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
+    pipeline/sort/sort_context.cpp
     pipeline/pipeline_driver_dispatcher.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
@@ -180,12 +186,15 @@ set(EXEC_FILES
     pipeline/set/intersect_build_sink_operator.cpp
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
+    workgroup/work_group.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
-set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+endif()
 
 set(EXEC_FILES
     ${EXEC_FILES}
@@ -195,8 +204,7 @@ set(EXEC_FILES
 
 IF (WITH_HDFS)
     set(EXEC_FILES ${EXEC_FILES}
-        vectorized/hdfs_scan_node.cpp
-    )
+        vectorized/hdfs_scan_node.cpp)
 endif()
 
 add_library(Exec STATIC

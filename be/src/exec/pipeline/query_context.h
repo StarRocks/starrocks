@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -61,7 +61,6 @@ public:
 
 private:
     ExecEnv* _exec_env = nullptr;
-    TQueryOptions _query_options;
     TUniqueId _query_id;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
     size_t _total_fragments;

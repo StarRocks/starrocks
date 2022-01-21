@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -24,7 +24,11 @@ static constexpr size_t kHashJoinKeyColumnOffset = 1;
 class HashJoinNode final : public ExecNode {
 public:
     HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~HashJoinNode() override = default;
+    ~HashJoinNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
@@ -78,13 +82,20 @@ private:
     std::vector<ExprContext*> _other_join_conjunct_ctxs;
     std::vector<bool> _is_null_safes;
 
+    // If distribution type is SHUFFLE_HASH_BUCKET, local shuffle can use the
+    // equivalence of ExchagneNode's partition colums
+    std::vector<ExprContext*> _probe_equivalence_partition_expr_ctxs;
+    std::vector<ExprContext*> _build_equivalence_partition_expr_ctxs;
+
     std::list<ExprContext*> _runtime_in_filters;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
     bool _build_runtime_filters_from_planner;
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
+    TJoinDistributionMode::type _distribution_mode = TJoinDistributionMode::NONE;
 
     bool _is_push_down = false;
+    bool _need_create_tuple_columns = true;
 
     JoinHashTable _ht;
 

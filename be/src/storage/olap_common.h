@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_OLAP_COMMON_H
-#define STARROCKS_BE_SRC_OLAP_OLAP_COMMON_H
+#pragma once
 
 #include <netinet/in.h>
 
@@ -55,6 +54,19 @@ typedef unsigned __int128 uint128_t;
 typedef UniqueId TabletUid;
 
 enum CompactionType { BASE_COMPACTION = 1, CUMULATIVE_COMPACTION = 2, UPDATE_COMPACTION = 3 };
+
+inline std::string to_string(CompactionType type) {
+    switch (type) {
+    case BASE_COMPACTION:
+        return "base";
+    case CUMULATIVE_COMPACTION:
+        return "cumulative";
+    case UPDATE_COMPACTION:
+        return "update";
+    default:
+        return "unknown";
+    }
+}
 
 struct DataDirInfo {
     DataDirInfo() {}
@@ -534,5 +546,3 @@ struct hash<starrocks::TabletSegmentId> {
     }
 };
 } // namespace std
-
-#endif // STARROCKS_BE_SRC_OLAP_OLAP_COMMON_H

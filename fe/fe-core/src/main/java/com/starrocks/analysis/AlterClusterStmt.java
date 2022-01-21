@@ -21,13 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 
 import java.util.Map;
 
@@ -46,27 +42,7 @@ public class AlterClusterStmt extends DdlStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Config.disable_cluster_feature) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_OPERATION, "ALTER CLUSTER");
-        }
-
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.OPERATOR)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_AUTHORITY, "NODE");
-        }
-
-        if (properties == null || properties.size() == 0
-                || !properties.containsKey(CreateClusterStmt.CLUSTER_INSTANCE_NUM)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_PARAMETER);
-        }
-        try {
-            instanceNum = Integer.parseInt(properties.get(CreateClusterStmt.CLUSTER_INSTANCE_NUM));
-        } catch (NumberFormatException e) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_PARAMETER);
-        }
-
-        if (instanceNum < 0) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_CREATE_INSTANCE_NUM_ERROR);
-        }
+        ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_OPERATION, "ALTER CLUSTER");
     }
 
     @Override

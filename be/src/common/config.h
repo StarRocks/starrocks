@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_CONFIG_H
-#define STARROCKS_BE_SRC_COMMON_CONFIG_H
+#pragma once
 
 #include "configbase.h"
 
@@ -70,7 +69,7 @@ CONF_Int64(tc_max_total_thread_cache_bytes, "1073741824");
 // defaults to bytes if no unit is given"
 // must larger than 0. and if larger than physical memory size,
 // it will be set to physical memory size.
-CONF_String(mem_limit, "80%");
+CONF_String(mem_limit, "90%");
 
 // the port heartbeat service used
 CONF_Int32(heartbeat_service_port, "9050");
@@ -201,6 +200,8 @@ CONF_mInt32(doris_scan_range_row_count, "524288");
 CONF_mInt32(doris_scanner_queue_size, "1024");
 // single read execute fragment row size
 CONF_mInt32(doris_scanner_row_num, "16384");
+// number of max hdfs scanners
+CONF_Int32(max_hdfs_scanner_num, "50");
 // number of max scan keys
 CONF_mInt32(doris_max_scan_key_num, "1024");
 // the max number of push down values of a single column.
@@ -302,6 +303,11 @@ CONF_Int32(max_compaction_concurrency, "-1");
 CONF_mInt32(base_compaction_trace_threshold, "120");
 CONF_mInt32(cumulative_compaction_trace_threshold, "60");
 CONF_mInt32(update_compaction_trace_threshold, "20");
+
+// Max columns of each compaction group.
+// If the number of schema columns is greater than this,
+// the columns will be divided into groups for vertical compaction.
+CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 // Max row source mask memory bytes, default is 200M.
 // Should be smaller than compaction_mem_limit.
@@ -454,9 +460,12 @@ CONF_mInt64(write_buffer_size, "104857600");
 // user should set these configs properly if necessary.
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
 CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
+CONF_Bool(enable_new_load_on_memory_limit_exceeded, "false");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
+CONF_String(consistency_max_memory_limit, "10G");
+CONF_Int32(consistency_max_memory_limit_percent, "20");
 
 // update interval of tablet stat cache
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
@@ -636,23 +645,30 @@ CONF_Int64(pipeline_yield_max_time_spent, "100000000");
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
 // queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
-// the number of exchange threads pipeline engine.
-CONF_Int64(pipeline_exchange_thread_pool_thread_num, "2");
-// queue size of exchange thread pool for pipeline engine.
-CONF_Int64(pipeline_exchange_thread_pool_queue_size, "102400");
 // the number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // the buffer size of io task
 CONF_Int64(pipeline_io_buffer_size, "64");
+// the buffer size of SinkBuffer
+CONF_Int64(pipeline_sink_buffer_size, "64");
+// the degree of parallelism of brpc
+CONF_Int64(pipeline_sink_brpc_dop, "8");
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
 // max hdfs file handle
 CONF_mInt32(max_hdfs_file_handle, "1000");
+// buffer stream reserve size
+// each column will reserve buffer_stream_reserve_size bytes for read
+// default: 8M
+CONF_mInt32(buffer_stream_reserve_size, "8192000");
 
 CONF_Int64(max_segment_file_size, "1073741824");
+
+// Enables using hdfsPreadFully() instead of hdfsRead() when performing HDFS read operations.
+// This is necessary to use HDFS hedged reads (assuming the HDFS client is configured to do so).
+// hdfsPreadFully() are always enabled for object storage.
+CONF_Bool(use_hdfs_pread, "true");
 
 } // namespace config
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_COMMON_CONFIG_H

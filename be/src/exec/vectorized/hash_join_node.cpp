@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/hash_join_node.h"
 
@@ -9,9 +9,11 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
@@ -19,9 +21,11 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
+
 namespace starrocks::vectorized {
 
 HashJoinNode::HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -35,6 +39,9 @@ HashJoinNode::HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
     _build_runtime_filters_from_planner = false;
     if (tnode.hash_join_node.__isset.build_runtime_filters_from_planner) {
         _build_runtime_filters_from_planner = tnode.hash_join_node.build_runtime_filters_from_planner;
+    }
+    if (tnode.hash_join_node.__isset.distribution_mode) {
+        _distribution_mode = tnode.hash_join_node.distribution_mode;
     }
 }
 
@@ -63,6 +70,18 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
+    if (tnode.hash_join_node.__isset.partition_exprs) {
+        for (const auto& partition_expr : tnode.hash_join_node.partition_exprs) {
+            for (auto i = 0; i < eq_join_conjuncts.size(); ++i) {
+                const auto& eq_join_conjunct = eq_join_conjuncts[i];
+                if (eq_join_conjunct.left == partition_expr || eq_join_conjunct.right == partition_expr) {
+                    _probe_equivalence_partition_expr_ctxs.push_back(_probe_expr_ctxs[i]);
+                    _build_equivalence_partition_expr_ctxs.push_back(_build_expr_ctxs[i]);
+                }
+            }
+        }
+    }
+
     RETURN_IF_ERROR(
             Expr::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts, &_other_join_conjunct_ctxs));
 
@@ -76,6 +95,9 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _runtime_join_filter_pushdown_limit = state->query_options().runtime_join_filter_pushdown_limit;
     }
 
+    if (tnode.__isset.need_create_tuple_columns) {
+        _need_create_tuple_columns = tnode.need_create_tuple_columns;
+    }
     return Status::OK();
 }
 
@@ -124,6 +146,7 @@ Status HashJoinNode::prepare(RuntimeState* state) {
 
 void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
+    param->need_create_tuple_columns = _need_create_tuple_columns;
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
     param->build_row_desc = &child(1)->row_desc();
@@ -177,17 +200,15 @@ Status HashJoinNode::open(RuntimeState* state) {
         }
 
         {
-            RETURN_IF_ERROR(state->check_mem_limit("HashJoinNode"));
             // copy chunk of right table
             SCOPED_TIMER(_copy_right_table_chunk_timer);
-            RETURN_IF_ERROR(_ht.append_chunk(state, chunk));
+            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.append_chunk(state, chunk)));
         }
     }
 
     {
         // build hash table: compute key columns, and then build the hash table.
-        RETURN_IF_ERROR(_build(state));
-        RETURN_IF_ERROR(state->check_mem_limit("HashJoinNode"));
+        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_build(state)));
         COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
     }
@@ -309,7 +330,7 @@ Status HashJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         }
     }
 
-    DCHECK_LE((*chunk)->num_rows(), config::vector_chunk_size);
+    DCHECK_LE((*chunk)->num_rows(), runtime_state()->chunk_size());
     _num_rows_returned += (*chunk)->num_rows();
     _output_chunk_count++;
     if (reached_limit()) {
@@ -343,18 +364,89 @@ Status HashJoinNode::close(RuntimeState* state) {
 }
 
 pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
-    // return empty result in this case. Hash join cannot be divided into multiple
-    // partitions in this case. Otherwise, NULL value in right table will only occur
-    // in some partition hash table, and other partition hash table can output chunk.
-    size_t num_partitions = _join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN ? 1 : context->degree_of_parallelism();
+    auto rhs_operators = child(1)->decompose_to_pipeline(context);
+    auto lhs_operators = child(0)->decompose_to_pipeline(context);
+    size_t num_partitions;
+    if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
+        num_partitions = context->degree_of_parallelism();
+
+        rhs_operators =
+                context->maybe_interpolate_local_broadcast_exchange(runtime_state(), rhs_operators, num_partitions);
+        lhs_operators =
+                context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators, num_partitions);
+    } else {
+        // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
+        // return empty result in this case. Hash join cannot be divided into multiple
+        // partitions in this case. Otherwise, NULL value in right table will only occur
+        // in some partition hash table, and other partition hash table can output chunk.
+        if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
+            num_partitions = 1;
+
+            rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
+            lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators);
+        } else {
+            num_partitions = context->degree_of_parallelism();
+
+            // Both HashJoin{Build, Probe}Operator are parallelized
+            // There are two ways of shuffle
+            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHFFULE_HASH_PARTITIONED
+            // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
+            // there is no need to perform local shuffle again at receiver side
+            // 2. Otherwise, add LocalExchangeOperator
+            // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
+            TPartitionType::type part_type = TPartitionType::type::HASH_PARTITIONED;
+            bool rhs_need_local_shuffle = true;
+            if (auto* exchange_op = dynamic_cast<pipeline::ExchangeSourceOperatorFactory*>(rhs_operators[0].get());
+                exchange_op != nullptr) {
+                auto& texchange_node = exchange_op->texchange_node();
+                DCHECK(texchange_node.__isset.partition_type);
+                if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
+                    texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    part_type = texchange_node.partition_type;
+                    rhs_need_local_shuffle = false;
+                }
+            }
+            bool lhs_need_local_shuffle = true;
+            if (auto* exchange_op = dynamic_cast<pipeline::ExchangeSourceOperatorFactory*>(lhs_operators[0].get());
+                exchange_op != nullptr) {
+                auto& texchange_node = exchange_op->texchange_node();
+                DCHECK(texchange_node.__isset.partition_type);
+                if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
+                    texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    part_type = texchange_node.partition_type;
+                    lhs_need_local_shuffle = false;
+                }
+            }
+
+            // Make sure that local shuffle use the same hash function as the remote exchange sink do
+            if (rhs_need_local_shuffle) {
+                if (part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    DCHECK(!_build_equivalence_partition_expr_ctxs.empty());
+                    rhs_operators = context->maybe_interpolate_local_shuffle_exchange(
+                            runtime_state(), rhs_operators, _build_equivalence_partition_expr_ctxs, part_type);
+                } else {
+                    rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), rhs_operators,
+                                                                                      _build_expr_ctxs, part_type);
+                }
+            }
+            if (lhs_need_local_shuffle) {
+                if (part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    DCHECK(!_probe_equivalence_partition_expr_ctxs.empty());
+                    lhs_operators = context->maybe_interpolate_local_shuffle_exchange(
+                            runtime_state(), lhs_operators, _probe_equivalence_partition_expr_ctxs, part_type);
+                } else {
+                    lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), lhs_operators,
+                                                                                      _probe_expr_ctxs, part_type);
+                }
+            }
+        }
+    }
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
-    HashJoinerParam param(pool, _hash_join_node, _id, _type, limit(), std::move(_is_null_safes), _build_expr_ctxs,
-                          _probe_expr_ctxs, std::move(_other_join_conjunct_ctxs), std::move(_conjunct_ctxs),
-                          child(1)->row_desc(), child(0)->row_desc(), _row_descriptor, child(1)->type(),
-                          child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters);
-
+    HashJoinerParam param(pool, _hash_join_node, _id, _type, limit(), _is_null_safes, _build_expr_ctxs,
+                          _probe_expr_ctxs, _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(),
+                          child(0)->row_desc(), _row_descriptor, child(1)->type(), child(0)->type(),
+                          child(1)->conjunct_ctxs().empty(), _build_runtime_filters);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param, num_partitions);
 
     // add placeholder into RuntimeFilterHub, HashJoinBuildOperator will generate runtime filters and fill it,
@@ -365,10 +457,16 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // In default query engine, we only build one hash table for join right child.
     // But for pipeline query engine, we will build `num_partitions` hash tables, so we need to enlarge the limit
-    auto&& partial_rf_merger = std::make_unique<pipeline::PartialRuntimeFilterMerger>(
-            pool, _runtime_join_filter_pushdown_limit * num_partitions, num_partitions);
+    std::unique_ptr<pipeline::PartialRuntimeFilterMerger> partial_rf_merger;
+    if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
+        partial_rf_merger =
+                std::make_unique<pipeline::PartialRuntimeFilterMerger>(pool, _runtime_join_filter_pushdown_limit, 1);
+    } else {
+        partial_rf_merger = std::make_unique<pipeline::PartialRuntimeFilterMerger>(
+                pool, _runtime_join_filter_pushdown_limit * num_partitions, num_partitions);
+    }
     auto build_op = std::make_shared<pipeline::HashJoinBuildOperatorFactory>(
-            context->next_operator_id(), id(), hash_joiner_factory, std::move(partial_rf_merger));
+            context->next_operator_id(), id(), hash_joiner_factory, std::move(partial_rf_merger), _distribution_mode);
 
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(build_op.get(), context, rc_rf_probe_collector);
@@ -379,24 +477,16 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(probe_op.get(), context, rc_rf_probe_collector);
 
-    auto rhs_operators = child(1)->decompose_to_pipeline(context);
-    auto lhs_operators = child(0)->decompose_to_pipeline(context);
-
-    if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
-        rhs_operators = context->maybe_interpolate_local_passthrough_exchange(rhs_operators);
-        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(lhs_operators);
-    } else {
-        // both HashJoin{Build, Probe}Operator are parallelized, so add LocalExchangeOperator
-        // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
-        rhs_operators = context->maybe_interpolate_local_shuffle_exchange(rhs_operators, _build_expr_ctxs);
-        lhs_operators = context->maybe_interpolate_local_shuffle_exchange(lhs_operators, _probe_expr_ctxs);
-    }
-
     // add build-side pipeline to context and return probe-side pipeline.
     rhs_operators.emplace_back(std::move(build_op));
     context->add_pipeline(rhs_operators);
 
     lhs_operators.emplace_back(std::move(probe_op));
+
+    if (limit() != -1) {
+        lhs_operators.emplace_back(
+                std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
 
     return lhs_operators;
 }
@@ -486,8 +576,8 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                         } else {
                             if (_cur_left_input_chunk->num_rows() <= 0) {
                                 continue;
-                            } else if (_cur_left_input_chunk->num_rows() >= config::vector_chunk_size / 2) {
-                                // the probe chunk size of read from right child >= config::vector_chunk_size, direct return
+                            } else if (_cur_left_input_chunk->num_rows() >= runtime_state()->chunk_size() / 2) {
+                                // the probe chunk size of read from right child >= runtime_state()->chunk_size(), direct return
                                 _probing_chunk = std::move(_cur_left_input_chunk);
                             } else if (_pre_left_input_chunk == nullptr) {
                                 // the probe chunk size is small, reserve for merge next probe chunk
@@ -495,8 +585,8 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                                 continue;
                             } else {
                                 if (_cur_left_input_chunk->num_rows() + _pre_left_input_chunk->num_rows() >
-                                    config::vector_chunk_size) {
-                                    // the two chunk size > config::vector_chunk_size, return the first reserved chunk
+                                    runtime_state()->chunk_size()) {
+                                    // the two chunk size > runtime_state()->chunk_size(), return the first reserved chunk
                                     _probing_chunk = std::move(_pre_left_input_chunk);
                                     _pre_left_input_chunk = std::move(_cur_left_input_chunk);
                                 } else {
@@ -545,7 +635,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             }
         }
 
-        RETURN_IF_ERROR(_ht.probe(_key_columns, &_probing_chunk, chunk, &_ht_has_remain));
+        RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
             _probing_chunk = nullptr;
         }
@@ -583,7 +673,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     ScopedTimer<MonotonicStopWatch> probe_timer(_probe_timer);
 
     while (!_build_eos) {
-        RETURN_IF_ERROR(_ht.probe_remain(chunk, &_right_table_has_remain));
+        RETURN_IF_ERROR(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain));
 
         eval_join_runtime_filters(chunk);
 
@@ -770,7 +860,7 @@ Status HashJoinNode::_push_down_in_filter(RuntimeState* state) {
     }
 
     COUNTER_UPDATE(_push_down_expr_num, static_cast<int64_t>(_runtime_in_filters.size()));
-    push_down_predicate(state, &_runtime_in_filters, true);
+    push_down_predicate(state, &_runtime_in_filters);
 
     return Status::OK();
 }

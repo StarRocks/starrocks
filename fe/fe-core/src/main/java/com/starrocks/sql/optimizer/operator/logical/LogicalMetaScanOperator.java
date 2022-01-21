@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.operator.logical;
 
@@ -6,6 +6,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -20,7 +21,7 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
     public LogicalMetaScanOperator(Table table,
                                    Map<ColumnRefOperator, Column> columnRefMap) {
         super(OperatorType.LOGICAL_META_SCAN, table, columnRefMap, Maps.newHashMap(),
-                -1, null, null);
+                Operator.DEFAULT_LIMIT, null, null);
         aggColumnIdToNames = ImmutableMap.of();
     }
 
@@ -28,7 +29,7 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
                                    Map<ColumnRefOperator, Column> columnRefMap,
                                    Map<Integer, String> aggColumnIdToNames) {
         super(OperatorType.LOGICAL_META_SCAN, table, columnRefMap, Maps.newHashMap(),
-                -1, null, null);
+                Operator.DEFAULT_LIMIT, null, null);
         this.aggColumnIdToNames = ImmutableMap.copyOf(aggColumnIdToNames);
     }
 

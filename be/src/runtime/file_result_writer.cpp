@@ -30,7 +30,6 @@
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/date_func.h"
 #include "util/types.h"
@@ -87,7 +86,7 @@ Status FileResultWriter::_create_file_writer() {
         _file_builder = std::make_unique<ParquetBuilder>(std::move(writable_file), _output_expr_ctxs);
         break;
     default:
-        return Status::InternalError(strings::Substitute("unsupport file format: $0", _file_opts->file_format));
+        return Status::InternalError(strings::Substitute("unsupported file format: $0", _file_opts->file_format));
     }
     LOG(INFO) << "create file for exporting query result. file name: " << file_name
               << ". query id: " << print_id(_state->query_id());
@@ -110,10 +109,6 @@ std::string FileResultWriter::_file_format_to_name() {
     default:
         return "unknown";
     }
-}
-
-Status FileResultWriter::append_row_batch(const RowBatch* batch) {
-    return Status::NotSupported("append_row_batch deprecated");
 }
 
 Status FileResultWriter::append_chunk(vectorized::Chunk* chunk) {

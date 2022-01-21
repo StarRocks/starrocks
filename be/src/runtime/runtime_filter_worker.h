@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -70,9 +70,6 @@ public:
     size_t max_size = 0;
     bool stop = false;
 
-    // for pipeline engine
-    bool is_pipeline = false;
-
     // statistics.
     // timestamp in ms since unix epoch;
     // we care about diff not abs value.
@@ -85,7 +82,7 @@ public:
 // and sent merged RF to consumer nodes.
 class RuntimeFilterMerger {
 public:
-    RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options);
+    RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
     Status init(const TRuntimeFilterParams& params);
     void merge_runtime_filter(PTransmitRuntimeFilterParams& params, RuntimeFilterRpcClosure* rpc_closure);
 
@@ -97,6 +94,7 @@ private:
     ExecEnv* _exec_env;
     UniqueId _query_id;
     TQueryOptions _query_options;
+    const bool _is_pipeline;
 };
 
 // RuntimeFilterWorker works in a separated thread, and does following jobs:
@@ -115,7 +113,8 @@ public:
     RuntimeFilterWorker(ExecEnv* env);
     ~RuntimeFilterWorker();
     // open query for creating runtime filter merger.
-    void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params);
+    void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params,
+                    bool is_pipeline);
     void close_query(const TUniqueId& query_id);
     void receive_runtime_filter(const PTransmitRuntimeFilterParams& params);
     void execute();

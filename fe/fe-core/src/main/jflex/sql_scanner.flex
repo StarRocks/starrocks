@@ -144,6 +144,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("cross", new Integer(SqlParserSymbols.KW_CROSS));
         keywordMap.put("cube", new Integer(SqlParserSymbols.KW_CUBE));
         keywordMap.put("current", new Integer(SqlParserSymbols.KW_CURRENT));
+        keywordMap.put("current_timestamp", new Integer(SqlParserSymbols.KW_CURRENT_TIMESTAMP));
         keywordMap.put("current_user", new Integer(SqlParserSymbols.KW_CURRENT_USER));
         keywordMap.put("data", new Integer(SqlParserSymbols.KW_DATA));
         keywordMap.put("database", new Integer(SqlParserSymbols.KW_DATABASE));
@@ -634,7 +635,7 @@ EndOfLineComment = "--" !({HintContent}|{ContainsLineTerminator}) {LineTerminato
 
 {DoubleQuoteStringLiteral} {
   return newToken(SqlParserSymbols.STRING_LITERAL,
-                  escapeBackSlash(yytext().substring(1, yytext().length()-1)).replaceAll("\"\"", "\""));
+                  escapeBackSlash(yytext().substring(1, yytext().length()-1)));
 }
 
 {CommentedHintBegin} {

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/hdfs_scanner_orc.h"
 
@@ -34,7 +34,7 @@ public:
             auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
             throw orc::ParseError(msg);
         }
-        _stats->bytes_read_from_disk += length;
+        _stats->bytes_read += length;
     }
 
     const std::string& getName() const override { return _file->file_name(); }
@@ -230,6 +230,9 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
         // create chunk
         orc::StringDictionary* dict = it->second;
+        if (dict->dictionaryOffset.size() > _adapter->runtime_state()->chunk_size()) {
+            continue;
+        }
         vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
         // always assume there is a possibility of null value in ORC column.
         // and we evaluate with null always.
@@ -315,26 +318,22 @@ void HdfsOrcScanner::update_counter() {
     HdfsScanner::update_counter();
 
 #ifndef BE_TEST
-    COUNTER_UPDATE(_scanner_params.parent->_raw_rows_counter, _stats.raw_rows_read);
+    COUNTER_UPDATE(_scanner_params.parent->_rows_read_counter, _stats.raw_rows_read);
     COUNTER_UPDATE(_scanner_params.parent->_expr_filter_timer, _stats.expr_filter_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_timer, _stats.io_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_counter, _stats.io_count);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_from_disk_counter, _stats.bytes_read_from_disk);
+    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_counter, _stats.bytes_read);
     COUNTER_UPDATE(_scanner_params.parent->_column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(_scanner_params.parent->_column_convert_timer, _stats.column_convert_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_value_decode_timer, _stats.value_decode_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_level_decode_timer, _stats.level_decode_ns);
 #endif
-}
-
-void HdfsParquetScanner::do_close(RuntimeState* runtime_state) noexcept {
-    update_counter();
-    _reader.reset();
 }
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_scanner_params.fs,
                                                             _scanner_params.scan_ranges[0]->file_length, &_stats);
+#ifndef BE_TEST
+    SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
+#endif
     std::unique_ptr<orc::Reader> reader;
     try {
         orc::ReaderOptions options;
@@ -363,12 +362,12 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         }
     }
 
-    _orc_adapter = std::make_unique<OrcScannerAdapter>(_src_slot_descriptors);
+    _orc_adapter = std::make_unique<OrcScannerAdapter>(runtime_state, _src_slot_descriptors);
     _orc_row_reader_filter =
             std::make_shared<OrcRowReaderFilter>(_scanner_params, _file_read_param, _orc_adapter.get());
     _orc_adapter->disable_broker_load_mode();
     _orc_adapter->set_row_reader_filter(_orc_row_reader_filter);
-    _orc_adapter->set_read_chunk_size(config::vector_chunk_size);
+    _orc_adapter->set_read_chunk_size(runtime_state->chunk_size());
     _orc_adapter->set_runtime_state(runtime_state);
     _orc_adapter->set_current_file_name(_scanner_params.scan_ranges[0]->relative_path);
     RETURN_IF_ERROR(_orc_adapter->set_timezone(_file_read_param.timezone));
@@ -410,16 +409,9 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     {
         SCOPED_RAW_TIMER(&_stats.column_convert_ns);
         ChunkPtr ptr = _orc_adapter->create_chunk();
-        // reuse these counter.
-        {
-            SCOPED_RAW_TIMER(&_stats.value_decode_ns);
-            RETURN_IF_ERROR(_orc_adapter->fill_chunk(&ptr));
-        }
-        {
-            SCOPED_RAW_TIMER(&_stats.level_decode_ns);
-            ChunkPtr result = _orc_adapter->cast_chunk(&ptr);
-            *chunk = std::move(result);
-        }
+        RETURN_IF_ERROR(_orc_adapter->fill_chunk(&ptr));
+        ChunkPtr result = _orc_adapter->cast_chunk(&ptr);
+        *chunk = std::move(result);
     }
     ChunkPtr ck = *chunk;
     // important to add columns before evaluation

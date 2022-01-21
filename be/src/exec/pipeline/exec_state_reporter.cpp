@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #include "exec/pipeline/exec_state_reporter.h"
 
 #include <thrift/Thrift.h>
@@ -111,8 +111,7 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
     Status fe_status;
     FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, &fe_status);
     if (!fe_status.ok()) {
-        std::stringstream ss;
-        ss << "couldn't get a client for " << fe_addr;
+        LOG(WARNING) << "Couldn't get a client for " << fe_addr;
         return fe_status;
     }
 
@@ -144,7 +143,7 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
 }
 
 ExecStateReporter::ExecStateReporter() {
-    auto status = ThreadPoolBuilder("exec_state_reporter_thread")
+    auto status = ThreadPoolBuilder("ex_state_report") // exec state reporter
                           .set_min_threads(1)
                           .set_max_threads(2)
                           .set_max_queue_size(1000)

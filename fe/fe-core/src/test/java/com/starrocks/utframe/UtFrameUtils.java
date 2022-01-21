@@ -26,6 +26,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SqlParser;
@@ -50,6 +51,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.relation.Relation;
 import com.starrocks.sql.optimizer.OperatorStrings;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -57,6 +59,7 @@ import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -71,6 +74,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.MockedFrontend.EnvVarNotSetException;
 import com.starrocks.utframe.MockedFrontend.FeStartException;
 import com.starrocks.utframe.MockedFrontend.NotInitException;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -82,6 +86,8 @@ import java.io.StringReader;
 import java.net.ServerSocket;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -125,6 +131,7 @@ public class UtFrameUtils {
         ctx.setQualifiedUser(Auth.ROOT_USER);
         ctx.setCatalog(Catalog.getCurrentCatalog());
         ctx.setThreadLocalInfo();
+        ctx.setDumpInfo(new MockDumpInfo());
         return ctx;
     }
 
@@ -298,7 +305,7 @@ public class UtFrameUtils {
     public static int findValidPort() {
         String starRocksHome = System.getenv("STARROCKS_HOME");
         File portDir = new File(starRocksHome + "/fe/ut_ports");
-        if (!portDir.exists()){
+        if (!portDir.exists()) {
             Preconditions.checkState(portDir.mkdirs());
         }
         for (int i = 0; i < 10; i++) {
@@ -356,39 +363,36 @@ public class UtFrameUtils {
                 if (optHints != null) {
                     SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
                     for (String key : optHints.keySet()) {
-                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))));
+                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
                     }
                     connectContext.setSessionVariable(sessionVariable);
                 }
             }
 
-            com.starrocks.sql.analyzer.Analyzer analyzer =
-                    new com.starrocks.sql.analyzer.Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            Relation relation = analyzer.analyze(statementBase);
-
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(relation);
-
-            Optimizer optimizer = new Optimizer();
-            OptExpression optimizedPlan = optimizer.optimize(
-                    connectContext,
-                    logicalPlan.getRoot(),
-                    new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
-
-            PlannerContext plannerContext =
-                    new PlannerContext(null, null, connectContext.getSessionVariable().toThrift(), null);
-            ExecPlan execPlan = new PlanFragmentBuilder()
-                    .createPhysicalPlan(optimizedPlan, plannerContext, connectContext,
-                            logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
-            execPlan.setPlanCount(optimizedPlan.getPlanCount());
-
+            ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
             OperatorStrings operatorPrinter = new OperatorStrings();
-            return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
+            return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
         } finally {
             // before returing we have to restore session varibale.
             connectContext.setSessionVariable(oldSessionVariable);
+        }
+    }
+
+    public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
+        SqlScanner input =
+                new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
+        SqlParser parser = new SqlParser(input);
+        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
+        Preconditions.checkState(statementBase instanceof QueryStmt);
+        QueryStmt queryStmt = (QueryStmt) statementBase;
+        String digest = queryStmt.toDigest();
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            md.reset();
+            md.update(digest.getBytes());
+            return Hex.encodeHexString(md.digest());
+        } catch (NoSuchAlgorithmException e) {
+            return "";
         }
     }
 
@@ -397,7 +401,8 @@ public class UtFrameUtils {
         // mock statistics table
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         if (!starRocksAssert.databaseExist("_statistics_")) {
-            starRocksAssert.withDatabaseWithoutAnalyze(Constants.StatisticsDBName).useDatabase(Constants.StatisticsDBName);
+            starRocksAssert.withDatabaseWithoutAnalyze(Constants.StatisticsDBName)
+                    .useDatabase(Constants.StatisticsDBName);
             starRocksAssert.withTable(createStatisticsTableStmt);
         }
         // prepare dump mock environment
@@ -467,7 +472,7 @@ public class UtFrameUtils {
         Relation relation = analyzer.analyze(statementBase);
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(relation);
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext).transform(relation);
 
         Optimizer optimizer = new Optimizer();
         OptExpression optimizedPlan = optimizer.optimize(

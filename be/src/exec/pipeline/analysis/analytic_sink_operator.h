@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -9,7 +9,7 @@ namespace starrocks::pipeline {
 class AnalyticSinkOperator : public Operator {
 public:
     AnalyticSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const TPlanNode& tnode,
-                         AnalytorPtr analytor)
+                         AnalytorPtr&& analytor)
             : Operator(factory, id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(std::move(analytor)) {
         _analytor->ref();
     }
@@ -44,17 +44,19 @@ private:
 
 class AnalyticSinkOperatorFactory final : public OperatorFactory {
 public:
-    AnalyticSinkOperatorFactory(int32_t id, int32_t plan_node_id, const TPlanNode& tnode, AnalytorPtr analytor)
-            : OperatorFactory(id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(analytor) {}
+    AnalyticSinkOperatorFactory(int32_t id, int32_t plan_node_id, const TPlanNode& tnode,
+                                const AnalytorFactoryPtr& analytor_factory)
+            : OperatorFactory(id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor_factory(analytor_factory) {}
 
     ~AnalyticSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AnalyticSinkOperator>(this, _id, _plan_node_id, _tnode, _analytor);
+        auto analytor = _analytor_factory->create(driver_sequence);
+        return std::make_shared<AnalyticSinkOperator>(this, _id, _plan_node_id, _tnode, std::move(analytor));
     }
 
 private:
     TPlanNode _tnode;
-    AnalytorPtr _analytor = nullptr;
+    AnalytorFactoryPtr _analytor_factory;
 };
 } // namespace starrocks::pipeline

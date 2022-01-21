@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_COMMON_COMPILER_UTIL_H
-#define STARROCKS_BE_SRC_COMMON_COMMON_COMPILER_UTIL_H
-
+#pragma once
 // Compiler hint that this branch is likely or unlikely to
 // be taken. Take from the "What all programmers should know
 // about memory" paper.
@@ -73,6 +71,4 @@
 #define DIAGNOSTIC_IGNORE(XXX) __pragma(warning(disable : XXX))
 #else
 #define DIAGNOSTIC_IGNORE(XXX)
-#endif
-
 #endif

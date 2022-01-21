@@ -34,21 +34,21 @@ public class StarRocksRangePartitionerTest {
         List<Object> endKeys = new ArrayList<>();
         endKeys.add(new Integer(100));
         EtlJobConfig.EtlPartition partition1 = new EtlJobConfig.EtlPartition(
-                10000, startKeys, endKeys, false, 3);
+                10000, startKeys, endKeys, false, false, 3);
 
         List<Object> startKeys2 = new ArrayList<>();
         startKeys2.add(new Integer(100));
         List<Object> endKeys2 = new ArrayList<>();
         endKeys2.add(new Integer(200));
         EtlJobConfig.EtlPartition partition2 = new EtlJobConfig.EtlPartition(
-                10001, startKeys2, endKeys2, false, 4);
+                10001, startKeys2, endKeys2, false, false, 4);
 
         List<Object> startKeys3 = new ArrayList<>();
         startKeys3.add(new Integer(200));
         List<Object> endKeys3 = new ArrayList<>();
         endKeys3.add(new Integer(300));
         EtlJobConfig.EtlPartition partition3 = new EtlJobConfig.EtlPartition(
-                10002, startKeys3, endKeys3, false, 5);
+                10002, startKeys3, endKeys3, false, false, 5);
 
         List<EtlJobConfig.EtlPartition> partitions = new ArrayList<>();
         partitions.add(partition1);
@@ -64,7 +64,8 @@ public class StarRocksRangePartitionerTest {
         List<StarRocksRangePartitioner.PartitionRangeKey> partitionRangeKeys = new ArrayList<>();
         for (EtlJobConfig.EtlPartition partition : partitions) {
             StarRocksRangePartitioner.PartitionRangeKey partitionRangeKey = new StarRocksRangePartitioner.PartitionRangeKey();
-            partitionRangeKey.isMaxPartition = false;
+            partitionRangeKey.isMinPartition = partition.isMinPartition;
+            partitionRangeKey.isMaxPartition = partition.isMaxPartition;
             partitionRangeKey.startKeys = new DppColumns(partition.startKeys);
             partitionRangeKey.endKeys = new DppColumns(partition.endKeys);
             partitionRangeKeys.add(partitionRangeKey);
@@ -110,6 +111,62 @@ public class StarRocksRangePartitionerTest {
         DppColumns record5 = new DppColumns(fields5);
         int id5 = rangePartitioner.getPartition(record5);
         Assert.assertEquals(-1, id5);
+
+        List<Object> fields6 = new ArrayList<>();
+        fields6.add(null);
+        fields6.add("name");
+        DppColumns record6 = new DppColumns(fields6);
+        int id6 = rangePartitioner.getPartition(record6);
+        Assert.assertEquals(-1, id6);
+    }
+
+    @Test
+    public void testMinPartitionWithNull() {
+        List<Object> startKeys = new ArrayList<>();
+        List<Object> endKeys = new ArrayList<>();
+        endKeys.add(new Integer(100));
+        EtlJobConfig.EtlPartition partition1 = new EtlJobConfig.EtlPartition(
+                10000, startKeys, endKeys, true, false, 3);
+
+        List<Object> startKeys2 = new ArrayList<>();
+        startKeys2.add(new Integer(100));
+        List<Object> endKeys2 = new ArrayList<>();
+        endKeys2.add(new Integer(200));
+        EtlJobConfig.EtlPartition partition2 = new EtlJobConfig.EtlPartition(
+                10001, startKeys2, endKeys2, false, false, 4);
+
+        List<EtlJobConfig.EtlPartition> partitions = new ArrayList<>();
+        partitions.add(partition1);
+        partitions.add(partition2);
+
+        List<String> partitionColumns = new ArrayList<>();
+        partitionColumns.add("id");
+        List<String> bucketColumns = new ArrayList<>();
+        bucketColumns.add("key");
+        EtlJobConfig.EtlPartitionInfo partitionInfo = new EtlJobConfig.EtlPartitionInfo(
+                "RANGE", partitionColumns, bucketColumns, partitions);
+        List<StarRocksRangePartitioner.PartitionRangeKey> partitionRangeKeys = new ArrayList<>();
+        for (EtlJobConfig.EtlPartition partition : partitions) {
+            StarRocksRangePartitioner.PartitionRangeKey partitionRangeKey = new StarRocksRangePartitioner.PartitionRangeKey();
+            partitionRangeKey.isMinPartition = partition.isMinPartition;
+            partitionRangeKey.isMaxPartition = partition.isMaxPartition;
+            partitionRangeKey.startKeys = new DppColumns(partition.startKeys);
+            partitionRangeKey.endKeys = new DppColumns(partition.endKeys);
+            partitionRangeKeys.add(partitionRangeKey);
+        }
+        List<Integer> partitionKeyIndexes = new ArrayList<>();
+        partitionKeyIndexes.add(0);
+        StarRocksRangePartitioner rangePartitioner =
+                new StarRocksRangePartitioner(partitionInfo, partitionKeyIndexes, partitionRangeKeys);
+        int num = rangePartitioner.numPartitions();
+        Assert.assertEquals(2, num);
+
+        List<Object> fields1 = new ArrayList<>();
+        fields1.add(null);
+        fields1.add("name");
+        DppColumns record1 = new DppColumns(fields1);
+        int id1 = rangePartitioner.getPartition(record1);
+        Assert.assertEquals(0, id1);
     }
 
     @Test

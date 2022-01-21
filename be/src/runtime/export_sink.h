@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_RUNTIME_EXPORT_SINK_H
-#define STARROCKS_BE_SRC_RUNTIME_EXPORT_SINK_H
+#pragma once
 
 #include <vector>
 
@@ -40,7 +39,6 @@ class ExprContext;
 class MemTracker;
 class FileWriter;
 class Status;
-class TupleRow;
 class FileBuilder;
 
 // This class is a sinker, which put export data to external storage by broker.
@@ -87,5 +85,3 @@ private:
 };
 
 } // end namespace starrocks
-
-#endif // STARROCKS_BE_SRC_RUNTIME_EXPORT_SINK_H

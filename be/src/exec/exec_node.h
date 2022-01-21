@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_EXEC_NODE_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_EXEC_NODE_H
+#pragma once
 
 #include <functional>
 #include <mutex>
@@ -48,7 +47,6 @@ class ObjectPool;
 class RuntimeState;
 class SlotRef;
 class TPlan;
-class TupleRow;
 class DataSink;
 
 namespace pipeline {
@@ -82,7 +80,7 @@ public:
     /// Initializes this object from the thrift tnode desc. The subclass should
     /// do any initialization that can fail in Init() rather than the ctor.
     /// If overridden in subclass, must first call superclass's Init().
-    virtual Status init(const TPlanNode& tnode, RuntimeState* state = nullptr);
+    virtual Status init(const TPlanNode& tnode, RuntimeState* state);
 
     // Sets up internal structures, etc., without doing any actual work.
     // Must be called prior to open(). Will only be called once in this
@@ -156,6 +154,8 @@ public:
     static void eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
                                vectorized::FilterPtr* filter_ptr = nullptr);
 
+    static void eval_filter_null_values(vectorized::Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns);
+
     Status init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state);
     void register_runtime_filter_descriptor(RuntimeState* state, vectorized::RuntimeFilterProbeDescriptor* rf_desc);
     void eval_join_runtime_filters(vectorized::Chunk* chunk);
@@ -165,10 +165,22 @@ public:
     // Returns a string representation in DFS order of the plan rooted at this.
     std::string debug_string() const;
 
-    virtual void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized);
+    virtual void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs);
     virtual void push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector);
     void push_down_join_runtime_filter_to_children(RuntimeState* state,
                                                    vectorized::RuntimeFilterProbeCollector* collector);
+
+    void push_down_join_runtime_filter_recursively(RuntimeState* state) {
+        push_down_join_runtime_filter(state, &_runtime_filter_collector);
+        for (auto* child : _children) {
+            child->push_down_join_runtime_filter_recursively(state);
+        }
+    }
+
+    // Make the node store the slot mappings from input slot to output slot of ancestor nodes (include itself).
+    // It is used for pipeline to rewrite runtime in filters.
+    virtual void push_down_tuple_slot_mappings(RuntimeState* state,
+                                               const std::vector<TupleSlotMapping>& parent_mappings);
 
     // recursive helper method for generating a string for Debug_string().
     // implementations should call debug_string(int, std::stringstream) on their children.
@@ -253,6 +265,10 @@ protected:
 
     bool _use_vectorized;
 
+    // Mappings from input slot to output slot of ancestor nodes (include itself).
+    // It is used for pipeline to rewrite runtime in filters.
+    std::vector<TupleSlotMapping> _tuple_slot_mappings;
+
     ExecNode* child(int i) { return _children[i]; }
 
     bool is_closed() const { return _is_closed; }
@@ -287,5 +303,3 @@ private:
     bool _is_closed;
 };
 } // namespace starrocks
-
-#endif

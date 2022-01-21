@@ -246,6 +246,9 @@ enum TFunctionBinaryType {
 
   // Native-interface, precompiled to IR; loaded from *.ll
   IR,
+
+  // StarRocks customized UDF in jar.
+  SRJAR
 }
 
 // Represents a fully qualified function name.
@@ -275,6 +278,7 @@ struct TAggregateFunction {
   8: optional string get_value_fn_symbol
   9: optional string remove_fn_symbol
   10: optional bool is_analytic_only_fn = false
+  11: optional string symbol
 }
 
 struct TTableFunction {
@@ -345,6 +349,7 @@ enum TTableType {
     BROKER_TABLE,
     ES_TABLE,
     HDFS_TABLE,
+    ICEBERG_TABLE,
     VIEW = 20
 }
 
@@ -433,4 +438,3 @@ enum TCompressionType {
     BZIP2 = 10;
     LZO = 11; // Deprecated
 }
-

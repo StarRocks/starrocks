@@ -58,6 +58,7 @@ public class Table extends MetaObject implements Writable {
         BROKER,
         ELASTICSEARCH,
         HIVE,
+        ICEBERG,
         ODBC
     }
 
@@ -107,7 +108,7 @@ public class Table extends MetaObject implements Writable {
         this.id = id;
         this.name = tableName;
         this.type = type;
-        // must copy the list, it should not be the same object as in indexIdToSchmea
+        // must copy the list, it should not be the same object as in indexIdToSchema
         if (fullSchema != null) {
             this.fullSchema = Lists.newArrayList(fullSchema);
         }
@@ -195,6 +196,8 @@ public class Table extends MetaObject implements Writable {
             table = new OdbcTable();
         } else if (type == TableType.OLAP_EXTERNAL) {
             table = new ExternalOlapTable();
+        } else if (type == TableType.ICEBERG) {
+            table = new IcebergTable();
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }

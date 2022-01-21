@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/convert_helper.h"
 
@@ -111,11 +111,11 @@ PARALLEL_TEST(ConvertHelperTest, testDecimalToDecimalV2Column) {
     auto type_info = get_scalar_type_info(OLAP_FIELD_TYPE_DECIMAL);
     auto conv = get_field_converter(OLAP_FIELD_TYPE_DECIMAL, OLAP_FIELD_TYPE_DECIMAL_V2);
     decimal12_t values[5];
-    ASSERT_EQ(0, type_info->from_string(&values[0], "-9999999.999999"));
-    ASSERT_EQ(0, type_info->from_string(&values[1], "-0.000001"));
-    ASSERT_EQ(0, type_info->from_string(&values[2], "0"));
-    ASSERT_EQ(0, type_info->from_string(&values[3], "0.0000001"));
-    ASSERT_EQ(0, type_info->from_string(&values[4], "9999999.999999"));
+    ASSERT_TRUE(type_info->from_string(&values[0], "-9999999.999999").ok());
+    ASSERT_TRUE(type_info->from_string(&values[1], "-0.000001").ok());
+    ASSERT_TRUE(type_info->from_string(&values[2], "0").ok());
+    ASSERT_TRUE(type_info->from_string(&values[3], "0.0000001").ok());
+    ASSERT_TRUE(type_info->from_string(&values[4], "9999999.999999").ok());
 
     std::string values_string[5] = {
             trim_trailing_zeros(values[0].to_string()), trim_trailing_zeros(values[1].to_string()),
@@ -162,11 +162,11 @@ PARALLEL_TEST(ConvertHelperTest, testDecimalV2ToDecimalColumn) {
     auto type_info = get_scalar_type_info(OLAP_FIELD_TYPE_DECIMAL_V2);
     auto conv = get_field_converter(OLAP_FIELD_TYPE_DECIMAL_V2, OLAP_FIELD_TYPE_DECIMAL);
     DecimalV2Value values[5];
-    ASSERT_EQ(0, type_info->from_string(&values[0], "-9999999.999999"));
-    ASSERT_EQ(0, type_info->from_string(&values[1], "-0.000001"));
-    ASSERT_EQ(0, type_info->from_string(&values[2], "0"));
-    ASSERT_EQ(0, type_info->from_string(&values[3], "0.0000001"));
-    ASSERT_EQ(0, type_info->from_string(&values[4], "9999999.999999"));
+    ASSERT_TRUE(type_info->from_string(&values[0], "-9999999.999999").ok());
+    ASSERT_TRUE(type_info->from_string(&values[1], "-0.000001").ok());
+    ASSERT_TRUE(type_info->from_string(&values[2], "0").ok());
+    ASSERT_TRUE(type_info->from_string(&values[3], "0.0000001").ok());
+    ASSERT_TRUE(type_info->from_string(&values[4], "9999999.999999").ok());
 
     {
         auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL_V2, false);
@@ -208,8 +208,8 @@ PARALLEL_TEST(ConvertHelperTest, testDateToDateV2Column) {
     auto type_info = get_scalar_type_info(OLAP_FIELD_TYPE_DATE);
     auto conv = get_field_converter(OLAP_FIELD_TYPE_DATE, OLAP_FIELD_TYPE_DATE_V2);
     uint24_t values[2];
-    ASSERT_EQ(0, type_info->from_string(&values[0], "1990-01-01"));
-    ASSERT_EQ(0, type_info->from_string(&values[1], "1983-12-31"));
+    ASSERT_TRUE(type_info->from_string(&values[0], "1990-01-01").ok());
+    ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31").ok());
 
     {
         auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE, false);
@@ -239,8 +239,8 @@ PARALLEL_TEST(ConvertHelperTest, testDateV2ToDateColumn) {
     auto type_info = get_scalar_type_info(OLAP_FIELD_TYPE_DATE_V2);
     auto conv = get_field_converter(OLAP_FIELD_TYPE_DATE_V2, OLAP_FIELD_TYPE_DATE);
     DateValue values[2];
-    ASSERT_EQ(0, type_info->from_string(&values[0], "1990-01-01"));
-    ASSERT_EQ(0, type_info->from_string(&values[1], "1983-12-31"));
+    ASSERT_TRUE(type_info->from_string(&values[0], "1990-01-01").ok());
+    ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31").ok());
 
     {
         auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE_V2, false);
@@ -270,8 +270,8 @@ PARALLEL_TEST(ConvertHelperTest, testDatetimeToTimestampColumn) {
     auto type_info = get_scalar_type_info(OLAP_FIELD_TYPE_DATETIME);
     auto conv = get_field_converter(OLAP_FIELD_TYPE_DATETIME, OLAP_FIELD_TYPE_TIMESTAMP);
     int64_t values[2];
-    ASSERT_EQ(0, type_info->from_string(&values[0], "1990-01-01 05:06:07"));
-    ASSERT_EQ(0, type_info->from_string(&values[1], "1983-12-31 08:09:10"));
+    ASSERT_TRUE(type_info->from_string(&values[0], "1990-01-01 05:06:07").ok());
+    ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31 08:09:10").ok());
 
     {
         auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATETIME, false);
@@ -301,8 +301,8 @@ PARALLEL_TEST(ConvertHelperTest, testTimestampToDatetimeColumn) {
     auto type_info = get_scalar_type_info(OLAP_FIELD_TYPE_TIMESTAMP);
     auto conv = get_field_converter(OLAP_FIELD_TYPE_TIMESTAMP, OLAP_FIELD_TYPE_DATETIME);
     TimestampValue values[2];
-    ASSERT_EQ(0, type_info->from_string(&values[0], "1990-01-01 04:05:06"));
-    ASSERT_EQ(0, type_info->from_string(&values[1], "1983-12-31 05:06:07"));
+    ASSERT_TRUE(type_info->from_string(&values[0], "1990-01-01 04:05:06").ok());
+    ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31 05:06:07").ok());
 
     {
         auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_TIMESTAMP, false);
@@ -433,8 +433,8 @@ PARALLEL_TEST(ConvertHelperTest, testSameTypeConvertColumn_DATE_V2) {
     auto type_info = get_scalar_type_info(OLAP_FIELD_TYPE_DATE_V2);
     auto conv = get_field_converter(OLAP_FIELD_TYPE_DATE_V2, OLAP_FIELD_TYPE_DATE_V2);
     DateValue values[2];
-    ASSERT_EQ(0, type_info->from_string(&values[0], "1990-01-01"));
-    ASSERT_EQ(0, type_info->from_string(&values[1], "1983-12-31"));
+    ASSERT_TRUE(type_info->from_string(&values[0], "1990-01-01").ok());
+    ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31").ok());
 
     auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE_V2, false);
     c0->append_datum({values[0]});
@@ -453,8 +453,8 @@ PARALLEL_TEST(ConvertHelperTest, testSameTypeConvertColumn_TIMESTAMP) {
     auto type_info = get_scalar_type_info(OLAP_FIELD_TYPE_TIMESTAMP);
     auto conv = get_field_converter(OLAP_FIELD_TYPE_TIMESTAMP, OLAP_FIELD_TYPE_TIMESTAMP);
     TimestampValue values[2];
-    ASSERT_EQ(0, type_info->from_string(&values[0], "1990-01-01 02:03:04"));
-    ASSERT_EQ(0, type_info->from_string(&values[1], "1983-12-31 10:11:12"));
+    ASSERT_TRUE(type_info->from_string(&values[0], "1990-01-01 02:03:04").ok());
+    ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31 10:11:12").ok());
 
     auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_TIMESTAMP, false);
     c0->append_datum({values[0]});

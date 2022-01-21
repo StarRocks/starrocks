@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableSortedSet;
@@ -27,12 +27,13 @@ public class DecimalV3FunctionAnalyzer {
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
-                    .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE).build();
+                    .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
+                    .add(FunctionSet.ANY_VALUE).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
                     .add(FunctionSet.COUNT)
-                    .add("sum").add("sum_distinct").add("multi_distinct_sum").add("avg").add("variance")
+                    .add("sum").add("sum_distinct").add(FunctionSet.MULTI_DISTINCT_SUM).add("avg").add("variance")
                     .add("variance_pop").add("var_pop").add("variance_samp").add("var_samp")
                     .add("stddev").add("stddev_pop").add("stddev_samp").build();
 

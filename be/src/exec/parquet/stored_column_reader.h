@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -32,7 +32,7 @@ class StoredColumnReader {
 public:
     static Status create(RandomAccessFile* file, const ParquetField* field,
                          const tparquet::ColumnChunk* _chunk_metadata, const StoredColumnReaderOptions& opts,
-                         std::unique_ptr<StoredColumnReader>* out);
+                         int chunk_size, std::unique_ptr<StoredColumnReader>* out);
 
     virtual ~StoredColumnReader() = default;
 

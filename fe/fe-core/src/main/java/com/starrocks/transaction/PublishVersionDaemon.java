@@ -94,6 +94,7 @@ public class PublishVersionDaemon extends MasterDaemon {
         for (TransactionState transactionState : readyTransactionStates) {
             Map<Long, PublishVersionTask> transTasks = transactionState.getPublishVersionTasks();
             Set<Long> publishErrorReplicaIds = Sets.newHashSet();
+            Set<Long> unfinishedBackends = Sets.newHashSet();
             boolean allTaskFinished = true;
             for (PublishVersionTask publishVersionTask : transTasks.values()) {
                 if (publishVersionTask.isFinished()) {
@@ -105,19 +106,19 @@ public class PublishVersionDaemon extends MasterDaemon {
                     }
                 } else {
                     allTaskFinished = false;
+                    unfinishedBackends.add(publishVersionTask.getBackendId());
                 }
             }
             boolean shouldFinishTxn = true;
             if (!allTaskFinished) {
-                shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState, publishErrorReplicaIds);
+                shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
+                        publishErrorReplicaIds, unfinishedBackends);
             }
 
             if (shouldFinishTxn) {
                 globalTransactionMgr.finishTransaction(transactionState.getDbId(), transactionState.getTransactionId(),
                         publishErrorReplicaIds);
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
-                    // if finish transaction state failed, then update publish version time, should check 
-                    // to finish after some interval
                     transactionState.updateSendTaskTime();
                     LOG.debug("publish version for transation {} failed, has {} error replicas during publish",
                             transactionState, publishErrorReplicaIds.size());
@@ -125,6 +126,8 @@ public class PublishVersionDaemon extends MasterDaemon {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
                         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
                     }
+                    // clear publish version tasks to reduce memory usage when state changed to visible.
+                    transactionState.clearPublishVersionTasks();
                 }
             }
         } // end for readyTransactionStates

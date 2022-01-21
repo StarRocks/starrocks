@@ -523,7 +523,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
             msg.setLocal_rf_waiting_set(waitingPlanNodeIds);
         }
-
+        msg.setNeed_create_tuple_columns(false);
     }
 
     /**
@@ -604,7 +604,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Assign remaining unassigned conjuncts.
      */
     protected void assignConjuncts(Analyzer analyzer) {
-        List<Expr> unassigned = analyzer.getUnassignedConjuncts(this);
+        List<Expr> unassigned = analyzer.getUnassignedConjuncts(this.getTupleIds());
         conjuncts.addAll(unassigned);
         analyzer.markConjunctsAssigned(unassigned);
     }
@@ -783,6 +783,12 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     public boolean canPushDownRuntimeFilter() {
+        // RuntimeFilter can only be pushed into multicast fragment iff.
+        // this runtime filter is applied to all consumers. It's quite hard to do
+        // thorough analysis, so we disable it for safety.
+        if (fragment_ instanceof MultiCastPlanFragment) {
+            return false;
+        }
         return true;
     }
 

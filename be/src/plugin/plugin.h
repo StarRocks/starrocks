@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_PLUGIN_PLUGIN_H
-#define STARROCKS_BE_PLUGIN_PLUGIN_H
+#pragma once
 
 namespace starrocks {
 
@@ -81,5 +80,3 @@ struct Plugin {
     ;
 
 } // namespace starrocks
-
-#endif //STARROCKS_BE_PLUGIN_PLUGIN_H

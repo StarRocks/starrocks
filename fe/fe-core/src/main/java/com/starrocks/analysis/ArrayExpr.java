@@ -85,6 +85,18 @@ public class ArrayExpr extends Expr {
     }
 
     @Override
+    protected String toDigestImpl() {
+        StringBuilder sb = new StringBuilder();
+        if (this.explicitType) {
+            sb.append(this.type.toSql());
+        }
+        sb.append('[');
+        sb.append(children.stream().map(Expr::toDigest).collect(Collectors.joining(",")));
+        sb.append(']');
+        return sb.toString();
+    }
+
+    @Override
     protected void toThrift(TExprNode msg) {
         msg.setNode_type(TExprNodeType.ARRAY_EXPR);
     }
@@ -110,18 +122,6 @@ public class ArrayExpr extends Expr {
         ArrayExpr e = new ArrayExpr(targetType, newItems);
         e.analysisDone();
         return e;
-    }
-
-    @Override
-    protected boolean canCastTo(Type targetType) {
-        if (this.type.isNull()) {
-            return true;
-        }
-        if (!targetType.isArrayType()) {
-            return false;
-        }
-        ArrayType targetArrayType = (ArrayType) targetType;
-        return this.children.stream().allMatch(child -> child.canCastTo(targetArrayType.getItemType()));
     }
 
     @Override

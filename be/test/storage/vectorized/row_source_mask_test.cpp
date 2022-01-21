@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/row_source_mask.h"
 
 #include "common/config.h"
 #include "gtest/gtest.h"
+#include "storage/olap_define.h"
 #include "util/file_utils.h"
 
 namespace starrocks::vectorized {
@@ -70,7 +71,7 @@ TEST_F(RowSourceMaskTest, memory_masks) {
     buffer.flush();
 
     // --- read ---
-    buffer.flip();
+    buffer.flip_to_read();
     auto st = buffer.has_remaining();
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(st.value());
@@ -115,7 +116,7 @@ TEST_F(RowSourceMaskTest, memory_masks) {
     ASSERT_FALSE(st.value());
 
     // --- read again and check has same source ---
-    buffer.flip();
+    buffer.flip_to_read();
     ASSERT_TRUE(buffer.has_remaining().value());
     mask = buffer.current();
     ASSERT_EQ(0, mask.get_source_num());
@@ -151,7 +152,7 @@ TEST_F(RowSourceMaskTest, memory_masks_with_persistence) {
     buffer.flush();
 
     // --- read ---
-    buffer.flip();
+    buffer.flip_to_read();
     auto st = buffer.has_remaining();
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(st.value());
@@ -196,7 +197,7 @@ TEST_F(RowSourceMaskTest, memory_masks_with_persistence) {
     ASSERT_FALSE(st.value());
 
     // --- read again and check has same source ---
-    buffer.flip();
+    buffer.flip_to_read();
     ASSERT_TRUE(buffer.has_remaining().value());
     mask = buffer.current();
     ASSERT_EQ(0, mask.get_source_num());

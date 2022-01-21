@@ -31,9 +31,7 @@ namespace starrocks {
 class Env;
 class ExprContext;
 class FileBuilder;
-class RowBatch;
 class RuntimeProfile;
-class TupleRow;
 class WritableFile;
 
 struct ResultFileOptions {
@@ -73,7 +71,6 @@ public:
     ~FileResultWriter() override;
 
     Status init(RuntimeState* state) override;
-    Status append_row_batch(const RowBatch* batch) override;
     Status append_chunk(vectorized::Chunk* chunk) override;
     Status close() override;
 

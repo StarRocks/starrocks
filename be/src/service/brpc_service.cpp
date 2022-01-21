@@ -23,6 +23,7 @@
 
 #include <cstring>
 
+#include "common/config.h"
 #include "common/logging.h"
 #include "service/brpc.h"
 #include "service/internal_service.h"

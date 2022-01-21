@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #include "column/datum_convert.h"
 
 #include "gutil/strings/substitute.h"
@@ -11,9 +11,7 @@ using strings::Substitute;
 template <FieldType TYPE>
 Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str) {
     typename CppTypeTraits<TYPE>::CppType value;
-    if (type_info->from_string(&value, str) != OLAP_SUCCESS) {
-        return Status::InvalidArgument(Substitute("Failed to convert $0 to type $1", str, TYPE));
-    }
+    RETURN_IF_ERROR(type_info->from_string(&value, str));
     dst->set(value);
     return Status::OK();
 }
@@ -23,10 +21,7 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
     switch (type) {
     case OLAP_FIELD_TYPE_BOOL: {
         bool v;
-        auto st = type_info->from_string(&v, str);
-        if (st != OLAP_SUCCESS) {
-            return Status::InvalidArgument(Substitute("Failed to conert $0 to Bool type", str));
-        }
+        RETURN_IF_ERROR(type_info->from_string(&v, str));
         dst->set_int8(v);
         return Status::OK();
     }
@@ -72,9 +67,7 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
             slice.data = (char*)str.data();
         } else {
             slice.data = reinterpret_cast<char*>(mem_pool->allocate(slice.size));
-            if (UNLIKELY(slice.data == nullptr)) {
-                return Status::InternalError("Mem usage has exceed the limit of BE");
-            }
+            RETURN_IF_UNLIKELY_NULL(slice.data, Status::MemoryAllocFailed("alloc mem for varchar field failed"));
             memcpy(slice.data, str.data(), slice.size);
         }
         // If type is OLAP_FIELD_TYPE_CHAR, strip its tailing '\0'

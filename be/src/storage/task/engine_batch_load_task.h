@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TASK_ENGINE_BATCH_LOAD_TASK_H
-#define STARROCKS_BE_SRC_OLAP_TASK_ENGINE_BATCH_LOAD_TASK_H
+#pragma once
 
 #include <utility>
 #include <vector>
@@ -47,7 +46,7 @@ public:
                         AgentStatus* res_status, MemTracker* mem_tracker);
     ~EngineBatchLoadTask() override;
 
-    OLAPStatus execute() override;
+    Status execute() override;
 
 private:
     // The initial function of pusher
@@ -66,10 +65,9 @@ private:
     // @param [in] request specify tablet and delete conditions
     // @param [out] tablet_info_vec return tablet lastest status, which
     //              include version info, row count, data size, etc
-    // @return OLAP_SUCCESS if submit delete_data success
-    virtual OLAPStatus _delete_data(const TPushReq& request, vector<TTabletInfo>* tablet_info_vec);
+    virtual Status _delete_data(const TPushReq& request, vector<TTabletInfo>* tablet_info_vec);
 
-    OLAPStatus _push(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec);
+    Status _push(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec);
 
     std::unique_ptr<MemTracker> _mem_tracker;
 
@@ -80,4 +78,3 @@ private:
     AgentStatus* _res_status;
 }; // class Pusher
 } // namespace starrocks
-#endif // STARROCKS_BE_SRC_OLAP_TASK_ENGINE_BATCH_LOAD_TASK_H

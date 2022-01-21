@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -268,14 +268,15 @@ using DataSegments = std::vector<DataSegment>;
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorter {
 public:
+    static constexpr int USE_HEAP_SORTER_LIMIT_SZ = 1024;
     /**
      * Constructor.
-     * @param sort_exprs     The order-by columns or columns with expresion. This sorter will use but not own the object.
+     * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
      * @param is_asc         Orders on each column.
      * @param is_null_first  NULL values should at the head or tail.
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
-    ChunksSorter(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
+    ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
                  const std::vector<bool>* is_null_first, size_t size_of_chunk_batch = 1000);
     virtual ~ChunksSorter();
 
@@ -284,7 +285,7 @@ public:
                                                               const SortExecExprs& sort_exec_exprs,
                                                               const std::vector<OrderByType>& order_by_types);
 
-    void setup_runtime(RuntimeProfile* profile, const std::string& parent_timer);
+    virtual void setup_runtime(RuntimeProfile* profile, const std::string& parent_timer);
 
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
@@ -313,6 +314,8 @@ public:
 
 protected:
     inline size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
+
+    RuntimeState* _state;
 
     // sort rules
     const std::vector<ExprContext*>* _sort_exprs;

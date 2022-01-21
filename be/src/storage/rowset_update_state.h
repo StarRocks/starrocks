@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -7,6 +7,7 @@
 
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
+#include "storage/tablet_updates.h"
 
 namespace starrocks {
 
@@ -16,6 +17,11 @@ class Tablet;
 class TabletMeta;
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
+struct PartialUpdateState {
+    std::vector<uint64_t> src_rss_rowids;
+    std::vector<std::unique_ptr<vectorized::Column>> write_columns;
+};
+
 class RowsetUpdateState {
 public:
     using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
@@ -23,7 +29,9 @@ public:
     RowsetUpdateState();
     ~RowsetUpdateState();
 
-    Status load(int64_t tablet_id, Rowset* rowset);
+    Status load(Tablet* tablet, Rowset* rowset);
+
+    Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, const PrimaryIndex& index);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
@@ -32,8 +40,12 @@ public:
 
     std::string to_string() const;
 
+    const std::vector<PartialUpdateState>& parital_update_states() { return _parital_update_states; }
+
 private:
-    Status _do_load(Rowset* rowset);
+    Status _do_load(Tablet* tablet, Rowset* rowset);
+
+    Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset);
 
     std::once_flag _load_once_flag;
     Status _status;
@@ -43,6 +55,13 @@ private:
     std::vector<ColumnUniquePtr> _deletes;
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
+
+    // states for partial update
+    EditVersion _read_version;
+    uint32_t _next_rowset_id = 0;
+
+    // TODO: dump to disk if memory usage is too large
+    std::vector<PartialUpdateState> _parital_update_states;
 
     RowsetUpdateState(const RowsetUpdateState&) = delete;
     const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;

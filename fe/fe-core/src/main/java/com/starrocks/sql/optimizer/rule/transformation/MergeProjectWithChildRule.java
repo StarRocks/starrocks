@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -42,9 +43,9 @@ public class MergeProjectWithChildRule extends TransformationRule {
 
         Operator.Builder builder = OperatorBuilderFactory.build(child);
         builder.withOperator(child).setProjection(new Projection(logicalProjectOperator.getColumnRefMap(),
-                logicalProjectOperator.getCommonSubOperatorMap()));
+                Maps.newHashMap()));
 
-        if (logicalProjectOperator.getLimit() != -1) {
+        if (logicalProjectOperator.hasLimit()) {
             builder.setLimit(logicalProjectOperator.getLimit());
         } else {
             builder.setLimit(child.getLimit());

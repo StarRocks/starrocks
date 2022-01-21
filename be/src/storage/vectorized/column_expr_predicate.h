@@ -1,5 +1,5 @@
 
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/olap_common.h"
 #include "storage/types.h"
@@ -11,10 +11,7 @@ class RuntimeState;
 class SlotDescriptor;
 class SparseRange;
 class ExprContext;
-
-namespace segment_v2 {
 class BitmapIndexIterator;
-}
 } // namespace starrocks
 
 namespace starrocks::vectorized {

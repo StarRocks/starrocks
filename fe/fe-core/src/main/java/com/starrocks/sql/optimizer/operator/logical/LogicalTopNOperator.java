@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -24,8 +24,8 @@ public class LogicalTopNOperator extends LogicalOperator {
     public LogicalTopNOperator(List<Ordering> orderByElements) {
         super(OperatorType.LOGICAL_TOPN);
         this.orderByElements = orderByElements;
-        this.limit = -1;
-        this.offset = 0;
+        this.limit = DEFAULT_LIMIT;
+        this.offset = DEFAULT_OFFSET;
         this.sortPhase = SortPhase.FINAL;
     }
 

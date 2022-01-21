@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/push_handler.h"
 
@@ -7,6 +7,7 @@
 #include "column/column_viewer.h"
 #include "exec/vectorized/parquet_scanner.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -16,6 +17,11 @@
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
+
+PushBrokerReader::~PushBrokerReader() {
+    _counter.reset();
+    _scanner.reset();
+}
 
 Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescriptorTable& t_desc_tbl) {
     // init runtime state, runtime profile, counter
@@ -35,7 +41,8 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescr
                                            query_options, query_globals, ExecEnv::GetInstance());
 
     DescriptorTbl* desc_tbl = nullptr;
-    RETURN_IF_ERROR(DescriptorTbl::create(_runtime_state->obj_pool(), t_desc_tbl, &desc_tbl));
+    RETURN_IF_ERROR(
+            DescriptorTbl::create(_runtime_state->obj_pool(), t_desc_tbl, &desc_tbl, config::vector_chunk_size));
     _runtime_state->set_desc_tbl(desc_tbl);
 
     _runtime_profile = _runtime_state->runtime_profile();
@@ -75,7 +82,7 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescr
 }
 
 ColumnPtr PushBrokerReader::_build_object_column(const ColumnPtr& column) {
-    ColumnBuilder<TYPE_OBJECT> builder;
+    ColumnBuilder<TYPE_OBJECT> builder(config::vector_chunk_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {
@@ -101,7 +108,7 @@ ColumnPtr PushBrokerReader::_build_object_column(const ColumnPtr& column) {
 }
 
 ColumnPtr PushBrokerReader::_build_hll_column(const ColumnPtr& column) {
-    ColumnBuilder<TYPE_HLL> builder;
+    ColumnBuilder<TYPE_HLL> builder(config::vector_chunk_size);
     ColumnViewer<TYPE_VARCHAR> viewer(column);
 
     if (!column->has_null()) {
@@ -279,19 +286,15 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
         return Status::InternalError("tablet is migrating or has been migrated");
     }
 
-    OLAPStatus res = OLAP_SUCCESS;
+    Status res = Status::OK();
     PUniqueId load_id;
     load_id.set_hi(0);
     load_id.set_lo(0);
     tablet->obtain_push_lock();
     {
         DeferOp release_push_lock([&tablet] { return tablet->release_push_lock(); });
-        res = StorageEngine::instance()->txn_manager()->prepare_txn(request.partition_id, tablet,
-                                                                    request.transaction_id, load_id);
-        if (res != OLAP_SUCCESS) {
-            return Status::InternalError("Fail to prepare txn");
-        }
-
+        RETURN_IF_ERROR(StorageEngine::instance()->txn_manager()->prepare_txn(request.partition_id, tablet,
+                                                                              request.transaction_id, load_id));
         // prepare txn will be always successful
         // if current tablet is under schema change, origin tablet is successful and
         // new tablet is not successful, it maybe a fatal error because new tablet has
@@ -335,11 +338,8 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                     PUniqueId load_id;
                     load_id.set_hi(0);
                     load_id.set_lo(0);
-                    res = StorageEngine::instance()->txn_manager()->prepare_txn(request.partition_id, related_tablet,
-                                                                                request.transaction_id, load_id);
-                    if (res != OLAP_SUCCESS) {
-                        return Status::InternalError("Fail to prepare txn");
-                    }
+                    RETURN_IF_ERROR(StorageEngine::instance()->txn_manager()->prepare_txn(
+                            request.partition_id, related_tablet, request.transaction_id, load_id));
                     // prepare txn will always be successful
                     tablet_vars->push_back(TabletVars());
                     TabletVars& new_item = tablet_vars->back();
@@ -368,7 +368,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                                                              request.delete_conditions, &del_pred);
             del_preds.push(del_pred);
             tablet_var.tablet->release_header_lock();
-            if (res != OLAP_SUCCESS) {
+            if (!res.ok()) {
                 LOG(WARNING) << "Fail to generate delete condition. res=" << res
                              << ", tablet=" << tablet_var.tablet->full_name();
                 return Status::InternalError("Fail to generate delete condition");
@@ -393,10 +393,10 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                 continue;
             }
 
-            OLAPStatus rollback_status = StorageEngine::instance()->txn_manager()->rollback_txn(
+            Status rollback_status = StorageEngine::instance()->txn_manager()->rollback_txn(
                     request.partition_id, tablet_var.tablet, request.transaction_id);
             // has to check rollback status to ensure not delete a committed rowset
-            if (rollback_status == OLAP_SUCCESS) {
+            if (rollback_status.ok()) {
                 // actually, olap_index may has been deleted in delete_transaction()
                 StorageEngine::instance()->add_unused_rowset(tablet_var.rowset_to_add);
             }
@@ -414,10 +414,10 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
             tablet_var.rowset_to_add->rowset_meta()->set_delete_predicate(del_preds.front());
             del_preds.pop();
         }
-        OLAPStatus commit_status = StorageEngine::instance()->txn_manager()->commit_txn(
+        Status commit_status = StorageEngine::instance()->txn_manager()->commit_txn(
                 request.partition_id, tablet_var.tablet, request.transaction_id, load_id, tablet_var.rowset_to_add,
                 false);
-        if (commit_status != OLAP_SUCCESS && commit_status != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
+        if (!commit_status.ok() && !commit_status.is_already_exist()) {
             LOG(WARNING) << "fail to commit txn. res=" << commit_status << ", table=" << tablet->full_name()
                          << ", transaction_id=" << request.transaction_id;
             st = Status::InternalError("Fail to commit txn");
@@ -481,18 +481,14 @@ Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSha
         // 3. New RowsetBuilder to write data into rowset
         VLOG(3) << "init rowset builder. tablet=" << cur_tablet->full_name()
                 << ", block_row_size=" << cur_tablet->num_rows_per_row_block();
-        if (rowset_writer->flush() != OLAP_SUCCESS) {
-            LOG(WARNING) << "Failed to finalize writer.";
-            st = Status::InternalError("Fail to finalize writer");
+        st = rowset_writer->flush();
+        if (!st.ok()) {
+            LOG(WARNING) << "Failed to finalize writer: " << st;
             break;
         }
-        *cur_rowset = rowset_writer->build();
-
-        if (*cur_rowset == nullptr) {
-            LOG(WARNING) << "Fail to build rowset";
-            st = Status::InternalError("Fail to build rowset");
-            break;
-        }
+        auto rowset = rowset_writer->build();
+        if (!rowset.ok()) return rowset.status();
+        *cur_rowset = std::move(rowset).value();
 
         _write_bytes += (*cur_rowset)->data_disk_size();
         _write_rows += (*cur_rowset)->num_rows();
@@ -552,7 +548,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
 
         // 3. read data and write rowset
         // init Reader
-        Status st = reader->init(_request.broker_scan_range, _request.desc_tbl);
+        st = reader->init(_request.broker_scan_range, _request.desc_tbl);
         if (!st.ok()) {
             LOG(WARNING) << "fail to init reader. res=" << st.to_string() << ", tablet=" << cur_tablet->full_name();
             return st;
@@ -572,11 +568,12 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
                     break;
                 }
 
-                if (auto ost = rowset_writer->add_chunk(*chunk); ost != OLAP_SUCCESS) {
+                st = rowset_writer->add_chunk(*chunk);
+                if (!st.ok()) {
                     LOG(WARNING) << "fail to add chunk to rowset writer"
-                                 << ". res=" << ost << ", tablet=" << cur_tablet->full_name()
+                                 << ". res=" << st << ", tablet=" << cur_tablet->full_name()
                                  << ", read_rows=" << num_rows;
-                    return Status::InternalError("Fail to add chunk to rowset writer");
+                    return st;
                 }
 
                 num_rows += chunk->num_rows();
@@ -588,18 +585,13 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
     }
 
     // 4. finish
-    if (rowset_writer->flush() != OLAP_SUCCESS) {
-        LOG(WARNING) << "fail to finalize writer";
-        return Status::InternalError("Fail to finalize writer");
-    }
-    *cur_rowset = rowset_writer->build();
-    if (*cur_rowset == nullptr) {
-        LOG(WARNING) << "fail to build rowset";
-        return Status::InternalError("Fail to build rowset");
-    }
+    RETURN_IF_ERROR(rowset_writer->flush());
+    auto rowset = rowset_writer->build();
+    if (!rowset.ok()) return rowset.status();
+    *cur_rowset = std::move(rowset).value();
 
-    _write_bytes += (*cur_rowset)->data_disk_size();
-    _write_rows += (*cur_rowset)->num_rows();
+    _write_bytes += static_cast<int64_t>((*cur_rowset)->data_disk_size());
+    _write_rows += static_cast<int64_t>((*cur_rowset)->num_rows());
     VLOG(10) << "convert delta file end. res=" << st.to_string() << ", tablet=" << cur_tablet->full_name()
              << ", processed_rows" << num_rows;
     return st;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 
@@ -45,7 +45,7 @@ bool LocalExchangeSourceOperator::is_finished() const {
 bool LocalExchangeSourceOperator::has_output() const {
     std::lock_guard<std::mutex> l(_chunk_lock);
 
-    return !_full_chunk_queue.empty() || _partition_rows_num >= config::vector_chunk_size ||
+    return !_full_chunk_queue.empty() || _partition_rows_num >= _factory->runtime_state()->chunk_size() ||
            (_is_finished && _partition_rows_num > 0);
 }
 
@@ -99,7 +99,7 @@ vectorized::ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeSta
         DCHECK(!_partition_chunk_queue.empty());
 
         while (!_partition_chunk_queue.empty() &&
-               rows_num + _partition_chunk_queue.front().size <= config::vector_chunk_size) {
+               rows_num + _partition_chunk_queue.front().size <= state->chunk_size()) {
             rows_num += _partition_chunk_queue.front().size;
             selected_partition_chunks.emplace_back(std::move(_partition_chunk_queue.front()));
             _partition_chunk_queue.pop();

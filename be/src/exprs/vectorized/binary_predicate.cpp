@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/binary_predicate.h"
 
@@ -33,8 +33,6 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedBinaryPredicate(*this)); }
 
-    bool is_vectorized() const override { return true; }
-
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
@@ -50,8 +48,6 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedNullSafeEqPredicate(*this)); }
 
-    bool is_vectorized() const override { return true; }
-
     // if v1 null and v2 null = true
     // if v1 null and v2 not null = false
     // if v1 not null and v2 null = false
@@ -64,9 +60,8 @@ public:
         ColumnViewer<Type> v2(r);
         Columns list = {l, r};
 
-        ColumnBuilder<TYPE_BOOLEAN> builder;
-
         size_t size = list[0]->size();
+        ColumnBuilder<TYPE_BOOLEAN> builder(size);
         for (int row = 0; row < size; ++row) {
             auto null1 = v1.is_null(row);
             auto null2 = v2.is_null(row);

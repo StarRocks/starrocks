@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXPRS_EXPR_CONTEXT_H
-#define STARROCKS_BE_SRC_QUERY_EXPRS_EXPR_CONTEXT_H
+#pragma once
 
 #include <memory>
 
@@ -48,7 +47,6 @@ class MemTracker;
 class RuntimeState;
 class RowDescriptor;
 class TColumnValue;
-class TupleRow;
 
 using vectorized::ColumnPtr;
 
@@ -86,10 +84,6 @@ public:
 
     /// Closes all FunctionContexts. Must be called on every ExprContext, including clones.
     void close(RuntimeState* state);
-
-    /// Calls the appropriate Get*Val() function on this context's expr tree and stores the
-    /// result in result_.
-    void* get_value(TupleRow* row);
 
     /// Creates a FunctionContext, and returns the index that's passed to fn_context() to
     /// retrieve the created context. Exprs that need a FunctionContext should call this in
@@ -173,5 +167,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

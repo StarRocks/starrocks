@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -73,6 +73,8 @@ private:
 
         void push(T&& v) { _items.emplace_back(std::move(v)); }
 
+        void clear() { _items.clear(); }
+
         // REQUIRES: not empty.
         T pop() {
             DCHECK(!_items.empty());
@@ -123,10 +125,10 @@ private:
 
     // _mtx protects _chunk_pool and _pending_scanners.
     std::mutex _mtx;
-    Stack<Chunk*> _chunk_pool;
+    Stack<ChunkPtr> _chunk_pool;
     Stack<TabletScanner*> _pending_scanners;
 
-    UnboundedBlockingQueue<Chunk*> _result_chunks;
+    UnboundedBlockingQueue<ChunkPtr> _result_chunks;
 
     // used to compute task priority.
     std::atomic<int32_t> _scanner_submit_count{0};

@@ -1,8 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -41,6 +42,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // The flag for this aggregate operator has split to
     // two stage aggregate or three stage aggregate
     private final boolean isSplit;
+    // flg for this aggregate operator could use streaming pre-aggregation
+    private boolean useStreamingPreAgg = true;
 
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
@@ -91,25 +94,33 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return isSplit;
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(type, groupBys, aggregations.keySet());
+    public void setUseStreamingPreAgg(boolean useStreamingPreAgg) {
+        this.useStreamingPreAgg = useStreamingPreAgg;
+    }
+
+    public boolean isUseStreamingPreAgg() {
+        return this.useStreamingPreAgg;
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalHashAggregateOperator)) {
-            return false;
-        }
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), type, groupBys, aggregations.keySet());
+    }
 
-        PhysicalHashAggregateOperator rhs = (PhysicalHashAggregateOperator) obj;
-        if (this == rhs) {
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
             return true;
         }
-
-        return type.equals(rhs.type) &&
-                groupBys.equals(rhs.groupBys) &&
-                aggregations.keySet().equals(rhs.aggregations.keySet());
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        PhysicalHashAggregateOperator that = (PhysicalHashAggregateOperator) o;
+        return type == that.type && Objects.equals(aggregations, that.aggregations) &&
+                Objects.equals(groupBys, that.groupBys);
     }
 
     @Override
@@ -159,6 +170,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return false;
     }
 
+    public static final Set<String> couldApplyLowCardAggregateFunction = Sets.newHashSet(
+            FunctionSet.COUNT, FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN
+    );
+
     private boolean couldApplyStringDict(CallOperator operator, ColumnRefSet dictSet) {
         for (ScalarOperator child : operator.getChildren()) {
             if (!(child instanceof ColumnRefOperator)) {
@@ -167,11 +182,19 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         }
         ColumnRefSet usedColumns = operator.getUsedColumns();
         if (usedColumns.isIntersect(dictSet)) {
-            // TODO(kks): support more functions
-            return operator.getFnName().equals(FunctionSet.COUNT) ||
-                    operator.getFnName().equals(FunctionSet.MULTI_DISTINCT_COUNT);
+            return couldApplyLowCardAggregateFunction.contains(operator.getFnName());
         }
         return true;
+    }
+
+    public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
+        ColumnRefSet dictSet = new ColumnRefSet();
+        dictColIds.forEach(dictSet::union);
+        getAggregations().values().forEach((v) -> {
+            if (!couldApplyStringDict(v, dictSet)) {
+                resultSet.union(v.getUsedColumns());
+            }
+        });
     }
 
 }

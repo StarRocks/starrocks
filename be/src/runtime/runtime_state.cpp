@@ -79,7 +79,7 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
         : _unreported_error_idx(0), _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
-    _query_options.batch_size = DEFAULT_BATCH_SIZE;
+    _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
         _timestamp_ms = query_globals.timestamp_ms;
@@ -148,7 +148,7 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
     }
 
     if (_query_options.batch_size <= 0) {
-        _query_options.batch_size = DEFAULT_BATCH_SIZE;
+        _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     }
 
     // Register with the thread mgr
@@ -156,8 +156,6 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
         _resource_pool = exec_env->thread_mgr()->register_pool();
         DCHECK(_resource_pool != nullptr);
     }
-    _db_name = "insert_stmt";
-    _import_label = print_id(fragment_instance_id);
     _runtime_filter_port = _obj_pool->add(new RuntimeFilterPort(this));
 
     return Status::OK();
@@ -262,8 +260,7 @@ Status RuntimeState::check_mem_limit(const std::string& msg) {
 const int64_t MAX_ERROR_NUM = 50;
 
 Status RuntimeState::create_error_log_file() {
-    _exec_env->load_path_mgr()->get_load_error_file_name(_db_name, _import_label, _fragment_instance_id,
-                                                         &_error_log_file_path);
+    _exec_env->load_path_mgr()->get_load_error_file_name(_fragment_instance_id, &_error_log_file_path);
     std::string error_log_absolute_path =
             _exec_env->load_path_mgr()->get_load_error_absolute_path(_error_log_file_path);
     _error_log_file = new std::ofstream(error_log_absolute_path, std::ifstream::out);
@@ -302,12 +299,11 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
 
     std::stringstream out;
     if (is_summary) {
-        out << "Summary: ";
+        out << "Error: ";
         out << error_msg;
     } else {
         // Note: export reason first in case src line too long and be truncated.
-        out << "Reason: " << error_msg;
-        out << ". src line: [" << line << "]; ";
+        out << "Error: " << error_msg << ". Row: " << line;
     }
 
     if (!out.str().empty()) {
@@ -367,6 +363,7 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
         for (int i = 0; i < dict_sz; ++i) {
             const std::string& dict_key = global_dict.strings[i];
             auto* data = _instance_mem_pool->allocate(dict_key.size());
+            RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
             memcpy(data, dict_key.data(), dict_key.size());
             Slice slice(data, dict_key.size());
             dict_map.emplace(slice, global_dict.ids[i]);

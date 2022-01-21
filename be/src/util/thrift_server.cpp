@@ -32,11 +32,13 @@
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TSocket.h>
 
-#include <boost/thread.hpp>
 #include <condition_variable>
 #include <memory>
 #include <sstream>
+#include <thread>
 #include <utility>
+
+#include "util/thread.h"
 
 namespace starrocks {
 
@@ -101,7 +103,8 @@ Status ThriftServer::ThriftServerEventProcessor::start_and_wait_for_server() {
     _thrift_server->_started = false;
 
     _thrift_server->_server_thread =
-            std::make_unique<boost::thread>(&ThriftServer::ThriftServerEventProcessor::supervise, this);
+            std::make_unique<std::thread>(&ThriftServer::ThriftServerEventProcessor::supervise, this);
+    Thread::set_thread_name(_thrift_server->_server_thread.get()->native_handle(), "thrift_server");
 
     // Loop protects against spurious wakeup. Locks provide necessary fences to ensure
     // visibility.

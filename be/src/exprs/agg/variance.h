@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -173,7 +173,7 @@ public:
         }
     }
 
-    std::string get_name() const override { return "deviatation from average"; }
+    std::string get_name() const override { return "deviation from average"; }
 };
 
 template <PrimitiveType PT, bool is_sample, typename T = RunTimeCppType<PT>,

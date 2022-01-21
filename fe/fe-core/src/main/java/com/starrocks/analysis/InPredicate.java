@@ -29,7 +29,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Reference;
 import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TExprNode;
@@ -59,8 +58,6 @@ public class InPredicate extends Predicate {
     private static final String IN_ITERATE = "in_iterate";
     private static final String NOT_IN_ITERATE = "not_in_iterate";
     private final boolean isNotIn;
-    private static final String IN = "in";
-    private static final String NOT_IN = "not_in";
 
     private static final NullLiteral NULL_LITERAL = new NullLiteral();
 
@@ -206,8 +203,6 @@ public class InPredicate extends Predicate {
         // function and will fail analysis.
         Type[] argTypes = {getChild(0).type, getChild(1).type};
         if (useSetLookup) {
-            // fn = getBuiltinFunction(analyzer, isNotIn ? NOT_IN_SET_LOOKUP : IN_SET_LOOKUP,
-            // argTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             opcode = isNotIn ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN;
         } else {
             fn = getBuiltinFunction(analyzer, isNotIn ? NOT_IN_ITERATE : IN_ITERATE,
@@ -215,17 +210,7 @@ public class InPredicate extends Predicate {
             opcode = isNotIn ? TExprOpcode.FILTER_NEW_NOT_IN : TExprOpcode.FILTER_NEW_IN;
         }
 
-        Reference<SlotRef> slotRefRef = new Reference<SlotRef>();
-        Reference<Integer> idxRef = new Reference<Integer>();
-        if (isSingleColumnPredicate(slotRefRef,
-                idxRef) && idxRef.getRef() == 0 && slotRefRef.getRef().getNumDistinctValues() > 0) {
-            selectivity =
-                    (double) (getChildren().size() - 1) / (double) slotRefRef.getRef()
-                            .getNumDistinctValues();
-            selectivity = Math.max(0.0, Math.min(1.0, selectivity));
-        } else {
-            selectivity = Expr.DEFAULT_SELECTIVITY;
-        }
+        selectivity = Expr.DEFAULT_SELECTIVITY;
     }
 
     @Override
@@ -243,9 +228,22 @@ public class InPredicate extends Predicate {
     public String toSqlImpl() {
         StringBuilder strBuilder = new StringBuilder();
         String notStr = (isNotIn) ? "NOT " : "";
-        strBuilder.append(getChild(0).toSql() + " " + notStr + "IN (");
+        strBuilder.append(getChild(0).toSql()).append(" ").append(notStr).append("IN (");
         for (int i = 1; i < children.size(); ++i) {
             strBuilder.append(getChild(i).toSql());
+            strBuilder.append((i + 1 != children.size()) ? ", " : "");
+        }
+        strBuilder.append(")");
+        return strBuilder.toString();
+    }
+
+    @Override
+    public String toDigestImpl() {
+        StringBuilder strBuilder = new StringBuilder();
+        String notStr = (isNotIn) ? "not " : "";
+        strBuilder.append(getChild(0).toDigest()).append(" ").append(notStr).append("in (");
+        for (int i = 1; i < children.size(); ++i) {
+            strBuilder.append(getChild(i).toDigest());
             strBuilder.append((i + 1 != children.size()) ? ", " : "");
         }
         strBuilder.append(")");
@@ -287,16 +285,9 @@ public class InPredicate extends Predicate {
     public boolean equals(Object obj) {
         if (super.equals(obj)) {
             InPredicate expr = (InPredicate) obj;
-            if (isNotIn == expr.isNotIn) {
-                return true;
-            }
+            return isNotIn == expr.isNotIn;
         }
         return false;
-    }
-
-    @Override
-    public boolean isStrictPredicate() {
-        return getChild(0).unwrapSlotRef() != null;
     }
 
     public void setOpcode(TExprOpcode opcode) {

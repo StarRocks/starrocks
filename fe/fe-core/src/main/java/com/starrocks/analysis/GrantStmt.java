@@ -127,7 +127,7 @@ public class GrantStmt extends DdlStmt {
 
     /*
      * Rules:
-     * 1. Can not grant/revoke NODE_PRIV to/from any other user.
+     * 1. NODE_PRIV can only be granted/revoked on GLOBAL level
      * 2. ADMIN_PRIV can only be granted/revoked on GLOBAL level
      * 3. Privileges can not be granted/revoked to/from ADMIN and OPERATOR role
      * 4. Only user with GLOBAL level's GRANT_PRIV can grant/revoke privileges to/from roles.
@@ -138,8 +138,8 @@ public class GrantStmt extends DdlStmt {
     public static void checkPrivileges(Analyzer analyzer, List<Privilege> privileges,
                                        String role, TablePattern tblPattern) throws AnalysisException {
         // Rule 1
-        if (privileges.contains(Privilege.NODE_PRIV)) {
-            throw new AnalysisException("Can not grant NODE_PRIV to any other users or roles");
+        if (tblPattern.getPrivLevel() != PrivLevel.GLOBAL && privileges.contains(Privilege.NODE_PRIV)) {
+            throw new AnalysisException("NODE_PRIV privilege can only be granted on *.*");
         }
 
         // Rule 2
@@ -177,8 +177,8 @@ public class GrantStmt extends DdlStmt {
     public static void checkPrivileges(Analyzer analyzer, List<Privilege> privileges,
                                        String role, ResourcePattern resourcePattern) throws AnalysisException {
         // Rule 1
-        if (privileges.contains(Privilege.NODE_PRIV)) {
-            throw new AnalysisException("Can not grant NODE_PRIV to any other users or roles");
+        if (resourcePattern.getPrivLevel() != PrivLevel.GLOBAL && privileges.contains(Privilege.NODE_PRIV)) {
+            throw new AnalysisException("NODE_PRIV privilege can only be granted on resource *");
         }
 
         // Rule 2

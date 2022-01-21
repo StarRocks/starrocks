@@ -1,5 +1,5 @@
 
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/olap_scan_prepare.h"
 
@@ -651,7 +651,7 @@ Status OlapScanConjunctsManager::build_olap_filters() {
     for (auto iter : column_value_ranges) {
         std::vector<TCondition> filters;
         boost::apply_visitor([&](auto&& range) { range.to_olap_filter(filters); }, iter.second);
-        bool empty_range = boost::apply_visitor([](auto&& range) { return range.empty_range(); }, iter.second);
+        bool empty_range = boost::apply_visitor([](auto&& range) { return range.is_empty_value_range(); }, iter.second);
         if (empty_range) {
             return Status::EndOfFile("EOF, Filter by always false condition");
         }
@@ -716,15 +716,16 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
     return Status::OK();
 }
 
-void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, std::vector<ColumnPredicate*>* preds) {
+void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
+                                                     std::vector<std::unique_ptr<ColumnPredicate>>* preds) {
     for (auto& f : olap_filters) {
-        ColumnPredicate* p = parser->parse_thrift_cond(f);
+        std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
         p->set_index_filter_only(f.is_index_filter_only);
-        preds->push_back(p);
+        preds->emplace_back(std::move(p));
     }
     for (auto& f : is_null_vector) {
-        ColumnPredicate* p = parser->parse_thrift_cond(f);
-        preds->push_back(p);
+        std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
+        preds->emplace_back(std::move(p));
     }
 
     const auto& slots = tuple_desc->decoded_slots();
@@ -733,8 +734,8 @@ void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, st
         auto& expr_ctxs = iter.second;
         const SlotDescriptor* slot_desc = slots[slot_index];
         for (ExprContext* ctx : expr_ctxs) {
-            ColumnPredicate* p = parser->parse_expr_ctx(*slot_desc, runtime_state, ctx);
-            preds->push_back(p);
+            std::unique_ptr<ColumnPredicate> p(parser->parse_expr_ctx(*slot_desc, runtime_state, ctx));
+            preds->emplace_back(std::move(p));
         }
     }
 }
@@ -760,7 +761,7 @@ void OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContex
 Status OlapScanConjunctsManager::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {
     RETURN_IF_ERROR(scan_keys.get_key_range(key_ranges));
     if (key_ranges->empty()) {
-        key_ranges->emplace_back(new OlapScanRange());
+        key_ranges->emplace_back(std::make_unique<OlapScanRange>());
     }
     return Status::OK();
 }
@@ -802,6 +803,9 @@ void OlapScanConjunctsManager::build_column_expr_predicates() {
         const SlotDescriptor* slot_desc = slots[index];
         PrimitiveType ptype = slot_desc->type().type;
         if (!is_scalar_primitive_type(ptype)) continue;
+        // disable on float/double type because min/max value may lose precision
+        // The fix should be on storage layer, and this is just a temporary fix.
+        if (ptype == PrimitiveType::TYPE_FLOAT || ptype == PrimitiveType::TYPE_DOUBLE) continue;
         {
             auto iter = slot_index_to_expr_ctxs.find(index);
             if (iter == slot_index_to_expr_ctxs.end()) {

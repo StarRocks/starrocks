@@ -30,7 +30,7 @@
 #include "common/status.h"
 #include "env/env.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "gen_cpp/segment_v2.pb.h"
+#include "gen_cpp/segment.pb.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
@@ -38,9 +38,9 @@
 #include "storage/data_dir.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
-#include "storage/rowset/segment_v2/binary_plain_page.h"
-#include "storage/rowset/segment_v2/column_iterator.h"
-#include "storage/rowset/segment_v2/column_reader.h"
+#include "storage/rowset/binary_plain_page.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/utils.h"
@@ -49,9 +49,7 @@
 #include "util/file_utils.h"
 
 using starrocks::DataDir;
-using starrocks::OLAP_SUCCESS;
 using starrocks::KVStore;
-using starrocks::OLAPStatus;
 using starrocks::Status;
 using starrocks::TabletMeta;
 using starrocks::TabletMetaManager;
@@ -61,14 +59,14 @@ using starrocks::Slice;
 using starrocks::RandomAccessFile;
 using starrocks::MemTracker;
 using strings::Substitute;
-using starrocks::segment_v2::SegmentFooterPB;
-using starrocks::segment_v2::ColumnReader;
-using starrocks::segment_v2::BinaryPlainPageDecoder;
-using starrocks::segment_v2::PageHandle;
-using starrocks::segment_v2::PagePointer;
-using starrocks::segment_v2::ColumnReaderOptions;
-using starrocks::segment_v2::ColumnIteratorOptions;
-using starrocks::segment_v2::PageFooterPB;
+using starrocks::SegmentFooterPB;
+using starrocks::ColumnReader;
+using starrocks::BinaryPlainPageDecoder;
+using starrocks::PageHandle;
+using starrocks::PagePointer;
+using starrocks::ColumnReaderOptions;
+using starrocks::ColumnIteratorOptions;
+using starrocks::PageFooterPB;
 
 const std::string HEADER_PREFIX = "tabletmeta_";
 
@@ -101,6 +99,7 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool --operation=delete_rowset_meta "
           "--root_path=/path/to/storage/path --tablet_uid=tablet_uid "
           "--rowset_id=rowset_id\n";
+    ss << "./meta_tool --operation=compact_meta --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=get_meta_stats --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=ls --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=show_meta --pb_meta_path=path\n";
@@ -190,6 +189,19 @@ void delete_rowset_meta(DataDir* data_dir) {
     std::cout << "delete rowset meta successfully" << std::endl;
 }
 
+void compact_meta(DataDir* data_dir) {
+    uint64_t size_before = 0;
+    uint64_t size_after = 0;
+    Status s = data_dir->get_meta()->compact(&size_before, &size_after);
+    if (!s.ok()) {
+        std::cout << "compact meta failed:" << s << std::endl;
+        return;
+    }
+    std::cout << "compact meta successfully" << std::endl;
+    std::cout << data_dir->get_meta()->get_stats() << std::endl;
+    std::cout << "size before: " << size_before << " after: " << size_after << std::endl;
+}
+
 void get_meta_stats(DataDir* data_dir) {
     MetaStoreStats stats;
     auto st = TabletMetaManager::get_stats(data_dir, &stats, false);
@@ -237,9 +249,9 @@ Status init_data_dir(const std::string& dir, std::unique_ptr<DataDir>* ret, bool
     }
     starrocks::StorePath path;
     auto res = parse_root_path(root_path, &path);
-    if (res != OLAP_SUCCESS) {
+    if (!res.ok()) {
         std::cout << "parse root path failed:" << root_path << std::endl;
-        return Status::InternalError("parse root path failed");
+        return res;
     }
 
     std::unique_ptr<DataDir> p(new (std::nothrow) DataDir(path.path, path.storage_medium));
@@ -443,8 +455,8 @@ int meta_tool_main(int argc, char** argv) {
         show_segment_footer(FLAGS_file);
     } else {
         // operations that need root path should be written here
-        std::set<std::string> valid_operations = {"get_meta",           "load_meta",      "delete_meta",
-                                                  "delete_rowset_meta", "get_meta_stats", "ls"};
+        std::set<std::string> valid_operations = {"get_meta",     "load_meta",      "delete_meta", "delete_rowset_meta",
+                                                  "compact_meta", "get_meta_stats", "ls"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation:" << FLAGS_operation << std::endl;
             return -1;
@@ -470,6 +482,8 @@ int meta_tool_main(int argc, char** argv) {
             delete_meta(data_dir.get());
         } else if (FLAGS_operation == "delete_rowset_meta") {
             delete_rowset_meta(data_dir.get());
+        } else if (FLAGS_operation == "compact_meta") {
+            compact_meta(data_dir.get());
         } else if (FLAGS_operation == "get_meta_stats") {
             get_meta_stats(data_dir.get());
         } else if (FLAGS_operation == "ls") {

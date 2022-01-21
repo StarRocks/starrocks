@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/parquet/column_chunk_reader.h"
 
@@ -12,6 +12,7 @@
 #include "exec/parquet/types.h"
 #include "exec/parquet/utils.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::parquet {
@@ -28,7 +29,7 @@ public:
             SCOPED_RAW_TIMER(&_stats->io_ns);
             _stats->io_count += 1;
             st = _file->read(offset, res);
-            _stats->bytes_read_from_disk += res->size;
+            _stats->bytes_read += res->size;
         }
         return st;
     }
@@ -39,7 +40,7 @@ public:
             SCOPED_RAW_TIMER(&_stats->io_ns);
             _stats->io_count += 1;
             st = _file->read_at(offset, result);
-            _stats->bytes_read_from_disk += result.size;
+            _stats->bytes_read += result.size;
         }
         return st;
     }
@@ -51,7 +52,7 @@ public:
             _stats->io_count += 1;
             st = _file->readv_at(offset, res, res_cnt);
             for (int i = 0; i < res_cnt; ++i) {
-                _stats->bytes_read_from_disk += res[i].size;
+                _stats->bytes_read += res[i].size;
             }
         }
         return st;
@@ -80,7 +81,7 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
 
 ColumnChunkReader::~ColumnChunkReader() = default;
 
-Status ColumnChunkReader::init() {
+Status ColumnChunkReader::init(int chunk_size) {
     int64_t start_offset = 0;
     if (metadata().__isset.dictionary_page_offset) {
         start_offset = metadata().dictionary_page_offset;
@@ -96,7 +97,7 @@ Status ColumnChunkReader::init() {
     auto compress_type = convert_compression_codec(metadata().codec);
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
 
-    RETURN_IF_ERROR(_try_load_dictionary());
+    RETURN_IF_ERROR(_try_load_dictionary(chunk_size));
     RETURN_IF_ERROR(_parse_page_data());
     return Status::OK();
 }
@@ -123,7 +124,7 @@ Status ColumnChunkReader::_parse_page_data() {
         return Status::InternalError("There are two dictionary page in this column");
     default:
         return Status::NotSupported(
-                strings::Substitute("Not supproted page type: $0", _page_reader->current_header()->type));
+                strings::Substitute("Not supported page type: $0", _page_reader->current_header()->type));
         break;
     }
     _page_parse_state = PAGE_DATA_PARSED;
@@ -141,6 +142,7 @@ void ColumnChunkReader::_reserve_uncompress_buf(size_t size) {
 
 Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size,
                                                          bool is_compressed) {
+    RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read and decompress page"));
     if (is_compressed && _compress_codec != nullptr) {
         Slice com_slice("", compressed_size);
         RETURN_IF_ERROR(_page_reader->read_bytes((const uint8_t**)&com_slice.data, com_slice.size));
@@ -216,7 +218,7 @@ Status ColumnChunkReader::_parse_dict_page() {
     return Status::OK();
 }
 
-Status ColumnChunkReader::_try_load_dictionary() {
+Status ColumnChunkReader::_try_load_dictionary(int chunk_size) {
     RETURN_IF_ERROR(_parse_page_header());
     const auto& header = *_page_reader->current_header();
     if (header.type != tparquet::PageType::DICTIONARY_PAGE) {
@@ -245,7 +247,7 @@ Status ColumnChunkReader::_try_load_dictionary() {
     std::unique_ptr<Decoder> decoder;
     RETURN_IF_ERROR(EncodingInfo::get(metadata().type, tparquet::Encoding::RLE_DICTIONARY, &code_info));
     RETURN_IF_ERROR(code_info->create_decoder(&decoder));
-    RETURN_IF_ERROR(decoder->set_dict(header.dictionary_page_header.num_values, dict_decoder.get()));
+    RETURN_IF_ERROR(decoder->set_dict(chunk_size, header.dictionary_page_header.num_values, dict_decoder.get()));
     _decoders[static_cast<int>(tparquet::Encoding::RLE_DICTIONARY)] = std::move(decoder);
 
     RETURN_IF_ERROR(_parse_page_header());

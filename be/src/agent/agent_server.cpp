@@ -236,13 +236,11 @@ void AgentServer::make_snapshot(TAgentResult& t_agent_result, const TSnapshotReq
 }
 
 void AgentServer::release_snapshot(TAgentResult& t_agent_result, const std::string& snapshot_path) {
-    Status ret_st;
-    OLAPStatus err_code = SnapshotManager::instance()->release_snapshot(snapshot_path);
-    if (err_code != OLAP_SUCCESS) {
-        LOG(WARNING) << "failt to release_snapshot. snapshot_path: " << snapshot_path << ", err_code: " << err_code;
-        ret_st = Status::RuntimeError(strings::Substitute("fail to release_snapshot. err_code=$0", err_code));
+    Status ret_st = SnapshotManager::instance()->release_snapshot(snapshot_path);
+    if (!ret_st.ok()) {
+        LOG(WARNING) << "Fail to release_snapshot. snapshot_path: " << snapshot_path;
     } else {
-        LOG(INFO) << "success to release_snapshot. snapshot_path=" << snapshot_path << ", err_code=" << err_code;
+        LOG(INFO) << "success to release_snapshot. snapshot_path=" << snapshot_path;
     }
     ret_st.to_thrift(&t_agent_result.status);
 }

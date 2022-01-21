@@ -28,11 +28,11 @@
 #include <vector>
 
 #include "common/status.h"
+#include "env/env.h"
 
 namespace starrocks {
 
 class BlockId;
-class Env;
 class MemTracker;
 class Slice;
 
@@ -176,6 +176,8 @@ public:
 struct CreateBlockOptions {
     // const std::string tablet_id;
     const std::string path;
+    // create mode
+    Env::OpenMode mode = Env::MUST_CREATE;
 };
 
 // Block manager creation options.
@@ -229,6 +231,8 @@ public:
     //
     // Does not modify 'block' on error.
     virtual Status open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) = 0;
+
+    virtual void erase_block_cache(const std::string& path) = 0;
 
     // Retrieves the IDs of all blocks under management by this block manager.
     // These include ReadableBlocks as well as WritableBlocks.

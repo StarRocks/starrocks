@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/json_functions.h"
 
@@ -268,24 +268,6 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
     }
-}
-
-TEST_F(JsonFunctionsTest, json_minify_test) {
-    simdjson::ondemand::parser parser;
-    auto cars_json = R"( { "test":[ { "val1":1, "val2":2 }, { "val1":1, "val2":2 } ] }   )"_padded;
-    simdjson::ondemand::document doc;
-    auto err = parser.iterate(cars_json).get(doc);
-    ASSERT_EQ(err, simdjson::error_code::SUCCESS);
-
-    simdjson::ondemand::value val;
-    err = doc.get_value().get(val);
-    ASSERT_EQ(err, simdjson::error_code::SUCCESS);
-
-    std::unique_ptr<char[]> buf_ptr;
-    size_t dstlen{};
-    JsonFunctions::minify_json_to_string(val, buf_ptr, dstlen);
-    ASSERT_EQ(std::string(buf_ptr.get(), dstlen), "{\"test\":[{\"val1\":1,\"val2\":2},{\"val1\":1,\"val2\":2}]}");
-    ASSERT_EQ(dstlen, 50);
 }
 
 } // namespace vectorized

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <cstdint>
 
@@ -63,12 +63,12 @@ bool test_function_wrapper() {
 
 template <PrimitiveType... TYPE>
 bool test_all() {
-    constexpr int batch_size = 4095;
+    constexpr int chunk_size = 4095;
 
-    return (... && test_function_wrapper<TYPE, 1, batch_size>()) &&
-           (... && test_function_wrapper<TYPE, 2, batch_size>()) &&
-           (... && test_function_wrapper<TYPE, 4, batch_size>()) &&
-           (... && test_function_wrapper<TYPE, 8, batch_size>());
+    return (... && test_function_wrapper<TYPE, 1, chunk_size>()) &&
+           (... && test_function_wrapper<TYPE, 2, chunk_size>()) &&
+           (... && test_function_wrapper<TYPE, 4, chunk_size>()) &&
+           (... && test_function_wrapper<TYPE, 8, chunk_size>());
 }
 
 PARALLEL_TEST(SIMDMultiSelectorTest, TestVarVar) {

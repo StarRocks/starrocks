@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_THREAD_POOL_H
-#define STARROCKS_BE_SRC_UTIL_THREAD_POOL_H
+#pragma once
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/list_hook.hpp>
@@ -436,5 +435,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif //STARROCKS_BE_SRC_UTIL_THREAD_POOL_H

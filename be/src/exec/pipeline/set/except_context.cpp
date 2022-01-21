@@ -1,13 +1,15 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/set/except_context.h"
+
+#include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {
 
 Status ExceptContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
     _build_pool = std::make_unique<MemPool>();
 
-    RETURN_IF_ERROR(_hash_set->init());
+    RETURN_IF_ERROR(_hash_set->init(state));
 
     _dst_tuple_desc = state->desc_tbl().get_tuple_descriptor(_dst_tuple_id);
     _dst_nullables.reserve(build_exprs.size());
@@ -28,7 +30,8 @@ Status ExceptContext::close(RuntimeState* state) {
 
 Status ExceptContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,
                                          const std::vector<ExprContext*>& dst_exprs) {
-    return _hash_set->build_set(state, chunk, dst_exprs, _build_pool.get());
+    TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, dst_exprs, _build_pool.get()));
+    return Status::OK();
 }
 
 Status ExceptContext::erase_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,
@@ -37,10 +40,10 @@ Status ExceptContext::erase_chunk_from_ht(RuntimeState* state, const ChunkPtr& c
 }
 
 StatusOr<vectorized::ChunkPtr> ExceptContext::pull_chunk(RuntimeState* state) {
-    // 1. Get at most *config::vector_chunk_size* remained keys from ht.
+    // 1. Get at most *state->chunk_size()* remained keys from ht.
     size_t num_remained_keys = 0;
-    _remained_keys.resize(config::vector_chunk_size);
-    while (_next_processed_iter != _hash_set->end() && num_remained_keys < config::vector_chunk_size) {
+    _remained_keys.resize(state->chunk_size());
+    while (_next_processed_iter != _hash_set->end() && num_remained_keys < state->chunk_size()) {
         if (!_next_processed_iter->deleted) {
             _remained_keys[num_remained_keys++] = _next_processed_iter->slice;
         }

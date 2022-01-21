@@ -21,6 +21,7 @@
 
 package com.starrocks.journal.bdbje;
 
+import com.google.common.net.HostAndPort;
 import com.sleepycat.je.DatabaseConfig;
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.DatabaseNotFoundException;
@@ -56,6 +57,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.logging.Level;
 
 /* this class contains the reference to bdb environment.
  * including all the opened databases and the replicationGroupAdmin.
@@ -130,12 +132,16 @@ public class BDBEnvironment {
             replicationConfig.setConsistencyPolicy(new NoConsistencyRequiredPolicy());
         }
 
+        java.util.logging.Logger parent = java.util.logging.Logger.getLogger("com.sleepycat.je");
+        parent.setLevel(Level.parse(Config.bdbje_log_level));
+
         // set environment config
         environmentConfig = new EnvironmentConfig();
         environmentConfig.setTransactional(true);
         environmentConfig.setAllowCreate(true);
         environmentConfig.setCachePercent(MEMORY_CACHE_PERCENT);
         environmentConfig.setLockTimeout(Config.bdbje_lock_timeout_second, TimeUnit.SECONDS);
+        environmentConfig.setConfigParam(EnvironmentConfig.FILE_LOGGING_LEVEL, Config.bdbje_log_level);
         if (isElectable) {
             Durability durability = new Durability(getSyncPolicy(Config.master_sync_policy),
                     getSyncPolicy(Config.replica_sync_policy), getAckPolicy(Config.replica_ack_policy));
@@ -162,14 +168,16 @@ public class BDBEnvironment {
                 // get replicationGroupAdmin object.
                 Set<InetSocketAddress> adminNodes = new HashSet<InetSocketAddress>();
                 // 1. add helper node
-                InetSocketAddress helper = new InetSocketAddress(helperHostPort.split(":")[0],
-                        Integer.parseInt(helperHostPort.split(":")[1]));
+                HostAndPort helperAddress = HostAndPort.fromString(helperHostPort);
+                InetSocketAddress helper = new InetSocketAddress(helperAddress.getHost(),
+                        helperAddress.getPort());
                 adminNodes.add(helper);
                 LOG.info("add helper[{}] as ReplicationGroupAdmin", helperHostPort);
                 // 2. add self if is electable
                 if (!selfNodeHostPort.equals(helperHostPort) && Catalog.getCurrentCatalog().isElectable()) {
-                    InetSocketAddress self = new InetSocketAddress(selfNodeHostPort.split(":")[0],
-                            Integer.parseInt(selfNodeHostPort.split(":")[1]));
+                    HostAndPort selfNodeAddress = HostAndPort.fromString(selfNodeHostPort);
+                    InetSocketAddress self = new InetSocketAddress(selfNodeAddress.getHost(),
+                            selfNodeAddress.getPort());
                     adminNodes.add(self);
                     LOG.info("add self[{}] as ReplicationGroupAdmin", selfNodeHostPort);
                 }

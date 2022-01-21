@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/union_iterator.h"
 
 #include <memory>
 
 #include "column/chunk.h"
-#include "storage/iterators.h" // StorageReadOptions
 
 namespace starrocks::vectorized {
 

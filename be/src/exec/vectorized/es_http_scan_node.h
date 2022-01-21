@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -50,7 +50,6 @@ private:
 
 private:
     TupleId _tuple_id;
-    RuntimeState* _runtime_state;
     TupleDescriptor* _tuple_desc;
 
     std::atomic<int> _num_running_scanners;

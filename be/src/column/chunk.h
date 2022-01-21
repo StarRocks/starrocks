@@ -1,13 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
 #include <runtime/types.h>
 
+#include <string_view>
+
 #include "butil/containers/flat_map.h"
 #include "column/column.h"
+#include "column/column_hash.h"
 #include "column/schema.h"
 #include "common/global_types.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 class ChunkPB;
@@ -18,12 +22,14 @@ class DatumTuple;
 class Chunk {
 public:
     using ChunkPtr = std::shared_ptr<Chunk>;
+    using SlotHashMap = phmap::flat_hash_map<SlotId, size_t, StdHash<SlotId>>;
+    using ColumnIdHashMap = phmap::flat_hash_map<ColumnId, size_t, StdHash<SlotId>>;
+    using TupleHashMap = phmap::flat_hash_map<TupleId, size_t, StdHash<TupleId>>;
 
     Chunk();
     Chunk(Columns columns, SchemaPtr schema);
-    Chunk(Columns columns, const butil::FlatMap<SlotId, size_t>& slot_map);
-    Chunk(Columns columns, const butil::FlatMap<SlotId, size_t>& slot_map,
-          const butil::FlatMap<TupleId, size_t>& tuple_map);
+    Chunk(Columns columns, const SlotHashMap& slot_map);
+    Chunk(Columns columns, const SlotHashMap& slot_map, const TupleHashMap& tuple_map);
 
     Chunk(Chunk&& other) = default;
     Chunk& operator=(Chunk&& other) = default;
@@ -59,7 +65,7 @@ public:
     Columns& columns() { return _columns; }
 
     // schema must exists.
-    std::string get_column_name(size_t idx) const;
+    std::string_view get_column_name(size_t idx) const;
 
     // schema must exist and will be updated.
     void append_column(ColumnPtr column, const FieldPtr& field);
@@ -97,47 +103,27 @@ public:
     ColumnPtr& get_column_by_slot_id(SlotId slot_id);
 
     void set_slot_id_to_index(SlotId slot_id, size_t idx) { _slot_id_to_index[slot_id] = idx; }
-    bool is_slot_exist(SlotId id) const { return _slot_id_to_index.seek(id) != nullptr; }
-    bool is_tuple_exist(TupleId id) const { return _tuple_id_to_index.seek(id) != nullptr; }
+    bool is_slot_exist(SlotId id) const { return _slot_id_to_index.contains(id); }
+    bool is_tuple_exist(TupleId id) const { return _tuple_id_to_index.contains(id); }
     void reset_slot_id_to_index() { _slot_id_to_index.clear(); }
 
     void set_columns(const Columns& columns) { _columns = columns; }
 
-    // The size for serialize chunk meta and chunk data
-    size_t serialize_size() const;
-
-    // Serialize chunk data and meta to ChunkPB
-    // The result value is the chunk data serialize size
-    size_t serialize_with_meta(starrocks::ChunkPB* chunk) const;
-
-    // Only serialize chunk data to dst
-    // The serialize format:
-    //     version(4 byte)
-    //     num_rows(4 byte)
-    //     column 1 data
-    //     column 2 data
-    //     ...
-    //     column n data
-    // Note: You should ensure the dst buffer size is enough
-    void serialize(uint8_t* dst) const;
-
-    // Deserialize chunk by |src| (chunk data) and |meta| (chunk meta)
-    Status deserialize(const uint8_t* src, size_t len, const RuntimeChunkMeta& meta);
-
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
     // not clone tuple column
-    std::unique_ptr<Chunk> clone_empty() const;
-    std::unique_ptr<Chunk> clone_empty_with_slot() const;
-    std::unique_ptr<Chunk> clone_empty_with_schema() const;
+    ChunkUniquePtr clone_empty() const;
+    ChunkUniquePtr clone_empty_with_slot() const;
+    ChunkUniquePtr clone_empty_with_schema() const;
     // Create an empty chunk with the same meta and reserve it of specified size.
     // not clone tuple column
-    std::unique_ptr<Chunk> clone_empty(size_t size) const;
-    std::unique_ptr<Chunk> clone_empty_with_slot(size_t size) const;
-    std::unique_ptr<Chunk> clone_empty_with_schema(size_t size) const;
+    ChunkUniquePtr clone_empty(size_t size) const;
+    ChunkUniquePtr clone_empty_with_slot(size_t size) const;
+    ChunkUniquePtr clone_empty_with_schema(size_t size) const;
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
-    std::unique_ptr<Chunk> clone_empty_with_tuple() const;
+    ChunkUniquePtr clone_empty_with_tuple() const;
     // Create an empty chunk with the same meta and reserve it of specified size.
-    std::unique_ptr<Chunk> clone_empty_with_tuple(size_t size) const;
+    ChunkUniquePtr clone_empty_with_tuple(size_t size) const;
+    ChunkUniquePtr clone_unique() const;
 
     void append(const Chunk& src) { append(src, 0, src.num_rows()); }
 
@@ -182,8 +168,8 @@ public:
 
     DelCondSatisfied delete_state() const { return _delete_state; }
 
-    const butil::FlatMap<TupleId, size_t>& get_tuple_id_to_index_map() const { return _tuple_id_to_index; }
-    const butil::FlatMap<SlotId, size_t>& get_slot_id_to_index_map() const { return _slot_id_to_index; }
+    const TupleHashMap& get_tuple_id_to_index_map() const { return _tuple_id_to_index; }
+    const SlotHashMap& get_slot_id_to_index_map() const { return _slot_id_to_index; }
 
     // Call `Column::reserve` on each column of |chunk|, with |cap| passed as argument.
     void reserve(size_t cap);
@@ -248,10 +234,10 @@ private:
 
     Columns _columns;
     std::shared_ptr<Schema> _schema;
-    butil::FlatMap<ColumnId, size_t> _cid_to_index;
+    ColumnIdHashMap _cid_to_index;
     // For compatibility
-    butil::FlatMap<SlotId, size_t> _slot_id_to_index;
-    butil::FlatMap<TupleId, size_t> _tuple_id_to_index;
+    SlotHashMap _slot_id_to_index;
+    TupleHashMap _tuple_id_to_index;
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
 
@@ -289,7 +275,7 @@ inline const ColumnPtr& Chunk::get_column_by_id(ColumnId cid) const {
 
 inline ColumnPtr& Chunk::get_column_by_id(ColumnId cid) {
     DCHECK(!_cid_to_index.empty());
-    DCHECK(_cid_to_index.seek(cid) != nullptr);
+    DCHECK(_cid_to_index.contains(cid));
     return _columns[_cid_to_index[cid]];
 }
 
@@ -300,16 +286,6 @@ inline const ColumnPtr& Chunk::get_tuple_column_by_id(TupleId tuple_id) const {
 inline ColumnPtr& Chunk::get_tuple_column_by_id(TupleId tuple_id) {
     return _columns[_tuple_id_to_index[tuple_id]];
 }
-
-// Chunk meta for runtime compute
-// Currently Used in DataStreamRecvr to deserialize Chunk
-struct RuntimeChunkMeta {
-    std::vector<TypeDescriptor> types;
-    std::vector<bool> is_nulls;
-    std::vector<bool> is_consts;
-    butil::FlatMap<SlotId, size_t> slot_id_to_index;
-    butil::FlatMap<TupleId, size_t> tuple_id_to_index;
-};
 
 } // namespace vectorized
 } // namespace starrocks

@@ -27,7 +27,6 @@
 #include "exec/data_sink.h"
 #include "runtime/exec_env.h"
 #include "runtime/plan_fragment_executor.h"
-#include "runtime/row_batch.h"
 #include "util/monotime.h"
 
 namespace starrocks {

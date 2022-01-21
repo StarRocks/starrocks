@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Type;
@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeSetOperationTest {
     // use a unique dir so that it won't be conflict with other unit test which
@@ -81,7 +82,7 @@ public class AnalyzeSetOperationTest {
         QueryRelation queryRelation = analyzeSuccess(sql);
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(queryRelation);
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, getConnectContext()).transform(queryRelation);
         List<ColumnRefOperator> outColumns = logicalPlan.getOutputColumn();
 
         Assert.assertEquals(2, outColumns.size());

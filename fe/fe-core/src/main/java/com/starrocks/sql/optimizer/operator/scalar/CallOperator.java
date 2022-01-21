@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -13,7 +12,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
@@ -110,24 +108,19 @@ public class CallOperator extends ScalarOperator {
         arguments.set(index, child);
     }
 
-    public static final Set<String> AlwaysReturnNonNullableFunctions =
-            ImmutableSet.<String>builder()
-                    .add(FunctionSet.COUNT)
-                    .add(FunctionSet.MULTI_DISTINCT_COUNT)
-                    .add(FunctionSet.NULL_OR_EMPTY)
-                    .add(FunctionSet.HLL_HASH)
-                    .add(FunctionSet.HLL_UNION_AGG)
-                    .add(FunctionSet.NDV)
-                    .add(FunctionSet.APPROX_COUNT_DISTINCT)
-                    .add(FunctionSet.BITMAP_UNION_INT)
-                    .add(FunctionSet.BITMAP_UNION_COUNT)
-                    .add(FunctionSet.BITMAP_COUNT)
-                    .build();
-
-    // TODO(kks): improve this
     @Override
     public boolean isNullable() {
-        return !AlwaysReturnNonNullableFunctions.contains(fnName);
+        // check if fn always return non null
+        if (fn != null && !fn.isNullable()) {
+            return false;
+        }
+        // check children nullable
+        if (FunctionCallExpr.nullableSameWithChildrenFunctions.contains(fnName)) {
+            // decimal operation may overflow
+            return arguments.stream()
+                    .anyMatch(argument -> argument.isNullable() || argument.getType().isDecimalOfAnyVersion());
+        }
+        return true;
     }
 
     public ColumnRefSet getUsedColumns() {

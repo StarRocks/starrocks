@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef TIMEZONE_HH
-#define TIMEZONE_HH
+#pragma once
 
 // This file is for timezone routines.
 
@@ -133,5 +132,3 @@ public:
    */
 std::shared_ptr<FutureRule> parseFutureRule(const std::string& ruleString);
 } // namespace orc
-
-#endif

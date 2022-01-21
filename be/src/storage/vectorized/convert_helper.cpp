@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/convert_helper.h"
 
@@ -12,9 +12,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
-#include "storage/row.h"
-#include "storage/row_block2.h"
-#include "storage/row_cursor.h"
+#include "storage/column_vector.h"
 #include "storage/schema.h"
 #include "storage/tablet_schema.h"
 #include "storage/vectorized/chunk_helper.h"
@@ -90,7 +88,7 @@ public:
     ~DatetimeToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -113,7 +111,7 @@ public:
     ~TimestampToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -136,7 +134,7 @@ public:
     ~IntToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -164,7 +162,7 @@ public:
     ~DateV2ToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -230,7 +228,7 @@ public:
     ~DateToDateV2TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -250,7 +248,7 @@ public:
     ~DateToDatetimeFieldConveter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -273,7 +271,7 @@ public:
     ~DateV2ToDatetimeFieldConveter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -296,7 +294,7 @@ public:
     ~TimestampToDatetimeTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -375,7 +373,7 @@ public:
     ~DatetimeToTimestampTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -395,7 +393,7 @@ public:
     ~FloatToDoubleTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -418,7 +416,7 @@ public:
     ~DecimalToDecimal12TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -439,7 +437,7 @@ public:
     ~Decimal12ToDecimalTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -499,7 +497,7 @@ public:
     ~DecimalTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -526,7 +524,7 @@ public:
     ~DecimalV3TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -562,7 +560,7 @@ public:
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
                          MemPool* mem_pool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 };
 
@@ -575,7 +573,7 @@ public:
     ~StringToOtherTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -587,9 +585,7 @@ public:
             source = src.get_slice().to_string();
         }
         CppType value;
-        if (dst_typeinfo->from_string(&value, source) != OLAP_SUCCESS) {
-            return Status::InvalidArgument(Substitute("Failed to convert $0 to type $1", source, Type));
-        }
+        RETURN_IF_ERROR(dst_typeinfo->from_string(&value, source));
         dst.set(value);
         return Status::OK();
     }
@@ -604,7 +600,7 @@ public:
     ~OtherToStringTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        return Status::InternalError("misssing implementation");
+        return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
@@ -624,7 +620,7 @@ public:
         } else {
             slice.data = reinterpret_cast<char*>(mem_pool->allocate(slice.size));
             if (UNLIKELY(slice.data == nullptr)) {
-                return Status::InternalError("Mem usage has exceed the limit of BE");
+                return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
             }
             memcpy(slice.data, source.data(), slice.size);
         }
@@ -1404,7 +1400,7 @@ const MaterializeTypeConverter* get_materialized_converter(FieldType from_type, 
         return &s_converter;
     }
     default:
-        LOG(WARNING) << "unknown materilized type";
+        LOG(WARNING) << "unknown materialized type";
         break;
     }
     return nullptr;
@@ -2058,25 +2054,6 @@ Status RowConverter::init(const Schema& in_schema, const Schema& out_schema) {
     return Status::OK();
 }
 
-template <typename RowType>
-void RowConverter::convert(RowCursor* dst, const RowType& src) const {
-    for (int i = 0; i < _converters.size(); ++i) {
-        auto cid = _cids[i];
-
-        auto src_cell = src.cell(cid);
-        auto dst_cell = dst->cell(cid);
-        bool is_null = src_cell.is_null();
-        dst_cell.set_is_null(is_null);
-        if (is_null) {
-            continue;
-        }
-        _converters[i]->convert(dst_cell.mutable_cell_ptr(), src_cell.cell_ptr());
-    }
-}
-
-template void RowConverter::convert<RowCursor>(RowCursor* dst, const RowCursor& src) const;
-template void RowConverter::convert<ContiguousRow>(RowCursor* dst, const ContiguousRow& src) const;
-
 void RowConverter::convert(std::vector<Datum>* dst, const std::vector<Datum>& src) const {
     int num_datums = src.size();
     dst->resize(num_datums);
@@ -2125,38 +2102,6 @@ std::unique_ptr<Chunk> ChunkConverter::move_convert(Chunk* from) const {
         dest->append_column(std::move(c), f);
     }
     return dest;
-}
-
-Status BlockConverter::init(const ::starrocks::Schema& in_schema, const ::starrocks::Schema& out_schema) {
-    auto num_columns = in_schema.num_column_ids();
-    _converters.resize(num_columns, nullptr);
-    _cids.resize(num_columns, 0);
-    for (int i = 0; i < num_columns; ++i) {
-        auto cid = in_schema.column_ids()[i];
-        _cids[i] = cid;
-        _converters[i] = get_field_converter(in_schema.column(cid)->type(), out_schema.column(cid)->type());
-        if (_converters[i] == nullptr) {
-            return Status::NotSupported("Cannot get field converter");
-        }
-    }
-    return Status::OK();
-}
-
-Status BlockConverter::convert(::starrocks::RowBlockV2* dst, ::starrocks::RowBlockV2* src) const {
-    DCHECK_EQ(dst->_capacity, src->_capacity);
-
-    auto num_columns = _converters.size();
-    for (int i = 0; i < num_columns; ++i) {
-        auto cid = _cids[i];
-        _converters[i]->convert(dst->_column_vector_batches[cid].get(), src->_column_vector_batches[cid].get(),
-                                src->_selection_vector, src->_selected_size);
-    }
-    std::swap(dst->_num_rows, src->_num_rows);
-    std::swap(dst->_pool, src->_pool);
-    std::swap(dst->_selection_vector, src->_selection_vector);
-    std::swap(dst->_selected_size, src->_selected_size);
-    std::swap(dst->_delete_state, src->_delete_state);
-    return Status::OK();
 }
 
 } // namespace starrocks::vectorized

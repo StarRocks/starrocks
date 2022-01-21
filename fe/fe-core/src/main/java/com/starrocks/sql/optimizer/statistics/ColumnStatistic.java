@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -80,6 +80,10 @@ public class ColumnStatistic {
 
     public boolean isInfiniteRange() {
         return this.minValue == NEGATIVE_INFINITY || this.maxValue == POSITIVE_INFINITY;
+    }
+
+    public boolean hasNaNValue() {
+        return Double.isNaN(minValue) || Double.isNaN(maxValue);
     }
 
     // TODO(ywb): remove this after user can dump statistics with type

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -99,16 +99,16 @@ public:
         }
     }
 
-    void batch_serialize(size_t batch_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
-                         Column* to) const override {
-        for (size_t i = 0; i < batch_size; i++) {
-            serialize_to_column(nullptr, agg_states[i] + state_offset, to);
+    void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                         size_t state_offset, Column* to) const override {
+        for (size_t i = 0; i < chunk_size; i++) {
+            serialize_to_column(ctx, agg_states[i] + state_offset, to);
         }
     }
 
-    void batch_finalize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
+    void batch_finalize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                         size_t state_offset, Column* to) const override {
-        for (size_t i = 0; i < batch_size; i++) {
+        for (size_t i = 0; i < chunk_size; i++) {
             finalize_to_column(ctx, agg_states[i] + state_offset, to);
         }
     }
@@ -173,16 +173,16 @@ public:
         }
     }
 
-    void merge_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
+    void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                      AggDataPtr* states) const override {
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             merge(ctx, column, states[i] + state_offset, i);
         }
     }
 
-    void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
+    void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
-        for (size_t i = 0; i < batch_size; i++) {
+        for (size_t i = 0; i < chunk_size; i++) {
             // TODO: optimize with simd ?
             if (filter[i] == 0) {
                 merge(ctx, column, states[i] + state_offset, i);
@@ -190,9 +190,9 @@ public:
         }
     }
 
-    void merge_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column* column,
+    void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
                                   AggDataPtr __restrict state) const override {
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             merge(ctx, column, state, i);
         }
     }
@@ -211,7 +211,7 @@ public:
                 size_t row_num) const override {}
 
     // TODO(kks): abstract the AVX2 filter process later
-    void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+    void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.
@@ -224,7 +224,7 @@ public:
             // !important: filter must be an uint8_t container
             constexpr int batch_nums = 256 / (8 * sizeof(uint8_t));
             __m256i all0 = _mm256_setzero_si256();
-            while (offset + batch_nums < batch_size) {
+            while (offset + batch_nums < chunk_size) {
                 // TODO(kks): when our memory allocate could align 32-byte, we could use _mm256_load_si256
                 __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + offset));
                 int mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
@@ -249,7 +249,7 @@ public:
                 offset += batch_nums;
             }
 #endif
-            for (size_t i = offset; i < batch_size; ++i) {
+            for (size_t i = offset; i < chunk_size; ++i) {
                 if (f_data[i] == 0) {
                     this->data(states[i] + state_offset).is_null = false;
                     this->nested_function->update(ctx, &data_column,
@@ -257,7 +257,7 @@ public:
                 }
             }
         } else {
-            for (size_t i = 0; i < batch_size; ++i) {
+            for (size_t i = 0; i < chunk_size; ++i) {
                 this->data(states[i] + state_offset).is_null = false;
                 this->nested_function->update(ctx, columns, this->data(states[i] + state_offset).mutable_nest_state(),
                                               i);
@@ -265,7 +265,7 @@ public:
         }
     }
 
-    void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+    void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.
@@ -279,7 +279,7 @@ public:
             // !important: filter must be an uint8_t container
             constexpr int batch_nums = 256 / (8 * sizeof(uint8_t));
             __m256i all0 = _mm256_setzero_si256();
-            while (offset + batch_nums < batch_size) {
+            while (offset + batch_nums < chunk_size) {
                 // TODO(kks): when our memory allocate could align 32-byte, we could use _mm256_load_si256
                 __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + offset));
                 int mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
@@ -308,7 +308,7 @@ public:
             }
 #endif
 
-            for (size_t i = offset; i < batch_size; ++i) {
+            for (size_t i = offset; i < chunk_size; ++i) {
                 if (!f_data[i] & !selection[i]) {
                     this->data(states[i] + state_offset).is_null = false;
                     this->nested_function->update(ctx, &data_column,
@@ -316,7 +316,7 @@ public:
                 }
             }
         } else {
-            for (size_t i = 0; i < batch_size; ++i) {
+            for (size_t i = 0; i < chunk_size; ++i) {
                 if (!selection[i]) {
                     this->data(states[i] + state_offset).is_null = false;
                     this->nested_function->update(ctx, columns,
@@ -326,7 +326,7 @@ public:
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.
@@ -337,7 +337,7 @@ public:
             // The fast pass
             if (!column->has_null()) {
                 this->data(state).is_null = false;
-                this->nested_function->update_batch_single_state(ctx, batch_size, &data_column,
+                this->nested_function->update_batch_single_state(ctx, chunk_size, &data_column,
                                                                  this->data(state).mutable_nest_state());
                 return;
             }
@@ -348,7 +348,7 @@ public:
             // !important: filter must be an uint8_t container
             constexpr int batch_nums = 256 / (8 * sizeof(uint8_t));
             __m256i all0 = _mm256_setzero_si256();
-            while (offset + batch_nums < batch_size) {
+            while (offset + batch_nums < chunk_size) {
                 __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + offset));
                 int mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
                 // all not null
@@ -371,7 +371,7 @@ public:
             }
 #endif
 
-            for (size_t i = offset; i < batch_size; ++i) {
+            for (size_t i = offset; i < chunk_size; ++i) {
                 if (f_data[i] == 0) {
                     this->nested_function->update(ctx, &data_column, this->data(state).mutable_nest_state(), i);
                     this->data(state).is_null = false;
@@ -379,7 +379,7 @@ public:
             }
         } else {
             this->data(state).is_null = false;
-            this->nested_function->update_batch_single_state(ctx, batch_size, columns,
+            this->nested_function->update_batch_single_state(ctx, chunk_size, columns,
                                                              this->data(state).mutable_nest_state());
         }
     }
@@ -455,14 +455,14 @@ public:
         this->nested_function->update(ctx, data_columns.data(), this->data(state).mutable_nest_state(), row_num);
     }
 
-    void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+    void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             update(ctx, columns, states[i] + state_offset, i);
         }
     }
 
-    void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+    void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
         auto column_size = ctx->get_num_args();
         // This container stores the columns we really pass to the nested function.
@@ -470,7 +470,7 @@ public:
         data_columns.resize(column_size);
 
         std::vector<uint8_t> null_data_result;
-        null_data_result.resize(batch_size);
+        null_data_result.resize(chunk_size);
 
         // has_nullable_column: false, means every column is data column.
         bool has_nullable_column = false;
@@ -485,7 +485,7 @@ public:
                 if (columns[i]->has_null()) {
                     has_null = true;
                     auto null_data = column->null_column()->raw_data();
-                    for (size_t j = 0; j < batch_size; ++j) {
+                    for (size_t j = 0; j < chunk_size; ++j) {
                         null_data_result[j] |= null_data[j];
                     }
                 }
@@ -496,7 +496,7 @@ public:
 
         if (has_nullable_column) {
             if (has_null) {
-                for (size_t i = 0; i < batch_size; ++i) {
+                for (size_t i = 0; i < chunk_size; ++i) {
                     if (!null_data_result[i] & !selection[i]) {
                         this->data(states[i] + state_offset).is_null = false;
                         this->nested_function->update(ctx, data_columns.data(),
@@ -504,7 +504,7 @@ public:
                     }
                 }
             } else {
-                for (size_t i = 0; i < batch_size; ++i) {
+                for (size_t i = 0; i < chunk_size; ++i) {
                     if (!selection[i]) {
                         this->data(states[i] + state_offset).is_null = false;
                         this->nested_function->update(ctx, data_columns.data(),
@@ -514,7 +514,7 @@ public:
             }
         } else {
             // Because every column is data column, so we still use columns.
-            for (size_t i = 0; i < batch_size; ++i) {
+            for (size_t i = 0; i < chunk_size; ++i) {
                 if (!selection[i]) {
                     this->data(states[i] + state_offset).is_null = false;
                     this->nested_function->update(ctx, columns,
@@ -524,9 +524,9 @@ public:
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             update(ctx, columns, state, i);
         }
     }

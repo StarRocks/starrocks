@@ -24,6 +24,9 @@
 #include <gtest/gtest.h>
 
 #include "column/const_column.h"
+#include "exprs/vectorized/percentile_functions.h"
+#include "storage/hll.h"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 
@@ -184,6 +187,41 @@ TEST(ObjectColumnTest, HLL_test_swap_column) {
     ASSERT_EQ(1, c2->get_data().size());
     ASSERT_EQ(3, c1->size());
     ASSERT_EQ(3, c1->get_data().size());
+}
+
+TEST(ObjectColumnTest, Percentile_test_swap_column) {
+    Columns columns;
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto s = DoubleColumn::create();
+    s->append(1);
+    s->append(2);
+    s->append(3);
+    columns.push_back(s);
+
+    auto column = PercentileFunctions::percentile_hash(ctx, columns);
+    ASSERT_TRUE(column->is_object());
+
+    auto percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
+    ASSERT_EQ(1, percentile->get_object(0)->quantile(1));
+    ASSERT_EQ(2, percentile->get_object(1)->quantile(1));
+    ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
+
+    auto s1 = DoubleColumn::create();
+    s1->append(4);
+    columns.clear();
+    columns.push_back(s1);
+    auto column1 = PercentileFunctions::percentile_hash(ctx, columns);
+    ASSERT_TRUE(column1->is_object());
+
+    std::vector<uint32_t> idx = {1};
+    ASSERT_TRUE(column->update_rows(*column1.get(), idx.data()).ok());
+
+    percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
+    ASSERT_EQ(1, percentile->get_object(0)->quantile(1));
+    ASSERT_EQ(4, percentile->get_object(1)->quantile(1));
+    ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
+
+    delete ctx;
 }
 
 } // namespace starrocks::vectorized

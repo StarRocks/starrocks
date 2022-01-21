@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer;
 
@@ -15,6 +15,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -264,7 +267,7 @@ public class OperatorStrings {
 
             PhysicalHashJoinOperator join = (PhysicalHashJoinOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("").append(join.getJoinType()).append(" (");
-            sb.append("join-predicate [").append(join.getJoinPredicate()).append("] ");
+            sb.append("join-predicate [").append(join.getOnPredicate()).append("] ");
             sb.append("post-join-predicate [").append(join.getPredicate()).append("]");
             sb.append(")");
 
@@ -395,6 +398,33 @@ public class OperatorStrings {
         @Override
         public OperatorStr visitPhysicalLimit(OptExpression optExpression, Integer step) {
             return visit(optExpression.getInputs().get(0), step);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalCTEAnchor(OptExpression optExpression, Integer step) {
+            OperatorStr producer = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr consumer = visit(optExpression.getInputs().get(1), step + 1);
+            PhysicalCTEAnchorOperator op = (PhysicalCTEAnchorOperator) optExpression.getOp();
+            String sb = "CTEAnchor(cteid=" + op.getCteId() + ") ";
+            ArrayList<OperatorStr> children = new ArrayList<>();
+            children.add(producer);
+            children.add(consumer);
+            return new OperatorStr(sb, step, children);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalCTEProduce(OptExpression optExpression, Integer step) {
+            OperatorStr children = visit(optExpression.getInputs().get(0), step + 1);
+            PhysicalCTEProduceOperator op = (PhysicalCTEProduceOperator) optExpression.getOp();
+            String sb = "CTEProducer(cteid=" + op.getCteId() + ") ";
+            return new OperatorStr(sb, step, Collections.singletonList(children));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalCTEConsume(OptExpression optExpression, Integer step) {
+            PhysicalCTEConsumeOperator op = (PhysicalCTEConsumeOperator) optExpression.getOp();
+            String sb = "CTEConsumer(cteid=" + op.getCteId() + ") ";
+            return new OperatorStr(sb, step, Collections.emptyList());
         }
     }
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -52,7 +52,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         if (join.getJoinType().isLeftOuterJoin()) {
             for (ScalarOperator e : Utils.extractConjuncts(predicate)) {
                 ColumnRefSet usedColumns = e.getUsedColumns();
-                if (leftColumns.contains(usedColumns)) {
+                if (leftColumns.containsAll(usedColumns)) {
                     leftPushDown.add(e);
                 } else {
                     remainingFilter.add(e);
@@ -61,7 +61,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         } else if (join.getJoinType().isRightOuterJoin()) {
             for (ScalarOperator e : Utils.extractConjuncts(predicate)) {
                 ColumnRefSet usedColumns = e.getUsedColumns();
-                if (rightColumns.contains(usedColumns)) {
+                if (rightColumns.containsAll(usedColumns)) {
                     rightPushDown.add(e);
                 } else {
                     remainingFilter.add(e);
@@ -80,7 +80,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         } else if (join.getJoinType().isLeftSemiAntiJoin()) {
             for (ScalarOperator e : Utils.extractConjuncts(predicate)) {
                 ColumnRefSet usedColumns = e.getUsedColumns();
-                if (leftColumns.contains(usedColumns)) {
+                if (leftColumns.containsAll(usedColumns)) {
                     leftPushDown.add(e);
                 } else {
                     remainingFilter.add(e);
@@ -89,7 +89,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         } else if (join.getJoinType().isRightSemiAntiJoin()) {
             for (ScalarOperator e : Utils.extractConjuncts(predicate)) {
                 ColumnRefSet usedColumns = e.getUsedColumns();
-                if (rightColumns.contains(usedColumns)) {
+                if (rightColumns.containsAll(usedColumns)) {
                     rightPushDown.add(e);
                 } else {
                     remainingFilter.add(e);
@@ -240,15 +240,27 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         ScalarOperator derivedPredicate = JoinPredicateUtils.equivalenceDerive(predicate, false);
         List<ScalarOperator> derivedPredicates = Utils.extractConjuncts(derivedPredicate);
 
-        if (join.getJoinType().isLeftOuterJoin() || join.getJoinType().isLeftSemiJoin()) {
+        if (join.getJoinType().isLeftSemiJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (rightOutputColumns.contains(p.getUsedColumns())) {
+                if (rightOutputColumns.containsAll(p.getUsedColumns())) {
                     rightPushDown.add(p);
                 }
             }
-        } else if (join.getJoinType().isRightOuterJoin() || join.getJoinType().isRightSemiJoin()) {
+        } else if (join.getJoinType().isLeftOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (leftOutputColumns.contains(p.getUsedColumns())) {
+                if (rightOutputColumns.containsAll(p.getUsedColumns()) && canEliminateNull(rightOutputColumns, p.clone())) {
+                    rightPushDown.add(p);
+                }
+            }
+        } else if (join.getJoinType().isRightSemiJoin()) {
+            for (ScalarOperator p : derivedPredicates) {
+                if (leftOutputColumns.containsAll(p.getUsedColumns())) {
+                    leftPushDown.add(p);
+                }
+            }
+        } else if (join.getJoinType().isRightOuterJoin()) {
+            for (ScalarOperator p : derivedPredicates) {
+                if (leftOutputColumns.containsAll(p.getUsedColumns()) && canEliminateNull(leftOutputColumns, p.clone())) {
                     leftPushDown.add(p);
                 }
             }

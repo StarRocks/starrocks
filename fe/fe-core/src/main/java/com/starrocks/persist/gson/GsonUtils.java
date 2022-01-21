@@ -57,6 +57,7 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
+import com.starrocks.catalog.IcebergResource;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OdbcCatalogResource;
 import com.starrocks.catalog.PseudoType;
@@ -122,6 +123,7 @@ public class GsonUtils {
             .of(Resource.class, "clazz")
             .registerSubtype(SparkResource.class, SparkResource.class.getSimpleName())
             .registerSubtype(HiveResource.class, HiveResource.class.getSimpleName())
+            .registerSubtype(IcebergResource.class, IcebergResource.class.getSimpleName())
             .registerSubtype(OdbcCatalogResource.class, OdbcCatalogResource.class.getSimpleName());
 
     // runtime adapter for class "AlterJobV2"

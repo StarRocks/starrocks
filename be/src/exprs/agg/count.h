@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -25,9 +25,9 @@ public:
         ++this->data(state).count;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        this->data(state).count += batch_size;
+        this->data(state).count += chunk_size;
     }
 
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -56,11 +56,11 @@ public:
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
 
-    void batch_serialize(size_t batch_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
-                         Column* to) const override {
+    void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                         size_t state_offset, Column* to) const override {
         Int64Column* column = down_cast<Int64Column*>(to);
         Buffer<int64_t>& result_data = column->get_data();
-        for (size_t i = 0; i < batch_size; i++) {
+        for (size_t i = 0; i < chunk_size; i++) {
             result_data.emplace_back(data(agg_states[i] + state_offset).count);
         }
     }
@@ -70,13 +70,8 @@ public:
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
 
-    void batch_finalize(size_t batch_size, const Buffer<AggDataPtr>& agg_states, size_t state_offsets,
-                        Column* to) const {
-        batch_serialize(batch_size, agg_states, state_offsets, to);
-    }
-
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
-        Int64Column* column = down_cast<Int64Column*>((*dst).get());
+        auto* column = down_cast<Int64Column*>((*dst).get());
         column->get_data().assign(chunk_size, 1);
     }
 
@@ -96,20 +91,20 @@ public:
         this->data(state).count += !columns[0]->is_null(row_num);
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         if (columns[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-                for (size_t i = 0; i < batch_size; ++i) {
+                for (size_t i = 0; i < chunk_size; ++i) {
                     this->data(state).count += !null_data[i];
                 }
             } else {
                 this->data(state).count += nullable_column->size();
             }
         } else {
-            this->data(state).count += batch_size;
+            this->data(state).count += chunk_size;
         }
     }
 
@@ -151,11 +146,11 @@ public:
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
 
-    void batch_serialize(size_t batch_size, const Buffer<AggDataPtr>& agg_states, size_t state_offset,
-                         Column* to) const override {
+    void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                         size_t state_offset, Column* to) const override {
         Int64Column* column = down_cast<Int64Column*>(to);
         Buffer<int64_t>& result_data = column->get_data();
-        for (size_t i = 0; i < batch_size; i++) {
+        for (size_t i = 0; i < chunk_size; i++) {
             result_data.emplace_back(data(agg_states[i] + state_offset).count);
         }
     }
@@ -163,11 +158,6 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric());
         down_cast<Int64Column*>(to)->append(this->data(state).count);
-    }
-
-    void batch_finalize(size_t batch_size, const Buffer<AggDataPtr>& agg_states, size_t state_offsets,
-                        Column* to) const {
-        batch_serialize(batch_size, agg_states, state_offsets, to);
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {

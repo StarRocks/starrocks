@@ -62,7 +62,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "simd/simd.h"
@@ -99,10 +98,10 @@ ExecNode::~ExecNode() {
     }
 }
 
-void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
+void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
         for (auto& i : _children) {
-            i->push_down_predicate(state, expr_ctxs, is_vectorized);
+            i->push_down_predicate(state, expr_ctxs);
             if (expr_ctxs->size() == 0) {
                 return;
             }
@@ -124,11 +123,20 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
     }
 }
 
+void ExecNode::push_down_tuple_slot_mappings(RuntimeState* state,
+                                             const std::vector<TupleSlotMapping>& parent_mappings) {
+    _tuple_slot_mappings = parent_mappings;
+    for (auto& child : _children) {
+        child->push_down_tuple_slot_mappings(state, _tuple_slot_mappings);
+    }
+}
+
 void ExecNode::push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector) {
+    if (collector->empty()) return;
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
         push_down_join_runtime_filter_to_children(state, collector);
     }
-    _runtime_filter_collector.push_down(collector, _tuple_ids);
+    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
 }
 
 void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state,
@@ -168,7 +176,8 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
 void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::PipelineBuilderContext* context,
                                                 const RcRfProbeCollectorPtr& rc_rf_probe_collector) {
     op->init_runtime_filter(context->fragment_context()->runtime_filter_hub(), this->get_tuple_ids(),
-                            this->local_rf_waiting_set(), this->row_desc(), rc_rf_probe_collector);
+                            this->local_rf_waiting_set(), this->row_desc(), rc_rf_probe_collector,
+                            std::move(_filter_null_value_columns), std::move(_tuple_slot_mappings));
 }
 
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
@@ -225,12 +234,12 @@ pipeline::OpFactories ExecNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 }
 
 // specific_get_next to get chunks, It's implemented in subclass.
-// if pre chunk is nullptr current chunk size >= batch_size / 2, direct return the current chunk
+// if pre chunk is nullptr current chunk size >= chunk_size / 2, direct return the current chunk
 // if pre chunk is not nullptr and pre chunk size + cur chunk size <= 4096, merge the two chunk
 // if pre chunk is not nullptr and pre chunk size + cur chunk size > 4096, return pre chunk
 Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* eos, ChunkPtr& pre_output_chunk,
                                     const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next) {
-    size_t batch_size = state->batch_size();
+    size_t chunk_size = state->chunk_size();
 
     while (true) {
         bool cur_eos = false;
@@ -251,8 +260,8 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
             if (cur_size <= 0) {
                 continue;
             } else if (pre_output_chunk == nullptr) {
-                if (cur_size >= batch_size / 2) {
-                    // the probe chunk size of read from right child >= batch_size, direct return
+                if (cur_size >= chunk_size / 2) {
+                    // the probe chunk size of read from right child >= chunk_size, direct return
                     *eos = false;
                     *chunk = std::move(cur_chunk);
                     return Status::OK();
@@ -261,8 +270,8 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
                     continue;
                 }
             } else {
-                if (cur_size + pre_output_chunk->num_rows() > batch_size) {
-                    // the two chunk size > batch_size, return the first reserved chunk
+                if (cur_size + pre_output_chunk->num_rows() > chunk_size) {
+                    // the two chunk size > chunk_size, return the first reserved chunk
                     *eos = false;
                     *chunk = std::move(pre_output_chunk);
                     pre_output_chunk = std::move(cur_chunk);
@@ -619,15 +628,15 @@ void ExecNode::eval_join_runtime_filters(vectorized::ChunkPtr* chunk) {
     eval_join_runtime_filters(chunk->get());
 }
 
-void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk) {
-    if (_filter_null_value_columns.size() == 0) return;
+void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns) {
+    if (filter_null_value_columns.size() == 0) return;
     size_t before_size = chunk->num_rows();
     if (before_size == 0) return;
 
     // lazy allocation.
     vectorized::Buffer<uint8_t> selection(0);
 
-    for (SlotId slot_id : _filter_null_value_columns) {
+    for (SlotId slot_id : filter_null_value_columns) {
         const ColumnPtr& c = chunk->get_column_by_slot_id(slot_id);
         if (!c->is_nullable()) continue;
         const vectorized::NullableColumn* nullable_column =
@@ -656,6 +665,10 @@ void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk) {
         VLOG_FILE << "filter null values. before_size = " << before_size << ", after_size = " << after_size;
         chunk->filter(selection);
     }
+}
+
+void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk) {
+    eval_filter_null_values(chunk, _filter_null_value_columns);
 }
 
 void ExecNode::collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode*>* nodes) {

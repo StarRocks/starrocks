@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -103,6 +103,7 @@ struct DistinctAggregateState<PT, BinaryPTGuard<PT>> {
         KeyType key(raw_key);
         set.template lazy_emplace(key, [&](const auto& ctor) {
             uint8_t* pos = mem_pool->allocate(key.size);
+            assert(pos != nullptr);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
             ret = phmap::item_serialize_size<SliceHashSet>::value;
@@ -115,6 +116,7 @@ struct DistinctAggregateState<PT, BinaryPTGuard<PT>> {
         KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
         set.template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
             uint8_t* pos = mem_pool->allocate(key.size);
+            assert(pos != nullptr);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
             ret = phmap::item_serialize_size<SliceHashSet>::value;
@@ -156,6 +158,7 @@ struct DistinctAggregateState<PT, BinaryPTGuard<PT>> {
             // we only memcpy when the key is new
             set.template lazy_emplace(key, [&](const auto& ctor) {
                 uint8_t* pos = mem_pool->allocate(key.size);
+                assert(pos != nullptr);
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
                 mem_usage += phmap::item_serialize_size<SliceHashSet>::value;
@@ -277,7 +280,7 @@ public:
     // The following two functions are specialized because of performance issue.
     // We have found out that by precomputing and prefetching hash values, we can boost peformance of hash table by a lot.
     // And this is a quite useful pattern for phmap::flat_hash_table.
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage = 0;
@@ -287,9 +290,9 @@ public:
             size_t hash_value;
         };
 
-        std::vector<CacheEntry> cache(batch_size);
+        std::vector<CacheEntry> cache(chunk_size);
         const auto& container_data = column->get_data();
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             size_t hash_value = agg_state.set.hash_function()(container_data[i]);
             cache[i] = CacheEntry{hash_value};
         }
@@ -297,8 +300,8 @@ public:
         size_t prefetch_index = 16;
 
         MemPool* mem_pool = ctx->impl()->mem_pool();
-        for (size_t i = 0; i < batch_size; ++i) {
-            if (prefetch_index < batch_size) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (prefetch_index < chunk_size) {
                 agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
                 prefetch_index++;
             }
@@ -307,7 +310,7 @@ public:
         ctx->impl()->add_mem_usage(mem_usage);
     }
 
-    void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+    void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage = 0;
@@ -320,9 +323,9 @@ public:
             size_t hash_value;
         };
 
-        std::vector<CacheEntry> cache(batch_size);
+        std::vector<CacheEntry> cache(chunk_size);
         const auto& container_data = column->get_data();
-        for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t i = 0; i < chunk_size; ++i) {
             AggDataPtr state = states[i] + state_offset;
             auto& agg_state = this->data(state);
             size_t hash_value = agg_state.set.hash_function()(container_data[i]);
@@ -332,8 +335,8 @@ public:
         size_t prefetch_index = 16;
 
         MemPool* mem_pool = ctx->impl()->mem_pool();
-        for (size_t i = 0; i < batch_size; ++i) {
-            if (prefetch_index < batch_size) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (prefetch_index < chunk_size) {
                 cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
                 prefetch_index++;
             }
@@ -450,7 +453,7 @@ public:
         DCHECK(false) << "this method shouldn't be called";
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         size_t mem_usage = 0;
         auto& agg_state = this->data(state);

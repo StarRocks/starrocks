@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.planner;
 
@@ -195,6 +195,7 @@ public class RuntimeFilterDescription {
             t.putToPlan_node_id_to_target_expr(entry.getKey(), entry.getValue().treeToThrift());
         }
         t.setHas_remote_targets(hasRemoteTargets);
+        t.setBuild_plan_node_id(buildPlanNodeId);
         if (!mergeNodes.isEmpty()) {
             t.setRuntime_filter_merge_nodes(mergeNodes);
         }

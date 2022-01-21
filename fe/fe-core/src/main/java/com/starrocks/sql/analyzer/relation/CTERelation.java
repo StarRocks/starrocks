@@ -1,23 +1,19 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.analyzer.relation;
-
-import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.RelationFields;
 
 import java.util.List;
 
 public class CTERelation extends Relation {
     private final String cteId;
-
     private final String name;
+    private final List<String> columnOutputNames;
+    private final QueryRelation cteQuery;
 
-    private QueryRelation cteQuery;
-
-    public CTERelation(String cteId, String name, QueryRelation cteQuery, List<Field> relationFields) {
-        super(new RelationFields(relationFields));
+    public CTERelation(String cteId, String name, List<String> columnOutputNames, QueryRelation cteQuery) {
         this.cteId = cteId;
         this.name = name;
+        this.columnOutputNames = columnOutputNames;
         this.cteQuery = cteQuery;
     }
 
@@ -27,6 +23,14 @@ public class CTERelation extends Relation {
 
     public String getCteId() {
         return cteId;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public List<String> getColumnOutputNames() {
+        return columnOutputNames;
     }
 
     @Override

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/primary_index.h"
 
@@ -49,6 +49,20 @@ void test_integral_pk() {
     }
     ASSERT_TRUE(pk_index->insert(2, 0, *pk_col).ok());
 
+    {
+        std::vector<uint64_t> rowids(pk_col->size());
+        pk_index->get(*pk_col, &rowids);
+        for (uint32_t i = 0; i < kSegmentSize; i++) {
+            uint64_t v = rowids[i];
+            uint32_t rssid = v >> 32;
+            CHECK_EQ(rssid, 2);
+            if (rssid != static_cast<uint32_t>(-1)) {
+                uint32_t rowid = v & ROWID_MASK;
+                CHECK_EQ(rowid, i);
+            }
+        }
+    }
+
     PrimaryIndex::DeletesMap deletes;
 
     // [3*kSegmentSize, 4*kSegmentSize)
@@ -83,6 +97,16 @@ void test_integral_pk() {
     deletes.clear();
     pk_index->erase(*pk_col, &deletes);
     CHECK_EQ(2, deletes.size());
+
+    {
+        std::vector<uint64_t> rowids(pk_col->size());
+        pk_index->get(*pk_col, &rowids);
+        for (uint32_t i = 0; i < kSegmentSize; i++) {
+            uint64_t v = rowids[i];
+            uint32_t rssid = v >> 32;
+            CHECK_EQ(rssid, -1);
+        }
+    }
 
     CHECK(deletes.find(2) != deletes.end());
     CHECK(deletes.find(2) != deletes.end());
@@ -152,6 +176,20 @@ void test_binary_pk() {
     }
     ASSERT_TRUE(pk_index->insert(2, 0, *pk_col).ok());
 
+    {
+        std::vector<uint64_t> rowids(pk_col->size());
+        pk_index->get(*pk_col, &rowids);
+        for (uint32_t i = 0; i < kSegmentSize; i++) {
+            uint64_t v = rowids[i];
+            uint32_t rssid = v >> 32;
+            CHECK_EQ(rssid, 2);
+            if (rssid != static_cast<uint32_t>(-1)) {
+                uint32_t rowid = v & ROWID_MASK;
+                CHECK_EQ(rowid, i);
+            }
+        }
+    }
+
     PrimaryIndex::DeletesMap deletes;
 
     // [3*kSegmentSize, 4*kSegmentSize)
@@ -189,6 +227,16 @@ void test_binary_pk() {
     deletes.clear();
     pk_index->erase(*pk_col, &deletes);
     CHECK_EQ(2, deletes.size());
+
+    {
+        std::vector<uint64_t> rowids(pk_col->size());
+        pk_index->get(*pk_col, &rowids);
+        for (uint32_t i = 0; i < kSegmentSize; i++) {
+            uint64_t v = rowids[i];
+            uint32_t rssid = v >> 32;
+            CHECK_EQ(rssid, -1);
+        }
+    }
 
     CHECK(deletes.find(2) != deletes.end());
     CHECK(deletes.find(3) != deletes.end());

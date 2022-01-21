@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -54,7 +54,7 @@ public:
     /**
      * @param: 
      * @paramType columns: [TYPE_OBJECT]
-     * @return TYPE_VARCHA
+     * @return TYPE_VARCHAR
      */
     DEFINE_VECTORIZED_FN(bitmap_to_string);
 

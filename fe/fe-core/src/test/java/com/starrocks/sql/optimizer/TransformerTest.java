@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.analysis.SqlParser;
@@ -150,7 +150,7 @@ public class TransformerTest {
 
             Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
             Relation relation = analyzer.analyze(statementBase);
-            LogicalPlan logicalPlan = new RelationTransformer(new ColumnRefFactory()).transform(relation);
+            LogicalPlan logicalPlan = new RelationTransformer(new ColumnRefFactory(), connectContext).transform(relation);
 
             OperatorStrings operatorPrinter = new OperatorStrings();
             try {

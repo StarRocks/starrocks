@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -33,6 +33,7 @@ class RowsetReadOptions;
 class Schema;
 class TabletReader;
 class ChunkChanger;
+class SegmentIterator;
 } // namespace vectorized
 
 struct EditVersion {
@@ -59,12 +60,16 @@ struct CompactionInfo {
 // maintain all states for updatable tablets
 class TabletUpdates {
 public:
+    using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+
     explicit TabletUpdates(Tablet& tablet);
     ~TabletUpdates();
 
     Status init();
 
     bool is_error() const { return _error; }
+
+    std::string get_error_msg() const { return _error_msg; }
 
     using IteratorList = std::vector<std::shared_ptr<vectorized::ChunkIterator>>;
 
@@ -171,9 +176,60 @@ public:
     //  - logs
     Status clear_meta();
 
+    // get column values by rssids and rowids, at currently applied version
+    // for example:
+    // get_column_values with
+    //    column:          {1,3}
+    //    with_default:    true
+    //    rowids_by_rssid: {4:[1,3], 6:[2,4]}
+    // will return:
+    // [
+    //   [
+    //              default_value_for_column 1,
+    //          column 1 value@rssid:4 rowid:1,
+    //          column 1 value@rssid:4 rowid:3,
+    //          column 1 value@rssid:6 rowid:2,
+    //          column 1 value@rssid:6 rowid:4,
+    //   ],
+    //   [
+    //              default_value_for_column 2,
+    //          column 2 value@rssid:4 rowid:1,
+    //          column 2 value@rssid:4 rowid:3,
+    //          column 2 value@rssid:6 rowid:2,
+    //          column 2 value@rssid:6 rowid:4,
+    //   ]
+    // ]
+    // get_column_values with
+    //    column:          {1,3}
+    //    with_default:    false
+    //    rowids_by_rssid: {4:[1,3], 6:[2,4]}
+    // will return:
+    // [
+    //   [
+    //          column 1 value@rssid:4 rowid:1,
+    //          column 1 value@rssid:4 rowid:3,
+    //          column 1 value@rssid:6 rowid:2,
+    //          column 1 value@rssid:6 rowid:4,
+    //   ],
+    //   [
+    //          column 2 value@rssid:4 rowid:1,
+    //          column 2 value@rssid:4 rowid:3,
+    //          column 2 value@rssid:6 rowid:2,
+    //          column 2 value@rssid:6 rowid:4,
+    //   ]
+    // ]
+    Status get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
+                             std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+                             vector<std::unique_ptr<vectorized::Column>>* columns);
+
+    Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
+                                         EditVersion* read_version, uint32_t* next_rowset_id,
+                                         std::vector<std::vector<uint64_t>*>* rss_rowids);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
+    friend class RowsetUpdateState;
 
     template <typename K, typename V>
     using OrderedMap = std::map<K, V>;
@@ -255,7 +311,7 @@ private:
 
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 
-    void _set_error();
+    void _set_error(const string& msg);
 
     Status _load_from_pb(const TabletUpdatesPB& updates);
 
@@ -294,6 +350,8 @@ private:
 
     // used for async apply, make sure at most 1 thread is doing applying
     mutable std::mutex _apply_running_lock;
+    // make sure at most 1 thread is read or write primary index
+    mutable std::mutex _index_lock;
     // apply process is running currently
     bool _apply_running = false;
 
@@ -325,6 +383,7 @@ private:
     // keep the scene(internal state) unchanged for further investigation, and don't crash
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
+    std::string _error_msg;
 
     TabletUpdates(const TabletUpdates&) = delete;
     const TabletUpdates& operator=(const TabletUpdates&) = delete;

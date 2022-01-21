@@ -58,7 +58,9 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
     auto st = _exec_env->fragment_mgr()->exec_plan_fragment(
             ctx->put_result.params,
             [ctx](PlanFragmentExecutor* executor) {
-                ctx->mem_tracker = executor->runtime_state()->instance_mem_tracker();
+                ctx->runtime_profile = executor->runtime_state()->runtime_profile_ptr();
+                ctx->query_mem_tracker = executor->runtime_state()->query_mem_tracker_ptr();
+                ctx->instance_mem_tracker = executor->runtime_state()->instance_mem_tracker_ptr();
             },
             [ctx](PlanFragmentExecutor* executor) {
                 ctx->commit_infos = std::move(executor->runtime_state()->tablet_commit_infos());

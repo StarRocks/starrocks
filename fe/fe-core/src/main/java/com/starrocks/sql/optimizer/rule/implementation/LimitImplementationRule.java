@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -22,6 +22,7 @@ public class LimitImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
         return Lists.newArrayList(OptExpression
-                .create(new PhysicalLimitOperator(limit.getOffset(), limit.getLimit()), input.getInputs()));
+                .create(new PhysicalLimitOperator(limit.getOffset(), limit.getLimit(), limit.getProjection()),
+                        input.getInputs()));
     }
 }

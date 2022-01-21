@@ -64,4 +64,6 @@ public class FeConstants {
     public static String null_string = "\\N";
 
     public static boolean USE_MOCK_DICT_MANAGER = false;
+
+    public static final int default_tablet_number = 128;
 }

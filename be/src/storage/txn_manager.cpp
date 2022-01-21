@@ -31,7 +31,6 @@
 #include <set>
 
 #include "storage/data_dir.h"
-#include "storage/reader.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
@@ -39,22 +38,6 @@
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
-
-using apache::thrift::ThriftDebugString;
-
-using std::back_inserter;
-using std::copy;
-using std::inserter;
-using std::list;
-using std::map;
-using std::nothrow;
-using std::pair;
-using std::priority_queue;
-using std::set;
-using std::set_difference;
-using std::string;
-using std::stringstream;
-using std::vector;
 
 namespace starrocks {
 
@@ -70,33 +53,31 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
     _txn_mutex = std::unique_ptr<std::mutex[]>(new std::mutex[_txn_shard_size]);
 }
 
-OLAPStatus TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
-                                   TTransactionId transaction_id, const PUniqueId& load_id) {
+Status TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                               const PUniqueId& load_id) {
     return prepare_txn(partition_id, transaction_id, tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid(),
                        load_id);
 }
 
-OLAPStatus TxnManager::commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
-                                  TTransactionId transaction_id, const PUniqueId& load_id,
-                                  const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
+Status TxnManager::commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                              const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
     return commit_txn(tablet->data_dir()->get_meta(), partition_id, transaction_id, tablet->tablet_id(),
                       tablet->schema_hash(), tablet->tablet_uid(), load_id, rowset_ptr, is_recovery);
 }
 
-OLAPStatus TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
-                                   TTransactionId transaction_id, const Version& version) {
+Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                               const Version& version) {
     return publish_txn(tablet->data_dir()->get_meta(), partition_id, transaction_id, tablet->tablet_id(),
                        tablet->schema_hash(), tablet->tablet_uid(), version);
 }
 
 // delete the txn from manager if it is not committed(not have a valid rowset)
-OLAPStatus TxnManager::rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
-                                    TTransactionId transaction_id) {
+Status TxnManager::rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
+                                TTransactionId transaction_id) {
     return rollback_txn(partition_id, transaction_id, tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());
 }
 
-OLAPStatus TxnManager::delete_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
-                                  TTransactionId transaction_id) {
+Status TxnManager::delete_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id) {
     return delete_txn(tablet->data_dir()->get_meta(), partition_id, transaction_id, tablet->tablet_id(),
                       tablet->schema_hash(), tablet->tablet_uid());
 }
@@ -104,8 +85,8 @@ OLAPStatus TxnManager::delete_txn(TPartitionId partition_id, const TabletSharedP
 // prepare txn should always be allowed because ingest task will be retried
 // could not distinguish rollup, schema change or base table, prepare txn successfully will allow
 // ingest retried
-OLAPStatus TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                                   SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id) {
+Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                               SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id) {
     TxnKey key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     std::unique_lock txn_wrlock(_get_txn_map_lock(transaction_id));
@@ -123,7 +104,7 @@ OLAPStatus TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId tra
                 LOG(WARNING) << "find transaction exists when add to engine."
                              << "partition_id: " << key.first << ", transaction_id: " << key.second
                              << ", tablet: " << tablet_info.to_string();
-                return OLAP_SUCCESS;
+                return Status::OK();
             }
         }
     }
@@ -134,7 +115,7 @@ OLAPStatus TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId tra
     if (txn_partition_map.size() > config::max_runnings_transactions_per_txn_map) {
         LOG(WARNING) << "too many transactions: " << txn_tablet_map.size()
                      << ", limit: " << config::max_runnings_transactions_per_txn_map;
-        return OLAP_ERR_TOO_MANY_TRANSACTIONS;
+        return Status::InternalError("Too many transactions.");
     }
 
     // not found load id
@@ -147,12 +128,12 @@ OLAPStatus TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId tra
     VLOG(3) << "add transaction to engine successfully."
             << "partition_id: " << key.first << ", transaction_id: " << key.second
             << ", tablet: " << tablet_info.to_string();
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
-OLAPStatus TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                                  TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
-                                  const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
+Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
+                              TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
+                              const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
     if (partition_id < 1 || transaction_id < 1 || tablet_id < 1) {
         LOG(FATAL) << "invalid commit req "
                    << " partition_id=" << partition_id << " transaction_id=" << transaction_id
@@ -161,10 +142,11 @@ OLAPStatus TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTra
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     if (rowset_ptr == nullptr) {
-        LOG(WARNING) << "could not commit txn because rowset ptr is null. "
+        LOG(WARNING) << "could not commit txn. "
                      << "partition_id: " << key.first << ", transaction_id: " << key.second
                      << ", tablet: " << tablet_info.to_string();
-        return OLAP_ERR_ROWSET_INVALID;
+        return Status::InternalError(fmt::format("Could not commit txn. partition_id: {}, transaction_id, tablet: {}",
+                                                 key.first, key.second, tablet_info.to_string()));
     }
 
     std::lock_guard txn_lock(_get_txn_lock(transaction_id));
@@ -187,17 +169,16 @@ OLAPStatus TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTra
                               << "partition_id: " << key.first << ", transaction_id: " << key.second
                               << ", tablet: " << tablet_info.to_string()
                               << ", rowset_id: " << load_info.rowset->rowset_id();
-                    return OLAP_SUCCESS;
+                    return Status::OK();
                 } else if (load_info.load_id.hi() == load_id.hi() && load_info.load_id.lo() == load_id.lo() &&
                            load_info.rowset != nullptr && load_info.rowset->rowset_id() != rowset_ptr->rowset_id()) {
                     // find a rowset with different rowset id, then it should not happen, just return errors
-                    LOG(WARNING) << "find transaction exists when add to engine. but rowset ids "
-                                    "are not same."
+                    LOG(WARNING) << "Transaction already exist but rowset_ids are not equal. "
                                  << "partition_id: " << key.first << ", transaction_id: " << key.second
                                  << ", tablet: " << tablet_info.to_string()
                                  << ", exist rowset_id: " << load_info.rowset->rowset_id()
                                  << ", new rowset_id: " << rowset_ptr->rowset_id();
-                    return OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST;
+                    return Status::AlreadyExist("Transaction already exist but rowset_ids are not equal.");
                 }
             }
         }
@@ -211,9 +192,9 @@ OLAPStatus TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTra
         rowset_ptr->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_ptr->rowset_id(), rowset_meta_pb);
         if (!st.ok()) {
-            LOG(WARNING) << "save committed rowset failed. when commit txn rowset_id:" << rowset_ptr->rowset_id()
-                         << "tablet id: " << tablet_id << "txn id:" << transaction_id;
-            return OLAP_ERR_ROWSET_SAVE_FAILED;
+            LOG(WARNING) << "Fail to save committed rowset. rowset_id:" << rowset_ptr->rowset_id()
+                         << ", tablet_id: " << tablet_id << "txn_id: " << transaction_id;
+            return Status::InternalError("Fail to save committed rowset.");
         }
     }
 
@@ -228,13 +209,13 @@ OLAPStatus TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTra
                   << " tablet: " << tablet_info.tablet_id << " rowsetid: " << rowset_ptr->rowset_id()
                   << " version: " << rowset_ptr->version().first;
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 // remove a txn from txn manager
-OLAPStatus TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                                   TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
-                                   const Version& version) {
+Status TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
+                               TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
+                               const Version& version) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     RowsetSharedPtr rowset_ptr = nullptr;
@@ -262,12 +243,12 @@ OLAPStatus TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTr
         auto& rowset_meta_pb = rowset_ptr->rowset_meta()->get_meta_pb();
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_ptr->rowset_id(), rowset_meta_pb);
         if (!st.ok()) {
-            LOG(WARNING) << "save committed rowset failed. when publish txn rowset_id:" << rowset_ptr->rowset_id()
-                         << ", tablet id: " << tablet_id << ", txn id:" << transaction_id;
-            return OLAP_ERR_ROWSET_SAVE_FAILED;
+            LOG(WARNING) << "Fail to save committed rowset. rowset_id:" << rowset_ptr->rowset_id()
+                         << ", tablet_id: " << tablet_id << "txn_id: " << transaction_id;
+            return Status::InternalError("Fail to save committed rowset.");
         }
     } else {
-        return OLAP_ERR_TRANSACTION_NOT_EXIST;
+        return Status::NotFound(fmt::format("Not found txn_id: ", transaction_id));
     }
     {
         std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
@@ -284,12 +265,12 @@ OLAPStatus TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTr
                 _clear_txn_partition_map_unlocked(transaction_id, partition_id);
             }
         }
-        return OLAP_SUCCESS;
+        return Status::OK();
     }
 }
 
-OLAPStatus TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId partition_id,
-                                    const TabletSharedPtr& tablet, int64_t version) {
+Status TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId partition_id, const TabletSharedPtr& tablet,
+                                int64_t version) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletUid tablet_uid = tablet->tablet_uid();
     TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet_uid);
@@ -316,10 +297,10 @@ OLAPStatus TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId 
         auto st = tablet->rowset_commit(version, rowset_ptr);
         if (!st.ok()) {
             StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
-            return OLAP_ERR_IO_ERROR;
+            return st;
         }
     } else {
-        return OLAP_ERR_TRANSACTION_NOT_EXIST;
+        return Status::NotFound(fmt::format("Not found txn_id: ", transaction_id));
     }
     {
         std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
@@ -336,7 +317,7 @@ OLAPStatus TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId 
                 _clear_txn_partition_map_unlocked(transaction_id, partition_id);
             }
         }
-        return OLAP_SUCCESS;
+        return Status::OK();
     }
 }
 
@@ -344,8 +325,8 @@ OLAPStatus TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId 
 // if the txn has related rowset then could not rollback it, because it
 // may be committed in another thread and our current thread meets errors when writing to data file
 // BE has to wait for fe call clear txn api
-OLAPStatus TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                                    SchemaHash schema_hash, const TabletUid& tablet_uid) {
+Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                                SchemaHash schema_hash, const TabletUid& tablet_uid) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
@@ -360,7 +341,7 @@ OLAPStatus TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId tr
             if (load_info.rowset != nullptr) {
                 // if rowset is not null, it means other thread may commit the rowset
                 // should not delete txn any more
-                return OLAP_ERR_TRANSACTION_ALREADY_COMMITTED;
+                return Status::AlreadyExist(fmt::format("Txn has been already commit. txn_id: {}", transaction_id));
             }
         }
         it->second.erase(tablet_info);
@@ -372,20 +353,20 @@ OLAPStatus TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId tr
             _clear_txn_partition_map_unlocked(transaction_id, partition_id);
         }
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 // fe call this api to clear unused rowsets in be
 // could not delete the rowset if it already has a valid version
-OLAPStatus TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                                  TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid) {
+Status TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
+                              TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     std::unique_lock txn_wrlock(_get_txn_map_lock(transaction_id));
     txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
     auto it = txn_tablet_map.find(key);
     if (it == txn_tablet_map.end()) {
-        return OLAP_ERR_TRANSACTION_NOT_EXIST;
+        return Status::NotFound(fmt::format("Not found txn: {}", transaction_id));
     }
     auto load_itr = it->second.find(tablet_info);
     if (load_itr != it->second.end()) {
@@ -401,7 +382,7 @@ OLAPStatus TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTra
                              << ", tablet: " << tablet_info.to_string()
                              << ", rowset id: " << load_info.rowset->rowset_id()
                              << ", version: " << load_info.rowset->version().first;
-                return OLAP_ERR_TRANSACTION_ALREADY_VISIBLE;
+                return Status::InternalError("Could not delete transaction from engine");
             } else {
                 (void)RowsetMetaManager::remove(meta, tablet_uid, load_info.rowset->rowset_id());
 #ifndef BE_TEST
@@ -419,7 +400,7 @@ OLAPStatus TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTra
         txn_tablet_map.erase(it);
         _clear_txn_partition_map_unlocked(transaction_id, partition_id);
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 void TxnManager::get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,

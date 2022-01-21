@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UITL_BITMAP_H
-#define STARROCKS_BE_SRC_COMMON_UITL_BITMAP_H
+#pragma once
 
 #include "gutil/strings/fastmem.h"
 #include "util/bit_util.h"
@@ -245,5 +244,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

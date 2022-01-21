@@ -111,7 +111,7 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
     }
 }
 
-OLAPStatus SnapshotManager::release_snapshot(const string& snapshot_path) {
+Status SnapshotManager::release_snapshot(const string& snapshot_path) {
     std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "snapshot", _mem_tracker);
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
@@ -122,20 +122,17 @@ OLAPStatus SnapshotManager::release_snapshot(const string& snapshot_path) {
     auto stores = StorageEngine::instance()->get_stores();
     for (auto store : stores) {
         std::string abs_path;
-        RETURN_CODE_IF_ERROR_WITH_WARN(FileUtils::canonicalize(store->path(), &abs_path), OLAP_ERR_DIR_NOT_EXIST,
-                                       "canonical path " + store->path() + "failed");
-
+        RETURN_IF_ERROR(FileUtils::canonicalize(store->path(), &abs_path));
         if (snapshot_path.compare(0, abs_path.size(), abs_path) == 0 &&
             snapshot_path.compare(abs_path.size(), SNAPSHOT_PREFIX.size(), SNAPSHOT_PREFIX) == 0) {
             (void)FileUtils::remove_all(snapshot_path);
             LOG(INFO) << "success to release snapshot path. [path='" << snapshot_path << "']";
-
-            return OLAP_SUCCESS;
+            return Status::OK();
         }
     }
 
-    LOG(WARNING) << "released snapshot path illegal. [path='" << snapshot_path << "']";
-    return OLAP_ERR_CE_CMD_PARAMS_ERROR;
+    LOG(WARNING) << "Illegal snapshot_path: " << snapshot_path;
+    return Status::InvalidArgument(fmt::format("Illegal snapshot_path: {}", snapshot_path));
 }
 
 Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tablet_id, int32_t schema_hash) {
@@ -251,20 +248,17 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
         return Status::RuntimeError("fail to create rowset writer");
     }
 
-    if (rs_writer->add_rowset(org_rowset) != OLAP_SUCCESS) {
-        LOG(WARNING) << "Fail to add rowset " << org_rowset->rowset_id() << " to rowset " << rowset_id;
-        return Status::RuntimeError("fail to add rowset");
+    if (auto st = rs_writer->add_rowset(org_rowset); !st.ok()) {
+        LOG(WARNING) << "Fail to add rowset " << org_rowset->rowset_id() << " to rowset " << rowset_id << ": " << st;
+        return st;
     }
-    RowsetSharedPtr new_rowset = rs_writer->build();
-    if (new_rowset == nullptr) {
-        return Status::RuntimeError("fail to build rowset");
+    auto new_rowset = rs_writer->build();
+    if (!new_rowset.ok()) return new_rowset.status();
+    if (auto st = (*new_rowset)->load(); !st.ok()) {
+        LOG(WARNING) << "Fail to load new rowset: " << st;
+        return st;
     }
-    auto st = new_rowset->load();
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to load new rowset: " << st.to_string();
-        return Status::RuntimeError("fail to load new rowset");
-    }
-    new_rowset->rowset_meta()->to_rowset_pb(new_rs_meta_pb);
+    (*new_rowset)->rowset_meta()->to_rowset_pb(new_rs_meta_pb);
     org_rowset->remove();
     return Status::OK();
 }

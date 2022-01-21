@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -8,7 +8,6 @@
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
 #include "storage/decimal12.h"
-#include "storage/hll.h"
 #include "storage/uint24.h"
 #include "util/int96.h"
 #include "util/percentile_value.h"
@@ -18,6 +17,8 @@ namespace starrocks {
 class MemPool;
 class Status;
 class BitmapValue;
+class HyperLogLog;
+class PercentileValue;
 } // namespace starrocks
 
 namespace starrocks::vectorized {

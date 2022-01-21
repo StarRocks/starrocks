@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.Lists;
@@ -48,6 +48,7 @@ public abstract class PredicateOperator extends ScalarOperator {
         return "(" + arguments.stream().map(ScalarOperator::toString).collect(Collectors.joining(", ")) + ")";
     }
 
+    @Override
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet used = new ColumnRefSet();
         for (ScalarOperator child : arguments) {

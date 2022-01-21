@@ -19,13 +19,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_THREAD_H
-#define STARROCKS_BE_SRC_UTIL_THREAD_H
+#pragma once
 
 #include <pthread.h>
 #include <syscall.h>
 
 #include <atomic>
+#include <thread>
 
 #include "common/status.h"
 #include "gutil/ref_counted.h"
@@ -133,6 +133,11 @@ public:
     // performance sensistive code, however it is only guaranteed to return a
     // unique and stable thread ID, not necessarily the system thread ID.
     static int64_t current_thread_id();
+
+    // Set name for thread
+    // name's size should be less than 16, otherwise it will be truncated
+    static void set_thread_name(pthread_t t, const std::string name);
+    static void set_thread_name(std::thread& t, const std::string name);
 
 private:
     friend class ThreadJoiner;
@@ -277,5 +282,3 @@ private:
 };
 
 } //namespace starrocks
-
-#endif //STARROCKS_BE_SRC_UTIL_THREAD_H

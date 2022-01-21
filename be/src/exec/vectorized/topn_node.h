@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -39,6 +39,10 @@ private:
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
     std::vector<OrderByType> _order_by_types;
+    // if TopNNode is followed by AnalyticNode with partition_exprs, this partition_exprs is
+    // also added to TopNNode to hint that local shuffle operator is prepended to TopNNode in
+    // order to eliminate merging operation in pipeline execution engine.
+    std::vector<ExprContext*> _analytic_partition_exprs;
 
     // Cached descriptor for the materialized tuple. Assigned in Prepare().
     TupleDescriptor* _materialized_tuple_desc;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -55,7 +55,7 @@ public:
     // non-output operators to be finished early.
     bool is_finished() const { return _is_finished.load(std::memory_order_acquire); }
 
-private:
+protected:
     std::atomic<int32_t> _num_running_operators = 0;
     std::atomic<bool> _is_finished = false;
 };

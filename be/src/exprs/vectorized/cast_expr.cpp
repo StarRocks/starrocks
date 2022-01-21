@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/cast_expr.h"
 
@@ -14,6 +14,7 @@
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "storage/hll.h"
 #include "util/date_func.h"
 
 namespace starrocks::vectorized {
@@ -94,8 +95,8 @@ UNARY_FN_CAST(TYPE_TIME, TYPE_BOOLEAN, ImplicitToBoolean);
 
 template <>
 ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
-    ColumnBuilder<TYPE_BOOLEAN> builder;
     ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnBuilder<TYPE_BOOLEAN> builder(viewer.size());
 
     StringParser::ParseResult result;
 
@@ -133,6 +134,28 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
     return builder.build(column->is_constant());
 }
 
+template <>
+ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_HLL>(ColumnPtr& column) {
+    ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnBuilder<TYPE_HLL> builder(viewer.size());
+    for (int row = 0; row < viewer.size(); ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto value = viewer.value(row);
+        if (!HyperLogLog::is_valid(value)) {
+            builder.append_null();
+        } else {
+            HyperLogLog hll;
+            hll.deserialize(value);
+            builder.append(&hll);
+        }
+    }
+
+    return builder.build(column->is_constant());
+}
 // all int(tinyint, smallint, int, bigint, largeint) cast implements
 DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
     return value;
@@ -157,9 +180,8 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToNumber, value) {
 
 template <PrimitiveType FromType, PrimitiveType ToType>
 ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
-    ColumnBuilder<ToType> builder;
     ColumnViewer<TYPE_VARCHAR> viewer(column);
-
+    ColumnBuilder<ToType> builder(viewer.size());
     StringParser::ParseResult result;
 
     for (int row = 0; row < viewer.size(); ++row) {
@@ -181,8 +203,8 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
 
 template <PrimitiveType FromType, PrimitiveType ToType>
 ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
-    ColumnBuilder<ToType> builder;
     ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnBuilder<ToType> builder(viewer.size());
 
     StringParser::ParseResult result;
 
@@ -352,8 +374,8 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_DECIMALV2, TimestampToDecimal);
 
 template <>
 ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ColumnPtr& column) {
-    ColumnBuilder<TYPE_DECIMALV2> builder;
     ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnBuilder<TYPE_DECIMALV2> builder(viewer.size());
 
     if (!column->has_null()) {
         for (int row = 0; row < viewer.size(); ++row) {
@@ -384,8 +406,8 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ColumnPtr& column) {
 // date
 template <PrimitiveType FromType, PrimitiveType ToType>
 ColumnPtr cast_to_date_fn(ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATE> builder;
     ColumnViewer<FromType> viewer(column);
+    ColumnBuilder<TYPE_DATE> builder(viewer.size());
 
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
@@ -423,8 +445,8 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_DATE, TimestampToDate);
 
 template <>
 ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATE> builder;
     ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnBuilder<TYPE_DATE> builder(viewer.size());
 
     if (!column->has_null()) {
         for (int row = 0; row < viewer.size(); ++row) {
@@ -454,8 +476,8 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ColumnPtr& column) {
 // datetime(timestamp)
 template <PrimitiveType FromType, PrimitiveType ToType>
 ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATETIME> builder;
     ColumnViewer<FromType> viewer(column);
+    ColumnBuilder<TYPE_DATETIME> builder(viewer.size());
 
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
@@ -493,8 +515,8 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_DATETIME, DateToTimestmap);
 
 template <>
 ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATETIME>(ColumnPtr& column) {
-    ColumnBuilder<TYPE_DATETIME> builder;
     ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnBuilder<TYPE_DATETIME> builder(viewer.size());
 
     if (!column->has_null()) {
         for (int row = 0; row < viewer.size(); ++row) {
@@ -555,9 +577,8 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_TIME, DatetimeToTime);
 
 template <>
 ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ColumnPtr& column) {
-    ColumnBuilder<TYPE_TIME> builder;
-
     auto size = column->size();
+    ColumnBuilder<TYPE_TIME> builder(size);
     ColumnViewer<TYPE_VARCHAR> viewer_time(column);
     for (size_t row = 0; row < size; ++row) {
         if (viewer_time.is_null(row)) {
@@ -843,8 +864,8 @@ private:
         }
 
         // type.length > 0
-        ColumnBuilder<TYPE_VARCHAR> builder;
         ColumnViewer<FloatType> viewer(column);
+        ColumnBuilder<TYPE_VARCHAR> builder(viewer.size());
 
         char value[MAX_DOUBLE_STR_LENGTH];
         size_t len = 0;
@@ -876,8 +897,8 @@ private:
             return column;
         }
 
-        ColumnBuilder<TYPE_VARCHAR> builder;
         ColumnViewer<TYPE_VARCHAR> viewer(column);
+        ColumnBuilder<TYPE_VARCHAR> builder(viewer.size());
 
         for (int row = 0; row < viewer.size(); ++row) {
             if (viewer.is_null(row)) {
@@ -894,8 +915,8 @@ private:
     }
 
     ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
-        ColumnBuilder<TYPE_VARCHAR> builder;
         ColumnViewer<TYPE_TIME> viewer(column);
+        ColumnBuilder<TYPE_VARCHAR> builder(viewer.size());
 
         for (int row = 0; row < viewer.size(); ++row) {
             if (viewer.is_null(row)) {
@@ -1003,6 +1024,10 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
     if (from_type == TYPE_NULL) {
         // NULL TO OTHER TYPE, direct return
         from_type = to_type;
+    }
+
+    if (from_type == TYPE_VARCHAR && to_type == TYPE_HLL) {
+        return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL>(node);
     }
 
     if (to_type == TYPE_VARCHAR) {

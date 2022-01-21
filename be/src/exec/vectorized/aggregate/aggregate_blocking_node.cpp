@@ -1,12 +1,14 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
+#include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
+#include "runtime/current_thread.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {
@@ -47,7 +49,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
             continue;
         }
 
-        DCHECK_LE(chunk->num_rows(), config::vector_chunk_size);
+        DCHECK_LE(chunk->num_rows(), runtime_state()->chunk_size());
 
         _aggregator->evaluate_exprs(chunk.get());
 
@@ -57,16 +59,17 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
             if (!_aggregator->is_none_group_by_exprs()) {
                 if (false) {
                 }
-#define HASH_MAP_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME)                       \
-            _aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, chunk_size, agg_group_by_with_limit);
+#define HASH_MAP_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) {                                     \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
+                *_aggregator->hash_map_variant().NAME, chunk_size, agg_group_by_with_limit));                          \
+    }
                 APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
                 _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
                                   _aggregator->mem_pool()->total_reserved_bytes());
-                _aggregator->try_convert_to_two_level_map();
+                TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
             }
             if (_aggregator->is_none_group_by_exprs()) {
                 _aggregator->compute_single_agg_state(chunk_size);
@@ -129,7 +132,7 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = config::vector_chunk_size;
+    int32_t chunk_size = runtime_state()->chunk_size();
 
     if (_aggregator->is_none_group_by_exprs()) {
         SCOPED_TIMER(_aggregator->get_results_timer());
@@ -145,10 +148,10 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 #undef HASH_MAP_METHOD
     }
 
+    size_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
 
     // For having
-    size_t old_size = (*chunk)->num_rows();
     ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
     _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
 
@@ -166,12 +169,32 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     if (agg_node.need_finalize) {
         // If finalize aggregate with group by clause, then it can be paralized
         if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
-            std::vector<ExprContext*> group_by_expr_ctxs;
-            Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-            operators_with_sink =
-                    context->maybe_interpolate_local_shuffle_exchange(operators_with_sink, group_by_expr_ctxs);
+            // There are two ways of shuffle
+            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHFFULE_HASH_PARTITIONED
+            // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
+            // there is no need to perform local shuffle again at receiver side
+            // 2. Otherwise, add LocalExchangeOperator
+            // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into AggregateBlockingSinkOperator.
+            bool need_local_shuffle = true;
+            if (auto* exchange_op =
+                        dynamic_cast<pipeline::ExchangeSourceOperatorFactory*>(operators_with_sink[0].get());
+                exchange_op != nullptr) {
+                auto& texchange_node = exchange_op->texchange_node();
+                DCHECK(texchange_node.__isset.partition_type);
+                if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
+                    texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    need_local_shuffle = false;
+                }
+            }
+            if (need_local_shuffle) {
+                std::vector<ExprContext*> group_by_expr_ctxs;
+                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+                operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(
+                        runtime_state(), operators_with_sink, group_by_expr_ctxs);
+            }
         } else {
-            operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
+            operators_with_sink =
+                    context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_with_sink);
         }
     }
     // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value

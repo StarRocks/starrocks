@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_SEARCHARGUMENT_HH
-#define ORC_SEARCHARGUMENT_HH
+#pragma once
 
 #include <map>
 #include <unordered_map>
@@ -207,5 +206,3 @@ public:
 };
 
 } // namespace orc
-
-#endif //ORC_SEARCHARGUMENT_HH

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -196,7 +196,7 @@ public:
         }
 
         if (lhs->is_constant()) {
-            return ConstColumn::create(result, 1);
+            return ConstColumn::create(result, size);
         }
         return result;
     }
@@ -205,11 +205,10 @@ public:
     // equal_null: true means that 'null' in column and 'null' in set is equal.
     template <bool null_in_set, bool equal_null, bool use_array>
     ColumnPtr eval_on_chunk(const ColumnPtr& lhs) {
-        ColumnBuilder<TYPE_BOOLEAN> builder;
         ColumnViewer<Type> viewer(lhs);
-
-        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column())->get_data().data();
         size_t size = viewer.size();
+        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column())->get_data().data();
 
         for (int row = 0; row < size; ++row) {
             if (viewer.is_null(row)) {
@@ -243,7 +242,7 @@ public:
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
         ColumnPtr lhs = _children[0]->evaluate(context, ptr);
-        if (ColumnHelper::count_nulls(lhs) == lhs->size()) {
+        if (!_eq_null && ColumnHelper::count_nulls(lhs) == lhs->size()) {
             return ColumnHelper::create_const_null_column(lhs->size());
         }
         bool use_array = is_use_array();
