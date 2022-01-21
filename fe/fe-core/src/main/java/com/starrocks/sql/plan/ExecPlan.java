@@ -27,7 +27,7 @@ public class ExecPlan {
     private final DescriptorTable descTbl = new DescriptorTable();
     private final Map<ColumnRefOperator, Expr> colRefToExpr = new HashMap<>();
     private final ArrayList<PlanFragment> fragments = new ArrayList<>();
-    private final Map<String, PlanFragment> cteProduceFragments = Maps.newHashMap();
+    private final Map<Integer, PlanFragment> cteProduceFragments = Maps.newHashMap();
     private int planCount = 0;
 
     private final OptExpression physicalPlan;
@@ -82,7 +82,7 @@ public class ExecPlan {
         return planCount;
     }
 
-    public Map<String, PlanFragment> getCteProduceFragments() {
+    public Map<Integer, PlanFragment> getCteProduceFragments() {
         return cteProduceFragments;
     }
 

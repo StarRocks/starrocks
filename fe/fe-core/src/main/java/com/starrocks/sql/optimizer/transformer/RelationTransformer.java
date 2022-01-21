@@ -95,7 +95,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
     private final ConnectContext session;
 
     private final ExpressionMapping outer;
-    private final Map<String, ExpressionMapping> cteContext;
+    private final Map<Integer, ExpressionMapping> cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
@@ -106,7 +106,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
     }
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
-                               Map<String, ExpressionMapping> cteContext) {
+                               Map<Integer, ExpressionMapping> cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
