@@ -223,13 +223,14 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         }
     }
     
+    ColumnPtr p;
     if (type_desc.type == TYPE_ARRAY) {
         auto offsets = UInt32Column::create();
         auto data = create_column(type_desc.children[0], true);
-        return ArrayColumn::create(std::move(data), std::move(offsets));
+        p = ArrayColumn::create(std::move(data), std::move(offsets));
+    } else {
+        p = type_dispatch_all(type_desc.type, ColumnBuilder(), type_desc);
     }
-
-    ColumnPtr p = type_dispatch_all(type_desc.type, ColumnBuilder(), type_desc);
 
     if (is_const) {
         return ConstColumn::create(p);
