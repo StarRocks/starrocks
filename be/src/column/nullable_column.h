@@ -276,6 +276,8 @@ public:
         return _data_column->reach_capacity_limit() || _null_column->reach_capacity_limit();
     }
 
+    Column* mutable_child_column() { return _data_column.get(); }
+
 private:
     ColumnPtr _data_column;
     NullColumnPtr _null_column;

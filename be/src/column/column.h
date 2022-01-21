@@ -341,6 +341,8 @@ public:
 
     virtual Status accept_mutable(ColumnVisitorMutable* visitor) = 0;
 
+    virtual Column* mutable_child_column() { return nullptr; }
+
 protected:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
