@@ -872,7 +872,8 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     _sender_queues.reserve(num_queues);
     int num_sender_per_queue = is_merging ? 1 : num_senders;
     for (int i = 0; i < num_queues; ++i) {
-        SenderQueue* queue = _sender_queue_pool.add(new SenderQueue(this, num_sender_per_queue, degree_of_parallelism));
+        SenderQueue* queue =
+                _sender_queue_pool.add(new SenderQueue(this, num_sender_per_queue, _degree_of_parallelism));
         _sender_queues.push_back(queue);
     }
 

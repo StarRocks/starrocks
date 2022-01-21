@@ -72,6 +72,9 @@ class SortExecExprs;
 // recvr instance from the tracking structure of its DataStreamMgr in all cases.
 class DataStreamRecvr {
 public:
+    const static int32_t INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE = 0;
+
+public:
     ~DataStreamRecvr();
 
     Status get_chunk(std::unique_ptr<vectorized::Chunk>* chunk);
@@ -192,6 +195,7 @@ private:
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
     bool _is_pipeline;
+    // Invalid if _is_pipeline is false
     int32_t _degree_of_parallelism;
 
     // Invalid if _is_pipeline is false
