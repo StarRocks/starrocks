@@ -71,7 +71,7 @@ struct BatchBuilder {
 
 Status ColumnVectorBatch::create(size_t capacity, bool nullable, const TypeInfoPtr& type_info, Field* field,
                                  std::unique_ptr<ColumnVectorBatch>* batch) {
-    auto res = field_type_dispatch_basic(type_info->type(), BatchBuilder(), type_info, nullable, field, capacity);
+    auto res = field_type_dispatch_column(type_info->type(), BatchBuilder(), type_info, nullable, field, capacity);
     if (!res.ok()) {
         return res.status();
     }

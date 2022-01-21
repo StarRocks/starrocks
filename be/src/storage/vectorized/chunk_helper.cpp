@@ -8,6 +8,7 @@
 #include "column/type_traits.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
+#include "storage/types.h"
 #include "storage/vectorized/type_utils.h"
 #include "util/metrics.h"
 
@@ -147,9 +148,7 @@ struct ColumnPtrBuilder {
             return Nullable(array);
         }
         default: {
-            using cpp_t = typename CppTypeTraits<ftype>::CppType;
-            using column_t = typename ColumnTraits<cpp_t>::ColumnType;
-            return Nullable(get_column_ptr<column_t, force>(chunk_size));
+            return Nullable(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size));
         }
         }
     }
@@ -159,8 +158,7 @@ template <bool force>
 ColumnPtr column_from_pool(const Field& field, size_t chunk_size) {
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
-    return field_type_dispatch_basic(field.type()->type(), ColumnPtrBuilder<force>(), chunk_size, field, precision,
-                                     scale);
+    return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder<force>(), chunk_size, field, precision, scale);
 }
 
 Chunk* ChunkHelper::new_chunk_pooled(const vectorized::Schema& schema, size_t chunk_size, bool force) {
@@ -295,14 +293,12 @@ struct ColumnBuilder {
             return nullable ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
         };
 
-        using cpp_t = typename CppTypeTraits<ftype>::CppType;
-        using column_t = typename ColumnTraits<cpp_t>::ColumnType;
-        return NullableIfNeed(column_t::create());
+        return NullableIfNeed(CppColumnTraits<ftype>::ColumnType::create());
     }
 };
 
 ColumnPtr ChunkHelper::column_from_field_type(FieldType type, bool nullable) {
-    return field_type_dispatch_basic(type, ColumnBuilder(), nullable);
+    return field_type_dispatch_column(type, ColumnBuilder(), nullable);
 }
 
 } // namespace starrocks::vectorized

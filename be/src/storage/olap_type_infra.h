@@ -46,6 +46,11 @@ namespace starrocks {
     M(OLAP_FIELD_TYPE_OBJECT)                \
     M(OLAP_FIELD_TYPE_PERCENTILE)
 
+#define APPLY_FOR_METRIC_FIELD_TYPE(M)      \
+    M(OLAP_FIELD_TYPE_HLL)                  \
+    M(OLAP_FIELD_TYPE_OBJECT)               \
+    M(OLAP_FIELD_TYPE_PERCENTILE)
+    
 #define APPLY_FOR_SUPPORTED_FIELD_TYPE(M) \
     APPLY_FOR_BASIC_OLAP_FIELD_TYPE(M)    \
     APPLY_FOR_UNSIGN_OLAP_FIELD_TYPE(M)   \
@@ -63,11 +68,22 @@ namespace starrocks {
     case type:                    \
         return fun.template operator()<type>(args...);
 
-// Dispatch dynamic ptype to static template instance Functor
 template <class Functor, class... Args>
 auto field_type_dispatch_basic(FieldType ftype, Functor fun, Args... args) {
     switch (ftype) {
         APPLY_FOR_BASIC_OLAP_FIELD_TYPE(_TYPE_DISPATCH_CASE)
+    default:
+        CHECK(false) << "unknown type " << ftype;
+        __builtin_unreachable();
+    }
+}
+
+// Types could built into columns
+template <class Functor, class... Args>
+auto field_type_dispatch_column(FieldType ftype, Functor fun, Args... args) {
+    switch (ftype) {
+        APPLY_FOR_BASIC_OLAP_FIELD_TYPE(_TYPE_DISPATCH_CASE)
+        APPLY_FOR_METRIC_FIELD_TYPE(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "unknown type " << ftype;
         __builtin_unreachable();
