@@ -107,7 +107,6 @@ static Expr* create_binary_predicate(const TExprNode& node) {
     return nullptr;
 }
 
-
 Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     PrimitiveType type = thrift_to_type(node.child_type);
 

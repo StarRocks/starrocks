@@ -11,7 +11,6 @@
 namespace starrocks::vectorized {
 
 struct InConstPredicateBuilder {
-    
     template <PrimitiveType ptype>
     Expr* operator()(const TExprNode& node) {
         return new VectorizedInConstPredicate<ptype>(node);
@@ -19,13 +18,11 @@ struct InConstPredicateBuilder {
 };
 
 struct InIteratorBuilder {
-    
     template <PrimitiveType ptype>
     Expr* operator()(const TExprNode& node) {
         return new VectorizedInIteratorPredicate<ptype>(node);
     }
 };
-
 
 Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
     // children type

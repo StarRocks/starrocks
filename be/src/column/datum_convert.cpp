@@ -52,12 +52,11 @@ struct DatumFromStringBuilder {
 
 Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str, MemPool* mem_pool) {
     const auto type = type_info->type();
-    
+
     return field_type_dispatch_supported(type, DatumFromStringBuilder(), type_info, dst, str, mem_pool);
 }
 
 struct DatumToStringBuilder {
-    
     template <FieldType ftype>
     std::string operator()(TypeInfo* type_info, const Datum& datum) {
         using CppType = typename CppTypeTraits<ftype>::CppType;

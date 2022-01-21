@@ -20,6 +20,7 @@
 // under the License.
 
 #include "storage/types.h"
+
 #include "storage/decimal_type_info.h"
 #include "storage/olap_type_infra.h"
 
@@ -65,7 +66,7 @@ void ScalarTypeInfoResolver::add_mapping() {
 }
 
 ScalarTypeInfoResolver::ScalarTypeInfoResolver() {
-#define M(ftype) add_mapping<ftype>(); 
+#define M(ftype) add_mapping<ftype>();
     APPLY_FOR_SUPPORTED_FIELD_TYPE(M)
 #undef M
     add_mapping<OLAP_FIELD_TYPE_NONE>();

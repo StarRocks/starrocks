@@ -180,7 +180,6 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
 }
 
 struct ColumnBuilder {
-    
     template <PrimitiveType ptype>
     ColumnPtr operator()(const TypeDescriptor& type_desc) {
         switch (ptype) {
@@ -198,12 +197,11 @@ struct ColumnBuilder {
             return Decimal64Column::create(type_desc.precision, type_desc.scale);
         case TYPE_DECIMAL128:
             return Decimal128Column::create(type_desc.precision, type_desc.scale);
-        default: ;
+        default:;
         }
 
         return RunTimeColumnType<ptype>::create();
     }
-    
 };
 
 ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size) {
@@ -222,7 +220,7 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
             return NullableColumn::create(BooleanColumn::create(), NullColumn::create());
         }
     }
-    
+
     ColumnPtr p;
     if (type_desc.type == TYPE_ARRAY) {
         auto offsets = UInt32Column::create();

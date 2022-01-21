@@ -5,7 +5,7 @@
 #include "column/datum.h"
 #include "storage/types.h"
 namespace starrocks::vectorized {
-    
+
 Status datum_from_string(Datum* dst, FieldType type, const std::string& str, MemPool* mem_pool);
 Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str, MemPool* mem_pool);
 

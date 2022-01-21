@@ -13,10 +13,10 @@
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
 #include "storage/column_vector.h"
+#include "storage/olap_type_infra.h"
 #include "storage/schema.h"
 #include "storage/tablet_schema.h"
 #include "storage/vectorized/chunk_helper.h"
-#include "storage/olap_type_infra.h"
 #include "util/pred_guard.h"
 #include "util/stack_util.h"
 #include "util/unaligned_access.h"
@@ -828,7 +828,6 @@ const TypeConverter* get_double_converter(FieldType from_type, FieldType to_type
 
 const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType to_type) {
     switch (to_type) {
-
 #define M(ftype)                                              \
     case ftype: {                                             \
         static StringToOtherTypeConverter<ftype> s_converter; \
@@ -844,7 +843,6 @@ const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType t
 
 const TypeConverter* get_to_varchar_converter(FieldType from_type, FieldType to_type) {
     switch (from_type) {
-        
 #define M(ftype)                                              \
     case ftype: {                                             \
         static OtherToStringTypeConverter<ftype> s_converter; \

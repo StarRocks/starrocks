@@ -7,9 +7,8 @@
 
 // Infra to build the type system:
 // 1. Macro `APPLY_FOR*` to build generic codes
-// 2. Macro `TYPE_DISPATCH*` to dispatch type 
+// 2. Macro `TYPE_DISPATCH*` to dispatch type
 // 2. Function `field_type_dispatch*` to dynamic dispatch with better customlization
-
 
 namespace starrocks {
 
@@ -139,7 +138,7 @@ namespace starrocks {
 #define TYPE_DISPATCH_CAST_TYPE(TEMPLATEF_FUNC, typeFrom, typeTo, ...)        \
     [&]() {                                                                   \
         switch (typeFrom) {                                                   \
-        TYPE_DISPATCH_PREDICATE_TYPE(TEMPLATE_FUNC, typeTo, __VA_ARGS__); \
+            TYPE_DISPATCH_PREDICATE_TYPE(TEMPLATE_FUNC, typeTo, __VA_ARGS__); \
         default:;                                                             \
         }                                                                     \
     }

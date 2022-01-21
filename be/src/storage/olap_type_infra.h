@@ -4,7 +4,6 @@
 
 #include "storage/olap_common.h"
 
-
 // Infra to build the type system:
 // 1. Macro `APPLY_FOR*` to build generic codes
 // 2. field_type_dispatch* function dynamic dispatch types
@@ -46,11 +45,11 @@ namespace starrocks {
     M(OLAP_FIELD_TYPE_OBJECT)                \
     M(OLAP_FIELD_TYPE_PERCENTILE)
 
-#define APPLY_FOR_METRIC_FIELD_TYPE(M)      \
-    M(OLAP_FIELD_TYPE_HLL)                  \
-    M(OLAP_FIELD_TYPE_OBJECT)               \
+#define APPLY_FOR_METRIC_FIELD_TYPE(M) \
+    M(OLAP_FIELD_TYPE_HLL)             \
+    M(OLAP_FIELD_TYPE_OBJECT)          \
     M(OLAP_FIELD_TYPE_PERCENTILE)
-    
+
 #define APPLY_FOR_SUPPORTED_FIELD_TYPE(M) \
     APPLY_FOR_BASIC_OLAP_FIELD_TYPE(M)    \
     APPLY_FOR_UNSIGN_OLAP_FIELD_TYPE(M)   \

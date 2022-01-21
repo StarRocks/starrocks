@@ -101,7 +101,7 @@ Status MysqlTableWriter::_build_viewers(vectorized::Columns& columns) {
         if (!is_scalar_primitive_type(type.type)) {
             return Status::InternalError(fmt::format("unsupported type in mysql sink:{}", type.type));
         }
-        
+
         switch (type.type) {
 #define M(NAME)                                                                           \
     case PrimitiveType::NAME: {                                                           \

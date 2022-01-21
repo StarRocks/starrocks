@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/in_const_predicate.hpp"
-#include "runtime/primitive_type_infra.h"
 
 #include "gutil/strings/substitute.h"
+#include "runtime/primitive_type_infra.h"
 
 namespace starrocks {
 namespace vectorized {

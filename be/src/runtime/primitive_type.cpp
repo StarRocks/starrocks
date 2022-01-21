@@ -20,11 +20,11 @@
 // under the License.
 
 #include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
 
 #include <sstream>
 
 #include "gen_cpp/Types_types.h"
+#include "runtime/primitive_type_infra.h"
 
 namespace starrocks {
 //to_tcolumn_type_thrift only test
@@ -45,8 +45,10 @@ PrimitiveType thrift_to_type(TPrimitiveType::type ttype) {
         return INVALID_TYPE;
     case TPrimitiveType::NULL_TYPE:
         return TYPE_NULL;
-#define M(ttype) case TPrimitiveType::ttype: return TYPE_##ttype;
-    APPLY_FOR_ALL_THRIFT_TYPE(M)
+#define M(ttype)                \
+    case TPrimitiveType::ttype: \
+        return TYPE_##ttype;
+        APPLY_FOR_ALL_THRIFT_TYPE(M)
 #undef M
     }
 
@@ -54,7 +56,6 @@ PrimitiveType thrift_to_type(TPrimitiveType::type ttype) {
 }
 
 TPrimitiveType::type to_thrift(PrimitiveType ptype) {
-
     switch (ptype) {
     // TODO(mofei) rename these two type
     case INVALID_TYPE:
@@ -62,8 +63,10 @@ TPrimitiveType::type to_thrift(PrimitiveType ptype) {
     case TYPE_NULL:
         return TPrimitiveType::NULL_TYPE;
 
-#define M(thrift_name) case TYPE_##thrift_name: return TPrimitiveType::thrift_name;
-    APPLY_FOR_ALL_THRIFT_TYPE(M)
+#define M(thrift_name)       \
+    case TYPE_##thrift_name: \
+        return TPrimitiveType::thrift_name;
+        APPLY_FOR_ALL_THRIFT_TYPE(M)
 #undef M
 
     case TYPE_ARRAY:
@@ -76,11 +79,15 @@ TPrimitiveType::type to_thrift(PrimitiveType ptype) {
 
 std::string type_to_string(PrimitiveType t) {
     switch (t) {
-    case INVALID_TYPE: return "INVALID";
-    case TYPE_NULL: return "NULL";
-#define M(ttype) case TYPE_##ttype: return #ttype;
-    APPLY_FOR_ALL_THRIFT_TYPE(M)
-    APPLY_FOR_COMPLEX_THRIFT_TYPE(M)
+    case INVALID_TYPE:
+        return "INVALID";
+    case TYPE_NULL:
+        return "NULL";
+#define M(ttype)       \
+    case TYPE_##ttype: \
+        return #ttype;
+        APPLY_FOR_ALL_THRIFT_TYPE(M)
+        APPLY_FOR_COMPLEX_THRIFT_TYPE(M)
 #undef M
     }
     return "";
@@ -91,15 +98,16 @@ std::string type_to_odbc_string(PrimitiveType t) {
     switch (t) {
     case INVALID_TYPE:
         return "invalid";
-        
-#define M(ttype) case TYPE_##ttype: return #ttype;
-    APPLY_FOR_ALL_THRIFT_TYPE(M)
+
+#define M(ttype)       \
+    case TYPE_##ttype: \
+        return #ttype;
+        APPLY_FOR_ALL_THRIFT_TYPE(M)
 #undef M
 
-    default: 
+    default:
         return "unknown";
     }
-
 }
 
 // for test only

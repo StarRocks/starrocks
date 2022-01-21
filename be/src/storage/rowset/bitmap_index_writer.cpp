@@ -28,11 +28,11 @@
 
 #include "env/env.h"
 #include "runtime/mem_pool.h"
+#include "storage/olap_type_infra.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/types.h"
-#include "storage/olap_type_infra.h"
 #include "util/faststring.h"
 #include "util/slice.h"
 
@@ -193,7 +193,6 @@ private:
 } // namespace
 
 struct BitmapIndexWriterBuilder {
-    
     template <FieldType ftype>
     std::unique_ptr<BitmapIndexWriter> operator()(const TypeInfoPtr& typeinfo) {
         return std::make_unique<BitmapIndexWriterImpl<ftype>>(typeinfo);
@@ -203,7 +202,7 @@ struct BitmapIndexWriterBuilder {
 Status BitmapIndexWriter::create(const TypeInfoPtr& typeinfo, std::unique_ptr<BitmapIndexWriter>* res) {
     FieldType type = typeinfo->type();
     *res = field_type_dispatch_bitmap_index(type, BitmapIndexWriterBuilder(), typeinfo);
-    
+
     return Status::OK();
 }
 

@@ -6,6 +6,4 @@
 #include "runtime/mem_pool.h"
 #include "storage/types.h"
 
-namespace starrocks::vectorized {
-
-} // namespace starrocks::vectorized
+namespace starrocks::vectorized {} // namespace starrocks::vectorized

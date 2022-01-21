@@ -23,10 +23,10 @@
 
 #include <memory>
 
+#include "common/statusor.h"
 #include "storage/field.h"
 #include "storage/olap_common.h"
 #include "storage/olap_type_infra.h"
-#include "common/statusor.h"
 
 namespace starrocks {
 
@@ -51,8 +51,7 @@ struct BatchT<OLAP_FIELD_TYPE_BOOL> {
 
 struct BatchBuilder {
     template <FieldType ftype>
-    StatusOr<std::unique_ptr<ColumnVectorBatch>> operator()(const TypeInfoPtr& type_info, 
-                                                            bool nullable, Field* field,
+    StatusOr<std::unique_ptr<ColumnVectorBatch>> operator()(const TypeInfoPtr& type_info, bool nullable, Field* field,
                                                             size_t capacity) {
         switch (ftype) {
         case OLAP_FIELD_TYPE_ARRAY: {
