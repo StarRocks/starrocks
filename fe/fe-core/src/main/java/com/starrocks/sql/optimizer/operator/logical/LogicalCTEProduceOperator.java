@@ -19,9 +19,9 @@ import java.util.Objects;
  *
  * */
 public class LogicalCTEProduceOperator extends LogicalOperator {
-    private final String cteId;
+    private final int cteId;
 
-    public LogicalCTEProduceOperator(String cteId) {
+    public LogicalCTEProduceOperator(int cteId) {
         super(OperatorType.LOGICAL_CTE_PRODUCE);
         this.cteId = cteId;
     }
@@ -31,7 +31,7 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
         return expressionContext.getChildLogicalProperty(0).getOutputColumns();
     }
 
-    public String getCteId() {
+    public int getCteId() {
         return cteId;
     }
 
