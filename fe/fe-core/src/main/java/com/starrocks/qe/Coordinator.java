@@ -1200,20 +1200,8 @@ public class Coordinator {
                 if (dopAdaptionEnabled) {
                     int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
                     Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
-                    DataSink sink = getDataStreamSink(maxParallelismFragmentExecParams.fragment, fragment);
-                    Preconditions.checkArgument(sink != null);
-                    // If the maximum parallel child fragment send data to the current PlanFragment via UNPARTITIONED
-                    // DataStreamSink, then fragment instance parallelization is leveraged, otherwise, pipeline parallelization
-                    // is adopted.
-                    if (sink.getOutputPartition().isPartitioned()) {
-                        // fragment instance parallelization (numInstances=N, pipelineDop=1)
-                        maxParallelism = Math.min(hostSet.size() * degreeOfParallelism, maxParallelism);
-                        fragment.setPipelineDop(1);
-                    } else {
-                        // pipeline parallelization (numInstances=|hostSet|, pipelineDop=degreeOfParallelism)
-                        maxParallelism = hostSet.size();
-                        fragment.setPipelineDop(degreeOfParallelism);
-                    }
+                    maxParallelism = hostSet.size();
+                    fragment.setPipelineDop(degreeOfParallelism);
                 }
 
                 // AddAll() soft copy()
@@ -1319,7 +1307,8 @@ public class Coordinator {
                     }
 
                     float inputBytes = numRows * scanNode.getAvgRowSize();
-                    long maxBytesPerOperator = ConnectContext.get().getSessionVariable().getPipelineMaxInputBytesPerOperator();
+                    long maxBytesPerOperator =
+                            ConnectContext.get().getSessionVariable().getPipelineMaxInputBytesPerOperator();
                     int numOperatorsPerInstance = Math.max(1, (int) (inputBytes / maxBytesPerOperator / numInstances));
                     int pipelineDop =
                             Math.max(1, degreeOfParallelism / Math.max(1, numInstances / Math.max(1, numBackends)));
@@ -2053,10 +2042,11 @@ public class Coordinator {
                     SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
 
                     if (isEnablePipelineEngine) {
-                        boolean isPipeline = fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine();
+                        boolean isPipeline =
+                                fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine();
                         params.setIs_pipeline(isPipeline);
                         if (isPipeline) {
-                            queryOptions.setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE); 
+                            queryOptions.setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
                         }
                         params.setPipeline_dop(fragment.getPipelineDop());
                         params.setPer_scan_node_dop(instanceExecParam.perScanNodeDop);
