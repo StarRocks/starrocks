@@ -81,11 +81,11 @@ public:
         auto& offsets = column->offsets_column()->get_data();
         auto& elements_column = column->elements_column();
 
-        for (size_t i = 0; i < data.size(); i++) {
-            elements_column->append_datum(data[i]);
-        }
         if (null_count > 0) {
             elements_column->append_nulls(null_count);
+        }
+        for (size_t i = 0; i < data.size(); i++) {
+            elements_column->append_datum(data[i]);
         }
         offsets.emplace_back(offsets.back() + data.size() + null_count);
     }
@@ -98,11 +98,11 @@ public:
         auto& offsets = column->offsets_column()->get_data();
         auto& elements_column = column->elements_column();
 
-        for (size_t i = 0; i < data.size(); i++) {
-            elements_column->append_datum(data[i]);
-        }
         if (null_count > 0) {
             elements_column->append_nulls(null_count);
+        }
+        for (size_t i = 0; i < data.size(); i++) {
+            elements_column->append_datum(data[i]);
         }
         offsets.emplace_back(offsets.back() + data.size() + null_count);
     }

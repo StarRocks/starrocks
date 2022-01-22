@@ -49,9 +49,6 @@ public:
     virtual void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
                        size_t row_num) const = 0;
 
-    // Merge the aggregation state with null
-    virtual void merge_null(FunctionContext* ctx, AggDataPtr __restrict state) const {}
-
     // When transmit data over network, we need to serialize agg data.
     // We serialize the agg data to |to| column
     // @param[out] to: maybe nullable
