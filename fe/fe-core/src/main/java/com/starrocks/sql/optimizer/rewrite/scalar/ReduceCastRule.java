@@ -140,32 +140,37 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             }
             targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
             ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
-            BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
+            BinaryPredicateOperator binaryPredicateOperator =
+                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
             return binaryPredicateOperator;
         } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT)) {
             offset = 1;
             targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
             ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
-            BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
+            BinaryPredicateOperator binaryPredicateOperator =
+                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
             return binaryPredicateOperator;
         } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE)) {
             offset = 0;
             targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
             ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
-            BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
+            BinaryPredicateOperator binaryPredicateOperator =
+                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
             return binaryPredicateOperator;
         } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT)) {
             offset = -1;
             targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
             ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
-            BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
+            BinaryPredicateOperator binaryPredicateOperator =
+                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
             return binaryPredicateOperator;
         } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.EQ)) {
             if (!originalDateTime.isEqual(bottomLocalDateTime)) {
                 return operator;
             } else {
                 ConstantOperator newDate = ConstantOperator.createDate(bottomLocalDateTime.truncatedTo(ChronoUnit.DAYS));
-                BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, castChild, newDate);
+                BinaryPredicateOperator binaryPredicateOperator =
+                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, castChild, newDate);
                 return binaryPredicateOperator;
             }
         } else {

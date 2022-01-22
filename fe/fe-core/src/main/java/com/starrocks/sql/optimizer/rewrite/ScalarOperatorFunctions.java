@@ -201,7 +201,7 @@ public class ScalarOperatorFunctions {
     }
 
     @FEFunction(name = "timestamp", argTypes = {"DATETIME"}, returnType = "DATETIME")
-    public static ConstantOperator timestamp(ConstantOperator arg) throws AnalysisException{;
+    public static ConstantOperator timestamp(ConstantOperator arg) throws AnalysisException {
         return arg;
     }
 

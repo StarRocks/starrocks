@@ -381,7 +381,6 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             try {
                 // DateLiteral will throw Exception if cast failed
                 // 1.try cast by format "yyyy-MM-dd HH:mm:ss"
-                literal = new DateLiteral(childString, Type.DATETIME);
                 if (childString.length() <= "yyyy-MM-dd HH:mm:ss".length()) {
                     literal = new DateLiteral(childString, Type.DATETIME);
                 } else {
