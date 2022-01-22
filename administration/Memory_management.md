@@ -29,7 +29,7 @@
 | disable_storage_page_cache | true |  是否打开StarRocks自有PageCachestorage_page_cache_limit0PageCache容量限制 |
 | write_buffer_size | 104857600 |  单个MemTable内存中的容量限制超过这个限制要执行刷盘 |
 | load_process_max_memory_limit_bytes | 107374182400 | 导入总内存限制min(mem_limit * load_process_max_memory_limit_percent, load_process_max_memory_limit_bytes)是实际可使用的导入内存限制到达这个限制，会触发刷盘逻辑 |
-| load_process_max_memory_limit_percent | 60 | 导入总内存限制min(mem_limit * load_process_max_memory_limit_percent, load_process_max_memory_limit_bytes)是实际可使用的导入内存限制到达这个限制，会触发刷盘逻辑 |
+| load_process_max_memory_limit_percent | 30 | 导入总内存限制min(mem_limit * load_process_max_memory_limit_percent, load_process_max_memory_limit_bytes)是实际可使用的导入内存限制到达这个限制，会触发刷盘逻辑 |
 | default_load_mem_limit | 2147483648 | 单个导入实例，接收端的内存限制到达这个限制，会触发刷盘逻辑当前，需要配合Session变量 load_mem_limit 的修改才能生效|
 | max_compaction_concurrency | -1 | BaseCompaction + CumulativeCompaction的最大并发，-1表示不限制，0表示禁用 Compaction|
 | cumulative_compaction_check_interval_seconds | 1 | Compaction Check 间隔时间|
