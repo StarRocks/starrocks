@@ -287,7 +287,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CHUNK_SIZE, flag = VariableMgr.INVISIBLE)
     private int chunkSize = 4096;
 
-    private static final int PIPELINE_BATCH_SIZE = 16384;
+    public static final int PIPELINE_BATCH_SIZE = 16384;
 
     @VariableMgr.VarAttr(name = DISABLE_STREAMING_PREAGGREGATIONS)
     private boolean disableStreamPreaggregations = false;
@@ -801,11 +801,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setIs_report_success(isReportSucc);
         tResult.setCodegen_level(codegenLevel);
-        if (isEnablePipelineEngine()) {
-            tResult.setBatch_size(PIPELINE_BATCH_SIZE);
-        } else {
-            tResult.setBatch_size(chunkSize);
-        }
+        tResult.setBatch_size(chunkSize);
         tResult.setDisable_stream_preaggregations(disableStreamPreaggregations);
         tResult.setLoad_mem_limit(loadMemLimit);
 
