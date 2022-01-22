@@ -1947,7 +1947,7 @@ public class Coordinator {
                 params.setCoord(coordAddress);
                 params.setBackend_num(backendNum++);
                 params.setQuery_globals(queryGlobals);
-                params.setQuery_options(queryOptions);
+                params.setQuery_options(new TQueryOptions(queryOptions));
                 params.params.setSend_query_statistics_with_every_batch(
                         fragment.isTransferQueryStatisticsWithEveryBatch());
                 if (queryOptions.getQuery_type() == TQueryType.LOAD) {
@@ -1969,7 +1969,7 @@ public class Coordinator {
                                 fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine();
                         params.setIs_pipeline(isPipeline);
                         if (isPipeline) {
-                            queryOptions.setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
+                            params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
                         }
                         params.setPipeline_dop(fragment.getPipelineDop());
                         params.setPer_scan_node_dop(instanceExecParam.perScanNodeDop);
