@@ -726,6 +726,6 @@ void StatusOr<T>::IgnoreError() const {
 //
 // WARNING: ARROW_ASSIGN_OR_RETURN `std::move`s its right operand. If you have
 // an lvalue StatusOr which you *don't* want to move out of cast appropriately.
-#define ASSIGN_OR_RETURN(lhs, rhs) ASSIGN_OR_RETURN_IMPL(VARNAME_LINENUM(varlue_or_err), lhs, rhs)
+#define ASSIGN_OR_RETURN(lhs, rhs) ASSIGN_OR_RETURN_IMPL(VARNAME_LINENUM(value_or_err), lhs, rhs)
 
 } // namespace starrocks
