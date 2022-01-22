@@ -109,10 +109,9 @@ namespace starrocks {
     case type:                    \
         return fun.template operator()<type>(args...);
 
-// type_dispatch_all:
-// Dispatch dynamic ptype to static template instance Functor
+// type_dispatch_*:
 template <class Functor, class... Args>
-auto type_dispatch_all(PrimitiveType ptype, Functor fun, Args... args) {
+auto type_dispatch_basic(PrimitiveType ptype, Functor fun, Args... args) {
     switch (ptype) {
         APPLY_FOR_ALL_PRIMITIVE_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
     default:
@@ -120,6 +119,20 @@ auto type_dispatch_all(PrimitiveType ptype, Functor fun, Args... args) {
     }
 }
 
+// Types could build into columns
+template <class Functor, class... Args>
+auto type_dispatch_column(PrimitiveType ptype, Functor fun, Args... args) {
+    switch (ptype) {
+        APPLY_FOR_ALL_PRIMITIVE_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
+        _TYPE_DISPATCH_CASE(TYPE_HLL)
+        _TYPE_DISPATCH_CASE(TYPE_OBJECT)
+        _TYPE_DISPATCH_CASE(TYPE_PERCENTILE)
+    default:
+        CHECK(false) << "Unknown type: " << ptype;
+    }
+}
+
+// Types which are sortable
 template <class Functor, class... Args>
 auto type_dispatch_sortable(PrimitiveType ptype, Functor fun, Args... args) {
     switch (ptype) {

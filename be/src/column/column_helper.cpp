@@ -227,7 +227,7 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         auto data = create_column(type_desc.children[0], true);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else {
-        p = type_dispatch_all(type_desc.type, ColumnBuilder(), type_desc);
+        p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc);
     }
 
     if (is_const) {

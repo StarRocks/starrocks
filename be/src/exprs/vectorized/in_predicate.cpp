@@ -35,10 +35,10 @@ Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
     switch (node.opcode) {
     case TExprOpcode::FILTER_IN:
     case TExprOpcode::FILTER_NOT_IN:
-        return type_dispatch_all(child_type, InConstPredicateBuilder(), node);
+        return type_dispatch_basic(child_type, InConstPredicateBuilder(), node);
     case TExprOpcode::FILTER_NEW_IN:
     case TExprOpcode::FILTER_NEW_NOT_IN:
-        return type_dispatch_all(child_type, InIteratorBuilder(), node);
+        return type_dispatch_basic(child_type, InIteratorBuilder(), node);
     default:
         LOG(WARNING) << "vectorized engine in predicate not support: " << node.opcode;
         return nullptr;
