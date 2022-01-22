@@ -619,17 +619,18 @@ public:
     }
 
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
+        vectorized::NullableColumn* nullable_column = nullptr;
         vectorized::ArrayColumn* array_column = nullptr;
         if (_field->is_nullable) {
             DCHECK(dst->is_nullable());
-            DCHECK_NOTNULL(dst->mutable_child_column());
-            DCHECK(dst->mutable_child_column()->is_array());
-            array_column = down_cast<vectorized::ArrayColumn*>(dst->mutable_child_column());
+            nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+            DCHECK(nullable_column->mutable_data_column()->is_array());
+            array_column = down_cast<vectorized::ArrayColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_array());
             array_column = down_cast<vectorized::ArrayColumn*>(dst);
         }
-        auto* child_column = array_column->mutable_child_column();
+        auto* child_column = array_column->elements_column().get();
         auto st = _element_reader->prepare_batch(num_records, content_type, child_column);
 
         level_t* def_levels = nullptr;
@@ -650,7 +651,7 @@ public:
         }
         if (_field->is_nullable) {
             DCHECK(dst->is_nullable());
-            auto* nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+            DCHECK_NOTNULL(nullable_column);
             for (int i = 1; i <= num_offsets; i++) {
                 nullable_column->null_column()->append(is_nulls[i - 1]);
             }
