@@ -197,7 +197,7 @@
 |enable_token_check|true|Token开启检验|
 |enable_prefetch|true|查询提前预取|
 |load_process_max_memory_limit_bytes|107374182400|单节点上所有的导入线程占据的内存上限，100GB|
-|load_process_max_memory_limit_percent|80|单节点上所有的导入线程占据的内存上限比例，100GB|
+|load_process_max_memory_limit_percent|30|单节点上所有的导入线程占据的内存上限比例，默认30%|
 |sync_tablet_meta|false|存储引擎是否开sync保留到磁盘上。|
 |thrift_rpc_timeout_ms|5000|Thrift超时的时长|
 |txn_commit_rpc_timeout_ms|10000|Txn超时的时长|
