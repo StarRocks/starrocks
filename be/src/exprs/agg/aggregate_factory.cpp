@@ -97,10 +97,10 @@ AggregateFunctionPtr AggregateFactory::MakeAnyValueAggregateFunction() {
             AnyValueAggregateFunction<PT, AnyValueAggregateData<PT>, AnyValueElement<PT, AnyValueAggregateData<PT>>>>();
 }
 
-template <typename NestedState>
+template <typename NestedState, bool IgnoreNull>
 AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionUnary(AggregateFunctionPtr nested_function) {
     using AggregateDataType = NullableAggregateFunctionState<NestedState>;
-    return std::make_shared<NullableAggregateFunctionUnary<AggregateDataType>>(nested_function);
+    return std::make_shared<NullableAggregateFunctionUnary<AggregateDataType, IgnoreNull>>(nested_function);
 }
 
 template <typename NestedState>

@@ -39,6 +39,9 @@ public:
     virtual void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                         size_t row_num) const = 0;
 
+    // Update/Merge the aggregation state with null
+    virtual void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const {}
+
     // Merge the aggregation state
     // columns points to columns containing merge input,
     // We maybe need deserialize input data firstly.
@@ -99,6 +102,13 @@ public:
     virtual void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                            int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                            int64_t frame_end) const {}
+
+    // For window functions
+    // A peer group is all of the rows that are peers within the specified ordering.
+    // Rows are peers if they compare equal to each other using the specified ordering expression.
+    // Update batch single state with null
+    virtual void update_single_state_null(FunctionContext* ctx, AggDataPtr __restrict state, int64_t peer_group_start,
+                                          int64_t peer_group_end) const {}
 
     // Contains a loop with calls to "merge" function.
     // You can collect arguments into array "states"
