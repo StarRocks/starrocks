@@ -215,7 +215,7 @@ StarRocks目前的导入方式分为两种：同步和异步。
 
     这两个参数分别是最大内存和最大内存百分比，限制了单个BE上可用于导入任务的内存上限。系统会在两个参数中取较小者，作为最终的BE导入任务内存使用上限。
 
-  * load\_process\_max\_memory\_limit\_percent：表示对BE总内存限制的百分比。默认为80。（总内存限制 mem\_limit 默认为 80%，表示对物理内存的百分比）。即假设物理内存为 M，则默认导入内存限制为 M \* 80% \* 80%。
+  * load\_process\_max\_memory\_limit\_percent：表示对BE总内存限制的百分比。默认为30。（总内存限制 mem\_limit 默认为 80%，表示对物理内存的百分比）。即假设物理内存为 M，则默认导入内存限制为 M \* 80% \* 30%。
   
   * load\_process\_max\_memory\_limit\_bytes：默认为100GB。
 
