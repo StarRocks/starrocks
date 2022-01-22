@@ -237,7 +237,6 @@ set(EXEC_FILES
         ./util/tdigest_test.cpp
         ./util/thread_test.cpp
         ./util/trace_test.cpp
-        ./util/types_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
         ./util/buffered_stream_test.cpp

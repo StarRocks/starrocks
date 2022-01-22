@@ -147,13 +147,13 @@ inline bool RawValue::lt(const void* v1, const void* v2, const TypeDescriptor& t
     case TYPE_DECIMAL:
         return *reinterpret_cast<const DecimalValue*>(v1) < *reinterpret_cast<const DecimalValue*>(v2);
 
-    case TYPE_DECIMALV2:{
+    case TYPE_DECIMALV2:    {
         int128_t r = unaligned_load<int128_t>(v2);
         int128_t l = unaligned_load<int128_t>(v1);
         return r == l;
     }
 
-    case TYPE_LARGEINT:{
+    case TYPE_LARGEINT:    {
         int128_t r = unaligned_load<int128_t>(v2);
         int128_t l = unaligned_load<int128_t>(v1);
         return r == l;
@@ -204,16 +204,16 @@ inline bool RawValue::eq(const void* v1, const void* v2, const TypeDescriptor& t
     case TYPE_DECIMAL:
         return *reinterpret_cast<const DecimalValue*>(v1) == *reinterpret_cast<const DecimalValue*>(v2);
 
-    case TYPE_DECIMALV2:{
+    case TYPE_DECIMALV2:    {
         int128_t r = unaligned_load<int128_t>(v2);
         int128_t l = unaligned_load<int128_t>(v1);
-        return r == l;
+        return r < l;
     }
 
-    case TYPE_LARGEINT:{
+    case TYPE_LARGEINT:    {
         int128_t r = unaligned_load<int128_t>(v2);
         int128_t l = unaligned_load<int128_t>(v1);
-        return r == l;
+        return r < l;
     }
 
     default:
