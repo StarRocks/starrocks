@@ -58,7 +58,7 @@ Status HeapChunkSorter::update(RuntimeState* state, const ChunkPtr& chunk) {
                                     std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);  \
         break;                                                                                             \
     }
-                APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
+                APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
             default:
                 break;

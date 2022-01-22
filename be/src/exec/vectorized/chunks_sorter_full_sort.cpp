@@ -453,7 +453,7 @@ Status ChunksSorterFullSort::_sort_by_columns(RuntimeState* state) {
         ExprContext* expr_ctx = (*_sort_exprs)[col_index];
         if (column->is_nullable()) {
             switch (expr_ctx->root()->type().type) {
-                APPLY_FOR_SORTABLE_TYPE(CASE_FOR_NULLABLE_COLUMN_SORT)
+                APPLY_FOR_ALL_SCALAR_TYPE(CASE_FOR_NULLABLE_COLUMN_SORT)
             default: {
                 RETURN_IF_ERROR(SortHelper::sort_on_other_column(state, column, _sort_order_flag[col_index],
                                                                  _null_first_flag[col_index], _sorted_permutation));
@@ -462,7 +462,7 @@ Status ChunksSorterFullSort::_sort_by_columns(RuntimeState* state) {
             }
         } else {
             switch (expr_ctx->root()->type().type) {
-                APPLY_FOR_SORTABLE_TYPE(CASE_FOR_NOT_NULL_COLUMN_SORT)
+                APPLY_FOR_ALL_SCALAR_TYPE(CASE_FOR_NOT_NULL_COLUMN_SORT)
             default: {
                 RETURN_IF_ERROR(SortHelper::sort_on_other_column(state, column, _sort_order_flag[col_index],
                                                                  _null_first_flag[col_index], _sorted_permutation));

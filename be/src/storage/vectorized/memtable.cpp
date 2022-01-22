@@ -481,7 +481,7 @@ void MemTable::_sort_chunk_by_columns() {
         SortHelper::sort_on_nullable_column<RunTimeColumnType<ptype>, RunTimeCppType<ptype>>(column, &_permutations); \
         break;                                                                                                        \
     }
-                APPLY_FOR_SORTABLE_TYPE(M)
+                APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
 
             default: {
@@ -496,7 +496,7 @@ void MemTable::_sort_chunk_by_columns() {
         SortHelper::sort_on_not_null_column<RunTimeColumnType<ptype>, RunTimeCppType<ptype>>(column, &_permutations); \
         break;                                                                                                        \
     }
-                APPLY_FOR_SORTABLE_TYPE(M)
+                APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
             default: {
                 CHECK(false) << "This type couldn't be key column";

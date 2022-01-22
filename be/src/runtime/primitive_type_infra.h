@@ -24,37 +24,18 @@ namespace starrocks {
     M(TYPE_DECIMAL64)                \
     M(TYPE_DECIMAL128)
 
-#define APPLY_FOR_ALL_PRIMITIVE_TYPE(M) \
+#define APPLY_FOR_ALL_SCALAR_TYPE(M) \
     APPLY_FOR_ALL_NUMBER_TYPE(M)        \
     M(TYPE_DECIMALV2)                   \
     M(TYPE_VARCHAR)                     \
     M(TYPE_CHAR)                        \
     M(TYPE_DATE)                        \
     M(TYPE_DATETIME)                    \
+    M(TYPE_TIME)                        \
     M(TYPE_BOOLEAN)
 
-#define APPLY_FOR_ALL_CAST_TYPE(M)  \
-    APPLY_FOR_ALL_PRIMITIVE_TYPE(M) \
-    M(TYPE_TIME)
-
-#define APPLY_FOR_ALL_TYPE(M)       \
-    APPLY_FOR_ALL_PRIMITIVE_TYPE(M) \
-    M(TYPE_STRUCT)                  \
-    M(TYPE_ARRAY)                   \
-    M(TYPE_MAP)                     \
-    M(TYPE_HLL)                     \
-    M(TYPE_OBJECT)                  \
-    M(TYPE_PERCENTILE)              \
-    M(TYPE_DECIMAL)                 \
-    M(TYPE_TIME)                    \
-    M(TYPE_BINARY)
-
-#define APPLY_FOR_SORTABLE_TYPE(M)  \
-    APPLY_FOR_ALL_PRIMITIVE_TYPE(M) \
-    M(TYPE_TIME)
-
-#define APPLY_FOR_ALL_PRIMITIVE_TYPE_WITH_NULL(M) \
-    APPLY_FOR_ALL_PRIMITIVE_TYPE(M)               \
+#define APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M) \
+    APPLY_FOR_ALL_SCALAR_TYPE(M)               \
     M(TYPE_NULL)
 
 #define APPLY_FOR_COMPLEX_THRIFT_TYPE(M) \
@@ -113,7 +94,7 @@ namespace starrocks {
 template <class Functor, class... Args>
 auto type_dispatch_basic(PrimitiveType ptype, Functor fun, Args... args) {
     switch (ptype) {
-        APPLY_FOR_ALL_PRIMITIVE_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
+        APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "Unknown type: " << ptype;
     }
@@ -123,7 +104,7 @@ auto type_dispatch_basic(PrimitiveType ptype, Functor fun, Args... args) {
 template <class Functor, class... Args>
 auto type_dispatch_column(PrimitiveType ptype, Functor fun, Args... args) {
     switch (ptype) {
-        APPLY_FOR_ALL_PRIMITIVE_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
+        APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
         _TYPE_DISPATCH_CASE(TYPE_HLL)
         _TYPE_DISPATCH_CASE(TYPE_OBJECT)
         _TYPE_DISPATCH_CASE(TYPE_PERCENTILE)
@@ -136,7 +117,7 @@ auto type_dispatch_column(PrimitiveType ptype, Functor fun, Args... args) {
 template <class Functor, class... Args>
 auto type_dispatch_sortable(PrimitiveType ptype, Functor fun, Args... args) {
     switch (ptype) {
-        APPLY_FOR_SORTABLE_TYPE(_TYPE_DISPATCH_CASE)
+        APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "Unknown type: " << ptype;
     }
@@ -145,7 +126,7 @@ auto type_dispatch_sortable(PrimitiveType ptype, Functor fun, Args... args) {
 template <class Functor, class... Args>
 auto type_dispatch_predicate(PrimitiveType ptype, Functor fun, Args... args) {
     switch (ptype) {
-        APPLY_FOR_ALL_PRIMITIVE_TYPE(_TYPE_DISPATCH_CASE)
+        APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "Unknown type: " << ptype;
     }
@@ -154,7 +135,7 @@ auto type_dispatch_predicate(PrimitiveType ptype, Functor fun, Args... args) {
 template <class Functor, class... Args>
 auto type_dispatch_filter(PrimitiveType ptype, Functor fun, Args... args) {
     switch (ptype) {
-        APPLY_FOR_ALL_PRIMITIVE_TYPE(_TYPE_DISPATCH_CASE)
+        APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "Unknown type: " << ptype;
     }

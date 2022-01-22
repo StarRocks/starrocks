@@ -55,7 +55,7 @@ class MysqlTableWriter {
 public:
     using VariantViewer = std::variant<
 #define M(NAME) vectorized::ColumnViewer<NAME>,
-            APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
+            APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
                     vectorized::ColumnViewer<TYPE_NULL>>;
 
