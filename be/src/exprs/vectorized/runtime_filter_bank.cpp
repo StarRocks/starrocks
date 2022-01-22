@@ -20,8 +20,15 @@ namespace starrocks::vectorized {
 // 0x2. change simd-block-filter hash function.
 static const uint8_t RF_VERSION = 0x2;
 
+struct FilterBuilder {
+    template <PrimitiveType ptype>
+    JoinRuntimeFilter* operator()() {
+        return new RuntimeBloomFilter<ptype>();
+    }
+};
+
 JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, PrimitiveType type) {
-    JoinRuntimeFilter* filter = TYPE_DISPATCH_PREDICATE_TYPE((JoinRuntimeFilter*)new RuntimeBloomFilter, type);
+    JoinRuntimeFilter* filter = type_dispatch_filter(type, FilterBuilder());
     if (pool != nullptr && filter != nullptr) {
         return pool->add(filter);
     } else {
@@ -75,42 +82,37 @@ JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* 
     return filter;
 }
 
-template <PrimitiveType ptype>
-static void init_filter_not_null(const ColumnPtr& column, size_t column_offset, JoinRuntimeFilter* expr) {
-    using ColumnType = typename RunTimeTypeTraits<ptype>::ColumnType;
-    auto* filter1 = (RuntimeBloomFilter<ptype>*)(expr);
-    auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
-    for (size_t j = column_offset; j < data_ptr.size(); j++) {
-        filter1->insert(&data_ptr[j]);
-    }
-}
+struct FilterIniter {
+    template <PrimitiveType ptype>
+    void operator()(const ColumnPtr& column, size_t column_offset, JoinRuntimeFilter* expr, bool eq_null) {
+        using ColumnType = typename RunTimeTypeTraits<ptype>::ColumnType;
+        auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
 
-template <PrimitiveType ptype>
-static void init_filter_nullable(const ColumnPtr& column, size_t column_offset, JoinRuntimeFilter* expr, bool eq_null) {
-    using ColumnType = typename RunTimeTypeTraits<ptype>::ColumnType;
-    auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
-    auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
-    auto& data_array = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data();
-    for (size_t j = column_offset; j < data_array.size(); j++) {
-        if (!nullable_column->is_null(j)) {
-            filter->insert(&data_array[j]);
+        if (column->is_nullable()) {
+            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
+            auto& data_array = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data();
+            for (size_t j = column_offset; j < data_array.size(); j++) {
+                if (!nullable_column->is_null(j)) {
+                    filter->insert(&data_array[j]);
+                } else {
+                    if (eq_null) {
+                        filter->insert(nullptr);
+                    }
+                }
+            }
+
         } else {
-            if (eq_null) {
-                filter->insert(nullptr);
+            auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
+            for (size_t j = column_offset; j < data_ptr.size(); j++) {
+                filter->insert(&data_ptr[j]);
             }
         }
     }
-}
+};
 
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type,
                                                       JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
-    JoinRuntimeFilter* expr = filter;
-    if (!column->is_nullable()) {
-        TYPE_DISPATCH_PREDICATE_TYPE(init_filter_not_null, type, column, column_offset, expr);
-    } else {
-        TYPE_DISPATCH_PREDICATE_TYPE(init_filter_nullable, type, column, column_offset, expr, eq_null);
-    }
-
+    type_dispatch_filter(type, FilterIniter(), column, column_offset, filter, eq_null);
     return Status::OK();
 }
 

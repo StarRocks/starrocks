@@ -570,6 +570,12 @@ struct CppColumnTraits<OLAP_FIELD_TYPE_BOOL> {
     using ColumnType = vectorized::UInt8Column;
 };
 
+// deprecated
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_DATE> {
+    using ColumnType = vectorized::FixedLengthColumn<uint24_t>;
+};
+
 template <>
 struct CppColumnTraits<OLAP_FIELD_TYPE_DATE_V2> {
     using ColumnType = vectorized::DateColumn;
@@ -578,6 +584,12 @@ struct CppColumnTraits<OLAP_FIELD_TYPE_DATE_V2> {
 template <>
 struct CppColumnTraits<OLAP_FIELD_TYPE_TIMESTAMP> {
     using ColumnType = vectorized::TimestampColumn;
+};
+
+// deprecated
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_DECIMAL> {
+    using ColumnType = vectorized::FixedLengthColumn<decimal12_t>;
 };
 
 template <>
@@ -593,6 +605,11 @@ struct CppColumnTraits<OLAP_FIELD_TYPE_PERCENTILE> {
 template <>
 struct CppColumnTraits<OLAP_FIELD_TYPE_OBJECT> {
     using ColumnType = vectorized::BitmapColumn;
+};
+
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_UNSIGNED_INT> {
+    using ColumnType = vectorized::UInt32Column;
 };
 
 template <FieldType field_type>

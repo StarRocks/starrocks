@@ -48,7 +48,7 @@ PrimitiveType thrift_to_type(TPrimitiveType::type ttype) {
 #define M(ttype)                \
     case TPrimitiveType::ttype: \
         return TYPE_##ttype;
-        APPLY_FOR_ALL_THRIFT_TYPE(M)
+        APPLY_FOR_SCALAR_THRIFT_TYPE(M)
 #undef M
     }
 
@@ -66,7 +66,7 @@ TPrimitiveType::type to_thrift(PrimitiveType ptype) {
 #define M(thrift_name)       \
     case TYPE_##thrift_name: \
         return TPrimitiveType::thrift_name;
-        APPLY_FOR_ALL_THRIFT_TYPE(M)
+        APPLY_FOR_SCALAR_THRIFT_TYPE(M)
 #undef M
 
     case TYPE_ARRAY:
@@ -86,7 +86,7 @@ std::string type_to_string(PrimitiveType t) {
 #define M(ttype)       \
     case TYPE_##ttype: \
         return #ttype;
-        APPLY_FOR_ALL_THRIFT_TYPE(M)
+        APPLY_FOR_SCALAR_THRIFT_TYPE(M)
         APPLY_FOR_COMPLEX_THRIFT_TYPE(M)
 #undef M
     }
@@ -102,7 +102,7 @@ std::string type_to_odbc_string(PrimitiveType t) {
 #define M(ttype)       \
     case TYPE_##ttype: \
         return #ttype;
-        APPLY_FOR_ALL_THRIFT_TYPE(M)
+        APPLY_FOR_SCALAR_THRIFT_TYPE(M)
 #undef M
 
     default:

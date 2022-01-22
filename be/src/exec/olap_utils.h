@@ -34,27 +34,6 @@
 
 namespace starrocks {
 
-typedef bool (*CompareLargeFunc)(const void*, const void*);
-
-template <class T>
-inline bool compare_large(const void* lhs, const void* rhs) {
-    return *reinterpret_cast<const T*>(lhs) > *reinterpret_cast<const T*>(rhs);
-}
-
-inline CompareLargeFunc get_compare_func(PrimitiveType type) {
-    switch (type) {
-#define M(name)                                           \
-    case name: {                                          \
-        using CppType = vectorized::RunTimeCppType<name>; \
-        return compare_large<CppType>;                    \
-    }
-        APPLY_FOR_SORTABLE_TYPE(M)
-#undef M
-    default:
-        CHECK(false) << "Unsupported Compare type";
-    }
-}
-
 static const char* NEGATIVE_INFINITY = "-oo";
 static const char* POSITIVE_INFINITY = "+oo";
 

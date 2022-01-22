@@ -84,33 +84,35 @@ public:
     }
 };
 
-template <PrimitiveType data_type>
-static Expr* create_binary_predicate(const TExprNode& node) {
-    switch (node.opcode) {
-    case TExprOpcode::EQ:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredEq>(node);
-    case TExprOpcode::NE:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredNe>(node);
-    case TExprOpcode::LT:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredLt>(node);
-    case TExprOpcode::LE:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredLe>(node);
-    case TExprOpcode::GT:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredGt>(node);
-    case TExprOpcode::GE:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredGe>(node);
-    case TExprOpcode::EQ_FOR_NULL:
-        return new VectorizedNullSafeEqPredicate<data_type, BinaryPredEq>(node);
-    default:
-        break;
+struct BinaryPredicateBuilder {
+    template <PrimitiveType data_type>
+    Expr* operator()(const TExprNode& node) {
+        switch (node.opcode) {
+        case TExprOpcode::EQ:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredEq>(node);
+        case TExprOpcode::NE:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredNe>(node);
+        case TExprOpcode::LT:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredLt>(node);
+        case TExprOpcode::LE:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredLe>(node);
+        case TExprOpcode::GT:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredGt>(node);
+        case TExprOpcode::GE:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredGe>(node);
+        case TExprOpcode::EQ_FOR_NULL:
+            return new VectorizedNullSafeEqPredicate<data_type, BinaryPredEq>(node);
+        default:
+            break;
+        }
+        return nullptr;
     }
-    return nullptr;
-}
+};
 
 Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     PrimitiveType type = thrift_to_type(node.child_type);
 
-    return TYPE_DISPATCH_PREDICATE_TYPE(create_binary_predicate, type, node);
+    return type_dispatch_predicate(type, BinaryPredicateBuilder(), node);
 }
 
 } // namespace starrocks::vectorized

@@ -11,8 +11,6 @@
 
 namespace starrocks {
 
-struct uint24;
-
 namespace vectorized {
 
 template <bool B, typename T>
@@ -249,11 +247,6 @@ struct ColumnTraits<int16_t> {
 };
 
 template <>
-struct ColumnTraits<uint24_t> {
-    using ColumnType = UInt24Column;
-};
-
-template <>
 struct ColumnTraits<int32_t> {
     using ColumnType = Int32Column;
 };
@@ -281,11 +274,6 @@ struct ColumnTraits<double> {
 template <>
 struct ColumnTraits<DecimalV2Value> {
     using ColumnType = DecimalColumn;
-};
-
-template <>
-struct ColumnTraits<decimal12_t> {
-    using ColumnType = FixedLengthColumn<decimal12_t>;
 };
 
 template <>

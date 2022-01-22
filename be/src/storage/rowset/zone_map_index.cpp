@@ -161,7 +161,7 @@ struct ZoneMapIndexWriterBuilder {
 };
 
 std::unique_ptr<ZoneMapIndexWriter> ZoneMapIndexWriter::create(starrocks::Field* field) {
-    return field_type_dispatch_bitmap_index(field->type(), ZoneMapIndexWriterBuilder(), field);
+    return field_type_dispatch_zonemap_index(field->type(), ZoneMapIndexWriterBuilder(), field);
 }
 
 template <FieldType type>

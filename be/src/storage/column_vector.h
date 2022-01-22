@@ -21,12 +21,10 @@
 
 #pragma once
 
-#include <type_traits>
 #include <utility>
 
 #include "common/status.h"
 #include "storage/olap_common.h"
-#include "storage/olap_type_infra.h"
 #include "storage/rowset/common.h" // for ordinal_t
 #include "storage/types.h"
 #include "util/raw_container.h"

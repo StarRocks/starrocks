@@ -11,7 +11,6 @@ class DecimalV2Value;
 class HyperLogLog;
 class BitmapValue;
 class PercentileValue;
-struct uint24_t;
 
 namespace vectorized {
 
@@ -54,7 +53,6 @@ using UInt8Column = FixedLengthColumn<uint8_t>;
 using BooleanColumn = UInt8Column;
 using Int16Column = FixedLengthColumn<int16_t>;
 using UInt16Column = FixedLengthColumn<uint16_t>;
-using UInt24Column = FixedLengthColumn<uint24_t>;
 using Int32Column = FixedLengthColumn<int32_t>;
 using UInt32Column = FixedLengthColumn<uint32_t>;
 using Int64Column = FixedLengthColumn<int64_t>;
