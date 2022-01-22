@@ -8,13 +8,14 @@ import com.starrocks.catalog.Type;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 public class CaseWhenOperator extends CallOperator {
     private boolean hasCase;
     private boolean hasElse;
 
     private int whenStart;
-    private final int whenEnd;
+    private int whenEnd;
 
     public CaseWhenOperator(CaseWhenOperator other, List<ScalarOperator> children) {
         super("CaseWhen", other.type, children);
@@ -97,6 +98,23 @@ public class CaseWhenOperator extends CallOperator {
 
     public void setThenClause(int i, ScalarOperator op) {
         arguments.set(2 * i + whenStart + 1, op);
+    }
+
+    public int getWhenStart() {
+        return this.whenStart;
+    }
+
+    // This method used for remove useless WhenThenClause,
+    // removeSet contains arguments index that should be removed.
+    public void removeArguments(Set<Integer> removeSet) {
+        List<ScalarOperator> newArguments = Lists.newArrayList();
+        for (int i = 0; i < this.arguments.size(); ++i) {
+            if (!removeSet.contains(i)) {
+                newArguments.add(this.arguments.get(i));
+            }
+        }
+        this.arguments = newArguments;
+        this.whenEnd = this.arguments.size();
     }
 
     @Override
