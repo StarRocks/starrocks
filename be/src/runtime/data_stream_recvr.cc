@@ -460,8 +460,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
     ChunkQueue chunks;
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
-    _is_pipeline_level_shuffle = request.has_driver_sequence();
-    int32_t driver_sequence = request.has_driver_sequence() ? request.driver_sequence() : -1;
+    _is_pipeline_level_shuffle = request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -487,7 +486,9 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
         COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
 
     } else {
-        for (auto& pchunk : request.chunks()) {
+        for (auto i = 0; i < request.chunks().size(); ++i) {
+            auto& pchunk = request.chunks().Get(i);
+            auto driver_sequence = _is_pipeline_level_shuffle ? request.driver_sequences(i) : -1;
             int64_t chunk_bytes = pchunk.data().size();
             ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
             RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
@@ -586,8 +587,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     ChunkQueue local_chunk_queue;
-    _is_pipeline_level_shuffle = request.has_driver_sequence();
-    int32_t driver_sequence = request.has_driver_sequence() ? request.driver_sequence() : -1;
+    _is_pipeline_level_shuffle = request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -612,7 +612,9 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
         total_chunk_bytes += bytes;
         COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
     } else {
-        for (auto& pchunk : request.chunks()) {
+        for (auto i = 0; i < request.chunks().size(); ++i) {
+            auto& pchunk = request.chunks().Get(i);
+            auto driver_sequence = _is_pipeline_level_shuffle ? request.driver_sequences(i) : -1;
             int64_t chunk_bytes = pchunk.data().size();
             ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
             RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
