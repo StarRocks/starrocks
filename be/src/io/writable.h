@@ -22,6 +22,12 @@ public:
 
     // Write a given chunk of data to the output.
     // Some output streams may implement this in a way that avoids copying.
+    // For example, if we have an asynchronized Writable, the chunk of data
+    // passed by `write_aliased()` can be passed to the background writer
+    // thread directly without copying, while the chunk of data passed by
+    // `write()` need to be copied into an internal buffer first, and then
+    // the internal buffer will be passed to the background writer thread.
+    //
     // Check allows_aliasing() before calling write_aliased(). It will fall
     // back to copying if write_aliased() is called on a stream that does not
     // allow aliasing.
