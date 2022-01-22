@@ -28,7 +28,6 @@ public:
 
 protected:
     MorselQueue* _morsel_queue;
-    ChunkSourcePtr _chunk_source;
 };
 
 class SourceOperatorFactory : public OperatorFactory {

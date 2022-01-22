@@ -27,7 +27,9 @@ public:
             : SourceOperator(factory, id, "olap_scan", plan_node_id),
               _olap_scan_node(olap_scan_node),
               _conjunct_ctxs(conjunct_ctxs),
-              _limit(limit) {}
+              _limit(limit),
+              _is_io_task_running(_max_io_tasks_per_op),
+              _chunk_sources(_max_io_tasks_per_op) {}
 
     ~ScanOperator() override = default;
 
@@ -44,33 +46,37 @@ public:
     void set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-    void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
 
     void set_workgroup(starrocks::workgroup::WorkGroupPtr wg);
 
 private:
+    const size_t _buffer_size = config::pipeline_io_buffer_size;
+    const int _max_io_tasks_per_op = config::pipeline_scan_max_tasks_per_operator;
+
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
-    Status _pickup_morsel(RuntimeState* state);
-    Status _trigger_next_scan(RuntimeState* state);
+    Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
+    Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
+    Status _try_to_trigger_next_scan(RuntimeState* state);
 
-private:
     // TODO(hcf) ugly, remove this later
     RuntimeState* _state = nullptr;
 
-    const size_t _buffer_size = config::pipeline_io_buffer_size;
-    mutable bool _is_finished = false;
-    std::atomic_bool _is_io_task_active = false;
+    bool _is_finished = false;
     int32_t _io_task_retry_cnt = 0;
+
     const TOlapScanNode& _olap_scan_node;
     const std::vector<ExprContext*>& _conjunct_ctxs;
-    PriorityThreadPool* _io_threads = nullptr;
     std::vector<std::string> _unused_output_columns;
     // Pass limit info to scan operator in order to improve sql:
     // select * from table limit x;
     int64_t _limit; // -1: no limit
 
     starrocks::workgroup::WorkGroupPtr _workgroup = nullptr;
+
+    std::atomic<int> _num_running_io_tasks = 0;
+    std::vector<std::atomic<bool>> _is_io_task_running;
+    std::vector<ChunkSourcePtr> _chunk_sources;
 };
 
 class ScanOperatorFactory final : public SourceOperatorFactory {

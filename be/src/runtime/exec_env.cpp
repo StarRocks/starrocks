@@ -134,13 +134,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _thread_pool = new PriorityThreadPool("olap_scan_io", // olap scan io
                                           config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
-    _pipeline_scan_io_thread_pool = new PriorityThreadPool("pip_scan_io", // pipeline scan io
-                                                           config::pipeline_scan_thread_pool_thread_num <= 0
-                                                                   ? std::thread::hardware_concurrency()
-                                                                   : config::pipeline_scan_thread_pool_thread_num,
-                                                           config::pipeline_scan_thread_pool_queue_size);
 
-    _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool("elt", config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _fragment_mgr = new FragmentMgr(this);
 
@@ -362,10 +356,6 @@ void ExecEnv::_destroy() {
     if (_etl_thread_pool) {
         delete _etl_thread_pool;
         _etl_thread_pool = nullptr;
-    }
-    if (_pipeline_scan_io_thread_pool) {
-        delete _pipeline_scan_io_thread_pool;
-        _pipeline_scan_io_thread_pool = nullptr;
     }
     if (_io_dispatcher) {
         delete _io_dispatcher;

@@ -57,6 +57,8 @@ public:
         }
     }
 
+    bool empty() const { return _pop_index >= _num_morsels; }
+
 private:
     Morsels _morsels;
     const size_t _num_morsels;
