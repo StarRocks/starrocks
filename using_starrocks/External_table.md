@@ -261,7 +261,7 @@ PROPERTIES (
     | --- | --- | ---|
     |   INT/INTEGER  | INT    |
     |   BIGINT  | BIGINT    |
-    |   TIMESTAMP  | DATETIME    |TIMESTAMP转成DATETIME，会损失精度和时区信息，<br/>根据sessionVariable中的时区转成无时区Datatime|
+    |   TIMESTAMP  | DATETIME    |TIMESTAMP转成DATETIME，会损失精度和时区信息，<br/>根据sessionVariable中的时区转成无时区DATETIME|
     |  STRING  | VARCHAR   |
     |  VARCHAR  | VARCHAR   |
     |  CHAR  | CHAR   |
@@ -297,7 +297,9 @@ select count(*) from profile_wos_p7;
   3. 在fe/conf/fe.conf文件中的JAVA_OPTS/JAVA_OPTS_FOR_JDK_9选项加上 -Djava.security.krb5.conf:/etc/krb5.conf，/etc/krb5.conf是krb5.conf文件的路径，可以根据自己的系统调整。
   4. resource中的uri地址一定要使用域名，并且相应的hive和hdfs的域名与ip的映射都需要配置到/etc/hosts中。
 * S3 支持:
-  在fe/conf/core-site.xml和be/conf/core-site.xml中加入如下配置即可
+  2.0.1及之后的版本默认不开启此功能，可以按照以下步骤配置后使用。
+  1. 下载[依赖库](https://cdn-thirdparty.starrocks.com/hive_S3_jar.tar.gz)并添加到fe/lib/和be/lib/hadoop/hdfs/路径下。
+  2. 在fe/conf/core-site.xml和be/conf/core-site.xml中加入如下配置，并重启fe和be。
 
 ~~~xml
 <configuration>
