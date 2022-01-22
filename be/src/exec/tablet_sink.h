@@ -165,7 +165,7 @@ public:
     Status mark_close();
     Status close_wait(RuntimeState* state);
 
-    void cancel();
+    void cancel(const Status& err_st);
 
     int try_send_chunk_and_fetch_status();
 

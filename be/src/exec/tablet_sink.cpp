@@ -307,10 +307,11 @@ Status NodeChannel::close_wait(RuntimeState* state) {
     return _err_st;
 }
 
-void NodeChannel::cancel() {
+void NodeChannel::cancel(const Status& err_st) {
     // we don't need to wait last rpc finished, cause closure's release/reset will join.
     // But do we need brpc::StartCancel(call_id)?
     _cancelled = true;
+    _err_st = err_st;
 
     PTabletWriterCancelRequest request;
     request.set_allocated_id(&_parent->_load_id);
@@ -802,7 +803,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
             }
             for (int i = ordinal; i < _channels.size(); ++i) {
                 auto& index_channel = _channels[i];
-                index_channel->for_each_node_channel([](NodeChannel* ch) { ch->cancel(); });
+                index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
             }
         }
         // TODO need to be improved
@@ -835,7 +836,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
         LOG(INFO) << ss.str();
     } else {
         for (auto& channel : _channels) {
-            channel->for_each_node_channel([](NodeChannel* ch) { ch->cancel(); });
+            channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
         }
     }
 
