@@ -44,7 +44,7 @@ public class SubqueryTransformer {
     }
 
     public OptExprBuilder handleSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt, Expr expression,
-                                           Map<String, ExpressionMapping> cteContext) {
+                                           Map<Integer, ExpressionMapping> cteContext) {
         FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory, session);
         subOpt = expression.accept(handler, new SubqueryContext(subOpt, true, cteContext));
 
@@ -53,7 +53,7 @@ public class SubqueryTransformer {
 
     // Only support scalar-subquery in `SELECT` clause
     public OptExprBuilder handleScalarSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt,
-                                                 Expr expression, Map<String, ExpressionMapping> cteContext) {
+                                                 Expr expression, Map<Integer, ExpressionMapping> cteContext) {
         FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory, session);
         subOpt = expression.accept(handler, new SubqueryContext(subOpt, false, cteContext));
 
@@ -92,9 +92,9 @@ public class SubqueryTransformer {
     private static class SubqueryContext {
         public OptExprBuilder builder;
         public boolean useSemiAnti;
-        public Map<String, ExpressionMapping> cteContext;
+        public Map<Integer, ExpressionMapping> cteContext;
 
-        public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti, Map<String, ExpressionMapping> cteContext) {
+        public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti, Map<Integer, ExpressionMapping> cteContext) {
             this.builder = builder;
             this.useSemiAnti = useSemiAnti;
             this.cteContext = cteContext;
@@ -111,7 +111,7 @@ public class SubqueryTransformer {
         }
 
         private LogicalPlan getLogicalPlan(Relation relation, ConnectContext session, ExpressionMapping outer,
-                                           Map<String, ExpressionMapping> cteContext) {
+                                           Map<Integer, ExpressionMapping> cteContext) {
             if (!(relation instanceof SelectRelation) && !(relation instanceof ValuesRelation)) {
                 throw new SemanticException("Unsupported subquery relation");
             }

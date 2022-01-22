@@ -409,8 +409,7 @@ public class QueryAnalyzer {
                         withQuery.getColLabels().get(fieldIdx));
             }
 
-            CTERelation cteRelation = new CTERelation(
-                    String.valueOf(RelationId.of(query).hashCode()),
+            CTERelation cteRelation = new CTERelation(RelationId.of(query).hashCode(),
                     withQuery.getName(),
                     columnOutputNames.build(),
                     query);

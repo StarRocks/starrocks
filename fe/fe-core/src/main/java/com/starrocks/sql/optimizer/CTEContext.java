@@ -28,23 +28,23 @@ import java.util.Map;
  * */
 public class CTEContext {
     // All CTE produce, OptExpression should bind GroupExpression
-    private Map<String, OptExpression> produces;
+    private Map<Integer, OptExpression> produces;
 
     // All CTE consume inline costs
-    private Map<String, List<Double>> consumeInlineCosts;
+    private Map<Integer, List<Double>> consumeInlineCosts;
 
     // All Cte produce costs
-    private Map<String, Double> produceCosts;
+    private Map<Integer, Double> produceCosts;
 
     // Nums of CTE consume
-    private Map<String, Integer> consumeNums;
+    private Map<Integer, Integer> consumeNums;
 
     // Consume required columns
-    private Map<String, ColumnRefSet> requiredColumns;
+    private Map<Integer, ColumnRefSet> requiredColumns;
 
-    private Map<String, List<ScalarOperator>> consumePredicates;
+    private Map<Integer, List<ScalarOperator>> consumePredicates;
 
-    private Map<String, List<Long>> consumeLimits;
+    private Map<Integer, List<Long>> consumeLimits;
 
     private boolean enableCTE;
 
@@ -66,20 +66,20 @@ public class CTEContext {
         this.enableCTE = enableCTE;
     }
 
-    public void addCTEProduce(String cteId, OptExpression produce) {
+    public void addCTEProduce(int cteId, OptExpression produce) {
         this.produces.put(cteId, produce);
     }
 
-    public void addCTEConsume(String cteId) {
+    public void addCTEConsume(int cteId) {
         int i = this.consumeNums.getOrDefault(cteId, 0);
         this.consumeNums.put(cteId, i + 1);
     }
 
-    public void addCTEProduceCost(String cteId, double cost) {
+    public void addCTEProduceCost(int cteId, double cost) {
         produceCosts.put(cteId, cost);
     }
 
-    public void addCTEConsumeInlineCost(String cteId, double cost) {
+    public void addCTEConsumeInlineCost(int cteId, double cost) {
         if (consumeInlineCosts.containsKey(cteId)) {
             consumeInlineCosts.get(cteId).add(cost);
         } else {
@@ -87,17 +87,17 @@ public class CTEContext {
         }
     }
 
-    public OptExpression getCTEProduce(String cteId) {
+    public OptExpression getCTEProduce(int cteId) {
         Preconditions.checkState(produces.containsKey(cteId));
         return produces.get(cteId);
     }
 
-    public int getCTEConsumeNums(String cteId) {
+    public int getCTEConsumeNums(int cteId) {
         Preconditions.checkState(consumeNums.containsKey(cteId));
         return consumeNums.get(cteId);
     }
 
-    public Map<String, ColumnRefSet> getRequiredColumns() {
+    public Map<Integer, ColumnRefSet> getRequiredColumns() {
         return requiredColumns;
     }
 
@@ -107,11 +107,11 @@ public class CTEContext {
         return all;
     }
 
-    public Map<String, List<ScalarOperator>> getConsumePredicates() {
+    public Map<Integer, List<ScalarOperator>> getConsumePredicates() {
         return consumePredicates;
     }
 
-    public Map<String, List<Long>> getConsumeLimits() {
+    public Map<Integer, List<Long>> getConsumeLimits() {
         return consumeLimits;
     }
 
@@ -120,8 +120,8 @@ public class CTEContext {
     }
 
     public boolean needPushPredicate() {
-        for (Map.Entry<String, Integer> entry : consumeNums.entrySet()) {
-            String cteId = entry.getKey();
+        for (Map.Entry<Integer, Integer> entry : consumeNums.entrySet()) {
+            int cteId = entry.getKey();
             int nums = entry.getValue();
 
             if (consumePredicates.getOrDefault(cteId, Collections.emptyList()).size() >= nums) {
@@ -133,8 +133,8 @@ public class CTEContext {
     }
 
     public boolean needPushLimit() {
-        for (Map.Entry<String, Integer> entry : consumeNums.entrySet()) {
-            String cteId = entry.getKey();
+        for (Map.Entry<Integer, Integer> entry : consumeNums.entrySet()) {
+            int cteId = entry.getKey();
             int nums = entry.getValue();
 
             if (consumeLimits.getOrDefault(cteId, Collections.emptyList()).size() >= nums) {
@@ -153,7 +153,7 @@ public class CTEContext {
      *    so produce cost will multi a rate
      *
      */
-    public boolean needInline(String cteId) {
+    public boolean needInline(int cteId) {
         // 1. Disable CTE reuse
         // 2. CTE consume only use once
         if (!enableCTE || consumeNums.getOrDefault(cteId, 0) <= 1) {
@@ -182,7 +182,7 @@ public class CTEContext {
     }
 
     public boolean hasInlineCTE() {
-        for (String cteId : produces.keySet()) {
+        for (int cteId : produces.keySet()) {
             if (needInline(cteId)) {
                 return true;
             }
