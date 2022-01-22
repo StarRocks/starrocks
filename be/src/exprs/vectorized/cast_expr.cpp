@@ -673,7 +673,7 @@ public:
                                                                                           to_type.scale);
         } else {
             auto result_column = cast_fn<FromType, ToType>(column);
-            if (result_column->is_constant()) {
+            if (result_column->is_constant() && ptr != nullptr) {
                 result_column->resize(ptr->num_rows());
             }
             return result_column;
