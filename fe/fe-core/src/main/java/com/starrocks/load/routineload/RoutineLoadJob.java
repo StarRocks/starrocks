@@ -1538,6 +1538,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     // for ALTER ROUTINE LOAD
     private void modifyCommonJobProperties(Map<String, String> jobProperties) {
+        // Some properties will be remove from the map, so we copy the jobProperties to copiedJobProperties
         Map<String, String> copiedJobProperties = new HashMap<>(jobProperties);
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY)) {
             this.desireTaskConcurrentNum = Integer.parseInt(
