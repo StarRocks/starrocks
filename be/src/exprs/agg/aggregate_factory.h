@@ -68,6 +68,7 @@ public:
     static AggregateFunctionPtr MakeSumDistinctAggregateFunctionV2();
 
     static AggregateFunctionPtr MakeDictMergeAggregateFunction();
+    static AggregateFunctionPtr MakeRetentionAggregateFunction();
 
     // Hyperloglog functions:
     static AggregateFunctionPtr MakeHllUnionAggregateFunction();
