@@ -1446,7 +1446,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
                     total_score += stat.compaction_score;
                     total_rows += stat.num_rows;
                     total_bytes += stat.byte_size;
-                    LOG(INFO) << "estimate add:" << stat.byte_size << "=" << total_bytes;
                     continue;
                 }
                 candidates.emplace_back();
