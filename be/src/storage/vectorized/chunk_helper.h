@@ -105,26 +105,5 @@ inline std::shared_ptr<Chunk> ChunkHelper::new_chunk(const std::vector<SlotDescr
     return chunk;
 }
 
-inline ColumnPtr ChunkHelper::column_from_field(const Field& field) {
-    auto NullableIfNeed = [&](ColumnPtr col) -> ColumnPtr {
-        return field.is_nullable() ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
-    };
-
-    auto type = field.type()->type();
-    switch (type) {
-    case OLAP_FIELD_TYPE_DECIMAL32:
-        return NullableIfNeed(Decimal32Column::create(field.type()->precision(), field.type()->scale()));
-    case OLAP_FIELD_TYPE_DECIMAL64:
-        return NullableIfNeed(Decimal64Column::create(field.type()->precision(), field.type()->scale()));
-    case OLAP_FIELD_TYPE_DECIMAL128:
-        return NullableIfNeed(Decimal128Column::create(field.type()->precision(), field.type()->scale()));
-    case OLAP_FIELD_TYPE_ARRAY: {
-        return NullableIfNeed(ArrayColumn::create(column_from_field(field.sub_field(0)), UInt32Column::create()));
-    }
-    default:
-        return NullableIfNeed(column_from_field_type(type, false));
-    }
-}
-
 } // namespace vectorized
 } // namespace starrocks

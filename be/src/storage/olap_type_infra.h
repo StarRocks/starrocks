@@ -83,6 +83,7 @@ auto field_type_dispatch_column(FieldType ftype, Functor fun, Args... args) {
     switch (ftype) {
         APPLY_FOR_BASIC_OLAP_FIELD_TYPE(_TYPE_DISPATCH_CASE)
         APPLY_FOR_METRIC_FIELD_TYPE(_TYPE_DISPATCH_CASE)
+        _TYPE_DISPATCH_CASE(OLAP_FIELD_TYPE_ARRAY)
     default:
         CHECK(false) << "unknown type " << ftype;
         __builtin_unreachable();
