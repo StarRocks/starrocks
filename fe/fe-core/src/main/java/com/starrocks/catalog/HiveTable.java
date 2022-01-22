@@ -199,35 +199,10 @@ public class HiveTable extends Table {
                 .refreshPartitionCache(resourceName, hiveDb, hiveTable, partNames);
     }
 
-    /**
-     * 1. get from table stats
-     * 2. get from partition stats if table stats is missing
-     */
-    public long getRowCount() {
-        // from table stats
-        HiveTableStats tableStats = null;
-        try {
-            tableStats = getTableStats();
-        } catch (DdlException e) {
-            LOG.warn("table {} gets stats failed", name, e);
-            return 0;
-        }
-        long numRows = tableStats.getNumRows();
-        long tableTotalFileBytes = tableStats.getTotalFileBytes();
-        if (numRows < 0 || tableTotalFileBytes <= 0 || (numRows == 0 && tableTotalFileBytes != 0)) {
-            numRows = -1;
-        }
-        if (numRows != -1) {
-            return numRows;
-        }
-
-        // from partition stats
-        numRows = getPartitionStatsRowCount(null);
-        if (numRows != -1) {
-            return numRows;
-        }
-
-        return 0;
+    public void refreshTableColumnStats() throws DdlException {
+        Catalog.getCurrentCatalog().getHiveRepository()
+                .refreshTableColumnStats(resourceName, hiveDb, hiveTable, getPartitionColumns(),
+                        new ArrayList<>(nameToColumn.keySet()));
     }
 
     /**
@@ -617,10 +592,18 @@ public class HiveTable extends Table {
     }
 
     @Override
+    public void onCreate() {
+        if (this.resourceName != null) {
+            Catalog.getCurrentCatalog().getMetastoreEventsProcessor().registerTable(this);
+        }
+    }
+
+    @Override
     public void onDrop() {
         if (this.resourceName != null) {
             Catalog.getCurrentCatalog().getHiveRepository().
                     clearCache(this.resourceName, this.hiveDb, this.hiveTable);
+            Catalog.getCurrentCatalog().getMetastoreEventsProcessor().unregisterTable(this);
         }
     }
 }

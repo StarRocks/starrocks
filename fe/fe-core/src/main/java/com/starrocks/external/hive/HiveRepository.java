@@ -199,6 +199,13 @@ public class HiveRepository {
         metaCache.refreshPartition(dbName, tableName, partNames);
     }
 
+    public void refreshTableColumnStats(String resourceName, String dbName, String tableName, List<Column> partColumns,
+                                        List<String> columnNames)
+            throws DdlException {
+        HiveMetaCache metaCache = getMetaCache(resourceName);
+        metaCache.refreshColumnStats(dbName, tableName, partColumns, columnNames);
+    }
+
     public void clearCache(String resourceName, String dbName, String tableName) {
         try {
             HiveMetaCache metaCache = getMetaCache(resourceName);
