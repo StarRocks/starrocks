@@ -163,7 +163,17 @@ public:
 
     RowsetTxnMetaPB* mutable_txn_meta() { return _rowset_meta_pb.mutable_txn_meta(); }
 
+    // return semgent_footer position and size if rowset is partial_rowset
+    const FooterPointerPB* partial_rowset_footer(size_t segment_id) const {
+        if (!_rowset_meta_pb.has_txn_meta()) {
+            return nullptr;
+        }
+        return &_rowset_meta_pb.txn_meta().partial_rowset_footers(segment_id);
+    }
+
     void set_txn_meta(const RowsetTxnMetaPB& txn_meta) { *_rowset_meta_pb.mutable_txn_meta() = txn_meta; }
+
+    void release_txn_meta() { _rowset_meta_pb.release_txn_meta(); }
 
     bool empty() const { return _rowset_meta_pb.empty(); }
 

@@ -63,12 +63,13 @@ using strings::Substitute;
 
 StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
                                                  const std::string& filename, uint32_t segment_id,
-                                                 const TabletSchema* tablet_schema, size_t* footer_length_hint) {
+                                                 const TabletSchema* tablet_schema, size_t* footer_length_hint,
+                                                 const FooterPointerPB* partial_rowset_footer) {
     auto segment = std::shared_ptr<Segment>(new Segment(private_type(0), blk_mgr, filename, segment_id, tablet_schema),
                                             DeleterWithMemTracker<Segment>(mem_tracker));
     mem_tracker->consume(segment->mem_usage());
 
-    RETURN_IF_ERROR(segment->_open(mem_tracker, footer_length_hint));
+    RETURN_IF_ERROR(segment->_open(mem_tracker, footer_length_hint, partial_rowset_footer));
     return std::move(segment);
 }
 
@@ -166,11 +167,12 @@ Segment::Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fna
                  const TabletSchema* tablet_schema)
         : _block_mgr(blk_mgr), _fname(std::move(fname)), _tablet_schema(tablet_schema), _segment_id(segment_id) {}
 
-Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint) {
+Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint,
+                      const FooterPointerPB* partial_rowset_footer) {
     SegmentFooterPB footer;
     std::unique_ptr<fs::ReadableBlock> rblock;
     RETURN_IF_ERROR(_block_mgr->open_block(_fname, &rblock));
-    RETURN_IF_ERROR(Segment::parse_segment_footer(rblock.get(), &footer, footer_length_hint, nullptr));
+    RETURN_IF_ERROR(Segment::parse_segment_footer(rblock.get(), &footer, footer_length_hint, partial_rowset_footer));
 
     RETURN_IF_ERROR(_create_column_readers(mem_tracker, &footer));
     _num_rows = footer.num_rows();

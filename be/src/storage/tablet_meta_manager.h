@@ -110,6 +110,10 @@ public:
     // commit a rowset into tablet
     static Status rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, EditVersionMetaPB* edit,
                                 const RowsetMetaPB& rowset, const string& rowset_meta_key);
+    // write rowset_meta into rocksdb
+    // this function is used for partial update so far
+    static Status write_rowset_meta(DataDir* store, TTabletId tablet_id, const RowsetMetaPB& rowset,
+                                    const string& rowset_meta_key);
 
     using RowsetIterateFunc = std::function<bool(RowsetMetaSharedPtr rowset_meta)>;
     static Status rowset_iterate(DataDir* store, TTabletId tablet_id, const RowsetIterateFunc& func);

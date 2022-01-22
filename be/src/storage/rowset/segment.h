@@ -78,7 +78,8 @@ public:
     static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
                                                    const std::string& filename, uint32_t segment_id,
                                                    const TabletSchema* tablet_schema,
-                                                   size_t* footer_length_hint = nullptr);
+                                                   size_t* footer_length_hint = nullptr,
+                                                   const FooterPointerPB* partial_rowset_footer = nullptr);
 
     static Status parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
                                        const FooterPointerPB* partial_rowset_footer);
@@ -151,7 +152,7 @@ private:
     };
 
     // open segment file and read the minimum amount of necessary information (footer)
-    Status _open(MemTracker* mem_tracker, size_t* footer_length_hint);
+    Status _open(MemTracker* mem_tracker, size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer);
     Status _create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer);
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.

@@ -35,7 +35,9 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 
     SegmentFooterPB footer;
     RETURN_IF_ERROR(Segment::parse_segment_footer(rblock.get(), &footer, nullptr, &partial_rowset_footer));
-    uint64_t remaining = partial_rowset_footer.position();
+    // keep the partial rowset footer in dest file
+    // because be may be crash during update rowset meta
+    uint64_t remaining = partial_rowset_footer.position() + partial_rowset_footer.size();
     std::string read_buffer;
     raw::stl_string_resize_uninitialized(&read_buffer, 4096);
     uint64_t offset = 0;

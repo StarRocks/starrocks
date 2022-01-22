@@ -10,6 +10,7 @@
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/tablet.h"
+#include "storage/tablet_meta_manager.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/phmap/phmap.h"
@@ -403,7 +404,20 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     rewrite_files.clear();
     auto beta_rowset = down_cast<BetaRowset*>(rowset);
     RETURN_IF_ERROR(beta_rowset->reload());
+    // Be may crash during the rewrite or after the rewrite
+    // So the data at the end of the segment_file may be illegal
+    // We use partial_rowset_footers to locate the partial_footer so that
+    // the segment can be read normally after be crashe during the rewrite
+    // If rewrite is finished, the partial_segment_footer should be removed from rowset_meta
+    // to indicate the new full rowset could be read normally after be restarted
+    RETURN_IF_ERROR(_update_rowset_meta(tablet, rowset));
     return Status::OK();
+}
+
+Status RowsetUpdateState::_update_rowset_meta(Tablet* tablet, Rowset* rowset) {
+    rowset->rowset_meta()->release_txn_meta();
+    auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    return TabletMetaManager::write_rowset_meta(tablet->data_dir(), tablet->tablet_id(), rowset_meta_pb, string());
 }
 
 std::string RowsetUpdateState::to_string() const {
