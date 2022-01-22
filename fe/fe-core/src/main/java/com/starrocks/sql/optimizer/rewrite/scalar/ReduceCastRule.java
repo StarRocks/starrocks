@@ -73,9 +73,10 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
 
         // abandon cast function when cast datetime to date
         if (child1 instanceof CastOperator && isConstantOperator) {
-            boolean isDateType = castChild.getType().isDate();
+            boolean isCastFunction = castChild instanceof CastOperator;
+            boolean isOriginalDateType = castChild.getType().isDate();
             boolean isDatetimeType = child2.getType().isDatetime();
-            if (isDateType && isDatetimeType) {
+            if (!isCastFunction && isOriginalDateType && isDatetimeType) {
                 return optimizeDateTimeToDateCastSituation(operator);
             }
         }

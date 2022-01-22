@@ -1100,7 +1100,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "and cast(id_date as datetime) <= '1970-01-01'";
         plan = getFragmentPlan(sql);
         // check not prune tablet
-        Assert.assertTrue(plan.contains("tabletRatio=3/3"));
+        Assert.assertTrue(plan.contains("tabletRatio=1/3"));
 
         sql = "select * from test_all_type_distributed_by_date where cast(id_date as date) >= '1970-01-01' " +
                 "and cast(id_date as date) <= '1970-01-01'";
@@ -1120,6 +1120,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "and cast(id_date as datetime) < '1992-01-01 12:00:00'";
         plan = getFragmentPlan(sql);
         // check not prune partition
-        Assert.assertTrue(plan.contains("partitions=3/3"));
+        Assert.assertTrue(plan.contains("partitions=1/3"));
     }
 }
