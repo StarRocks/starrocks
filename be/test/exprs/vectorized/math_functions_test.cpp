@@ -403,11 +403,11 @@ TEST_F(VecMathFunctionsTest, Conv_stringTest) {
         auto tc2 = Int8Column::create();
         auto tc3 = Int8Column::create();
 
-        std::string bigints[] = {"1", "2", "35", "1000", "103", "114"};
-        int8_t baseints[] = {10, 10, 10, 8, 35, 35};
-        int8_t destints[] = {10, 16, 36, 10, 10, 10};
+        std::string bigints[] = {"1", "2", "35", "1000", "103", "114", "18446744073709551617", "-9223372036854775808", "-9223372036854775809", "de0b6b3a7640000", "8ac7230489e80000"};
+        int8_t baseints[] = {10, 10, 10, 8, 35, 35, 10, 10, 10, 16, 16};
+        int8_t destints[] = {10, 16, 36, 10, 10, 10, 10, 10, 10, 10, 10};
 
-        std::string results[] = {"1", "2", "Z", "512", "1228", "1264"};
+        std::string results[] = {"1", "2", "Z", "512", "1228", "1264", "18446744073709551615", "9223372036854775808", "9223372036854775807", "1000000000000000000", "10000000000000000000"};
 
         for (int i = 0; i < sizeof(bigints) / sizeof(bigints[0]); ++i) {
             tc1->append(bigints[i]);

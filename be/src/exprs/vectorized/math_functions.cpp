@@ -441,20 +441,23 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const starrocks::
         }
 
         StringParser::ParseResult parse_res;
-        int64_t decimal_num = StringParser::string_to_int<int64_t>(reinterpret_cast<char*>(string_value.data),
+        int128_t decimal_num = StringParser::string_to_int<int128_t>(reinterpret_cast<char*>(string_value.data),
                                                                    string_value.size, src_base_value, &parse_res);
-
         if (src_base_value < 0 && decimal_num >= 0) {
             result.append_null();
             continue;
         }
-
-        if (!handle_parse_result(dest_base_value, &decimal_num, parse_res)) {
+        int64_t decimal64_num = static_cast<int64_t>(decimal_num);
+        // recheck overflow
+        if (parse_res == StringParser::PARSE_SUCCESS && decimal_num > std::numeric_limits<uint64_t>::max()) {
+            parse_res = StringParser::PARSE_OVERFLOW;
+        }
+        if (!handle_parse_result(dest_base_value, &decimal64_num, parse_res)) {
             result.append(Slice("0", 1));
             continue;
         }
 
-        result.append(Slice(decimal_to_base(decimal_num, dest_base_value)));
+        result.append(Slice(decimal_to_base(decimal64_num, dest_base_value)));
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
