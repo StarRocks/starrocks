@@ -833,9 +833,8 @@ const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType t
         static StringToOtherTypeConverter<ftype> s_converter; \
         return &s_converter;                                  \
     }
-        APPLY_FOR_BASIC_OLAP_FIELD_TYPE(M)
+        APPLY_FOR_TYPE_CONVERT_FROM_VARCHAR(M)
 #undef M
-
     default:
         return nullptr;
     }
@@ -843,12 +842,21 @@ const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType t
 
 const TypeConverter* get_to_varchar_converter(FieldType from_type, FieldType to_type) {
     switch (from_type) {
+    case OLAP_FIELD_TYPE_BOOL: {
+        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_TINYINT> s_converter;
+        return &s_converter;
+    }
+    case OLAP_FIELD_TYPE_CHAR:
+    case OLAP_FIELD_TYPE_VARCHAR: {
+        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_VARCHAR> s_converter;
+        return &s_converter;
+    }
 #define M(ftype)                                              \
     case ftype: {                                             \
         static OtherToStringTypeConverter<ftype> s_converter; \
         return &s_converter;                                  \
     }
-        APPLY_FOR_BASIC_OLAP_FIELD_TYPE(M)
+        APPLY_FOR_TYPE_CONVERT_TO_VARCHAR(M)
 #undef M
 
     default:
