@@ -25,13 +25,13 @@ namespace starrocks {
     M(TYPE_DECIMAL128)
 
 #define APPLY_FOR_ALL_SCALAR_TYPE(M) \
-    APPLY_FOR_ALL_NUMBER_TYPE(M)        \
-    M(TYPE_DECIMALV2)                   \
-    M(TYPE_VARCHAR)                     \
-    M(TYPE_CHAR)                        \
-    M(TYPE_DATE)                        \
-    M(TYPE_DATETIME)                    \
-    M(TYPE_TIME)                        \
+    APPLY_FOR_ALL_NUMBER_TYPE(M)     \
+    M(TYPE_DECIMALV2)                \
+    M(TYPE_VARCHAR)                  \
+    M(TYPE_CHAR)                     \
+    M(TYPE_DATE)                     \
+    M(TYPE_DATETIME)                 \
+    M(TYPE_TIME)                     \
     M(TYPE_BOOLEAN)
 
 #define APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M) \
