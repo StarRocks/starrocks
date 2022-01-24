@@ -28,28 +28,47 @@ SchemaCharsetsScanner::SchemaCharsetsScanner()
 SchemaCharsetsScanner::~SchemaCharsetsScanner() = default;
 
 Status SchemaCharsetsScanner::fill_chunk(ChunkPtr* chunk) {
-    // variables names
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[0]->id());
-        Slice value(_s_charsets[_index].charset, strlen(_s_charsets[_index].charset));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // DEFAULT_COLLATE_NAME
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[1]->id());
-        Slice value(_s_charsets[_index].default_collation, strlen(_s_charsets[_index].default_collation));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // DESCRIPTION
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[2]->id());
-        Slice value(_s_charsets[_index].description, strlen(_s_charsets[_index].description));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // maxlen
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[3]->id());
-        fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_s_charsets[_index].maxlen);
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        switch (slot_id) {
+        case 1: {
+            // variables names
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                Slice value(_s_charsets[_index].charset, strlen(_s_charsets[_index].charset));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 2: {
+            // DEFAULT_COLLATE_NAME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                Slice value(_s_charsets[_index].default_collation, strlen(_s_charsets[_index].default_collation));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 3: {
+            // DESCRIPTION
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                Slice value(_s_charsets[_index].description, strlen(_s_charsets[_index].description));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 4: {
+            // maxlen
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_s_charsets[_index].maxlen);
+            }
+            break;
+        }
+        default:
+            break;
+        }
     }
     _index++;
     return Status::OK();
