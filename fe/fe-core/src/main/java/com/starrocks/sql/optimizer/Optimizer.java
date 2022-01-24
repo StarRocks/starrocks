@@ -148,9 +148,8 @@ public class Optimizer {
 
         CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         // inline CTE if consume use once
-        while (cteContext.hasInlineCTE()) {
+        if (cteContext.hasInlineCTE()) {
             ruleRewriteIterative(memo, rootTaskContext, RuleSetType.INLINE_ONE_CTE);
-            CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         }
 
         cleanUpMemoGroup(memo);
@@ -221,14 +220,14 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
         cleanUpMemoGroup(memo);
-        if (cteContext.needOptimizeCTE()) {
-            CTEUtils.collectCteOperators(memo, context);
-        }
 
         // compute CTE inline by costs
-        while (cteContext.needOptimizeCTE() && cteContext.hasInlineCTE()) {
-            ruleRewriteIterative(memo, rootTaskContext, RuleSetType.INLINE_CTE);
+        if (cteContext.needOptimizeCTE()) {
             CTEUtils.collectCteOperators(memo, context);
+            if (cteContext.hasInlineCTE()) {
+                ruleRewriteIterative(memo, rootTaskContext, RuleSetType.INLINE_CTE);
+                CTEUtils.collectCteOperators(memo, context);
+            }
         }
 
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
