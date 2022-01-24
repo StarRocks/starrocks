@@ -150,7 +150,7 @@ inline bool RawValue::lt(const void* v1, const void* v2, const TypeDescriptor& t
     case TYPE_DECIMALV2: {
         int128_t r = unaligned_load<int128_t>(v2);
         int128_t l = unaligned_load<int128_t>(v1);
-        return r < l;
+        return l < r;
     }
 
     case TYPE_LARGEINT: {
