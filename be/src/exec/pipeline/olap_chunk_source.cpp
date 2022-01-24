@@ -300,21 +300,32 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
         return _status;
     }
     using namespace vectorized;
+    int64_t time_spent = 0;
+    int64_t total_time_spent = 0;
     for (size_t i = 0; i < batch_size && !can_finish; ++i) {
-        ChunkUniquePtr chunk(
-                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
-        _status = _read_chunk_from_storage(_runtime_state, chunk.get());
-        if (!_status.ok()) {
-            // end of file is normal case, need process chunk
-            if (_status.is_end_of_file()) {
-                (*num_read_chunks) += chunk->num_rows();
-                _chunk_buffer.put(std::move(chunk));
+        {
+            SCOPED_RAW_TIMER(&time_spent);
+
+            ChunkUniquePtr chunk(
+                    ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
+            _status = _read_chunk_from_storage(_runtime_state, chunk.get());
+            if (!_status.ok()) {
+                // end of file is normal case, need process chunk
+                if (_status.is_end_of_file()) {
+                    ++(*num_read_chunks);
+                    _chunk_buffer.put(std::move(chunk));
+                }
+                break;
             }
-            break;
+
+            ++(*num_read_chunks);
+            _chunk_buffer.put(std::move(chunk));
         }
 
-        (*num_read_chunks) += chunk->num_rows();
-        _chunk_buffer.put(std::move(chunk));
+        total_time_spent += time_spent;
+        if (total_time_spent >= config::pipeline_scan_task_yield_max_tims_spent) {
+            break;
+        }
     }
 
     return _status;

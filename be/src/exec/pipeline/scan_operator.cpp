@@ -96,7 +96,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
             auto&& chunk = chunk_source->get_next_chunk_from_buffer();
 
             eval_runtime_bloom_filters(chunk.value().get());
-            _workgroup->decrease_chunk_num(chunk.value()->num_rows());
+            _workgroup->decrease_chunk_num(1);
 
             return std::move(chunk);
         }

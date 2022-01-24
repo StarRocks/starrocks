@@ -643,10 +643,10 @@ CONF_Int64(pipeline_yield_max_chunks_moved, "100");
 CONF_Int64(pipeline_yield_max_time_spent, "100000000");
 // the number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
-// queue size of scan thread pool for pipeline engine.
-CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The max number of io tasks for each scan operator.
 CONF_Int64(pipeline_scan_max_tasks_per_operator, "4");
+// The max number of io tasks for each scan operator.
+CONF_Int64(pipeline_scan_task_yield_max_tims_spent, "100000000");
 // the number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // the buffer size of io task
@@ -656,6 +656,7 @@ CONF_Int64(pipeline_sink_buffer_size, "64");
 // the degree of parallelism of brpc
 CONF_Int64(pipeline_sink_brpc_dop, "8");
 
+// cpu_limit for each workgroup. It's just for test.
 CONF_Int16(wg0_cpu_limit, "1");
 CONF_Int16(wg1_cpu_limit, "2");
 CONF_Int16(wg2_cpu_limit, "4");
