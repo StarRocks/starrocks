@@ -21,9 +21,8 @@
 
 package com.starrocks.common;
 
+// Database and table's default configurations, we will never change them
 public class FeConstants {
-    // Database and table's default configurations, we will never change them
-    public static short default_replication_num = 3;
     /*
      * Those two fields is responsible for determining the default key columns in duplicate table.
      * If user does not specify key of duplicate table in create table stmt,

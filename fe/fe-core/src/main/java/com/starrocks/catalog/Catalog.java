@@ -3921,7 +3921,7 @@ public class Catalog {
         }
 
         // analyze replication_num
-        short replicationNum = FeConstants.default_replication_num;
+        short replicationNum = Config.default_cluster_replication_num;
         try {
             boolean isReplicationNumSet =
                     properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);

@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
@@ -104,7 +105,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         TableName tableName = new TableName(Constants.StatisticsDBName,
                 Constants.StatisticsTableName);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3,
+        int defaultReplicationNum = Math.min(Config.default_cluster_replication_num,
                 Catalog.getCurrentSystemInfo().getBackendIds(true).size());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,

@@ -25,9 +25,9 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.PrintableMap;
 
@@ -43,7 +43,7 @@ public class RestoreStmt extends AbstractBackupStmt {
     private static final String PROP_STARROCKS_META_VERSION = "starrocks_meta_version";
 
     private boolean allowLoad = false;
-    private int replicationNum = FeConstants.default_replication_num;
+    private int replicationNum = Config.default_cluster_replication_num;
     private String backupTimestamp = null;
     private int metaVersion = -1;
     private int starrocksMetaVersion = -1;

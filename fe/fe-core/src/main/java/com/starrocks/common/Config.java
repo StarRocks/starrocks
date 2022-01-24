@@ -1357,4 +1357,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long min_routine_load_lag_for_metrics = 10000;
+
+    @ConfField(mutable = true)
+    public static short default_cluster_replication_num = 3;
 }

@@ -29,7 +29,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 
@@ -109,7 +109,7 @@ public class ModifyPartitionClause extends AlterTableClause {
 
         // 2. replication num
         short newReplicationNum = (short) -1;
-        newReplicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, FeConstants.default_replication_num);
+        newReplicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, Config.default_cluster_replication_num);
         Preconditions.checkState(newReplicationNum != (short) -1);
 
         // 3. in memory

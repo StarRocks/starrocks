@@ -28,8 +28,8 @@ import com.google.common.collect.Range;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
 import org.apache.logging.log4j.LogManager;
@@ -393,7 +393,7 @@ public class RangePartitionInfo extends PartitionInfo {
         String replicationNumStr = table.getTableProperty().getProperties().get("replication_num");
         short replicationNum;
         if (replicationNumStr == null) {
-            replicationNum = FeConstants.default_replication_num;
+            replicationNum = Config.default_cluster_replication_num;
         } else {
             replicationNum = Short.parseShort(replicationNumStr);
         }

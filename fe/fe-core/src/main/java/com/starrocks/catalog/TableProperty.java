@@ -23,7 +23,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.FeConstants;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -51,7 +51,7 @@ public class TableProperty implements Writable {
 
     private DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(Maps.newHashMap());
     // table's default replication num
-    private Short replicationNum = FeConstants.default_replication_num;
+    private Short replicationNum = Config.default_cluster_replication_num;
 
     private boolean isInMemory = false;
 
@@ -116,7 +116,7 @@ public class TableProperty implements Writable {
 
     public TableProperty buildReplicationNum() {
         replicationNum = Short.parseShort(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM,
-                String.valueOf(FeConstants.default_replication_num)));
+                String.valueOf(Config.default_cluster_replication_num)));
         return this;
     }
 
