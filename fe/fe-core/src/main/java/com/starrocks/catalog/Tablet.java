@@ -162,6 +162,16 @@ public class Tablet extends MetaObject implements Writable {
         return beIds;
     }
 
+    public List<String> getBackends() {
+        List<String> backends = new ArrayList<String>(); 
+        SystemInfoService infoService = Catalog.getCurrentSystemInfo();
+        for (Replica replica : replicas) {
+            Backend backend = Catalog.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            backends.add(backend.getHost()); 
+        }
+        return backends;
+    }
+
     // for loading data
     public List<Long> getNormalReplicaBackendIds() {
         List<Long> beIds = Lists.newArrayList();
