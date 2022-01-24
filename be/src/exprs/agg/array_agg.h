@@ -17,9 +17,7 @@ template <PrimitiveType PT>
 struct ArrayAggAggregateState<PT, FixedLengthPTGuard<PT>> {
     using CppType = RunTimeCppType<PT>;
 
-    void update(MemPool* mem_pool, CppType key) {
-        items.emplace_back(key);
-    }
+    void update(MemPool* mem_pool, CppType key) { items.emplace_back(key); }
 
     std::vector<CppType> items;
     size_t null_count = 0;
@@ -49,7 +47,7 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        if constexpr(IsSlice<InputCppType>) {
+        if constexpr (IsSlice<InputCppType>) {
             this->data(state).update(ctx->impl()->mem_pool(), column.get_slice(row_num));
         } else {
             this->data(state).update(ctx->impl()->mem_pool(), column.get_data()[row_num]);
