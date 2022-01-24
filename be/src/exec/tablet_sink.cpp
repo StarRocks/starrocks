@@ -78,17 +78,18 @@ Status NodeChannel::init(RuntimeState* state) {
     _tuple_desc = _parent->_output_tuple_desc;
     _node_info = _parent->_nodes_info->find_node(_node_id);
     if (_node_info == nullptr) {
-        std::stringstream ss;
-        ss << "unknown node id, id=" << _node_id;
         _cancelled = true;
-        return Status::InternalError(ss.str());
+        _err_st = Status::InvalidArgument(fmt::format("Unknown node_id: {}", _node_id));
+        return _err_st;
     }
 
     _stub = state->exec_env()->brpc_stub_cache()->get_stub(_node_info->host, _node_info->brpc_port);
     if (_stub == nullptr) {
-        LOG(WARNING) << "Get rpc stub failed, host=" << _node_info->host << ", port=" << _node_info->brpc_port;
         _cancelled = true;
-        return Status::InternalError("get rpc stub failed");
+        auto msg = fmt::format("Connect {}:{} failed.", _node_info->host, _node_info->brpc_port);
+        LOG(WARNING) << msg;
+        _err_st = Status::InternalError(msg);
+        return _err_st;
     }
 
     // Initialize _cur_add_chunk_request
@@ -157,10 +158,9 @@ void NodeChannel::open() {
 Status NodeChannel::open_wait() {
     _open_closure->join();
     if (_open_closure->cntl.Failed()) {
-        LOG(WARNING) << "failed to open tablet writer, error=" << berror(_open_closure->cntl.ErrorCode())
-                     << ", error_text=" << _open_closure->cntl.ErrorText();
         _cancelled = true;
-        return Status::InternalError("failed to open tablet writer");
+        _err_st = Status::InternalError(_open_closure->cntl.ErrorText());
+        return _err_st;
     }
     Status status(_open_closure->result.status());
     if (_open_closure->unref()) {
@@ -170,15 +170,15 @@ Status NodeChannel::open_wait() {
 
     if (!status.ok()) {
         _cancelled = true;
-        return status;
+        _err_st = status;
+        return _err_st;
     }
 
     // add batch closure
     _add_batch_closure = ReusableClosure<PTabletWriterAddBatchResult>::create();
     _add_batch_closure->addFailedHandler([this]() {
         _cancelled = true;
-        LOG(WARNING) << name() << " add batch req rpc failed, " << print_load_info() << ", node=" << node_info()->host
-                     << ":" << node_info()->brpc_port;
+        _err_st = _add_batch_closure->result.status();
     });
 
     _add_batch_closure->addSuccessHandler([this](const PTabletWriterAddBatchResult& result, bool is_last_rpc) {
@@ -207,9 +207,7 @@ Status NodeChannel::open_wait() {
             }
         } else {
             _cancelled = true;
-            LOG(WARNING) << name() << " add batch req success but status isn't ok, " << print_load_info()
-                         << ", node=" << node_info()->host << ":" << node_info()->brpc_port
-                         << ", errmsg=" << status.get_error_msg();
+            _err_st = status;
         }
 
         if (result.has_execution_time_us()) {
@@ -226,7 +224,7 @@ Status NodeChannel::add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_id
                               uint32_t from, uint32_t size) {
     // If add_row() when _eos_is_produced==true, there must be sth wrong, we can only mark this channel as failed.
     if (_cancelled | _eos_is_produced) {
-        return Status::InternalError("already stopped, can't add_row. cancelled/eos: ");
+        return _err_st;
     }
 
     // We use OlapTableSink mem_tracker which has the same ancestor of _plan node,
@@ -266,7 +264,7 @@ Status NodeChannel::add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_id
 Status NodeChannel::mark_close() {
     auto st = none_of({_cancelled, _eos_is_produced});
     if (!st.ok()) {
-        return st.clone_and_prepend("already stopped, can't mark as closed. cancelled/eos: ");
+        return _err_st;
     }
 
     _cur_add_chunk_request.set_eos(true);
@@ -285,7 +283,7 @@ Status NodeChannel::mark_close() {
 Status NodeChannel::close_wait(RuntimeState* state) {
     auto st = none_of({_cancelled, !_eos_is_produced});
     if (!st.ok()) {
-        return st.clone_and_prepend("already stopped, skip waiting for close. cancelled/!eos: ");
+        return _err_st;
     }
 
     // waiting for finished, it may take a long time, so we could't set a timeout
@@ -309,13 +307,14 @@ Status NodeChannel::close_wait(RuntimeState* state) {
         return Status::OK();
     }
 
-    return Status::InternalError("close wait failed coz rpc error");
+    return _err_st;
 }
 
-void NodeChannel::cancel() {
+void NodeChannel::cancel(const Status& err_st) {
     // we don't need to wait last rpc finished, cause closure's release/reset will join.
     // But do we need brpc::StartCancel(call_id)?
     _cancelled = true;
+    _err_st = err_st;
 
     PTabletWriterCancelRequest request;
     request.set_allocated_id(&_parent->_load_id);
@@ -414,8 +413,8 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPart
     for (const auto& tablet : tablets) {
         auto* location = _parent->_location->find_tablet(tablet.tablet_id);
         if (location == nullptr) {
-            LOG(WARNING) << "unknown tablet, tablet_id=" << tablet.tablet_id;
-            return Status::InternalError("unknown tablet");
+            auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id);
+            return Status::NotFound(msg);
         }
         std::vector<NodeChannel*> channels;
         std::vector<int64_t> bes;
@@ -601,25 +600,27 @@ Status OlapTableSink::open(RuntimeState* state) {
         index_channel->for_each_node_channel([](NodeChannel* ch) { ch->open(); });
     }
 
+    Status err_st = Status::OK();
     for (auto& index_channel : _channels) {
-        index_channel->for_each_node_channel([&index_channel](NodeChannel* ch) {
+        index_channel->for_each_node_channel([&index_channel, &err_st](NodeChannel* ch) {
             auto st = ch->open_wait();
             if (!st.ok()) {
-                LOG(WARNING) << ch->name() << ": tablet open failed, " << ch->print_load_info()
+                LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
                              << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
                              << ", errmsg=" << st.get_error_msg();
+                err_st = st;
                 index_channel->mark_as_failed(ch);
             }
         });
 
         if (index_channel->has_intolerable_failure()) {
-            LOG(WARNING) << "open failed, load_id=" << _load_id;
-            return Status::InternalError("intolerable failure in opening node channels");
+            LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+            return err_st;
         }
     }
 
     _sender_thread = std::thread(&OlapTableSink::_send_chunk_process, this);
-    Thread::set_thread_name(_sender_thread, "olap_table_send");
+    Thread::set_thread_name(_sender_thread, "olap_table_sink");
     return Status::OK();
 }
 
@@ -738,6 +739,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
 
 Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel,
                                           std::vector<uint16_t>& selection_idx) {
+    Status err_st = Status::OK();
     for (auto& it : channel->_node_channels) {
         int64_t be_id = it.first;
         _node_select_idx.clear();
@@ -753,9 +755,10 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
 
         if (!st.ok()) {
             channel->mark_as_failed(node);
+            err_st = st;
         }
         if (channel->has_intolerable_failure()) {
-            return Status::InternalError("index channel has intolerable failure");
+            return err_st;
         }
     }
     return Status::OK();
@@ -778,31 +781,32 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
 
             bool intolerable_failure = false;
             int ordinal = 0;
+            Status err_st = Status::OK();
             while (ordinal < _channels.size() && !intolerable_failure) {
                 auto& index_channel = _channels[ordinal];
                 index_channel->for_each_node_channel([&index_channel, &state, &node_add_batch_counter_map,
                                                       &serialize_batch_ns, &mem_exceeded_block_ns, &queue_push_lock_ns,
-                                                      &actual_consume_ns](NodeChannel* ch) {
+                                                      &actual_consume_ns, &err_st](NodeChannel* ch) {
                     auto channel_status = ch->close_wait(state);
                     if (!channel_status.ok()) {
                         LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
                                      << ", load_info=" << ch->print_load_info()
                                      << ", error_msg=" << channel_status.get_error_msg();
+                        err_st = channel_status;
                         index_channel->mark_as_failed(ch);
                     }
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &mem_exceeded_block_ns,
                                     &queue_push_lock_ns, &actual_consume_ns);
                 });
                 if (index_channel->has_intolerable_failure()) {
-                    status = Status::InternalError(
-                            strings::Substitute("close index channel failed, load_id=$0", print_id(_load_id)));
+                    status = err_st;
                     intolerable_failure = true;
                 }
                 ordinal++;
             }
             for (int i = ordinal; i < _channels.size(); ++i) {
                 auto& index_channel = _channels[i];
-                index_channel->for_each_node_channel([](NodeChannel* ch) { ch->cancel(); });
+                index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
             }
         }
         // TODO need to be improved
@@ -826,8 +830,8 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
 
         // print log of add batch time of all node, for tracing load performance easily
         std::stringstream ss;
-        ss << "Closed olap table sink load_id=" << print_id(_load_id) << " txn_id=" << _txn_id
-           << ", node add batch time(ms)/wait lock time(ms)/num: ";
+        ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+           << ", add chunk time(ms)/wait lock time(ms)/num: ";
         for (auto const& pair : node_add_batch_counter_map) {
             ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
                << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
@@ -835,7 +839,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
         LOG(INFO) << ss.str();
     } else {
         for (auto& channel : _channels) {
-            channel->for_each_node_channel([](NodeChannel* ch) { ch->cancel(); });
+            channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
         }
     }
 

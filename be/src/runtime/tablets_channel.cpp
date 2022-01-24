@@ -258,9 +258,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
         }
     }
     if (index_slots == nullptr) {
-        std::stringstream ss;
-        ss << "unknown index id, key=" << _key;
-        return Status::InternalError(ss.str());
+        return Status::InvalidArgument(fmt::format("Unknown index_id: {}", _key.to_string()));
     }
     // init global dict info if needed
     for (auto& slot : params.schema().slot_descs()) {
@@ -293,11 +291,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
         options.global_dicts = &_global_dicts;
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
-        if (!res.ok()) {
-            LOG(WARNING) << "Fail to open delta writer: " << res.status() << ". tablet_id=" << tablet.tablet_id()
-                         << " txn_id=" << _txn_id << " partition_id=" << tablet.partition_id();
-            return Status::InternalError("fail to open delta writer: " + res.status().get_error_msg());
-        }
+        RETURN_IF_ERROR(res.status());
         auto writer = std::move(res).value();
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());

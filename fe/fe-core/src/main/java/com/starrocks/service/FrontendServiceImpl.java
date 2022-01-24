@@ -700,7 +700,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (!loadTxnCommitImpl(request)) {
                 // committed success but not visible
                 status.setStatus_code(TStatusCode.PUBLISH_TIMEOUT);
-                status.addToError_msgs("transaction commit successfully, BUT data will be visible later");
+                status.addToError_msgs("Publish timeout. The data will be visible after a while");
             }
         } catch (UserException e) {
             LOG.warn("failed to commit txn: {}: {}", request.getTxnId(), e.getMessage());

@@ -1077,7 +1077,7 @@ public class StmtExecutor {
             coord.join(context.getSessionVariable().getQueryTimeoutS());
             if (!coord.isDone()) {
                 coord.cancel();
-                ErrorReport.reportDdlException(ErrorCode.ERR_EXECUTE_TIMEOUT);
+                ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT);
             }
 
             if (!coord.getExecStatus().ok()) {

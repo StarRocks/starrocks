@@ -36,7 +36,7 @@ public:
     // called when all data has been append
     virtual Status finish() { return Status::OK(); }
     // called when read HTTP failed
-    virtual void cancel() {}
+    virtual void cancel(const Status& status) {}
 };
 
 // write message to a local file
@@ -49,7 +49,7 @@ public:
 
     Status append(const char* data, size_t size) override;
     Status finish() override;
-    void cancel() override;
+    void cancel(const Status& status) override;
 
 private:
     std::string _path;

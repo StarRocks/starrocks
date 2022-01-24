@@ -497,8 +497,9 @@ public class DatabaseTransactionMgr {
                         for (long tabletBackend : tabletBackends) {
                             Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
                             if (replica == null) {
-                                throw new TransactionCommitFailedException("could not find replica for tablet ["
-                                        + tabletId + "], backend [" + tabletBackend + "]");
+                                Backend backend = Catalog.getCurrentSystemInfo().getBackend(tabletBackend);
+                                throw new TransactionCommitFailedException("Not found replicas of tablet. "
+                                        + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
                             }
                             // if the tablet have no replica's to commit or the tablet is a rolling up tablet, the commit backends maybe null
                             // if the commit backends is null, set all replicas as error replicas
@@ -523,14 +524,10 @@ public class DatabaseTransactionMgr {
                                 Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
                                 errorBackends.add(backend.getId() + ":" + backend.getHost());
                             }
-                            LOG.warn("Failed to commit txn [{}]. "
-                                            + "Tablet [{}] success replica num is {} < quorum replica num {} "
-                                            + "while error backends {}",
-                                    transactionId, tablet.getId(), successReplicaNum, quorumReplicaNum,
+                            LOG.warn("Fail to load files. tablet_id: {}, txn_id: {}, backends: {}",
+                                    tablet.getId(), transactionId,
                                     Joiner.on(",").join(errorBackends));
-                            throw new TabletQuorumFailedException(transactionId, tablet.getId(),
-                                    successReplicaNum, quorumReplicaNum,
-                                    errorBackendIdsForTablet);
+                            throw new TabletQuorumFailedException(tablet.getId(), transactionId, errorBackends);
                         }
                     }
                 }

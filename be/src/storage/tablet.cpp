@@ -474,13 +474,16 @@ Status Tablet::capture_consistent_versions(const Version& spec_version, std::vec
         std::vector<Version> missed_versions;
         calc_missed_versions_unlocked(spec_version.second, &missed_versions);
         if (missed_versions.empty()) {
-            LOG(WARNING) << "tablet:" << full_name()
-                         << ", version already has been merged. spec_version: " << spec_version;
-            return Status::VersionAlreadyMerged("");
+            auto msg = fmt::format("version already been compacted. tablet_id: {}, version: {}",
+                                   _tablet_meta->tablet_id(), spec_version.second);
+            LOG(WARNING) << msg;
+            return Status::VersionAlreadyMerged(msg);
         } else {
-            LOG(WARNING) << "tablet" << tablet_id() << " missed version " << spec_version;
+            auto msg = fmt::format("version not found. tablet_id: {}, version: {}", _tablet_meta->tablet_id(),
+                                   spec_version.second);
+            LOG(WARNING) << msg;
             _print_missed_versions(missed_versions);
-            return Status::NotFound("has missed versions");
+            return Status::NotFound(msg);
         }
     }
     return Status::OK();
