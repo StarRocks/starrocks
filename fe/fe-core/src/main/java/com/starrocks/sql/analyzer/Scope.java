@@ -3,7 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.sql.analyzer.relation.CTERelation;
+import com.starrocks.sql.ast.CTERelation;
 
 import java.util.List;
 import java.util.Map;
