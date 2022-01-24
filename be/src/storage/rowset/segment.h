@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "storage/fs/block_manager.h"
@@ -77,10 +78,11 @@ public:
     static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
                                                    const std::string& filename, uint32_t segment_id,
                                                    const TabletSchema* tablet_schema,
-                                                   size_t* footer_length_hint = nullptr);
+                                                   size_t* footer_length_hint = nullptr,
+                                                   const FooterPointerPB* partial_rowset_footer = nullptr);
 
     static Status parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                       uint64_t* segment_data_size);
+                                       const FooterPointerPB* partial_rowset_footer);
 
     Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
             const TabletSchema* tablet_schema);
@@ -150,7 +152,7 @@ private:
     };
 
     // open segment file and read the minimum amount of necessary information (footer)
-    Status _open(MemTracker* mem_tracker, size_t* footer_length_hint);
+    Status _open(MemTracker* mem_tracker, size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer);
     Status _create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer);
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
