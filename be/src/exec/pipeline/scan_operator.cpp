@@ -123,13 +123,12 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         if (chunk_source != nullptr && chunk_source->has_output()) {
             auto&& chunk = chunk_source->get_next_chunk_from_buffer();
             eval_runtime_bloom_filters(chunk.value().get());
-            if (_workgroup != nullptr) {
-                _workgroup->decrease_chunk_num(1);
-            }
+            _workgroup->decrease_chunk_num(1);
             return std::move(chunk);
         }
     }
 
+    _workgroup->decrease_chunk_num(1);
     return nullptr;
 }
 
@@ -141,7 +140,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // Firstly, find the picked-up morsel, whose can commit an io task.
     for (int i = 0; i < _max_io_tasks_per_op; ++i) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
-            return _trigger_next_scan(state, i);
+            RETURN_IF_ERROR(_trigger_next_scan(state, i));
         }
     }
 
@@ -149,7 +148,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (!_morsel_queue->empty()) {
         for (int i = 0; i < _max_io_tasks_per_op; ++i) {
             if (_chunk_sources[i] == nullptr || (!_is_io_task_running[i] && !_chunk_sources[i]->has_output())) {
-                return _pickup_morsel(state, i);
+                RETURN_IF_ERROR(_pickup_morsel(state, i));
             }
         }
     }
@@ -165,12 +164,12 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.work_function = [this, state, chunk_source_index]() {
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-            size_t read_size = 0;
+            size_t num_read_chunks = 0;
             _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished,
-                                                                                  &read_size);
+                                                                                  &num_read_chunks);
             if (this->_workgroup != nullptr) {
                 // TODO (by laotan332): More detailed information is needed
-                this->_workgroup->increase_chunk_num(read_size);
+                this->_workgroup->increase_chunk_num(num_read_chunks);
             }
         }
 
