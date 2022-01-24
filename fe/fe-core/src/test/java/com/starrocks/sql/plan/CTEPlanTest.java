@@ -5,7 +5,6 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
@@ -154,6 +153,18 @@ public class CTEPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testOneCTEInlineComplex2() throws Exception {
+        String sql = "with x0 as (select * from t0), x1 as (select * from x0), x2 as (select * from x1), " +
+                "x3 as (select * from x2) " +
+                "select * from x3;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
+    }
+
+    @Test
     public void testCTEPredicate() throws Exception {
         StatisticsEstimateCoefficient.DEFAULT_CTE_INLINE_COST_RATE = 0;
         String sql = "explain with xx as (select * from t0) " +
@@ -236,5 +247,53 @@ public class CTEPlanTest extends PlanTestBase {
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 05\n" +
                 "    HASH_PARTITIONED: <slot 28>, <slot 29>, <slot 30>"));
+    }
+
+    @Test
+    public void testComplexCTEAllCostInline() throws Exception {
+        StatisticsEstimateCoefficient.DEFAULT_CTE_INLINE_COST_RATE = Double.MAX_VALUE;
+
+        String sql = "WITH x1 AS (select * from t0), \n" +
+                " x2 AS (select * from x1) \n" +
+                " select * " +
+                " from (select x2.* from x1 join x2 on x1.v2 = x2.v2) as s1" +
+                " join (select x1.* from x1 join x2 on x1.v3 = x2.v3) as s2 on s1.v2 = s2.v2;";
+        String plan = getFragmentPlan(sql);
+        StatisticsEstimateCoefficient.DEFAULT_CTE_INLINE_COST_RATE = 1.5;
+        Assert.assertFalse(plan.contains("MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testSubqueryWithPushPredicate() throws Exception {
+        StatisticsEstimateCoefficient.DEFAULT_CTE_INLINE_COST_RATE = 0;
+
+        String sql = "select * from " +
+                "(with xx as (select * from t0) select x1.* from xx x1 join xx x2 on x1.v2 = x2.v2) s " +
+                "where s.v1 = 2;";
+
+        String plan = getFragmentPlan(sql);
+        StatisticsEstimateCoefficient.DEFAULT_CTE_INLINE_COST_RATE = 1.5;
+        Assert.assertTrue(plan.contains("  5:SELECT\n" +
+                "  |  predicates: 4: v1 = 2\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  <slot 4> : 1: v1\n" +
+                "  |  <slot 5> : 2: v2\n" +
+                "  |  <slot 6> : 3: v3"));
+    }
+
+    @Test
+    public void testSubqueryWithPushLimit() throws Exception {
+        StatisticsEstimateCoefficient.DEFAULT_CTE_INLINE_COST_RATE = 0;
+        String sql = "select * from " +
+                "(with xx as (select * from t0) " +
+                "select x1.* from xx x1 left outer join[broadcast] xx x2 on x1.v2 = x2.v2) s " +
+                "where s.v1 = 2 limit 10;";
+
+        String plan = getFragmentPlan(sql);
+        StatisticsEstimateCoefficient.DEFAULT_CTE_INLINE_COST_RATE = 1.5;
+        Assert.assertTrue(plan.contains("  3:SELECT\n" +
+                "  |  predicates: 4: v1 = 2\n" +
+                "  |  limit: 10"));
     }
 }
