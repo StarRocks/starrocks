@@ -1947,7 +1947,11 @@ public class Coordinator {
                 params.setCoord(coordAddress);
                 params.setBackend_num(backendNum++);
                 params.setQuery_globals(queryGlobals);
-                params.setQuery_options(new TQueryOptions(queryOptions));
+                if (isEnablePipelineEngine) {
+                    params.setQuery_options(new TQueryOptions(queryOptions));
+                } else {
+                    params.setQuery_options(queryOptions);
+                }
                 params.params.setSend_query_statistics_with_every_batch(
                         fragment.isTransferQueryStatisticsWithEveryBatch());
                 if (queryOptions.getQuery_type() == TQueryType.LOAD) {
