@@ -706,6 +706,28 @@ Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int
     return store->get_meta()->write_batch(&batch);
 }
 
+Status TabletMetaManager::write_rowset_meta(DataDir* store, TTabletId tablet_id, const RowsetMetaPB& rowset,
+                                            const string& rowset_meta_key) {
+    WriteBatch batch;
+    auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    string rowsetkey = encode_meta_rowset_key(tablet_id, rowset.rowset_seg_id());
+    auto rowsetvalue = rowset.SerializeAsString();
+    rocksdb::Status st = batch.Put(handle, rowsetkey, rowsetvalue);
+    if (!st.ok()) {
+        LOG(WARNING) << "put rowset meta failed, rocksdb.batch.put failed";
+        return to_status(st);
+    }
+    if (!rowset_meta_key.empty()) {
+        // delete rowset meta in txn
+        st = batch.Delete(handle, rowset_meta_key);
+        if (!st.ok()) {
+            LOG(WARNING) << "put rowset meta failed, rocksdb.batch.delete failed";
+            return to_status(st);
+        }
+    }
+    return store->get_meta()->write_batch(&batch);
+}
+
 Status TabletMetaManager::rowset_delete(DataDir* store, TTabletId tablet_id, uint32_t rowset_id, uint32_t segments) {
     WriteBatch batch;
     KVStore* meta = store->get_meta();
