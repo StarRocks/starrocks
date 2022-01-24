@@ -584,4 +584,4 @@ private:
 };
 
 } // namespace vectorized
-} // namespace starrocks 
+} // namespace starrocks

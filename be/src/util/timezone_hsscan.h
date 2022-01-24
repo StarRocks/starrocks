@@ -55,4 +55,4 @@ private:
     // hyper scan compile error.
     hs_compile_error_t* compile_err = nullptr;
 };
-} // namespace starrocks 
+} // namespace starrocks
