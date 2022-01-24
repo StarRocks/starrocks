@@ -119,16 +119,17 @@ void ScanOperator::set_finishing(RuntimeState* state) {
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
 
+    _workgroup->decrease_chunk_num(1);
+
     for (auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr && chunk_source->has_output()) {
             auto&& chunk = chunk_source->get_next_chunk_from_buffer();
             eval_runtime_bloom_filters(chunk.value().get());
-            _workgroup->decrease_chunk_num(1);
+
             return std::move(chunk);
         }
     }
 
-    _workgroup->decrease_chunk_num(1);
     return nullptr;
 }
 
