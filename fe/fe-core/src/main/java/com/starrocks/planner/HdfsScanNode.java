@@ -148,7 +148,7 @@ public class HdfsScanNode extends ScanNode {
             }
         }
         if (hostToBeId.isEmpty()) {
-            throw new UserException("there is no scanNode Backend");
+            throw new UserException("Backend not found. Check if any backend is down or not");
         }
     }
 

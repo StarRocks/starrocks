@@ -2088,7 +2088,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalCTEConsume(OptExpression optExpression, ExecPlan context) {
             PhysicalCTEConsumeOperator consume = (PhysicalCTEConsumeOperator) optExpression.getOp();
-            String cteId = consume.getCteId();
+            int cteId = consume.getCteId();
 
             MultiCastPlanFragment cteFragment = (MultiCastPlanFragment) context.getCteProduceFragments().get(cteId);
 
@@ -2129,7 +2129,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalCTEProduce(OptExpression optExpression, ExecPlan context) {
             PlanFragment child = visit(optExpression.inputAt(0), context);
-            String cteId = ((PhysicalCTEProduceOperator) optExpression.getOp()).getCteId();
+            int cteId = ((PhysicalCTEProduceOperator) optExpression.getOp()).getCteId();
             context.getFragments().remove(child);
             MultiCastPlanFragment cteProduce = new MultiCastPlanFragment(child);
 

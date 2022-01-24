@@ -40,8 +40,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TColumn;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -60,7 +58,7 @@ import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMAT;
  */
 public class Column implements Writable {
 
-    private static final Logger LOG = LogManager.getLogger(Column.class);
+    public static final String CAN_NOT_CHANGE_DEFAULT_VALUE = "Can not change default value";
 
     @SerializedName(value = "name")
     private String name;
@@ -335,13 +333,29 @@ public class Column implements Writable {
             throw new DdlException("Can not change from nullable to non-nullable");
         }
 
-        if (this.getDefaultValue() == null) {
-            if (other.getDefaultValue() != null) {
-                throw new DdlException("Can not change default value");
+        DefaultValueType thisDefaultValueType = this.getDefaultValueType();
+        DefaultValueType otherDefaultValueType = other.getDefaultValueType();
+        // Adding a default value to a column without a default value is not supported
+        if (thisDefaultValueType != otherDefaultValueType) {
+            throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
+        }
+
+        // default value should same
+        if (thisDefaultValueType == DefaultValueType.VARY) {
+            if (!this.getDefaultExpr().getExpr().equalsIgnoreCase(other.getDefaultExpr().getExpr())) {
+                throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
             }
-        } else {
-            if (!this.getDefaultValue().equals(other.getDefaultValue())) {
-                throw new DdlException("Can not change default value");
+        } else if (this.getDefaultValueType() == DefaultValueType.CONST) {
+            if (this.getDefaultValue() != null && other.getDefaultValue() != null) {
+                if (!this.getDefaultValue().equals(other.getDefaultValue())) {
+                    throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
+                }
+            } else if (this.getDefaultExpr() != null && other.getDefaultExpr() != null) {
+                if (!this.getDefaultExpr().getExpr().equalsIgnoreCase(other.getDefaultExpr().getExpr())) {
+                    throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
+                }
+            } else {
+                throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
             }
         }
 

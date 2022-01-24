@@ -1035,7 +1035,7 @@ public class Coordinator {
         Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
-            throw new UserException("there is no scanNode Backend");
+            throw new UserException("Backend not found. Check if any backend is down or not");
         }
         return new TNetworkAddress(backend.getHost(), backend.getBeRpcPort());
     }
@@ -1044,7 +1044,7 @@ public class Coordinator {
         Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
-            throw new UserException("there is no scanNode Backend");
+            throw new UserException("Backend not found. Check if any backend is down or not");
         }
         if (backend.getBrpcPort() < 0) {
             return null;
@@ -1072,7 +1072,7 @@ public class Coordinator {
                 TNetworkAddress execHostport = SimpleScheduler.getHost(this.idToBackend, backendIdRef);
                 if (execHostport == null) {
                     LOG.warn("DataPartition UNPARTITIONED, no scanNode Backend");
-                    throw new UserException("there is no scanNode Backend");
+                    throw new UserException("Backend not found. Check if any backend is down or not");
                 }
                 this.addressToBackendID.put(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
@@ -1125,18 +1125,8 @@ public class Coordinator {
                 if (dopAdaptionEnabled) {
                     int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
                     Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
-                    // If the maximum parallel child fragment send data to the current PlanFragment via UNPARTITIONED
-                    // DataStreamSink, then fragment instance parallelization is leveraged, otherwise, pipeline parallelization
-                    // is adopted.
-                    if (maxParallelismFragmentExecParams.fragment.isPartitioned()) {
-                        // fragment instance parallelization (numInstances=N, pipelineDop=1)
-                        maxParallelism = Math.min(hostSet.size() * degreeOfParallelism, maxParallelism);
-                        fragment.setPipelineDop(1);
-                    } else {
-                        // pipeline parallelization (numInstances=|hostSet|, pipelineDop=degreeOfParallelism)
-                        maxParallelism = hostSet.size();
-                        fragment.setPipelineDop(degreeOfParallelism);
-                    }
+                    maxParallelism = hostSet.size();
+                    fragment.setPipelineDop(degreeOfParallelism);
                 }
 
                 // AddAll() soft copy()
@@ -1261,7 +1251,7 @@ public class Coordinator {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport = SimpleScheduler.getHost(this.idToBackend, backendIdRef);
                 if (execHostport == null) {
-                    throw new UserException("there is no scanNode Backend");
+                    throw new UserException("Backend not found. Check if any backend is down or not");
                 }
                 this.addressToBackendID.put(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
@@ -1975,10 +1965,11 @@ public class Coordinator {
                     SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
 
                     if (isEnablePipelineEngine) {
-                        boolean isPipeline = fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine();
+                        boolean isPipeline =
+                                fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine();
                         params.setIs_pipeline(isPipeline);
                         if (isPipeline) {
-                            queryOptions.setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE); 
+                            queryOptions.setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
                         }
                         params.setPipeline_dop(fragment.getPipelineDop());
                         params.setPer_scan_node_dop(instanceExecParam.perScanNodeDop);
@@ -2088,7 +2079,7 @@ public class Coordinator {
                         scanRangeLocations.getLocations(),
                         idToBackend, backendIdRef);
                 if (execHostPort == null) {
-                    throw new UserException("there is no scanNode Backend");
+                    throw new UserException("Backend not found. Check if any backend is down or not");
                 }
                 addressToBackendID.put(execHostPort, backendIdRef.getRef());
 
@@ -2208,7 +2199,7 @@ public class Coordinator {
                         Reference<Long> backendIdRef = new Reference<>();
                         TNetworkAddress execHostport = SimpleScheduler.getHost(idToBackend, backendIdRef);
                         if (execHostport == null) {
-                            throw new UserException("there is no scanNode Backend");
+                            throw new UserException("Backend not found. Check if any backend is down or not");
                         }
                         addressToBackendID.put(execHostport, backendIdRef.getRef());
                         bucketSeqToAddress.put(bucketSeq, execHostport);
@@ -2261,7 +2252,7 @@ public class Coordinator {
             TNetworkAddress execHostPort =
                     SimpleScheduler.getHost(buckendId, seqLocation.locations, idToBackend, backendIdRef);
             if (execHostPort == null) {
-                throw new UserException("there is no scanNode Backend");
+                throw new UserException("Backend not found. Check if any backend is down or not");
             }
 
             addressToBackendID.put(execHostPort, backendIdRef.getRef());
@@ -2328,7 +2319,7 @@ public class Coordinator {
                 hostToBes.put(backend.getHost(), backend);
             }
             if (hostToBes.isEmpty()) {
-                throw new UserException("there is no scanNode Backend");
+                throw new UserException("Backend not found. Check if any backend is down or not");
             }
 
             // total scans / alive bes

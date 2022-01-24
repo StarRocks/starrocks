@@ -5,12 +5,12 @@ package com.starrocks.sql.analyzer.relation;
 import java.util.List;
 
 public class CTERelation extends Relation {
-    private final String cteId;
+    private final int cteId;
     private final String name;
     private final List<String> columnOutputNames;
     private final QueryRelation cteQuery;
 
-    public CTERelation(String cteId, String name, List<String> columnOutputNames, QueryRelation cteQuery) {
+    public CTERelation(int cteId, String name, List<String> columnOutputNames, QueryRelation cteQuery) {
         this.cteId = cteId;
         this.name = name;
         this.columnOutputNames = columnOutputNames;
@@ -21,7 +21,7 @@ public class CTERelation extends Relation {
         return cteQuery;
     }
 
-    public String getCteId() {
+    public int getCteId() {
         return cteId;
     }
 
@@ -35,7 +35,7 @@ public class CTERelation extends Relation {
 
     @Override
     public String toString() {
-        return name == null ? cteId : name;
+        return name == null ? String.valueOf(cteId) : name;
     }
 
     @Override

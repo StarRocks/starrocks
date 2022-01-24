@@ -123,7 +123,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
 
     private boolean containsMaterializedColumn(LogicalScanOperator scanOperator, Set<ColumnRefOperator> scanColumns) {
         if (scanOperator instanceof LogicalHiveScanOperator) {
-            return scanColumns.size() == 0 && ((LogicalHiveScanOperator) scanOperator).getPartitionColumns().containsAll(
+            return scanColumns.size() != 0 && !((LogicalHiveScanOperator) scanOperator).getPartitionColumns().containsAll(
                     scanColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
         }
         return scanColumns.size() == 0;
