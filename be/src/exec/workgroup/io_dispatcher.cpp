@@ -2,7 +2,8 @@
 
 namespace starrocks::workgroup {
 
-IoDispatcher::IoDispatcher(std::unique_ptr<ThreadPool> thread_pool) : _thread_pool(std::move(thread_pool)) {}
+IoDispatcher::IoDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool set_high_priority)
+        : _set_high_priority(set_high_priority), _thread_pool(std::move(thread_pool)) {}
 
 IoDispatcher::~IoDispatcher() {
     workgroup::WorkGroupManager::instance()->close();

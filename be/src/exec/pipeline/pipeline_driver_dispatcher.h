@@ -28,8 +28,7 @@ public:
     virtual void initialize(int32_t num_threads) {}
     virtual void change_num_threads(int32_t num_threads) {}
     virtual void dispatch(DriverRawPtr driver){};
-    virtual void set_os_priority(int32_t priority) {};
-
+    virtual void set_os_priority(int32_t priority){};
 
     // When all the root drivers (the drivers have no successors in the same fragment) have finished,
     // just notify FE timely the completeness of fragment via invocation of report_exec_state, but
@@ -41,14 +40,13 @@ public:
 
 class GlobalDriverDispatcher final : public FactoryMethod<DriverDispatcher, GlobalDriverDispatcher> {
 public:
-    explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool);
+    explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool is_low_latency = false);
     ~GlobalDriverDispatcher() override;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
     void dispatch(DriverRawPtr driver) override;
     void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) override;
     void set_os_priority(int32_t priority) override;
-
 
 private:
     void run();

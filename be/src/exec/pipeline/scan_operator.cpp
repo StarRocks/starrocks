@@ -14,6 +14,7 @@
 namespace starrocks::pipeline {
 
 using starrocks::workgroup::WorkGroupManager;
+using starrocks::workgroup::WorkGroupType;
 
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
@@ -168,8 +169,16 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     // TODO(by satanson): set a proper priority
     task.priority = 20;
 
-    if (WorkGroupManager::instance()->try_offer_io_task(_workgroup, task)) {
-        _io_task_retry_cnt = 0;
+    if (_workgroup != nullptr) {
+        if (_workgroup->type() == WorkGroupType::WG_REALTIME) {
+            if (WorkGroupManager::instance()->try_offer_real_time_io_task(task)) {
+                _io_task_retry_cnt = 0;
+            }
+        } else {
+            if (WorkGroupManager::instance()->try_offer_io_task(_workgroup, task)) {
+                _io_task_retry_cnt = 0;
+            }
+        }
     } else {
         _num_running_io_tasks--;
         _is_io_task_running[chunk_source_index] = false;

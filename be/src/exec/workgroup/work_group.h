@@ -51,6 +51,10 @@ public:
     StatusOr<PriorityThreadPool::Task> pick_next_task();
     bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
 
+    // for real_time wg
+    bool try_offer_real_time_io_task(const PriorityThreadPool::Task& task);
+    StatusOr<PriorityThreadPool::Task> pick_next_real_time_task();
+
     void close() override;
 
 private:
@@ -68,10 +72,25 @@ private:
     const int _max_schedule_num_period = config::pipeline_max_io_schedule_num_period;
     // Adjust select factor of each wg after every `min(_max_schedule_num_period, num_tasks)` schedule times.
     int _remaining_schedule_num_period = 0;
+
+    // for realtime workgroup
+    std::mutex _realtime_io_mutex;
+    std::condition_variable _realtime_io_cv;
+    WorkGroupPtr _real_time_wg;
 };
 
 class WorkGroupManager;
+<<<<<<< HEAD
 using WorkGroupType = TWorkGroupType::type;
+=======
+
+enum WorkGroupType {
+    WG_NORMAL = 0,   // normal work group, maybe added to the BE dynamically
+    WG_DEFAULT = 1,  // default work group
+    WG_REALTIME = 2, // realtime work group, maybe reserved beforehand
+};
+
+>>>>>>> 3c7f327e (support low latency wg)
 // WorkGroup is the unit of resource isolation, it has {CPU, Memory, Concurrency} quotas which limit the
 // resource usage of the queries belonging to the WorkGroup. Each user has be bound to a WorkGroup, when
 // the user issues a query, then the corresponding WorkGroup is chosen to manage the query.
@@ -114,6 +133,8 @@ public:
     static constexpr int64 DEFAULT_VERSION = 0;
     bool try_offer_io_task(const PriorityThreadPool::Task& task);
     PriorityThreadPool::Task pick_io_task();
+
+    WorkGroupType type() { return _type; }
 
 public:
     // Return current io task queue size
@@ -228,8 +249,15 @@ public:
     void close();
 
     // get next workgroup for io
-    StatusOr<PriorityThreadPool::Task> pick_next_task_for_io();
+    StatusOr<PriorityThreadPool::Task> pick_next_task_for_io(bool is_real_time_type = false);
     bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
+
+    // for real time workgroup
+    bool try_offer_real_time_io_task(const PriorityThreadPool::Task& task);
+
+    WorkGroupQueue& get_cpu_queue();
+
+    WorkGroupQueue& get_io_queue();
 
     size_t get_sum_cpu_limit() const { return _sum_cpu_limit; }
     void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }

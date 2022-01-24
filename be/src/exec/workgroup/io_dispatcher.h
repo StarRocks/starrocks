@@ -13,9 +13,8 @@ class WorkGroupManager;
 
 class IoDispatcher {
 public:
-    explicit IoDispatcher(std::unique_ptr<ThreadPool> thread_pool);
+    explicit IoDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool set_high_priority = false);
     virtual ~IoDispatcher();
-
     void initialize(int32_t num_threads);
     void change_num_threads(int32_t num_threads);
     void set_os_priority(int32_t priority);
@@ -25,6 +24,7 @@ private:
 
 private:
     LimitSetter _num_threads_setter;
+    bool _set_high_priority;
     std::unique_ptr<ThreadPool> _thread_pool;
 };
 

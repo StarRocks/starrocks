@@ -209,6 +209,7 @@ private:
     PriorityThreadPool* _etl_thread_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     starrocks::pipeline::DriverDispatcher* _driver_dispatcher = nullptr;
+    starrocks::pipeline::DriverDispatcher* _real_time_driver_dispatcher = nullptr;
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
 
@@ -230,6 +231,7 @@ private:
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
 
     starrocks::workgroup::IoDispatcher* _io_dispatcher = nullptr;
+    starrocks::workgroup::IoDispatcher* _real_time_io_dispatcher = nullptr;
 };
 
 template <>
