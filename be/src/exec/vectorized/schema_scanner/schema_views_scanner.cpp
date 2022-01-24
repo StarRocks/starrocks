@@ -6,7 +6,6 @@
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
-//#include "runtime/datetime_value.h"
 
 namespace starrocks::vectorized {
 
@@ -58,75 +57,112 @@ Status SchemaViewsScanner::start(RuntimeState* state) {
 
 Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
     const TTableStatus& tbl_status = _table_result.tables[_table_index];
-    // TABLE_CATALOG
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[0]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // TABLE_SCHEMA
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[1]->id());
-        std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
-        Slice value(db_name.c_str(), db_name.length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // TABLE_NAME
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[2]->id());
-        const std::string* str = &tbl_status.name;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // VIEW_DEFINITION
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[3]->id());
-        const std::string* str = &tbl_status.ddl_sql;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // CHECK_OPTION
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[4]->id());
-        const char* str = "NONE";
-        Slice value(str, strlen(str));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // IS_UPDATABLE
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[5]->id());
-        const char* str = "NO";
-        Slice value(str, strlen(str));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // DEFINER
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[6]->id());
-        // since we did not record the creater of a certain `view` or `table` , just leave this column empty at this stage.
-        const char* str = "";
-        Slice value(str, strlen(str));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // SECURITY_TYPE
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[7]->id());
-        // since we did not record the creater of a certain `view` or `table` , just leave this column empty at this stage.
-        const char* str = "";
-        Slice value(str, strlen(str));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // CHARACTER_SET_CLIENT
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[8]->id());
-        const char* str = "utf8";
-        Slice value(str, strlen(str));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // COLLATION_CONNECTION
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[9]->id());
-        const char* str = "utf8_general_ci";
-        Slice value(str, strlen(str));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        switch (slot_id) {
+        case 1: {
+            // TABLE_CATALOG
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 2: {
+            // TABLE_SCHEMA
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
+                Slice value(db_name.c_str(), db_name.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 3: {
+            // TABLE_NAME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                const std::string* str = &tbl_status.name;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 4: {
+            // VIEW_DEFINITION
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                const std::string* str = &tbl_status.ddl_sql;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 5: {
+            // CHECK_OPTION
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                const char* str = "NONE";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 6: {
+            // IS_UPDATABLE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                const char* str = "NO";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 7: {
+            // DEFINER
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+                // since we did not record the creater of a certain `view` or `table` , just leave this column empty at this stage.
+                const char* str = "";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 8: {
+            // SECURITY_TYPE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
+                // since we did not record the creater of a certain `view` or `table` , just leave this column empty at this stage.
+                const char* str = "";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 9: {
+            // CHARACTER_SET_CLIENT
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+                const char* str = "utf8";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 10: {
+            // COLLATION_CONNECTION
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
+                const char* str = "utf8_general_ci";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        default:
+            break;
+        }
     }
     _table_index++;
     return Status::OK();
