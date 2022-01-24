@@ -692,7 +692,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
                 partNames);
         return client.get_partitions_statistics_req(rqst).getPartStats();
     }
-    
+
     @Override
     public NotificationEventResponse getNextNotification(long lastEventId, int maxEvents, NotificationFilter filter)
             throws TException {

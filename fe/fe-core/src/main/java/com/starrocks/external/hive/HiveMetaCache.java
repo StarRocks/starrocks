@@ -96,6 +96,9 @@ public class HiveMetaCache {
                 }, executor));
     }
 
+    /**
+     * Currently we only support either refreshAfterWrite or automatic refresh by events.
+     */
     private static CacheBuilder<Object, Object> newCacheBuilder(long maximumSize) {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
         cacheBuilder.expireAfterWrite(Config.hive_meta_cache_ttl_s, SECONDS);

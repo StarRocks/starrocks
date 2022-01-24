@@ -1318,19 +1318,19 @@ public class Config extends ConfigBase {
      * If set to true, StarRocks will process events in parallel.
      */
     @ConfField(mutable = true)
-    public static boolean enable_parallel_process_hms_evens = true;
+    public static boolean enable_hms_parallel_process_evens = true;
 
     /**
      * Num of thread to process events in parallel.
      */
     @ConfField(mutable = true)
-    public static int process_hms_events_parallel_num = 4;
+    public static int hms_process_events_parallel_num = 4;
 
     /**
      * Metastore event processor refresh table column statistic interval in seconds.
      */
     @ConfField(mutable = true)
-    public static int refresh_columns_statistic_interval_s = 600;
+    public static int hms_refresh_columns_statistic_interval_s = 600;
 
     /**
      * Used to split files stored in dfs such as object storage

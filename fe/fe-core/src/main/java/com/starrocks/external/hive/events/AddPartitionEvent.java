@@ -87,7 +87,7 @@ public class AddPartitionEvent extends MetastoreTableEvent {
     }
 
     /**
-     * If the table name of <code>{@link AddPartitionEvent}</code> exists in the hive cache,
+     * If the table name of {@link AddPartitionEvent} exists in the hive cache,
      * then the {@link PartitionKey} of the table needs to be updated.
      */
     @Override

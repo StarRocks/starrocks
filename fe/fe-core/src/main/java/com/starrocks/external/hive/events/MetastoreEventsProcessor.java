@@ -75,7 +75,7 @@ public class MetastoreEventsProcessor extends MasterDaemon {
 
     // thread pool for processing the metastore events
     private final ExecutorService eventsProcessExecutor =
-            ThreadPoolManager.newDaemonFixedThreadPool(Config.process_hms_events_parallel_num,
+            ThreadPoolManager.newDaemonFixedThreadPool(Config.hms_process_events_parallel_num,
                     Integer.MAX_VALUE, "hms-event-processor-executor", true);
 
     // scheduler daemon thread executor for updating {HiveMetaCache#tableColumnStatsCache}
@@ -137,9 +137,9 @@ public class MetastoreEventsProcessor extends MasterDaemon {
      */
     private void startScheduler() {
         LOG.info("Starting refresh table columns statistic with interval {} seconds.",
-                Config.refresh_columns_statistic_interval_s);
-        scheduler.scheduleWithFixedDelay(this::refreshTableColumns, Config.refresh_columns_statistic_interval_s,
-                Config.refresh_columns_statistic_interval_s, TimeUnit.SECONDS);
+                Config.hms_refresh_columns_statistic_interval_s);
+        scheduler.scheduleWithFixedDelay(this::refreshTableColumns, Config.hms_refresh_columns_statistic_interval_s,
+                Config.hms_refresh_columns_statistic_interval_s, TimeUnit.SECONDS);
     }
 
     public void registerTable(HiveTable tbl) {
@@ -322,7 +322,7 @@ public class MetastoreEventsProcessor extends MasterDaemon {
         LOG.info("Total number of events received: {} Total number of events filtered out: {}",
                 events.size(), filteredEvents.size());
 
-        if (Config.enable_parallel_process_hms_evens) {
+        if (Config.enable_hms_parallel_process_evens) {
             doExecuteWithPartialProgress(filteredEvents);
         } else {
             doExecute(filteredEvents, resourceName);

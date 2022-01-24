@@ -40,10 +40,4 @@ public class CreateTableEvent extends MetastoreTableEvent {
     protected void process() throws MetastoreNotificationException {
         throw new UnsupportedOperationException("Unsupported event type: " + getEventType());
     }
-
-
-
-
-
-
 }
