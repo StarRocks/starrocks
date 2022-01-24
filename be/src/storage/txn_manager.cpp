@@ -102,9 +102,8 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
             // check if load id is equal
             if (load_info.load_id.hi() == load_id.hi() && load_info.load_id.lo() == load_id.lo() &&
                 load_info.rowset != nullptr) {
-                LOG(WARNING) << "find transaction exists when add to engine."
-                             << "partition_id: " << key.first << ", transaction_id: " << key.second
-                             << ", tablet: " << tablet_info.to_string();
+                LOG(WARNING) << "Transaction altready exists. tablet: " << tablet_info.tablet_id
+                             << ", partition_id: " << key.first << ", txn_id: " << key.second;
                 return Status::OK();
             }
         }
@@ -114,9 +113,10 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
     // if yes, reject the request.
     txn_partition_map_t& txn_partition_map = _get_txn_partition_map(transaction_id);
     if (txn_partition_map.size() > config::max_runnings_transactions_per_txn_map) {
-        LOG(WARNING) << "too many transactions: " << txn_tablet_map.size()
-                     << ", limit: " << config::max_runnings_transactions_per_txn_map;
-        return Status::InternalError("Too many transactions.");
+        auto msg = fmt::format("Txn number exceeds the limit. txn_count: {}, limit: {}", txn_tablet_map.size(),
+                               config::max_runnings_transactions_per_txn_map);
+        LOG(ERROR) << msg;
+        return Status::ServiceUnavailable(msg);
     }
 
     // not found load id
@@ -136,18 +136,17 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
                               TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                               const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
     if (partition_id < 1 || transaction_id < 1 || tablet_id < 1) {
-        LOG(FATAL) << "invalid commit req "
+        LOG(FATAL) << "Invalid commit req "
                    << " partition_id=" << partition_id << " transaction_id=" << transaction_id
                    << " tablet_id=" << tablet_id;
     }
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     if (rowset_ptr == nullptr) {
-        LOG(WARNING) << "could not commit txn. "
-                     << "partition_id: " << key.first << ", transaction_id: " << key.second
-                     << ", tablet: " << tablet_info.to_string();
-        return Status::InternalError(fmt::format("Could not commit txn. partition_id: {}, transaction_id, tablet: {}",
-                                                 key.first, key.second, tablet_info.to_string()));
+        auto msg = fmt::format("Fail to commit txn. tablet_id: {}, partition_id: {}, txn_Id: {}", tablet_id, key.first,
+                               key.second);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
     }
 
     std::lock_guard txn_lock(_get_txn_lock(transaction_id));
@@ -166,20 +165,19 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
                 if (load_info.load_id.hi() == load_id.hi() && load_info.load_id.lo() == load_id.lo() &&
                     load_info.rowset != nullptr && load_info.rowset->rowset_id() == rowset_ptr->rowset_id()) {
                     // find a rowset with same rowset id, then it means a duplicate call
-                    LOG(INFO) << "find transaction exists when add to engine."
-                              << "partition_id: " << key.first << ", transaction_id: " << key.second
-                              << ", tablet: " << tablet_info.to_string()
-                              << ", rowset_id: " << load_info.rowset->rowset_id();
+                    LOG(INFO) << "Transaction altready exists. tablet: " << tablet_id << ", partition_id: " << key.first
+                              << ", txn_id: " << key.second << ", rowset_id: " << load_info.rowset->rowset_id();
                     return Status::OK();
                 } else if (load_info.load_id.hi() == load_id.hi() && load_info.load_id.lo() == load_id.lo() &&
                            load_info.rowset != nullptr && load_info.rowset->rowset_id() != rowset_ptr->rowset_id()) {
                     // find a rowset with different rowset id, then it should not happen, just return errors
-                    LOG(WARNING) << "Transaction already exist but rowset_ids are not equal. "
-                                 << "partition_id: " << key.first << ", transaction_id: " << key.second
-                                 << ", tablet: " << tablet_info.to_string()
-                                 << ", exist rowset_id: " << load_info.rowset->rowset_id()
-                                 << ", new rowset_id: " << rowset_ptr->rowset_id();
-                    return Status::AlreadyExist("Transaction already exist but rowset_ids are not equal.");
+                    LOG(WARNING) << "Txn are correpsonds to two different rowsets. "
+                                 << "txn_id: " << key.second << ", tablet_id: " << tablet_id
+                                 << ", first_rowset_id: " << load_info.rowset->rowset_id()
+                                 << ", second_rowset_id: " << rowset_ptr->rowset_id();
+                    return Status::InternalError(
+                            fmt::format("Txn are correpsonds to two different rowsets. tablet_id: {}, txn_id: {}",
+                                        tablet_id, key.second));
                 }
             }
         }
@@ -193,9 +191,11 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         rowset_ptr->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_ptr->rowset_id(), rowset_meta_pb);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to save committed rowset. rowset_id:" << rowset_ptr->rowset_id()
-                         << ", tablet_id: " << tablet_id << "txn_id: " << transaction_id;
-            return Status::InternalError("Fail to save committed rowset.");
+            LOG(WARNING) << "Fail to save committed rowset. "
+                         << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
+                         << ", rowset_id: " << rowset_ptr->rowset_id();
+            return Status::InternalError(
+                    fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}", tablet_id, key.second));
         }
     }
 
@@ -205,9 +205,8 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
         txn_tablet_map[key][tablet_info] = load_info;
         _insert_txn_partition_map_unlocked(transaction_id, partition_id);
-        LOG(INFO) << "committed transaction "
-                  << " partition_id: " << key.first << " transaction_id: " << key.second
-                  << " tablet: " << tablet_info.tablet_id << " rowsetid: " << rowset_ptr->rowset_id()
+        LOG(INFO) << "Commit txn successfully. "
+                  << " tablet: " << tablet_id << ", txn_id: " << key.second << ", rowsetid: " << rowset_ptr->rowset_id()
                   << " version: " << rowset_ptr->version().first;
     }
     return Status::OK();
@@ -244,12 +243,14 @@ Status TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransa
         auto& rowset_meta_pb = rowset_ptr->rowset_meta()->get_meta_pb();
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_ptr->rowset_id(), rowset_meta_pb);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to save committed rowset. rowset_id:" << rowset_ptr->rowset_id()
-                         << ", tablet_id: " << tablet_id << "txn_id: " << transaction_id;
-            return Status::InternalError("Fail to save committed rowset.");
+            LOG(WARNING) << "Fail to save committed rowset. "
+                         << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
+                         << ", rowset_id: " << rowset_ptr->rowset_id();
+            return Status::InternalError(
+                    fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}", tablet_id, key.second));
         }
     } else {
-        return Status::NotFound(fmt::format("Not found txn_id: ", transaction_id));
+        return Status::NotFound(fmt::format("Not found txn. tablet_id: {}, txn_id:{} ", tablet_id, transaction_id));
     }
     {
         std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
@@ -301,7 +302,8 @@ Status TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId part
             return st;
         }
     } else {
-        return Status::NotFound(fmt::format("Not found txn_id: ", transaction_id));
+        return Status::NotFound(
+                fmt::format("Not found txn. tablet_id: {}, txn_id:{} ", tablet->tablet_id(), transaction_id));
     }
     {
         std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
@@ -368,7 +370,8 @@ Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transa
             if (load_info.rowset != nullptr) {
                 // if rowset is not null, it means other thread may commit the rowset
                 // should not delete txn any more
-                return Status::AlreadyExist(fmt::format("Txn has been already commit. txn_id: {}", transaction_id));
+                return Status::AlreadyExist(
+                        fmt::format("Txn already exists. tablet_id: {}, txn_id: {}", tablet_id, transaction_id));
             }
         }
         it->second.erase(tablet_info);
@@ -395,7 +398,7 @@ Status TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransac
     txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
     auto it = txn_tablet_map.find(key);
     if (it == txn_tablet_map.end()) {
-        return Status::NotFound(fmt::format("Not found txn: {}", transaction_id));
+        return Status::NotFound(fmt::format("Not found txn. tablet_id: {}, txn_id:{}", tablet_id, transaction_id));
     }
     auto load_itr = it->second.find(tablet_info);
     if (load_itr != it->second.end()) {
@@ -404,14 +407,13 @@ Status TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransac
         TabletTxnInfo& load_info = load_itr->second;
         if (load_info.rowset != nullptr && meta != nullptr) {
             if (load_info.rowset->version().first > 0) {
-                LOG(WARNING) << "could not delete transaction from engine, "
-                             << "just remove it from memory not delete from disk"
-                             << " because related rowset already published."
-                             << ",partition_id: " << key.first << ", transaction_id: " << key.second
-                             << ", tablet: " << tablet_info.to_string()
+                LOG(WARNING) << "Fail to delete txn because rowset is already published "
+                             << "tablet_id: " << tablet_info.tablet_id << ", txn_id: " << key.second
                              << ", rowset id: " << load_info.rowset->rowset_id()
                              << ", version: " << load_info.rowset->version().first;
-                return Status::InternalError("Could not delete transaction from engine");
+                return Status::InternalError(
+                        fmt::format("Fail to delete txn because rowset is already published. tablet_id: {}, txn_id: {}",
+                                    tablet_info.tablet_id, transaction_id));
             } else {
                 (void)RowsetMetaManager::remove(meta, tablet_uid, load_info.rowset->rowset_id());
 #ifndef BE_TEST

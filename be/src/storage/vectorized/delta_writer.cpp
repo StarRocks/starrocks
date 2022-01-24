@@ -111,10 +111,8 @@ Status DeltaWriter::_init() {
             new_tablet = tablet_mgr->get_tablet(_opt.tablet_id, _opt.schema_hash);
             if (new_tablet == nullptr) {
                 _set_state(kAborted);
-                std::stringstream ss;
-                ss << "Fail to get tablet. tablet_id=" << _opt.tablet_id;
-                LOG(WARNING) << ss.str();
-                return Status::InternalError(ss.str());
+                auto msg = fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id);
+                return Status::NotFound(msg);
             }
             if (_tablet != new_tablet) {
                 _tablet = new_tablet;
@@ -222,7 +220,8 @@ Status DeltaWriter::close() {
     case kUninitialized:
     case kCommitted:
     case kAborted:
-        return Status::InternalError(fmt::format("cannot close delta writer in {} state", _state_name(state)));
+        return Status::InternalError(fmt::format("Fail to close delta writer. tablet_id: {}, state: {}", _opt.tablet_id,
+                                                 _state_name(state)));
     case kClosed:
         return Status::OK();
     case kWriting:
@@ -278,7 +277,6 @@ Status DeltaWriter::commit() {
     }
 
     _cur_rowset->set_schema(&_tablet->tablet_schema());
-
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
         if (!st.ok()) {
@@ -296,13 +294,14 @@ Status DeltaWriter::commit() {
 
     if (!res.ok() && !res.is_already_exist()) {
         _set_state(kAborted);
-        return Status::InternalError("Fail to commit transaction");
+        return res;
     }
     State curr_state = kClosed;
     if (!_state.compare_exchange_strong(curr_state, kCommitted, std::memory_order_acq_rel)) {
-        return Status::InternalError("delta writer has been aborted");
+        return Status::InternalError(fmt::format("Delta writer has been aborted. tablet_id: {}, state: {}",
+                                                 _opt.tablet_id, _state_name(state)));
     }
-    LOG(INFO) << "Closed delta writer. tablet_id=" << _tablet->tablet_id() << " stats=" << _flush_token->get_stats();
+    LOG(INFO) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
     return Status::OK();
 }
 

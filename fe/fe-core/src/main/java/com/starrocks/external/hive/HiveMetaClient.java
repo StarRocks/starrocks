@@ -158,8 +158,8 @@ public class HiveMetaClient {
                 return partitionKeys;
             }
         } catch (Exception e) {
-            LOG.warn("get partition keys failed", e);
-            throw new DdlException("get hive partition keys from meta store failed: " + e.getMessage());
+            LOG.warn("Fail to access meta store of Hive", e);
+            throw new DdlException("Fail to access meta store of Hive. error: " + e.getMessage());
         }
     }
 

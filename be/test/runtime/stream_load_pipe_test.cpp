@@ -211,7 +211,7 @@ TEST_F(StreamLoadPipeTest, cancel) {
             pipe.append(&buf, 1);
         }
         SleepFor(MonoDelta::FromMilliseconds(100));
-        pipe.cancel();
+        pipe.cancel(Status::Cancelled("Cancelled"));
     };
     std::thread t1(appender);
 
@@ -247,7 +247,7 @@ TEST_F(StreamLoadPipeTest, close) {
             byte_buf->put_bytes(buf, 64);
             byte_buf->flip();
             auto st = pipe.append(byte_buf);
-            ASSERT_FALSE(st.ok());
+            ASSERT_TRUE(st.ok());
         }
     };
     std::thread t1(appender);

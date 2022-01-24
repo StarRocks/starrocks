@@ -65,7 +65,7 @@ Status MessageBodyFileSink::finish() {
     return Status::OK();
 }
 
-void MessageBodyFileSink::cancel() {
+void MessageBodyFileSink::cancel(const Status& status) {
     unlink(_path.data());
 }
 

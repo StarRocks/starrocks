@@ -154,7 +154,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             if (left_bytes == ctx->max_batch_size) {
                 // nothing to be consumed, we have to cancel it, because
                 // we do not allow finishing stream load pipe without data
-                kafka_pipe->cancel();
+                kafka_pipe->cancel(Status::Cancelled("Cancelled"));
                 return Status::Cancelled("Cancelled");
             } else {
                 DCHECK(left_bytes < ctx->max_batch_size);
