@@ -46,7 +46,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -86,16 +85,6 @@ public class FunctionCallExpr extends Expr {
             new ImmutableSortedSet.Builder(String.CASE_INSENSITIVE_ORDER)
                     .add("stddev").add("stddev_val").add("stddev_samp")
                     .add("variance").add("variance_pop").add("variance_pop").add("var_samp").add("var_pop").build();
-
-    private static final ImmutableSet<String> UTF8_STRING_FUNCTION_SET =
-            new ImmutableSortedSet.Builder(String.CASE_INSENSITIVE_ORDER)
-                    .add("substr").add("substring").add("left").add("strleft").add("right").add("strright")
-                    .add("ends_with").add("starts_with").add("space").add("repeat").add("lpad").add("rpad")
-                    .add("pad").add("append_trailing_char_if_absent").add("length").add("char_length")
-                    .add("character_length").add("lower").add("upper").add("lcase").add("ucase").add("reverse")
-                    .add("trim").add("ltrim").add("rtrim").add("ascii").add("char").add("instr").add("locate")
-                    .add("concat").add("concat_ws").add("find_in_set").add("split_part").add("split")
-                    .add("regexp_extract").add("regexp_replace").add("replace").add("money_format").build();
 
     // TODO(yan): add more known functions which are monotonic.
     private static final ImmutableSet<String> MONOTONIC_FUNCTION_SET =
@@ -975,16 +964,15 @@ public class FunctionCallExpr extends Expr {
         return false;
     }
 
-    // A string function that advances utf8 chars cannot handle invalid utf8 string. geo function whose name
-    // starts_with 'st_' and is not 'st_astext' generates invalid utf8 strings. so
+    // geo function whose name starts_with 'st_' and is not 'st_astext' generates invalid utf8 strings. so it cannot
+    // be used as a argument to a string-typed parameter of a function.
     // 1. select reverse(st_circle(...)) unacceptable
     // 2. select reverse(st_astext(st_circle(...)) acceptable
     // 3. select reverse(cast(st_circle(...) as varchar)) unacceptable
     // 4. select reverse(cast(cast(st_circle(...) as varchar) as varchar))) unacceptable
-    public static void validateUtf8StringFunction(FunctionCallExpr node) throws SemanticException {
+    public static void checkGeoFunctionGeneratedInvalidUtf8(FunctionCallExpr node) throws SemanticException {
         Function fn = node.getFn();
-        // only string function involving utf8 strings are taken into consideration
-        if (!UTF8_STRING_FUNCTION_SET.contains(fn.functionName())) {
+        if (fn.functionName().toLowerCase().equals("st_astext")) {
             return;
         }
         int numChildren = node.getChildren().size();
@@ -1016,7 +1004,8 @@ public class FunctionCallExpr extends Expr {
             if (child instanceof FunctionCallExpr) {
                 FunctionCallExpr fnCallChild = (FunctionCallExpr) child;
                 String name = fnCallChild.getFn().functionName().toLowerCase();
-                if (!name.equals("st_astext") && name.startsWith("st_")) {
+                if (!name.equals("st_astext") && name.startsWith("st_")
+                        && fnCallChild.getFn().getReturnType().isStringType()) {
                     throw new SemanticException(String.format("Function '%s' cannot invoke '%s'", fn.functionName(), name));
                 }
             }
