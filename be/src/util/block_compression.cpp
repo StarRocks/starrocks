@@ -483,9 +483,7 @@ public:
 
         int ret = inflateInit2(&z_strm, MAX_WBITS + 16);
         if (ret < 0) {
-            std::stringstream ss;
-            ss << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret);
-            return Status::InternalError(ss.str());
+            return Status::InternalError(strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret));
         }
 
         // 1. set input and output
