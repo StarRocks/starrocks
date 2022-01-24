@@ -30,7 +30,8 @@ public class MultiCastPlanFragment extends PlanFragment {
 
     public MultiCastPlanFragment(PlanFragment planFragment) {
         super(planFragment.fragmentId, planFragment.planRoot, planFragment.getDataPartition());
-        this.outputPartition = planFragment.getOutputPartition();
+        // Use random, only send to self
+        this.outputPartition = DataPartition.RANDOM;
         this.children.addAll(planFragment.getChildren());
     }
 

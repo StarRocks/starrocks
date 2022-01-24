@@ -2117,12 +2117,12 @@ public class PlanFragmentBuilder {
                     cteFragment.getPlanRoot(), false, DistributionSpec.DistributionType.SHUFFLE);
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
 
-            PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
-                    DataPartition.hashPartitioned(cteFragment.getOutputExprs()));
+            PlanFragment consumeFragment = new PlanFragment(context.getPlanCtx().getNextFragmentId(), exchangeNode,
+                    cteFragment.getDataPartition());
 
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
             consume.getCteOutputColumnRefMap().forEach(projectMap::put);
-            buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
+            consumeFragment = buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
 
             // add filter node
             if (consume.getPredicate() != null) {
