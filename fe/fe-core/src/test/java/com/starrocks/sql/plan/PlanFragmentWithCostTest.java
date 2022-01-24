@@ -929,12 +929,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     cardinality: 400000\n" +
                 "     probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (1: v4)"));
-
-        Assert.assertTrue(plan.contains("  11:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("11:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [10: v4, BIGINT, true] = [7: v7, BIGINT, true]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (7: v7), remote = false\n" +
+                "  |  output columns: 10\n" +
                 "  |  cardinality: 400000"));
 
         connectContext.getSessionVariable().setCboCteReuse(false);
