@@ -2111,7 +2111,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalCTEConsume(OptExpression optExpression, ExecPlan context) {
             PhysicalCTEConsumeOperator consume = (PhysicalCTEConsumeOperator) optExpression.getOp();
-            String cteId = consume.getCteId();
+            int cteId = consume.getCteId();
 
             MultiCastPlanFragment cteFragment = (MultiCastPlanFragment) context.getCteProduceFragments().get(cteId);
 
@@ -2126,6 +2126,23 @@ public class PlanFragmentBuilder {
             consume.getCteOutputColumnRefMap().forEach(projectMap::put);
             buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
 
+            // add filter node
+            if (consume.getPredicate() != null) {
+                List<Expr> predicates = Utils.extractConjuncts(consume.getPredicate()).stream()
+                        .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        .collect(Collectors.toList());
+                SelectNode selectNode =
+                        new SelectNode(context.getPlanCtx().getNextNodeId(), consumeFragment.getPlanRoot(), predicates);
+                selectNode.computeStatistics(optExpression.getStatistics());
+                consumeFragment.setPlanRoot(selectNode);
+            }
+
+            // set limit
+            if (consume.hasLimit()) {
+                consumeFragment.getPlanRoot().setLimit(consume.getLimit());
+            }
+
             cteFragment.getDestNodeList().add(exchangeNode);
             consumeFragment.addChild(cteFragment);
             context.getFragments().add(consumeFragment);
@@ -2135,7 +2152,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalCTEProduce(OptExpression optExpression, ExecPlan context) {
             PlanFragment child = visit(optExpression.inputAt(0), context);
-            String cteId = ((PhysicalCTEProduceOperator) optExpression.getOp()).getCteId();
+            int cteId = ((PhysicalCTEProduceOperator) optExpression.getOp()).getCteId();
             context.getFragments().remove(child);
             MultiCastPlanFragment cteProduce = new MultiCastPlanFragment(child);
 

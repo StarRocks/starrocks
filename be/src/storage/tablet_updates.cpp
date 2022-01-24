@@ -736,7 +736,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     }
 
     int64_t t_load = MonotonicMillis();
-    st = state.apply(&_tablet, rowset.get(), rowset_id, index);
+    st = state.apply(&_tablet, rowset.get(), rowset_id, _edit_version_infos[_apply_version_idx]->version, index);
     if (!st.ok()) {
         manager->update_state_cache().remove(state_entry);
         std::string msg = Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
@@ -1030,7 +1030,14 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
 Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo, const RowsetSharedPtr& rowset,
                                          EditVersion* commit_version) {
     _compaction_state = std::make_unique<vectorized::CompactionState>();
-    RETURN_IF_ERROR(_compaction_state->load(rowset.get()));
+    const auto status = _compaction_state->load(rowset.get());
+    if (!status.ok()) {
+        _compaction_state.reset();
+        std::string msg = Substitute("_commit_compaction error: load compaction state failed: $0 $1",
+                                     status.to_string(), debug_string());
+        LOG(WARNING) << msg;
+        return status;
+    }
     std::lock_guard wl(_lock);
     EditVersionMetaPB edit;
     auto lastv = _edit_version_infos.back().get();
@@ -1469,7 +1476,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
                     total_score += stat.compaction_score;
                     total_rows += stat.num_rows;
                     total_bytes += stat.byte_size;
-                    LOG(INFO) << "estimate add:" << stat.byte_size << "=" << total_bytes;
                     continue;
                 }
                 candidates.emplace_back();

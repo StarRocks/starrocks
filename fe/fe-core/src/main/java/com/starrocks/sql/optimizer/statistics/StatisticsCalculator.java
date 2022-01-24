@@ -237,7 +237,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
-                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         // TODO: get statistics from iceberg catalog or metadata
         Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
         builder.setOutputRowCount(1);
@@ -622,7 +622,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     public static double computeGroupByStatistics(List<ColumnRefOperator> groupBys, Statistics inputStatistics,
-                                         Map<ColumnRefOperator, ColumnStatistic> groupStatisticsMap) {
+                                                  Map<ColumnRefOperator, ColumnStatistic> groupStatisticsMap) {
         for (ColumnRefOperator groupByColumn : groupBys) {
             ColumnStatistic groupByColumnStatics = inputStatistics.getColumnStatistic(groupByColumn);
             ColumnStatistic.Builder statsBuilder = buildFrom(groupByColumnStatics);
@@ -1246,10 +1246,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return computeCTEConsume(node, context, node.getCteId(), node.getCteOutputColumnRefMap());
     }
 
-    private Void computeCTEConsume(Operator node, ExpressionContext context, String cteId,
+    private Void computeCTEConsume(Operator node, ExpressionContext context, int cteId,
                                    Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
         OptExpression produce = optimizerContext.getCteContext().getCTEProduce(cteId);
         Statistics produceStatistics = produce.getGroupExpression().getGroup().getStatistics();
+        if (null == produceStatistics) {
+            produceStatistics = produce.getStatistics();
+        }
+
+        Preconditions.checkNotNull(produce.getStatistics());
 
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator ref : columnRefMap.keySet()) {

@@ -95,7 +95,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
     private final ConnectContext session;
 
     private final ExpressionMapping outer;
-    private final Map<String, ExpressionMapping> cteContext;
+    private final Map<Integer, ExpressionMapping> cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
@@ -106,7 +106,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
     }
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
-                               Map<String, ExpressionMapping> cteContext) {
+                               Map<Integer, ExpressionMapping> cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
@@ -125,8 +125,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
         }
 
         OptExprBuilder optExprBuilder;
-        if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()
-                && session.getSessionVariable().isCboCteReuse()) {
+        if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()) {
             Pair<OptExprBuilder, OptExprBuilder> cteRootAndMostDeepAnchor =
                     buildCTEAnchorAndProducer((QueryRelation) relation);
             optExprBuilder = cteRootAndMostDeepAnchor.first;
@@ -396,29 +395,26 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
 
     @Override
     public LogicalPlan visitCTE(CTERelation node, ExpressionMapping context) {
-        if (session.getSessionVariable().isCboCteReuse()) {
-            ExpressionMapping expressionMapping = cteContext.get(node.getCteId());
-            List<ColumnRefOperator> cteOutputs = new ArrayList<>();
-            Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
-            for (ColumnRefOperator columnRefOperator : expressionMapping.getFieldMappings()) {
-                ColumnRefOperator c = columnRefFactory.create(columnRefOperator, columnRefOperator.getType(),
-                        columnRefOperator.isNullable());
-                cteOutputs.add(c);
-                cteOutputColumnRefMap.put(c, columnRefOperator);
-            }
+        LogicalPlan childPlan = visit(node.getCteQuery());
+        ExpressionMapping expressionMapping = cteContext.get(node.getCteId());
+        Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
 
-            return new LogicalPlan(
-                    new OptExprBuilder(new LogicalCTEConsumeOperator(node.getCteId(), cteOutputColumnRefMap),
-                            Collections.emptyList(), new ExpressionMapping(node.getScope(), cteOutputs)),
-                    null, null);
-        } else {
-            LogicalPlan logicalPlan = visit(node.getCteQuery());
-            return new LogicalPlan(
-                    new OptExprBuilder(logicalPlan.getRoot().getOp(), logicalPlan.getRootBuilder().getInputs(),
-                            new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn())),
-                    logicalPlan.getOutputColumn(),
-                    logicalPlan.getCorrelation());
+        Preconditions.checkState(childPlan.getOutputColumn().size() == expressionMapping.getFieldMappings().size());
+
+        for (int i = 0; i < expressionMapping.getFieldMappings().size(); i++) {
+            ColumnRefOperator childColumn = childPlan.getOutputColumn().get(i);
+            ColumnRefOperator produceColumn = expressionMapping.getFieldMappings().get(i);
+
+            Preconditions.checkState(childColumn.getType().equals(produceColumn.getType()));
+            Preconditions.checkState(childColumn.isNullable() == produceColumn.isNullable());
+
+            cteOutputColumnRefMap.put(childColumn, produceColumn);
         }
+
+        LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(node.getCteId(), cteOutputColumnRefMap);
+        OptExprBuilder consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
+                new ExpressionMapping(node.getScope(), childPlan.getOutputColumn()));
+        return new LogicalPlan(consumeBuilder, null, null);
     }
 
     @Override

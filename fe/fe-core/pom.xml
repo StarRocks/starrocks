@@ -182,12 +182,6 @@ under the License.
             <scope>test</scope>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/joda-time/joda-time -->
-        <dependency>
-            <groupId>joda-time</groupId>
-            <artifactId>joda-time</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
         <dependency>
             <groupId>com.baidu</groupId>

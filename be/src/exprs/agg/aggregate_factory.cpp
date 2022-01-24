@@ -7,6 +7,7 @@
 
 #include "column/type_traits.h"
 #include "exprs/agg/any_value.h"
+#include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/bitmap_union.h"
@@ -97,10 +98,10 @@ AggregateFunctionPtr AggregateFactory::MakeAnyValueAggregateFunction() {
             AnyValueAggregateFunction<PT, AnyValueAggregateData<PT>, AnyValueElement<PT, AnyValueAggregateData<PT>>>>();
 }
 
-template <typename NestedState>
+template <typename NestedState, bool IgnoreNull>
 AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionUnary(AggregateFunctionPtr nested_function) {
     using AggregateDataType = NullableAggregateFunctionState<NestedState>;
-    return std::make_shared<NullableAggregateFunctionUnary<AggregateDataType>>(nested_function);
+    return std::make_shared<NullableAggregateFunctionUnary<AggregateDataType, IgnoreNull>>(nested_function);
 }
 
 template <typename NestedState>
@@ -157,6 +158,11 @@ AggregateFunctionPtr AggregateFactory::MakePercentileApproxAggregateFunction() {
 
 AggregateFunctionPtr AggregateFactory::MakePercentileUnionAggregateFunction() {
     return std::make_shared<PercentileUnionAggregateFunction>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeArrayAggAggregateFunction() {
+    return std::make_shared<ArrayAggAggregateFunction<PT>>();
 }
 
 // Windows functions:
@@ -374,6 +380,10 @@ public:
             } else if (name == "any_value") {
                 auto any_value = AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>>(any_value);
+            } else if (name == "array_agg") {
+                auto array_agg = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
+                        array_agg);
             }
         } else {
             if (name == "count") {
@@ -408,6 +418,8 @@ public:
                 return AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
             } else if (name == "any_value") {
                 return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
+            } else if (name == "array_agg") {
+                return AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
             }
         }
 
@@ -453,6 +465,10 @@ public:
             } else if (name == "any_value") {
                 auto any_value = AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>>(any_value);
+            } else if (name == "array_agg") {
+                auto array_agg_value = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
+                        array_agg_value);
             }
         } else {
             if (name == "avg") {
@@ -469,6 +485,8 @@ public:
                 return AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
             } else if (name == "any_value") {
                 return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
+            } else if (name == "array_agg") {
+                return AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
             }
         }
 
@@ -523,6 +541,21 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>("avg");
     add_aggregate_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128>("avg");
     add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("avg");
+
+    add_aggregate_mapping<TYPE_BOOLEAN, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_TINYINT, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_SMALLINT, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_INT, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_LARGEINT, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_FLOAT, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_DOUBLE, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_VARCHAR, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_CHAR, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_DECIMAL32, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_DATETIME, TYPE_ARRAY>("array_agg");
+    add_aggregate_mapping<TYPE_DATE, TYPE_ARRAY>("array_agg");
+    // TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128 is not supported now for array_agg
 
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("bitmap_union_int");
     add_aggregate_mapping<TYPE_SMALLINT, TYPE_BIGINT>("bitmap_union_int");

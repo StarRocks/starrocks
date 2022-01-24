@@ -72,13 +72,6 @@ under the License.
             <scope>test</scope>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/joda-time/joda-time -->
-        <dependency>
-            <groupId>joda-time</groupId>
-            <artifactId>joda-time</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/junit/junit -->
         <dependency>
             <groupId>junit</groupId>

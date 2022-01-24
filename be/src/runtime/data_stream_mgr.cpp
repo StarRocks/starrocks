@@ -56,14 +56,15 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
         RuntimeState* state, const RowDescriptor& row_desc, const TUniqueId& fragment_instance_id,
         PlanNodeId dest_node_id, int num_senders, int buffer_size, const std::shared_ptr<RuntimeProfile>& profile,
         bool is_merging, std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline,
-        bool keep_order) {
+        int32_t degree_of_parallelism, bool keep_order) {
     DCHECK(profile != nullptr);
     VLOG_FILE << "creating receiver for fragment=" << fragment_instance_id << ", node=" << dest_node_id;
     PassThroughChunkBuffer* pass_through_chunk_buffer = get_pass_through_chunk_buffer(state->query_id());
     DCHECK(pass_through_chunk_buffer != nullptr);
-    std::shared_ptr<DataStreamRecvr> recvr(new DataStreamRecvr(
-            this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging, buffer_size, profile,
-            std::move(sub_plan_query_statistics_recvr), is_pipeline, keep_order, pass_through_chunk_buffer));
+    std::shared_ptr<DataStreamRecvr> recvr(
+            new DataStreamRecvr(this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
+                                buffer_size, profile, std::move(sub_plan_query_statistics_recvr), is_pipeline,
+                                degree_of_parallelism, keep_order, pass_through_chunk_buffer));
     uint32_t hash_value = get_hash_value(fragment_instance_id, dest_node_id);
     std::lock_guard<std::mutex> l(_lock);
     _fragment_stream_set.emplace(fragment_instance_id, dest_node_id);

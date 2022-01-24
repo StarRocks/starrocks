@@ -47,10 +47,10 @@ class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
-    private final Map<String, ExpressionMapping> cteContext;
+    private final Map<Integer, ExpressionMapping> cteContext;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            Map<String, ExpressionMapping> cteContext) {
+                            Map<Integer, ExpressionMapping> cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
@@ -107,10 +107,10 @@ class QueryTransformer {
         return outputs;
     }
 
-    private OptExprBuilder planFrom(Relation node, Map<String, ExpressionMapping> cteContext) {
+    private OptExprBuilder planFrom(Relation node, Map<Integer, ExpressionMapping> cteContext) {
         // This must be a copy of the context, because the new Relation may contain cte with the same name,
         // and the internal cte with the same name will overwrite the original mapping
-        Map<String, ExpressionMapping> newCTEContext = Maps.newHashMap(cteContext);
+        Map<Integer, ExpressionMapping> newCTEContext = Maps.newHashMap(cteContext);
         return new RelationTransformer(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCTEContext).visit(
                 node).getRootBuilder();

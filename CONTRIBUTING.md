@@ -1,9 +1,8 @@
 # Contributing to StarRocks
 
 ## Contributing to StarRocks
-Welcome to StarRocks! To learn more about contributing to the StarRocks code repo, check out the [Contributor's Guide](https://github.com/StarRocks/community/tree/main/Contributors/guide).
 
-The [StarRocks Community](https://github.com/StarRocks/community) repo contains information about how to get started, how the community organizes, and more.
+Welcome to StarRocks community! To learn more about contributing to the StarRocks, check out the [Contributor's Guide](https://github.com/StarRocks/community/tree/main/Contributors/guide).
 
 ## Code of Conduct
 The code of conduct is described in [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)

@@ -78,25 +78,27 @@ Status DeltaWriter::_init() {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
             _set_state(kAborted);
-            auto msg = Substitute("Update memory limit exceed tablet:$0 $1 > $2 top_tablets:$3", _tablet->tablet_id(),
-                                  tracker->consumption(), tracker->limit(),
-                                  _storage_engine->update_manager()->topn_memory_stats(5));
+            auto msg = Substitute(
+                    "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
+                    " Memory stats of top five tablets: $3",
+                    _opt.tablet_id, tracker->consumption(), tracker->limit(),
+                    _storage_engine->update_manager()->topn_memory_stats(5));
             LOG(WARNING) << msg;
             return Status::MemoryLimitExceeded(msg);
         }
         if (_tablet->updates()->is_error()) {
             _set_state(kAborted);
-            auto msg = Substitute("Fail to init delta writer. tablet $0 error: $1", _tablet->tablet_id(),
-                                  _tablet->updates()->get_error_msg());
-            LOG(WARNING) << msg;
+            auto msg = fmt::format("Tablet is in error state. This is a primary key table. tablet_id: {}",
+                                   _tablet->tablet_id());
             return Status::ServiceUnavailable(msg);
         }
     }
     if (_tablet->version_count() > config::tablet_max_versions) {
         _set_state(kAborted);
-        LOG(WARNING) << "Fail to init delta writer: version limit exceeded. tablet=" << _tablet->tablet_id()
-                     << " version count=" << _tablet->version_count() << " limit=" << config::tablet_max_versions;
-        return Status::ServiceUnavailable("too many tablet versions");
+        auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}", _opt.tablet_id,
+                               _tablet->version_count(), config::tablet_max_versions);
+        LOG(ERROR) << msg;
+        return Status::ServiceUnavailable(msg);
     }
 
     // The tablet may have been migrated during delta writer init,
@@ -111,10 +113,8 @@ Status DeltaWriter::_init() {
             new_tablet = tablet_mgr->get_tablet(_opt.tablet_id, _opt.schema_hash);
             if (new_tablet == nullptr) {
                 _set_state(kAborted);
-                std::stringstream ss;
-                ss << "Fail to get tablet. tablet_id=" << _opt.tablet_id;
-                LOG(WARNING) << ss.str();
-                return Status::InternalError(ss.str());
+                auto msg = fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id);
+                return Status::NotFound(msg);
             }
             if (_tablet != new_tablet) {
                 _tablet = new_tablet;
@@ -123,14 +123,10 @@ Status DeltaWriter::_init() {
         }
 
         std::lock_guard push_lock(_tablet->get_push_lock());
-        Status olap_status =
-                _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
-        if (!olap_status.ok()) {
+        Status st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
+        if (!st.ok()) {
             _set_state(kAborted);
-            std::stringstream ss;
-            ss << "Fail to prepare transaction. tablet_id=" << _opt.tablet_id << " err=" << olap_status;
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
+            return st;
         }
         break;
     }
@@ -149,10 +145,9 @@ Status DeltaWriter::_init() {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
             int32_t index = _tablet->field_index(slot_col_name);
             if (index < 0) {
-                std::stringstream ss;
-                ss << "invalid column name: " << slot_col_name;
-                LOG(WARNING) << ss.str();
-                return Status::InternalError(ss.str());
+                auto msg = strings::Substitute("Invalid column name: $0", slot_col_name);
+                LOG(WARNING) << msg;
+                return Status::InvalidArgument(msg);
             }
             writer_context.referenced_column_ids.push_back(index);
         }
@@ -178,10 +173,10 @@ Status DeltaWriter::_init() {
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
         _set_state(kAborted);
-        std::stringstream ss;
-        ss << "Fail to create rowset writer. tablet_id=" << _opt.tablet_id << " err=" << st;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
+        auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,
+                                       st.to_string());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
     }
 
     _tablet_schema = writer_context.tablet_schema;
@@ -200,7 +195,8 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     case kCommitted:
     case kAborted:
     case kClosed:
-        return Status::InternalError(fmt::format("cannot write delta writer in {} state", _state_name(state)));
+        return Status::InternalError(
+                fmt::format("Fail to write delta. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
     case kWriting:
         bool full = _mem_table->insert(chunk, indexes, from, size);
         if (_mem_tracker->limit_exceeded()) {
@@ -230,7 +226,8 @@ Status DeltaWriter::close() {
     case kUninitialized:
     case kCommitted:
     case kAborted:
-        return Status::InternalError(fmt::format("cannot close delta writer in {} state", _state_name(state)));
+        return Status::InternalError(fmt::format("Fail to close delta writer. tablet_id: {}, state: {}", _opt.tablet_id,
+                                                 _state_name(state)));
     case kClosed:
         return Status::OK();
     case kWriting:
@@ -263,7 +260,8 @@ Status DeltaWriter::commit() {
     case kUninitialized:
     case kAborted:
     case kWriting:
-        return Status::InternalError(fmt::format("cannot commit delta writer in {} state", _state_name(state)));
+        return Status::InternalError(fmt::format("Fail to commit delta writer. tablet_id: {}, state: {}",
+                                                 _opt.tablet_id, _state_name(state)));
     case kCommitted:
         return Status::OK();
     case kClosed:
@@ -285,7 +283,6 @@ Status DeltaWriter::commit() {
     }
 
     _cur_rowset->set_schema(&_tablet->tablet_schema());
-
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
         if (!st.ok()) {
@@ -303,13 +300,14 @@ Status DeltaWriter::commit() {
 
     if (!res.ok() && !res.is_already_exist()) {
         _set_state(kAborted);
-        return Status::InternalError("Fail to commit transaction");
+        return res;
     }
     State curr_state = kClosed;
     if (!_state.compare_exchange_strong(curr_state, kCommitted, std::memory_order_acq_rel)) {
-        return Status::InternalError("delta writer has been aborted");
+        return Status::InternalError(fmt::format("Delta writer has been aborted. tablet_id: {}, state: {}",
+                                                 _opt.tablet_id, _state_name(state)));
     }
-    LOG(INFO) << "Closed delta writer. tablet_id=" << _tablet->tablet_id() << " stats=" << _flush_token->get_stats();
+    LOG(INFO) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
     return Status::OK();
 }
 
