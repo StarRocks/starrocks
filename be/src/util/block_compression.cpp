@@ -324,10 +324,7 @@ public:
 
     Status compress(const std::vector<Slice>& inputs, Slice* output) const override {
         z_stream zstrm;
-        Status st = init_compress_stream(zstrm);
-        if (!st.ok()) {
-            return st;
-        }
+        RETURN_IF_ERROR(init_compress_stream(zstrm));
         // we assume that output is e
         zstrm.next_out = (Bytef*)output->data;
         zstrm.avail_out = output->size;
