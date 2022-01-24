@@ -256,12 +256,14 @@ public class ReplayFromDumpTest {
     @Test
     public void testTPCDS22() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds22"));
+        System.out.println(replayPair.second);
         // check d_date_sk distinct values has adjusted according to the cardinality
         Assert.assertTrue(replayPair.second.contains("4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [1: inv_date_sk, INT, false] = [5: d_date_sk, INT, false]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (5: d_date_sk), remote = false\n" +
+                "  |  output columns: 2, 4\n" +
                 "  |  cardinality: 399330000\n" +
                 "  |  column statistics: \n" +
                 "  |  * inv_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +

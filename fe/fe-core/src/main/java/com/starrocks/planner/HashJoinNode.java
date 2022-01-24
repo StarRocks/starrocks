@@ -428,12 +428,6 @@ public class HashJoinNode extends PlanNode {
                 detailPrefix + "join op: " + joinOp.toString() + distrModeStr + "\n").append(
                 detailPrefix + "hash predicates:\n");
 
-        if (outputSlots != null) {
-            output.append(detailPrefix).append("output columns: ");
-            output.append(outputSlots.stream().map(Object::toString).collect(Collectors.joining(", ")));
-            output.append("\n");
-        }
-
         output.append(detailPrefix).append("colocate: ").append(isColocate)
                 .append(isColocate ? "" : ", reason: " + colocateReason).append("\n");
 
@@ -480,6 +474,13 @@ public class HashJoinNode extends PlanNode {
                 output.append(detailPrefix).append("- ").append(rf.toExplainString(-1)).append("\n");
             }
         }
+
+        if (outputSlots != null) {
+            output.append(detailPrefix).append("output columns: ");
+            output.append(outputSlots.stream().map(Object::toString).collect(Collectors.joining(", ")));
+            output.append("\n");
+        }
+
         return output.toString();
     }
 

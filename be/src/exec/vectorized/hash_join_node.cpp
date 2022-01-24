@@ -100,8 +100,7 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     if (tnode.hash_join_node.__isset.output_columns) {
-        _output_slots.insert(_output_slots.end(), tnode.hash_join_node.output_columns.begin(),
-                             tnode.hash_join_node.output_columns.end());
+        _output_slots.insert(tnode.hash_join_node.output_columns.begin(), tnode.hash_join_node.output_columns.end());
     }
     return Status::OK();
 }
@@ -162,16 +161,16 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->output_tuple_column_timer = _output_tuple_column_timer;
 
     param->output_slots = _output_slots;
-    std::vector<SlotId> predicate_slots;
+    std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
         std::vector<SlotId> expr_slots;
         expr_context->root()->get_slot_ids(&expr_slots);
-        predicate_slots.insert(predicate_slots.end(), expr_slots.begin(), expr_slots.end());
+        predicate_slots.insert( expr_slots.begin(), expr_slots.end());
     }
     for (ExprContext* expr_context : _other_join_conjunct_ctxs) {
         std::vector<SlotId> expr_slots;
         expr_context->root()->get_slot_ids(&expr_slots);
-        predicate_slots.insert(predicate_slots.end(), expr_slots.begin(), expr_slots.end());
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
     }
     param->predicate_slots = predicate_slots;
 

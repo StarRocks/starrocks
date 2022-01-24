@@ -541,6 +541,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(plan.contains("6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [29: cast, BIGINT, true] = [30: add, BIGINT, true]\n" +
+                "  |  output columns: 14, 15, 20, 22\n" +
                 "  |  cardinality: 600000000"));
         Assert.assertTrue(plan.contains("|----5:EXCHANGE\n" +
                 "  |       cardinality: 150000000\n" +
@@ -552,6 +553,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         plan = getCostExplain(sql);
         Assert.assertTrue(
                 plan.contains("equal join conjunct: [29: multiply, BIGINT, true] = [30: add, BIGINT, true]\n" +
+                        "  |  output columns: 14, 15, 20, 22\n" +
                         "  |  cardinality: 600000000"));
     }
 
@@ -605,6 +607,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  equal join conjunct: [20: L_ORDERKEY, INT, false] = [10: O_ORDERKEY, INT, false]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 1, build_expr = (10: O_ORDERKEY), remote = false\n" +
+                "  |  output columns: 11, 25, 26\n" +
                 "  |  cardinality: 7650728\n" +
                 "  |  column statistics: \n" +
                 "  |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5738045.738045738] ESTIMATE\n" +
@@ -721,6 +724,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [1: PS_PARTKEY, INT, false] = [7: P_PARTKEY, INT, true]\n" +
                 "  |  other predicates: 7: P_PARTKEY IS NULL\n" +
+                "  |  output columns: 1, 2\n" +
                 "  |  cardinality: 8000000"));
         // test right outer join
         sql = "select ps_partkey,ps_suppkey from partsupp right outer join part on " +
@@ -732,6 +736,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  other predicates: 1: PS_PARTKEY IS NULL\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (7: P_PARTKEY), remote = false\n" +
+                "  |  output columns: 1, 2\n" +
                 "  |  cardinality: 8000000"));
         // test full outer join
         sql = "select ps_partkey,ps_suppkey from partsupp full outer join part on " +
@@ -741,6 +746,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  join op: FULL OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, true]\n" +
                 "  |  other predicates: 1: PS_PARTKEY IS NULL\n" +
+                "  |  output columns: 1, 2\n" +
                 "  |  cardinality: 4000000"));
     }
 

@@ -393,24 +393,18 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chun
     bool to_nullable = _table_items->left_to_nullable;
 
     for (size_t i = 0; i < _table_items->probe_column_count; i++) {
-        SlotDescriptor* slot = _table_items->probe_slots[i];
+        HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
+        SlotDescriptor* slot = hash_table_slot.slot;
         auto &column = (*probe_chunk)->get_column_by_slot_id(slot->id());
-
-        if (_table_items->output_slots.empty()
-                || std::find(_table_items->output_slots.begin(), _table_items->output_slots.end(), slot->id()) != _table_items->output_slots.end()
-                || std::find(_table_items->predicate_slots.begin(), _table_items->predicate_slots.end(), slot->id()) != _table_items->predicate_slots.end()) {
-
+        if (hash_table_slot.need_output) {
             if (!column->is_nullable()) {
                 _copy_probe_column(&column, chunk, slot, to_nullable);
             } else {
                 _copy_probe_nullable_column(&column, chunk, slot);
             }
         } else {
-            ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable());
+            ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
             if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
-                default_column->append_default(column->size());
-            } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
-                column->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
                 default_column->append_default(column->size());
             } else {
                 default_column->append_default(_probe_state->count);
@@ -458,7 +452,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_tuple_output(ChunkPtr* probe_
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_null_output(ChunkPtr* chunk, size_t count) {
     for (size_t i = 0; i < _table_items->probe_column_count; i++) {
-        SlotDescriptor* slot = _table_items->probe_slots[i];
+        SlotDescriptor* slot = _table_items->probe_slots[i].slot;
         ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
         column->append_nulls(count);
         (*chunk)->append_column(std::move(column), slot->id());
@@ -471,19 +465,17 @@ template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
     bool to_nullable = _table_items->right_to_nullable;
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
-        SlotDescriptor* slot = _table_items->build_slots[i];
+        HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
+        SlotDescriptor* slot = hash_table_slot.slot;
         ColumnPtr &column = _table_items->build_chunk->columns()[i];
-
-        if (_table_items->output_slots.empty()
-                || std::find(_table_items->output_slots.begin(), _table_items->output_slots.end(), slot->id()) != _table_items->output_slots.end()
-                || std::find(_table_items->predicate_slots.begin(), _table_items->predicate_slots.end(), slot->id()) != _table_items->predicate_slots.end()) {
+        if (hash_table_slot.need_output) {
             if (!column->is_nullable()) {
                 _copy_build_column(column, chunk, slot, to_nullable);
             } else {
                 _copy_build_nullable_column(column, chunk, slot);
             }
-        } else {
-            ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable());
+        }  else {
+            ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
             default_column->append_default(_probe_state->count);
             (*chunk)->append_column(std::move(default_column), slot->id());
         }
@@ -543,7 +535,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_build_tuple_output(ChunkPtr* chunk)
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_build_default_output(ChunkPtr* chunk, size_t count) {
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
-        SlotDescriptor* slot = _table_items->build_slots[i];
+        SlotDescriptor* slot = _table_items->build_slots[i].slot;
         ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
         column->append_nulls(count);
         (*chunk)->append_column(std::move(column), slot->id());

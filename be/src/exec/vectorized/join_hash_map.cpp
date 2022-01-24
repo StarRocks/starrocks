@@ -243,7 +243,17 @@ void JoinHashTable::create(const HashTableParam& param) {
     const auto& probe_desc = *param.probe_row_desc;
     for (const auto& tuple_desc : probe_desc.tuple_descriptors()) {
         for (const auto& slot : tuple_desc->slots()) {
-            _table_items->probe_slots.emplace_back(slot);
+            HashTableSlotDescriptor hash_table_slot;
+            hash_table_slot.slot = slot;
+            if (param.output_slots.empty()
+                || std::find(param.output_slots.begin(), param.output_slots.end(), slot->id()) != param.output_slots.end()
+                || std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) != param.predicate_slots.end()) {
+                hash_table_slot.need_output = true;
+            } else {
+                hash_table_slot.need_output = false;
+            }
+
+            _table_items->probe_slots.emplace_back(hash_table_slot);
             _table_items->probe_column_count++;
         }
         if (_table_items->row_desc->get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
@@ -254,7 +264,17 @@ void JoinHashTable::create(const HashTableParam& param) {
     const auto& build_desc = *param.build_row_desc;
     for (const auto& tuple_desc : build_desc.tuple_descriptors()) {
         for (const auto& slot : tuple_desc->slots()) {
-            _table_items->build_slots.emplace_back(slot);
+            HashTableSlotDescriptor hash_table_slot;
+            hash_table_slot.slot = slot;
+            if (param.output_slots.empty()
+                || std::find(param.output_slots.begin(), param.output_slots.end(), slot->id()) != param.output_slots.end()
+                || std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) != param.predicate_slots.end()) {
+                hash_table_slot.need_output = true;
+            } else {
+                hash_table_slot.need_output = false;
+            }
+
+            _table_items->build_slots.emplace_back(hash_table_slot);
             ColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
             if (slot->is_nullable()) {
                 auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
@@ -268,12 +288,6 @@ void JoinHashTable::create(const HashTableParam& param) {
         if (_table_items->row_desc->get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
             _table_items->output_build_tuple_ids.emplace_back(tuple_desc->id());
         }
-    }
-    for (const auto& slot_id : param.output_slots) {
-        _table_items->output_slots.emplace_back(slot_id);
-    }
-    for (const auto& slot_id : param.predicate_slots) {
-        _table_items->predicate_slots.emplace_back(slot_id);
     }
 }
 
@@ -345,7 +359,7 @@ Status JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     size_t chunk_memory_size = 0;
 
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
-        SlotDescriptor* slot = _table_items->build_slots[i];
+        SlotDescriptor* slot = _table_items->build_slots[i].slot;
         ColumnPtr& column = chunk->get_column_by_slot_id(slot->id());
         chunk_memory_size += column->memory_usage();
 

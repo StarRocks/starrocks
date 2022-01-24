@@ -102,6 +102,7 @@ OutPut Exchange Id: 12
 |  equal join conjunct: [20: L_ORDERKEY, INT, false] = [10: O_ORDERKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (10: O_ORDERKEY), remote = false
+|  output columns: 14, 17, 20, 25, 26
 |  cardinality: 46999957
 |  column statistics:
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.1799208766687468E7] ESTIMATE
@@ -164,6 +165,7 @@ OutPut Exchange Id: 08
 |  equal join conjunct: [11: O_CUSTKEY, INT, false] = [1: C_CUSTKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (1: C_CUSTKEY), remote = false
+|  output columns: 10, 14, 17
 |  cardinality: 21799209
 |  column statistics:
 |  * C_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 3000000.0] ESTIMATE

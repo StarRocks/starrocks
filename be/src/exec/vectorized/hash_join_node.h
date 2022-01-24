@@ -93,8 +93,7 @@ private:
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     TJoinDistributionMode::type _distribution_mode = TJoinDistributionMode::NONE;
-    std::vector<SlotId> _output_slots;
-    std::vector<SlotId> _slots_used_in_conjunct;
+    std::set<SlotId> _output_slots;
 
     bool _is_push_down = false;
     bool _need_create_tuple_columns = true;

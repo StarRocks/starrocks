@@ -5466,4 +5466,33 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  equal join conjunct: 5: v2 = 11: v1\n" +
                 "  |  other predicates: (10: expr) OR (11: v1 IS NOT NULL)"));
     }
+
+    @Test
+    public void testJoinOutput() throws Exception {
+        String sql = "select v1,v4 from t0, t1 where v2 = v5";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("output columns: 1, 4"));
+
+        sql = "select v1+1,v4 from t0, t1 where v2 = v5";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("output columns: 1, 4"));
+
+        sql = "select v2+1,v4 from t0, t1 where v2 = v5";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("output columns: 2, 4"));
+
+        sql = "select v1+1,v4 from t0, t1 where v2 = v5 and v3 > v6";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("output columns: 1, 4"));
+
+        sql = "select (v2+v6 = 1 or v2+v6 = 5) from t0, t1 where v2 = v5 ";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  4:Project\n" +
+                "  |  output columns:\n" +
+                "  |  7 <-> (8: add = 1) OR (8: add = 5)\n" +
+                "  |  common expressions:\n" +
+                "  |  8 <-> [2: v2, BIGINT, true] + [6: v6, BIGINT, true]\n" +
+                "  |  cardinality: 1"));
+        Assert.assertTrue(plan.contains("output columns: 2, 6"));
+    }
 }

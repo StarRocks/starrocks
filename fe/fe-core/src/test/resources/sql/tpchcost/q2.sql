@@ -112,6 +112,7 @@ OutPut Exchange Id: 38
 |  equal join conjunct: [11: S_SUPPKEY, INT, false] = [20: PS_SUPPKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 8, build_expr = (20: PS_SUPPKEY), remote = false
+|  output columns: 1, 3, 12, 13, 15, 16, 17, 26
 |  cardinality: 180000
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
@@ -152,6 +153,7 @@ OutPut Exchange Id: 38
 |  equal join conjunct: [14: S_NATIONKEY, INT, false] = [25: N_NATIONKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (25: N_NATIONKEY), remote = false
+|  output columns: 11, 12, 13, 15, 16, 17, 26
 |  cardinality: 200000
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
@@ -210,6 +212,7 @@ OutPut Exchange Id: 34
 |  build runtime filters:
 |  - filter_id = 6, build_expr = (57: min), remote = false
 |  - filter_id = 7, build_expr = (1: P_PARTKEY), remote = false
+|  output columns: 1, 3, 20
 |  cardinality: 360000
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
@@ -259,6 +262,7 @@ OutPut Exchange Id: 31
 |  equal join conjunct: [34: PS_PARTKEY, INT, false] = [1: P_PARTKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 5, build_expr = (1: P_PARTKEY), remote = false
+|  output columns: 1, 3, 57
 |  cardinality: 100000
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
@@ -291,6 +295,7 @@ OutPut Exchange Id: 31
 |  equal join conjunct: [35: PS_SUPPKEY, INT, false] = [40: S_SUPPKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 4, build_expr = (40: S_SUPPKEY), remote = false
+|  output columns: 34, 37
 |  cardinality: 16000000
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.6E7] ESTIMATE
@@ -363,6 +368,7 @@ OutPut Exchange Id: 22
 |  equal join conjunct: [43: S_NATIONKEY, INT, false] = [48: N_NATIONKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 3, build_expr = (48: N_NATIONKEY), remote = false
+|  output columns: 40
 |  cardinality: 200000
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
@@ -403,6 +409,7 @@ OutPut Exchange Id: 19
 |  equal join conjunct: [50: N_REGIONKEY, INT, false] = [53: R_REGIONKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 2, build_expr = (53: R_REGIONKEY), remote = false
+|  output columns: 48
 |  cardinality: 5
 |  column statistics:
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
@@ -470,6 +477,7 @@ OutPut Exchange Id: 07
 |  equal join conjunct: [27: N_REGIONKEY, INT, false] = [30: R_REGIONKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (30: R_REGIONKEY), remote = false
+|  output columns: 25, 26
 |  cardinality: 5
 |  column statistics:
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE

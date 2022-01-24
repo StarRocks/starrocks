@@ -49,7 +49,7 @@ struct HashJoinerParam {
                     const RowDescriptor& probe_row_descriptor, const RowDescriptor& row_descriptor,
                     TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
-                    const std::vector<SlotId>& output_slots)
+                    const std::set<SlotId>& output_slots)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _node_id(node_id),
@@ -88,7 +88,7 @@ struct HashJoinerParam {
     TPlanNodeType::type _probe_node_type;
     bool _build_conjunct_ctxs_is_empty;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
-    std::vector<SlotId> _output_slots;
+    std::set<SlotId> _output_slots;
 };
 
 class HashJoiner final : public pipeline::ContextWithDependency {
@@ -323,7 +323,7 @@ private:
     const TPlanNodeType::type _build_node_type;
     const TPlanNodeType::type _probe_node_type;
     const bool _build_conjunct_ctxs_is_empty;
-    const std::vector<SlotId>& _output_slots;
+    const std::set<SlotId>& _output_slots;
 
     std::list<ExprContext*> _runtime_in_filters;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
