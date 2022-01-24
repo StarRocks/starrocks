@@ -91,20 +91,7 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        const auto& data = this->data(state).items;
-        const size_t null_count = this->data(state).null_count;
-
-        auto* column = down_cast<ArrayColumn*>(to);
-        auto& offsets = column->offsets_column()->get_data();
-        auto& elements_column = column->elements_column();
-
-        if (null_count > 0) {
-            elements_column->append_nulls(null_count);
-        }
-        for (size_t i = 0; i < data.size(); i++) {
-            elements_column->append_datum(data[i]);
-        }
-        offsets.emplace_back(offsets.back() + data.size() + null_count);
+        return serialize_to_column(ctx, state, to);
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
@@ -112,20 +99,9 @@ public:
         auto& offsets = column->offsets_column()->get_data();
         auto& elements_column = column->elements_column();
 
-        if (!src[0]->is_nullable()) {
-            const auto* input_column = down_cast<const InputColumnType*>(src[0].get());
-
-            for (size_t i = 0; i < chunk_size; i++) {
-                elements_column->append_datum(input_column->get(i));
-                offsets.emplace_back(offsets.back() + 1);
-            }
-        } else {
-            const auto* input_column = down_cast<const NullableColumn*>(src[0].get());
-
-            for (size_t i = 0; i < chunk_size; i++) {
-                elements_column->append_datum(input_column->get(i));
-                offsets.emplace_back(offsets.back() + 1);
-            }
+        for (size_t i = 0; i < chunk_size; i++) {
+            elements_column->append_datum(src[0]->get(i));
+            offsets.emplace_back(offsets.back() + 1);
         }
     }
 

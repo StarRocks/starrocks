@@ -396,12 +396,6 @@ public class FunctionCallExpr extends Expr {
             return;
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
-            if (fnParams.isDistinct()) {
-                throw new AnalysisException("array_agg does not support DISTINCT");
-            }
-        }
-
         if (fnName.getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
             if (children.size() > 2 || children.isEmpty()) {
                 throw new AnalysisException(
@@ -459,6 +453,15 @@ public class FunctionCallExpr extends Expr {
         Expr arg = getChild(0);
         if (arg == null) {
             return;
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+            if (fnParams.isDistinct()) {
+                throw new AnalysisException("array_agg does not support DISTINCT");
+            }
+            if (arg.type.isDecimalV3()) {
+                throw new AnalysisException("array_agg does not support DecimalV3");
+            }
         }
 
         // SUM and AVG cannot be applied to non-numeric types
