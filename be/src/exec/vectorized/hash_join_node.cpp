@@ -165,7 +165,7 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     for (ExprContext* expr_context : _conjunct_ctxs) {
         std::vector<SlotId> expr_slots;
         expr_context->root()->get_slot_ids(&expr_slots);
-        predicate_slots.insert( expr_slots.begin(), expr_slots.end());
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
     }
     for (ExprContext* expr_context : _other_join_conjunct_ctxs) {
         std::vector<SlotId> expr_slots;

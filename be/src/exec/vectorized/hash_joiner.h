@@ -67,7 +67,7 @@ struct HashJoinerParam {
               _probe_node_type(probe_node_type),
               _build_conjunct_ctxs_is_empty(build_conjunct_ctxs_is_empty),
               _build_runtime_filters(build_runtime_filters),
-              _output_slots(output_slots){}
+              _output_slots(output_slots) {}
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
     ~HashJoinerParam() = default;
