@@ -1,6 +1,6 @@
 # StarRocks version 2.0
 
-## 2.0
+## 2.0.0
 
 发布日期：2022年1月5日
 
@@ -35,3 +35,25 @@
 - 修复向量化引擎对`like`的实现 [#722](https://github.com/StarRocks/starrocks/pull/722)
 - 修复`alter table`中谓词is的解析错误[#725](https://github.com/StarRocks/starrocks/pull/725)
 - 修复`curdate`函数没办法格式化日期的问题
+
+## 2.0.1
+
+发布日期： 2022年1月21日
+
+### Imporvement
+
+- 优化StarRocks读取Hive外表时Hive外表隐式数据转换的功能。 [#2829](https://github.com/StarRocks/starrocks/pull/2829)
+- 优化高并发查询场景下，StarRocks CBO优化器采集统计信息时的锁竞争问题。 [#2901](https://github.com/StarRocks/starrocks/pull/2901)
+- 优化CBO的统计信息工作，UNION算子等。
+
+### Bugfix
+
+- 修复低基数全局字典的副本数据不一致问题。 [#2700](https://github.com/StarRocks/starrocks/pull/2700)[#2765](https://github.com/StarRocks/starrocks/pull/2765)
+- 修复数据导入至StarRocks前设置参数`exec_mem_limit`不生效的问题。 [#2693](https://github.com/StarRocks/starrocks/pull/2693)
+  > 参数`exec_mem_limit`用于指定数据导入时单个BE节点计算层使用的内存上限。
+- 修复数据导入至StarRocks时更新主键列的值而触发OOM的问题。 [#2743](https://github.com/StarRocks/starrocks/pull/2743)[#2777](https://github.com/StarRocks/starrocks/pull/2777)
+- 修复StarRocks在查询大数量级的MySQL外部表时的查询卡死问题。 [#2881](https://github.com/StarRocks/starrocks/pull/2881)
+
+### Behavior Change
+
+- StarRocks支持使用Hive外表访问创建在Hive外表上的Amazon S3外表。由于用于访问Amazon S3外表的jar包较大，因此StarRocks二进制产品包目前暂未包含该jar包。如有需要，请单击[Hive_s3_lib](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz)进行下载。
