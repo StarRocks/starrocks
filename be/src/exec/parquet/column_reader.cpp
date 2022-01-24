@@ -636,25 +636,22 @@ public:
         level_t* def_levels = nullptr;
         level_t* rep_levels = nullptr;
         size_t num_levels = 0;
-
         _element_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+
         std::vector<int32_t> offsets(num_levels + 1);
         std::vector<int8_t> is_nulls(num_levels);
         size_t num_offsets = 0;
-
         offsets[0] = 0;
         def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
                           &num_offsets);
-
-        for (int i = 1; i <= num_offsets; i++) {
-            array_column->offsets_column()->append(offsets[i]);
+        if (num_offsets > 0) {
+            array_column->offsets_column()->append_numbers(&offsets[1], num_offsets);
         }
+
         if (_field->is_nullable) {
             DCHECK(dst->is_nullable());
             DCHECK_NOTNULL(nullable_column);
-            for (int i = 1; i <= num_offsets; i++) {
-                nullable_column->null_column()->append(is_nulls[i - 1]);
-            }
+            nullable_column->mutable_null_column()->append_numbers(&is_nulls[0], num_offsets);
         }
 
         return st;
