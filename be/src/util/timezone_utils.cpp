@@ -60,17 +60,15 @@ bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, c
                                         cctz::time_zone& ctz) {
     bool v = false;
     hs_scan(
-        timezone_hsscan.database, timezone.c_str(), timezone.size(), 0, timezone_hsscan.scratch,
-        [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
-            void* ctx) -> int {
-            *((bool*)ctx) = true;
-            return 1;
-        },
-    &v);
+            timezone_hsscan.database, timezone.c_str(), timezone.size(), 0, timezone_hsscan.scratch,
+            [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags, void* ctx) -> int {
+                *((bool*)ctx) = true;
+                return 1;
+            },
+            &v);
 
     if (v) {
         bool positive = (timezone.substr(0, 1) != "-");
-        auto t1 = timezone.substr(1, 2);
 
         //Regular expression guarantees hour and minute mush be int
         int hour = std::stoi(timezone.substr(1, 2));

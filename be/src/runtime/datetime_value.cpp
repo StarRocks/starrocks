@@ -1538,15 +1538,6 @@ bool DateTimeValue::date_add_interval(const TimeInterval& interval, TimeUnit uni
     return true;
 }
 
-bool DateTimeValue::unix_timestamp(int64_t* timestamp, const TimezoneHsScan& timezone_hsscan,
-                                   const std::string& timezone) const {
-    cctz::time_zone ctz;
-    if (!TimezoneUtils::find_cctz_time_zone(timezone_hsscan, timezone, ctz)) {
-        return false;
-    }
-    return unix_timestamp(timestamp, ctz);
-}
-
 bool DateTimeValue::unix_timestamp(int64_t* timestamp, const std::string& timezone) const {
     cctz::time_zone ctz;
     if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
@@ -1561,13 +1552,9 @@ bool DateTimeValue::unix_timestamp(int64_t* timestamp, const cctz::time_zone& ct
     return true;
 }
 
-bool DateTimeValue::from_unixtime(int64_t timestamp, const TimezoneHsScan& timezone_hsscan,
-                                  const std::string& timezone) {
-    cctz::time_zone ctz;
-    if (!TimezoneUtils::find_cctz_time_zone(timezone_hsscan, timezone, ctz)) {
-        return false;
-    }
-    return from_unixtime(timestamp, ctz);
+bool DateTimeValue::from_cctz_timezone(const TimezoneHsScan& timezone_hsscan, const std::string& timezone,
+                                       const cctz::time_zone& ctz) {
+    return TimezoneUtils::find_cctz_time_zone(timezone_hsscan, timezone, ctz);
 }
 
 bool DateTimeValue::from_unixtime(int64_t timestamp, const std::string& timezone) {
