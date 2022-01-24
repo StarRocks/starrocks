@@ -672,7 +672,11 @@ public:
             return VectorizedUnaryFunction<DecimalFrom<true>>::evaluate<FromType, ToType>(column, to_type.precision,
                                                                                           to_type.scale);
         } else {
-            return cast_fn<FromType, ToType>(column);
+            auto result_column = cast_fn<FromType, ToType>(column);
+            if (result_column->is_constant()) {
+                result_column->resize(column->size());
+            }
+            return result_column;
         }
     };
     std::string debug_string() const override {

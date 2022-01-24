@@ -21,6 +21,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
@@ -307,8 +308,8 @@ public class OlapTableSink extends DataSink {
                     Multimap<Long, Long> bePathsMap = tablet.getNormalReplicaBackendPathMap(table.getClusterId());
                     if (bePathsMap.keySet().size() < quorum) {
                         throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
-                                "tablet " + tablet.getId() + " has few replicas: " + bePathsMap.keySet().size()
-                                + ", quorum: " + quorum + ", cluster: " + table.getClusterId());
+                                "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                + tablet.getId() + ", backends: " + Joiner.on(",").join(tablet.getBackends()));
                     }
                     locationParam
                             .addToTablets(new TTabletLocation(tablet.getId(), Lists.newArrayList(bePathsMap.keySet())));

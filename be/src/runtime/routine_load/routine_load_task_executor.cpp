@@ -321,7 +321,7 @@ void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& 
         ctx->need_rollback = false;
     }
     if (ctx->body_sink != nullptr) {
-        ctx->body_sink->cancel();
+        ctx->body_sink->cancel(st);
     }
 }
 

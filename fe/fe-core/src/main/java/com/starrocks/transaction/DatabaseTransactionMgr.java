@@ -56,6 +56,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -492,8 +493,9 @@ public class DatabaseTransactionMgr {
                         for (long tabletBackend : tabletBackends) {
                             Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
                             if (replica == null) {
-                                throw new TransactionCommitFailedException("could not find replica for tablet ["
-                                        + tabletId + "], backend [" + tabletBackend + "]");
+                                Backend backend = Catalog.getCurrentSystemInfo().getBackend(tabletBackend);
+                                throw new TransactionCommitFailedException("Not found replicas of tablet. "
+                                        + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
                             }
                             // if the tablet have no replica's to commit or the tablet is a rolling up tablet, the commit backends maybe null
                             // if the commit backends is null, set all replicas as error replicas
@@ -513,14 +515,15 @@ public class DatabaseTransactionMgr {
                         }
 
                         if (successReplicaNum < quorumReplicaNum) {
-                            LOG.warn("Failed to commit txn [{}]. "
-                                            + "Tablet [{}] success replica num is {} < quorum replica num {} "
-                                            + "while error backends {}",
-                                    transactionId, tablet.getId(), successReplicaNum, quorumReplicaNum,
-                                    Joiner.on(",").join(errorBackendIdsForTablet));
-                            throw new TabletQuorumFailedException(transactionId, tablet.getId(),
-                                    successReplicaNum, quorumReplicaNum,
-                                    errorBackendIdsForTablet);
+                            List<String> errorBackends = new ArrayList<String>();
+                            for (long backendId : errorBackendIdsForTablet) {
+                                Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
+                                errorBackends.add(backend.getHost());
+                            }
+
+                            LOG.warn("Fail to load files. tablet_id: {}, txn_id: {}, backends: {}",
+                                     tablet.getId(), transactionId, tablet.getId(), Joiner.on(",").join(errorBackends));
+                            throw new TabletQuorumFailedException(tablet.getId(), transactionId, errorBackends);
                         }
                     }
                 }
