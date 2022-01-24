@@ -57,6 +57,7 @@
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -618,6 +619,112 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 
 void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+
+    std::unique_ptr<ThreadPool> threadpool;
+    auto st = ThreadPoolBuilder("publish_version")
+                      .set_min_threads(config::partition_publish_version_worker_count)
+                      .set_max_threads(config::partition_publish_version_worker_count)
+                      .set_max_queue_size(32)
+                      .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                      .build(&threadpool);
+
+    // Use a lambda to make code clearer.
+    auto publish_version_in_parallel = [&worker_pool_this, &threadpool](
+                                               const TPublishVersionRequest& publish_version_req,
+                                               std::vector<TTabletId>* error_tablet_ids) -> Status {
+        int64_t transaction_id = publish_version_req.transaction_id;
+        Status error_status = Status::OK();
+
+        // each partition
+        for (auto& par_ver_info : publish_version_req.partition_version_infos) {
+            int64_t partition_id = par_ver_info.partition_id;
+            // get all partition related tablets and check whether the tablet have the related version
+            std::set<TabletInfo> partition_related_tablet_infos;
+            StorageEngine::instance()->tablet_manager()->get_partition_related_tablets(partition_id,
+                                                                                       &partition_related_tablet_infos);
+            if (publish_version_req.strict_mode && partition_related_tablet_infos.empty()) {
+                VLOG(1) << "could not find related tablet for partition " << partition_id << ", skip publish version";
+                continue;
+            }
+
+            map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
+            StorageEngine::instance()->txn_manager()->get_txn_related_tablets(transaction_id, partition_id,
+                                                                              &tablet_related_rs);
+
+            TVersion version = par_ver_info.version;
+
+            std::vector<TabletInfo> tablet_infos;
+            tablet_infos.reserve(tablet_related_rs.size());
+            std::vector<Status> statuses(tablet_related_rs.size(), Status::OK());
+
+            size_t idx = 0;
+            // each tablet
+            for (auto& tablet_rs : tablet_related_rs) {
+                tablet_infos.push_back(tablet_rs.first);
+
+                threadpool->submit_func([&worker_pool_this, &tablet_rs, &statuses, idx, &version, &transaction_id,
+                                         &partition_id]() {
+                    const TabletInfo& tablet_info = tablet_rs.first;
+                    const RowsetSharedPtr& rowset = tablet_rs.second;
+                    auto& status = statuses[idx];
+                    // if rowset is null, it means this be received write task, but failed during write
+                    // and receive fe's publish version task
+                    // this be must return as an error tablet
+                    if (rowset == nullptr) {
+                        LOG(WARNING) << "Not found rowset of tablet: " << tablet_info.tablet_id << ", txn_id "
+                                     << transaction_id;
+                        status = Status::NotFound(fmt::format("Not found rowset of tablet: {}, txn_id: {}",
+                                                              tablet_info.tablet_id, transaction_id));
+                        return;
+                    }
+                    EnginePublishVersionTask engine_task(transaction_id, partition_id, version, tablet_info, rowset);
+
+                    status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+                });
+
+                ++idx;
+            }
+
+            // Wait until that all jobs in threadpool are done.
+            threadpool->wait();
+
+            for (size_t i = 0; i < tablet_infos.size(); ++i) {
+                const auto& tablet_info = tablet_infos[i];
+                const auto& status = statuses[i];
+                if (!status.ok()) {
+                    error_tablet_ids->push_back(tablet_info.tablet_id);
+                    // Use the first non-ok status as error_status.
+                    if (!error_status.ok()) {
+                        error_status = status;
+                    }
+                    continue;
+                }
+                partition_related_tablet_infos.erase(tablet_info);
+            }
+
+            for (auto& tablet_info : partition_related_tablet_infos) {
+                // has to use strict mode to check if check all tablets
+                if (!publish_version_req.strict_mode) {
+                    break;
+                }
+                TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_info.tablet_id);
+                if (tablet == nullptr) {
+                    error_tablet_ids->push_back(tablet_info.tablet_id);
+                } else {
+                    // check if the version exist, if not exist, then set publish failed
+                    if (!tablet->check_version_exist(Version{version, version})) {
+                        error_tablet_ids->push_back(tablet_info.tablet_id);
+                        // TODO(zc)
+                        // generate a pull rowset meta task to pull rowset from remote meta store and storage
+                        // pull rowset meta using tablet_id + txn_id
+                        // it depends on the tablet type to download file or only meta
+                    }
+                }
+            }
+        }
+        return error_status;
+    };
+
     while (true) {
         TAgentTaskRequest agent_task_req;
         TPublishVersionRequest publish_version_req;
@@ -638,14 +745,14 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         StarRocksMetrics::instance()->publish_task_request_total.increment(1);
         LOG(INFO) << "get publish version task, signature:" << agent_task_req.signature;
 
-        std::vector<TTabletId> error_tablet_ids;
+        std::vector<TTableId> error_tablet_ids;
         uint32_t retry_time = 0;
-        Status res = Status::OK();
+        Status status;
+
         while (retry_time < PUBLISH_VERSION_MAX_RETRY) {
             error_tablet_ids.clear();
-            EnginePublishVersionTask engine_task(publish_version_req, &error_tablet_ids);
-            res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-            if (res.ok()) {
+            status = publish_version_in_parallel(publish_version_req, &error_tablet_ids);
+            if (status.ok()) {
                 break;
             } else {
                 LOG(WARNING) << "publish version error, retry. [transaction_id=" << publish_version_req.transaction_id
@@ -656,7 +763,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         }
 
         TFinishTaskRequest finish_task_request;
-        if (!res.ok()) {
+        if (!status.ok()) {
             StarRocksMetrics::instance()->publish_task_failed_total.increment(1);
             // if publish failed, return failed, FE will ignore this error and
             // check error tablet ids and FE will also republish this task
@@ -666,7 +773,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
             LOG(INFO) << "publish_version success. signature:" << agent_task_req.signature;
         }
 
-        res.to_thrift(&finish_task_request.task_status);
+        status.to_thrift(&finish_task_request.task_status);
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);

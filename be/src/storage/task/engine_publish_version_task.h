@@ -29,14 +29,18 @@ namespace starrocks {
 
 class EnginePublishVersionTask : public EngineTask {
 public:
-    EnginePublishVersionTask(TPublishVersionRequest& publish_version_req, vector<TTabletId>* error_tablet_ids);
+    EnginePublishVersionTask(TTransactionId transaction_id, TPartitionId partition_id, TVersion version,
+                             const TabletInfo& tablet_info, const RowsetSharedPtr& rowset);
     ~EnginePublishVersionTask() override = default;
 
     Status finish() override;
 
 private:
-    const TPublishVersionRequest& _publish_version_req;
-    vector<TTabletId>* _error_tablet_ids;
+    const TTransactionId _transaction_id;
+    const TPartitionId _partition_id;
+    const TVersion _version;
+    const TabletInfo _tablet_info;
+    const RowsetSharedPtr _rowset;
 };
 
 } // namespace starrocks
