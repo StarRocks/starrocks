@@ -58,6 +58,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
@@ -972,7 +973,8 @@ public class FunctionCallExpr extends Expr {
     // 4. select reverse(cast(cast(st_circle(...) as varchar) as varchar))) unacceptable
     public static void checkGeoFunctionGeneratedInvalidUtf8(FunctionCallExpr node) throws SemanticException {
         Function fn = node.getFn();
-        if (fn.functionName().toLowerCase().equals("st_astext")) {
+        String fnName = fn.functionName().toLowerCase();
+        if (fnName.equals(FunctionSet.ST_ASTEXT) || !(fn instanceof ScalarFunction)) {
             return;
         }
         int numChildren = node.getChildren().size();
@@ -981,7 +983,9 @@ public class FunctionCallExpr extends Expr {
             Type childType;
             // variadic functions
             if (i > args.length - 1) {
-                Preconditions.checkArgument(fn.hasVarArgs());
+                if (!fn.hasVarArgs()) {
+                    continue;
+                }
                 childType = fn.getVarArgsType();
             } else {
                 childType = fn.getArgs()[i];
@@ -1004,7 +1008,7 @@ public class FunctionCallExpr extends Expr {
             if (child instanceof FunctionCallExpr) {
                 FunctionCallExpr fnCallChild = (FunctionCallExpr) child;
                 String name = fnCallChild.getFn().functionName().toLowerCase();
-                if (!name.equals("st_astext") && name.startsWith("st_")
+                if (!name.equals(FunctionSet.ST_ASTEXT) && name.startsWith(FunctionSet.GEO_FUNCTION_PREFIX)
                         && fnCallChild.getFn().getReturnType().isStringType()) {
                     throw new SemanticException(String.format("Function '%s' cannot invoke '%s'", fn.functionName(), name));
                 }
