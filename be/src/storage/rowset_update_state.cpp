@@ -407,9 +407,9 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     // Be may crash during the rewrite or after the rewrite
     // So the data at the end of the segment_file may be illegal
     // We use partial_rowset_footers to locate the partial_footer so that
-    // the segment can be read normally after be crashe during the rewrite
+    // the segment can be read normally after be crash during rewrite
     // If rewrite is finished, the partial_segment_footer should be removed from rowset_meta
-    // to indicate the new full rowset could be read normally after be restarted
+    // to make sure the new full rowset could be read normally after be restarted
     RETURN_IF_ERROR(_update_rowset_meta(tablet, rowset));
     return Status::OK();
 }
