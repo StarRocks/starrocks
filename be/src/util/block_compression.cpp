@@ -472,12 +472,7 @@ public:
     Status compress(const Slice& input, Slice* output) const override {
         std::vector<Slice> orig_slices;
         orig_slices.emplace_back(input);
-        auto zres = ZlibBlockCompression::compress(orig_slices, output);
-        if (!zres.ok()) {
-            return Status::InvalidArgument(
-                    strings::Substitute("Fail to do ZLib compress, error=$0", zres.get_error_msg()));
-        }
-        return Status::OK();
+        RETURN_IF_ERROR(ZlibBlockCompression::compress(orig_slices, output));
     }
 
     Status decompress(const Slice& input, Slice* output) const override {
@@ -489,7 +484,7 @@ public:
         int ret = inflateInit2(&z_strm, MAX_WBITS + 16);
         if (ret < 0) {
             std::stringstream ss;
-            ss << "Failed to init inflate. status code: " << ret;
+            ss << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret);
             return Status::InternalError(ss.str());
         }
 
@@ -512,24 +507,18 @@ public:
 
             VLOG(10) << "gzip dec ret: " << ret;
 
-            if (ret == Z_BUF_ERROR) {
-                // Z_BUF_ERROR indicates that inflate() could not consume more input or
-                // produce more output. inflate() can be called again with more output space
-                // or more available input
-                // ATTN: even if ret == Z_OK, output_bytes_written may also be zero
-                return Status::OK();
-            } else if (ret == Z_STREAM_END) {
+            if (ret == Z_STREAM_END) {
                 // reset z_strm to continue decoding a subsequent gzip stream
                 ret = inflateReset(&z_strm);
                 if (ret != Z_OK) {
                     std::stringstream ss;
-                    ss << "Failed to inflateRset. return code: " << ret;
+                    ss << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret);
                     (void)inflateEnd(&z_strm);
                     return Status::InternalError(ss.str());
                 }
             } else if (ret != Z_OK) {
                 std::stringstream ss;
-                ss << "Failed to inflate. return code: " << ret;
+                ss << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret);
                 (void)inflateEnd(&z_strm);
                 return Status::InternalError(ss.str());
             } else {
