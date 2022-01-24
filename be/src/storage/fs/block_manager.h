@@ -133,6 +133,8 @@ public:
 
     // Returns the number of bytes successfully appended via Append().
     virtual size_t bytes_appended() const = 0;
+    // Set the number of bytes has been appended
+    virtual void set_bytes_appended(size_t bytes_appended) = 0;
 
     virtual State state() const = 0;
 };

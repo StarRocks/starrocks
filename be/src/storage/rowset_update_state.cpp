@@ -10,6 +10,7 @@
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/tablet.h"
+#include "storage/tablet_meta_manager.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/phmap/phmap.h"
@@ -367,29 +368,56 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
             Env::Default()->delete_file(e.second);
         }
     });
-
+    bool is_rewrite = config::rewrite_partial_segment;
     RETURN_IF_ERROR(
             _check_and_resolve_conflict(tablet, rowset, rowset_id, lastest_applied_version, read_column_ids, index));
+
     for (size_t i = 0; i < num_segments; i++) {
         auto src_path = BetaRowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
         auto dest_path = BetaRowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
         rewrite_files.emplace_back(src_path, dest_path);
+
         int64_t t_rewrite_start = MonotonicMillis();
-        RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
-                                                 _partial_update_states[i].write_columns, i));
+        FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(i);
+        // if is_rewrite is true, rewrite partial segment file into dest_path first, then append write_columns
+        // if is_rewrite is false, append write_columns into src_path and rebuild segment footer
+        if (is_rewrite) {
+            RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
+                                                     _partial_update_states[i].write_columns, i,
+                                                     partial_rowset_footer));
+        } else {
+            RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, tablet->tablet_schema(), read_column_ids,
+                                                     _partial_update_states[i].write_columns, i,
+                                                     partial_rowset_footer));
+        }
         int64_t t_rewrite_end = MonotonicMillis();
         LOG(INFO) << Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
                                 tablet->tablet_id(), rowset_id, i, read_column_ids.size(),
                                 (t_rewrite_end - t_rewrite_start) / 1000000);
     }
-    for (size_t i = 0; i < num_segments; i++) {
-        RETURN_IF_ERROR(Env::Default()->rename_file(rewrite_files[i].second, rewrite_files[i].first));
+    if (is_rewrite) {
+        for (size_t i = 0; i < num_segments; i++) {
+            RETURN_IF_ERROR(Env::Default()->rename_file(rewrite_files[i].second, rewrite_files[i].first));
+        }
     }
     // clean this to prevent DeferOp clean files
     rewrite_files.clear();
     auto beta_rowset = down_cast<BetaRowset*>(rowset);
     RETURN_IF_ERROR(beta_rowset->reload());
+    // Be may crash during the rewrite or after the rewrite
+    // So the data at the end of the segment_file may be illegal
+    // We use partial_rowset_footers to locate the partial_footer so that
+    // the segment can be read normally after be crash during rewrite
+    // If rewrite is finished, the partial_segment_footer should be removed from rowset_meta
+    // to make sure the new full rowset could be read normally after be restarted
+    RETURN_IF_ERROR(_update_rowset_meta(tablet, rowset));
     return Status::OK();
+}
+
+Status RowsetUpdateState::_update_rowset_meta(Tablet* tablet, Rowset* rowset) {
+    rowset->rowset_meta()->release_txn_meta();
+    auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    return TabletMetaManager::write_rowset_meta(tablet->data_dir(), tablet->tablet_id(), rowset_meta_pb, string());
 }
 
 std::string RowsetUpdateState::to_string() const {
