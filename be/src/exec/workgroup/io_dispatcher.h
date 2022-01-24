@@ -14,7 +14,8 @@ class WorkGroupManager;
 class IoDispatcher {
 public:
     explicit IoDispatcher(std::unique_ptr<ThreadPool> thread_pool);
-    virtual ~IoDispatcher() = default;
+    virtual ~IoDispatcher();
+
     void initialize(int32_t num_threads);
     void change_num_threads(int32_t num_threads);
 

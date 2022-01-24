@@ -96,9 +96,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
             auto&& chunk = chunk_source->get_next_chunk_from_buffer();
 
             eval_runtime_bloom_filters(chunk.value().get());
-            if (_workgroup != nullptr) {
-                _workgroup->decrease_chunk_num(1);
-            }
+            _workgroup->decrease_chunk_num(chunk.value()->num_rows());
 
             return std::move(chunk);
         }
@@ -115,7 +113,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // Firstly, find the picked-up morsel, whose can commit an io task.
     for (int i = 0; i < _max_io_tasks_per_op && _num_running_io_tasks < _max_io_tasks_per_op; ++i) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
-            return _trigger_next_scan(state, i);
+            RETURN_IF_ERROR(_trigger_next_scan(state, i));
         }
     }
 
@@ -123,7 +121,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (!_morsel_queue->empty()) {
         for (int i = 0; i < _max_io_tasks_per_op && _num_running_io_tasks < _max_io_tasks_per_op; ++i) {
             if (_chunk_sources[i] == nullptr || (!_is_io_task_running[i] && !_chunk_sources[i]->has_output())) {
-                return _pickup_morsel(state, i);
+                RETURN_IF_ERROR(_pickup_morsel(state, i));
             }
         }
     }

@@ -307,14 +307,14 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
         if (!_status.ok()) {
             // end of file is normal case, need process chunk
             if (_status.is_end_of_file()) {
+                (*num_read_chunks) += chunk->num_rows();
                 _chunk_buffer.put(std::move(chunk));
-                ++(*num_read_chunks);
             }
             break;
         }
 
+        (*num_read_chunks) += chunk->num_rows();
         _chunk_buffer.put(std::move(chunk));
-        ++(*num_read_chunks);
     }
 
     return _status;

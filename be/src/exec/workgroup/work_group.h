@@ -27,42 +27,41 @@ class WorkGroupQueue {
 public:
     WorkGroupQueue() = default;
     virtual ~WorkGroupQueue() = default;
+
     virtual void add(const WorkGroupPtr& wg) = 0;
     virtual void remove(const WorkGroupPtr& wg) = 0;
     virtual WorkGroupPtr pick_next() = 0;
+
+    virtual void close() = 0;
 };
 
 class IoWorkGroupQueue final : public WorkGroupQueue {
 public:
-    IoWorkGroupQueue() : _schedule_num_period(1024) { _cur_wait_run_wgs.resize(_schedule_num_period, nullptr); };
-    ~IoWorkGroupQueue() = default;
+    IoWorkGroupQueue() = default;
+    ~IoWorkGroupQueue() override = default;
+
     void add(const WorkGroupPtr& wg) override {}
     void remove(const WorkGroupPtr& wg) override {}
     WorkGroupPtr pick_next() override { return nullptr; };
 
-    PriorityThreadPool::Task pick_next_task();
+    StatusOr<PriorityThreadPool::Task> pick_next_task();
     bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
 
-private:
-    void adjust_weight_if_need();
-    void schedule_io_task();
+    void close() override;
 
-    size_t get_next_wg_index();
-    WorkGroupPtr get_next_wg();
+private:
+    void _adjust_weight();
+
+    WorkGroupPtr _select_next_wg();
 
 private:
     std::mutex _global_io_mutex;
     std::condition_variable _cv;
 
-    std::vector<WorkGroupPtr> _io_wgs;
+    bool _is_closed = false;
+
     std::unordered_set<WorkGroupPtr> _ready_wgs;
     std::atomic<size_t> _total_task_num = 0;
-    std::atomic<size_t> _cur_index = 0;
-    std::vector<WorkGroupPtr> _cur_wait_run_wgs;
-
-    const size_t _schedule_num_period;
-    std::atomic<int> _cur_schedule_num = 0;
-    size_t _cur_schedule_num_period = 0;
 };
 
 class WorkGroupManager;
@@ -90,11 +89,6 @@ public:
     int id() const { return _id; }
 
     const std::string& name() const { return _name; }
-
-    int get_io_priority() {
-        // TODO: implement io priority computation
-        return 0;
-    }
 
     size_t get_cpu_limit() const { return _cpu_limit; }
     int64_t get_vruntime_ns() const { return _vruntime_ns; }
@@ -138,7 +132,6 @@ public:
 
     // TODO(ZiheLiu): remove them. They are just for test.
     std::atomic<int> num_selected_io_times = 0;
-    std::atomic<int> num_real_selected_io_times = 0;
 
 private:
     std::string _name;
@@ -165,20 +158,15 @@ private:
     // BlockingPriorityQueue<PriorityThreadPool::Task> _io_work_queue;
     std::queue<PriorityThreadPool::Task> _io_work_queue;
 
-    std::atomic<double> _cpu_expect_use_ratio;
-    std::atomic<double> _cpu_actual_use_ratio;
-
     //  some variables for io schedule
     std::atomic<int64_t> _cur_hold_total_chunk_num = 0; // total chunk num wait for consume
     std::atomic<size_t> _increase_chunk_num_period = 1;
     std::atomic<size_t> _decrease_chunk_num_period = 1;
 
-    std::atomic<bool> _is_estimate = false;
-
-    double _expect_factor; // the factor which should be selected to run by scheduler
-    double _diff_factor;
-    double _select_factor;
-    double _cur_select_factor;
+    double _expect_factor = 0; // the factor which should be selected to run by scheduler
+    double _diff_factor = 0;
+    double _select_factor = 0;
+    double _cur_select_factor = 0;
 };
 
 // WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
@@ -196,13 +184,11 @@ public:
     // remove already-existing workgroup from WorkGroupManager
     void remove_workgroup(int wg_id);
 
+    void close();
+
     // get next workgroup for io
-    PriorityThreadPool::Task pick_next_task_for_io();
+    StatusOr<PriorityThreadPool::Task> pick_next_task_for_io();
     bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
-
-    WorkGroupQueue& get_cpu_queue();
-
-    WorkGroupQueue& get_io_queue();
 
     size_t get_sum_cpu_limit() const { return _sum_cpu_limit; }
     void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
@@ -211,7 +197,6 @@ public:
         _sum_unadjusted_cpu_runtime_ns += cpu_runtime_ns;
     }
     int64_t get_sum_unadjusted_cpu_runtime_ns() const { return _sum_unadjusted_cpu_runtime_ns; }
-    double get_cpu_unadjusted_actual_use_ratio() const;
 
     // TODO(ZiheLiu): remove it. It is just for test.
     void log_cpu();
