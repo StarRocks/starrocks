@@ -113,9 +113,10 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto slot = _scanner_params.materialize_slots[i];
         ConverterPtr conv = csv::get_converter(slot->type(), true);
+        RETURN_IF_ERROR(_get_hive_column_index(slot->col_name()));
         if (conv == nullptr) {
-            auto msg = strings::Substitute("Unsupported CSV type $0", slot->type().debug_string());
-            return Status::InternalError(msg);
+            return Status::InternalError(strings::Substitute("Unsupported CSV type $0",
+                                                             slot->type().debug_string()));
         }
         _converters.emplace_back(std::move(conv));
     }
@@ -188,11 +189,17 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 
         bool has_error = false;
         int num_materialize_columns = _scanner_params.materialize_slots.size();
+        if (_scanner_params.hive_column_names->size() > fields.size()) {
+            return Status::InvalidArgument(strings::Substitute("Size mismatch between hive column $0 names and fields $1!",
+                                                               _scanner_params.hive_column_names->size(), fields.size()));
+        }
         for (int j = 0; j < num_materialize_columns; j++) {
             int index = _scanner_params.materialize_index_in_chunk[j];
-            const Slice& field = fields[_scanner_params.materialize_slots[j]->id() - 1];
+            const Slice& field = fields[_columns_index[_scanner_params.materialize_slots[j]->col_name()]];
             options.type_desc = &(_scanner_params.materialize_slots[j]->type());
             if (!_converters[j]->read_string(_column_raw_ptrs[index], field, options)) {
+                LOG(WARNING) << "Converter encountered an error for field " << field.to_string()<< ", index " << index
+                             << ", column " << _scanner_params.materialize_slots[j]->debug_string();
                 chunk->get()->set_num_rows(num_rows);
                 has_error = true;
                 break;
@@ -237,6 +244,17 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
         RETURN_IF_ERROR(down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&dummy));
     }
     return Status::OK();
+}
+
+Status HdfsTextScanner::_get_hive_column_index(const std::string& column_name) {
+    for (int i = 0; i < _scanner_params.hive_column_names->size(); i++) {
+        const std::string& name = _scanner_params.hive_column_names->at(i);
+        if (name == column_name) {
+            _columns_index[name] = i;
+            return Status::OK();
+        }
+    }
+    return Status::InvalidArgument("Can not get index of column name " + column_name);
 }
 
 } // namespace starrocks::vectorized
