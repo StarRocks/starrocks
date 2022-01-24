@@ -473,6 +473,7 @@ public:
         std::vector<Slice> orig_slices;
         orig_slices.emplace_back(input);
         RETURN_IF_ERROR(ZlibBlockCompression::compress(orig_slices, output));
+        return Status::OK();
     }
 
     Status decompress(const Slice& input, Slice* output) const override {
