@@ -22,27 +22,23 @@
 package com.starrocks.transaction;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.Sets;
 
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TabletQuorumFailedException extends TransactionException {
 
-    private static final String TABLET_QUORUM_FAILED_MSG = "Failed to commit txn %s. "
-            + "Tablet [%s] success replica num %s is less then quorum "
-            + "replica num %s while error backends %s";
+    private static final String TABLET_QUORUM_FAILED_MSG = "Fail to load files. tablet_id: %s"
+            + ", txn_id: %s, backends: %s";
 
     private long tabletId;
-    private Set<Long> errorBackendIdsForTablet = Sets.newHashSet();
+    private List<String> errorBackends = new ArrayList<String>();
 
     public TabletQuorumFailedException(long transactionId, long tabletId,
-                                       int successReplicaNum, int quorumReplicaNum,
-                                       Set<Long> errorBackendIdsForTablet) {
-        super(String.format(TABLET_QUORUM_FAILED_MSG, transactionId, tabletId,
-                successReplicaNum, quorumReplicaNum,
-                Joiner.on(",").join(errorBackendIdsForTablet)),
-                transactionId);
+                                       List<String> errorBackends) {
+        super(String.format(TABLET_QUORUM_FAILED_MSG, tabletId, transactionId,
+                            Joiner.on(",").join(errorBackends)));
         this.tabletId = tabletId;
-        this.errorBackendIdsForTablet = errorBackendIdsForTablet;
+        this.errorBackends = errorBackends;
     }
 }
