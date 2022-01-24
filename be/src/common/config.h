@@ -676,6 +676,12 @@ CONF_Bool(use_hdfs_pread, "true");
 // default: true
 CONF_Bool(rewrite_partial_segment, "true");
 
+// properties to access aws s3
+CONF_String(aws_access_key_id, "");
+CONF_String(aws_secret_access_key, "");
+CONF_String(aws_s3_endpoint, "");
+CONF_Int64(aws_s3_max_connection, "128");
+
 } // namespace config
 
 } // namespace starrocks

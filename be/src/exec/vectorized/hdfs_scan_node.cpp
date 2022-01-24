@@ -13,6 +13,7 @@
 #include "exprs/vectorized/runtime_filter.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
@@ -207,6 +208,7 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     scanner_params.runtime_filter_collector = &_runtime_filter_collector;
     scanner_params.scan_ranges = hdfs_file_desc.splits;
     scanner_params.fs = hdfs_file_desc.fs;
+    scanner_params.is_hdfs_fs = hdfs_file_desc.is_hdfs_fs;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -621,7 +623,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
     // if found, add file splits to hdfs file desc
     // if not found, create
     for (auto& item : _hdfs_files) {
-        if (item->partition_id == scan_range.partition_id && item->path == scan_range_path) {
+        if (item->partition_id == scan_range.partition_id && item->scan_range_path == scan_range_path) {
             item->splits.emplace_back(&scan_range);
             return Status::OK();
         }
@@ -639,8 +641,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         native_file_path = file_path.native();
     }
     std::string namenode;
-    RETURN_IF_ERROR(get_name_node_from_path(native_file_path, &namenode));
-    _is_hdfs_fs = is_hdfs_path(namenode.c_str());
+    RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &namenode));
     bool usePread = starrocks::config::use_hdfs_pread || is_object_storage_path(namenode.c_str());
 
     if (namenode.compare("default") == 0) {
@@ -648,26 +649,33 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         auto* env = Env::Default();
         std::unique_ptr<RandomAccessFile> file;
         env->new_random_access_file(native_file_path, &file);
-
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
-        hdfs_file_desc->hdfs_fs = nullptr;
         hdfs_file_desc->fs = std::move(file);
+        hdfs_file_desc->is_hdfs_fs = false;
         hdfs_file_desc->partition_id = scan_range.partition_id;
-        hdfs_file_desc->path = scan_range_path;
+        hdfs_file_desc->scan_range_path = scan_range_path;
         hdfs_file_desc->file_length = scan_range.file_length;
         hdfs_file_desc->splits.emplace_back(&scan_range);
         hdfs_file_desc->hdfs_file_format = scan_range.file_format;
         hdfs_file_desc->open_limit = nullptr;
         _hdfs_files.emplace_back(hdfs_file_desc);
     } else {
-        hdfsFS hdfs;
+        HdfsFsHandle handle;
         std::atomic<int32_t>* open_limit = nullptr;
-        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &hdfs, &open_limit));
+        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, &open_limit));
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
-        hdfs_file_desc->hdfs_fs = hdfs;
-        hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(hdfs, native_file_path, usePread);
+        size_t file_size = scan_range.file_length;
+        hdfs_file_desc->is_hdfs_fs = false;
+        if (handle.type == HdfsFsHandle::Type::HDFS) {
+            hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(handle, native_file_path, file_size, usePread);
+            hdfs_file_desc->is_hdfs_fs = true;
+        } else if (handle.type == HdfsFsHandle::Type::S3) {
+            hdfs_file_desc->fs = std::make_shared<S3RandomAccessFile>(handle, native_file_path, file_size);
+        } else {
+            return Status::InternalError("Unknown HdfsFsHandle::Type $0", static_cast<int>(handle.type));
+        }
         hdfs_file_desc->partition_id = scan_range.partition_id;
-        hdfs_file_desc->path = scan_range_path;
+        hdfs_file_desc->scan_range_path = scan_range_path;
         hdfs_file_desc->file_length = scan_range.file_length;
         hdfs_file_desc->splits.emplace_back(&scan_range);
         hdfs_file_desc->hdfs_file_format = scan_range.file_format;

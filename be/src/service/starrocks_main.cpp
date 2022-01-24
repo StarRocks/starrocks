@@ -19,6 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <aws/core/Aws.h>
 #include <gperftools/malloc_extension.h>
 #include <sys/file.h>
 #include <unistd.h>
@@ -271,13 +272,16 @@ int main(int argc, char** argv) {
         LOG(INFO) << "StarRocks BE HeartBeat Service started correctly.";
     }
 
+    Aws::SDKOptions aws_sdk_options;
+    Aws::InitAPI(aws_sdk_options);
+
     while (!starrocks::k_starrocks_exit) {
         sleep(10);
     }
-
     daemon->stop();
     daemon.reset();
 
+    Aws::ShutdownAPI(aws_sdk_options);
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
     delete heartbeat_thrift_server;

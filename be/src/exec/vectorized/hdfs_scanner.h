@@ -70,6 +70,7 @@ struct HdfsScannerParams {
 
     // file fd (local file or hdfs file)
     std::shared_ptr<RandomAccessFile> fs = nullptr;
+    bool is_hdfs_fs = false;
 
     const TupleDescriptor* tuple_desc;
 

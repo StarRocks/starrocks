@@ -217,6 +217,9 @@ public:
     RandomAccessFile() = default;
     virtual ~RandomAccessFile() = default;
 
+    virtual Status open() { return Status::OK(); }
+    virtual void close() {}
+
     // Read up to "result.size" bytes from the file.
     // Copies the resulting data into "result.data".
     //

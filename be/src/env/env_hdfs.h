@@ -5,33 +5,73 @@
 #include <hdfs/hdfs.h>
 
 #include "env/env.h"
+#include "env/s3_client.h"
 
 namespace starrocks {
+
+struct HdfsFsHandle {
+    enum class Type { HDFS, S3 };
+    Type type;
+    std::string namenode;
+    hdfsFS hdfs_fs;
+    S3Client* s3_client;
+};
 
 // class for remote read hdfs file
 // Now this is not thread-safe.
 class HdfsRandomAccessFile : public RandomAccessFile {
 public:
-    HdfsRandomAccessFile(hdfsFS fs, std::string filename, bool usePread);
+    HdfsRandomAccessFile(const HdfsFsHandle& handle, const std::string& file_name, size_t file_size, bool usePread);
     virtual ~HdfsRandomAccessFile() noexcept;
 
-    Status open();
-    void close() noexcept;
+    Status open() override;
+    void close() override;
     Status read(uint64_t offset, Slice* res) const override;
     Status read_at(uint64_t offset, const Slice& res) const override;
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
 
-    Status size(uint64_t* size) const override;
-    const std::string& file_name() const override { return _filename; }
+    Status size(uint64_t* size) const override {
+        *size = _file_size;
+        return Status::OK();
+    }
+    const std::string& file_name() const override { return _file_name; }
 
     hdfsFile hdfs_file() const { return _file; }
 
 private:
+    Status _read_at(int64_t offset, char* data, size_t size, size_t* read_size) const;
     bool _opened;
     hdfsFS _fs;
     hdfsFile _file;
-    std::string _filename;
+    std::string _file_name;
+    size_t _file_size;
     bool _usePread;
 };
 
+class S3RandomAccessFile : public RandomAccessFile {
+public:
+    S3RandomAccessFile(const HdfsFsHandle& handle, const std::string& file_name, size_t file_size);
+    virtual ~S3RandomAccessFile() noexcept;
+
+    Status open() override;
+    void close() override;
+    Status read(uint64_t offset, Slice* res) const override;
+    Status read_at(uint64_t offset, const Slice& res) const override;
+    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
+
+    Status size(uint64_t* size) const override {
+        *size = _file_size;
+        return Status::OK();
+    }
+    const std::string& file_name() const override { return _file_name; }
+
+private:
+    void _init(const HdfsFsHandle& handle);
+    bool _opened;
+    S3Client* _client;
+    std::string _file_name;
+    size_t _file_size;
+    std::string _bucket;
+    std::string _object;
+};
 } // namespace starrocks
