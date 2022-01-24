@@ -456,7 +456,7 @@ public class CreateFunctionStmt extends DdlStmt {
     }
 
     private void analyzeStarrocksJarUdaf() throws AnalysisException {
-        isAnalyticFn = "true".equals(properties.get(IS_ANALYTIC_NAME));
+        isAnalyticFn = "true".equalsIgnoreCase(properties.get(IS_ANALYTIC_NAME));
         checkStarrocksJarUdafStateClass();
         checkStarrocksJarUdafClass();
         AggregateFunction.AggregateFunctionBuilder builder =
