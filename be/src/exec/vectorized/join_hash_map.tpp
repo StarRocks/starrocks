@@ -404,11 +404,7 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chun
             }
         } else {
             ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
-            if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
-                default_column->append_default(column->size());
-            } else {
-                default_column->append_default(_probe_state->count);
-            }
+            default_column->append_default(_probe_state->count);
             (*chunk)->append_column(std::move(default_column), slot->id());
         }
     }
