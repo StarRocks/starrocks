@@ -84,7 +84,7 @@ void test_single_slice(starrocks::CompressionTypePB type) {
                 ASSERT_FALSE(st.ok());
             }
             // corrupt compressed data
-            // we use inflate for gzip decompressor, it will return Status::OK for this case
+            // we use inflate for gzip decompressor, it will return Z_OK for this case
             if (type != starrocks::CompressionTypePB::SNAPPY && type != starrocks::CompressionTypePB::GZIP) {
                 Slice uncompressed_slice(uncompressed);
                 compressed_slice.size -= 1;
