@@ -353,6 +353,15 @@ public class DynamicPartitionUtil {
         }
     }
 
+    public static void checkAndSetDynamicPartitionBuckets(Map<String, String> properties, int bucketNum) {
+        if (properties == null || properties.isEmpty()) {
+            return;
+        }
+        if (!Strings.isNullOrEmpty(properties.get(DynamicPartitionProperty.ENABLE))) {
+            properties.putIfAbsent(DynamicPartitionProperty.BUCKETS, String.valueOf(bucketNum));
+        }
+    }
+
     public static String getPartitionFormat(Column column) throws DdlException {
         if (column.getPrimitiveType().equals(PrimitiveType.DATE)) {
             return DATE_FORMAT;

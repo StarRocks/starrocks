@@ -56,6 +56,7 @@ public class HashDistributionDesc extends DistributionDesc {
         return distributionColumnNames;
     }
 
+    @Override
     public int getBuckets() {
         return numBucket;
     }

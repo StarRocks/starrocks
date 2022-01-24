@@ -32,12 +32,12 @@ import java.util.Map;
 public class ValuesTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
-    Map<String, ExpressionMapping> cteContex;
+    Map<Integer, ExpressionMapping> cteContex;
 
     private final BitSet subqueriesIndex = new BitSet();
     private final List<ColumnRefOperator> outputColumns = Lists.newArrayList();
 
-    ValuesTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, Map<String, ExpressionMapping> cteContex) {
+    ValuesTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, Map<Integer, ExpressionMapping> cteContex) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContex = cteContex;
