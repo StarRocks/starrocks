@@ -43,7 +43,7 @@ private:
     std::vector<DirectByteBuffer>& _buffers;
 };
 
-class JavaWindowFunction final : public JavaUDAFAggregateFunction<false> {
+class JavaWindowFunction final : public JavaUDAFAggregateFunction<true> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         ctx->impl()->udaf_ctxs()->_func->reset(data(state).handle);
