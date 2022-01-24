@@ -28,6 +28,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.FEFunction;
@@ -44,9 +45,6 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
-import java.time.format.SignStyle;
-import java.time.format.TextStyle;
-import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -117,7 +115,7 @@ public class ScalarOperatorFunctions {
         String format = fmtLiteral.getVarchar();
         // unix style
         if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
-            DateTimeFormatterBuilder builder = unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
+            DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
             return ConstantOperator.createVarchar(builder.toFormatter().format(date.getDatetime()));
         } else {
             String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
@@ -127,7 +125,7 @@ public class ScalarOperatorFunctions {
 
     @FEFunction(name = "str_to_date", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "DATETIME")
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatterBuilder builder = unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
+        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
 
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
             LocalDateTime ldt = LocalDateTime.from(builder.toFormatter().parse(date.getVarchar()));
@@ -140,7 +138,7 @@ public class ScalarOperatorFunctions {
 
     @FEFunction(name = "str2date", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "DATE")
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatterBuilder builder = unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
+        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
         LocalDate ld = LocalDate.from(builder.toFormatter().parse(date.getVarchar()));
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
@@ -446,110 +444,4 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDecimal(result, type);
     }
 
-    private static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern) {
-        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
-        boolean escaped = false;
-        for (int i = 0; i < pattern.length(); i++) {
-            char character = pattern.charAt(i);
-            if (escaped) {
-                switch (character) {
-                    case 'c': // %c Month, numeric (0..12)
-                        builder.appendValue(ChronoField.MONTH_OF_YEAR, 1, 2, SignStyle.NORMAL);
-                        break;
-                    case 'm': // %m Month, numeric (00..12)
-                        builder.appendValue(ChronoField.MONTH_OF_YEAR, 2);
-                        break;
-                    case 'd': // %d Day of the month, numeric (00..31)
-                        builder.appendValue(ChronoField.DAY_OF_MONTH, 2);
-                        break;
-                    case 'e': // %e Day of the month, numeric (0..31)
-                        builder.appendValue(ChronoField.DAY_OF_MONTH, 1, 2, SignStyle.NORMAL);
-                        break;
-                    case 'H': // %H Hour (00..23)
-                        builder.appendValue(ChronoField.HOUR_OF_DAY, 2);
-                        break;
-                    case 'k': // %k Hour (0..23)
-                        builder.appendValue(ChronoField.HOUR_OF_DAY, 1, 2, SignStyle.NORMAL);
-                        break;
-                    case 'h': // %h Hour (01..12)
-                    case 'I': // %I Hour (01..12)
-                        builder.appendValue(ChronoField.CLOCK_HOUR_OF_AMPM, 2);
-                        break;
-                    case 'l': // %l Hour (1..12)
-                        builder.appendValue(ChronoField.CLOCK_HOUR_OF_AMPM, 1, 2, SignStyle.NORMAL);
-                        break;
-                    case 'i': // %i Minutes, numeric (00..59)
-                        builder.appendValue(ChronoField.MINUTE_OF_HOUR, 2);
-                        break;
-                    case 'j': // %j Day of year (001..366)
-                        builder.appendValue(ChronoField.DAY_OF_YEAR, 3);
-                        break;
-                    case 'p': // %p AM or PM
-                        builder.appendText(ChronoField.AMPM_OF_DAY, TextStyle.FULL);
-                        break;
-                    case 'r': // %r Time, 12-hour (hh:mm:ss followed by AM or PM)
-                        builder.appendValue(ChronoField.CLOCK_HOUR_OF_AMPM, 2)
-                                .appendLiteral(':')
-                                .appendValue(ChronoField.MINUTE_OF_HOUR, 2)
-                                .appendLiteral(':')
-                                .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
-                                .appendLiteral(' ')
-                                .appendText(ChronoField.AMPM_OF_DAY, TextStyle.FULL);
-                        break;
-                    case 'S': // %S Seconds (00..59)
-                    case 's': // %s Seconds (00..59)
-                        builder.appendValue(ChronoField.SECOND_OF_MINUTE, 2);
-                        break;
-                    case 'T': // %T Time, 24-hour (hh:mm:ss)
-                        builder.appendValue(ChronoField.HOUR_OF_DAY, 2)
-                                .appendLiteral(':')
-                                .appendValue(ChronoField.MINUTE_OF_HOUR, 2)
-                                .appendLiteral(':')
-                                .appendValue(ChronoField.SECOND_OF_MINUTE, 2);
-                        break;
-                    case 'v': // %v Week (01..53), where Monday is the first day of the week; used with %x
-                        builder.appendValue(ChronoField.ALIGNED_WEEK_OF_YEAR, 2);
-                        break;
-                    case 'Y': // %Y Year, numeric, four digits
-                        builder.appendValue(ChronoField.YEAR, 4);
-                        break;
-                    case 'y': // %y Year, numeric (two digits)
-                        builder.appendValueReduced(ChronoField.YEAR_OF_ERA, 2, 2, 2020);
-                        break;
-                    case 'w': // %w Day of the week (0=Sunday..6=Saturday)
-                        builder.appendValue(ChronoField.DAY_OF_WEEK, 1);
-                        break;
-                    case 'f': // %f Microseconds (000000..999999)
-                        builder.appendValue(ChronoField.MICRO_OF_SECOND, 6);
-                        break;
-                    case 'u': // %u Week (00..53), where Monday is the first day of the week
-                        builder.appendValueReduced(ChronoField.ALIGNED_WEEK_OF_YEAR, 2, 2, 0);
-                        break;
-                    case 'U': // %U Week (00..53), where Sunday is the first day of the week
-                    case 'W': // %W Weekday name (Sunday..Saturday)
-                    case 'x': // %x Year for the week, where Monday is the first day of the week, numeric, four digits; used with %v
-                    case 'M': // %M Month name (January..December)
-                    case 'a': // %a Abbreviated weekday name (Sun..Sat)
-                    case 'b': // %b Abbreviated month name (Jan..Dec)
-                    case 'V': // %V Week (01..53), where Sunday is the first day of the week; used with %X
-                    case 'X': // %X Year for the week where Sunday is the first day of the week, numeric, four digits; used with %V
-                    case 'D': // %D Day of the month with English suffix (0th, 1st, 2nd, 3rd, ...)
-                        throw new IllegalArgumentException(
-                                String.format("%%%s not supported in date format string", character));
-                    case '%': // %% A literal "%" character
-                        builder.appendLiteral('%');
-                        break;
-                    default: // %<x> The literal character represented by <x>
-                        builder.appendLiteral(character);
-                        break;
-                }
-                escaped = false;
-            } else if (character == '%') {
-                escaped = true;
-            } else {
-                builder.appendLiteral(character);
-            }
-        }
-        return builder;
-    }
 }
