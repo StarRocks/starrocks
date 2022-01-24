@@ -252,15 +252,11 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_seg
 
 Status HorizontalBetaRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
     if (_segment_writer == nullptr) {
-        auto segment_writer = _create_segment_writer();
-        if (!segment_writer.ok()) return segment_writer.status();
-        _segment_writer = std::move(segment_writer).value();
+        ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
     } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
                _segment_writer->num_rows_written() + chunk.num_rows() >= _context.max_rows_per_segment) {
         RETURN_IF_ERROR(_flush_segment_writer(&_segment_writer));
-        auto segment_writer = _create_segment_writer();
-        if (!segment_writer.ok()) return segment_writer.status();
-        _segment_writer = std::move(segment_writer).value();
+        ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
     }
 
     RETURN_IF_ERROR(_segment_writer->append_chunk(chunk));
@@ -271,15 +267,11 @@ Status HorizontalBetaRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
 
 Status HorizontalBetaRowsetWriter::add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
     if (_segment_writer == nullptr) {
-        auto segment_writer = _create_segment_writer();
-        if (!segment_writer.ok()) return segment_writer.status();
-        _segment_writer = std::move(segment_writer).value();
+        ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
     } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
                _segment_writer->num_rows_written() + chunk.num_rows() >= _context.max_rows_per_segment) {
         RETURN_IF_ERROR(_flush_segment_writer(&_segment_writer));
-        auto segment_writer = _create_segment_writer();
-        if (!segment_writer.ok()) return segment_writer.status();
-        _segment_writer = std::move(segment_writer).value();
+        ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
     }
 
     RETURN_IF_ERROR(_segment_writer->append_chunk(chunk));
