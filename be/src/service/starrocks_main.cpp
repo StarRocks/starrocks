@@ -57,6 +57,8 @@
 #include "util/thrift_util.h"
 #include "util/uid_util.h"
 
+DECLARE_bool(s2debug);
+
 static void help(const char*);
 
 #include <dlfcn.h>
@@ -95,6 +97,9 @@ int main(int argc, char** argv) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
         exit(-1);
     }
+
+    // S2 will crashes when deserialization fails and FLAGS_s2debug was true
+    FLAGS_s2debug = false;
 
     using starrocks::Status;
     using std::string;
