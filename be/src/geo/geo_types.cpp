@@ -310,7 +310,7 @@ void GeoPolygon::encode(std::string* buf) {
 bool GeoPolygon::decode(const void* data, size_t size) {
     Decoder decoder(data, size);
     _polygon = std::make_unique<S2Polygon>();
-    return _polygon->Decode(&decoder);
+    return _polygon->Decode(&decoder) && _polygon->IsValid();
 }
 
 std::string GeoLine::as_wkt() const {
@@ -484,7 +484,7 @@ void GeoCircle::encode(std::string* buf) {
 bool GeoCircle::decode(const void* data, size_t size) {
     Decoder decoder(data, size);
     _cap = std::make_unique<S2Cap>();
-    return _cap->Decode(&decoder);
+    return _cap->Decode(&decoder) && _cap->is_valid();
 }
 
 std::string GeoCircle::as_wkt() const {
