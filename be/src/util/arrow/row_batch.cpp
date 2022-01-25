@@ -44,7 +44,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "util/arrow/utils.h"
-#include "util/types.h"
 
 namespace starrocks {
 

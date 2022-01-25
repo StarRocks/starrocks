@@ -37,7 +37,6 @@
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 #include "util/date_func.h"
-#include "util/types.h"
 
 namespace starrocks {
 

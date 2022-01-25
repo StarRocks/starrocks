@@ -44,6 +44,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
@@ -57,6 +58,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.

@@ -69,12 +69,17 @@ struct JoinKeyDesc {
     bool is_null_safe_equal;
 };
 
+struct HashTableSlotDescriptor {
+    SlotDescriptor* slot;
+    bool need_output;
+};
+
 struct JoinHashTableItems {
     //TODO: memory continus problem?
     ChunkPtr build_chunk = nullptr;
     Columns key_columns;
-    Buffer<SlotDescriptor*> build_slots;
-    Buffer<SlotDescriptor*> probe_slots;
+    Buffer<HashTableSlotDescriptor> build_slots;
+    Buffer<HashTableSlotDescriptor> probe_slots;
     Buffer<TupleId> output_build_tuple_ids;
     Buffer<TupleId> output_probe_tuple_ids;
     const RowDescriptor* row_desc;
@@ -155,6 +160,8 @@ struct HashTableParam {
     const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
+    std::set<SlotId> output_slots;
+    std::set<SlotId> predicate_slots;
     std::vector<JoinKeyDesc> join_keys;
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;

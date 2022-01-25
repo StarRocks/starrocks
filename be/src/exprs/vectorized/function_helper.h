@@ -5,7 +5,6 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/type_traits.h"
-#include "util/types.h"
 
 namespace starrocks {
 namespace vectorized {

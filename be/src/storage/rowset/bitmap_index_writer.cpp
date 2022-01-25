@@ -28,6 +28,7 @@
 
 #include "env/env.h"
 #include "runtime/mem_pool.h"
+#include "storage/olap_type_infra.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
@@ -191,57 +192,17 @@ private:
 
 } // namespace
 
+struct BitmapIndexWriterBuilder {
+    template <FieldType ftype>
+    std::unique_ptr<BitmapIndexWriter> operator()(const TypeInfoPtr& typeinfo) {
+        return std::make_unique<BitmapIndexWriterImpl<ftype>>(typeinfo);
+    }
+};
+
 Status BitmapIndexWriter::create(const TypeInfoPtr& typeinfo, std::unique_ptr<BitmapIndexWriter>* res) {
     FieldType type = typeinfo->type();
-    switch (type) {
-    case OLAP_FIELD_TYPE_TINYINT:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_TINYINT>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_SMALLINT:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_SMALLINT>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_INT:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_INT>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_UNSIGNED_INT>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_BIGINT:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_BIGINT>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_CHAR:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_CHAR>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_VARCHAR:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_VARCHAR>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DATE:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_DATE>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DATE_V2:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_DATE_V2>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DATETIME:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_DATETIME>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_TIMESTAMP>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_LARGEINT:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_LARGEINT>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL_V2>>(typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_BOOL:
-        *res = std::make_unique<BitmapIndexWriterImpl<OLAP_FIELD_TYPE_BOOL>>(typeinfo);
-        break;
-    default:
-        return Status::NotSupported("unsupported type for bitmap index: " + std::to_string(type));
-    }
+    *res = field_type_dispatch_bitmap_index(type, BitmapIndexWriterBuilder(), typeinfo);
+
     return Status::OK();
 }
 

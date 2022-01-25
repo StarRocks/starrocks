@@ -104,6 +104,7 @@ public class ExpressionAnalyzer {
         private final ConnectContext session;
         private final Catalog catalog;
 
+
         public Visitor(AnalyzeState analyzeState, Catalog catalog, ConnectContext session) {
             this.analyzeState = analyzeState;
             this.session = session;
@@ -603,6 +604,7 @@ public class ExpressionAnalyzer {
             }
             return fn;
         }
+
 
         @Override
         public Void visitGroupingFunctionCall(GroupingFunctionCallExpr node, Scope scope) {

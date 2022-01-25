@@ -795,7 +795,14 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     auto row_desc = create_row_desc(object_pool, &row_desc_builder, false);
-    table_items.probe_slots = row_desc->tuple_descriptors()[0]->slots();
+    vector<HashTableSlotDescriptor> hash_table_slot_vec;
+    for (size_t i = 0; i < row_desc->tuple_descriptors()[0]->slots().size(); ++i) {
+        HashTableSlotDescriptor hash_table_slot;
+        hash_table_slot.slot = row_desc->tuple_descriptors()[0]->slots()[i];
+        hash_table_slot.need_output = true;
+        hash_table_slot_vec.emplace_back(hash_table_slot);
+    }
+    table_items.probe_slots = hash_table_slot_vec;
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
 
@@ -824,7 +831,15 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     auto row_desc = create_row_desc(object_pool, &row_desc_builder, false);
-    table_items.build_slots = row_desc->tuple_descriptors()[0]->slots();
+
+    vector<HashTableSlotDescriptor> hash_table_slot_vec;
+    for (size_t i = 0; i < row_desc->tuple_descriptors()[0]->slots().size(); ++i) {
+        HashTableSlotDescriptor hash_table_slot;
+        hash_table_slot.slot = row_desc->tuple_descriptors()[0]->slots()[i];
+        hash_table_slot.need_output = true;
+        hash_table_slot_vec.emplace_back(hash_table_slot);
+    }
+    table_items.build_slots = hash_table_slot_vec;
 
     auto chunk = std::make_shared<Chunk>();
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);

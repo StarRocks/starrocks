@@ -32,7 +32,6 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "util/date_func.h"
-#include "util/types.h"
 #include "util/uid_util.h"
 
 namespace starrocks {

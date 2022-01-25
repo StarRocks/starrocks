@@ -5,6 +5,8 @@
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "exprs/vectorized/binary_function.h"
+#include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 
 namespace starrocks::vectorized {
 
@@ -82,61 +84,35 @@ public:
     }
 };
 
-template <PrimitiveType data_type>
-static Expr* create_binary_predicate(const TExprNode& node) {
-    switch (node.opcode) {
-    case TExprOpcode::EQ:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredEq>(node);
-    case TExprOpcode::NE:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredNe>(node);
-    case TExprOpcode::LT:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredLt>(node);
-    case TExprOpcode::LE:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredLe>(node);
-    case TExprOpcode::GT:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredGt>(node);
-    case TExprOpcode::GE:
-        return new VectorizedBinaryPredicate<data_type, BinaryPredGe>(node);
-    case TExprOpcode::EQ_FOR_NULL:
-        return new VectorizedNullSafeEqPredicate<data_type, BinaryPredEq>(node);
-    default:
-        break;
+struct BinaryPredicateBuilder {
+    template <PrimitiveType data_type>
+    Expr* operator()(const TExprNode& node) {
+        switch (node.opcode) {
+        case TExprOpcode::EQ:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredEq>(node);
+        case TExprOpcode::NE:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredNe>(node);
+        case TExprOpcode::LT:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredLt>(node);
+        case TExprOpcode::LE:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredLe>(node);
+        case TExprOpcode::GT:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredGt>(node);
+        case TExprOpcode::GE:
+            return new VectorizedBinaryPredicate<data_type, BinaryPredGe>(node);
+        case TExprOpcode::EQ_FOR_NULL:
+            return new VectorizedNullSafeEqPredicate<data_type, BinaryPredEq>(node);
+        default:
+            break;
+        }
+        return nullptr;
     }
-    return nullptr;
-}
+};
 
 Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     PrimitiveType type = thrift_to_type(node.child_type);
 
-#define CASE_SWITCH_OP(TYPE) \
-    case TYPE:               \
-        return create_binary_predicate<TYPE>(node)
-
-    switch (type) {
-        CASE_SWITCH_OP(TYPE_BOOLEAN);
-        CASE_SWITCH_OP(TYPE_TINYINT);
-        CASE_SWITCH_OP(TYPE_SMALLINT);
-        CASE_SWITCH_OP(TYPE_INT);
-        CASE_SWITCH_OP(TYPE_BIGINT);
-        CASE_SWITCH_OP(TYPE_LARGEINT);
-        CASE_SWITCH_OP(TYPE_FLOAT);
-        CASE_SWITCH_OP(TYPE_DOUBLE);
-        CASE_SWITCH_OP(TYPE_DECIMALV2);
-        CASE_SWITCH_OP(TYPE_TIME);
-        CASE_SWITCH_OP(TYPE_DATE);
-        CASE_SWITCH_OP(TYPE_DATETIME);
-        CASE_SWITCH_OP(TYPE_CHAR);
-        CASE_SWITCH_OP(TYPE_VARCHAR);
-        CASE_SWITCH_OP(TYPE_DECIMAL32);
-        CASE_SWITCH_OP(TYPE_DECIMAL64);
-        CASE_SWITCH_OP(TYPE_DECIMAL128);
-    default:
-        break;
-    }
-    DCHECK(false) << "Unsupported binary predicate: " << node.opcode << " type: " << type;
-    return nullptr;
+    return type_dispatch_predicate(type, BinaryPredicateBuilder(), node);
 }
-
-#undef CASE_SWITCH_OP
 
 } // namespace starrocks::vectorized

@@ -111,6 +111,7 @@ set(EXEC_FILES
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
+        ./io/array_random_access_file_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
@@ -190,7 +191,6 @@ set(EXEC_FILES
         ./runtime/result_queue_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
-        ./runtime/string_buffer_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/thread_resource_mgr_test.cpp
@@ -238,7 +238,6 @@ set(EXEC_FILES
         ./util/tdigest_test.cpp
         ./util/thread_test.cpp
         ./util/trace_test.cpp
-        ./util/types_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
         ./util/buffered_stream_test.cpp

@@ -3,6 +3,7 @@
 #include "exprs/vectorized/array_functions.h"
 
 #include "column/array_column.h"
+#include "column/column_hash.h"
 #include "util/raw_container.h"
 
 namespace starrocks::vectorized {
