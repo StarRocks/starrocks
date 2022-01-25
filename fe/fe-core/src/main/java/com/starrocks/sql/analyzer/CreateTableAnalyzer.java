@@ -29,7 +29,7 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.ast.Relation;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.HashSet;

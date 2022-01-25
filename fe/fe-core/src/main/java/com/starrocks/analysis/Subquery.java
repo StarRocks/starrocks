@@ -29,9 +29,9 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.thrift.TExprNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -232,7 +232,7 @@ public class Subquery extends Expr {
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitSubquery(this, context);
     }
 

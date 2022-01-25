@@ -31,7 +31,7 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -325,7 +325,7 @@ public class CastExpr extends Expr {
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitCastExpr(this, context);
     }
 

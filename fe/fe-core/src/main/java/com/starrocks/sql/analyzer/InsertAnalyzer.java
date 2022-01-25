@@ -17,10 +17,10 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.relation.InsertRelation;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.Relation;
-import com.starrocks.sql.analyzer.relation.ValuesRelation;
+import com.starrocks.sql.ast.InsertRelation;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;

@@ -24,7 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -137,7 +137,7 @@ public class LikePredicate extends Predicate {
     }
 
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitLikePredicate(this, context);
     }
 }

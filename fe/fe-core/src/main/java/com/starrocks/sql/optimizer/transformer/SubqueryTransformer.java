@@ -14,12 +14,12 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.Relation;
-import com.starrocks.sql.analyzer.relation.SelectRelation;
-import com.starrocks.sql.analyzer.relation.ValuesRelation;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -101,7 +101,7 @@ public class SubqueryTransformer {
         }
     }
 
-    private static class FilterWithSubqueryHandler extends ExprVisitor<OptExprBuilder, SubqueryContext> {
+    private static class FilterWithSubqueryHandler extends AstVisitor<OptExprBuilder, SubqueryContext> {
         private final ColumnRefFactory columnRefFactory;
         private final ConnectContext session;
 

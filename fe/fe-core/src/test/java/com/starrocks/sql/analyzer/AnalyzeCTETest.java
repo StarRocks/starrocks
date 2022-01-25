@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;

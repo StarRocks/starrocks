@@ -1,5 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-package com.starrocks.sql.analyzer.relation;
+package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 
@@ -30,7 +30,7 @@ public class ValuesRelation extends QueryRelation {
         return rows.get(0);
     }
 
-    public <R, C> R accept(RelationVisitor<R, C> visitor, C context) {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitValues(this, context);
     }
 }

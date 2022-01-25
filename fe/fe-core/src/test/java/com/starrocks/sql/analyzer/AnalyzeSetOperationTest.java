@@ -2,7 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
