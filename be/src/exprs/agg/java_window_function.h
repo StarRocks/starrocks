@@ -15,7 +15,7 @@
 namespace starrocks::vectorized {
 void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val);
 
-// Column to DirectByteBuffer, which could avoid some memory memory copy,
+// Column to DirectByteBuffer, which could avoid some memory copy,
 // directly access the C++ address space in Java
 // Because DirectBuffer does not hold the referece of these memory,
 // we must ensure that it is valid during accesses to it
