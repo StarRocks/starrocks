@@ -309,10 +309,10 @@ double MathFunctions::double_round(double value, int64_t dec, bool dec_unsigned,
 
 bool MathFunctions::decimal_in_base_to_decimal(int64_t src_num, int8_t src_base, int64_t* result) {
     uint64_t temp_num = std::abs(src_num);
-    int32_t place = 1;
+    int64_t place = 1;
     *result = 0;
     do {
-        int32_t digit = temp_num % 10;
+        int64_t digit = temp_num % 10;
         // Reset result if digit is not representable in src_base.
         if (digit >= src_base) {
             *result = 0;
@@ -400,14 +400,9 @@ ColumnPtr MathFunctions::conv_int(FunctionContext* context, const starrocks::vec
             continue;
         }
 
-        if (src_base_value < 0 && binint_value >= 0) {
-            result.append_null();
-            continue;
-        }
-
         int64_t decimal_num = binint_value;
         if (src_base_value != 10) {
-            if (!decimal_in_base_to_decimal(binint_value, src_base_value, &decimal_num)) {
+            if (!decimal_in_base_to_decimal(binint_value, std::abs(src_base_value), &decimal_num)) {
                 handle_parse_result(dest_base_value, &decimal_num, StringParser::PARSE_OVERFLOW);
             }
         }
@@ -439,22 +434,46 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const starrocks::
             result.append_null();
             continue;
         }
-
-        StringParser::ParseResult parse_res;
-        int64_t decimal_num = StringParser::string_to_int<int64_t>(reinterpret_cast<char*>(string_value.data),
-                                                                   string_value.size, src_base_value, &parse_res);
-
-        if (src_base_value < 0 && decimal_num >= 0) {
-            result.append_null();
-            continue;
-        }
-
-        if (!handle_parse_result(dest_base_value, &decimal_num, parse_res)) {
+        bool is_signed = src_base_value < 0;
+        char* data_ptr = reinterpret_cast<char*>(string_value.data);
+        int digit_start_offset = StringParser::skip_leading_whitespace(data_ptr, string_value.size);
+        if (digit_start_offset == string_value.size) {
             result.append(Slice("0", 1));
             continue;
         }
+        bool negative = data_ptr[digit_start_offset] == '-';
+        digit_start_offset += negative;
+        StringParser::ParseResult parse_res;
+        uint64_t decimal64_num = StringParser::string_to_int<uint64_t>(data_ptr + digit_start_offset,
+                                                                       string_value.size - digit_start_offset,
+                                                                       std::abs(src_base_value), &parse_res);
+        if (parse_res == StringParser::PARSE_SUCCESS) {
+            if (is_signed) {
+                if (negative && decimal64_num > 0ull - std::numeric_limits<int64_t>::min()) {
+                    decimal64_num = 0ull - std::numeric_limits<int64_t>::min();
+                }
+                if (!negative && decimal64_num > std::numeric_limits<int64_t>::max()) {
+                    decimal64_num = std::numeric_limits<int64_t>::max();
+                }
+            }
+        } else if (parse_res == StringParser::PARSE_FAILURE) {
+            result.append(Slice("0", 1));
+            continue;
+        } else if (parse_res == StringParser::PARSE_OVERFLOW) {
+            if (is_signed) {
+                decimal64_num =
+                        negative ? (0ull - std::numeric_limits<int64_t>::min()) : std::numeric_limits<int64_t>::max();
+            } else {
+                decimal64_num = negative ? 0 : std::numeric_limits<uint64_t>::max();
+            }
+        } else {
+            CHECK(false) << "unreachable path, parse_res: " << parse_res;
+        }
+        if (negative) {
+            decimal64_num = -decimal64_num;
+        }
 
-        result.append(Slice(decimal_to_base(decimal_num, dest_base_value)));
+        result.append(Slice(decimal_to_base(decimal64_num, dest_base_value)));
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
