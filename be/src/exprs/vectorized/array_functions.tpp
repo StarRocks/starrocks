@@ -96,7 +96,7 @@ private:
         auto iter = hash_set->begin();
         while (iter != hash_set->end()) {
             dest_data_column->append_datum(*iter);
-            iter++;
+            ++iter;
         }
         dest_offsets.emplace_back(dest_offsets.back() + hash_set->size() + has_null);
     }
