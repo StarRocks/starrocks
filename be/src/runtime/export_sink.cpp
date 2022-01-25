@@ -34,7 +34,6 @@
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
-#include "util/types.h"
 
 namespace starrocks {
 

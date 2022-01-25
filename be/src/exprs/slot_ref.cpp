@@ -25,7 +25,6 @@
 
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/runtime_state.h"
-#include "util/types.h"
 
 namespace starrocks {
 

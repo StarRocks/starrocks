@@ -48,7 +48,6 @@
 #include "util/mem_util.hpp"
 #include "util/slice.h"
 #include "util/string_parser.hpp"
-#include "util/types.h"
 #include "util/unaligned_access.h"
 
 namespace starrocks {

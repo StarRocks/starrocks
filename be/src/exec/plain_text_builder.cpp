@@ -11,7 +11,6 @@
 #include "runtime/buffer_control_block.h"
 #include "util/date_func.h"
 #include "util/mysql_row_buffer.h"
-#include "util/types.h"
 
 namespace starrocks {
 
