@@ -28,7 +28,7 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
                     .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
-                    .add(FunctionSet.ANY_VALUE).build();
+                    .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)

@@ -183,185 +183,265 @@ std::string SchemaColumnsScanner::type_to_string(TColumnDesc& desc) {
 
 Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
     // https://dev.mysql.com/doc/refman/5.7/en/information-schema-columns-table.html
-    // TABLE_CATALOG
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[0]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // TABLE_SCHEMA
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[1]->id());
-        std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
-        Slice value(db_name.c_str(), db_name.length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // TABLE_NAME
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[2]->id());
-        std::string* str = &_table_result.tables[_table_index - 1];
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // COLUMN_NAME
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[3]->id());
-        std::string* str = &_desc_result.columns[_column_index].columnDesc.columnName;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // ORDINAL_POSITION
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[4]->id());
-        int64_t value = _column_index + 1;
-        fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
-    }
-    // COLUMN_DEFAULT
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[5]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // IS_NULLABLE
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[6]->id());
-        const char* str = "NO";
-        Slice value(str, strlen(str));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // DATA_TYPE
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[7]->id());
-        std::string str = to_mysql_data_type_string(_desc_result.columns[_column_index].columnDesc);
-        Slice value(str.c_str(), str.length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // CHARACTER_MAXIMUM_LENGTH
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[8]->id());
-        int data_type = _desc_result.columns[_column_index].columnDesc.columnType;
-        if (data_type == TPrimitiveType::VARCHAR || data_type == TPrimitiveType::CHAR) {
-            if (_desc_result.columns[_column_index].columnDesc.__isset.columnLength) {
-                int64_t value = _desc_result.columns[_column_index].columnDesc.columnLength;
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
-            } else {
+
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        switch (slot_id) {
+        case 1: {
+            // TABLE_CATALOG
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
                 fill_data_column_with_null(column.get());
             }
-        } else {
-            fill_data_column_with_null(column.get());
+            break;
         }
-    }
-    // CHARACTER_OCTET_LENGTH
-    // For string columns, the maximum length in bytes.
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[9]->id());
-        int data_type = _desc_result.columns[_column_index].columnDesc.columnType;
-        if (data_type == TPrimitiveType::VARCHAR || data_type == TPrimitiveType::CHAR) {
-            if (_desc_result.columns[_column_index].columnDesc.__isset.columnLength) {
-                // currently we save string use UTF-8 so * 3
-                int64_t value = _desc_result.columns[_column_index].columnDesc.columnLength * 3;
+        case 2: {
+            // TABLE_SCHEMA
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
+                Slice value(db_name.c_str(), db_name.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 3: {
+            // TABLE_NAME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                std::string* str = &_table_result.tables[_table_index - 1];
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 4: {
+            // COLUMN_NAME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                std::string* str = &_desc_result.columns[_column_index].columnDesc.columnName;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 5: {
+            // ORDINAL_POSITION
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                int64_t value = _column_index + 1;
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
-            } else {
+            }
+            break;
+        }
+        case 6: {
+            // COLUMN_DEFAULT
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
                 fill_data_column_with_null(column.get());
             }
-        } else {
-            fill_data_column_with_null(column.get());
+            break;
         }
-    }
-    // NUMERIC_PRECISION
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[10]->id());
-        if (_desc_result.columns[_column_index].columnDesc.__isset.columnPrecision) {
-            int64_t value = _desc_result.columns[_column_index].columnDesc.columnPrecision;
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
-        } else {
-            fill_data_column_with_null(column.get());
+        case 7: {
+            // IS_NULLABLE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+                const char* str = "NO";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
         }
-    }
-    // NUMERIC_SCALE
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[11]->id());
-        if (_desc_result.columns[_column_index].columnDesc.__isset.columnScale) {
-            int64_t value = _desc_result.columns[_column_index].columnDesc.columnScale;
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
-        } else {
-            fill_data_column_with_null(column.get());
+        case 8: {
+            // DATA_TYPE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
+                std::string str = to_mysql_data_type_string(_desc_result.columns[_column_index].columnDesc);
+                Slice value(str.c_str(), str.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
         }
-    }
-    // DATETIME_PRECISION
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[12]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // CHARACTER_SET_NAME
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[13]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // COLLATION_NAME
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[14]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // COLUMN_TYPE
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[15]->id());
-        std::string value = type_to_string(_desc_result.columns[_column_index].columnDesc);
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // COLUMN_KEY (UNI, AGG, DUP, PRI)
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[16]->id());
-        std::string* str = &_desc_result.columns[_column_index].columnDesc.columnKey;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // EXTRA
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[17]->id());
-        Slice value;
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // PRIVILEGES
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[18]->id());
-        Slice value;
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // COLUMN_COMMENT
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[19]->id());
-        std::string* str = &_desc_result.columns[_column_index].comment;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // COLUMN_SIZE
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[20]->id());
-        if (_desc_result.columns[_column_index].columnDesc.__isset.columnLength) {
-            int64_t value = _desc_result.columns[_column_index].columnDesc.columnLength;
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
-        } else {
-            fill_data_column_with_null(column.get());
+        case 9: {
+            // CHARACTER_MAXIMUM_LENGTH
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+                int data_type = _desc_result.columns[_column_index].columnDesc.columnType;
+                if (data_type == TPrimitiveType::VARCHAR || data_type == TPrimitiveType::CHAR) {
+                    if (_desc_result.columns[_column_index].columnDesc.__isset.columnLength) {
+                        int64_t value = _desc_result.columns[_column_index].columnDesc.columnLength;
+                        fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+                    } else {
+                        fill_data_column_with_null(column.get());
+                    }
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
+            }
+            break;
         }
-    }
-    // DECIMAL_DIGITS
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[21]->id());
-        if (_desc_result.columns[_column_index].columnDesc.__isset.columnScale) {
-            int64_t value = _desc_result.columns[_column_index].columnDesc.columnScale;
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
-        } else {
-            fill_data_column_with_null(column.get());
+        case 10: {
+            // CHARACTER_OCTET_LENGTH
+            // For string columns, the maximum length in bytes.
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
+                int data_type = _desc_result.columns[_column_index].columnDesc.columnType;
+                if (data_type == TPrimitiveType::VARCHAR || data_type == TPrimitiveType::CHAR) {
+                    if (_desc_result.columns[_column_index].columnDesc.__isset.columnLength) {
+                        // currently we save string use UTF-8 so * 3
+                        int64_t value = _desc_result.columns[_column_index].columnDesc.columnLength * 3;
+                        fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+                    } else {
+                        fill_data_column_with_null(column.get());
+                    }
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
+            }
+            break;
         }
-    }
-    // GENERATION_EXPRESSION
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[22]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // SRS_ID
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[23]->id());
-        fill_data_column_with_null(column.get());
+        case 11: {
+            // NUMERIC_PRECISION
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
+                if (_desc_result.columns[_column_index].columnDesc.__isset.columnPrecision) {
+                    int64_t value = _desc_result.columns[_column_index].columnDesc.columnPrecision;
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
+            }
+            break;
+        }
+        case 12: {
+            // NUMERIC_SCALE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
+                if (_desc_result.columns[_column_index].columnDesc.__isset.columnScale) {
+                    int64_t value = _desc_result.columns[_column_index].columnDesc.columnScale;
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
+            }
+            break;
+        }
+        case 13: {
+            // DATETIME_PRECISION
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 14: {
+            // CHARACTER_SET_NAME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(14);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 15: {
+            // COLLATION_NAME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(15);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 16: {
+            // COLUMN_TYPE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
+                std::string value = type_to_string(_desc_result.columns[_column_index].columnDesc);
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 17: {
+            // COLUMN_KEY (UNI, AGG, DUP, PRI)
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(17);
+                std::string* str = &_desc_result.columns[_column_index].columnDesc.columnKey;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 18: {
+            // EXTRA
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(18);
+                Slice value;
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 19: {
+            // PRIVILEGES
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(19);
+                Slice value;
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 20: {
+            // COLUMN_COMMENT
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(20);
+                std::string* str = &_desc_result.columns[_column_index].comment;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 21: {
+            // COLUMN_SIZE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(21);
+                if (_desc_result.columns[_column_index].columnDesc.__isset.columnLength) {
+                    int64_t value = _desc_result.columns[_column_index].columnDesc.columnLength;
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
+            }
+            break;
+        }
+        case 22: {
+            // DECIMAL_DIGITS
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(22);
+                if (_desc_result.columns[_column_index].columnDesc.__isset.columnScale) {
+                    int64_t value = _desc_result.columns[_column_index].columnDesc.columnScale;
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
+            }
+            break;
+        }
+        case 23: {
+            // GENERATION_EXPRESSION
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(23);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 24: {
+            // SRS_ID
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(24);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        default:
+            break;
+        }
     }
     _column_index++;
     return Status::OK();

@@ -13,6 +13,7 @@
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
 #include "storage/column_vector.h"
+#include "storage/olap_type_infra.h"
 #include "storage/schema.h"
 #include "storage/tablet_schema.h"
 #include "storage/vectorized/chunk_helper.h"
@@ -827,70 +828,13 @@ const TypeConverter* get_double_converter(FieldType from_type, FieldType to_type
 
 const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType to_type) {
     switch (to_type) {
-    case OLAP_FIELD_TYPE_TINYINT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_TINYINT> s_converter;
-        return &s_converter;
+#define M(ftype)                                              \
+    case ftype: {                                             \
+        static StringToOtherTypeConverter<ftype> s_converter; \
+        return &s_converter;                                  \
     }
-    case OLAP_FIELD_TYPE_SMALLINT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_SMALLINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_INT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_INT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_BIGINT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_BIGINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_LARGEINT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_LARGEINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_FLOAT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_FLOAT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DOUBLE: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DOUBLE> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATE: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DATE> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATE_V2: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DATE_V2> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATETIME: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DATETIME> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DATETIME> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DECIMAL> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DECIMAL_V2> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL32: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DECIMAL32> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DECIMAL64> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DECIMAL128> s_converter;
-        return &s_converter;
-    }
+        APPLY_FOR_TYPE_CONVERT_FROM_VARCHAR(M)
+#undef M
     default:
         return nullptr;
     }
@@ -898,69 +842,8 @@ const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType t
 
 const TypeConverter* get_to_varchar_converter(FieldType from_type, FieldType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_BOOL:
-    case OLAP_FIELD_TYPE_TINYINT: {
+    case OLAP_FIELD_TYPE_BOOL: {
         static OtherToStringTypeConverter<OLAP_FIELD_TYPE_TINYINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_SMALLINT: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_SMALLINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_INT: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_INT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_BIGINT: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_BIGINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_LARGEINT: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_LARGEINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_FLOAT: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_FLOAT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DOUBLE: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DOUBLE> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATE: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DATE> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATE_V2: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DATE_V2> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATETIME: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DATETIME> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_TIMESTAMP> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DECIMAL> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DECIMAL_V2> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL32: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DECIMAL32> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DECIMAL64> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DECIMAL128> s_converter;
         return &s_converter;
     }
     case OLAP_FIELD_TYPE_CHAR:
@@ -968,6 +851,14 @@ const TypeConverter* get_to_varchar_converter(FieldType from_type, FieldType to_
         static OtherToStringTypeConverter<OLAP_FIELD_TYPE_VARCHAR> s_converter;
         return &s_converter;
     }
+#define M(ftype)                                              \
+    case ftype: {                                             \
+        static OtherToStringTypeConverter<ftype> s_converter; \
+        return &s_converter;                                  \
+    }
+        APPLY_FOR_TYPE_CONVERT_TO_VARCHAR(M)
+#undef M
+
     default:
         return nullptr;
     }

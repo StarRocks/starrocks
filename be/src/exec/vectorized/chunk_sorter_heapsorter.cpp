@@ -12,27 +12,10 @@
 #include "column/vectorized_fwd.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "runtime/primitive_type_infra.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
-
-#define APPLY_FOR_ALL_PRIMITIVE_TYPE(M) \
-    M(TYPE_TINYINT)                     \
-    M(TYPE_SMALLINT)                    \
-    M(TYPE_INT)                         \
-    M(TYPE_BIGINT)                      \
-    M(TYPE_LARGEINT)                    \
-    M(TYPE_FLOAT)                       \
-    M(TYPE_DOUBLE)                      \
-    M(TYPE_VARCHAR)                     \
-    M(TYPE_CHAR)                        \
-    M(TYPE_DATE)                        \
-    M(TYPE_DATETIME)                    \
-    M(TYPE_DECIMALV2)                   \
-    M(TYPE_DECIMAL32)                   \
-    M(TYPE_DECIMAL64)                   \
-    M(TYPE_DECIMAL128)                  \
-    M(TYPE_BOOLEAN)
 
 Status HeapChunkSorter::update(RuntimeState* state, const ChunkPtr& chunk) {
     ScopedTimer<MonotonicStopWatch> timer(_build_timer);
@@ -75,7 +58,7 @@ Status HeapChunkSorter::update(RuntimeState* state, const ChunkPtr& chunk) {
                                     std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);  \
         break;                                                                                             \
     }
-                APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
+                APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
             default:
                 break;

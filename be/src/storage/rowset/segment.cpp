@@ -63,17 +63,18 @@ using strings::Substitute;
 
 StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
                                                  const std::string& filename, uint32_t segment_id,
-                                                 const TabletSchema* tablet_schema, size_t* footer_length_hint) {
+                                                 const TabletSchema* tablet_schema, size_t* footer_length_hint,
+                                                 const FooterPointerPB* partial_rowset_footer) {
     auto segment = std::shared_ptr<Segment>(new Segment(private_type(0), blk_mgr, filename, segment_id, tablet_schema),
                                             DeleterWithMemTracker<Segment>(mem_tracker));
     mem_tracker->consume(segment->mem_usage());
 
-    RETURN_IF_ERROR(segment->_open(mem_tracker, footer_length_hint));
+    RETURN_IF_ERROR(segment->_open(mem_tracker, footer_length_hint, partial_rowset_footer));
     return std::move(segment);
 }
 
 Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                     uint64_t* segment_data_size) {
+                                     const FooterPointerPB* partial_rowset_footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     uint64_t file_size;
     RETURN_IF_ERROR(rblock->size(&file_size));
@@ -86,10 +87,19 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
     size_t hint_size = footer_length_hint ? *footer_length_hint : 4096;
     size_t footer_read_size = std::min<size_t>(hint_size, file_size);
 
+    if (partial_rowset_footer != nullptr) {
+        if (file_size < partial_rowset_footer->position() + partial_rowset_footer->size()) {
+            return Status::Corruption(
+                    strings::Substitute("Bad partial segment file $0: file size $1 < $2", rblock->path(), file_size,
+                                        partial_rowset_footer->position() + partial_rowset_footer->size()));
+        }
+        footer_read_size = partial_rowset_footer->size();
+    }
     std::string buff;
     raw::stl_string_resize_uninitialized(&buff, footer_read_size);
+    size_t read_pos = partial_rowset_footer ? partial_rowset_footer->position() : file_size - buff.size();
 
-    RETURN_IF_ERROR(rblock->read(file_size - buff.size(), buff));
+    RETURN_IF_ERROR(rblock->read(read_pos, buff));
 
     const uint32_t footer_length = UNALIGNED_LOAD32(buff.data() + buff.size() - 12);
     const uint32_t checksum = UNALIGNED_LOAD32(buff.data() + buff.size() - 8);
@@ -150,10 +160,6 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
                                     rblock->path(), actual_checksum, checksum));
     }
 
-    if (segment_data_size) {
-        *segment_data_size = file_size - footer_length - 12;
-    }
-
     return Status::OK();
 }
 
@@ -161,11 +167,12 @@ Segment::Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fna
                  const TabletSchema* tablet_schema)
         : _block_mgr(blk_mgr), _fname(std::move(fname)), _tablet_schema(tablet_schema), _segment_id(segment_id) {}
 
-Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint) {
+Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint,
+                      const FooterPointerPB* partial_rowset_footer) {
     SegmentFooterPB footer;
     std::unique_ptr<fs::ReadableBlock> rblock;
     RETURN_IF_ERROR(_block_mgr->open_block(_fname, &rblock));
-    RETURN_IF_ERROR(Segment::parse_segment_footer(rblock.get(), &footer, footer_length_hint, nullptr));
+    RETURN_IF_ERROR(Segment::parse_segment_footer(rblock.get(), &footer, footer_length_hint, partial_rowset_footer));
 
     RETURN_IF_ERROR(_create_column_readers(mem_tracker, &footer));
     _num_rows = footer.num_rows();
