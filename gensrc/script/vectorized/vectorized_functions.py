@@ -584,4 +584,17 @@ vectorized_functions = [
 
     [150083, 'array_remove', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_remove'],
     [150084, 'array_position', 'INT', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_position'],
+
+    [150090, 'array_distinct', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::array_distinct_boolean'],
+    [150091, 'array_distinct', 'ARRAY_TINYINT',   ['ARRAY_TINYINT'],   'ArrayFunctions::array_distinct_tinyint'],
+    [150092, 'array_distinct', 'ARRAY_SMALLINT',  ['ARRAY_SMALLINT'],  'ArrayFunctions::array_distinct_smallint'],
+    [150093, 'array_distinct', 'ARRAY_INT',       ['ARRAY_INT'],       'ArrayFunctions::array_distinct_int'],
+    [150094, 'array_distinct', 'ARRAY_BIGINT',    ['ARRAY_BIGINT'],    'ArrayFunctions::array_distinct_bigint'],
+    [150095, 'array_distinct', 'ARRAY_LARGEINT',  ['ARRAY_LARGEINT'],  'ArrayFunctions::array_distinct_largeint'],
+    [150096, 'array_distinct', 'ARRAY_FLOAT',     ['ARRAY_FLOAT'],     'ArrayFunctions::array_distinct_float'],
+    [150097, 'array_distinct', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE'],    'ArrayFunctions::array_distinct_double'],
+    [150098, 'array_distinct', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR'],   'ArrayFunctions::array_distinct_varchar'],
+    [150099, 'array_distinct', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_distinct_decimalv2'],
+    [150100, 'array_distinct', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_distinct_datetime'],
+    [150101, 'array_distinct', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_distinct_date'],
 ]
