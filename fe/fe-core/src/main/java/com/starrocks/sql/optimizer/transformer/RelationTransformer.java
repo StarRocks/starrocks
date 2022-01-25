@@ -28,20 +28,20 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.relation.CTERelation;
-import com.starrocks.sql.analyzer.relation.ExceptRelation;
-import com.starrocks.sql.analyzer.relation.IntersectRelation;
-import com.starrocks.sql.analyzer.relation.JoinRelation;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.Relation;
-import com.starrocks.sql.analyzer.relation.RelationVisitor;
-import com.starrocks.sql.analyzer.relation.SelectRelation;
-import com.starrocks.sql.analyzer.relation.SetOperationRelation;
-import com.starrocks.sql.analyzer.relation.SubqueryRelation;
-import com.starrocks.sql.analyzer.relation.TableFunctionRelation;
-import com.starrocks.sql.analyzer.relation.TableRelation;
-import com.starrocks.sql.analyzer.relation.UnionRelation;
-import com.starrocks.sql.analyzer.relation.ValuesRelation;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.IntersectRelation;
+import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Utils;
@@ -90,7 +90,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
-public class RelationTransformer extends RelationVisitor<LogicalPlan, ExpressionMapping> {
+public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMapping> {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
 
@@ -170,7 +170,7 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
     }
 
     @Override
-    public LogicalPlan visitQuery(QueryRelation node, ExpressionMapping context) {
+    public LogicalPlan visitQueryRelation(QueryRelation node, ExpressionMapping context) {
         throw new StarRocksPlannerException("query block not materialized", ErrorType.INTERNAL_ERROR);
     }
 

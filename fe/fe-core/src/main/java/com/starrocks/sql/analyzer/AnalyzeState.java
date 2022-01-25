@@ -6,8 +6,8 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.sql.analyzer.relation.Relation;
-import com.starrocks.sql.analyzer.relation.SelectRelation;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
 
 import java.util.HashMap;
 import java.util.List;

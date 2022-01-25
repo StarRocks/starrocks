@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.ast.Relation;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.lang.String.format;

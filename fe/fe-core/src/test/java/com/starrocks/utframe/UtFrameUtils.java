@@ -52,7 +52,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.optimizer.OperatorStrings;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;

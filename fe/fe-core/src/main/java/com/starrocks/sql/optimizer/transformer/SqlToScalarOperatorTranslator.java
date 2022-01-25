@@ -23,14 +23,15 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.sql.analyzer.ResolvedField;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -130,7 +131,7 @@ public final class SqlToScalarOperatorTranslator {
         return result;
     }
 
-    private static class Visitor extends ExprVisitor<ScalarOperator, Void> {
+    private static class Visitor extends AstVisitor<ScalarOperator, Void> {
         private final ExpressionMapping expressionMapping;
         private final List<ColumnRefOperator> correlation;
 
@@ -146,9 +147,10 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visit(Expr node) {
-            if (expressionMapping.get(node) != null && !(node.isConstant())) {
-                return expressionMapping.get(node);
+        public ScalarOperator visit(ParseNode node) {
+            Expr expr = (Expr) node;
+            if (expressionMapping.get(expr) != null && !(expr.isConstant())) {
+                return expressionMapping.get(expr);
             }
             return super.visit(node);
         }
