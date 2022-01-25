@@ -420,39 +420,39 @@ public class HiveTable extends Table {
 
         // for type with length, like char(10), we only check the type and ignore the length
         String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
+        PrimitiveType primitiveType = type.getPrimitiveType();
         switch (typeUpperCase) {
             case "TINYINT":
-                return type.getPrimitiveType() == PrimitiveType.TINYINT;
+                return primitiveType == PrimitiveType.TINYINT;
             case "SMALLINT":
-                return type.getPrimitiveType() == PrimitiveType.SMALLINT;
+                return primitiveType == PrimitiveType.SMALLINT;
             case "INT":
             case "INTEGER":
-                return type.getPrimitiveType() == PrimitiveType.INT;
+                return primitiveType == PrimitiveType.INT;
             case "BIGINT":
-                return type.getPrimitiveType() == PrimitiveType.BIGINT;
+                return primitiveType == PrimitiveType.BIGINT;
             case "FLOAT":
-                return type.getPrimitiveType() == PrimitiveType.FLOAT;
+                return primitiveType == PrimitiveType.FLOAT;
             case "DOUBLE":
             case "DOUBLE PRECISION":
-                return type.getPrimitiveType() == PrimitiveType.DOUBLE;
+                return primitiveType == PrimitiveType.DOUBLE;
             case "DECIMAL":
             case "NUMERIC":
-                return type.getPrimitiveType() == PrimitiveType.DECIMALV2 || type.getPrimitiveType() ==
-                        PrimitiveType.DECIMAL32 || type.getPrimitiveType() == PrimitiveType.DECIMAL64 ||
-                        type.getPrimitiveType() == PrimitiveType.DECIMAL128;
+                return primitiveType == PrimitiveType.DECIMALV2 || primitiveType == PrimitiveType.DECIMAL32 ||
+                        primitiveType == PrimitiveType.DECIMAL64 || primitiveType == PrimitiveType.DECIMAL128;
             case "TIMESTAMP":
-                return type.getPrimitiveType() == PrimitiveType.DATETIME;
+                return primitiveType == PrimitiveType.DATETIME;
             case "DATE":
-                return type.getPrimitiveType() == PrimitiveType.DATE;
+                return primitiveType == PrimitiveType.DATE;
             case "STRING":
             case "VARCHAR":
             case "BINARY":
-                return type.getPrimitiveType() == PrimitiveType.VARCHAR;
+                return primitiveType == PrimitiveType.VARCHAR;
             case "CHAR":
-                return type.getPrimitiveType() == PrimitiveType.CHAR ||
-                        type.getPrimitiveType() == PrimitiveType.VARCHAR;
+                return primitiveType == PrimitiveType.CHAR ||
+                        primitiveType == PrimitiveType.VARCHAR;
             case "BOOLEAN":
-                return type.getPrimitiveType() == PrimitiveType.BOOLEAN;
+                return primitiveType == PrimitiveType.BOOLEAN;
             case "ARRAY":
                 if (!type.isArrayType()) {
                     return false;
