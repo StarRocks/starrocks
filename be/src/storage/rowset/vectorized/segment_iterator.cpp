@@ -757,15 +757,15 @@ void SegmentIterator::_switch_context(ScanContext* to) {
 
     if (to->_has_force_dict_encode) {
         // rebuild encoded schema
-        _encoded_schema.clear();
+        Schema finalchunk_schema;
         for (const auto& field : schema().fields()) {
             if (_can_using_global_dict(field)) {
-                _encoded_schema.append(Field::convert_to_dict_field(*field));
+                finalchunk_schema.append(Field::convert_to_dict_field(*field));
             } else {
-                _encoded_schema.append(field);
+                finalchunk_schema.append(field);
             }
         }
-        to->_final_chunk = ChunkHelper::new_chunk(this->encoded_schema(), _opts.chunk_size);
+        to->_final_chunk = ChunkHelper::new_chunk(finalchunk_schema, _opts.chunk_size);
     } else {
         to->_final_chunk = to->_late_materialize ? ChunkHelper::new_chunk(this->encoded_schema(), _opts.chunk_size)
                                                  : to->_final_chunk = to->_dict_chunk;
