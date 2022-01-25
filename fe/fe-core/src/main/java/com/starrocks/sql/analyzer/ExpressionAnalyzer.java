@@ -499,7 +499,6 @@ public class ExpressionAnalyzer {
             }
 
             node.setFn(fn);
-            FunctionCallExpr.checkGeoFunctionGeneratedInvalidUtf8(node);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
             return null;
