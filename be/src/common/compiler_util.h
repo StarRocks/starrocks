@@ -20,7 +20,6 @@
 // under the License.
 
 #pragma once
-#include <diagnostics.h>
 
 // Compiler hint that this branch is likely or unlikely to
 // be taken. Take from the "What all programmers should know
