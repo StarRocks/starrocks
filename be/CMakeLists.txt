@@ -427,6 +427,7 @@ set(STARROCKS_LINK_LIBS
     Exprs
     Formats
     Gutil
+    IO
     Serde
     Storage
     Rowset
@@ -579,6 +580,7 @@ add_subdirectory(${SRC_DIR}/gen_cpp)
 add_subdirectory(${SRC_DIR}/geo)
 add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
+add_subdirectory(${SRC_DIR}/io)
 add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
