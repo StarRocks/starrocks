@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "exprs/vectorized/function_helper.h"
+#include "exprs/vectorized/array_functions.tpp"
 
 namespace starrocks::vectorized {
 
@@ -18,6 +18,27 @@ public:
 
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
+
+#define DEFINE_ARRAY_DISTINCT_FN(NAME, PT)                                                     \
+    static ColumnPtr array_distinct_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayDistinct<PT>::process(context, columns);                                   \
+    }
+
+    DEFINE_ARRAY_DISTINCT_FN(boolean, PrimitiveType::TYPE_BOOLEAN);
+    DEFINE_ARRAY_DISTINCT_FN(tinyint, PrimitiveType::TYPE_TINYINT);
+    DEFINE_ARRAY_DISTINCT_FN(smallint, PrimitiveType::TYPE_SMALLINT);
+    DEFINE_ARRAY_DISTINCT_FN(int, PrimitiveType::TYPE_INT);
+    DEFINE_ARRAY_DISTINCT_FN(bigint, PrimitiveType::TYPE_BIGINT);
+    DEFINE_ARRAY_DISTINCT_FN(largeint, PrimitiveType::TYPE_LARGEINT);
+    DEFINE_ARRAY_DISTINCT_FN(float, PrimitiveType::TYPE_FLOAT);
+    DEFINE_ARRAY_DISTINCT_FN(double, PrimitiveType::TYPE_DOUBLE);
+    DEFINE_ARRAY_DISTINCT_FN(varchar, PrimitiveType::TYPE_VARCHAR);
+    DEFINE_ARRAY_DISTINCT_FN(char, PrimitiveType::TYPE_CHAR);
+    DEFINE_ARRAY_DISTINCT_FN(decimalv2, PrimitiveType::TYPE_DECIMALV2);
+    DEFINE_ARRAY_DISTINCT_FN(datetime, PrimitiveType::TYPE_DATETIME);
+    DEFINE_ARRAY_DISTINCT_FN(date, PrimitiveType::TYPE_DATE);
+
+#undef DEFINE_ARRAY_DISTINCT_FN
 
     DEFINE_VECTORIZED_FN(array_sum_boolean);
     DEFINE_VECTORIZED_FN(array_sum_tinyint);
