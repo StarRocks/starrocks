@@ -68,7 +68,7 @@ public:
     std::string debug_string() const;
 
     int get_column_index(const std::string& column) const;
-    const ParquetField* get_stored_column_by_idx(int idx) const { return _physical_fields[idx]; }
+    const ParquetField* get_stored_column_by_idx(int idx) const { return &_fields[idx]; }
 
     const ParquetField* resolve_by_name(const std::string& name) const {
         auto it = _field_by_name.find(name);

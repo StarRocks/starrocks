@@ -381,8 +381,7 @@ public class HiveTable extends Table {
             if (hiveColumn == null) {
                 throw new DdlException("column [" + column.getName() + "] not exists in hive");
             }
-            Set<PrimitiveType> validColumnTypes = getValidColumnType(hiveColumn.getType());
-            if (!validColumnTypes.contains(column.getPrimitiveType())) {
+            if (!validateColumnType(hiveColumn.getType(), column.getType())) {
                 throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "]");
             }
@@ -414,47 +413,54 @@ public class HiveTable extends Table {
         }
     }
 
-    private Set<PrimitiveType> getValidColumnType(String hiveType) {
+    private boolean validateColumnType(String hiveType, Type type) {
         if (hiveType == null) {
-            return Sets.newHashSet();
+            return false;
         }
 
         // for type with length, like char(10), we only check the type and ignore the length
-        hiveType = Utils.getTypeKeyword(hiveType);
-        String typeUpperCase = hiveType.toUpperCase();
+        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
+        PrimitiveType primitiveType = type.getPrimitiveType();
         switch (typeUpperCase) {
             case "TINYINT":
-                return Sets.newHashSet(PrimitiveType.TINYINT);
+                return primitiveType == PrimitiveType.TINYINT;
             case "SMALLINT":
-                return Sets.newHashSet(PrimitiveType.SMALLINT);
+                return primitiveType == PrimitiveType.SMALLINT;
             case "INT":
             case "INTEGER":
-                return Sets.newHashSet(PrimitiveType.INT);
+                return primitiveType == PrimitiveType.INT;
             case "BIGINT":
-                return Sets.newHashSet(PrimitiveType.BIGINT);
+                return primitiveType == PrimitiveType.BIGINT;
             case "FLOAT":
-                return Sets.newHashSet(PrimitiveType.FLOAT);
+                return primitiveType == PrimitiveType.FLOAT;
             case "DOUBLE":
             case "DOUBLE PRECISION":
-                return Sets.newHashSet(PrimitiveType.DOUBLE);
+                return primitiveType == PrimitiveType.DOUBLE;
             case "DECIMAL":
             case "NUMERIC":
-                return Sets.newHashSet(PrimitiveType.DECIMALV2, PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64,
-                        PrimitiveType.DECIMAL128);
+                return primitiveType == PrimitiveType.DECIMALV2 || primitiveType == PrimitiveType.DECIMAL32 ||
+                        primitiveType == PrimitiveType.DECIMAL64 || primitiveType == PrimitiveType.DECIMAL128;
             case "TIMESTAMP":
-                return Sets.newHashSet(PrimitiveType.DATETIME);
+                return primitiveType == PrimitiveType.DATETIME;
             case "DATE":
-                return Sets.newHashSet(PrimitiveType.DATE);
+                return primitiveType == PrimitiveType.DATE;
             case "STRING":
             case "VARCHAR":
             case "BINARY":
-                return Sets.newHashSet(PrimitiveType.VARCHAR);
+                return primitiveType == PrimitiveType.VARCHAR;
             case "CHAR":
-                return Sets.newHashSet(PrimitiveType.CHAR, PrimitiveType.VARCHAR);
+                return primitiveType == PrimitiveType.CHAR ||
+                        primitiveType == PrimitiveType.VARCHAR;
             case "BOOLEAN":
-                return Sets.newHashSet(PrimitiveType.BOOLEAN);
+                return primitiveType == PrimitiveType.BOOLEAN;
+            case "ARRAY":
+                if (!type.isArrayType()) {
+                    return false;
+                }
+                return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
+                        ((ArrayType) type).getItemType());
             default:
-                return Sets.newHashSet();
+                return false;
         }
     }
 
