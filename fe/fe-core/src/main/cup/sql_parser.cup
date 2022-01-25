@@ -450,8 +450,8 @@ nonterminal ParseNode load_property;
 nonterminal List<ParseNode> opt_load_property_list;
 
 // Boolean
-nonterminal Boolean opt_negative, opt_is_allow_null, opt_is_key, opt_read_only, opt_aggregate;
-nonterminal String opt_from_rollup, opt_to_rollup;
+nonterminal Boolean opt_negative, opt_is_allow_null, opt_is_key, opt_read_only;
+nonterminal String opt_from_rollup, opt_to_rollup, function_type;
 nonterminal ColumnPosition opt_col_pos;
 
 // Alter statement
@@ -472,7 +472,7 @@ nonterminal String keyword, ident, ident_or_text, variable_name, text_or_passwor
 nonterminal String opt_db, procedure_or_function, opt_comment, opt_engine;
 nonterminal ColumnDef.DefaultValueDef opt_default_value;
 nonterminal Boolean opt_if_exists, opt_if_not_exists;
-nonterminal Boolean opt_external;
+nonterminal Boolean externalable_table, externalable_resource;
 nonterminal Boolean opt_force;
 nonterminal IndexDef.IndexType opt_index_type;
 
@@ -516,6 +516,9 @@ precedence left KW_PARTITION;
 precedence left KW_PARTITIONS;
 precedence right KW_TEMPORARY;
 precedence right LBRACKET;
+// fix conflict in create table function
+// http://tryitnw.blogspot.com/2012/02/tip-avoiding-shiftreduce-conflict.html
+precedence left KW_FUNCTION;
 
 start with stmts;
 
@@ -1102,17 +1105,17 @@ create_stmt ::=
         RESULT = new CreateClusterStmt(name, properties, password);
     :}*/
     /* Function */
-    | KW_CREATE opt_aggregate:isAggregate KW_FUNCTION function_name:functionName LPAREN func_args_def:args RPAREN
+    | KW_CREATE function_type:functionType function_name:functionName LPAREN func_args_def:args RPAREN
             KW_RETURNS type_def:returnType opt_intermediate_type:intermediateType opt_properties:properties
     {:
-        RESULT = new CreateFunctionStmt(isAggregate, functionName, args, returnType, intermediateType, properties);
+        RESULT = new CreateFunctionStmt(functionType, functionName, args, returnType, intermediateType, properties);
     :}
     /* Table */
-    | KW_CREATE opt_external:isExternal KW_TABLE opt_if_not_exists:ifNotExists table_name:name KW_LIKE table_name:existed_name
+    | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name KW_LIKE table_name:existed_name
     {:
         RESULT = new CreateTableLikeStmt(ifNotExists, name, existed_name);
     :}
-    | KW_CREATE opt_external:isExternal KW_TABLE opt_if_not_exists:ifNotExists table_name:name
+    | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
             LPAREN column_definition_list:columns RPAREN opt_engine:engineName
             opt_keys:keys
             opt_comment:tableComment
@@ -1125,7 +1128,7 @@ create_stmt ::=
         RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, engineName, keys, partition,
         distribution, tblProperties, extProperties, tableComment, index);
     :}
-    | KW_CREATE opt_external:isExternal KW_TABLE opt_if_not_exists:ifNotExists table_name:name
+    | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
             LPAREN column_definition_list:columns COMMA index_definition_list:indexes RPAREN opt_engine:engineName
             opt_keys:keys
             opt_comment:tableComment
@@ -1138,7 +1141,7 @@ create_stmt ::=
         RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, indexes, engineName, keys, partition,
         distribution, tblProperties, extProperties, tableComment, index);
     :}
-    | KW_CREATE opt_external:isExternal KW_TABLE opt_if_not_exists:ifNotExists table_name:name
+    | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
         opt_col_list:columns
         opt_comment:comment
         opt_partition:partition
@@ -1188,7 +1191,7 @@ create_stmt ::=
         RESULT = new AlterTableStmt(tableName, Lists.newArrayList(new CreateIndexClause(tableName, new IndexDef(indexName, cols, indexType, comment), false)));
     :}
     /* resource */
-    | KW_CREATE opt_external:isExternal KW_RESOURCE ident_or_text:resourceName opt_properties:properties
+    | KW_CREATE externalable_resource:isExternal ident_or_text:resourceName opt_properties:properties
     {:
         RESULT = new CreateResourceStmt(isExternal, resourceName, properties);
     :}
@@ -1198,13 +1201,18 @@ create_stmt ::=
     :}
     ;
 
-opt_aggregate ::=
+function_type ::=
+    KW_FUNCTION
     {:
-        RESULT = false;
+        RESULT = "scalar";
     :}
-    | KW_AGGREGATE
+    | KW_TABLE:table KW_FUNCTION
     {:
-        RESULT = true;
+        RESULT = table;
+    :}
+    | KW_AGGREGATE:aggregate KW_FUNCTION
+    {:
+        RESULT = aggregate;
     :}
     ;
 
@@ -2178,12 +2186,23 @@ opt_if_not_exists ::=
     :}
     ;
 
-opt_external ::=
-    /* empty */
+externalable_table ::=
+    KW_TABLE
     {:
         RESULT = false;
     :}
-    | KW_EXTERNAL
+    | KW_EXTERNAL KW_TABLE
+    {:
+        RESULT = true;
+    :}
+    ;
+
+externalable_resource ::=
+    KW_RESOURCE
+    {:
+        RESULT = false;
+    :}
+    | KW_EXTERNAL KW_RESOURCE
     {:
         RESULT = true;
     :}

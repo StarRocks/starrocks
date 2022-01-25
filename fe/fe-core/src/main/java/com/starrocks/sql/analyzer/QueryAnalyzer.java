@@ -15,6 +15,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FieldReference;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionTableRef;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
@@ -51,6 +52,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.TreeNode;
+import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
@@ -66,6 +68,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
@@ -734,6 +737,29 @@ public class QueryAnalyzer {
         }
     }
 
+    private TableFunction getUDTF(String fnName, Type[] argTypes) {
+        String dbName = session.getDatabase();
+
+        if (!catalog.getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
+            throw new StarRocksPlannerException("Access denied. need the SELECT " + dbName + " privilege(s)",
+                    ErrorType.USER_ERROR);
+        }
+
+        Database db = catalog.getDb(dbName);
+        if (db == null) {
+            return null;
+        }
+
+        Function search = new Function(new FunctionName(dbName, fnName), argTypes, Type.INVALID, false);
+        Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+        if (fn instanceof TableFunction) {
+            return (TableFunction) fn;
+        }
+
+        return null;
+    }
+
     public Relation resolveTableRef(TableRef tableRef, AnalyzeState analyzeState, Scope scope) {
         if (tableRef.getAliasAsName() == null) {
             throw new SemanticException("Every derived table must have its own alias");
@@ -806,6 +832,11 @@ public class QueryAnalyzer {
             TableFunction fn =
                     (TableFunction) Expr.getBuiltinFunction(functionTableRef.getFnName(), argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+            if (fn == null) {
+                fn = getUDTF(functionTableRef.getFnName(), argTypes);
+            }
+
             if (fn == null) {
                 throw new SemanticException("Unknown table function '%s(%s)'", functionTableRef.getFnName(),
                         Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));

@@ -578,7 +578,8 @@ public class Function implements Writable {
     enum FunctionType {
         ORIGIN(0),
         SCALAR(1),
-        AGGREGATE(2);
+        AGGREGATE(2),
+        TABLE(3);
 
         private int code;
 
@@ -598,6 +599,8 @@ public class Function implements Writable {
                     return SCALAR;
                 case 2:
                     return AGGREGATE;
+                case 3:
+                    return TABLE;
             }
             return null;
         }
@@ -669,6 +672,9 @@ public class Function implements Writable {
             case AGGREGATE:
                 function = new AggregateFunction();
                 break;
+            case TABLE:
+                function = new TableFunction();
+                break;
             default:
                 throw new Error("Unsupported function type, type=" + functionType);
         }
@@ -708,7 +714,7 @@ public class Function implements Writable {
             if (this instanceof ScalarFunction) {
                 row.add("Scalar");
                 row.add("NULL");
-            } else {
+            } else if (this instanceof AggregateFunction) {
                 row.add("Aggregate");
                 AggregateFunction aggFunc = (AggregateFunction) this;
                 Type intermediateType = aggFunc.getIntermediateType();
@@ -717,6 +723,10 @@ public class Function implements Writable {
                 } else {
                     row.add("NULL");
                 }
+            } else {
+                TableFunction tableFunc = (TableFunction) this;
+                row.add("Table");
+                row.add("NULL");
             }
             // property
             row.add(getProperties());
