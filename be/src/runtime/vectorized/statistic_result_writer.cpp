@@ -9,7 +9,6 @@
 #include "runtime/buffer_control_block.h"
 #include "runtime/primitive_type.h"
 #include "util/thrift_util.h"
-#include "util/types.h"
 
 namespace starrocks::vectorized {
 

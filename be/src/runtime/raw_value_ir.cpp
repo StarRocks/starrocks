@@ -21,7 +21,6 @@
 
 #include "runtime/raw_value.h"
 #include "runtime/string_value.hpp"
-#include "util/types.h"
 #include "util/unaligned_access.h"
 
 namespace starrocks {
