@@ -23,6 +23,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SelectStmt;
@@ -51,20 +52,20 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.relation.CTERelation;
-import com.starrocks.sql.analyzer.relation.ExceptRelation;
-import com.starrocks.sql.analyzer.relation.IntersectRelation;
-import com.starrocks.sql.analyzer.relation.JoinRelation;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.Relation;
-import com.starrocks.sql.analyzer.relation.RelationVisitor;
-import com.starrocks.sql.analyzer.relation.SelectRelation;
-import com.starrocks.sql.analyzer.relation.SetOperationRelation;
-import com.starrocks.sql.analyzer.relation.SubqueryRelation;
-import com.starrocks.sql.analyzer.relation.TableFunctionRelation;
-import com.starrocks.sql.analyzer.relation.TableRelation;
-import com.starrocks.sql.analyzer.relation.UnionRelation;
-import com.starrocks.sql.analyzer.relation.ValuesRelation;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.IntersectRelation;
+import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
@@ -438,7 +439,7 @@ public class QueryAnalyzer {
                             INTERNAL_ERROR);
                 }
 
-                columnOutputNames.addAll(new RelationVisitor<List<String>, Void>() {
+                columnOutputNames.addAll(new AstVisitor<List<String>, Void>() {
                     public List<String> visitTable(TableRelation node, Void context) {
                         if (item.getTblName() == null) {
                             return node.getTable().getBaseSchema().stream().map(Column::getName)
@@ -1056,7 +1057,7 @@ public class QueryAnalyzer {
 
     // If alias is same with table column name, we directly use table name.
     // otherwise, we use output expression according to the alias
-    private static class RewriteAliasVisitor extends ExprVisitor<Expr, Void> {
+    private static class RewriteAliasVisitor extends AstVisitor<Expr, Void> {
         private final Scope sourceScope;
         private final Scope outputScope;
         private final List<Expr> outputExprs;
@@ -1071,7 +1072,7 @@ public class QueryAnalyzer {
         }
 
         @Override
-        public Expr visit(Expr expr) {
+        public Expr visit(ParseNode expr) {
             return visit(expr, null);
         }
 

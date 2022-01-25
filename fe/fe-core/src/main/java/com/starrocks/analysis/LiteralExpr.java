@@ -25,7 +25,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -214,7 +214,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitLiteral(this, context);
     }
 
