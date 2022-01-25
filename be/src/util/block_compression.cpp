@@ -494,40 +494,15 @@ public:
         z_strm.next_out = reinterpret_cast<Bytef*>(output->data);
         z_strm.avail_out = output->size;
 
-        while (z_strm.avail_out > 0 && z_strm.avail_in > 0) {
-            // inflate() performs one or both of the following actions:
-            //   Decompress more input starting at next_in and update next_in and avail_in
-            //       accordingly.
-            //   Provide more output starting at next_out and update next_out and avail_out
-            //       accordingly.
-            // inflate() returns Z_OK if some progress has been made (more input processed
-            // or more output produced)
-
-            int ret = inflate(&z_strm, Z_NO_FLUSH);
-
-            VLOG(10) << "gzip dec ret: " << ret;
-
-            if (ret == Z_STREAM_END) {
-                // reset z_strm to continue decoding a subsequent gzip stream
-                ret = inflateReset(&z_strm);
-                if (ret != Z_OK) {
-                    std::stringstream ss;
-                    ss << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret);
-                    (void)inflateEnd(&z_strm);
-                    return Status::InternalError(ss.str());
-                }
-            } else if (ret != Z_OK) {
-                std::stringstream ss;
-                ss << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret);
-                (void)inflateEnd(&z_strm);
-                return Status::InternalError(ss.str());
-            } else {
-                // here ret must be Z_OK.
-                // we continue if avail_out and avail_in > 0.
-                // this means 'inflate' is not done yet.
-            }
+        // We only support non-streaming use case  for block decompressor
+        ret = inflate(&z_strm, Z_FINISH);
+        VLOG(10) << "gzip dec ret: " << ret;
+        if (ret != Z_OK && ret != Z_STREAM_END) {
+            std::stringstream ss;
+            ss << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret);
+            (void)inflateEnd(&z_strm);
+            return Status::InternalError(ss.str());
         }
-
         (void)inflateEnd(&z_strm);
 
         return Status::OK();
