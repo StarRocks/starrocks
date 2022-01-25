@@ -456,7 +456,7 @@ public class SelectStmt extends QueryStmt {
 
         if (selectList.isDistinct()) {
             for (Expr expr : resultExprs) {
-                if (expr.getType().isOnlyMetricType()) {
+                if (!expr.getType().canDistinct()) {
                     throw new AnalysisException("DISTINCT don't support metric type: " + expr.getType());
                 }
             }
@@ -486,7 +486,7 @@ public class SelectStmt extends QueryStmt {
         createSortInfo(analyzer);
         if (sortInfo != null && CollectionUtils.isNotEmpty(sortInfo.getOrderingExprs())) {
             for (Expr expr : sortInfo.getOrderingExprs()) {
-                if (expr.getType().isOnlyMetricType()) {
+                if (!expr.getType().canOrderBy()) {
                     throw new AnalysisException(Type.OnlyMetricTypeErrorMsg);
                 }
             }

@@ -380,8 +380,8 @@ public class AnalyticExpr extends Expr {
                         "Expressions in the PARTITION BY clause must not be constant: "
                                 + e.toSql() + " (in " + toSql() + ")");
             }
-            if (e.getType().isOnlyMetricType()) {
-                throw new AnalysisException("HLL, BITMAP and PERCENTILE type could't as partition by column");
+            if (!e.getType().canPartitionBy()) {
+                throw new AnalysisException(String.format("%s type cannot be partition by column", e.getType()));
             }
         }
 
@@ -391,8 +391,8 @@ public class AnalyticExpr extends Expr {
                         "Expressions in the ORDER BY clause must not be constant: "
                                 + e.getExpr().toSql() + " (in " + toSql() + ")");
             }
-            if (e.getExpr().getType().isOnlyMetricType()) {
-                throw new AnalysisException("HLL, BITMAP and PERCENTILE type could't as order by column");
+            if (!e.getExpr().getType().canOrderBy()) {
+                throw new AnalysisException(String.format("%s type cannot as order by column", e.getExpr().getType()));
             }
         }
 

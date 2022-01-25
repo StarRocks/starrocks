@@ -5,6 +5,7 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
@@ -120,6 +121,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitArrayElementExpr(ArrayElementExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitArrowExpr(ArrowExpr node, C context) {
         return visitExpression(node, context);
     }
 

@@ -78,6 +78,7 @@ public class Util {
         TYPE_STRING_MAP.put(PrimitiveType.BOOLEAN, "bool");
         TYPE_STRING_MAP.put(PrimitiveType.BITMAP, "bitmap");
         TYPE_STRING_MAP.put(PrimitiveType.PERCENTILE, "percentile");
+        TYPE_STRING_MAP.put(PrimitiveType.JSON, "json");
     }
 
     private static class CmdWorker extends Thread {

@@ -8,6 +8,7 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
@@ -189,6 +190,21 @@ public class ExpressionAnalyzer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+            return null;
+        }
+
+        @Override
+        public Void visitArrowExpr(ArrowExpr node, Scope scope) {
+            Expr item = node.getChild(0);
+            Expr key = node.getChild(1);
+            if (!key.isLiteral() || !key.getType().isStringType()) {
+                throw new SemanticException("right operand of -> should be string literal, but got " + key);
+            }
+            if (!item.getType().isJsonType()) {
+                throw new SemanticException(
+                        "-> operator could only be used for json column, but got " + item.getType());
+            }
+            node.setType(Type.JSON);
             return null;
         }
 

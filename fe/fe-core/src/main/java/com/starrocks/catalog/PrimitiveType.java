@@ -62,6 +62,9 @@ public enum PrimitiveType {
     DECIMAL32("DECIMAL32", 4, TPrimitiveType.DECIMAL32),
     DECIMAL64("DECIMAL64", 8, TPrimitiveType.DECIMAL64),
     DECIMAL128("DECIMAL128", 16, TPrimitiveType.DECIMAL128),
+
+    JSON("JSON", 16, TPrimitiveType.JSON),
+
     // Unsupported scalar types.
     BINARY("BINARY", -1, TPrimitiveType.BINARY);
 
@@ -87,6 +90,13 @@ public enum PrimitiveType {
     public static final ImmutableList<PrimitiveType> STRING_TYPE_LIST =
             ImmutableList.of(CHAR, VARCHAR);
 
+    public static final ImmutableList<PrimitiveType> JSON_COMPATIBLE_TYPE =
+            new ImmutableList.Builder<PrimitiveType>()
+                    .add(BOOLEAN)
+                    .addAll(NUMBER_TYPE_LIST)
+                    .addAll(STRING_TYPE_LIST)
+                    .build();
+
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
             ImmutableList.of(TIME, DATE, DATETIME);
 
@@ -102,7 +112,7 @@ public enum PrimitiveType {
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
         builder.putAll(NULL_TYPE, BASIC_TYPE_LIST);
-        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE));
+        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON));
 
         builder.putAll(BOOLEAN, BASIC_TYPE_LIST);
         builder.putAll(TINYINT, BASIC_TYPE_LIST);
@@ -131,6 +141,15 @@ public enum PrimitiveType {
         builder.put(HLL, HLL);
         builder.put(BITMAP, BITMAP);
         builder.put(PERCENTILE, PERCENTILE);
+
+        // JSON
+        builder.putAll(JSON, JSON);
+        builder.putAll(JSON, NULL_TYPE);
+
+        for (PrimitiveType type : JSON_COMPATIBLE_TYPE) {
+            builder.put(type, JSON);
+            builder.put(JSON, type);
+        }
 
         implicitCastMap = builder.build();
     }
@@ -202,6 +221,8 @@ public enum PrimitiveType {
                 return TIME;
             case BINARY:
                 return BINARY;
+            case JSON:
+                return JSON;
             default:
                 return INVALID_TYPE;
         }
@@ -270,6 +291,142 @@ public enum PrimitiveType {
             default:
                 Preconditions.checkState(t.isDecimalOfAnyVersion());
                 return -1;
+        }
+    }
+
+    // TODO(mofei) refactor it
+    public static String getUdfTypeName(PrimitiveType t) {
+        switch (t) {
+            case BOOLEAN:
+                return "boolean_val";
+            case TINYINT:
+                return "tiny_int_val";
+            case SMALLINT:
+                return "small_int_val";
+            case INT:
+                return "int_val";
+            case BIGINT:
+                return "big_int_val";
+            case LARGEINT:
+                return "large_int_val";
+            case FLOAT:
+                return "float_val";
+            case DOUBLE:
+            case TIME:
+                return "double_val";
+            case VARCHAR:
+            case CHAR:
+            case HLL:
+            case BITMAP:
+            case PERCENTILE:
+                return "string_val";
+            case DATE:
+            case DATETIME:
+                return "datetime_val";
+            case DECIMALV2:
+                return "decimalv2_val";
+            case DECIMAL32:
+                return "decimal32_val";
+            case DECIMAL64:
+                return "decimal64_val";
+            case DECIMAL128:
+                return "decimal128_val";
+            case JSON:
+                return "json_val";
+            default:
+                Preconditions.checkState(false, t.toString());
+                return "";
+        }
+    }
+
+    // TODO(mofei) refactor it
+    public static String getUdfType(PrimitiveType t) {
+        switch (t) {
+            case NULL_TYPE:
+                return "AnyVal";
+            case BOOLEAN:
+                return "BooleanVal";
+            case TINYINT:
+                return "TinyIntVal";
+            case SMALLINT:
+                return "SmallIntVal";
+            case INT:
+                return "IntVal";
+            case BIGINT:
+                return "BigIntVal";
+            case LARGEINT:
+                return "LargeIntVal";
+            case FLOAT:
+                return "FloatVal";
+            case DOUBLE:
+            case TIME:
+                return "DoubleVal";
+            case VARCHAR:
+            case CHAR:
+            case HLL:
+            case BITMAP:
+            case PERCENTILE:
+                return "StringVal";
+            case DATE:
+            case DATETIME:
+                return "DateTimeVal";
+            case DECIMALV2:
+                return "DecimalV2Val";
+            case DECIMAL32:
+                return "Decimal32";
+            case DECIMAL64:
+                return "Decimal64";
+            case DECIMAL128:
+                return "Decimal128";
+            case JSON:
+                return "JSONVal";
+            default:
+                Preconditions.checkState(false, t.toString());
+                return "";
+        }
+    }
+
+    public static String getBEFnArgTypeName(PrimitiveType type) {
+        switch (type) {
+            case BOOLEAN:
+                return "_boolean_val";
+            case TINYINT:
+                return "_tiny_int_val";
+            case SMALLINT:
+                return "_small_int_val";
+            case INT:
+                return "_int_val";
+            case BIGINT:
+                return "_big_int_val";
+            case LARGEINT:
+                return "_large_int_val";
+            case FLOAT:
+                return "_float_val";
+            case DOUBLE:
+            case TIME:
+                return "_double_val";
+            case CHAR:
+            case VARCHAR:
+            case HLL:
+            case BITMAP:
+            case PERCENTILE:
+                return "_string_val";
+            case DATE:
+            case DATETIME:
+                return "_datetime_val";
+            case DECIMALV2:
+                return "_decimalv2_val";
+            case DECIMAL32:
+                return "_decimal32_val";
+            case DECIMAL64:
+                return "_decimal64_val";
+            case DECIMAL128:
+                return "_decimal128_val";
+            case JSON:
+                return "_json_val";
+            default:
+                Preconditions.checkState(false, "Argument type not supported: " + type);
+                return "";
         }
     }
 

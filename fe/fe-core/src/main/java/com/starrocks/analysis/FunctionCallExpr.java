@@ -44,7 +44,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
@@ -58,7 +57,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Stream;
 
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
@@ -470,12 +468,12 @@ public class FunctionCallExpr extends Expr {
         if ((fnName.getFunction().equalsIgnoreCase("sum")
                 || fnName.getFunction().equalsIgnoreCase("avg"))
                 && ((!arg.type.isNumericType() && !arg.type.isNull() && !(arg instanceof NullLiteral)) ||
-                arg.type.isOnlyMetricType())) {
+                !arg.type.canApplyToNumeric())) {
             throw new AnalysisException(fnName.getFunction() + " requires a numeric parameter: " + this.toSql());
         }
         if (fnName.getFunction().equalsIgnoreCase("sum_distinct")
                 && ((!arg.type.isNumericType() && !arg.type.isNull() && !(arg instanceof NullLiteral)) ||
-                arg.type.isOnlyMetricType())) {
+                !arg.type.canApplyToNumeric())) {
             throw new AnalysisException(
                     "SUM_DISTINCT requires a numeric parameter: " + this.toSql());
         }
@@ -484,7 +482,7 @@ public class FunctionCallExpr extends Expr {
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.MAX)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.NDV)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.APPROX_COUNT_DISTINCT))
-                && arg.type.isOnlyMetricType()) {
+                && !arg.type.canApplyToNumeric()) {
             throw new AnalysisException(Type.OnlyMetricTypeErrorMsg);
         }
 

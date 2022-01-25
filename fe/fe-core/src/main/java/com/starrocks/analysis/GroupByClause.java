@@ -213,7 +213,7 @@ public class GroupByClause implements ParseNode {
                                 + groupingExpr.toSql());
             }
 
-            if (groupingExpr.type.isOnlyMetricType()) {
+            if (!groupingExpr.type.canGroupBy()) {
                 throw new AnalysisException(Type.OnlyMetricTypeErrorMsg);
             }
         }

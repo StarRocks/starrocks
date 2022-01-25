@@ -100,6 +100,12 @@ public class CreateTableTest {
                         + "partition by range(k2)\n" + "(partition p1 values less than(\"10\"))\n"
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 
+        ExceptionChecker.expectThrowsNoException(() ->
+                createTable("create table test.tbl8( id int, j json) " +
+                        "distributed by hash(id) buckets 1 " +
+                        "properties('replication_num'='1'); "
+                ));
+
         ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "false");
         ExceptionChecker
                 .expectThrowsNoException(() -> createTable("create table test.tb7(key1 int, key2 varchar(10)) \n"
@@ -165,5 +171,48 @@ public class CreateTableTest {
                         () -> createTable(
                                 "create table test.tb7(key1 int, key2 varchar(10)) distributed by hash(key1) \n"
                                         + "buckets 1 properties('replication_num' = '1', 'storage_medium' = 'ssd');"));
+    }
+
+    @Test
+    public void testCreateJsonTable() {
+        // success
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.json_tbl1\n" +
+                        "(k1 int, j json)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.json_tbl2\n" +
+                        "(k1 int, j json, j1 json, j2 json)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        // failed
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Invalid data type of key column 'k2': 'JSON'",
+                () -> createTable("create table test.json_tbl0\n"
+                        + "(k1 int, k2 json)\n"
+                        + "duplicate key(k1, k2)\n"
+                        + "distributed by hash(k1) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "JSON column can not be distribution column",
+                () -> createTable("create table test.json_tbl0\n"
+                        + "(k1 int, k2 json)\n"
+                        + "duplicate key(k1)\n"
+                        + "distributed by hash(k2) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Column[j] type[JSON] cannot be a range partition key",
+                () -> createTable("create table test.json_tbl0\n" +
+                        "(k1 int(40), j json, j1 json, j2 json)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1, j)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
     }
 }

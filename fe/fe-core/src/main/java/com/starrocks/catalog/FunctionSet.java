@@ -125,6 +125,11 @@ public class FunctionSet {
     // geo functions
     public static final String ST_ASTEXT = "st_astext";
     public static final String GEO_FUNCTION_PREFIX = "st_";
+    // JSON functions
+    public static final String JSON_QUERY = "json_query";
+    public static final String PARSE_JSON = "parse_json";
+    public static final Function JSON_QUERY_FUNC = new Function(
+            new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 

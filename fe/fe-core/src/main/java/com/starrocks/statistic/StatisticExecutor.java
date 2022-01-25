@@ -416,7 +416,7 @@ public class StatisticExecutor {
             context.put("tableName", ClusterNamespace.getNameFromFullName(db.getFullName()) + "." + table.getName());
             context.put("dataSize", getDataSize(column, false));
 
-            if (column.getType().isOnlyMetricType()) {
+            if (!column.getType().canStatistic()) {
                 context.put("countDistinctFunction", "0");
                 context.put("countNullFunction", "0");
                 context.put("maxFunction", "''");
@@ -526,7 +526,7 @@ public class StatisticExecutor {
 
             StringWriter sw = new StringWriter();
 
-            if (column.getType().isOnlyMetricType()) {
+            if (!column.getType().canStatistic()) {
                 DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_SELECT_METRIC_SAMPLE_TEMPLATE);
             } else {
                 DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_SELECT_TYPE_SAMPLE_TEMPLATE);
@@ -549,7 +549,7 @@ public class StatisticExecutor {
 
         long typeSize = column.getType().getTypeSize();
 
-        if (isSample && !column.getType().isOnlyMetricType()) {
+        if (isSample && column.getType().canStatistic()) {
             return "IFNULL(SUM(t1.count), 0) * " + typeSize;
         }
         return "COUNT(1) * " + typeSize;

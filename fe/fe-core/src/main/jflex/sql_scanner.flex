@@ -239,6 +239,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("isolation", new Integer(SqlParserSymbols.KW_ISOLATION));
         keywordMap.put("install", new Integer(SqlParserSymbols.KW_INSTALL));
         keywordMap.put("join", new Integer(SqlParserSymbols.KW_JOIN));
+        keywordMap.put("json", new Integer(SqlParserSymbols.KW_JSON));
         keywordMap.put("key", new Integer(SqlParserSymbols.KW_KEY));
         keywordMap.put("keys", new Integer(SqlParserSymbols.KW_KEYS));
         keywordMap.put("kill", new Integer(SqlParserSymbols.KW_KILL));
@@ -455,6 +456,7 @@ import com.starrocks.qe.SqlModeHelper;
     tokenIdMap.put(new Integer(SqlParserSymbols.error), "ERROR");
     tokenIdMap.put(new Integer(SqlParserSymbols.BITXOR), "^");
     tokenIdMap.put(new Integer(SqlParserSymbols.NUMERIC_OVERFLOW), "NUMERIC OVERFLOW");
+    tokenIdMap.put(new Integer(SqlParserSymbols.ARROW), "->");
   }
 
   public static boolean isKeyword(Integer tokenId) {
@@ -594,6 +596,7 @@ EndOfLineComment = "--" !({HintContent}|{ContainsLineTerminator}) {LineTerminato
 "\"" { return newToken(SqlParserSymbols.UNMATCHED_STRING_LITERAL, null); }
 "'" { return newToken(SqlParserSymbols.UNMATCHED_STRING_LITERAL, null); }
 "`" { return newToken(SqlParserSymbols.UNMATCHED_STRING_LITERAL, null); }
+"->" { return newToken(SqlParserSymbols.ARROW, null); }
 
 {QuotedIdentifier} {
     // Remove the quotes
