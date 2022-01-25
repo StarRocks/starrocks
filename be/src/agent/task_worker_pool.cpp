@@ -639,12 +639,16 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         for (auto& par_ver_info : publish_version_req.partition_version_infos) {
             int64_t partition_id = par_ver_info.partition_id;
             // get all partition related tablets and check whether the tablet have the related version
+
             std::set<TabletInfo> partition_related_tablet_infos;
-            StorageEngine::instance()->tablet_manager()->get_partition_related_tablets(partition_id,
-                                                                                       &partition_related_tablet_infos);
-            if (publish_version_req.strict_mode && partition_related_tablet_infos.empty()) {
-                VLOG(1) << "could not find related tablet for partition " << partition_id << ", skip publish version";
-                continue;
+            if (publish_version_req.strict_mode) {
+                StorageEngine::instance()->tablet_manager()->get_partition_related_tablets(
+                        partition_id, &partition_related_tablet_infos);
+                if (partition_related_tablet_infos.empty()) {
+                    VLOG(1) << "could not find related tablet for partition " << partition_id
+                            << ", skip publish version";
+                    continue;
+                }
             }
 
             map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
@@ -699,25 +703,25 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
                     }
                     continue;
                 }
-                partition_related_tablet_infos.erase(tablet_info);
+                if (publish_version_req.strict_mode) partition_related_tablet_infos.erase(tablet_info);
             }
 
-            for (auto& tablet_info : partition_related_tablet_infos) {
-                // has to use strict mode to check if check all tablets
-                if (!publish_version_req.strict_mode) {
-                    break;
-                }
-                TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_info.tablet_id);
-                if (tablet == nullptr) {
-                    error_tablet_ids->push_back(tablet_info.tablet_id);
-                } else {
-                    // check if the version exist, if not exist, then set publish failed
-                    if (!tablet->check_version_exist(Version{version, version})) {
+            if (publish_version_req.strict_mode) {
+                // use strict mode to check if check all tablets
+                for (auto& tablet_info : partition_related_tablet_infos) {
+                    TabletSharedPtr tablet =
+                            StorageEngine::instance()->tablet_manager()->get_tablet(tablet_info.tablet_id);
+                    if (tablet == nullptr) {
                         error_tablet_ids->push_back(tablet_info.tablet_id);
-                        // TODO(zc)
-                        // generate a pull rowset meta task to pull rowset from remote meta store and storage
-                        // pull rowset meta using tablet_id + txn_id
-                        // it depends on the tablet type to download file or only meta
+                    } else {
+                        // check if the version exist, if not exist, then set publish failed
+                        if (!tablet->check_version_exist(Version{version, version})) {
+                            error_tablet_ids->push_back(tablet_info.tablet_id);
+                            // TODO(zc)
+                            // generate a pull rowset meta task to pull rowset from remote meta store and storage
+                            // pull rowset meta using tablet_id + txn_id
+                            // it depends on the tablet type to download file or only meta
+                        }
                     }
                 }
             }
