@@ -225,8 +225,10 @@ public class MaterializedViewRule extends Rule {
         LogicalOperator logicalOperator = (LogicalOperator) operator;
         if (logicalOperator.getPredicate() != null) {
             ScalarOperator scalarOperator = logicalOperator.getPredicate();
-            Preconditions.checkState(scalarOperator instanceof PredicateOperator);
-            updateTableToColumns(scalarOperator, columnIdsInPredicates);
+            if (!scalarOperator.isConstantRef()) {
+                Preconditions.checkState(scalarOperator instanceof PredicateOperator);
+                updateTableToColumns(scalarOperator, columnIdsInPredicates);
+            }
         }
         if (logicalOperator instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
