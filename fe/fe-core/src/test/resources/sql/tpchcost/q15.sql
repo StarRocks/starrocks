@@ -255,6 +255,7 @@ OutPut Exchange Id: 22
 |  equal join conjunct: [1: S_SUPPKEY, INT, false] = [11: L_SUPPKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (11: L_SUPPKEY), remote = false
+|  output columns: 1, 2, 3, 5, 27
 |  cardinality: 1
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
@@ -302,6 +303,7 @@ OutPut Exchange Id: 18
 |  equal join conjunct: [27: sum, DOUBLE, true] = [47: max, DOUBLE, true]
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (47: max), remote = false
+|  output columns: 11, 27
 |  cardinality: 1
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE

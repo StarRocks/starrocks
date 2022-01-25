@@ -79,6 +79,7 @@ public class HashJoinNode extends PlanNode {
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     private final List<Integer> filter_null_value_columns = Lists.newArrayList();
     private List<Expr> partitionExprs;
+    private List<Integer> outputSlots;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -413,6 +414,10 @@ public class HashJoinNode extends PlanNode {
             msg.hash_join_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
         }
         msg.setFilter_null_value_columns(filter_null_value_columns);
+
+        if (outputSlots != null) {
+            msg.hash_join_node.setOutput_columns(outputSlots);
+        }
     }
 
     @Override
@@ -469,6 +474,13 @@ public class HashJoinNode extends PlanNode {
                 output.append(detailPrefix).append("- ").append(rf.toExplainString(-1)).append("\n");
             }
         }
+
+        if (outputSlots != null) {
+            output.append(detailPrefix).append("output columns: ");
+            output.append(outputSlots.stream().map(Object::toString).collect(Collectors.joining(", ")));
+            output.append("\n");
+        }
+
         return output.toString();
     }
 
@@ -540,5 +552,9 @@ public class HashJoinNode extends PlanNode {
         if (joinOp.isOuterJoin() && !description.getEqualForNull() && slotRefWithNullValue) {
             filter_null_value_columns.add(slotId.asInt());
         }
+    }
+
+    public void setOutputSlots(List<Integer> outputSlots) {
+        this.outputSlots = outputSlots;
     }
 }
