@@ -82,8 +82,8 @@ struct RetentionState {
  * 
  * for example, we could compute the Retention of 2020-01-02 from 2020-01-01, through following sql:
  * 
- *              select sum(retention[2]) / sum(retention[1]) as retention from (select retention([event_type = '点击' and time
- *              = '2020-01-01', event_type = '支付' and time = '2020-01-02']) as retention from test_retention 
+ *              select sum(retention[2]) / sum(retention[1]) as retention from (select retention([event_type = 'click' and time
+ *              = '2020-01-01', event_type = 'payment' and time = '2020-01-02']) as retention from test_retention 
  *              where time = '2020-01-01' or time = '2020-01-02' group by uid) t;
  */
 class RetentionAggregateFunction final
