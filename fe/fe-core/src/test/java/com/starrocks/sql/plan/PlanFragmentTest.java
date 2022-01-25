@@ -5523,5 +5523,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select 1 from t0 left outer join t1 on t0.v1= t1.v4 where md5sum(t1.v4) = 'a'";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (BROADCAST)"));
+        Assert.assertTrue(plan.contains("other predicates: md5sum(CAST(4: v4 AS VARCHAR)) = 'a'"));
     }
 }
