@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "exprs/vectorized/function_helper.h"
+#include "exprs/vectorized/array_functions.tpp"
 
 namespace starrocks::vectorized {
 
@@ -19,19 +19,26 @@ public:
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
 
-    DEFINE_VECTORIZED_FN(array_distinct_boolean);
-    DEFINE_VECTORIZED_FN(array_distinct_tinyint);
-    DEFINE_VECTORIZED_FN(array_distinct_smallint);
-    DEFINE_VECTORIZED_FN(array_distinct_int);
-    DEFINE_VECTORIZED_FN(array_distinct_bigint);
-    DEFINE_VECTORIZED_FN(array_distinct_largeint);
-    DEFINE_VECTORIZED_FN(array_distinct_float);
-    DEFINE_VECTORIZED_FN(array_distinct_double);
-    DEFINE_VECTORIZED_FN(array_distinct_varchar);
-    DEFINE_VECTORIZED_FN(array_distinct_char);
-    DEFINE_VECTORIZED_FN(array_distinct_decimalv2);
-    DEFINE_VECTORIZED_FN(array_distinct_datetime);
-    DEFINE_VECTORIZED_FN(array_distinct_date);
+#define DEFINE_ARRAY_DISTINCT_FN(NAME, PT)                                                     \
+    static ColumnPtr array_distinct_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayDistinct<PT>::process(context, columns);                                   \
+    }
+
+    DEFINE_ARRAY_DISTINCT_FN(boolean, PrimitiveType::TYPE_BOOLEAN);
+    DEFINE_ARRAY_DISTINCT_FN(tinyint, PrimitiveType::TYPE_TINYINT);
+    DEFINE_ARRAY_DISTINCT_FN(smallint, PrimitiveType::TYPE_SMALLINT);
+    DEFINE_ARRAY_DISTINCT_FN(int, PrimitiveType::TYPE_INT);
+    DEFINE_ARRAY_DISTINCT_FN(bigint, PrimitiveType::TYPE_BIGINT);
+    DEFINE_ARRAY_DISTINCT_FN(largeint, PrimitiveType::TYPE_LARGEINT);
+    DEFINE_ARRAY_DISTINCT_FN(float, PrimitiveType::TYPE_FLOAT);
+    DEFINE_ARRAY_DISTINCT_FN(double, PrimitiveType::TYPE_DOUBLE);
+    DEFINE_ARRAY_DISTINCT_FN(varchar, PrimitiveType::TYPE_VARCHAR);
+    DEFINE_ARRAY_DISTINCT_FN(char, PrimitiveType::TYPE_CHAR);
+    DEFINE_ARRAY_DISTINCT_FN(decimalv2, PrimitiveType::TYPE_DECIMALV2);
+    DEFINE_ARRAY_DISTINCT_FN(datetime, PrimitiveType::TYPE_DATETIME);
+    DEFINE_ARRAY_DISTINCT_FN(date, PrimitiveType::TYPE_DATE);
+
+#undef DEFINE_ARRAY_DISTINCT_FN
 
     DEFINE_VECTORIZED_FN(array_sum_boolean);
     DEFINE_VECTORIZED_FN(array_sum_tinyint);
@@ -94,13 +101,6 @@ private:
     static ColumnPtr _array_process_not_nullable_types(const Column* elements, const UInt32Column& offsets,
                                                        const NullColumn::Container* null_elements,
                                                        std::vector<uint8_t>* null_ptr);
-
-    template <PrimitiveType PT, typename HashSet>
-    static void _array_distinct_item(const ArrayColumn& column, size_t index, HashSet* hash_set,
-                                     ArrayColumn* dest_column);
-
-    template <PrimitiveType type, typename HashSet>
-    static ColumnPtr array_distinct(const Columns& column);
 
     template <PrimitiveType type>
     static ColumnPtr array_sum(const Columns& columns);
