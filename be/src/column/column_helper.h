@@ -10,6 +10,7 @@
 
 #include "column/const_column.h"
 #include "column/type_traits.h"
+#include "json_column.h"
 #include "common/config.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"

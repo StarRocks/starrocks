@@ -28,7 +28,6 @@
 
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "column/json_column.h"
 #include "common/status.h"
 #include "fmt/compile.h"
 #include "fmt/core.h"
