@@ -935,6 +935,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  equal join conjunct: [10: v4, BIGINT, true] = [7: v7, BIGINT, true]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (7: v7), remote = false\n" +
+                "  |  output columns: 10\n" +
                 "  |  cardinality: 400000"));
 
         connectContext.getSessionVariable().setCboCteReuse(false);
