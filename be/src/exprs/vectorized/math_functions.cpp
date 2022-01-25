@@ -445,8 +445,8 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const starrocks::
         digit_start_offset += negative;
         StringParser::ParseResult parse_res;
         uint64_t decimal64_num = StringParser::string_to_int<uint64_t>(data_ptr + digit_start_offset,
-                                                                     string_value.size - digit_start_offset,
-                                                                     std::abs(src_base_value), &parse_res);
+                                                                       string_value.size - digit_start_offset,
+                                                                       std::abs(src_base_value), &parse_res);
         if (parse_res == StringParser::PARSE_SUCCESS) {
             if (is_signed) {
                 if (negative && decimal64_num > 0ull - std::numeric_limits<int64_t>::min()) {
@@ -461,7 +461,8 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const starrocks::
             continue;
         } else if (parse_res == StringParser::PARSE_OVERFLOW) {
             if (is_signed) {
-                decimal64_num = negative ? (0ull - std::numeric_limits<int64_t>::min()) : std::numeric_limits<int64_t>::max();
+                decimal64_num =
+                        negative ? (0ull - std::numeric_limits<int64_t>::min()) : std::numeric_limits<int64_t>::max();
             } else {
                 decimal64_num = negative ? 0 : std::numeric_limits<uint64_t>::max();
             }
