@@ -162,6 +162,11 @@ Status JsonScanner::_construct_json_types() {
             _json_types[column_pos] = std::move(varchar_type);
             break;
         }
+        case TYPE_JSON: {
+            auto json_type = TypeDescriptor::create_json_type();
+            _json_types[column_pos] = std::move(json_type);
+            break;
+        }
 
         case TYPE_JSON: {
             _json_types[column_pos] = TypeDescriptor::create_json_type();
@@ -213,7 +218,7 @@ Status JsonScanner::_construct_cast_exprs() {
     return Status::OK();
 }
 
-Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<std::vector<JsonPath>>* path_vecs) {
+Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs) {
     try {
         simdjson::dom::parser parser;
         simdjson::dom::element elem = parser.parse(jsonpath.c_str(), jsonpath.length());
@@ -225,7 +230,7 @@ Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<s
                 return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", jsonpath));
             }
 
-            std::vector<JsonPath> parsed_paths;
+            std::vector<SimpleJsonPath> parsed_paths;
             const char* cstr = path.get_c_str();
 
             JsonFunctions::parse_json_paths(std::string(cstr), &parsed_paths);
