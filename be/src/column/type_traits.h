@@ -58,6 +58,8 @@ template <>
 inline constexpr bool IsObject<BitmapValue> = true;
 template <>
 inline constexpr bool IsObject<PercentileValue> = true;
+template <>
+inline constexpr bool IsObject<JsonValue> = true;
 
 template <typename T>
 using is_starrocks_arithmetic = std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T>>;
@@ -83,6 +85,8 @@ template <>
 inline constexpr bool isArithmeticPT<TYPE_OBJECT> = false;
 template <>
 inline constexpr bool isArithmeticPT<TYPE_PERCENTILE> = false;
+template <>
+inline constexpr bool isArithmeticPT<TYPE_JSON> = false;
 
 template <PrimitiveType primitive_type>
 constexpr bool isSlicePT = false;
@@ -220,6 +224,12 @@ template <>
 struct RunTimeTypeTraits<TYPE_PERCENTILE> {
     using CppType = PercentileValue*;
     using ColumnType = PercentileColumn;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_JSON> {
+    using CppType = JsonValue*;
+    using ColumnType = JsonColumn;
 };
 
 template <PrimitiveType Type>

@@ -11,6 +11,7 @@ class DecimalV2Value;
 class HyperLogLog;
 class BitmapValue;
 class PercentileValue;
+class JsonValue;
 
 namespace vectorized {
 
@@ -80,6 +81,7 @@ class ObjectColumn;
 using HyperLogLogColumn = ObjectColumn<HyperLogLog>;
 using BitmapColumn = ObjectColumn<BitmapValue>;
 using PercentileColumn = ObjectColumn<PercentileValue>;
+using JsonColumn = ObjectColumn<JsonValue>;
 
 using ChunkPtr = std::shared_ptr<Chunk>;
 using ChunkUniquePtr = std::unique_ptr<Chunk>;

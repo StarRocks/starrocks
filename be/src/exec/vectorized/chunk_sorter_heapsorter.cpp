@@ -8,6 +8,7 @@
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/json_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "glog/logging.h"

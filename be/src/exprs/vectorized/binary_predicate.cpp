@@ -4,6 +4,7 @@
 
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
+#include "column/json_column.h"
 #include "exprs/vectorized/binary_function.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"

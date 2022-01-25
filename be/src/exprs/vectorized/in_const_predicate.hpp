@@ -5,6 +5,7 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/json_column.h"
 #include "column/hash_set.h"
 #include "common/object_pool.h"
 #include "exprs/predicate.h"

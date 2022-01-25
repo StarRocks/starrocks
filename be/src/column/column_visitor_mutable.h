@@ -40,6 +40,7 @@ public:
     virtual Status visit(vectorized::HyperLogLogColumn* column);
     virtual Status visit(vectorized::BitmapColumn* column);
     virtual Status visit(vectorized::PercentileColumn* column);
+    virtual Status visit(vectorized::JsonColumn* column);
     virtual Status visit(vectorized::FixedLengthColumn<int96_t>* column);
     virtual Status visit(vectorized::FixedLengthColumn<uint24_t>* column);
     virtual Status visit(vectorized::FixedLengthColumn<decimal12_t>* column);

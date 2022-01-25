@@ -32,6 +32,7 @@ namespace starrocks {
     M(TYPE_DATE)                     \
     M(TYPE_DATETIME)                 \
     M(TYPE_TIME)                     \
+    M(TYPE_JSON)                    \
     M(TYPE_BOOLEAN)
 
 #define APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M) \
@@ -65,7 +66,8 @@ namespace starrocks {
     M(PERCENTILE)                       \
     M(DECIMAL32)                        \
     M(DECIMAL64)                        \
-    M(DECIMAL128)
+    M(DECIMAL128)                       \
+    M(JSON)
 
 #define TYPE_DISPATCH_CAST_TYPE(TEMPLATEF_FUNC, typeFrom, typeTo, ...)        \
     [&]() {                                                                   \

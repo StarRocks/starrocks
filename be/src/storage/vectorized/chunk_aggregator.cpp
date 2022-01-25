@@ -194,6 +194,7 @@ CompareFN ChunkAggregator::_choose_comparator(const FieldPtr& field) {
     case OLAP_FIELD_TYPE_HLL:
     case OLAP_FIELD_TYPE_OBJECT:
     case OLAP_FIELD_TYPE_PERCENTILE:
+    case OLAP_FIELD_TYPE_JSON:
     case OLAP_FIELD_TYPE_MAX_VALUE:
         CHECK(false) << "unhandled key column type: " << field->type()->type();
         return nullptr;

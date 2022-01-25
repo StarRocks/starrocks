@@ -13,6 +13,7 @@
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "util/date_func.h"
+#include "util/json.h"
 
 namespace starrocks::vectorized {
 
