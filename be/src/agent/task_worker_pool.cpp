@@ -240,7 +240,6 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
 
         LOG(INFO) << "success to submit task. type=" << type_str << ", signature=" << signature
                   << ", task_count_in_queue=" << _tasks.size();
-        ;
     }
 }
 

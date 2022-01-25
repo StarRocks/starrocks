@@ -23,7 +23,6 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
@@ -453,12 +452,7 @@ public class ConnectContext {
         // Now, cancel running process.
         StmtExecutor executorRef = executor;
         if (executorRef != null) {
-            if (executorRef.getParsedStmt() instanceof DeleteStmt) {
-                DeleteStmt deleteStmt = (DeleteStmt) executorRef.getParsedStmt();
-                catalog.getDeleteHandler().killJob(deleteStmt.getJobId());
-            } else {
-                executorRef.cancel();
-            }
+            executorRef.cancel();
         }
     }
 
