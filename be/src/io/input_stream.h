@@ -11,9 +11,12 @@ namespace starrocks::io {
 // InputStream is the superclass of all classes representing an input stream of bytes.
 class InputStream : public Readable {
 public:
-    ~InputStream() override = default();
+    ~InputStream() override = default;
 
     // Skips a number of bytes.
+    // This is guaranteed to be no slower that reading the same data, but may be faster.
+    // If end of stream is reached, skipping will stop at the end of the stream, and skip
+    // will return OK.
     // Returns error if an underlying read error occurs.
     virtual Status skip(int64_t count) = 0;
 
