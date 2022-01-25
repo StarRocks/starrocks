@@ -1,5 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-package com.starrocks.sql.analyzer;
+package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -21,22 +21,90 @@ import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 
-public abstract class ExprVisitor<R, C> {
-    public R visit(Expr node) {
+public abstract class AstVisitor<R, C> {
+    public R visit(ParseNode node) {
         return visit(node, null);
     }
 
-    public R visit(Expr node, C context) {
+    public R visit(ParseNode node, C context) {
         return node.accept(this, context);
     }
 
-    public R visitExpression(Expr node, C context) {
+    public R visitNode(ParseNode node, C context) {
         return null;
+    }
+
+    // ----------------- Statement ---------------
+
+    public R visitStatement(StatementBase node, C context) {
+        return visitNode(node, context);
+    }
+
+    // ----------------- Relation ---------------
+
+    public R visitRelation(Relation node, C context) {
+        return visitNode(node, context);
+    }
+
+    public R visitQueryRelation(QueryRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitSelect(SelectRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitTable(TableRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitJoin(JoinRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitSubquery(SubqueryRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitUnion(UnionRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitExcept(ExceptRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitIntersect(IntersectRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitValues(ValuesRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitTableFunction(TableFunctionRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitInsert(InsertRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitCTE(CTERelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    // ----------------- Expression ---------------
+
+    public R visitExpression(Expr node, C context) {
+        return visitNode(node, context);
     }
 
     public R visitSlot(SlotRef node, C context) {

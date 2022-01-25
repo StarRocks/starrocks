@@ -26,7 +26,7 @@ import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCaseExpr;
 import com.starrocks.thrift.TExprNode;
@@ -398,7 +398,7 @@ public class CaseExpr extends Expr {
     }
 
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitCaseWhenExpr(this, context);
     }
 }
