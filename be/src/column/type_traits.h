@@ -6,9 +6,11 @@
 #include "column/decimalv3_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
+#include "column/vectorized_fwd.h"
 #include "runtime/primitive_type.h"
 
 namespace starrocks {
+
 namespace vectorized {
 
 template <bool B, typename T>
