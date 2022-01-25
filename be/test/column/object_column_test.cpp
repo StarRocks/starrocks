@@ -23,8 +23,10 @@
 
 #include <gtest/gtest.h>
 
+#include "column/column_helper.h"
 #include "column/const_column.h"
 #include "exprs/vectorized/percentile_functions.h"
+#include "runtime/types.h"
 #include "storage/hll.h"
 #include "util/percentile_value.h"
 
@@ -34,7 +36,7 @@ namespace starrocks::vectorized {
 TEST(ObjectColumnTest, HLL_test_filter) {
     // keep all.
     {
-        auto c = HyperLogLogColumn::create();
+        auto c = ColumnHelper::create_column(TypeDescriptor::create_hll_type(), false);
         c->resize(100);
         ASSERT_EQ(100, c->size());
 

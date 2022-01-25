@@ -30,6 +30,8 @@
 #include <unordered_map>
 
 #include "column/datum.h"
+#include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "gen_cpp/segment.pb.h" // for ColumnMetaPB
 #include "gutil/strings/numbers.h"
 #include "runtime/date_value.hpp"
@@ -407,6 +409,8 @@ static const std::vector<std::string> DATE_FORMATS{
         "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d", "%y/%m/%d",
 };
 
+// CppTypeTraits:
+// Infer on-disk type(CppType) from FieldType
 template <FieldType field_type>
 struct CppTypeTraits {};
 
@@ -428,8 +432,18 @@ struct CppTypeTraits<OLAP_FIELD_TYPE_TINYINT> {
     using UnsignedCppType = uint8_t;
 };
 template <>
+struct CppTypeTraits<OLAP_FIELD_TYPE_UNSIGNED_TINYINT> {
+    using CppType = uint8_t;
+    using UnsignedCppType = uint8_t;
+};
+template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_SMALLINT> {
     using CppType = int16_t;
+    using UnsignedCppType = uint16_t;
+};
+template <>
+struct CppTypeTraits<OLAP_FIELD_TYPE_UNSIGNED_SMALLINT> {
+    using CppType = uint16_t;
     using UnsignedCppType = uint16_t;
 };
 template <>
@@ -539,6 +553,62 @@ struct CppTypeTraits<OLAP_FIELD_TYPE_PERCENTILE> {
 template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_ARRAY> {
     using CppType = Collection;
+};
+
+// CppColumnTraits:
+// Infer in-memory type from field type
+template <FieldType ftype>
+struct CppColumnTraits {
+    using CppType = typename CppTypeTraits<ftype>::CppType;
+    using ColumnType = typename vectorized::ColumnTraits<CppType>::ColumnType;
+};
+
+// Special types: In-memory type(ColumnType) is different from on-disk type(CppType)
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_BOOL> {
+    using ColumnType = vectorized::UInt8Column;
+};
+
+// deprecated
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_DATE> {
+    using ColumnType = vectorized::FixedLengthColumn<uint24_t>;
+};
+
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_DATE_V2> {
+    using ColumnType = vectorized::DateColumn;
+};
+
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_TIMESTAMP> {
+    using ColumnType = vectorized::TimestampColumn;
+};
+
+// deprecated
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_DECIMAL> {
+    using ColumnType = vectorized::FixedLengthColumn<decimal12_t>;
+};
+
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_HLL> {
+    using ColumnType = vectorized::HyperLogLogColumn;
+};
+
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_PERCENTILE> {
+    using ColumnType = vectorized::PercentileColumn;
+};
+
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_OBJECT> {
+    using ColumnType = vectorized::BitmapColumn;
+};
+
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_UNSIGNED_INT> {
+    using ColumnType = vectorized::UInt32Column;
 };
 
 template <FieldType field_type>
