@@ -223,12 +223,14 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
             int null_pos = 0;
             for (int i = 0; i < num_parsed_levels; ++i) {
                 _is_nulls[null_pos] = _def_levels[i] < _field->max_def_level();
+                // if current def level < ancestor def level, the ancestor will be not defined too, so that we don't
+                // need to add null value to this column. Otherwise, we need to add null value to this column.
                 null_pos += _def_levels[i] >= _field->level_info.immediate_repeated_ancestor_def_level;
             }
             RETURN_IF_ERROR(_reader->decode_values(null_pos, &_is_nulls[0], content_type, dst));
         }
 
-        records_read += num_parsed_levels;
+        records_read += records_to_read;
         _levels_parsed += num_parsed_levels;
         _num_values_left_in_cur_page -= num_parsed_levels;
     } while (records_read < *num_records);
