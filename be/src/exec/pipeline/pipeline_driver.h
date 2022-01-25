@@ -160,6 +160,7 @@ public:
             : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id,
                              driver._is_root) {}
 
+    ~PipelineDriver();
     QueryContext* query_ctx() { return _query_ctx; }
     FragmentContext* fragment_ctx() { return _fragment_ctx; }
     int32_t source_node_id() { return _source_node_id; }

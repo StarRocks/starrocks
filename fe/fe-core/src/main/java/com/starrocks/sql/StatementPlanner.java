@@ -6,7 +6,7 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.UserException;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StatementPlanner {
-    public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
+    public ExecPlan plan(StatementBase stmt, ConnectContext session) throws UserException {
         com.starrocks.sql.analyzer.Analyzer analyzer =
                 new com.starrocks.sql.analyzer.Analyzer(session.getCatalog(), session);
         Relation relation = analyzer.analyze(stmt);

@@ -60,6 +60,7 @@ public:
         REPORT_TASK,
         REPORT_DISK_STATE,
         REPORT_OLAP_TABLE,
+        REPORT_WORKGROUP,
         UPLOAD,
         DOWNLOAD,
         MAKE_SNAPSHOT,
@@ -109,6 +110,7 @@ private:
     static void* _report_task_worker_thread_callback(void* arg_this);
     static void* _report_disk_state_worker_thread_callback(void* arg_this);
     static void* _report_tablet_worker_thread_callback(void* arg_this);
+    static void* _report_workgroup_thread_callback(void* arg_this);
     static void* _upload_worker_thread_callback(void* arg_this);
     static void* _download_worker_thread_callback(void* arg_this);
     static void* _make_snapshot_thread_callback(void* arg_this);

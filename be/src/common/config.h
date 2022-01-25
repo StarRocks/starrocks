@@ -113,6 +113,8 @@ CONF_mInt32(report_task_interval_seconds, "10");
 CONF_mInt32(report_disk_state_interval_seconds, "60");
 // the interval time(seconds) for agent report olap table to FE
 CONF_mInt32(report_tablet_interval_seconds, "60");
+// the interval time(seconds) for agent report workgroup to FE
+CONF_mInt32(report_workgroup_interval_seconds, "5");
 // the interval time(seconds) for agent report plugin status to FE
 // CONF_Int32(report_plugin_interval_seconds, "120");
 // the timeout(seconds) for alter table
