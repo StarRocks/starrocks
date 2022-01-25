@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
@@ -9,12 +10,67 @@ import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 
 public class FunctionAnalyzer {
 
+    // geo function whose name starts_with 'st_' and is not 'st_astext' generates invalid utf8 strings. so it cannot
+    // be used as a argument to a string-typed parameter of a function.
+    // 1. select reverse(st_circle(...)) unacceptable
+    // 2. select reverse(st_astext(st_circle(...)) acceptable
+    // 3. select reverse(cast(st_circle(...) as varchar)) unacceptable
+    // 4. select reverse(cast(cast(st_circle(...) as varchar) as varchar))) unacceptable
+    public static void checkGeoFunctionGeneratedInvalidUtf8(FunctionCallExpr node) throws SemanticException {
+        Function fn = node.getFn();
+        String fnName = fn.functionName().toLowerCase();
+        if (fnName.equals(FunctionSet.ST_ASTEXT) || !(fn instanceof ScalarFunction)) {
+            return;
+        }
+        int numChildren = node.getChildren().size();
+        Type[] args = fn.getArgs();
+        for (int i = 0; i < numChildren; ++i) {
+            Type childType;
+            // variadic functions
+            if (i > args.length - 1) {
+                if (!fn.hasVarArgs()) {
+                    continue;
+                }
+                childType = fn.getVarArgsType();
+            } else {
+                childType = fn.getArgs()[i];
+            }
+
+            if (!childType.isStringType()) {
+                continue;
+            }
+
+            // strip cast(expr as varchar)
+            Expr child = node.getChild(i);
+            while (child instanceof CastExpr) {
+                Type grandsonType = child.getChild(0).getType();
+                if (grandsonType.isStringType()) {
+                    child = child.getChild(0);
+                } else {
+                    break;
+                }
+            }
+            if (child instanceof FunctionCallExpr) {
+                FunctionCallExpr fnCallChild = (FunctionCallExpr) child;
+                String name = fnCallChild.getFn().functionName().toLowerCase();
+                if (!name.equals(FunctionSet.ST_ASTEXT) && name.startsWith(FunctionSet.GEO_FUNCTION_PREFIX)
+                        && fnCallChild.getFn().getReturnType().isStringType()) {
+                    throw new SemanticException(String.format("Function '%s' cannot invoke '%s'", fn.functionName(), name));
+                }
+            }
+        }
+        return;
+    }
+
     public static void analyze(FunctionCallExpr functionCallExpr) {
+        checkGeoFunctionGeneratedInvalidUtf8(functionCallExpr);
         if (functionCallExpr.getFn() instanceof AggregateFunction) {
             analyzeBuiltinAggFunction(functionCallExpr);
         }

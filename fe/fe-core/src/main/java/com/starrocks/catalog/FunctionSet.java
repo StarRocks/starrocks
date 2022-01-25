@@ -123,6 +123,10 @@ public class FunctionSet {
     // string functions
     public static final String SUBSTRING = "substring";
 
+    // geo functions
+    public static final String ST_ASTEXT = "st_astext";
+    public static final String GEO_FUNCTION_PREFIX = "st_";
+
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
     private static final Map<Type, Type> MULTI_DISTINCT_SUM_RETURN_TYPE =
