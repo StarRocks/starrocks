@@ -132,6 +132,7 @@ public class StarRocksFE {
                 Thread.sleep(2000);
             }
         } catch (Throwable e) {
+            LOG.error("StarRocksFE start failed", e);
             e.printStackTrace();
         }
     }
