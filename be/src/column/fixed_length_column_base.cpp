@@ -11,7 +11,6 @@
 #include "util/coding.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
-#include "util/types.h"
 
 namespace starrocks::vectorized {
 
