@@ -1,6 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
@@ -10,6 +9,7 @@ import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
@@ -188,6 +188,17 @@ public class FunctionAnalyzer {
             if (arg.getType().isDecimalV3()) {
                 throw new SemanticException("array_agg does not support DecimalV3");
             }
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.RETENTION)) {
+            if (!arg.getType().isArrayType()) {
+                throw new SemanticException("retention only support Array<BOOLEAN>");
+            }
+            ArrayType type = (ArrayType) arg.getType();
+            if (!type.getItemType().isBoolean()) {
+                throw new SemanticException("retention only support Array<BOOLEAN>");
+            }
+            // For Array<BOOLEAN> that have different size, we just extend result array to Compatible with it
         }
 
         // SUM and AVG cannot be applied to non-numeric types

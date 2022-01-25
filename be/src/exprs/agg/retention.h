@@ -26,13 +26,9 @@ namespace starrocks::vectorized {
 struct RetentionState {
     void merge_array_element(const DatumArray& datum_array) {
         auto size = datum_array.size();
-        if (!is_initial) {
-            is_initial = true;
+        if (size > boolean_vector.size()) {
             boolean_vector.resize(size);
         }
-
-        // All array conditions' size is equal.
-        DCHECK_EQ(boolean_vector.size(), datum_array.size());
 
         for (int i = 0; i < size; ++i) {
             // Use union operation between different rows of the same condition.
@@ -42,7 +38,7 @@ struct RetentionState {
 
     template <bool finalize>
     void serialize_to_array_column(ArrayColumn* array_column) const {
-        if (is_initial) {
+        if (!boolean_vector.empty()) {
             size_t size = boolean_vector.size();
             DatumArray array;
             array.reserve(size);
@@ -57,8 +53,6 @@ struct RetentionState {
             array_column->append_datum(array);
         }
     }
-
-    bool is_initial = false;
 
     /*
      * The nth element of boolean_vector is the partial result of 
