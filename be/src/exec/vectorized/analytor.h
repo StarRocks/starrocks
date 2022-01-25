@@ -7,6 +7,7 @@
 #include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 #include "util/runtime_profile.h"
@@ -123,12 +124,14 @@ public:
 private:
     RuntimeState* _state = nullptr;
     bool _is_closed = false;
-
-    const TPlanNode _tnode;
+    // TPlanNode is only valid in the PREPARE and INIT phase
+    const TPlanNode& _tnode;
     const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
+    // The open phase still relies on the TFunction object for some initialization operations
+    std::vector<TFunction> _fns;
 
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;

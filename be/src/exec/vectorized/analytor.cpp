@@ -239,6 +239,12 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
     }
 
+    // save TFunction object
+    _fns.resize(_agg_fn_ctxs.size());
+    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+        _fns.push_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
+    }
+
     return Status::OK();
 }
 
@@ -252,8 +258,8 @@ Status Analytor::open(RuntimeState* state) {
     }
 #ifdef STARROCKS_WITH_HDFS
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        if (_tnode.analytic_node.analytic_functions[i].nodes[0].fn.binary_type == TFunctionBinaryType::SRJAR) {
-            const auto& fn = _tnode.analytic_node.analytic_functions[i].nodes[0].fn;
+        if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+            const auto& fn = _fns[i];
             auto st = vectorized::window_init_jvm_context(fn.id, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
                                                           _agg_fn_ctxs[i]);
             RETURN_IF_ERROR(st);
