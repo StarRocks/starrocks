@@ -546,16 +546,10 @@ public class EditLog {
                     catalog.replayExpandCluster(info);
                     break;
                 }
-                case OperationType.OP_LINK_CLUSTER: {
-                    final BaseParam param = (BaseParam) journal.getData();
-                    catalog.replayLinkDb(param);
+                // for compatibility
+                case OperationType.OP_LINK_CLUSTER:
+                case OperationType.OP_MIGRATE_CLUSTER:
                     break;
-                }
-                case OperationType.OP_MIGRATE_CLUSTER: {
-                    final BaseParam param = (BaseParam) journal.getData();
-                    catalog.replayMigrateDb(param);
-                    break;
-                }
                 case OperationType.OP_UPDATE_DB: {
                     final DatabaseInfo param = (DatabaseInfo) journal.getData();
                     catalog.replayUpdateDb(param);
