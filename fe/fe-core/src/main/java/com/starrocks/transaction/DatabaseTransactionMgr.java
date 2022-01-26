@@ -280,7 +280,7 @@ public class DatabaseTransactionMgr {
                 if (!notAbortedTxns.isEmpty()) {
                     TransactionState notAbortedTxn = notAbortedTxns.get(0);
                     if (requestId != null && notAbortedTxn.getTransactionStatus() == TransactionStatus.PREPARE
-                            && notAbortedTxn.getRequsetId() != null && notAbortedTxn.getRequsetId().equals(requestId)) {
+                            && notAbortedTxn.getRequestId() != null && notAbortedTxn.getRequestId().equals(requestId)) {
                         // this may be a retry request for same job, just return existing txn id.
                         throw new DuplicatedRequestException(DebugUtil.printId(requestId),
                                 notAbortedTxn.getTransactionId(), "");
@@ -1129,17 +1129,18 @@ public class DatabaseTransactionMgr {
     public void removeExpiredTxns(long currentMillis) {
         writeLock();
         try {
+            int numJobsToRemove = getTransactionNum() - Config.label_keep_max_num;
             while (!finalStatusTransactionStateDeque.isEmpty()) {
                 TransactionState transactionState = finalStatusTransactionStateDeque.getFirst();
-                if (transactionState.isExpired(currentMillis)) {
+                if (transactionState.isExpired(currentMillis) || numJobsToRemove > 0) {
                     finalStatusTransactionStateDeque.pop();
                     clearTransactionState(transactionState);
+                    --numJobsToRemove;
                     LOG.info("transaction [" + transactionState.getTransactionId() +
                             "] is expired, remove it from transaction manager");
                 } else {
                     break;
                 }
-
             }
         } finally {
             writeUnlock();
