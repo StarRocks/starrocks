@@ -337,16 +337,27 @@ ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns
     return JsonFunctions::template _iterate_rows<TYPE_VARCHAR>(context, columns);
 }
 
+static ColumnPtr fake_result(size_t rows) {
+    ColumnBuilder<TYPE_VARCHAR> result(rows);
+    for (int i = 0; i < rows; i++) {
+        result.append_null();
+    }
+    return result.build(true);
+}
+
 ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
-    CHECK(false) << "TODO";
+    // TODO(mofei) implement
+    return fake_result(columns[0]->size());
 }
 
 ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {
-    CHECK(false) << "TODO";
+    // TODO(mofei) implement
+    return fake_result(columns[0]->size());
 }
 
 ColumnPtr JsonFunctions::json_array(FunctionContext* context, const Columns& columns) {
-    CHECK(false) << "TODO";
+    // TODO(mofei) implement
+    return fake_result(columns[0]->size());
 }
 
 } // namespace starrocks::vectorized
