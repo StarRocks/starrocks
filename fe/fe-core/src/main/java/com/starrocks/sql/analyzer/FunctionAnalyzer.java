@@ -26,7 +26,8 @@ public class FunctionAnalyzer {
     public static void checkGeoFunctionGeneratedInvalidUtf8(FunctionCallExpr node) throws SemanticException {
         Function fn = node.getFn();
         String fnName = fn.functionName().toLowerCase();
-        if (fnName.equals(FunctionSet.ST_ASTEXT) || !(fn instanceof ScalarFunction)) {
+        // A geo function can call another geo function
+        if (fnName.startsWith(FunctionSet.GEO_FUNCTION_PREFIX) || !(fn instanceof ScalarFunction)) {
             return;
         }
         int numChildren = node.getChildren().size();
@@ -60,6 +61,7 @@ public class FunctionAnalyzer {
             if (child instanceof FunctionCallExpr) {
                 FunctionCallExpr fnCallChild = (FunctionCallExpr) child;
                 String name = fnCallChild.getFn().functionName().toLowerCase();
+                // non-geo scalar function only can call st_astext function as its string-typed argument.
                 if (!name.equals(FunctionSet.ST_ASTEXT) && name.startsWith(FunctionSet.GEO_FUNCTION_PREFIX)
                         && fnCallChild.getFn().getReturnType().isStringType()) {
                     throw new SemanticException(String.format("Function '%s' cannot invoke '%s'", fn.functionName(), name));
