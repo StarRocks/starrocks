@@ -19,10 +19,12 @@ static int open_temp_file() {
     static char tmpl[] = "/tmp/fd_random_access_file_testXXXXXX";
     int fd = ::mkstemp(tmpl);
     if (fd < 0) {
+        std::cerr << "mkstemp() failed: " << strerror(errno);
         PLOG(FATAL) << "mkstemp() failed";
     }
     int ret = ::unlink(tmpl);
     if (ret < 0) {
+        std::cerr << "unlink() failed: " << strerror(errno);
         PLOG(FATAL) << "unlink() failed";
     }
     return fd;
