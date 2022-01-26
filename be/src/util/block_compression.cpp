@@ -499,7 +499,8 @@ public:
         VLOG(10) << "gzip dec ret: " << ret;
         if (ret != Z_OK && ret != Z_STREAM_END) {
             (void)inflateEnd(&z_strm);
-            return Status::InternalError(strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret));
+            return Status::InternalError(
+                    strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret));
         }
         (void)inflateEnd(&z_strm);
 
@@ -514,12 +515,15 @@ public:
         auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY);
         if (zres != Z_OK) {
             // Fall back to zlib estimate logic for deflate, notice this may cause decompress error
-            LOG(WARNING) << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres).c_str();
+            LOG(WARNING) << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres)
+                                    .c_str();
             return ZlibBlockCompression::max_compressed_len(len);
         } else {
             zres = deflateEnd(&zstrm);
             if (zres != Z_OK) {
-                LOG(WARNING) << strings::Substitute("Fail to do deflateEnd on ZLib stream, error=$0, res=$1", zError(zres), zres).c_str();
+                LOG(WARNING) << strings::Substitute("Fail to do deflateEnd on ZLib stream, error=$0, res=$1",
+                                                    zError(zres), zres)
+                                        .c_str();
             }
             // Mark, maintainer of zlib, has stated that 12 needs to be added to result for gzip
             // http://compgroups.net/comp.unix.programmer/gzip-compressing-an-in-memory-string-usi/54854
