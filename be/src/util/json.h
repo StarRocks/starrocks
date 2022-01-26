@@ -94,7 +94,9 @@ public:
 
     ////////////////// util  //////////////////////
     StatusOr<std::string> to_string() const;
+    std::string to_string_uncheck() const;
     int compare(const JsonValue& rhs) const;
+    int64_t hash() const;
 
 private:
     template <class Ret, class Fn>
@@ -172,12 +174,7 @@ template <>
 struct formatter<starrocks::JsonValue> : formatter<std::string> {
     template <typename FormatContext>
     auto format(const starrocks::JsonValue& p, FormatContext& ctx) -> decltype(ctx.out()) {
-        auto json = p.to_string();
-        if (json.ok()) {
-            return fmt::formatter<std::string>::format(json.value(), ctx);
-        } else {
-            return fmt::formatter<std::string>::format("{corrupted}", ctx);
-        }
+        return fmt::formatter<std::string>::format(p.to_string_uncheck(), ctx);
     }
 };
 } // namespace fmt

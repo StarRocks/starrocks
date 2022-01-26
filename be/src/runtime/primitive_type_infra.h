@@ -85,6 +85,7 @@ namespace starrocks {
             return TEMPLATE_FUNC<TYPE_NULL>(__VA_ARGS__);                     \
         default:                                                              \
             CHECK(false) << "Unknown type: " << typeKind;                     \
+            __builtin_unreachable();                                            \
         }                                                                     \
     }();
 
@@ -99,6 +100,7 @@ auto type_dispatch_basic(PrimitiveType ptype, Functor fun, Args... args) {
         APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "Unknown type: " << ptype;
+        __builtin_unreachable();
     }
 }
 
@@ -112,6 +114,7 @@ auto type_dispatch_column(PrimitiveType ptype, Functor fun, Args... args) {
         _TYPE_DISPATCH_CASE(TYPE_PERCENTILE)
     default:
         CHECK(false) << "Unknown type: " << ptype;
+        __builtin_unreachable();
     }
 }
 
@@ -122,6 +125,7 @@ auto type_dispatch_sortable(PrimitiveType ptype, Functor fun, Args... args) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "Unknown type: " << ptype;
+        __builtin_unreachable();
     }
 }
 
@@ -131,6 +135,7 @@ auto type_dispatch_predicate(PrimitiveType ptype, Functor fun, Args... args) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "Unknown type: " << ptype;
+        __builtin_unreachable();
     }
 }
 
@@ -140,6 +145,7 @@ auto type_dispatch_filter(PrimitiveType ptype, Functor fun, Args... args) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "Unknown type: " << ptype;
+        __builtin_unreachable();
     }
 }
 

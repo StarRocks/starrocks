@@ -53,5 +53,6 @@ VISIT_IMPL(vectorized::FixedLengthColumnBase<vectorized::TimestampValue>)
 VISIT_IMPL(vectorized::FixedLengthColumnBase<uint24_t>)
 VISIT_IMPL(vectorized::FixedLengthColumnBase<int96_t>)
 VISIT_IMPL(vectorized::FixedLengthColumnBase<decimal12_t>)
+VISIT_IMPL(vectorized::ObjectColumn<JsonValue>)
 
 } // namespace starrocks

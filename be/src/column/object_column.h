@@ -22,7 +22,7 @@ namespace starrocks::vectorized {
 //};
 
 template <typename T>
-class ObjectColumn final : public ColumnFactory<Column, ObjectColumn<T>> {
+class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
     friend class ColumnFactory<Column, ObjectColumn>;
 
 public:

@@ -64,6 +64,7 @@ public:
     virtual Status visit(const vectorized::FixedLengthColumnBase<int96_t>& column);
     virtual Status visit(const vectorized::FixedLengthColumnBase<uint24_t>& column);
     virtual Status visit(const vectorized::FixedLengthColumnBase<decimal12_t>& column);
+    virtual Status visit(const vectorized::ObjectColumn<JsonValue>& column);
 };
 
 } // namespace starrocks

@@ -136,6 +136,15 @@ StatusOr<std::string> JsonValue::to_string() const {
     });
 }
 
+std::string JsonValue::to_string_uncheck() const {
+    auto res = to_string();
+    if (res.ok()) {
+        return res.value();
+    } else {
+        return "";
+    }
+}
+
 vpack::Slice JsonValue::to_vslice() const {
     return vpack::Slice((const uint8_t*)binary_.data());
 }
@@ -203,6 +212,10 @@ int JsonValue::compare(const JsonValue& rhs) const {
     return sliceCompare(left, right);
 }
 
+int64_t JsonValue::hash() const {
+    return to_vslice().hash();
+}
+
 Slice JsonValue::get_slice() const {
     return Slice(binary_);
 }
@@ -240,13 +253,7 @@ bool JsonValue::is_null() const {
 }
 
 std::ostream& operator<<(std::ostream& os, const JsonValue& json) {
-    auto str = json.to_string();
-    if (str.ok()) {
-        os << str.value();
-    } else {
-        os << "{corrupted}";
-    }
-    return os;
+    return os << json.to_string_uncheck();
 }
 
 } //namespace starrocks
