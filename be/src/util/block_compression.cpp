@@ -494,13 +494,15 @@ public:
         z_strm.next_out = reinterpret_cast<Bytef*>(output->data);
         z_strm.avail_out = output->size;
 
-        // We only support non-streaming use case  for block decompressor
-        ret = inflate(&z_strm, Z_FINISH);
-        VLOG(10) << "gzip dec ret: " << ret;
-        if (ret != Z_OK && ret != Z_STREAM_END) {
-            (void)inflateEnd(&z_strm);
-            return Status::InternalError(
-                    strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret));
+        if (z_strm.avail_out > 0) {
+            // We only support non-streaming use case  for block decompressor
+            ret = inflate(&z_strm, Z_FINISH);
+            VLOG(10) << "gzip dec ret: " << ret;
+            if (ret != Z_OK && ret != Z_STREAM_END) {
+                (void)inflateEnd(&z_strm);
+                return Status::InternalError(
+                        strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret));
+            }
         }
         (void)inflateEnd(&z_strm);
 
