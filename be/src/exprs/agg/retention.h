@@ -24,15 +24,38 @@
 
 namespace starrocks::vectorized {
 struct RetentionState {
-    void merge_array_element(const DatumArray& datum_array) {
-        auto size = datum_array.size();
-        if (size > boolean_vector.size()) {
-            boolean_vector.resize(size);
-        }
+    void merge_array_element(const ArrayColumn* input_column, size_t num_row) {
+        const auto& ele_col = input_column->elements();
+        auto offsets = input_column->offsets().get_data();
 
-        for (int i = 0; i < size; ++i) {
-            // Use union operation between different rows of the same condition.
-            boolean_vector[i] |= datum_array[i].is_null() ? 0 : datum_array[i].get_uint8();
+        if (ele_col.is_nullable()) {
+            const auto& null_column = down_cast<const NullableColumn&>(ele_col);
+
+            auto data_column = down_cast<BooleanColumn*>(null_column.data_column().get());
+            size_t offset = offsets[num_row];
+            size_t array_size = offsets[num_row + 1] - offset;
+
+            if (array_size > boolean_vector.size()) {
+                boolean_vector.resize(array_size);
+            }
+
+            for (size_t i = 0; i < array_size; ++i) {
+                uint32_t ele_offset = offset + i;
+                boolean_vector[i] |= null_column.is_null(i) ? 0 : data_column->get_data()[ele_offset];
+            }
+        } else {
+            const auto& data_column = down_cast<const BooleanColumn&>(ele_col);
+            size_t offset = offsets[num_row];
+            size_t array_size = offsets[num_row + 1] - offset;
+
+            if (array_size > boolean_vector.size()) {
+                boolean_vector.resize(array_size);
+            }
+
+            for (size_t i = 0; i < array_size; ++i) {
+                uint32_t ele_offset = offset + i;
+                boolean_vector[i] |= data_column.get_data()[ele_offset];
+            }
         }
     }
 
@@ -86,14 +109,12 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         const auto* column = down_cast<const ArrayColumn*>(columns[0]);
-        auto ele_vector = column->get(row_num).get_array();
-        this->data(state).merge_array_element(ele_vector);
+        this->data(state).merge_array_element(column, row_num);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const auto* input_column = down_cast<const ArrayColumn*>(column);
-        auto ele_vector = input_column->get(row_num).get_array();
-        this->data(state).merge_array_element(ele_vector);
+        this->data(state).merge_array_element(input_column, row_num);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
