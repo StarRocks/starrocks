@@ -621,11 +621,15 @@ public class Auth implements Writable {
             throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
         }
 
-        if (!doesUserExist(stmt.getUserIdentity())) {
-            throw new DdlException("user " + user + " does not exist");
+        writeLock(); 
+        try {
+            if (!doesUserExist(stmt.getUserIdentity())) {
+                throw new DdlException(String.format("User `%s`@`%s` does not exist.", user, host));
+            }
+            dropUserInternal(stmt.getUserIdentity(), false);
+        } finally {
+            writeUnlock();
         }
-
-        dropUserInternal(stmt.getUserIdentity(), false);
     }
 
     public void replayDropUser(UserIdentity userIdent) {
