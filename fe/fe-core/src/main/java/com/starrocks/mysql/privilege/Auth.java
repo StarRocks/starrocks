@@ -620,7 +620,16 @@ public class Auth implements Writable {
             // Allow dropping `superuser@%` when doing `DROP CLUSTER`, but not for `DROP USER`.
             throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
         }
-        dropUserInternal(stmt.getUserIdentity(), false);
+
+        writeLock(); 
+        try {
+            if (!doesUserExist(stmt.getUserIdentity())) {
+                throw new DdlException(String.format("User `%s`@`%s` does not exist.", user, host));
+            }
+            dropUserInternal(stmt.getUserIdentity(), false);
+        } finally {
+            writeUnlock();
+        }
     }
 
     public void replayDropUser(UserIdentity userIdent) {
