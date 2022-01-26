@@ -756,15 +756,6 @@ build_vpack() {
     make -j$PARALLEL && make install
 }
 
-# benchmark
-build_benchmark() {
-    check_if_source_exist $BENCHMARK_SOURCE
-    cd $TP_SOURCE_DIR/$BENCHMARK_SOURCE
-    mkdir -p build && cd build
-    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBENCHMARK_USE_BUNDLED_GTEST=off
-    make -j$PARALLEL && make install
-}
-
 build_libevent
 build_zlib
 build_lz4
@@ -802,7 +793,6 @@ build_mariadb
 build_aliyun_oss_jars
 build_aws_cpp_sdk
 build_vpack
-build_benchmark
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
