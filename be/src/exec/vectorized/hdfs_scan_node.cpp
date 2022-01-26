@@ -667,13 +667,9 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         size_t file_size = scan_range.file_length;
         hdfs_file_desc->is_hdfs_fs = false;
         if (handle.type == HdfsFsHandle::Type::HDFS) {
-            hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(handle, native_file_path, file_size, usePread);
             hdfs_file_desc->is_hdfs_fs = true;
-        } else if (handle.type == HdfsFsHandle::Type::S3) {
-            hdfs_file_desc->fs = std::make_shared<S3RandomAccessFile>(handle, native_file_path, file_size);
-        } else {
-            return Status::InternalError("Unknown HdfsFsHandle::Type $0", static_cast<int>(handle.type));
         }
+        hdfs_file_desc->fs = create_random_access_hdfs_file(handle, native_file_path, file_size, usePread);
         hdfs_file_desc->partition_id = scan_range.partition_id;
         hdfs_file_desc->scan_range_path = scan_range_path;
         hdfs_file_desc->file_length = scan_range.file_length;

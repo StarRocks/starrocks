@@ -21,7 +21,7 @@ struct HdfsFsHandle {
 // Now this is not thread-safe.
 class HdfsRandomAccessFile : public RandomAccessFile {
 public:
-    HdfsRandomAccessFile(const HdfsFsHandle& handle, const std::string& file_name, size_t file_size, bool usePread);
+    HdfsRandomAccessFile(hdfsFS fs, const std::string& file_name, size_t file_size, bool usePread);
     virtual ~HdfsRandomAccessFile() noexcept;
 
     Status open() override;
@@ -50,7 +50,8 @@ private:
 
 class S3RandomAccessFile : public RandomAccessFile {
 public:
-    S3RandomAccessFile(const HdfsFsHandle& handle, const std::string& file_name, size_t file_size);
+    S3RandomAccessFile(S3Client* client, const std::string& bucket, const std::string& object, size_t object_size = 0,
+                       const std::string& file_path = "");
     virtual ~S3RandomAccessFile() noexcept;
 
     Status open() override;
@@ -60,18 +61,21 @@ public:
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
 
     Status size(uint64_t* size) const override {
-        *size = _file_size;
+        *size = _object_size;
         return Status::OK();
     }
     const std::string& file_name() const override { return _file_name; }
 
 private:
     void _init(const HdfsFsHandle& handle);
-    bool _opened;
     S3Client* _client;
     std::string _file_name;
-    size_t _file_size;
     std::string _bucket;
     std::string _object;
+    size_t _object_size;
 };
+
+std::shared_ptr<RandomAccessFile> create_random_access_hdfs_file(const HdfsFsHandle& handle,
+                                                                 const std::string& file_path, size_t file_size,
+                                                                 bool usePread);
 } // namespace starrocks

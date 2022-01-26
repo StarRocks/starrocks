@@ -12,14 +12,8 @@ namespace starrocks {
 
 // ==================================  HdfsRandomAccessFile  ==========================================
 
-HdfsRandomAccessFile::HdfsRandomAccessFile(const HdfsFsHandle& handle, const std::string& file_name, size_t file_size,
-                                           bool usePread)
-        : _opened(false),
-          _fs(handle.hdfs_fs),
-          _file(nullptr),
-          _file_name(file_name),
-          _file_size(file_size),
-          _usePread(usePread) {}
+HdfsRandomAccessFile::HdfsRandomAccessFile(hdfsFS fs, const std::string& file_name, size_t file_size, bool usePread)
+        : _opened(false), _fs(fs), _file(nullptr), _file_name(file_name), _file_size(file_size), _usePread(usePread) {}
 
 HdfsRandomAccessFile::~HdfsRandomAccessFile() noexcept {
     close();
@@ -107,9 +101,14 @@ Status HdfsRandomAccessFile::readv_at(uint64_t offset, const Slice* res, size_t 
 
 // ===================================  S3RandomAccessFile  =========================================
 
-S3RandomAccessFile::S3RandomAccessFile(const HdfsFsHandle& handle, const std::string& file_name, size_t file_size)
-        : _opened(false), _client(handle.s3_client), _file_name(file_name), _file_size(file_size) {
-    _init(handle);
+S3RandomAccessFile::S3RandomAccessFile(S3Client* client, const std::string& bucket, const std::string& object,
+                                       size_t object_size, const std::string& file_path)
+        : _client(client), _bucket(bucket), _object(object), _object_size(object_size) {
+    if (file_path.empty()) {
+        _file_name = "s3://" + bucket + "/" + object;
+    } else {
+        _file_name = file_path;
+    }
 }
 
 S3RandomAccessFile::~S3RandomAccessFile() noexcept {
@@ -117,9 +116,6 @@ S3RandomAccessFile::~S3RandomAccessFile() noexcept {
 }
 
 void S3RandomAccessFile::_init(const HdfsFsHandle& handle) {
-    const std::string& nn = handle.namenode;
-    _bucket = get_bucket_from_namenode(nn);
-    _object = _file_name.substr(nn.size(), _file_name.size() - nn.size());
     VLOG_FILE << "[S3] filename = " << _file_name << ", bucket = " << _bucket << ", object = " << _object;
 }
 
@@ -148,6 +144,23 @@ Status S3RandomAccessFile::read_at(uint64_t offset, const Slice& res) const {
 Status S3RandomAccessFile::readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const {
     // TODO: implement
     return Status::InternalError("S3RandomAccessFile::readv_at not implement");
+}
+
+std::shared_ptr<RandomAccessFile> create_random_access_hdfs_file(const HdfsFsHandle& handle,
+                                                                 const std::string& file_path, size_t file_size,
+                                                                 bool usePread) {
+    if (handle.type == HdfsFsHandle::Type::HDFS) {
+        return std::make_shared<HdfsRandomAccessFile>(handle.hdfs_fs, file_path, file_size, usePread);
+    } else if (handle.type == HdfsFsHandle::Type::S3) {
+        const std::string& nn = handle.namenode;
+        const std::string bucket = get_bucket_from_namenode(nn);
+        const std::string object = file_path.substr(nn.size(), file_path.size() - nn.size());
+        return std::make_shared<S3RandomAccessFile>(handle.s3_client, bucket, object, file_size, file_path);
+    } else {
+        CHECK(false) << strings::Substitute("Unknown HdfsFsHandle::Type $0", static_cast<int>(handle.type));
+        __builtin_unreachable();
+        return nullptr;
+    }
 }
 
 } // namespace starrocks
