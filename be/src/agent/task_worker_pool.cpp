@@ -657,8 +657,11 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
 
             TVersion version = par_ver_info.version;
 
+            // vector for tablet_info.
             std::vector<TabletInfo> tablet_infos;
             tablet_infos.reserve(tablet_related_rs.size());
+
+            // vector for tablet publishing version status, which collects the execution results of the correspoding tablet.
             std::vector<Status> statuses(tablet_related_rs.size(), Status::OK());
 
             size_t idx = 0;
@@ -666,8 +669,9 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
             for (auto& tablet_rs : tablet_related_rs) {
                 tablet_infos.push_back(tablet_rs.first);
 
-                threadpool->submit_func([&worker_pool_this, &tablet_rs, &statuses, idx, &version, &transaction_id,
-                                         &partition_id]() {
+                // submit publishing tablet version task to the threadpool.
+                auto st = threadpool->submit_func([&worker_pool_this, &tablet_rs, &statuses, idx, &version,
+                                                   &transaction_id, &partition_id]() {
                     const TabletInfo& tablet_info = tablet_rs.first;
                     const RowsetSharedPtr& rowset = tablet_rs.second;
                     auto& status = statuses[idx];
@@ -684,14 +688,20 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
                     EnginePublishVersionTask engine_task(transaction_id, partition_id, version, tablet_info, rowset);
 
                     status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+                    if (!status.ok())
+                        LOG(WARNING) << "failed to publish version for tablet, tablet_id " << tablet_info.tablet_id
+                                     << ", txn_id " << transaction_id << ", err: " << status;
                 });
+
+                if (!st.ok()) return st;
 
                 ++idx;
             }
 
-            // Wait until that all jobs in threadpool are done.
+            // wait until that all jobs in threadpool are done.
             threadpool->wait();
 
+            // check status.
             for (size_t i = 0; i < tablet_infos.size(); ++i) {
                 const auto& tablet_info = tablet_infos[i];
                 const auto& status = statuses[i];
@@ -749,7 +759,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         StarRocksMetrics::instance()->publish_task_request_total.increment(1);
         LOG(INFO) << "get publish version task, signature:" << agent_task_req.signature;
 
-        std::vector<TTableId> error_tablet_ids;
+        std::vector<TTabletId> error_tablet_ids;
         uint32_t retry_time = 0;
         Status status;
 
