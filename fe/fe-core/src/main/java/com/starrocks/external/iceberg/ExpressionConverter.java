@@ -84,13 +84,15 @@ public class ExpressionConverter {
                         ((StringLiteral) literal).getUnescapedValue());
                 break;
             }
-            case DATETIME:
             case DATE: {
                 unboundPredicate = Expressions.predicate(op, colName,
-                        ((DateLiteral) literal).getRealValue());
+                        Math.toIntExact(((DateLiteral) literal).toLocalDateTime()
+                                .toLocalDate().toEpochDay()));
                 break;
             }
-            default: break;
+            case DATETIME:
+            default:
+                break;
         }
         if (unboundPredicate == null) {
             return null;
