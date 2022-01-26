@@ -472,7 +472,7 @@ vectorized_functions = [
     [100014, 'last_query_id', 'VARCHAR', [], "UtilityFunctions::last_query_id"],
     [100015, 'uuid', 'VARCHAR', [], "UtilityFunctions::uuid"],
 
-    # json function
+    # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",
      "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close"],
     [110001, "get_json_double", "DOUBLE", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_double",
@@ -480,6 +480,15 @@ vectorized_functions = [
     [110002, "get_json_string", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
      "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close"],
 
+    # json type function
+    [110003, "parse_json", "JSON", ["VARCHAR"], "JsonFunctions::parse_json"],
+    # [110004, "json_string", "VARCHAR", ["JSON"], "JsonFunctions::json_string"],
+    [110005, "json_query", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query"],
+    # [110006, "json_value", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query"],
+    # [110007, "json_exists", "BOOLEAN", ["JSON", "VARCHAR"], "JsonFunctions::json_exists"],
+    # [110008, "json_object", "JSON", ["JSON", "..."], "JsonFunctions::json_object"],
+    # [110009, "json_array", "JSON", ["JSON", "..."], "JsonFunctions::json_array"],
+    
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt"],
     [120110, "aes_decrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt"],
@@ -584,17 +593,4 @@ vectorized_functions = [
 
     [150083, 'array_remove', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_remove'],
     [150084, 'array_position', 'INT', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_position'],
-
-    [150090, 'array_distinct', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::array_distinct_boolean'],
-    [150091, 'array_distinct', 'ARRAY_TINYINT',   ['ARRAY_TINYINT'],   'ArrayFunctions::array_distinct_tinyint'],
-    [150092, 'array_distinct', 'ARRAY_SMALLINT',  ['ARRAY_SMALLINT'],  'ArrayFunctions::array_distinct_smallint'],
-    [150093, 'array_distinct', 'ARRAY_INT',       ['ARRAY_INT'],       'ArrayFunctions::array_distinct_int'],
-    [150094, 'array_distinct', 'ARRAY_BIGINT',    ['ARRAY_BIGINT'],    'ArrayFunctions::array_distinct_bigint'],
-    [150095, 'array_distinct', 'ARRAY_LARGEINT',  ['ARRAY_LARGEINT'],  'ArrayFunctions::array_distinct_largeint'],
-    [150096, 'array_distinct', 'ARRAY_FLOAT',     ['ARRAY_FLOAT'],     'ArrayFunctions::array_distinct_float'],
-    [150097, 'array_distinct', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE'],    'ArrayFunctions::array_distinct_double'],
-    [150098, 'array_distinct', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR'],   'ArrayFunctions::array_distinct_varchar'],
-    [150099, 'array_distinct', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_distinct_decimalv2'],
-    [150100, 'array_distinct', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_distinct_datetime'],
-    [150101, 'array_distinct', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_distinct_date'],
 ]

@@ -337,4 +337,12 @@ ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns
     return JsonFunctions::template _iterate_rows<TYPE_VARCHAR>(context, columns);
 }
 
+ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
+    CHECK(false) << "TODO";
+}
+    
+ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {
+    CHECK(false) << "TODO";
+}
+
 } // namespace starrocks::vectorized
