@@ -498,14 +498,35 @@ public:
         ret = inflate(&z_strm, Z_FINISH);
         VLOG(10) << "gzip dec ret: " << ret;
         if (ret != Z_OK && ret != Z_STREAM_END) {
-            std::stringstream ss;
-            ss << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret);
             (void)inflateEnd(&z_strm);
-            return Status::InternalError(ss.str());
+            return Status::InternalError(strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret));
         }
         (void)inflateEnd(&z_strm);
 
         return Status::OK();
+    }
+
+    size_t max_compressed_len(size_t len) const override {
+        z_stream zstrm;
+        zstrm.zalloc = Z_NULL;
+        zstrm.zfree = Z_NULL;
+        zstrm.opaque = Z_NULL;
+        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY);
+        if (zres != Z_OK) {
+            // Fall back to zlib estimate logic for deflate, notice this may cause decompress error
+            LOG(WARNING) << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres).c_str();
+            return ZlibBlockCompression::max_compressed_len(len);
+        } else {
+            zres = deflateEnd(&zstrm);
+            if (zres != Z_OK) {
+                LOG(WARNING) << strings::Substitute("Fail to do deflateEnd on ZLib stream, error=$0, res=$1", zError(zres), zres).c_str();
+            }
+            // Mark, maintainer of zlib, has stated that 12 needs to be added to result for gzip
+            // http://compgroups.net/comp.unix.programmer/gzip-compressing-an-in-memory-string-usi/54854
+            // To have a safe upper bound for "wrapper variations", we add 32 to estimate
+            int upper_bound = deflateBound(&zstrm, len) + 32;
+            return upper_bound;
+        }
     }
 };
 
