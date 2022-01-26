@@ -288,7 +288,7 @@ nonterminal StatementBase stmt, add_stmt, add_param, show_stmt, show_param, help
     show_routine_load_stmt, show_routine_load_task_stmt,
     describe_stmt, alter_stmt,
     use_stmt, kill_stmt, drop_stmt, recover_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt, delete_param, 
-    link_stmt, migrate_stmt, enter_stmt, unsupported_stmt, export_stmt, admin_stmt, truncate_stmt, refresh_stmt,
+    enter_stmt, unsupported_stmt, export_stmt, admin_stmt, truncate_stmt, refresh_stmt,
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt, analyze_stmt, create_analyze_stmt;
 
 nonterminal ImportColumnDesc import_column_desc;
@@ -341,8 +341,6 @@ nonterminal String select_alias, opt_table_alias;
 nonterminal ArrayList<String> ident_list;
 nonterminal PartitionNames opt_partition_names, partition_names;
 nonterminal ArrayList<Long> opt_tablet_list, tablet_list;
-nonterminal ClusterName cluster_name;
-nonterminal ClusterName des_cluster_name;
 nonterminal TableName table_name, opt_table_name;
 nonterminal FunctionName function_name;
 nonterminal Expr where_clause;
@@ -580,10 +578,6 @@ stmt ::=
     {: RESULT = stmt; :}
     | create_stmt:query
     {: RESULT = query; :}
-    | link_stmt:query
-    {: RESULT = query; :}
-    | migrate_stmt:query
-    {: RESULT = query; :}
     | enter_stmt:enter
     {: RESULT = enter; :}
     | query_stmt:query
@@ -692,22 +686,6 @@ uninstall_plugin_stmt ::=
     KW_UNINSTALL KW_PLUGIN ident_or_text:name
     {:
         RESULT = new UninstallPluginStmt(name);
-    :}
-    ;
-
-// link statement
-link_stmt ::=
-    KW_LINK KW_DATABASE cluster_name:src_name des_cluster_name:des_name
-    {:
-        RESULT = new LinkDbStmt(src_name, des_name);
-    :}
-    ;
-
-// migrate statement
-migrate_stmt ::=
-    KW_MIGRATE KW_DATABASE cluster_name:src_name des_cluster_name:des_name
-    {:
-        RESULT = new MigrateDbStmt(src_name, des_name);
     :}
     ;
 
