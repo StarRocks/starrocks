@@ -105,6 +105,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule.DecodeVisitor;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TPartitionType;
@@ -537,13 +538,13 @@ public class PlanFragmentBuilder {
                 Set<Integer> complexPredColumnIds = new HashSet<Integer>();
                 for (ScalarOperator predicate : predicates) {
                     ColumnRefSet usedColumns = predicate.getUsedColumns();
-                    if (usedColumns.cardinality() > 1) {
-                        for (int cid : usedColumns.getColumnIds()) {
-                            complexPredColumnIds.add(cid);
-                        }
-                    } else if (usedColumns.cardinality() == 1) {
+                    if (DecodeVisitor.isSimpleStrictPredicate(predicate)) {
                         for (int cid : usedColumns.getColumnIds()) {
                             singlePredColumnIds.add(cid);
+                        }
+                    } else {
+                        for (int cid : usedColumns.getColumnIds()) {
+                            complexPredColumnIds.add(cid);
                         }
                     }
                 }
