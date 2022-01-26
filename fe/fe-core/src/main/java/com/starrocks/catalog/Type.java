@@ -128,6 +128,9 @@ public abstract class Type implements Cloneable {
             ImmutableList.<Type>builder()
                     .add(NULL)
                     .add(BOOLEAN)
+                    .addAll(integerTypes)
+                    .add(FLOAT)
+                    .add(DOUBLE)
                     .add(VARCHAR)
                     .add(HLL)
                     .add(BITMAP)
@@ -135,10 +138,13 @@ public abstract class Type implements Cloneable {
                     .add(CHAR)
                     .add(DATE)
                     .add(DATETIME)
+                    .add(DECIMALV2)
                     .add(TIME)
                     .add(ANY_ARRAY)
+                    .add(DECIMAL32)
+                    .add(DECIMAL64)
+                    .add(DECIMAL128)
                     .add(JSON)
-                    .addAll(numericTypes)
                     .build();
 
     /**
