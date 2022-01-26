@@ -68,7 +68,7 @@ public class CTEContext {
     }
 
     public void setInlineCTERatio(double ratio) {
-        this.inlineCTERatio = inlineCTERatio;
+        this.inlineCTERatio = ratio;
     }
 
     public void addCTEProduce(int cteId, OptExpression produce) {
