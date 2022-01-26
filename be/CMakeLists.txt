@@ -510,7 +510,6 @@ set(STARROCKS_DEPENDENCIES
     simdjson
     librdkafka_cpp
     librdkafka
-    benchmark
     velocypack
     ${WL_END_GROUP}
 )
