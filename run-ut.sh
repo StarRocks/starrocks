@@ -160,6 +160,6 @@ do
     file_name=${test##*/}
     if [ -z $RUN_FILE ] || [ $file_name == $RUN_FILE ]; then
         echo "=== Run $file_name ==="
-        $test
+        $test --gtest_filter=${TEST_FILTER}
     fi
 done

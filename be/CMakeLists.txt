@@ -55,11 +55,13 @@ set(BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(ENV{STARROCKS_HOME} "${BASE_DIR}/../")
 set(BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}/installed/")
+set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
 set(GENSRC_DIR "${BASE_DIR}/../gensrc/build/")
 set(SRC_DIR "${BASE_DIR}/src/")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
 set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
+set(CMAKE_EXPORT_COMPILECOMMANDS ON)
 
 if (APPLE)
     set(MAKE_TEST "ON")
@@ -266,6 +268,9 @@ set_target_properties(hyperscan PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/l
 
 add_library(simdjson STATIC IMPORTED)
 set_target_properties(simdjson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdjson.a)
+
+add_library(velocypack STATIC IMPORTED)
+set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
 
 find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
 
@@ -505,6 +510,8 @@ set(STARROCKS_DEPENDENCIES
     simdjson
     librdkafka_cpp
     librdkafka
+    benchmark
+    velocypack
     ${WL_END_GROUP}
 )
 
