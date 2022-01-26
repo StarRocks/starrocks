@@ -99,8 +99,8 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(get_json_string);
-    
-      /**
+
+    /**
      * @param: [json_string]
      * @paramType: [BinaryColumn]
      * @return: JsonColumn
@@ -110,9 +110,16 @@ public:
     /**
      * @param: [json_object, json_path]
      * @paramType: [JsonColumn, BinaryColumn]
-     * @return: BinaryColumn
+     * @return: JsonColumn
      */
     DEFINE_VECTORIZED_FN(json_query);
+    
+    /**
+     * @param: [json_object, ...]
+     * @paramType: [JsonColumn, ...]
+     * @return: JsonColumn
+     */
+    DEFINE_VECTORIZED_FN(json_array);
 
     // extract_from_object extracts value from object according to the json path.
     // Now, we do not support complete functions of json path.

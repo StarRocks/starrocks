@@ -340,8 +340,12 @@ ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns
 ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
     CHECK(false) << "TODO";
 }
-    
+
 ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {
+    CHECK(false) << "TODO";
+}
+
+ColumnPtr JsonFunctions::json_array(FunctionContext* context, const Columns& columns) {
     CHECK(false) << "TODO";
 }
 

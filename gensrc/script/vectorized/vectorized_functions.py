@@ -487,7 +487,7 @@ vectorized_functions = [
     # [110006, "json_value", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query"],
     # [110007, "json_exists", "BOOLEAN", ["JSON", "VARCHAR"], "JsonFunctions::json_exists"],
     # [110008, "json_object", "JSON", ["JSON", "..."], "JsonFunctions::json_object"],
-    # [110009, "json_array", "JSON", ["JSON", "..."], "JsonFunctions::json_array"],
+    [110009, "json_array", "JSON", ["JSON", "..."], "JsonFunctions::json_array"],
     
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt"],
