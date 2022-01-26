@@ -37,9 +37,11 @@ import com.starrocks.analysis.ImportColumnDesc;
 import com.starrocks.analysis.ImportColumnsStmt;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.PartitionNames;
+import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -84,6 +86,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -270,7 +273,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     protected void setOptional(CreateRoutineLoadStmt stmt) throws UserException {
-        setRoutineLoadDesc(stmt.getRoutineLoadDesc());
+        if (stmt.getRoutineLoadDesc() != null) {
+            setRoutineLoadDesc(stmt.getRoutineLoadDesc());
+        }
         if (stmt.getDesiredConcurrentNum() != -1) {
             this.desireTaskConcurrentNum = stmt.getDesiredConcurrentNum();
         }
@@ -314,28 +319,27 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     private void setRoutineLoadDesc(RoutineLoadDesc routineLoadDesc) {
-        if (routineLoadDesc != null) {
-            if (routineLoadDesc.getColumnsInfo() != null) {
-                ImportColumnsStmt columnsStmt = routineLoadDesc.getColumnsInfo();
-                if (columnsStmt.getColumns() != null || columnsStmt.getColumns().size() != 0) {
-                    columnDescs = Lists.newArrayList();
-                    for (ImportColumnDesc columnDesc : columnsStmt.getColumns()) {
-                        columnDescs.add(columnDesc);
-                    }
-                }
+        if (routineLoadDesc == null) {
+            return;
+        }
+        if (routineLoadDesc.getColumnsInfo() != null) {
+            ImportColumnsStmt columnsStmt = routineLoadDesc.getColumnsInfo();
+            if (columnsStmt.getColumns() != null || columnsStmt.getColumns().size() != 0) {
+                columnDescs = Lists.newArrayList();
+                columnDescs.addAll(columnsStmt.getColumns());
             }
-            if (routineLoadDesc.getWherePredicate() != null) {
-                whereExpr = routineLoadDesc.getWherePredicate().getExpr();
-            }
-            if (routineLoadDesc.getColumnSeparator() != null) {
-                columnSeparator = routineLoadDesc.getColumnSeparator();
-            }
-            if (routineLoadDesc.getRowDelimiter() != null) {
-                rowDelimiter = routineLoadDesc.getRowDelimiter();
-            }
-            if (routineLoadDesc.getPartitionNames() != null) {
-                partitions = routineLoadDesc.getPartitionNames();
-            }
+        }
+        if (routineLoadDesc.getWherePredicate() != null) {
+            whereExpr = routineLoadDesc.getWherePredicate().getExpr();
+        }
+        if (routineLoadDesc.getColumnSeparator() != null) {
+            columnSeparator = routineLoadDesc.getColumnSeparator();
+        }
+        if (routineLoadDesc.getRowDelimiter() != null) {
+            rowDelimiter = routineLoadDesc.getRowDelimiter();
+        }
+        if (routineLoadDesc.getPartitionNames() != null) {
+            partitions = routineLoadDesc.getPartitionNames();
         }
     }
 
@@ -1307,6 +1311,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         return gson.toJson(result);
     }
 
+    public Map<String, String> getSessionVariables() {
+        return sessionVariables;
+    }
+
     private String jobPropertiesToJsonString() {
         Map<String, String> jobProperties = Maps.newHashMap();
         jobProperties.put("partitions",
@@ -1484,35 +1492,70 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         // parse the origin stmt to get routine load desc
         SqlParser parser = new SqlParser(new SqlScanner(new StringReader(origStmt.originStmt),
                 Long.valueOf(sessionVariables.get(SessionVariable.SQL_MODE))));
-        CreateRoutineLoadStmt stmt = null;
         try {
-            stmt = (CreateRoutineLoadStmt) SqlParserUtils.getStmt(parser, origStmt.idx);
-            stmt.checkLoadProperties();
-            setRoutineLoadDesc(stmt.getRoutineLoadDesc());
+            StatementBase stmt = SqlParserUtils.getStmt(parser, origStmt.idx);
+            if (stmt instanceof CreateRoutineLoadStmt) {
+                setRoutineLoadDesc(CreateRoutineLoadStmt.
+                        buildLoadDesc(((CreateRoutineLoadStmt) stmt).getLoadPropertyList()));
+            } else if (stmt instanceof AlterRoutineLoadStmt) {
+                setRoutineLoadDesc(CreateRoutineLoadStmt.
+                        buildLoadDesc(((AlterRoutineLoadStmt) stmt).getLoadPropertyList()));
+            }
+
         } catch (Exception e) {
             throw new IOException("error happens when parsing create routine load stmt: " + origStmt, e);
         }
     }
 
-    public abstract void modifyProperties(AlterRoutineLoadStmt stmt) throws DdlException;
+    public void modifyJob(RoutineLoadDesc routineLoadDesc,
+                          Map<String, String> jobProperties,
+                          RoutineLoadDataSourceProperties dataSourceProperties,
+                          OriginStatement originStatement,
+                          boolean isReplay) throws DdlException {
+        writeLock();
+        try {
+            if (routineLoadDesc != null) {
+                setRoutineLoadDesc(routineLoadDesc);
+            }
+            if (jobProperties != null) {
+                modifyCommonJobProperties(jobProperties);
+            }
+            if (dataSourceProperties != null) {
+                modifyDataSourceProperties(dataSourceProperties);
+            }
+            origStmt = originStatement;
+            if (!isReplay) {
+                AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(id,
+                        jobProperties, dataSourceProperties, originStatement);
+                Catalog.getCurrentCatalog().getEditLog().logAlterRoutineLoadJob(log);
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
 
-    public abstract void replayModifyProperties(AlterRoutineLoadJobOperationLog log);
+    protected abstract void modifyDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties) throws DdlException;
 
     // for ALTER ROUTINE LOAD
-    protected void modifyCommonJobProperties(Map<String, String> jobProperties) {
-        if (jobProperties.containsKey(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY)) {
+    private void modifyCommonJobProperties(Map<String, String> jobProperties) {
+        // Some properties will be remove from the map, so we copy the jobProperties to copiedJobProperties
+        Map<String, String> copiedJobProperties = new HashMap<>(jobProperties);
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY)) {
             this.desireTaskConcurrentNum = Integer.parseInt(
-                    jobProperties.remove(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY));
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY));
         }
-
-        if (jobProperties.containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY)) {
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY)) {
             this.maxErrorNum = Long.parseLong(
-                    jobProperties.remove(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
         }
-
-        if (jobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY)) {
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY)) {
             this.taskSchedIntervalS = Long.parseLong(
-                    jobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY));
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY));
         }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY)) {
+            this.maxBatchRows = Long.parseLong(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
+        }
+        this.jobProperties.putAll(copiedJobProperties);
     }
 }
