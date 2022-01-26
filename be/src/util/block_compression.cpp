@@ -461,7 +461,7 @@ public:
         zstrm.zalloc = Z_NULL;
         zstrm.zfree = Z_NULL;
         zstrm.opaque = Z_NULL;
-        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY);
+        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + GZIP_CODEC, MEM_LEVEL, Z_DEFAULT_STRATEGY);
         if (zres != Z_OK) {
             return Status::InvalidArgument(
                     strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres));
@@ -482,7 +482,7 @@ public:
         z_strm.zfree = Z_NULL;
         z_strm.opaque = Z_NULL;
 
-        int ret = inflateInit2(&z_strm, MAX_WBITS + 16);
+        int ret = inflateInit2(&z_strm, MAX_WBITS + GZIP_CODEC);
         if (ret != Z_OK) {
             return Status::InternalError(
                     strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret));
@@ -514,7 +514,7 @@ public:
         zstrm.zalloc = Z_NULL;
         zstrm.zfree = Z_NULL;
         zstrm.opaque = Z_NULL;
-        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY);
+        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + GZIP_CODEC, MEM_LEVEL, Z_DEFAULT_STRATEGY);
         if (zres != Z_OK) {
             // Fall back to zlib estimate logic for deflate, notice this may cause decompress error
             LOG(WARNING) << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres)
@@ -534,6 +534,12 @@ public:
             return upper_bound;
         }
     }
+
+private:
+    // Magic number for zlib, see https://zlib.net/manual.html for more details.
+    const static int GZIP_CODEC = 16; // gzip
+    // The memLevel parameter specifies how much memory should be allocated for the internal compression state.
+    const static int MEM_LEVEL = 8;
 };
 
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec) {
