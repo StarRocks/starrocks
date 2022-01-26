@@ -45,6 +45,8 @@ public:
     }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
     const TNetworkAddress& fe_addr() { return _fe_addr; }
+    void set_report_profile() { _is_report_profile = true; }
+    bool is_report_profile() { return _is_report_profile; }
     void set_profile_mode(const TPipelineProfileMode::type& profile_mode) { _profile_mode = profile_mode; }
     const TPipelineProfileMode::type& profile_mode() { return _profile_mode; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
@@ -126,6 +128,7 @@ private:
     TUniqueId _fragment_instance_id;
     TNetworkAddress _fe_addr;
 
+    bool _is_report_profile = false;
     // Mode of profile
     TPipelineProfileMode::type _profile_mode;
 
