@@ -211,8 +211,11 @@ public class MetastoreEventsProcessor extends MasterDaemon {
 
             int batchSize = getAllEvents ? -1 : Config.hms_events_batch_size_per_rpc;
             NotificationEventResponse response = client.getNextNotification(lastSyncedEventId, batchSize, null);
-            LOG.info(String.format("Received %d events. Start event id : %d",
-                    response.getEvents().size(), lastSyncedEventId));
+            if (response.getEvents().size() == 0) {
+                return Collections.emptyList();
+            }
+            LOG.info(String.format("Received %d events. Start event id : %d. Last synced id : %d",
+                    response.getEvents().size(), response.getEvents().get(0).getEventId(), lastSyncedEventId));
 
             if (filter == null) {
                 return response.getEvents();
@@ -314,13 +317,11 @@ public class MetastoreEventsProcessor extends MasterDaemon {
      */
     private void processEvents(List<NotificationEvent> events, String resourceName) {
         List<MetastoreEvent> filteredEvents = metastoreEventFactory.getFilteredEvents(events, resourceName);
+
         if (filteredEvents.isEmpty()) {
             lastSyncedEventIds.put(resourceName, events.get(events.size() - 1).getEventId());
             return;
         }
-
-        LOG.info("Total number of events received: {} Total number of events filtered out: {}",
-                events.size(), filteredEvents.size());
 
         if (Config.enable_hms_parallel_process_evens) {
             doExecuteWithPartialProgress(filteredEvents);

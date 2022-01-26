@@ -13,6 +13,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.spark_project.guava.collect.Lists;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -39,13 +40,20 @@ public class InsertEvent extends MetastoreTableEvent {
                 hivePartitionKeys.add(HivePartitionKey.gen(dbName, tblName, insertPartition.getValues()));
             }
         } catch (Exception e) {
+            LOG.warn("The InsertEvent of the current hive version cannot be parsed, " +
+                    "and there will be a corresponding Alter Event in next, InsertEvent is ignored here. {}",
+                    e.getMessage());
             throw new MetastoreNotificationException(debugString("Unable to "
                     + "parse insert message"), e);
         }
     }
 
     public static List<MetastoreEvent> getEvents(NotificationEvent event, HiveMetaCache metaCache) {
-        return Lists.newArrayList(new InsertEvent(event, metaCache));
+        try {
+            return Lists.newArrayList(new InsertEvent(event, metaCache));
+        } catch (MetastoreNotificationException e) {
+            return Collections.emptyList();
+        }
     }
 
     @Override

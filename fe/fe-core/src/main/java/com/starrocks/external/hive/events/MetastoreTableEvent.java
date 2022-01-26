@@ -44,6 +44,7 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
                     .add("transient_lastDdlTime")
                     .add("numFilesErasureCoded")
                     .add("numFiles")
+                    .add("comment")
                     .build();
 
     /**

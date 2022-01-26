@@ -128,8 +128,8 @@ public class BatchEvent<T extends MetastoreTableEvent> extends MetastoreTableEve
                 .collect(Collectors.toList());
 
         if (eventsToProcess.isEmpty()) {
-            LOG.info("Ignoring events from event id {} to {} since they modify parameters " +
-                    "which can be ignored", getFirstEventId(), getLastEventId());
+            LOG.info("Ignoring events {} since they modify parameters " +
+                    "which can be ignored", batchedEvents);
             return;
         }
 
