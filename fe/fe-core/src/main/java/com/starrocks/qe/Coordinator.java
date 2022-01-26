@@ -118,7 +118,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
@@ -1037,6 +1036,16 @@ public class Coordinator {
                     ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
                     fragment.getPlanRoot().canUsePipeLine();
 
+            // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
+            if (fragment.getChildren().size() > 0 && fragment.getChild(0) instanceof MultiCastPlanFragment) {
+                FragmentExecParams childFragmentParams =
+                        fragmentExecParamsMap.get(fragment.getChild(0).getFragmentId());
+                for (FInstanceExecParam childInstanceParam : childFragmentParams.instanceExecParams) {
+                    params.instanceExecParams.add(new FInstanceExecParam(null, childInstanceParam.host, 0, params));
+                }
+                continue;
+            }
+
             if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport = SimpleScheduler.getHost(this.idToBackend, backendIdRef);
@@ -1872,18 +1881,20 @@ public class Coordinator {
                 params.setProtocol_version(InternalServiceVersion.V1);
                 params.setFragment(fragment.toThrift());
 
-                /* For MultiCastDataFragment, output only send to itself */
+                /*
+                 * For MultiCastDataFragment, output only send to local, and the instance is keep
+                 * same with MultiCastDataFragment
+                 * */
                 if (fragment instanceof MultiCastPlanFragment) {
                     List<List<TPlanFragmentDestination>> multiFragmentDestinations =
                             params.getFragment().getOutput_sink().getMulti_cast_stream_sink().getDestinations();
                     List<List<TPlanFragmentDestination>> newDestinations = Lists.newArrayList();
                     for (List<TPlanFragmentDestination> destinations : multiFragmentDestinations) {
-                        TNetworkAddress localRpc = toRpcHost(instanceExecParam.host);
-                        List<TPlanFragmentDestination> ndes =
-                                destinations.stream().filter(des -> des.server.equals(localRpc))
-                                        .collect(Collectors.toList());
-                        Preconditions.checkState(ndes.size() == 1);
-                        newDestinations.add(ndes);
+                        Preconditions.checkState(instanceExecParams.size() == destinations.size());
+                        TPlanFragmentDestination ndes = destinations.get(i);
+
+                        Preconditions.checkState(ndes.getServer().equals(toRpcHost(instanceExecParam.host)));
+                        newDestinations.add(Lists.newArrayList(ndes));
                     }
                     params.getFragment().getOutput_sink().getMulti_cast_stream_sink().setDestinations(newDestinations);
                 }

@@ -52,7 +52,7 @@ public class MultiCastPlanFragment extends PlanFragment {
 
         for (ExchangeNode f : destNodeList) {
             DataStreamSink streamSink = new DataStreamSink(f.getId());
-            streamSink.setPartition(f.getFragment().getOutputPartition());
+            streamSink.setPartition(DataPartition.RANDOM);
             streamSink.setFragment(this);
             multiCastDataSink.getDataStreamSinks().add(streamSink);
             multiCastDataSink.getDestinations().add(Lists.newArrayList());
