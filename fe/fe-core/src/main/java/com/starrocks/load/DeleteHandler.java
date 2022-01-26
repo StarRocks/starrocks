@@ -297,14 +297,7 @@ public class DeleteHandler implements Writable {
                 while (countDownTime > 0) {
                     if (countDownTime > CHECK_INTERVAL) {
                         countDownTime -= CHECK_INTERVAL;
-                        if (killJobSet.contains(deleteJob.getId())) {
-                            Iterator<Long> iterator = killJobSet.iterator();
-                            while (iterator.hasNext()) {
-                                if (iterator.next().equals(deleteJob.getId())) {
-                                    iterator.remove();
-                                    break;
-                                }
-                            }
+                        if (killJobSet.remove(deleteJob.getId())) {
                             cancelJob(deleteJob, CancelType.USER, "user cancelled");
                             throw new DdlException("Cancelled");
                         }
