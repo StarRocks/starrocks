@@ -623,11 +623,6 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
             }
         } while (false);
 
-        if (push_req.push_type == TPushType::CANCEL_DELETE) {
-            // cancel task already done and continue to get the next task.
-            continue;
-        }
-
         if (worker_pool_this->_stopped) {
             break;
         }
