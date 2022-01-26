@@ -40,8 +40,8 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
             "DegreeOfParallelism",
             strings::Substitute("$0", pipeline->source_operator_factory()->degree_of_parallelism()));
     auto& operators = driver->operators();
-    for (int32_t j = operators.size() - 1; j >= 0; --j) {
-        auto& curr_op = operators[j];
+    for (int32_t i = operators.size() - 1; i >= 0; --i) {
+        auto& curr_op = operators[i];
         driver->runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
     }
 }
@@ -100,6 +100,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
 
+    if (query_options.__isset.is_report_success && query_options.is_report_success) {
+        _fragment_ctx->set_report_profile();
+    }
     if (query_options.__isset.pipeline_profile_mode) {
         _fragment_ctx->set_profile_mode(query_options.pipeline_profile_mode);
     }
@@ -246,9 +249,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 drivers.emplace_back(std::move(driver));
             }
         }
-        // The pipeline created later should be placed in the front
-        runtime_state->runtime_profile()->reverse_childs();
     }
+    // The pipeline created later should be placed in the front
+    runtime_state->runtime_profile()->reverse_childs();
     _fragment_ctx->set_num_root_drivers(num_root_drivers);
     _fragment_ctx->set_drivers(std::move(drivers));
 
