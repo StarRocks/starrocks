@@ -152,7 +152,6 @@ public:
 // The header include a format_version field, indicting the layout of column encoding
 class JsonColumnSerde {
 public:
-
     static int64_t max_serialized_size(const vectorized::JsonColumn& column) {
         const std::vector<JsonValue>& pool = column.get_pool();
         int64_t size = 0;

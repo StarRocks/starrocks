@@ -113,7 +113,7 @@ Status add_binary_column(Column* column, const TypeDescriptor& type_desc, const 
 }
 
 Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                         simdjson::ondemand::value* value) {
+                              simdjson::ondemand::value* value) {
     auto json_column = down_cast<JsonColumn*>(column);
 
     auto json_value = JsonValue::from_simdjson(value);

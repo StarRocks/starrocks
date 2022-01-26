@@ -146,7 +146,7 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
             auto sub = right.get(it.key.stringRef());
             if (!sub.isNone()) {
                 int x = sliceCompare(it.value, sub);
-                if (x != 0) { 
+                if (x != 0) {
                     return x;
                 }
             } else {
@@ -189,7 +189,7 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
         case vpack::ValueType::String:
             return left.stringRef().compare(right.stringRef());
         default:
-            DCHECK(false) <<  "unsupport json type: " << (int)type;
+            DCHECK(false) << "unsupport json type: " << (int)type;
         }
     } else {
         return (int)left.type() - (int)right.type();

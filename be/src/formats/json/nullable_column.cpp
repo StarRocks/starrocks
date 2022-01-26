@@ -75,7 +75,7 @@ static Status add_nullable_binary_column(Column* column, const TypeDescriptor& t
 }
 
 static Status add_nullable_native_json_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                            simdjson::ondemand::value* value) {
+                                              simdjson::ondemand::value* value) {
     auto nullable_column = down_cast<NullableColumn*>(column);
 
     auto& null_column = nullable_column->null_column();

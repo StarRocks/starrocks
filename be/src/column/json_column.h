@@ -2,13 +2,11 @@
 
 #pragma once
 
-#include "column/vectorized_fwd.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
 #include "util/json.h"
 
 namespace starrocks::vectorized {
-    
 
 // TODO(mofei) implement separated JsonColumn class
 using JsonColumn = ObjectColumn<JsonValue>;

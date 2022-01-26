@@ -24,7 +24,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, json_column) {
     auto c1 = vectorized::JsonColumn::create();
 
     ASSERT_EQ(8, ColumnArraySerde::max_serialized_size(*c1));
-    
+
     for (int i = 0; i < 10; i++) {
         JsonValue json;
         std::string json_str = strings::Substitute("{\"a\": $0}", i);
@@ -42,7 +42,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, json_column) {
     auto p2 = ColumnArraySerde::deserialize(buffer.data(), c2.get());
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
-    
+
     ASSERT_EQ(10, c2->size());
     for (size_t i = 0; i < c1->size(); i++) {
         const JsonValue* datum1 = c1->get(i).get_json();

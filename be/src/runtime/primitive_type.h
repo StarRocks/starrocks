@@ -66,8 +66,8 @@ enum PrimitiveType {
     TYPE_DECIMAL32,  /* 24 */
     TYPE_DECIMAL64,  /* 25 */
     TYPE_DECIMAL128, /* 26 */
-    
-    TYPE_JSON,       /* 27 */
+
+    TYPE_JSON, /* 27 */
 };
 
 inline bool is_enumeration_type(PrimitiveType type) {

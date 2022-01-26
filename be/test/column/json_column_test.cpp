@@ -1,8 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 #include <gutil/strings/substitute.h>
-#include <fmt/format.h>
 
 #include <vector>
 

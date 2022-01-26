@@ -2,10 +2,10 @@
 
 #include "column/object_column.h"
 
-#include "util/json.h"
 #include "gutil/casts.h"
 #include "storage/hll.h"
 #include "util/bitmap_value.h"
+#include "util/json.h"
 #include "util/mysql_row_buffer.h"
 #include "util/percentile_value.h"
 
@@ -223,7 +223,7 @@ void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_
             JsonValue* value = get_object(i);
             auto json_str = value->to_string();
             if (!json_str.ok()) {
-    buf->push_null();
+                buf->push_null();
             } else {
                 buf->push_string(json_str->data(), json_str->size());
             }

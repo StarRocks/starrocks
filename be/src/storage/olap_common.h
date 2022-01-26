@@ -160,7 +160,7 @@ enum FieldType {
     OLAP_FIELD_TYPE_TIMESTAMP = 51,
     OLAP_FIELD_TYPE_DECIMAL_V2 = 52,
     OLAP_FIELD_TYPE_PERCENTILE = 53,
-    
+
     OLAP_FIELD_TYPE_JSON = 54,
 
     // max value of FieldType, newly-added type should not exceed this value.

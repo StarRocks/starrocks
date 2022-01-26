@@ -1,7 +1,7 @@
 #pragma once
 
-#include <string>
 #include <ostream>
+#include <string>
 
 #include "common/config.h"
 #include "common/logging.h"
@@ -163,7 +163,6 @@ inline StatusOr<Ret> JsonValue::callVPack(Fn fn) const {
 
 // output
 std::ostream& operator<<(std::ostream& os, const JsonValue& json);
-
 
 } // namespace starrocks
 
