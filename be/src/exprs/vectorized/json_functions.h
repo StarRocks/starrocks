@@ -113,7 +113,7 @@ public:
      * @return: JsonColumn
      */
     DEFINE_VECTORIZED_FN(json_query);
-    
+
     /**
      * @param: [json_object, ...]
      * @paramType: [JsonColumn, ...]
