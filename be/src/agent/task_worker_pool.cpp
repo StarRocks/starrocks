@@ -205,7 +205,7 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
     {
         std::lock_guard task_signatures_lock(_s_task_signatures_lock);
         for (auto it = tasks->begin(); it != tasks->end();) {
-            TAgentTaskRequest task_req = *it;
+            TAgentTaskRequest& task_req = *it;
             int64_t signature = task_req.signature;
             LOG(INFO) << "submitting task. type=" << type_str << ", signature=" << signature;
 
@@ -602,9 +602,9 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
                 LOG(INFO) << "get push task. remove delete task transaction_id: " << push_req.transaction_id
                           << " priority: " << priority << " push_type: " << push_req.push_type;
 
-                const auto& tasks = worker_pool_this->_tasks;
+                auto& tasks = worker_pool_this->_tasks;
                 for (auto it = tasks.begin(); it != tasks.end();) {
-                    TAgentTaskRequest task_req = *it;
+                    TAgentTaskRequest& task_req = *it;
                     if (task_req.task_type == TTaskType::REALTIME_PUSH) {
                         const TPushReq& push_task_in_queue = task_req.push_req;
                         if (push_task_in_queue.push_type == TPushType::DELETE &&
