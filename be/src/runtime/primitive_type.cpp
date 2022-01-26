@@ -45,6 +45,8 @@ PrimitiveType thrift_to_type(TPrimitiveType::type ttype) {
         return INVALID_TYPE;
     case TPrimitiveType::NULL_TYPE:
         return TYPE_NULL;
+    case TPrimitiveType::JSON:
+        CHECK(false) << "not supported";
 #define M(ttype)                \
     case TPrimitiveType::ttype: \
         return TYPE_##ttype;
