@@ -1233,8 +1233,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             return this;
         }
 
-        if ((targetType.isStringType() || targetType.isHllType())
-                && (this.type.isStringType() || this.type.isHllType())) {
+        if (targetType.isHllType() && this.type.isStringType()) {
             return this;
         }
         if (!Type.canCastTo(this.type, targetType)) {
