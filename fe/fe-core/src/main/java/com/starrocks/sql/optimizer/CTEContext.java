@@ -7,7 +7,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 
 import java.util.Collections;
 import java.util.List;
@@ -48,6 +47,8 @@ public class CTEContext {
 
     private boolean enableCTE;
 
+    private double inlineCTERatio = 2.0;
+
     public CTEContext() {
     }
 
@@ -64,6 +65,10 @@ public class CTEContext {
 
     public void setEnableCTE(boolean enableCTE) {
         this.enableCTE = enableCTE;
+    }
+
+    public void setInlineCTERatio(double ratio) {
+        this.inlineCTERatio = inlineCTERatio;
     }
 
     public void addCTEProduce(int cteId, OptExpression produce) {
@@ -178,7 +183,7 @@ public class CTEContext {
 
         // 3. CTE produce cost > sum of all consume inline costs
         // Consume output rows less produce rows * rate choose inline
-        return p * StatisticsEstimateCoefficient.DEFAULT_CTE_INLINE_COST_RATE >= c;
+        return p * inlineCTERatio >= c;
     }
 
     public boolean hasInlineCTE() {

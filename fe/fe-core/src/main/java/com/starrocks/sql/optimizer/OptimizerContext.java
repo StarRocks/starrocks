@@ -49,6 +49,7 @@ public class OptimizerContext {
         this.cteContext = new CTEContext();
         cteContext.reset();
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
+        this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
     }
 
     public Memo getMemo() {

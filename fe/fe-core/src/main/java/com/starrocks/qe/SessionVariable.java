@@ -158,6 +158,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
+    public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -316,6 +317,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_CTE_REUSE)
     private boolean cboCteReuse = false;
+
+    @VarAttr(name = CBO_CTE_REUSE_RATE)
+    private double cboCTERuseRatio = 2.0;
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -821,6 +825,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isSingleNodeExecPlan() {
         return singleNodeExecPlan;
+    }
+    
+    public double getCboCTERuseRatio() {
+        return cboCTERuseRatio;
+    }
+
+    public void setCboCTERuseRatio(double cboCTERuseRatio) {
+        this.cboCTERuseRatio = cboCTERuseRatio;
     }
 
     // Serialize to thrift object
