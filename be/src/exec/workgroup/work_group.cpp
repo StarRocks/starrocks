@@ -403,6 +403,33 @@ std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
     return workgroups;
 }
 
+bool IoWorkGroupQueue::try_offer_real_time_io_task(const PriorityThreadPool::Task& task) {
+    std::unique_lock<std::mutex> lock(_realtime_io_mutex);
+    _real_time_wg->try_offer_io_task(task);
+    _realtime_io_cv.notify_one();
+    return true;
+}
+
+PriorityThreadPool::Task IoWorkGroupQueue::pick_next_real_time_task() {
+    std::unique_lock<std::mutex> lock(_realtime_io_mutex);
+    while (_real_time_wg->io_task_queue_size() == 0) {
+        _realtime_io_cv.wait(lock);
+    }
+
+    return _real_time_wg->pick_io_task();
+}
+
+PriorityThreadPool::Task WorkGroupManager::pick_next_task_for_io(bool is_real_time_type) {
+    if (is_real_time_type) {
+        return _wg_io_queue.pick_next_real_time_task();
+    }
+    return _wg_io_queue.pick_next_task();
+}
+
+WorkGroupQueue& WorkGroupManager::get_io_queue() {
+    return _wg_io_queue;
+}
+
 bool IoWorkGroupQueue::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
     std::lock_guard<std::mutex> lock(_global_io_mutex);
 
@@ -451,6 +478,12 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     default_wg->set_select_factor(default_wg->get_cpu_expected_use_ratio());
     wg1->set_select_factor(wg1->get_cpu_expected_use_ratio());
     wg2->set_select_factor(wg2->get_cpu_expected_use_ratio());
+
+    // add real_time workgroup
+    auto real_time_wg = std::make_shared<WorkGroup>("real_time", 100, 1, 20L * (1L << 30), 10, WorkGroupType::WG_REALTIME);
+    real_time_wg->init();
+    WorkGroupManager::instance()->add_workgroup(real_time_wg);
+
 }
 
 } // namespace workgroup

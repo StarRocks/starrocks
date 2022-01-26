@@ -130,6 +130,7 @@ public:
     PriorityThreadPool* etl_thread_pool() { return _etl_thread_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverDispatcher* driver_dispatcher() { return _driver_dispatcher; }
+    starrocks::pipeline::DriverDispatcher* real_time_driver_dispatcher() { return _real_time_driver_dispatcher; }
     TMasterInfo* master_info() { return _master_info; }
     LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }

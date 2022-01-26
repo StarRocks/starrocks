@@ -8,7 +8,7 @@
 
 namespace starrocks::pipeline {
 
-GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool)
+GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool set_high_priority)
         : _driver_queue(std::make_unique<DriverQueueWithWorkGroup>()),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
@@ -24,6 +24,10 @@ void GlobalDriverDispatcher::initialize(int num_threads) {
     for (auto i = 0; i < num_threads; ++i) {
         _thread_pool->submit_func([this]() { this->run(); });
     }
+}
+
+void GlobalDriverDispatcher::set_os_priority(int32_t priority) {
+    _thread_pool->set_os_priority(priority);
 }
 
 void GlobalDriverDispatcher::change_num_threads(int32_t num_threads) {

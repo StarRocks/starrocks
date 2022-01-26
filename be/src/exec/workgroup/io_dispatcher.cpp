@@ -15,6 +15,10 @@ void IoDispatcher::initialize(int num_threads) {
     }
 }
 
+void IoDispatcher::set_os_priority(int32_t priority) {
+    _thread_pool->set_os_priority(priority);
+}
+
 void IoDispatcher::change_num_threads(int32_t num_threads) {
     int32_t old_num_threads = 0;
     if (!_num_threads_setter.adjust_expect_num(num_threads, &old_num_threads)) {
@@ -31,7 +35,7 @@ void IoDispatcher::run() {
             break;
         }
 
-        auto maybe_task = WorkGroupManager::instance()->pick_next_task_for_io();
+        auto maybe_task = WorkGroupManager::instance()->pick_next_task_for_io(_set_high_priority);
         if (maybe_task.status().is_cancelled()) {
             return;
         }

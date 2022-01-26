@@ -18,6 +18,7 @@ public:
 
     void initialize(int32_t num_threads);
     void change_num_threads(int32_t num_threads);
+    void set_os_priority(int32_t priority);
 
 private:
     void run();

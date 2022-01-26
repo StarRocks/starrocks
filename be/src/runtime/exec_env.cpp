@@ -154,6 +154,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _driver_dispatcher = new pipeline::GlobalDriverDispatcher(std::move(driver_dispatcher_thread_pool));
     _driver_dispatcher->initialize(max_thread_num);
 
+    //_driver_dispatcher->set_os_priority(20);
+
     int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                  ? std::thread::hardware_concurrency()
                                  : config::pipeline_scan_thread_pool_thread_num;
@@ -166,6 +168,36 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .build(&io_dispatcher_thread_pool));
     _io_dispatcher = new workgroup::IoDispatcher(std::move(io_dispatcher_thread_pool));
     _io_dispatcher->initialize(num_io_threads);
+
+    // for real time 
+    std::unique_ptr<ThreadPool> real_time_driver_dispatcher_thread_pool;
+    
+    LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", max_thread_num);
+    RETURN_IF_ERROR(ThreadPoolBuilder("real_time_pip_dispatcher") // pipeline dispatcher
+                            .set_min_threads(0)
+                            .set_max_threads(max_thread_num)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&real_time_driver_dispatcher_thread_pool));
+    _real_time_driver_dispatcher = new pipeline::GlobalDriverDispatcher(std::move(real_time_driver_dispatcher_thread_pool), true);
+    _real_time_driver_dispatcher->initialize(max_thread_num);
+
+    // set os priority
+    //_real_time_driver_dispatcher->set_os_priority(10);
+
+    std::unique_ptr<ThreadPool> real_time_io_dispatcher_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("real_time_io_dispatcher") // io dispatcher
+                            .set_min_threads(0)
+                            .set_max_threads(num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&real_time_io_dispatcher_thread_pool));
+
+    _real_time_io_dispatcher = new workgroup::IoDispatcher(std::move(real_time_io_dispatcher_thread_pool), true);
+    _real_time_io_dispatcher->initialize(num_io_threads);
+
+    // set os priority
+    //_real_time_io_dispatcher->set_os_priority(10);
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);

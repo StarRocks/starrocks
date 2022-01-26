@@ -33,6 +33,7 @@ namespace starrocks::pipeline {
 
 using WorkGroupManager = starrocks::workgroup::WorkGroupManager;
 using WorkGroup = starrocks::workgroup::WorkGroup;
+using starrocks::workgroup::WorkGroupType;
 using WorkGroupPtr = starrocks::workgroup::WorkGroupPtr;
 
 static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelinePtr& pipeline) {
@@ -280,7 +281,11 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
     }
     for (const auto& driver : _fragment_ctx->drivers()) {
-        exec_env->driver_dispatcher()->dispatch(driver.get());
+        if (driver->workgroup()->type() == WorkGroupType::WG_REALTIME) {
+            exec_env->real_time_driver_dispatcher()->dispatch(driver.get());
+        } else {
+            exec_env->driver_dispatcher()->dispatch(driver.get());
+        }
     }
     return Status::OK();
 }
