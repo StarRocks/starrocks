@@ -267,7 +267,8 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createDecimalV3Type(PrimitiveType type, int precision, int scale) {
-        Preconditions.checkArgument(0 < precision && precision <= PrimitiveType.getMaxPrecisionOfDecimal(type));
+        Preconditions.checkArgument(0 < precision && precision <= PrimitiveType.getMaxPrecisionOfDecimal(type),
+                "DECIMAL's precision should range from 1 to 38");
         Preconditions.checkArgument(0 <= scale && scale <= precision,
                 "DECIMAL(P[,S]) type P must be greater than or equal to the value of S");
 
