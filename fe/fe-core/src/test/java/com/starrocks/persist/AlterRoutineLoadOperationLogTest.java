@@ -61,7 +61,7 @@ public class AlterRoutineLoadOperationLogTest {
         routineLoadDataSourceProperties.analyze();
 
         AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(jobId,
-                jobProperties, routineLoadDataSourceProperties);
+                jobProperties, routineLoadDataSourceProperties, null);
         log.write(out);
         out.flush();
         out.close();
