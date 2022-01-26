@@ -48,10 +48,10 @@
 
 ### Bugfix
 
-- 修复低基数全局字典的副本数据不一致问题。 [#2700](https://github.com/StarRocks/starrocks/pull/2700)[#2765](https://github.com/StarRocks/starrocks/pull/2765)
+- 修复副本的全局字典不一致而引起查询的问题。 [#2700](https://github.com/StarRocks/starrocks/pull/2700)[#2765](https://github.com/StarRocks/starrocks/pull/2765)
 - 修复数据导入至StarRocks前设置参数`exec_mem_limit`不生效的问题。 [#2693](https://github.com/StarRocks/starrocks/pull/2693)
   > 参数`exec_mem_limit`用于指定数据导入时单个BE节点计算层使用的内存上限。
-- 修复数据导入至StarRocks时更新主键列的值而触发OOM的问题。 [#2743](https://github.com/StarRocks/starrocks/pull/2743)[#2777](https://github.com/StarRocks/starrocks/pull/2777)
+- 修复数据导入至StarRocks主键模型时触发OOM的问题。 [#2743](https://github.com/StarRocks/starrocks/pull/2743)[#2777](https://github.com/StarRocks/starrocks/pull/2777)
 - 修复StarRocks在查询大数量级的MySQL外部表时的查询卡死问题。 [#2881](https://github.com/StarRocks/starrocks/pull/2881)
 
 ### Behavior Change
