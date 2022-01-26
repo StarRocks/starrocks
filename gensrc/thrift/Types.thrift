@@ -82,7 +82,8 @@ enum TPrimitiveType {
   PERCENTILE,
   DECIMAL32,
   DECIMAL64,
-  DECIMAL128
+  DECIMAL128,
+  JSON
 }
 
 enum TTypeNodeType {
