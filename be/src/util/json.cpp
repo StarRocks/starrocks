@@ -213,7 +213,7 @@ int JsonValue::compare(const JsonValue& rhs) const {
 }
 
 int64_t JsonValue::hash() const {
-    return to_vslice().hash();
+    return to_vslice().normalizedHash();
 }
 
 Slice JsonValue::get_slice() const {

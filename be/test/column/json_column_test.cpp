@@ -41,7 +41,6 @@ PARALLEL_TEST(JsonColumnTest, test_build) {
         ASSERT_EQ(JsonType::JSON_NULL, json.get_type());
         ASSERT_TRUE(json.is_null());
         ASSERT_EQ("null", json.to_string().value());
-        ASSERT_EQ(1, json.hash());
     }
     // int
     {
@@ -49,7 +48,6 @@ PARALLEL_TEST(JsonColumnTest, test_build) {
         ASSERT_EQ(JsonType::JSON_NUMBER, json.get_type());
         ASSERT_EQ(1024, json.get_int().value());
         ASSERT_EQ("1024", json.to_string().value());
-        ASSERT_EQ(1, json.hash());
     }
     // uint
     {
@@ -57,7 +55,6 @@ PARALLEL_TEST(JsonColumnTest, test_build) {
         ASSERT_EQ(JsonType::JSON_NUMBER, json.get_type());
         ASSERT_EQ((uint64_t)1024, json.get_uint().value());
         ASSERT_EQ("1024", json.to_string().value());
-        ASSERT_EQ(1, json.hash());
     }
 
     // double
@@ -66,7 +63,6 @@ PARALLEL_TEST(JsonColumnTest, test_build) {
         ASSERT_EQ(JsonType::JSON_NUMBER, json.get_type());
         ASSERT_DOUBLE_EQ(1.23, json.get_double().value());
         ASSERT_EQ("1.23", json.to_string().value());
-        ASSERT_EQ(1, json.hash());
     }
     // boolean
     {
@@ -74,7 +70,6 @@ PARALLEL_TEST(JsonColumnTest, test_build) {
         ASSERT_EQ(JsonType::JSON_BOOL, json.get_type());
         ASSERT_EQ(true, json.get_bool().value());
         ASSERT_EQ("true", json.to_string().value());
-        ASSERT_EQ(1, json.hash());
     }
     // string
     {
@@ -82,7 +77,6 @@ PARALLEL_TEST(JsonColumnTest, test_build) {
         ASSERT_EQ(JsonType::JSON_STRING, json.get_type());
         ASSERT_EQ("hehe", json.get_string().value());
         ASSERT_EQ("\"hehe\"", json.to_string().value());
-        ASSERT_EQ(1, json.hash());
     }
     // object
     {
@@ -90,7 +84,6 @@ PARALLEL_TEST(JsonColumnTest, test_build) {
         ASSERT_EQ(JsonType::JSON_OBJECT, json.get_type());
         ASSERT_EQ("{\"a\": 1}", json.to_string().value());
         ASSERT_EQ("{\"a\": 1}", json.to_string().value());
-        ASSERT_EQ(1, json.hash());
     }
 }
 
@@ -168,6 +161,7 @@ PARALLEL_TEST(JsonColumnTest, test_compare) {
 PARALLEL_TEST(JsonColumnTest, test_hash) {
     JsonValue x = JsonValue::parse(R"({"a": 1, "b": 2})").value();
     JsonValue y = JsonValue::parse(R"({"b": 2, "a": 1})").value();
+    ASSERT_EQ(-3726198756236301983, x.hash());
     ASSERT_EQ(x.hash(), y.hash());
 }
 
