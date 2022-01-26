@@ -104,6 +104,9 @@ public class SemiReorderRule extends TransformationRule {
                 } else if (!isProjectToColumnRef &&
                         newSemiOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
                     semiExpression.put(entry.getKey(), entry.getValue());
+                } else if (!isProjectToColumnRef && leftChildInputColumns.containsAll(entry.getValue().getUsedColumns())) {
+                    // left child projection produce
+                    semiExpression.put(entry.getKey(), entry.getValue());
                 }
             }
         }
@@ -116,7 +119,9 @@ public class SemiReorderRule extends TransformationRule {
             );
             projectMap.put(smallestColumnRef, smallestColumnRef);
         } else {
-            projectMap = newSemiOutputColumns.getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+            projectMap = newSemiOutputColumns.getStream()
+                    .filter(c -> newTopJoin.getRequiredChildInputColumns().contains(c))
+                    .mapToObj(context.getColumnRefFactory()::getColumnRef)
                     .collect(Collectors.toMap(Function.identity(), Function.identity()));
         }
 
