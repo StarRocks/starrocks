@@ -100,12 +100,6 @@ public class CreateTableTest {
                         + "partition by range(k2)\n" + "(partition p1 values less than(\"10\"))\n"
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 
-        ExceptionChecker.expectThrowsNoException(() ->
-                createTable("create table test.tbl8( id int, j json) " +
-                        "distributed by hash(id) buckets 1 " +
-                        "properties('replication_num'='1'); "
-                ));
-
         ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "false");
         ExceptionChecker
                 .expectThrowsNoException(() -> createTable("create table test.tb7(key1 int, key2 varchar(10)) \n"
@@ -192,6 +186,12 @@ public class CreateTableTest {
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // failed
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Invalid data type of key column 'k2': 'JSON'",
+                () -> createTable("create table test.json_tbl0\n"
+                        + "(k1 int, k2 json)\n"
+                        + "distributed by hash(k1) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Invalid data type of key column 'k2': 'JSON'",
                 () -> createTable("create table test.json_tbl0\n"

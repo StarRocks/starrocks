@@ -410,6 +410,10 @@ public abstract class Type implements Cloneable {
             ScalarType scalar = ScalarType.createType(type);
             compatibilityMatrix[scalar.ordinal()][JSON.ordinal()] = type;
         }
+        for (PrimitiveType type : PrimitiveType.JSON_UNCOMPATIBLE_TYPE) {
+            ScalarType scalar = ScalarType.createType(type);
+            compatibilityMatrix[scalar.ordinal()][JSON.ordinal()] = PrimitiveType.INVALID_TYPE;
+        }
 
         compatibilityMatrix[JSON.ordinal()][DATE.ordinal()] = PrimitiveType.INVALID_TYPE;
         compatibilityMatrix[JSON.ordinal()][DATETIME.ordinal()] = PrimitiveType.INVALID_TYPE;

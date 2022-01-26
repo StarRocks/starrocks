@@ -96,6 +96,9 @@ public enum PrimitiveType {
                     .addAll(NUMBER_TYPE_LIST)
                     .addAll(STRING_TYPE_LIST)
                     .build();
+    // TODO(mofei) support them
+    public static final ImmutableList<PrimitiveType> JSON_UNCOMPATIBLE_TYPE =
+            ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE);
 
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
             ImmutableList.of(TIME, DATE, DATETIME);
