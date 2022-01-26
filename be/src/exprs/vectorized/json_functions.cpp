@@ -13,106 +13,18 @@
 #include "column/column_viewer.h"
 #include "common/status.h"
 #include "exprs/vectorized/function_helper.h"
+#include "exprs/vectorized/jsonpath.h"
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "util/json.h"
-#include "velocypack/Builder.h"
-#include "velocypack/Exception.h"
-#include "velocypack/Iterator.h"
-#include "velocypack/Slice.h"
-#include "velocypack/Value.h"
-#include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks::vectorized {
 
 // static const re2::RE2 JSON_PATTERN("^([a-zA-Z0-9_\\-\\:\\s#\\|\\.]*)(?:\\[([0-9]+)\\])?");
 // json path cannot contains: ", [, ]
-static const re2::RE2 JSON_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9\:\*]+)\])?)");
-static const re2::RE2 ARRAY_SINGLE_SELECTOR(R"(\d+)");
-static const re2::RE2 ARRAY_SLICE_SELECTOR(R"(\d+\:\d+)");
-
-bool ArraySelectorSingle::match(const std::string& input) {
-    return RE2::FullMatch(input, ARRAY_SINGLE_SELECTOR);
-}
-
-bool ArraySelectorWildcard::match(const std::string& input) {
-    return input == "*";
-}
-
-bool ArraySelectorSlice::match(const std::string& input) {
-    return RE2::FullMatch(input, ARRAY_SLICE_SELECTOR);
-}
-
-void ArraySelectorSingle::iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) {
-    try {
-        callback(array_slice.at(index));
-    } catch (const vpack::Exception& e) {
-        if (e.errorCode() == vpack::Exception::IndexOutOfBounds) {
-            callback(noneJsonSlice());
-        }
-    }
-}
-
-void ArraySelectorWildcard::iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) {
-    for (auto item : vpack::ArrayIterator(array_slice)) {
-        callback(item);
-    }
-}
-
-void ArraySelectorSlice::iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) {
-    int index = 0;
-    for (auto item : vpack::ArrayIterator(array_slice)) {
-        if (left <= index && index < right) {
-            callback(item);
-        } else if (index >= right) {
-            break;
-        }
-        index++;
-    }
-}
-
-// 1. arr[x] select the x th element
-// 2. arr[*] select all elements
-// 3. arr[1:3] select slice of elements
-Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelector>* output) {
-    if (index.empty()) {
-        output->reset(new ArraySelectorNone());
-        return Status::OK();
-    } else if (ArraySelectorSingle::match(index)) {
-        StringParser::ParseResult result;
-        int index_int = StringParser::string_to_int<int>(index.c_str(), index.length(), &result);
-        if (result != StringParser::PARSE_SUCCESS) {
-            return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
-        }
-        output->reset(new ArraySelectorSingle(index_int));
-        return Status::OK();
-    } else if (ArraySelectorWildcard::match(index)) {
-        output->reset(new ArraySelectorWildcard());
-        return Status::OK();
-    } else if (ArraySelectorSlice::match(index)) {
-        std::vector<std::string> slices = strings::Split(index, ":");
-        if (slices.size() != 2) {
-            return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
-        }
-
-        StringParser::ParseResult result;
-        int left = StringParser::string_to_int<int>(slices[0].c_str(), slices[0].length(), &result);
-        if (result != StringParser::PARSE_SUCCESS) {
-            return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
-        }
-        int right = StringParser::string_to_int<int>(slices[1].c_str(), slices[1].length(), &result);
-        if (result != StringParser::PARSE_SUCCESS) {
-            return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
-        }
-
-        output->reset(new ArraySelectorSlice(left, right));
-        return Status::OK();
-    }
-
-    return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
-}
+const re2::RE2 JSON_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9\:\*]+)\])?)");
 
 Status JsonFunctions::_get_parsed_paths(const std::vector<std::string>& path_exprs,
                                         std::vector<SimpleJsonPath>* parsed_paths) {
@@ -485,104 +397,6 @@ ColumnPtr JsonFunctions::json_string(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-Status JsonFunctions::parse_full_json_paths(const std::string& path_string, std::vector<JsonPath>* parsed_paths) {
-    // split path by ".", and escape quota by "\"
-    // eg:
-    //    '$.text#abc.xyz'  ->  [$, text#abc, xyz]
-    //    '$."text.abc".xyz'  ->  [$, text.abc, xyz]
-    //    '$."text.abc"[1].xyz'  ->  [$, text.abc[1], xyz]
-    boost::tokenizer<boost::escaped_list_separator<char>> tok(path_string,
-                                                              boost::escaped_list_separator<char>("\\", ".", "\""));
-    std::vector<std::string> path_exprs(tok.begin(), tok.end());
-
-    for (int i = 0; i < path_exprs.size(); i++) {
-        std::string col;
-        std::string index;
-        auto& current = path_exprs[i];
-
-        if (i == 0) {
-            std::unique_ptr<ArraySelector> selector(new ArraySelectorNone());
-            if (current != "$") {
-                parsed_paths->emplace_back(JsonPath("", std::move(selector)));
-            } else {
-                parsed_paths->emplace_back(JsonPath("$", std::move(selector)));
-                continue;
-            }
-        }
-
-        if (UNLIKELY(!RE2::FullMatch(path_exprs[i], JSON_PATTERN, &col, &index))) {
-            parsed_paths->emplace_back("", std::unique_ptr<ArraySelector>(new ArraySelectorNone()));
-            return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", path_exprs[i]));
-        } else {
-            std::unique_ptr<ArraySelector> selector;
-            RETURN_IF_ERROR(ArraySelector::parse(index, &selector));
-            parsed_paths->emplace_back(JsonPath(col, std::move(selector)));
-        }
-    }
-
-    return Status::OK();
-}
-
-vpack::Slice JsonFunctions::_extract_full_from_object(const JsonValue* json, const std::vector<JsonPath>& jsonpath,
-                                                      vpack::Builder* builder) {
-    return _extract_full_from_object(json->to_vslice(), jsonpath, 1, builder);
-}
-
-// TODO(mofei) it's duplicated with extract_from_object
-vpack::Slice JsonFunctions::_extract_full_from_object(vpack::Slice root, const std::vector<JsonPath>& jsonpath,
-                                                      int path_index, vpack::Builder* builder) {
-    vpack::Slice current_value = root;
-
-    for (int i = path_index; i < jsonpath.size(); i++) {
-        auto& path_item = jsonpath[i];
-        auto item_key = path_item.key;
-        auto& array_selector = path_item.array_selector;
-
-        // iterate the path key
-        if (!current_value.isObject()) {
-            return noneJsonSlice();
-        }
-        vpack::Slice next_item = current_value.get(item_key);
-        if (next_item.isNone()) {
-            return noneJsonSlice();
-        }
-
-        // TODO(mofei) refactor it to ArraySelector
-        switch (array_selector->type) {
-        case INVALID:
-            DCHECK(false);
-        case NONE:
-            break;
-        case SINGLE: {
-            if (!next_item.isArray()) {
-                return noneJsonSlice();
-            }
-            array_selector->iterate(next_item, [&](vpack::Slice array_item) { next_item = array_item; });
-            break;
-        }
-        case WILDCARD:
-        case SLICE: {
-            if (!next_item.isArray()) {
-                return noneJsonSlice();
-            }
-            {
-                builder->clear();
-                vpack::ArrayBuilder ab(builder);
-                array_selector->iterate(next_item, [&](vpack::Slice array_item) {
-                    auto sub = _extract_full_from_object(array_item, jsonpath, i + 1, builder);
-                    builder->add(sub);
-                });
-            }
-            return builder->slice();
-        }
-        }
-
-        current_value = next_item;
-    }
-
-    return current_value;
-}
-
 //////////////////////////// User visiable functions /////////////////////////////////
 
 ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {
@@ -597,7 +411,7 @@ ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& col
         std::string path_str(path_value.get_data(), path_value.get_size());
 
         std::vector<JsonPath> jsonpath;
-        if (!parse_full_json_paths(path_str, &jsonpath).ok()) {
+        if (!JsonPath::parse(path_str, &jsonpath).ok()) {
             VLOG(2) << "parse json path failed: " << path_str;
             result.append_null();
             continue;
@@ -605,7 +419,7 @@ ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& col
         VLOG(2) << "parsed json path for " << path_str;
 
         vpack::Builder builder;
-        vpack::Slice slice = _extract_full_from_object(json_value, jsonpath, &builder);
+        vpack::Slice slice = JsonPath::extract(json_value, jsonpath, &builder);
         if (slice.isNone()) {
             result.append_null();
         } else {
@@ -632,14 +446,14 @@ ColumnPtr JsonFunctions::json_exists(FunctionContext* context, const Columns& co
         std::string path_str = path_viewer.value(row).to_string();
 
         std::vector<JsonPath> paths;
-        if (!parse_full_json_paths(path_str, &paths).ok()) {
+        if (!JsonPath::parse(path_str, &paths).ok()) {
             result.append_null();
             VLOG(2) << "parse json path failed: " << path_str;
             continue;
         }
         VLOG(2) << "json_exists for  " << path_str << " of " << json_value->to_string().value();
         vpack::Builder builder;
-        vpack::Slice slice = _extract_full_from_object(json_value, paths, &builder);
+        vpack::Slice slice = JsonPath::extract(json_value, paths, &builder);
         result.append(!slice.isNone());
     }
 

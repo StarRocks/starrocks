@@ -57,6 +57,7 @@ set(EXPR_FILES
   vectorized/in_predicate.cpp
   vectorized/is_null_predicate.cpp
   vectorized/json_functions.cpp
+  vectorized/jsonpath.cpp
   vectorized/like_predicate.cpp
   vectorized/literal.cpp
   vectorized/locate.cpp
