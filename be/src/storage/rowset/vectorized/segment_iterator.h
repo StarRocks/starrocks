@@ -7,9 +7,10 @@
 
 #include "storage/vectorized/chunk_iterator.h"
 
+namespace starrocks {
 class Segment;
 
-namespace starrocks::vectorized {
+namespace vectorized {
 
 class ColumnPredicate;
 class Schema;
@@ -17,5 +18,6 @@ class SegmentReadOptions;
 
 ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const vectorized::Schema& schema,
                                       const SegmentReadOptions& options);
+} // namespace vectorized
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
