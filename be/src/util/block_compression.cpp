@@ -461,7 +461,8 @@ public:
         zstrm.zalloc = Z_NULL;
         zstrm.zfree = Z_NULL;
         zstrm.opaque = Z_NULL;
-        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + GZIP_CODEC, MEM_LEVEL, Z_DEFAULT_STRATEGY);
+        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + GZIP_CODEC, MEM_LEVEL,
+                                 Z_DEFAULT_STRATEGY);
         if (zres != Z_OK) {
             return Status::InvalidArgument(
                     strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres));
@@ -514,7 +515,8 @@ public:
         zstrm.zalloc = Z_NULL;
         zstrm.zfree = Z_NULL;
         zstrm.opaque = Z_NULL;
-        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + GZIP_CODEC, MEM_LEVEL, Z_DEFAULT_STRATEGY);
+        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + GZIP_CODEC, MEM_LEVEL,
+                                 Z_DEFAULT_STRATEGY);
         if (zres != Z_OK) {
             // Fall back to zlib estimate logic for deflate, notice this may cause decompress error
             LOG(WARNING) << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres)
