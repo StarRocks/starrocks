@@ -483,7 +483,7 @@ public:
         z_strm.opaque = Z_NULL;
 
         int ret = inflateInit2(&z_strm, MAX_WBITS + 16);
-        if (ret < 0) {
+        if (ret != Z_OK) {
             return Status::InternalError(
                     strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret));
         }
