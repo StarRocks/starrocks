@@ -41,13 +41,13 @@
 
 ### Query parallelism
 
-* Set the query parallelism via the session variable `parallel\_fragment\_exec\_instance\_num`. If the query performance is not satisfying but CPU resources are sufficient, adjust the parallelism by setting `parallel\_fragment\_exec\_instance\_num = 16;`. Parallelism can be set to **half the number of CPU cores** .
-* To make the session variable globally valid, set**global** `parallel\_fragment\_exec\_instance\_num = 16;`.
-* `parallel\_fragment\_exec\_instance\_num` is affected by the number of tablets owned by each BE. For example, if a table has 32 tablets and 3 partitions distributed on 4 BEs, then the number of tablets per BE is `32 * 3 / 4 = 24`. In this case, the parallelism value of each BE cannot exceed 24. Even if you set `parallel\_fragment\_exec\_instance\_num = 32`, the parallelism value will still be 24 during execution.
-* To process high QPS queries, we recommend setting  `parallel\_fragment\_exec\_instance\_num` to `1`. This reduces the competition for resources during querying and therefore improves the QPS.
+* Set the query parallelism via the session variable `parallel_fragment_exec_instance_num`. If the query performance is not satisfying but CPU resources are sufficient, adjust the parallelism by setting `parallel_fragment_exec_instance_num = 16;`. Parallelism can be set to **half the number of CPU cores** .
+* To make the session variable globally valid, set**global** `parallel_fragment_exec_instance_num = 16;`.
+* `parallel_fragment_exec_instance_num` is affected by the number of tablets owned by each BE. For example, if a table has 32 tablets and 3 partitions distributed on 4 BEs, then the number of tablets per BE is `32 * 3 / 4 = 24`. In this case, the parallelism value of each BE cannot exceed 24. Even if you set `parallel_fragment_exec_instance_num = 32`, the parallelism value will still be 24 during execution.
+* To process high QPS queries, we recommend setting  `parallel_fragment_exec_instance_num` to `1`. This reduces the competition for resources during querying and therefore improves the QPS.
 
 ### Use profile to analyze query bottlenecks
 
 * To view the query plan, use the command `explain sql`.
-* To enable profile reporting, set `is\_report\_success = true`.
-* To view the current query and profile information, go to `http:FE\_IP:FE\_HTTP\_PORT/queries`.
+* To enable profile reporting, set `is_report_success = true`.
+* To view the current query and profile information, go to `http:FE_IP:FE_HTTP_PORT/queries`.
