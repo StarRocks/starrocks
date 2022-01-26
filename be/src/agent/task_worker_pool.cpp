@@ -204,6 +204,7 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
     EnumToString(TTaskType, task_type, type_str);
     {
         std::lock_guard task_signatures_lock(_s_task_signatures_lock);
+        const auto recv_time = time(nullptr);
         for (auto it = tasks->begin(); it != tasks->end();) {
             TAgentTaskRequest& task_req = *it;
             int64_t signature = task_req.signature;
@@ -212,7 +213,7 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
             // batch register task info
             std::set<int64_t>& signature_set = _s_task_signatures[task_type];
             if (signature_set.insert(signature).second) {
-                (const_cast<TAgentTaskRequest&>(task_req)).__set_recv_time(time(nullptr));
+                task_req.__set_recv_time(recv_time);
                 ++it;
             } else {
                 it = tasks->erase(it);
