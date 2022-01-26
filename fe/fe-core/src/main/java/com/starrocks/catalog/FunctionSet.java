@@ -167,7 +167,7 @@ public class FunctionSet {
     private final Map<String, List<Function>> vectorizedFunctions;
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
     private final ImmutableSet<String> nonNullResultWithNullParamFunctions = ImmutableSet.of("if", "hll_hash",
-            "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce");
+            "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce", "md5sum");
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
