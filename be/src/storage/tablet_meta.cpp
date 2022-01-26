@@ -90,6 +90,7 @@ static FieldType TPrimitiveType2FieldType(TPrimitiveType::type primitive_type, F
     case TPrimitiveType::NULL_TYPE:
     case TPrimitiveType::BINARY:
     case TPrimitiveType::TIME:
+    case TPrimitiveType::JSON:
         return OLAP_FIELD_TYPE_UNKNOWN;
     case TPrimitiveType::BOOLEAN:
         return OLAP_FIELD_TYPE_BOOL;
