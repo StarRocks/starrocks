@@ -50,8 +50,7 @@ private:
 
 class S3RandomAccessFile : public RandomAccessFile {
 public:
-    S3RandomAccessFile(S3Client* client, const std::string& bucket, const std::string& object, size_t object_size = 0,
-                       const std::string& file_path = "");
+    S3RandomAccessFile(S3Client* client, const std::string& bucket, const std::string& object, size_t object_size = 0);
     virtual ~S3RandomAccessFile() noexcept;
 
     Status open() override;

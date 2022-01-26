@@ -102,21 +102,13 @@ Status HdfsRandomAccessFile::readv_at(uint64_t offset, const Slice* res, size_t 
 // ===================================  S3RandomAccessFile  =========================================
 
 S3RandomAccessFile::S3RandomAccessFile(S3Client* client, const std::string& bucket, const std::string& object,
-                                       size_t object_size, const std::string& file_path)
+                                       size_t object_size)
         : _client(client), _bucket(bucket), _object(object), _object_size(object_size) {
-    if (file_path.empty()) {
-        _file_name = "s3://" + bucket + "/" + object;
-    } else {
-        _file_name = file_path;
-    }
+    _file_name = "s3://" + _bucket + "/" + _object;
 }
 
 S3RandomAccessFile::~S3RandomAccessFile() noexcept {
     close();
-}
-
-void S3RandomAccessFile::_init(const HdfsFsHandle& handle) {
-    VLOG_FILE << "[S3] filename = " << _file_name << ", bucket = " << _bucket << ", object = " << _object;
 }
 
 Status S3RandomAccessFile::open() {
@@ -155,7 +147,7 @@ std::shared_ptr<RandomAccessFile> create_random_access_hdfs_file(const HdfsFsHan
         const std::string& nn = handle.namenode;
         const std::string bucket = get_bucket_from_namenode(nn);
         const std::string object = file_path.substr(nn.size(), file_path.size() - nn.size());
-        return std::make_shared<S3RandomAccessFile>(handle.s3_client, bucket, object, file_size, file_path);
+        return std::make_shared<S3RandomAccessFile>(handle.s3_client, bucket, object, file_size);
     } else {
         CHECK(false) << strings::Substitute("Unknown HdfsFsHandle::Type $0", static_cast<int>(handle.type));
         __builtin_unreachable();
