@@ -87,8 +87,17 @@ public class StatementPlanner {
 
         //3. Build fragment exec plan
         PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
-        return new PlanFragmentBuilder().createPhysicalPlan(
-                optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+
+        // num_nodes is set in TableQueryPlanAction to generate a single-node Plan,
+        // currently only used in Spark Connector
+        // Because the connector sends only simple queries, it only needs to remove the output fragment
+        if (plannerContext.getQueryOptions().num_nodes == 1) {
+            return new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
+                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+        } else {
+            return new PlanFragmentBuilder().createPhysicalPlan(
+                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+        }
     }
 
     private ExecPlan createInsertPlan(Relation relation, ConnectContext session) {
