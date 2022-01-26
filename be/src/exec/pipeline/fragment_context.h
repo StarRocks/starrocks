@@ -128,7 +128,7 @@ private:
     TUniqueId _fragment_instance_id;
     TNetworkAddress _fe_addr;
 
-    bool _is_report_profile;
+    bool _is_report_profile = false;
     // Mode of profile
     TPipelineProfileMode::type _profile_mode;
 
