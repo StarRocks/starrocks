@@ -55,4 +55,15 @@ public class TestCheckGeoFunctionGeneratedInvalidUtfString extends PlanTestBase 
             Assert.assertTrue(explain.contains("st_astext(st_circle"));
         }
     }
+
+    @Test
+    public void testGeoFunctionCallAnotherGeoFunction() throws Exception {
+        String[] cases = new String[]{
+                "select ST_ASWKT(ST_Point(1,1))",
+        };
+        for (String sql : cases) {
+            String explain = getFragmentPlan(sql);
+            Assert.assertTrue(explain.contains("st_aswkt(st_point"));
+        }
+    }
 }
