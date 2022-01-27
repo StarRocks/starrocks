@@ -704,7 +704,7 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
             if (!status.ok()) {
                 error_tablet_ids->push_back(tablet_info.tablet_id);
                 // Use the first non-ok status as error_status.
-                if (!error_status.ok()) {
+                if (error_status.ok()) {
                     error_status = status;
                 }
             }
