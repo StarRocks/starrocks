@@ -20,7 +20,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.SqlParserUtils;
-import com.starrocks.planner.PlannerContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.OriginStatement;
@@ -326,9 +325,8 @@ public class StatisticExecutor {
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
 
-            PlannerContext plannerContext = new PlannerContext(null, null, sessionVariable.toThrift(), null);
             execPlan = new PlanFragmentBuilder()
-                    .createStatisticPhysicalPlan(optimizedPlan, plannerContext, context, logicalPlan.getOutputColumn(),
+                    .createStatisticPhysicalPlan(optimizedPlan, context, logicalPlan.getOutputColumn(),
                             columnRefFactory, isStatistic);
         } finally {
             unLock(dbs);
