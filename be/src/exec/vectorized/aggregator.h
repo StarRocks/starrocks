@@ -151,12 +151,16 @@ private:
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
 
-    const TPlanNode _tnode;
+    // TPlanNode is only valid in the PREPARE and INIT phase
+    const TPlanNode& _tnode;
 
     MemTracker* _mem_tracker = nullptr;
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
+    // The open phase still relies on the TFunction object for some initialization operations
+    std::vector<TFunction> _fns;
+
     RuntimeProfile* _runtime_profile;
 
     int64_t _limit = -1;

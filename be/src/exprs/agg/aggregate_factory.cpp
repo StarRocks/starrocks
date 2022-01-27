@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "column/type_traits.h"
+#include "exprs/agg/aggregate.h"
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
@@ -822,7 +823,8 @@ AggregateFuncResolver::AggregateFuncResolver() {
 
 AggregateFuncResolver::~AggregateFuncResolver() = default;
 
-const AggregateFunction* newJavaUDAFFunction(bool input_nullable);
+const AggregateFunction* getJavaUDAFFunction(bool input_nullable);
+const AggregateFunction* getJavaWindowFunction();
 
 const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
                                                 PrimitiveType return_type, bool is_null,
@@ -840,9 +842,22 @@ const AggregateFunction* get_aggregate_function(const std::string& name, Primiti
         return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type, is_null);
     } else if (binary_type == TFunctionBinaryType::SRJAR) {
 #ifdef STARROCKS_WITH_HDFS
-        return newJavaUDAFFunction(is_null);
+        return getJavaUDAFFunction(is_null);
 #endif
     }
     return nullptr;
 }
+
+const AggregateFunction* get_window_function(const std::string& name, PrimitiveType arg_type, PrimitiveType return_type,
+                                             bool is_null, TFunctionBinaryType::type binary_type) {
+    if (binary_type == TFunctionBinaryType::BUILTIN) {
+        return AggregateFuncResolver::instance()->get_aggregate_info(name, arg_type, return_type, is_null);
+    } else if (binary_type == TFunctionBinaryType::SRJAR) {
+#ifdef STARROCKS_WITH_HDFS
+        return getJavaWindowFunction();
+#endif
+    }
+    return nullptr;
+}
+
 } // namespace starrocks::vectorized

@@ -81,11 +81,16 @@ public class AggregateFunction extends Function {
 
     public AggregateFunction(FunctionName fnName, List<Type> argTypes,
                              Type retType, Type intermediateType, boolean hasVarArgs) {
+        this(fnName, argTypes, retType, intermediateType, hasVarArgs, false);
+    }
+
+    public AggregateFunction(FunctionName fnName, List<Type> argTypes, Type retType, Type intermediateType,
+                             boolean hasVarArgs, boolean isAnalyticFn) {
         super(fnName, argTypes, retType, hasVarArgs);
         this.intermediateType =
                 (intermediateType != null && intermediateType.equals(retType)) ? null : intermediateType;
+        this.isAnalyticFn = isAnalyticFn;
         ignoresDistinct = false;
-        isAnalyticFn = false;
         isAggregateFn = true;
         returnsNonNullOnEmpty = false;
     }
@@ -155,6 +160,7 @@ public class AggregateFunction extends Function {
         Type[] argTypes;
         Type retType;
         boolean hasVarArgs;
+        boolean isAnalyticFn;
         Type intermediateType;
         String objectFile;
         String symbolName;
@@ -187,6 +193,11 @@ public class AggregateFunction extends Function {
             return this;
         }
 
+        public AggregateFunctionBuilder isAnalyticFn(boolean isAnalyticFn) {
+            this.isAnalyticFn = isAnalyticFn;
+            return this;
+        }
+
         public AggregateFunctionBuilder intermediateType(Type type) {
             this.intermediateType = type;
             return this;
@@ -204,7 +215,8 @@ public class AggregateFunction extends Function {
 
         public AggregateFunction build() {
             AggregateFunction fn =
-                    new AggregateFunction(name, Lists.newArrayList(argTypes), retType, intermediateType, hasVarArgs);
+                    new AggregateFunction(name, Lists.newArrayList(argTypes), retType, intermediateType, hasVarArgs,
+                            isAnalyticFn);
             fn.setBinaryType(binaryType);
             fn.symbolName = symbolName;
             fn.setLocation(new HdfsURI(objectFile));
