@@ -618,7 +618,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 }
 
 Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_ptr<ThreadPool>& threadpool,
-                                                    const TPublishVersionRequest publish_version_req,
+                                                    const TPublishVersionRequest publish_version_req, size_t* tablet_n,
                                                     std::vector<TTabletId>* error_tablet_ids) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
     int64_t transaction_id = publish_version_req.transaction_id;
@@ -708,6 +708,7 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
                 }
             }
         }
+        *tablet_n += tablet_infos.size();
     }
     return error_status;
 }
@@ -750,9 +751,11 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         uint32_t retry_time = 0;
         Status status;
 
+        size_t tablet_n = 0;
         while (retry_time < PUBLISH_VERSION_MAX_RETRY) {
             error_tablet_ids.clear();
-            status = _publish_version_in_parallel(arg_this, threadpool, publish_version_req, &error_tablet_ids);
+            status = _publish_version_in_parallel(arg_this, threadpool, publish_version_req, &tablet_n,
+                                                  &error_tablet_ids);
             if (status.ok()) {
                 break;
             } else {
@@ -768,10 +771,12 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
             StarRocksMetrics::instance()->publish_task_failed_total.increment(1);
             // if publish failed, return failed, FE will ignore this error and
             // check error tablet ids and FE will also republish this task
-            LOG(WARNING) << "Fail to publish version. signature:" << agent_task_req.signature;
+            LOG(WARNING) << "Fail to publish version. signature:" << agent_task_req.signature
+                         << " related tablet num: " << tablet_n;
             finish_task_request.__set_error_tablet_ids(error_tablet_ids);
         } else {
-            LOG(INFO) << "publish_version success. signature:" << agent_task_req.signature;
+            LOG(INFO) << "publish_version success. signature:" << agent_task_req.signature
+                      << " related tablet num: " << tablet_n;
         }
 
         status.to_thrift(&finish_task_request.task_status);

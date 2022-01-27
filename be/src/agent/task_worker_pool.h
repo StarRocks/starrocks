@@ -97,7 +97,7 @@ private:
     static void* _drop_tablet_worker_thread_callback(void* arg_this);
     static void* _push_worker_thread_callback(void* arg_this);
     static Status _publish_version_in_parallel(void* arg_this, std::unique_ptr<ThreadPool>& threadpool,
-                                               const TPublishVersionRequest publish_version_req,
+                                               const TPublishVersionRequest publish_version_req, size_t* tablet_n,
                                                std::vector<TTabletId>* error_tablet_ids);
     static void* _publish_version_worker_thread_callback(void* arg_this);
     static void* _clear_transaction_task_worker_thread_callback(void* arg_this);
