@@ -169,7 +169,7 @@ public class CreateUserStmt extends DdlStmt {
                 // In kerberos authentication, userForAuthPlugin represents the user principal realm.
                 // If user realm is not specified when creating user, the service principal realm will be used as
                 // the user principal realm by default.
-                if (userForAuthPlugin != null) {
+                if (authString != null) {
                     userForAuthPlugin = this.authString;
                 } else {
                     userForAuthPlugin = Config.authentication_kerberos_service_principal.split("@")[1];
