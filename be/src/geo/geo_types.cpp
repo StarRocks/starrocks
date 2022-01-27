@@ -251,7 +251,7 @@ void GeoPoint::encode(std::string* buf) {
 }
 
 bool GeoPoint::decode(const void* data, size_t size) {
-    if (size < sizeof(*_point)) {
+    if (size != sizeof(*_point)) {
         return false;
     }
 
