@@ -142,6 +142,7 @@ set(EXEC_FILES
         ./storage/rowset/rle_page_test.cpp
         ./storage/rowset/segment_rewriter_test.cpp
         ./storage/rowset/segment_test.cpp
+        ./storage/rowset/segment_iterator_test.cpp
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
         ./storage/selection_vector_test.cpp
