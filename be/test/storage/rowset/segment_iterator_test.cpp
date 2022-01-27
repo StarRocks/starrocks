@@ -155,7 +155,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     vectorized::SegmentReadOptions seg_opts;
     seg_opts.block_mgr = _block_mgr;
     seg_opts.stats = &stats;
-    // seg_opts.delete_predicates.
+
     auto* con = pool.add(new vectorized::ConjunctivePredicates());
     auto type_varchar = ScalarTypeInfoResolver::instance()->get_type_info(OLAP_FIELD_TYPE_VARCHAR);
     con->add(pool.add(vectorized::new_column_ge_predicate(type_varchar, 1, Slice(values[8]))));
@@ -174,8 +174,13 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     chunk_iter->init_encoded_schema(dict_map);
     chunk_iter->init_output_schema(std::unordered_set<uint32_t>());
 
-    auto res_chunk = vectorized::ChunkHelper::new_chunk(vec_schema, chunk_size);
+    auto res_chunk = vectorized::ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
 
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+    res_chunk->reset();
+    ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+    res_chunk->reset();
+    ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+    res_chunk->reset();
 }
 } // namespace starrocks
