@@ -29,8 +29,10 @@ import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
+import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
+import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
@@ -75,15 +77,24 @@ public class HiveMetaClient {
     private static final int UNKNOWN_STORAGE_ID = -1;
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
+    private long baseHmsEventId;
+
     // Required for creating an instance of RetryingMetaStoreClient.
     private static final HiveMetaHookLoader dummyHookLoader = tbl -> null;
 
-    public HiveMetaClient(String uris) {
+    public HiveMetaClient(String uris) throws DdlException {
         HiveConf conf = new HiveConf();
         conf.set("hive.metastore.uris", uris);
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
                 String.valueOf(Config.hive_meta_store_timeout_s));
         this.conf = conf;
+
+        init();
+    }
+
+    private void init() throws DdlException {
+        CurrentNotificationEventId currentNotificationEventId = getCurrentNotificationEventId();
+        this.baseHmsEventId = currentNotificationEventId.getEventId();
     }
 
     public class AutoCloseClient implements AutoCloseable {
@@ -454,7 +465,7 @@ public class HiveMetaClient {
         }
     }
 
-    private List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable,
+    public List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable,
                                                 StorageDescriptor sd) throws Exception {
         URI uri = new URI(dirPath);
         FileSystem fileSystem = getFileSystem(uri);
@@ -484,6 +495,25 @@ public class HiveMetaClient {
             // hive empty partition may not create directory
         }
         return fileDescs;
+    }
+
+    public CurrentNotificationEventId getCurrentNotificationEventId() throws DdlException {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getCurrentNotificationEventId();
+        } catch (Exception e) {
+            throw new DdlException("Failed to get current notification event id. msg: " + e.getMessage());
+        }
+    }
+
+    public NotificationEventResponse getNextNotification(long lastEventId,
+                                                         int maxEvents,
+                                                         IMetaStoreClient.NotificationFilter filter)
+            throws DdlException {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getNextNotification(lastEventId, maxEvents, filter);
+        } catch (Exception e) {
+            throw new DdlException("Failed to get next notification. msg: " + e.getMessage());
+        }
     }
 
     private boolean isValidDataFile(FileStatus fileStatus) {
@@ -559,6 +589,10 @@ public class HiveMetaClient {
             idToBlockHost.put(newId, hostName);
             return newId;
         });
+    }
+
+    public long getBaseHmsEventId() {
+        return baseHmsEventId;
     }
 
     private long getStorageId(Integer storageHash) {
