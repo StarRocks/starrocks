@@ -59,17 +59,19 @@ bool ScanOperator::has_output() const {
         }
     }
 
-    // The io task is committed by pull_chunk, so return true here if more io tasks can be committed.
     if (_num_running_io_tasks >= _max_io_tasks_per_op) {
         return false;
     }
 
+    // Because commit i/o task is trigger in pull_chunk, return true if more i/o tasks can be committed.
+    // Can trigger_next_scan for the picked-up morsel.
     for (int i = 0; i < _max_io_tasks_per_op; ++i) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
             return true;
         }
     }
 
+    // Can pick up more morsels.
     return !_morsel_queue->empty();
 }
 
