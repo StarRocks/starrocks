@@ -171,6 +171,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
 
+    public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
+
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
 
@@ -444,6 +446,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = "rewrite_count_distinct_to_bitmap_hll", flag = VariableMgr.INVISIBLE)
     @Deprecated
     private boolean rewriteCountDistinct = true;
+
+    @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
+    private boolean singleNodeExecPlan = false;
 
     public long getMaxExecMemByte() {
         return maxExecMemByte;
@@ -785,6 +790,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboCteReuse(boolean cboCteReuse) {
         this.cboCteReuse = cboCteReuse;
+    }
+
+    public void setSingleNodeExecPlan(boolean singleNodeExecPlan) {
+        this.singleNodeExecPlan = singleNodeExecPlan;
+    }
+
+    public boolean isSingleNodeExecPlan() {
+        return singleNodeExecPlan;
     }
 
     // Serialize to thrift object
