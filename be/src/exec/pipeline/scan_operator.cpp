@@ -60,7 +60,7 @@ bool ScanOperator::has_output() const {
     }
 
     // The io task is committed by pull_chunk, so return true here if more io tasks can be committed.
-    return _num_running_io_tasks < _max_io_tasks_per_op;
+    return _num_running_io_tasks < _max_io_tasks_per_op && !_morsel_queue->empty();
 }
 
 bool ScanOperator::pending_finish() const {
@@ -116,17 +116,17 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     }
 
     // Firstly, find the picked-up morsel, whose can commit an io task.
-    for (int i = 0; i < _max_io_tasks_per_op && _num_running_io_tasks < _max_io_tasks_per_op; ++i) {
+    for (int i = 0; i < _max_io_tasks_per_op; ++i) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
-            RETURN_IF_ERROR(_trigger_next_scan(state, i));
+            return _trigger_next_scan(state, i);
         }
     }
 
     // Secondly, find the unused position of _chunk_sources to pick up a new morsel.
     if (!_morsel_queue->empty()) {
-        for (int i = 0; i < _max_io_tasks_per_op && _num_running_io_tasks < _max_io_tasks_per_op; ++i) {
+        for (int i = 0; i < _max_io_tasks_per_op; ++i) {
             if (_chunk_sources[i] == nullptr || (!_is_io_task_running[i] && !_chunk_sources[i]->has_output())) {
-                RETURN_IF_ERROR(_pickup_morsel(state, i));
+                return _pickup_morsel(state, i);
             }
         }
     }
