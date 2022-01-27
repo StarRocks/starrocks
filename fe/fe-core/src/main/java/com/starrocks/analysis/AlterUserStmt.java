@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
@@ -97,6 +98,16 @@ public class AlterUserStmt extends DdlStmt {
                     }
                 } else {
                     scramblePassword = new byte[0];
+                }
+            } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(authPlugin) &&
+                    Catalog.getCurrentCatalog().getAuth().isSupportKerberosAuth()) {
+                // In kerberos authentication, userForAuthPlugin represents the user principal realm.
+                // If user realm is not specified when creating user, the service principal realm will be used as
+                // the user principal realm by default.
+                if (authString != null) {
+                    userForAuthPlugin = this.authString;
+                } else {
+                    userForAuthPlugin = Config.authentication_kerberos_service_principal.split("@")[1];
                 }
             } else {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, authPlugin);
