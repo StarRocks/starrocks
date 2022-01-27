@@ -40,4 +40,16 @@ std::string JsonColumn::get_name() const {
     return "json";
 }
 
+MutableColumnPtr JsonColumn::clone() const {
+    return BaseClass::clone();
+}
+
+MutableColumnPtr JsonColumn::clone_empty() const {
+    return this->create_mutable();
+}
+
+ColumnPtr JsonColumn::clone_shared() const {
+    return BaseClass::clone_shared();
+}
+
 } // namespace starrocks::vectorized

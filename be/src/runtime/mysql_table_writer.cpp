@@ -27,6 +27,7 @@
 #include <variant>
 
 #include "column/column_helper.h"
+#include "column/json_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "fmt/compile.h"

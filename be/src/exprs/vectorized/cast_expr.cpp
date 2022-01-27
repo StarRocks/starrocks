@@ -7,6 +7,7 @@
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
+#include "column/json_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/vectorized/binary_function.h"

@@ -85,7 +85,7 @@ namespace starrocks {
             return TEMPLATE_FUNC<TYPE_NULL>(__VA_ARGS__);                     \
         default:                                                              \
             CHECK(false) << "Unknown type: " << typeKind;                     \
-            __builtin_unreachable();                                            \
+            __builtin_unreachable();                                          \
         }                                                                     \
     }();
 

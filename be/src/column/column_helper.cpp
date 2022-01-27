@@ -5,6 +5,7 @@
 #include <runtime/types.h>
 
 #include "column/array_column.h"
+#include "column/json_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "gutil/casts.h"
