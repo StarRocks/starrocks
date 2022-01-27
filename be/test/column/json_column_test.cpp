@@ -147,6 +147,11 @@ PARALLEL_TEST(JsonColumnTest, test_compare) {
         ASSERT_EQ(0, column[rhs].compare(column[rhs]));
         ASSERT_LT(column[lhs].compare(column[rhs]), 0);
         ASSERT_GT(column[rhs].compare(column[lhs]), 0);
+
+        ASSERT_EQ(column[lhs], column[lhs]);
+        ASSERT_EQ(column[rhs], column[rhs]);
+        ASSERT_LT(column[lhs], column[rhs]);
+        ASSERT_GT(column[rhs], column[lhs]);
     }
 
     // different type
@@ -160,6 +165,10 @@ PARALLEL_TEST(JsonColumnTest, test_compare) {
         int rhs = p.second;
         ASSERT_LT(column[lhs].compare(column[rhs]), 0);
         ASSERT_GT(column[rhs].compare(column[lhs]), 0);
+
+        // operators
+        ASSERT_LT(column[lhs], column[rhs]);
+        ASSERT_GT(column[rhs], column[lhs]);
     }
 }
 
