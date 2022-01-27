@@ -75,6 +75,7 @@ import org.apache.hadoop.hive.metastore.api.NoSuchLockException;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.NoSuchTxnException;
 import org.apache.hadoop.hive.metastore.api.NotNullConstraintsRequest;
+import org.apache.hadoop.hive.metastore.api.NotificationEventRequest;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.NotificationEventsCountRequest;
 import org.apache.hadoop.hive.metastore.api.NotificationEventsCountResponse;
@@ -690,6 +691,20 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
         PartitionsStatsRequest rqst = new PartitionsStatsRequest(dbName, tableName, colNames,
                 partNames);
         return client.get_partitions_statistics_req(rqst).getPartStats();
+    }
+
+    @Override
+    public NotificationEventResponse getNextNotification(long lastEventId, int maxEvents, NotificationFilter filter)
+            throws TException {
+        NotificationEventRequest eventRequest = new NotificationEventRequest();
+        eventRequest.setMaxEvents(maxEvents);
+        eventRequest.setLastEvent(lastEventId);
+        return client.get_next_notification(eventRequest);
+    }
+
+    @Override
+    public CurrentNotificationEventId getCurrentNotificationEventId() throws TException {
+        return client.get_current_notificationEventId();
     }
 
     public void setMetaConf(String key, String value) throws MetaException, TException {
@@ -1867,17 +1882,6 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     @Override
     public void insertTable(Table table, boolean overwrite) throws MetaException {
         throw new MetaException("method not implemented");
-    }
-
-    @Override
-    public NotificationEventResponse getNextNotification(long lastEventId, int maxEvents, NotificationFilter filter)
-            throws TException {
-        throw new TException("method not implemented");
-    }
-
-    @Override
-    public CurrentNotificationEventId getCurrentNotificationEventId() throws TException {
-        throw new TException("method not implemented");
     }
 
     @Override
