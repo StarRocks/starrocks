@@ -627,6 +627,17 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
+    public void testNestedExpressions() throws Exception {
+        String sql;
+        String plan;
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select upper(lower(S_ADDRESS)) from supplier group by lower(S_ADDRESS);";
+        plan = getVerboseExplain(sql);
+        System.out.println("plan = " + plan);
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
     public void testMultiMaxMin() throws Exception {
         String sql;
         String plan;
