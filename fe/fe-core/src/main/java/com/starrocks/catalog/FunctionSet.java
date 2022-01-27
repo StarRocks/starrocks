@@ -27,10 +27,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -276,15 +272,8 @@ public class FunctionSet {
 
     public void init() {
         ArithmeticExpr.initBuiltins(this);
-        BinaryPredicate.initBuiltins(this);
-        CastExpr.initBuiltins(this);
-        IsNullPredicate.initBuiltins(this);
-        InPredicate.initBuiltins(this);
         TableFunction.initBuiltins(this);
-
         VectorizedBuiltinFunctions.initBuiltins(this);
-
-        // Populate all aggregate builtins.
         initAggregateBuiltins();
     }
 
