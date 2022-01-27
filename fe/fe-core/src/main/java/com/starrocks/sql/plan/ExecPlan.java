@@ -4,8 +4,10 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.common.IdGenerator;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.planner.PlannerContext;
+import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
@@ -19,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 
 public class ExecPlan {
-    private final PlannerContext planCtx;
     private final ConnectContext connectContext;
     private final List<String> colNames;
     private final List<ScanNode> scanNodes = new ArrayList<>();
@@ -33,9 +34,11 @@ public class ExecPlan {
     private final OptExpression physicalPlan;
     private final List<ColumnRefOperator> outputColumns;
 
-    public ExecPlan(PlannerContext planCtx, ConnectContext connectContext, List<String> colNames,
+    private final IdGenerator<PlanNodeId> nodeIdGenerator = PlanNodeId.createGenerator();
+    private final IdGenerator<PlanFragmentId> fragmentIdGenerator = PlanFragmentId.createGenerator();
+
+    public ExecPlan(ConnectContext connectContext, List<String> colNames,
                     OptExpression physicalPlan, List<ColumnRefOperator> outputColumns) {
-        this.planCtx = planCtx;
         this.connectContext = connectContext;
         this.colNames = colNames;
         this.physicalPlan = physicalPlan;
@@ -66,8 +69,12 @@ public class ExecPlan {
         return colNames;
     }
 
-    public PlannerContext getPlanCtx() {
-        return planCtx;
+    public PlanNodeId getNextNodeId() {
+        return nodeIdGenerator.getNextId();
+    }
+
+    public PlanFragmentId getNextFragmentId() {
+        return fragmentIdGenerator.getNextId();
     }
 
     public Map<ColumnRefOperator, Expr> getColRefToExpr() {

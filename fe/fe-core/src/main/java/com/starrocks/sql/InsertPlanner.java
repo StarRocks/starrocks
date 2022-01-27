@@ -19,7 +19,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
-import com.starrocks.planner.PlannerContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -96,18 +95,16 @@ public class InsertPlanner {
                 columnRefFactory);
 
         //7. Build fragment exec plan
-        PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
-
         ExecPlan execPlan;
         if ((insertRelation.getQueryRelation() instanceof SelectRelation &&
                 ((SelectRelation) insertRelation.getQueryRelation()).hasLimit())
                 || insertRelation.getTargetTable() instanceof MysqlTable) {
             execPlan = new PlanFragmentBuilder().createPhysicalPlan(
-                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                     insertRelation.getQueryRelation().getColumnOutputNames());
         } else {
             execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                     insertRelation.getQueryRelation().getColumnOutputNames());
         }
 
