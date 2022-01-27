@@ -24,6 +24,7 @@ package com.starrocks.load;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DateLiteral;
@@ -97,6 +98,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -104,6 +106,7 @@ import java.util.stream.Collectors;
 
 public class DeleteHandler implements Writable {
     private static final Logger LOG = LogManager.getLogger(DeleteHandler.class);
+    public static final int CHECK_INTERVAL = 1000;
 
     // TransactionId -> DeleteJob
     private final Map<Long, DeleteJob> idToDeleteJob;
@@ -116,17 +119,24 @@ public class DeleteHandler implements Writable {
     // so it does not need to protect, although removeOldDeleteInfo only be called in one thread
     // but other thread may call deleteInfoList.add(deleteInfo) so deleteInfoList is not thread safe.
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final Set<Long> killJobSet;
 
     public DeleteHandler() {
         idToDeleteJob = Maps.newConcurrentMap();
         dbToDeleteInfos = Maps.newConcurrentMap();
+        killJobSet = Sets.newConcurrentHashSet();
+    }
+
+    public void killJob(long jobId) {
+        killJobSet.add(jobId);
     }
 
     private enum CancelType {
         METADATA_MISSING,
         TIMEOUT,
         COMMIT_FAIL,
-        UNKNOWN
+        UNKNOWN,
+        USER
     }
 
     public void process(DeleteStmt stmt) throws DdlException, QueryStateException {
@@ -191,8 +201,7 @@ public class DeleteHandler implements Writable {
 
                 // generate label
                 String label = "delete_" + UUID.randomUUID();
-                //generate jobId
-                long jobId = Catalog.getCurrentCatalog().getNextId();
+                long jobId = stmt.getJobId();
                 // begin txn here and generate txn id
                 transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                         Lists.newArrayList(table.getId()), label, null,
@@ -284,7 +293,23 @@ public class DeleteHandler implements Writable {
             LOG.info("waiting delete Job finish, signature: {}, timeout: {}", transactionId, timeoutMs);
             boolean ok = false;
             try {
-                ok = countDownLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+                long countDownTime = timeoutMs;
+                while (countDownTime > 0) {
+                    if (countDownTime > CHECK_INTERVAL) {
+                        countDownTime -= CHECK_INTERVAL;
+                        if (killJobSet.remove(deleteJob.getId())) {
+                            cancelJob(deleteJob, CancelType.USER, "user cancelled");
+                            throw new DdlException("Cancelled");
+                        }
+                        ok = countDownLatch.await(CHECK_INTERVAL, TimeUnit.MILLISECONDS);
+                        if (ok) {
+                            break;
+                        }
+                    } else {
+                        ok = countDownLatch.await(countDownTime, TimeUnit.MILLISECONDS);
+                        break;
+                    }
+                }
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
             }
@@ -470,6 +495,18 @@ public class DeleteHandler implements Writable {
         }
         LOG.info("start to cancel delete job, transactionId: {}, cancelType: {}", job.getTransactionId(),
                 cancelType.name());
+
+        // create push task for each backends
+        List<Long> backendIds = Catalog.getCurrentSystemInfo().getBackendIds(true);
+        for (Long backendId : backendIds) {
+            PushTask cancelDeleteTask = new PushTask(backendId, TPushType.CANCEL_DELETE, TPriority.HIGH,
+                    TTaskType.REALTIME_PUSH, job.getTransactionId(),
+                    Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId());
+            AgentTaskQueue.removePushTaskByTransactionId(backendId, job.getTransactionId(),
+                    TPushType.DELETE, TTaskType.REALTIME_PUSH);
+            AgentTaskExecutor.submit(new AgentBatchTask(cancelDeleteTask));
+        }
+
         GlobalTransactionMgr globalTransactionMgr = Catalog.getCurrentGlobalTransactionMgr();
         try {
             globalTransactionMgr.abortTransaction(job.getDeleteInfo().getDbId(), job.getTransactionId(), reason);
