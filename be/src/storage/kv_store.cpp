@@ -182,10 +182,37 @@ Status KVStore::remove(ColumnFamilyIndex column_family_index, const std::string&
     return to_status(s);
 }
 
+// get iterate upper bound for prefix range query, for example:
+//
+//   prefix(ascii):      00001
+//   prefix_end(ascii):  00002
+//
+//   prefix(hex):      00ffff
+//   prefix_end(hex):  010000
+static std::string get_iterate_upper_bound(const std::string& prefix) {
+    std::string ret = prefix;
+    for (ssize_t i = (ssize_t)ret.size() - 1; i >= 0; i--) {
+        if ((uint8_t)ret[i] < 255) {
+            ret[i]++;
+            return ret;
+        } else {
+            ret[i] = 0;
+        }
+    }
+    return std::string();
+}
+
 Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
                         std::function<bool(std::string_view, std::string_view)> const& func) {
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
-    std::unique_ptr<Iterator> it(_db->NewIterator(ReadOptions(), handle));
+    auto opts = ReadOptions();
+    std::string upper_bound = get_iterate_upper_bound(prefix);
+    rocksdb::Slice upper_bound_slice;
+    if (!upper_bound.empty()) {
+        upper_bound_slice = rocksdb::Slice(upper_bound);
+        opts.iterate_upper_bound = &upper_bound_slice;
+    }
+    std::unique_ptr<Iterator> it(_db->NewIterator(opts, handle));
     if (prefix.empty()) {
         it->SeekToFirst();
     } else {
