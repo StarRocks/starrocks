@@ -415,8 +415,6 @@ public class BinaryPredicate extends Predicate implements Writable {
 
         this.opcode = op.getOpcode();
         String opName = op.getName();
-        fn = getBuiltinFunction(analyzer, opName, collectChildReturnTypes(), Function.CompareMode.IS_SUPERTYPE_OF);
-        Preconditions.checkArgument(fn != null, String.format("Unsupported binary predicate %s", toSql()));
 
         selectivity = Expr.DEFAULT_SELECTIVITY;
     }

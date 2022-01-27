@@ -123,15 +123,6 @@ public class IsNullPredicate extends Predicate {
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
         super.analyzeImpl(analyzer);
 
-        if (isNotNull) {
-            fn = getBuiltinFunction(
-                    analyzer, IS_NOT_NULL, collectChildReturnTypes(), Function.CompareMode.IS_INDISTINGUISHABLE);
-        } else {
-            fn = getBuiltinFunction(
-                    analyzer, IS_NULL, collectChildReturnTypes(), Function.CompareMode.IS_INDISTINGUISHABLE);
-        }
-        Preconditions.checkState(fn != null, "tupleisNull fn == NULL");
-
         // determine selectivity
         selectivity = 0.1;
     }
