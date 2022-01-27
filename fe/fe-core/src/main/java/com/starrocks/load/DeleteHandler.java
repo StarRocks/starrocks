@@ -231,6 +231,11 @@ public class DeleteHandler implements Writable {
                 }
                 //
                 int beCount = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
+
+                if (beCount == 0) {
+                    throw new DdlException("No backend alive.");
+                }
+
                 int estimatedDeleteTaskLimit = beCount * Config.max_mark_delete_tablet_per_be;
                 if (totalReplicaNum > estimatedDeleteTaskLimit) {
                     throw new DdlException("failed to execute delete because statement this operation is too large. " +

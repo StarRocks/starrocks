@@ -1,5 +1,6 @@
 package com.starrocks.load;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
@@ -44,6 +45,7 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.internal.runners.statements.ExpectException;
 
 import java.util.Collection;
 import java.util.List;
@@ -74,6 +76,8 @@ public class DeleteHandlerTest {
     private AgentTaskQueue agentTaskQueue;
     @Mocked
     private AgentTaskExecutor executor;
+    @Mocked
+    private SystemInfoService systemInfoService;
 
     private Database db;
     private Auth auth;
@@ -148,7 +152,17 @@ public class DeleteHandlerTest {
         };
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
 
-        SystemInfoService systemInfoService = new SystemInfoService();
+        List<Long> ids = Lists.newArrayList();
+        ids.add(10000L);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendIds(true);
+                minTimes = 0;
+                result = ids;
+            }
+        };
+
         new Expectations() {
             {
                 Catalog.getCurrentCatalog();
@@ -173,12 +187,9 @@ public class DeleteHandlerTest {
                 Catalog.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
-
-                systemInfoService.getBackendIds(true);
-                minTimes = 0;
-                result = Lists.newArrayList();
             }
         };
+
     }
 
     @Test(expected = DdlException.class)
