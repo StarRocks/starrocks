@@ -270,7 +270,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         return Status::InternalError("write column is empty");
     }
 
-    // _read_version is equal to lastest_applied_version which means there is no other rowset is applied
+    // _read_version is equal to latest_applied_version which means there is no other rowset is applied
     // the data of write_columns can be write to segment file directly
     if (latest_applied_version == _read_version) {
         return Status::OK();
@@ -339,7 +339,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
     return Status::OK();
 }
 
-Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion lastest_applied_version,
+Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion latest_applied_version,
                                 const PrimaryIndex& index) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
     if (!rowset_meta_pb.has_txn_meta()) {
@@ -370,7 +370,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     });
     bool is_rewrite = config::rewrite_partial_segment;
     RETURN_IF_ERROR(
-            _check_and_resolve_conflict(tablet, rowset, rowset_id, lastest_applied_version, read_column_ids, index));
+            _check_and_resolve_conflict(tablet, rowset, rowset_id, latest_applied_version, read_column_ids, index));
 
     for (size_t i = 0; i < num_segments; i++) {
         auto src_path = BetaRowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);

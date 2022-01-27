@@ -273,6 +273,8 @@ private:
 
     void _ignore_rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
 
+    void _get_latest_applied_version(EditVersion* latest_applied_version);
+
     void _apply_rowset_commit(const EditVersionInfo& version_info);
 
     void _apply_compaction_commit(const EditVersionInfo& version_info);
