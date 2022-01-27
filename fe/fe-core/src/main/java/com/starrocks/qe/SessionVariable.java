@@ -318,8 +318,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_REUSE)
     private boolean cboCteReuse = false;
 
-    @VarAttr(name = CBO_CTE_REUSE_RATE)
-    private double cboCTERuseRatio = 2.0;
+    @VarAttr(name = CBO_CTE_REUSE_RATE, flag = VariableMgr.INVISIBLE)
+    private double cboCTERuseRatio = 1.2;
 
     /*
      * the parallel exec instance num for one Fragment in one BE

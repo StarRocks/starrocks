@@ -7,7 +7,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -17,14 +19,6 @@ public class CTEPlanTest extends PlanTestBase {
         public ColumnStatistic getColumnStatistic(Table table, String column) {
             return new ColumnStatistic(0, 2000000, 0, 8, 2000000);
         }
-    }
-
-    public void alwaysCTEReuse() {
-        connectContext.getSessionVariable().setCboCTERuseRatio(0);
-    }
-
-    public void defaultCTEReuse() {
-        connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
     }
 
     @BeforeClass
@@ -41,6 +35,16 @@ public class CTEPlanTest extends PlanTestBase {
 
         OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
         setTableStatistics(t1, 2000000);
+    }
+
+    @Before
+    public void alwaysCTEReuse() {
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+    }
+
+    @After
+    public void defaultCTEReuse() {
+        connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
     }
 
     @Test
@@ -101,10 +105,10 @@ public class CTEPlanTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED\n" +
+                "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 04\n" +
-                "    UNPARTITIONED"));
+                "    RANDOM"));
 
         sql = "with x0 as (select * from t0) " +
                 "select * from x0 t,t1 where v1 in (select v2 from x0 where t.v1 = v1)";
@@ -112,10 +116,10 @@ public class CTEPlanTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED\n" +
+                "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 04\n" +
-                "    UNPARTITIONED"));
+                "    RANDOM"));
     }
 
     @Test
@@ -124,12 +128,13 @@ public class CTEPlanTest extends PlanTestBase {
 
         String sql = "with xx as (select * from t0) select * from xx as x0 join xx as x1 on x0.v1 = x1.v1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
+        Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 01\n" +
-                "    UNPARTITIONED\n" +
+                "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 03\n" +
-                "    UNPARTITIONED\n"));
+                "    RANDOM"));
 
         connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
     }
@@ -173,11 +178,9 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testCTEPredicate() throws Exception {
-        alwaysCTEReuse();
         String sql = "explain with xx as (select * from t0) " +
                 "select x1.v1 from xx x1 join xx x2 on x1.v2=x2.v3 where x1.v3 = 4 and x2.v2=3;";
         String plan = getFragmentPlan(sql);
-        defaultCTEReuse();
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -186,12 +189,10 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testCTELimit() throws Exception {
-        alwaysCTEReuse();
         String sql = "with xx as (select * from t0) " +
                 "select x1.v1 from (select * from xx limit 1) x1 " +
                 "join (select * from xx limit 3) x2 on x1.v2=x2.v3;";
         String plan = getFragmentPlan(sql);
-        defaultCTEReuse();
         Assert.assertTrue(plan.contains("MultiCastDataSinks"));
         Assert.assertTrue(plan.contains("cardinality=1\n" +
                 "     avgRowSize=24.0\n" +
@@ -201,13 +202,11 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testCTEPredicateLimit() throws Exception {
-        alwaysCTEReuse();
         String sql = "with xx as (select * from t0) " +
                 "select x1.v1 from " +
                 "(select * from xx where xx.v2 = 2 limit 1) x1 join " +
                 "(select * from xx where xx.v3 = 4 limit 3) x2 on x1.v2=x2.v3;";
         String plan = getFragmentPlan(sql);
-        defaultCTEReuse();
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -224,10 +223,8 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testCTEPruneColumns() throws Exception {
-        alwaysCTEReuse();
         String sql = "with xx as (select * from t0) select v1 from xx union all select v2 from xx;";
         String plan = getFragmentPlan(sql);
-        defaultCTEReuse();
         Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
@@ -247,13 +244,13 @@ public class CTEPlanTest extends PlanTestBase {
                 "    select v3 + 1, v1 + 2, v2 + 3 from s)\n" +
                 "  select * from b;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  MultiCastDataSinks\n" +
+        Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
-                "    HASH_PARTITIONED: <slot 24>, <slot 22>, <slot 23>\n" +
+                "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 05\n" +
-                "    HASH_PARTITIONED: <slot 28>, <slot 29>, <slot 30>"));
+                "    RANDOM"));
     }
 
     @Test
@@ -272,8 +269,6 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testSubqueryWithPushPredicate() throws Exception {
-        alwaysCTEReuse();
-
         String sql = "select * from " +
                 "(with xx as (select * from t0) select x1.* from xx x1 join xx x2 on x1.v2 = x2.v2) s " +
                 "where s.v1 = 2;";
@@ -291,7 +286,6 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testSubqueryWithPushLimit() throws Exception {
-        alwaysCTEReuse();
         String sql = "select * from " +
                 "(with xx as (select * from t0) " +
                 "select x1.* from xx x1 left outer join[broadcast] xx x2 on x1.v2 = x2.v2) s " +

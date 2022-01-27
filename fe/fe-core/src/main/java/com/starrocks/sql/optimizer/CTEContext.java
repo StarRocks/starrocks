@@ -5,7 +5,6 @@ package com.starrocks.sql.optimizer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.logging.log4j.LogManager;
@@ -14,7 +13,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /*
  * Recorder CTE node info, contains:
@@ -197,6 +195,10 @@ public class CTEContext {
 
         Preconditions.checkState(produceCosts.containsKey(cteId));
         Preconditions.checkState(consumeInlineCosts.containsKey(cteId));
+
+        if (inlineCTERatio <= 0) {
+            return false;
+        }
 
         double p = produceCosts.get(cteId);
         double c = consumeInlineCosts.get(cteId).stream().reduce(Double::sum).orElse(Double.MAX_VALUE);
