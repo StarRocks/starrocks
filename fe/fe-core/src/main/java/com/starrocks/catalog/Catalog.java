@@ -309,6 +309,9 @@ public class Catalog {
     // Using QueryableReentrantLock to print owner thread in debug mode.
     private QueryableReentrantLock lock;
 
+    // Using for add/drop frontend operation.
+    private QueryableReentrantLock frontendLock;
+
     private ConcurrentHashMap<Long, Database> idToDb;
     private ConcurrentHashMap<String, Database> fullNameToDb;
 
@@ -742,6 +745,37 @@ public class Catalog {
 
     public static AuditEventProcessor getCurrentAuditEventProcessor() {
         return getCurrentCatalog().getAuditEventProcessor();
+    }
+
+    private boolean tryFrontendLock(boolean mustLock) {
+        while (true) {
+            try {
+                if (!frontendLock.tryLock(5000, TimeUnit.MILLISECONDS)) {
+
+                    Thread owner = lock.getOwner();
+                    if (owner != null) {
+                        LOG.warn("frontend lock is held by: {}", Util.dumpThread(owner, 50));
+                    }
+                    if (mustLock) {
+                        continue;
+                    } else {
+                        return false;
+                    }
+                }
+                return true;
+            } catch (InterruptedException e) {
+                LOG.warn("got exception while getting frontend lock", e);
+                if (!mustLock) {
+                    return frontendLock.isHeldByCurrentThread();
+                }
+            }
+        }
+    }
+
+    private void frontendUnlock() {
+        if (frontendLock.isHeldByCurrentThread()) {
+            this.frontendLock.unlock();
+        }
     }
 
     // Use tryLock to avoid potential dead lock
@@ -2520,8 +2554,8 @@ public class Catalog {
     }
 
     public void addFrontend(FrontendNodeType role, String host, int editLogPort) throws DdlException {
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+        if (!tryFrontendLock(false)) {
+            throw new DdlException("Failed to acquire frontend lock. Try again");
         }
         try {
             Frontend fe = checkFeExist(host, editLogPort);
@@ -2543,7 +2577,7 @@ public class Catalog {
             }
             editLog.logAddFrontend(fe);
         } finally {
-            unlock();
+            frontendUnlock();
         }
     }
 
@@ -2551,8 +2585,8 @@ public class Catalog {
         if (host.equals(selfNode.first) && port == selfNode.second && feType == FrontendNodeType.MASTER) {
             throw new DdlException("can not drop current master node.");
         }
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+        if (!tryFrontendLock(false)) {
+            throw new DdlException("Failed to acquire frontend lock. Try again");
         }
         try {
             Frontend fe = checkFeExist(host, port);
@@ -2571,7 +2605,7 @@ public class Catalog {
             }
             editLog.logRemoveFrontend(fe);
         } finally {
-            unlock();
+            frontendUnlock();
         }
     }
 
@@ -4928,7 +4962,7 @@ public class Catalog {
     }
 
     public void replayAddFrontend(Frontend fe) {
-        tryLock(true);
+        tryFrontendLock(true);
         try {
             Frontend existFe = checkFeExist(fe.getHost(), fe.getEditLogPort());
             if (existFe != null) {
@@ -4956,12 +4990,12 @@ public class Catalog {
                 helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
             }
         } finally {
-            unlock();
+            frontendUnlock();
         }
     }
 
     public void replayDropFrontend(Frontend frontend) {
-        tryLock(true);
+        tryFrontendLock(true);
         try {
             Frontend removedFe = frontends.remove(frontend.getNodeName());
             if (removedFe == null) {
@@ -4975,7 +5009,7 @@ public class Catalog {
 
             removedFrontends.add(removedFe.getNodeName());
         } finally {
-            unlock();
+            frontendUnlock();
         }
     }
 
