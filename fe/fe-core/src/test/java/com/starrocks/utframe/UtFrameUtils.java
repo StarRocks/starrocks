@@ -45,7 +45,6 @@ import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.Planner;
-import com.starrocks.planner.PlannerContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
@@ -482,10 +481,8 @@ public class UtFrameUtils {
                 new ColumnRefSet(logicalPlan.getOutputColumn()),
                 columnRefFactory);
 
-        PlannerContext plannerContext =
-                new PlannerContext(null, null, connectContext.getSessionVariable().toThrift(), null);
         ExecPlan execPlan = new PlanFragmentBuilder()
-                .createPhysicalPlan(optimizedPlan, plannerContext, connectContext,
+                .createPhysicalPlan(optimizedPlan, connectContext,
                         logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
 
         OperatorStrings operatorPrinter = new OperatorStrings();
