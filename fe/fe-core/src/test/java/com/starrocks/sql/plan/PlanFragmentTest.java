@@ -5554,4 +5554,28 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  cardinality: 1"));
         Assert.assertTrue(plan.contains("output columns: 2, 6"));
     }
+
+    @Test
+    public void testSingleNodeExecPlan() throws  Exception {
+        String sql = "select v1,v2,v3 from t0";
+        connectContext.getSessionVariable().setSingleNodeExecPlan(true);
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0"));
+        connectContext.getSessionVariable().setSingleNodeExecPlan(false);
+    }
 }
