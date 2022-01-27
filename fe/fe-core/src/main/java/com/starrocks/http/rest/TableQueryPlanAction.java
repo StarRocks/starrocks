@@ -187,8 +187,14 @@ public class TableQueryPlanAction extends RestBaseAction {
                 new SqlScanner(new StringReader(sql), context.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
         try {
+            /*
+             * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
+             * currently only used in Spark/Flink Connector
+             */
+            context.getSessionVariable().setSingleNodeExecPlan(true);
             StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
             execPlan = new StatementPlanner().plan(statementBase, context);
+            context.getSessionVariable().setSingleNodeExecPlan(false);
         } catch (Exception e) {
             throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "The Sql is invalid");

@@ -8,7 +8,6 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.planner.PlannerContext;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
@@ -86,17 +85,17 @@ public class StatementPlanner {
                 columnRefFactory);
 
         //3. Build fragment exec plan
-        PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
-
-        // num_nodes is set in TableQueryPlanAction to generate a single-node Plan,
-        // currently only used in Spark Connector
-        // Because the connector sends only simple queries, it only needs to remove the output fragment
-        if (plannerContext.getQueryOptions().num_nodes == 1) {
+        /*
+         * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
+         * currently only used in Spark/Flink Connector
+         * Because the connector sends only simple queries, it only needs to remove the output fragment
+         */
+        if (session.getSessionVariable().isSingleNodeExecPlan()) {
             return new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
         } else {
             return new PlanFragmentBuilder().createPhysicalPlan(
-                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
         }
     }
 
