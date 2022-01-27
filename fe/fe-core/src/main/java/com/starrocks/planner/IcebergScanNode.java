@@ -132,9 +132,6 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
         preProcessConjuncts();
-        icebergPredicates.forEach(icebergPredicate -> {
-            LOG.info("Predicate " + icebergPredicate);
-        });
         for (FileScanTask task : IcebergUtil.getTableScan(
                 srIcebergTable.getIcebergTable(), snapshot.get(),
                 icebergPredicates, true).planFiles()) {
