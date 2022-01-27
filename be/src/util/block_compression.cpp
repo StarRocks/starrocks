@@ -302,6 +302,18 @@ public:
 
     ~ZlibBlockCompression() override = default;
 
+    virtual Status init_compress_stream(z_stream& zstrm) const {
+        zstrm.zalloc = Z_NULL;
+        zstrm.zfree = Z_NULL;
+        zstrm.opaque = Z_NULL;
+        auto zres = deflateInit(&zstrm, Z_DEFAULT_COMPRESSION);
+        if (zres != Z_OK) {
+            return Status::InvalidArgument(
+                    strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres));
+        }
+        return Status::OK();
+    }
+
     Status compress(const Slice& input, Slice* output) const override {
         auto zres = ::compress((Bytef*)output->data, &output->size, (Bytef*)input.data, input.size);
         if (zres != Z_OK) {
@@ -312,17 +324,11 @@ public:
 
     Status compress(const std::vector<Slice>& inputs, Slice* output) const override {
         z_stream zstrm;
-        zstrm.zalloc = Z_NULL;
-        zstrm.zfree = Z_NULL;
-        zstrm.opaque = Z_NULL;
-        auto zres = deflateInit(&zstrm, Z_DEFAULT_COMPRESSION);
-        if (zres != Z_OK) {
-            return Status::InvalidArgument(
-                    strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres));
-        }
+        RETURN_IF_ERROR(init_compress_stream(zstrm));
         // we assume that output is e
         zstrm.next_out = (Bytef*)output->data;
         zstrm.avail_out = output->size;
+        auto zres = Z_OK;
         for (int i = 0; i < inputs.size(); ++i) {
             if (inputs[i].size == 0) {
                 continue;
@@ -442,6 +448,102 @@ public:
     size_t max_compressed_len(size_t len) const override { return ZSTD_compressBound(len); }
 };
 
+class GzipBlockCompression final : public ZlibBlockCompression {
+public:
+    static const GzipBlockCompression* instance() {
+        static GzipBlockCompression s_instance;
+        return &s_instance;
+    }
+
+    ~GzipBlockCompression() override = default;
+
+    Status init_compress_stream(z_stream& zstrm) const override {
+        zstrm.zalloc = Z_NULL;
+        zstrm.zfree = Z_NULL;
+        zstrm.opaque = Z_NULL;
+        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + GZIP_CODEC, MEM_LEVEL,
+                                 Z_DEFAULT_STRATEGY);
+        if (zres != Z_OK) {
+            return Status::InvalidArgument(
+                    strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres));
+        }
+        return Status::OK();
+    }
+
+    Status compress(const Slice& input, Slice* output) const override {
+        std::vector<Slice> orig_slices;
+        orig_slices.emplace_back(input);
+        RETURN_IF_ERROR(ZlibBlockCompression::compress(orig_slices, output));
+        return Status::OK();
+    }
+
+    Status decompress(const Slice& input, Slice* output) const override {
+        z_stream z_strm = {nullptr};
+        z_strm.zalloc = Z_NULL;
+        z_strm.zfree = Z_NULL;
+        z_strm.opaque = Z_NULL;
+
+        int ret = inflateInit2(&z_strm, MAX_WBITS + GZIP_CODEC);
+        if (ret != Z_OK) {
+            return Status::InternalError(
+                    strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret));
+        }
+
+        // 1. set input and output
+        z_strm.next_in = reinterpret_cast<Bytef*>(input.data);
+        z_strm.avail_in = input.size;
+        z_strm.next_out = reinterpret_cast<Bytef*>(output->data);
+        z_strm.avail_out = output->size;
+
+        if (z_strm.avail_out > 0) {
+            // We only support non-streaming use case  for block decompressor
+            ret = inflate(&z_strm, Z_FINISH);
+            VLOG(10) << "gzip dec ret: " << ret;
+            if (ret != Z_OK && ret != Z_STREAM_END) {
+                (void)inflateEnd(&z_strm);
+                return Status::InternalError(
+                        strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(ret), ret));
+            }
+        }
+        (void)inflateEnd(&z_strm);
+
+        return Status::OK();
+    }
+
+    size_t max_compressed_len(size_t len) const override {
+        z_stream zstrm;
+        zstrm.zalloc = Z_NULL;
+        zstrm.zfree = Z_NULL;
+        zstrm.opaque = Z_NULL;
+        auto zres = deflateInit2(&zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + GZIP_CODEC, MEM_LEVEL,
+                                 Z_DEFAULT_STRATEGY);
+        if (zres != Z_OK) {
+            // Fall back to zlib estimate logic for deflate, notice this may cause decompress error
+            LOG(WARNING) << strings::Substitute("Fail to do ZLib stream compress, error=$0, res=$1", zError(zres), zres)
+                                    .c_str();
+            return ZlibBlockCompression::max_compressed_len(len);
+        } else {
+            zres = deflateEnd(&zstrm);
+            if (zres != Z_OK) {
+                LOG(WARNING) << strings::Substitute("Fail to do deflateEnd on ZLib stream, error=$0, res=$1",
+                                                    zError(zres), zres)
+                                        .c_str();
+            }
+            // Mark, maintainer of zlib, has stated that 12 needs to be added to result for gzip
+            // http://compgroups.net/comp.unix.programmer/gzip-compressing-an-in-memory-string-usi/54854
+            // To have a safe upper bound for "wrapper variations", we add 32 to estimate
+            int upper_bound = deflateBound(&zstrm, len) + 32;
+            return upper_bound;
+        }
+    }
+
+private:
+    // Magic number for zlib, see https://zlib.net/manual.html for more details.
+    const static int GZIP_CODEC = 16; // gzip
+    // The memLevel parameter specifies how much memory should be allocated for the internal compression state.
+    const static int MEM_LEVEL = 8;
+};
+
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec) {
     switch (type) {
     case CompressionTypePB::NO_COMPRESSION:
@@ -461,6 +563,9 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         break;
     case CompressionTypePB::ZSTD:
         *codec = ZstdBlockCompression::instance();
+        break;
+    case CompressionTypePB::GZIP:
+        *codec = GzipBlockCompression::instance();
         break;
     default:
         return Status::NotFound(strings::Substitute("unknown compression type($0)", type));

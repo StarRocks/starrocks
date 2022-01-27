@@ -84,7 +84,8 @@ void test_single_slice(starrocks::CompressionTypePB type) {
                 ASSERT_FALSE(st.ok());
             }
             // corrupt compressed data
-            if (type != starrocks::CompressionTypePB::SNAPPY) {
+            // we use inflate for gzip decompressor, it will return Z_OK for this case
+            if (type != starrocks::CompressionTypePB::SNAPPY && type != starrocks::CompressionTypePB::GZIP) {
                 Slice uncompressed_slice(uncompressed);
                 compressed_slice.size -= 1;
                 st = codec->decompress(compressed_slice, &uncompressed_slice);
@@ -107,6 +108,7 @@ TEST_F(BlockCompressionTest, single) {
     test_single_slice(starrocks::CompressionTypePB::ZLIB);
     test_single_slice(starrocks::CompressionTypePB::LZ4);
     test_single_slice(starrocks::CompressionTypePB::LZ4_FRAME);
+    test_single_slice(starrocks::CompressionTypePB::GZIP);
 }
 
 void test_multi_slices(starrocks::CompressionTypePB type) {
@@ -163,6 +165,7 @@ TEST_F(BlockCompressionTest, multi) {
     test_multi_slices(starrocks::CompressionTypePB::LZ4);
     test_multi_slices(starrocks::CompressionTypePB::LZ4_FRAME);
     test_multi_slices(starrocks::CompressionTypePB::ZSTD);
+    test_multi_slices(starrocks::CompressionTypePB::GZIP);
 }
 
 } // namespace starrocks
