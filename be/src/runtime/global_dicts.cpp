@@ -342,7 +342,7 @@ template void DictOptimizeParser::rewrite_conjuncts<false>(std::vector<ExprConte
 
 void DictOptimizeParser::rewrite_exprs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
                                        const std::vector<SlotId>& target_slotids) {
-    _rewrite_expr_ctxs<false, false, DictStringFuncExpr>(pexpr_ctxs, state, target_slotids);
+    _rewrite_expr_ctxs<true, false, DictStringFuncExpr>(pexpr_ctxs, state, target_slotids);
 }
 
 void DictOptimizeParser::close(RuntimeState* state) noexcept {
