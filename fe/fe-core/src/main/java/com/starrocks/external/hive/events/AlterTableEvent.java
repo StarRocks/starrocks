@@ -3,6 +3,7 @@
 package com.starrocks.external.hive.events;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HiveTableKey;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -10,7 +11,6 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.messaging.json.JSONAlterTableMessage;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.spark_project.guava.collect.Lists;
 
 import java.util.List;
 

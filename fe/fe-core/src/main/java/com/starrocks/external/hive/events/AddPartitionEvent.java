@@ -64,8 +64,7 @@ public class AddPartitionEvent extends MetastoreTableEvent {
             AddPartitionMessage addPartitionMessage =
                     MetastoreEventsProcessor.getMessageDeserializer()
                             .getAddPartitionMessage(event.getMessage());
-            List<Partition> addedPartitions = Lists.newArrayList(addPartitionMessage.getPartitionObjs());
-            addedPartitions.forEach(partition ->
+            addPartitionMessage.getPartitionObjs().forEach(partition ->
                     addPartitionEvents.add(new AddPartitionEvent(event, metaCache, partition, partCols)));
         } catch (Exception ex) {
             throw new MetastoreNotificationException(ex);

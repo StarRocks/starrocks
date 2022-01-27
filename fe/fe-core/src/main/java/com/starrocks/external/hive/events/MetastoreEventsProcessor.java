@@ -145,7 +145,7 @@ public class MetastoreEventsProcessor extends MasterDaemon {
     public void registerTable(HiveTable tbl) {
         tablesLock.writeLock().lock();
         try {
-            tables.put(tbl.getResourceName(), getTablesColumnKey(tbl.getHiveDb(), tbl.getHiveTable()), tbl);
+            tables.put(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getHiveTable()), tbl);
         } finally {
             tablesLock.writeLock().unlock();
         }
@@ -154,7 +154,7 @@ public class MetastoreEventsProcessor extends MasterDaemon {
     public void unregisterTable(HiveTable tbl) {
         tablesLock.writeLock().lock();
         try {
-            tables.remove(tbl.getResourceName(), getTablesColumnKey(tbl.getHiveDb(), tbl.getHiveTable()));
+            tables.remove(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getHiveTable()));
         } finally {
             tablesLock.writeLock().unlock();
         }
@@ -163,7 +163,7 @@ public class MetastoreEventsProcessor extends MasterDaemon {
     public HiveTable getHiveTable(String resourceName, String dbName, String tblName) {
         tablesLock.readLock().lock();
         try {
-            return tables.get(resourceName, getTablesColumnKey(dbName, tblName));
+            return tables.get(resourceName, new TableName(dbName, tblName));
         } finally {
             tablesLock.readLock().unlock();
         }
@@ -278,11 +278,11 @@ public class MetastoreEventsProcessor extends MasterDaemon {
     private void prepareRefreshHiveColumnStats(String resource, NotificationEvent event) {
         String dbName = event.getDbName();
         String tblName = event.getTableName();
-        HiveTable table = tables.get(resource, getTablesColumnKey(dbName, tblName));
+        HiveTable table = tables.get(resource, new TableName(dbName, tblName));
         if (table == null) {
             return;
         }
-        refreshColumnsTables.put(resource, getTablesColumnKey(dbName, tblName));
+        refreshColumnsTables.put(resource, new TableName(dbName, tblName));
     }
 
     public void refreshTableColumns() {
@@ -354,10 +354,6 @@ public class MetastoreEventsProcessor extends MasterDaemon {
                 eventProcessorLock.writeLock().unlock();
             }
         }
-    }
-
-    public static TableName getTablesColumnKey(String dbName, String tableName) {
-        return new TableName(dbName, tableName);
     }
 
     public static class TableName {
