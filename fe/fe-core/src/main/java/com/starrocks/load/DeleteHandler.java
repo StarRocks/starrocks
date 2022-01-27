@@ -229,6 +229,14 @@ public class DeleteHandler implements Writable {
                         }
                     }
                 }
+                //
+                int beCount = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
+                int estimatedDeleteTaskLimit = beCount * Config.max_mark_delete_tablet_per_be;
+                if (totalReplicaNum > estimatedDeleteTaskLimit) {
+                    throw new DdlException("failed to execute delete because statement this operation is too large. " +
+                            "will mark " + totalReplicaNum + " tablet exceed limit " + estimatedDeleteTaskLimit +
+                            ". you can try to specify the delete partition to lower the mark tablet.");
+                }
 
                 countDownLatch = new MarkedCountDownLatch<>(totalReplicaNum);
 

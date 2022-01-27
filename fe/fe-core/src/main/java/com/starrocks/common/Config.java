@@ -782,6 +782,12 @@ public class Config extends ConfigBase {
     public static int max_allowed_in_element_num_of_delete = 10000;
 
     /**
+     * Used to limit element num of tablet mark in delete statement.
+     */
+    @ConfField(mutable = true)
+    public static int max_mark_delete_tablet_per_be = 1024;
+
+    /**
      * only limit for Row-based storage.
      * set to Integer.MAX_VALUE, cause starrocks is already Column-based storage
      */
