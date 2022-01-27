@@ -60,7 +60,17 @@ bool ScanOperator::has_output() const {
     }
 
     // The io task is committed by pull_chunk, so return true here if more io tasks can be committed.
-    return _num_running_io_tasks < _max_io_tasks_per_op && !_morsel_queue->empty();
+    if (_num_running_io_tasks >= _max_io_tasks_per_op) {
+        return false;
+    }
+
+    for (int i = 0; i < _max_io_tasks_per_op; ++i) {
+        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
+            return true;
+        }
+    }
+
+    return !_morsel_queue->empty();
 }
 
 bool ScanOperator::pending_finish() const {
@@ -81,7 +91,7 @@ bool ScanOperator::is_finished() const {
     }
 
     for (const auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr && chunk_source->has_output()) {
+        if (chunk_source != nullptr && (chunk_source->has_output() || chunk_source->has_next_chunk())) {
             return false;
         }
     }
