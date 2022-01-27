@@ -24,6 +24,7 @@
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/percentile_approx.h"
+#include "exprs/agg/retention.h"
 #include "exprs/agg/sum.h"
 #include "exprs/agg/variance.h"
 #include "exprs/agg/window.h"
@@ -138,6 +139,10 @@ AggregateFunctionPtr AggregateFactory::MakeSumDistinctAggregateFunctionV2() {
 
 AggregateFunctionPtr AggregateFactory::MakeDictMergeAggregateFunction() {
     return std::make_shared<DictMergeAggregateFunction>();
+}
+
+AggregateFunctionPtr AggregateFactory::MakeRetentionAggregateFunction() {
+    return std::make_shared<RetentionAggregateFunction>();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeHllUnionAggregateFunction() {
@@ -309,10 +314,15 @@ public:
             if (name == "dict_merge") {
                 auto dict_merge = AggregateFactory::MakeDictMergeAggregateFunction();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<DictMergeState>(dict_merge);
+            } else if (name == "retention") {
+                auto retentoin = AggregateFactory::MakeRetentionAggregateFunction();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState>(retentoin);
             }
         } else {
             if (name == "dict_merge") {
                 return AggregateFactory::MakeDictMergeAggregateFunction();
+            } else if (name == "retention") {
+                return AggregateFactory::MakeRetentionAggregateFunction();
             }
         }
 
@@ -817,6 +827,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_object_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE>("percentile_union");
 
     add_array_mapping<TYPE_ARRAY, TYPE_VARCHAR>("dict_merge");
+    add_array_mapping<TYPE_ARRAY, TYPE_ARRAY>("retention");
 }
 
 #undef ADD_ALL_TYPE

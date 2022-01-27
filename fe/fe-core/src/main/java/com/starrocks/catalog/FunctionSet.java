@@ -74,6 +74,7 @@ public class FunctionSet {
     public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum";
     public static final String DICT_MERGE = "dict_merge";
     public static final String ANY_VALUE = "any_value";
+    public static final String RETENTION = "retention";
     public static final String GROUP_CONCAT = "group_concat";
     public static final String ARRAY_AGG = "array_agg";
 
@@ -595,6 +596,9 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin("percentile_union",
                 Lists.newArrayList(Type.PERCENTILE), Type.PERCENTILE, Type.PERCENTILE,
                 false, false, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(RETENTION, Lists.newArrayList(Type.ARRAY_BOOLEAN),
+                Type.ARRAY_BOOLEAN, Type.ARRAY_BOOLEAN, false, false, false));
 
         // Avg
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
