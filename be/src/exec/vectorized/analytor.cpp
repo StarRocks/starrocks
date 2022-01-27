@@ -19,6 +19,10 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks {
+namespace vectorized {
+Status window_init_jvm_context(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
+                               starrocks_udf::FunctionContext* context);
+} // namespace vectorized
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                    const TupleDescriptor* result_tuple_desc)
@@ -122,8 +126,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         if (fn.name.function_name == "count" || fn.name.function_name == "row_number" ||
             fn.name.function_name == "rank" || fn.name.function_name == "dense_rank") {
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
-            auto* func = vectorized::get_aggregate_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT,
-                                                            is_input_nullable);
+            auto* func =
+                    vectorized::get_window_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
             _agg_functions[i] = func;
             _agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), false, false};
             // count(*) no input column, we manually resize it to 1 to process count(*)
@@ -149,8 +153,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             is_input_nullable = true;
             VLOG_ROW << "try get function " << fn.name.function_name << " arg_type.type " << arg_type.type
                      << " return_type.type " << return_type.type;
-            auto* func = vectorized::get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                            is_input_nullable);
+            auto* func = vectorized::get_window_function(fn.name.function_name, arg_type.type, return_type.type,
+                                                         is_input_nullable, fn.binary_type);
             if (func == nullptr) {
                 return Status::InternalError(
                         strings::Substitute("Invalid window function plan: $0", fn.name.function_name));
@@ -235,8 +239,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
     }
 
-    vectorized::AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-    _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
+    // save TFunction object
+    _fns.resize(_agg_fn_ctxs.size());
+    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+        _fns.push_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
+    }
 
     return Status::OK();
 }
@@ -249,6 +256,20 @@ Status Analytor::open(RuntimeState* state) {
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
     }
+#ifdef STARROCKS_WITH_HDFS
+    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+        if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+            const auto& fn = _fns[i];
+            auto st = vectorized::window_init_jvm_context(fn.id, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                                          _agg_fn_ctxs[i]);
+            RETURN_IF_ERROR(st);
+        }
+    }
+#endif
+
+    vectorized::AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+    _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
+
     return Status::OK();
 }
 

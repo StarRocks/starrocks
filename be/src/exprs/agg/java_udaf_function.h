@@ -22,6 +22,7 @@ struct JavaUDAFState {
     // UDAF State
     jobject handle;
 };
+
 template <bool handle_null>
 jvalue cast_to_jvalue(MethodTypeDescriptor method_type_desc, const Column* col, int row_num);
 void release_jvalue(MethodTypeDescriptor method_type_desc, jvalue val);
@@ -31,12 +32,12 @@ Status get_java_udaf_function(int fid, const std::string& url, const std::string
 // Not Support Nullable
 
 template <bool handle_null = true>
-class JavaUDAFAggregateFunction final : public AggregateFunction {
+class JavaUDAFAggregateFunction : public AggregateFunction {
 public:
     using State = JavaUDAFState;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
-                size_t row_num) const override {
+                size_t row_num) const override final {
         int num_args = ctx->get_num_args();
         jvalue args[num_args + 1];
         args[0].l = this->data(state).handle;
@@ -52,7 +53,8 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
+               size_t row_num) const override final {
         // TODO merge
         DCHECK(!column->is_nullable());
         DCHECK(column->is_binary());
@@ -71,7 +73,7 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
-                             Column* to) const override {
+                             Column* to) const override final {
         // TODO serialize
         DCHECK(!to->is_nullable());
         DCHECK(to->is_binary());
@@ -94,7 +96,7 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
-                            Column* to) const override {
+                            Column* to) const override final {
         // TODO finalize
         auto* udaf_ctx = ctx->impl()->udaf_ctxs();
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
@@ -103,7 +105,7 @@ public:
     }
 
     //Now Java UDAF don't Not Support Streaming Aggregate
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override final {
         DCHECK(false) << "Now Java UDAF Not Support Streaming Mode";
     }
 
