@@ -369,7 +369,16 @@ public class ScalarType extends Type implements Cloneable {
         if (precision > 38) {
             return ScalarType.DOUBLE;
         } else {
-            return ScalarType.createDecimalV3NarrowestType(precision, scale);
+            // the common type's PrimitiveType of two decimal types should wide enough, i.e
+            // the common type of (DECIMAL32, DECIMAL64) should be DECIMAL64
+            PrimitiveType primitiveType = PrimitiveType.getWiderDecimalV3Type(lhs.getPrimitiveType(), rhs.getPrimitiveType());
+            // the narrowestType for specified precision and scale is just wide properly to hold a decimal value, i.e
+            // DECIMAL128(7,4), DECIMAL64(7,4) and DECIMAL32(7,4) can all be held in a DECIMAL32(7,4) type without
+            // precision loss.
+            Type narrowestType = ScalarType.createDecimalV3NarrowestType(precision, scale);
+            primitiveType = PrimitiveType.getWiderDecimalV3Type(primitiveType, narrowestType.getPrimitiveType());
+            // create a commonType with wider primitive type.
+            return ScalarType.createDecimalV3Type(primitiveType, precision, scale);
         }
     }
 
