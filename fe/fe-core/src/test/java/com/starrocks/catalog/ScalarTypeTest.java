@@ -122,7 +122,22 @@ public class ScalarTypeTest {
                         ScalarType.createDecimalV3NarrowestType(38, 4),
                         ScalarType.createDecimalV3NarrowestType(18, 10),
                         ScalarType.DOUBLE,
-                }
+                },
+                {
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 7, 4),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 7, 4),
+                },
+                {
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 11),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 11),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 11),
+                },
+                {
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 4),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 4),
+                },
         };
 
         for (ScalarType[] tc : testCases) {
