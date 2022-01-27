@@ -126,7 +126,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
             return scanColumns.size() != 0 && !((LogicalHiveScanOperator) scanOperator).getPartitionColumns().containsAll(
                     scanColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
         }
-        return scanColumns.size() == 0;
+        return scanColumns.size() != 0;
     }
 
     private boolean isPartitionColumn(LogicalScanOperator scanOperator, String columnName) {
