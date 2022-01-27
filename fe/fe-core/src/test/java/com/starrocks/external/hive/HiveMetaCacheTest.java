@@ -17,6 +17,9 @@ import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -146,6 +149,18 @@ public class HiveMetaCacheTest {
         Assert.assertEquals(10000L, partitionStats.getNumRows());
         Assert.assertEquals(10000L, partitionStats.getTotalFileBytes());
 
+        long ts = System.currentTimeMillis();
+        String path = "/tmp/" + ts;
+        File dir = new File(path);
+        if (!dir.exists()) {
+            dir.mkdir();
+        }
+        File file = new File(dir + "/test_event");
+        file.createNewFile();
+        try (FileOutputStream outputStream = new FileOutputStream(file)) {
+            outputStream.write(1111);
+        }
+
         Map<String, String> params = Maps.newHashMap();
         params.put("numRows", "5");
         List<String> partValues = Lists.newArrayList("1", "2", "3");
@@ -155,7 +170,7 @@ public class HiveMetaCacheTest {
         SerDeInfo serDeInfo = new SerDeInfo();
         serDeInfo.setParameters(Maps.newHashMap());
         sd.setSerdeInfo(serDeInfo);
-        sd.setLocation("file:/tmp");
+        sd.setLocation("file:/tmp/" + ts);
         metaCache.alterPartitionByEvent(partitionKey, sd, params);
 
         partitionStats = metaCache.getPartitionStats("db", "tbl",
@@ -167,6 +182,8 @@ public class HiveMetaCacheTest {
         Assert.assertSame(partition.getFormat(), HdfsFileFormat.TEXT);
         long totalSize = partition.getFiles().stream().mapToLong(HdfsFileDesc::getLength).sum();
         Assert.assertEquals(partitionStats.getTotalFileBytes(), totalSize);
+        file.delete();
+        dir.delete();
     }
 
     @Test
