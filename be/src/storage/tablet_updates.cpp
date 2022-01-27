@@ -1528,8 +1528,9 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     if (!st.ok()) {
         _last_compaction_failure_millis = UnixMillis();
         _compaction_running = false;
+    } else {
+        _last_compaction_success_millis = UnixMillis();
     }
-    _last_compaction_success_millis = UnixMillis();
     return st;
 }
 
@@ -1581,8 +1582,7 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
         rapidjson::Value value;
         std::string rowset_str;
         if (rowsets[i] != nullptr) {
-            rowset_str = strings::Substitute("id:$0 #seg:$1 #OVERLAP:$2", rowset_ids[i], rowsets[i]->num_segments(),
-                                             SegmentsOverlapPB_Name(rowsets[i]->rowset_meta()->segments_overlap()));
+            rowset_str = strings::Substitute("id:$0 #seg:$1", rowset_ids[i], rowsets[i]->num_segments());
         } else {
             rowset_str = strings::Substitute("id:$0/NA", rowset_ids[i]);
         }
