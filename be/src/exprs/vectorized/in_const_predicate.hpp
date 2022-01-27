@@ -92,8 +92,8 @@ public:
         }
     }
 
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) override {
-        Expr::prepare(state, row_desc, context);
+    Status prepare(RuntimeState* state, ExprContext* context) override {
+        Expr::prepare(state, context);
 
         if (_is_prepare) {
             return Status::OK();

@@ -66,8 +66,7 @@ TEST_F(VectorizedInIteratorPredicateTest, sliceInTrue) {
     expr->_children.push_back(&col6);
 
     {
-        starrocks::RowDescriptor rd;
-        ASSERT_TRUE(expr->prepare(nullptr, rd, nullptr).ok());
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ASSERT_TRUE(ptr->is_numeric());
@@ -102,8 +101,7 @@ TEST_F(VectorizedInIteratorPredicateTest, dateInFalse) {
     expr->_children.push_back(&col6);
 
     {
-        starrocks::RowDescriptor rd;
-        ASSERT_TRUE(expr->prepare(nullptr, rd, nullptr).ok());
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ASSERT_TRUE(ptr->is_numeric());
@@ -138,8 +136,7 @@ TEST_F(VectorizedInIteratorPredicateTest, intNotInTrue) {
     expr->_children.push_back(&col6);
 
     {
-        starrocks::RowDescriptor rd;
-        ASSERT_TRUE(expr->prepare(nullptr, rd, nullptr).ok());
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ASSERT_TRUE(ptr->is_numeric());
@@ -174,8 +171,7 @@ TEST_F(VectorizedInIteratorPredicateTest, nullSliceIn) {
     expr->_children.push_back(&col3);
 
     {
-        starrocks::RowDescriptor rd;
-        ASSERT_TRUE(expr->prepare(nullptr, rd, nullptr).ok());
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ASSERT_TRUE(ptr->is_nullable());
@@ -218,8 +214,7 @@ TEST_F(VectorizedInIteratorPredicateTest, sliceNotInNull) {
     expr->_children.push_back(&col3);
 
     {
-        starrocks::RowDescriptor rd;
-        ASSERT_TRUE(expr->prepare(nullptr, rd, nullptr).ok());
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ASSERT_TRUE(ptr->is_nullable());
@@ -262,8 +257,7 @@ TEST_F(VectorizedInIteratorPredicateTest, intNullInTrue) {
     expr->_children.push_back(&col6);
 
     {
-        starrocks::RowDescriptor rd;
-        ASSERT_TRUE(expr->prepare(nullptr, rd, nullptr).ok());
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ASSERT_TRUE(ptr->is_nullable());

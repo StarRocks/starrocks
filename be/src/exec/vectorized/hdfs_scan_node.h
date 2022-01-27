@@ -106,7 +106,6 @@ private:
 
     int _min_max_tuple_id = 0;
     TupleDescriptor* _min_max_tuple_desc = nullptr;
-    RowDescriptor* _min_max_row_desc = nullptr;
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
 
     // complex conjuncts, such as contains multi slot, are evaled in scanner.
