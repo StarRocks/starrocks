@@ -39,15 +39,23 @@ import java.util.List;
 public class DeleteStmt extends DdlStmt {
     private final TableName tbl;
     private final PartitionNames partitionNames;
-    private Expr wherePredicate;
+    private final Expr wherePredicate;
 
-    private List<Predicate> deleteConditions;
+    private final List<Predicate> deleteConditions;
+    // Each deleteStmt corresponds to a DeleteJob.
+    // The JobID is generated here for easy correlation when cancel Delete
+    private final long jobId;
 
     public DeleteStmt(TableName tableName, PartitionNames partitionNames, Expr wherePredicate) {
         this.tbl = tableName;
         this.partitionNames = partitionNames;
         this.wherePredicate = wherePredicate;
-        this.deleteConditions = new LinkedList<Predicate>();
+        this.deleteConditions = Lists.newLinkedList();
+        this.jobId = Catalog.getCurrentCatalog().getNextId();
+    }
+
+    public long getJobId() {
+        return jobId;
     }
 
     public String getTableName() {
