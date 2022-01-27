@@ -62,6 +62,7 @@ namespace starrocks {
 
 const uint32_t TASK_FINISH_MAX_RETRY = 3;
 const uint32_t PUBLISH_VERSION_MAX_RETRY = 3;
+const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 3;
 
 std::atomic_ulong TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
 std::mutex TaskWorkerPool::_s_task_signatures_lock;
@@ -646,31 +647,48 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
         for (auto& tablet_rs : tablet_related_rs) {
             tablet_infos.push_back(tablet_rs.first);
 
-            // submit publishing tablet version task to the threadpool.
-            auto st = threadpool->submit_func([&worker_pool_this, &tablet_rs, &statuses, idx, &version, &transaction_id,
-                                               &partition_id]() {
-                const TabletInfo& tablet_info = tablet_rs.first;
-                const RowsetSharedPtr& rowset = tablet_rs.second;
-                auto& status = statuses[idx];
-                // if rowset is null, it means this be received write task, but failed during write
-                // and receive fe's publish version task
-                // this be must return as an error tablet
-                if (rowset == nullptr) {
-                    LOG(WARNING) << "Not found rowset of tablet: " << tablet_info.tablet_id << ", txn_id "
-                                 << transaction_id;
-                    status = Status::NotFound(fmt::format("Not found rowset of tablet: {}, txn_id: {}",
-                                                          tablet_info.tablet_id, transaction_id));
-                    return;
+            uint32_t retry_time = 0;
+
+            while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
+                // submit publishing tablet version task to the threadpool.
+                auto st = threadpool->submit_func([&worker_pool_this, &tablet_rs, &statuses, idx, &version,
+                                                   &transaction_id, &partition_id]() {
+                    const TabletInfo& tablet_info = tablet_rs.first;
+                    const RowsetSharedPtr& rowset = tablet_rs.second;
+                    auto& status = statuses[idx];
+                    // if rowset is null, it means this be received write task, but failed during write
+                    // and receive fe's publish version task
+                    // this be must return as an error tablet
+                    if (rowset == nullptr) {
+                        LOG(WARNING) << "Not found rowset of tablet: " << tablet_info.tablet_id << ", txn_id "
+                                     << transaction_id;
+                        status = Status::NotFound(fmt::format("Not found rowset of tablet: {}, txn_id: {}",
+                                                              tablet_info.tablet_id, transaction_id));
+                        return;
+                    }
+                    EnginePublishVersionTask engine_task(transaction_id, partition_id, version, tablet_info, rowset);
+
+                    status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+                    if (!status.ok())
+                        LOG(WARNING) << "failed to publish version for tablet, tablet_id " << tablet_info.tablet_id
+                                     << ", txn_id " << transaction_id << ", err: " << status;
+                });
+
+                if (!st.ok()) {
+                    // Status::ServiceUnavailable is returned when all of the threads of the pool are busy.
+                    if (st.is_service_unavailable()) {
+                        LOG(WARNING) << "publish version threadpool is busy, retry later. [transaction_id="
+                                     << publish_version_req.transaction_id
+                                     << ", tablet_id=" << tablet_rs.first.tablet_id;
+                        // In general, publish version is fast. A small sleep is needed here.
+                        SleepFor(MonoDelta::FromMilliseconds(50));
+                        continue;
+                    }
+                    return st;
                 }
-                EnginePublishVersionTask engine_task(transaction_id, partition_id, version, tablet_info, rowset);
 
-                status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-                if (!status.ok())
-                    LOG(WARNING) << "failed to publish version for tablet, tablet_id " << tablet_info.tablet_id
-                                 << ", txn_id " << transaction_id << ", err: " << status;
-            });
-
-            if (!st.ok()) return st;
+                break;
+            }
 
             ++idx;
         }
@@ -688,7 +706,6 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
                 if (!error_status.ok()) {
                     error_status = status;
                 }
-                continue;
             }
         }
     }
@@ -699,12 +716,15 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     std::unique_ptr<ThreadPool> threadpool;
-    auto st = ThreadPoolBuilder("publish_version")
-                      .set_min_threads(config::partition_publish_version_worker_count)
-                      .set_max_threads(config::partition_publish_version_worker_count)
-                      .set_max_queue_size(32)
-                      .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                      .build(&threadpool);
+    auto st =
+            ThreadPoolBuilder("publish_version")
+                    .set_min_threads(config::partition_publish_version_worker_count)
+                    .set_max_threads(config::partition_publish_version_worker_count)
+                    // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
+                    // But it seems that there's no limit for the number of tablets of a partition.
+                    // Since a large queue size brings a little overhead, a big one is chosen here.
+                    .set_max_queue_size(256)
+                    .build(&threadpool);
 
     while (true) {
         TAgentTaskRequest agent_task_req;
@@ -763,6 +783,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req.task_type, agent_task_req.signature);
     }
+    threadpool->shutdown();
     return (void*)nullptr;
 }
 
