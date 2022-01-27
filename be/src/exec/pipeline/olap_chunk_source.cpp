@@ -99,7 +99,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 Status OlapChunkSource::_build_scan_range(RuntimeState* state) {
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-    _dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state);
+    _dict_optimize_parser.rewrite_conjuncts<false>(&_not_push_down_conjuncts, state);
 
     // FixMe(kks): Ensure this logic is right.
     int scanners_per_tablet = 64;

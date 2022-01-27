@@ -81,6 +81,7 @@ public:
 
     void rewrite_exprs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
                        const std::vector<SlotId>& target_slotids);
+    template <bool close_original_expr>
     void rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs, RuntimeState* state);
 
     void close(RuntimeState* state) noexcept;
@@ -102,7 +103,7 @@ private:
     void _check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
 
     // use code mapping rewrite expr
-    template <bool is_predicate, typename ExprType>
+    template <bool close_original_expr, bool is_predicate, typename ExprType>
     void _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
                             const std::vector<SlotId>& slot_ids);
 
