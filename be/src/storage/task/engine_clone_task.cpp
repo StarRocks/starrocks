@@ -74,7 +74,7 @@ Status EngineCloneTask::execute() {
     auto tablet_manager = StorageEngine::instance()->tablet_manager();
     DeferOp op([&] {
         tls_thread_status.set_mem_tracker(prev_tracker);
-        tablet_manager->unregister_clone_tablet(_clone_req.tablet_id);    
+        tablet_manager->unregister_clone_tablet(_clone_req.tablet_id);
     });
 
     // Prevent the snapshot directory from been removed by the path GC worker.
@@ -94,7 +94,7 @@ Status EngineCloneTask::execute() {
         auto st = _do_clone(nullptr);
         _set_tablet_info(st, true);
     }
-    
+
     return Status::OK();
 }
 
