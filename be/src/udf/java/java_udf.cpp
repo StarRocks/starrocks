@@ -251,6 +251,7 @@ ClassLoader::~ClassLoader() {
 
 constexpr const char* CLASS_LOADER_NAME = "com.starrocks.udf.UDFClassLoader";
 constexpr const char* CLASS_ANALYZER_NAME = "com.starrocks.udf.UDFClassAnalyzer";
+constexpr const char* CLASS_UDF_HELPER_NAME = "com.starrocks.udf.UDFHelper";
 
 Status ClassLoader::init() {
     JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
@@ -414,7 +415,11 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
             continue;
         }
         if (sign[i] == '[') {
-            return Status::NotSupported("Not support Array Type");
+            while (sign[i] != ';') {
+                i++;
+            }
+            // return Status::NotSupported("Not support Array Type");
+            desc->emplace_back(MethodTypeDescriptor{INVALID_TYPE, true});
         }
         if (sign[i] == 'L') {
             int st = i + 1;
@@ -461,6 +466,18 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
         desc->erase(desc->begin() + desc->size() - 1);
     }
     return Status::OK();
+}
+
+jobject UDFHelper::create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz) {
+    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    std::string clazz_name = JVMFunctionHelper::to_jni_class_name(CLASS_UDF_HELPER_NAME);
+    jclass clazz = env->FindClass(clazz_name.c_str());
+    auto methodID = env->GetStaticMethodID(clazz, "createBoxedArray", "(IIZ[Ljava/nio/ByteBuffer;)[Ljava/lang/Object;");
+    jobjectArray input_arr = env->NewObjectArray(sz, env->FindClass("java/nio/ByteBuffer"), nullptr);
+    for (int i = 0; i < sz; ++i) {
+        env->SetObjectArrayElement(input_arr, i, buffs[i].handle());
+    }
+    return env->CallStaticObjectMethod(clazz, methodID, type, num_rows, nullable, input_arr);
 }
 
 JavaUDFContext::~JavaUDFContext() {
@@ -517,4 +534,35 @@ int UDAFFunction::serialize_size(jobject state) {
     jmethodID serialize_size = _ctx->serialize_size->get_method_id((jclass)_udaf_state_clazz);
     return env->CallIntMethod(state, serialize_size);
 }
+
+void UDAFFunction::reset(jobject state) {
+    JNIEnv* env = getJNIEnv();
+    jmethodID reset = _ctx->reset->get_method_id((jclass)_udaf_clazz);
+    env->CallVoidMethod(_udaf_handle, reset, state);
+}
+
+jobject UDAFFunction::get_values(jobject state, int start, int end) {
+    JNIEnv* env = getJNIEnv();
+    jmethodID get_values = _ctx->get_values->get_method_id((jclass)_udaf_clazz);
+    return env->CallObjectMethod(_udaf_handle, get_values, state, start, end);
+}
+
+jobject UDAFFunction::window_update_batch(jobject state, int64_t peer_group_start, int64_t peer_group_end,
+                                          int64_t frame_start, int64_t frame_end, int col_sz, jobject* cols) {
+    JNIEnv* env = getJNIEnv();
+    jmethodID window_update = _ctx->window_update->get_method_id((jclass)_udaf_clazz);
+    jvalue jvalues[5 + col_sz];
+    jvalues[0].l = state;
+    jvalues[1].j = peer_group_start;
+    jvalues[2].j = peer_group_end;
+    jvalues[3].j = frame_start;
+    jvalues[4].j = frame_end;
+
+    for (int i = 0; i < col_sz; ++i) {
+        jvalues[i + 5].l = cols[i];
+    }
+
+    return env->CallObjectMethodA(_udaf_handle, window_update, jvalues);
+}
+
 } // namespace starrocks::vectorized

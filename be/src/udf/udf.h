@@ -65,6 +65,7 @@ public:
         V2_0,
     };
 
+    // keep the order with PrimitiveType
     enum Type {
         INVALID_TYPE = 0,
         TYPE_NULL,
@@ -76,15 +77,18 @@ public:
         TYPE_LARGEINT,
         TYPE_FLOAT,
         TYPE_DOUBLE,
-        TYPE_DECIMAL,
+        TYPE_VARCHAR,
         TYPE_DATE,
         TYPE_DATETIME,
+        TYPE_BINARY,
+        TYPE_DECIMAL,
         TYPE_CHAR,
-        TYPE_VARCHAR,
+        TYPE_STRUCT,
+        TYPE_ARRAY,
+        TYPE_MAP,
         TYPE_HLL,
-        TYPE_STRING,
-        TYPE_FIXED_BUFFER,
         TYPE_DECIMALV2,
+        TYPE_TIME,
         TYPE_OBJECT,
         TYPE_PERCENTILE,
         TYPE_DECIMAL32,
