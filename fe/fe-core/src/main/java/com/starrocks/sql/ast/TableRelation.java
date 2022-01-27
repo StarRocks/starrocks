@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -12,12 +13,18 @@ import java.util.Map;
 
 public class TableRelation extends Relation {
     private final TableName name;
-    private final Table table;
-    private final Map<Field, Column> columns;
+    private Table table;
+    private Map<Field, Column> columns;
     // Support temporary partition
     private final PartitionNames partitionNames;
     private final List<Long> tabletIds;
-    private final boolean isMetaQuery;
+    private boolean isMetaQuery;
+
+    public TableRelation(TableName name) {
+        this.name = name;
+        partitionNames = null;
+        tabletIds = Lists.newArrayList();
+    }
 
     public TableRelation(TableName name, Table table,
                          Map<Field, Column> columns,
@@ -58,6 +65,10 @@ public class TableRelation extends Relation {
 
     public boolean isMetaQuery() {
         return isMetaQuery;
+    }
+
+    public void setMetaQuery(boolean metaQuery) {
+        isMetaQuery = metaQuery;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

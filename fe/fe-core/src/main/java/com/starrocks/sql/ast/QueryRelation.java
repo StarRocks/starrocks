@@ -3,6 +3,8 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.sql.analyzer.FieldId;
 
 import java.util.ArrayList;
@@ -18,8 +20,11 @@ public abstract class QueryRelation extends Relation {
      * The alias will also be recorded in columnOutputNames
      */
     private final List<String> columnOutputNames;
-
+    protected List<OrderByElement> sortClause;
+    protected LimitElement limit;
     private final List<CTERelation> cteRelations = new ArrayList<>();
+
+
 
     public QueryRelation(List<String> columnOutputNames) {
         this.columnOutputNames = columnOutputNames;
@@ -31,6 +36,18 @@ public abstract class QueryRelation extends Relation {
 
     public Map<Expr, FieldId> getColumnReferences() {
         return Maps.newHashMap();
+    }
+
+    public void setOrderBy(List<OrderByElement> sortClause) {
+        this.sortClause = sortClause;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return sortClause;
+    }
+
+    public void setLimitElement(LimitElement limit) {
+        this.limit = limit;
     }
 
     public void addCTERelation(CTERelation cteRelation) {

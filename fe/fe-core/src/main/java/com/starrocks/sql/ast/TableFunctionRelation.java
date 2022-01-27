@@ -2,6 +2,8 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.TableFunction;
 
 import java.util.List;
@@ -10,8 +12,23 @@ import java.util.List;
  * Table Value Function resolved to relation
  */
 public class TableFunctionRelation extends Relation {
-    private final TableFunction tableFunction;
-    private final List<Expr> childExpressions;
+    /**
+     * functionName is created by parser
+     * and will be converted to tableFunction in Analyzer
+     */
+    private FunctionName functionName;
+    /**
+     * functionParams is created by parser
+     * and will be converted to childExpressions in Analyzer
+     */
+    private FunctionParams functionParams;
+    private TableFunction tableFunction;
+    private List<Expr> childExpressions;
+
+    public TableFunctionRelation(String functionName, FunctionParams functionParams) {
+        this.functionName = new FunctionName(functionName);
+        this.functionParams = functionParams;
+    }
 
     public TableFunctionRelation(TableFunction tableFunction, List<Expr> childExpressions) {
         this.tableFunction = tableFunction;
