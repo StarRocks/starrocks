@@ -62,7 +62,7 @@ namespace starrocks {
 
 const uint32_t TASK_FINISH_MAX_RETRY = 3;
 const uint32_t PUBLISH_VERSION_MAX_RETRY = 3;
-const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 3;
+const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
 
 std::atomic_ulong TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
 std::mutex TaskWorkerPool::_s_task_signatures_lock;
@@ -649,10 +649,11 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
 
             uint32_t retry_time = 0;
 
+            Status st;
             while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
                 // submit publishing tablet version task to the threadpool.
-                auto st = threadpool->submit_func([&worker_pool_this, &tablet_rs, &statuses, idx, &version,
-                                                   &transaction_id, &partition_id]() {
+                st = threadpool->submit_func([&worker_pool_this, &tablet_rs, &statuses, idx, &version, &transaction_id,
+                                              &partition_id]() {
                     const TabletInfo& tablet_info = tablet_rs.first;
                     const RowsetSharedPtr& rowset = tablet_rs.second;
                     auto& status = statuses[idx];
@@ -674,21 +675,21 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
                                      << ", txn_id " << transaction_id << ", err: " << status;
                 });
 
-                if (!st.ok()) {
+                if (st.is_service_unavailable()) {
                     // Status::ServiceUnavailable is returned when all of the threads of the pool are busy.
-                    if (st.is_service_unavailable()) {
-                        LOG(WARNING) << "publish version threadpool is busy, retry later. [transaction_id="
-                                     << publish_version_req.transaction_id
-                                     << ", tablet_id=" << tablet_rs.first.tablet_id;
-                        // In general, publish version is fast. A small sleep is needed here.
-                        SleepFor(MonoDelta::FromMilliseconds(50));
-                        continue;
-                    }
-                    return st;
+                    LOG(WARNING) << "publish version threadpool is busy, retry later. [transaction_id="
+                                 << publish_version_req.transaction_id << ", tablet_id=" << tablet_rs.first.tablet_id;
+                    // In general, publish version is fast. A small sleep is needed here.
+                    SleepFor(MonoDelta::FromMilliseconds(50 * retry_time));
+                    continue;
                 }
-
                 break;
             }
+
+            // error category:
+            // 1. ServiceUnavailable, which means that the threadpool is busy even in retry.
+            // 2. error that is not ServiceUnavailable.
+            if (!st.ok()) return st;
 
             ++idx;
         }
