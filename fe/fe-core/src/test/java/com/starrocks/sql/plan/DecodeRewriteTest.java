@@ -633,7 +633,13 @@ public class DecodeRewriteTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         sql = "select upper(lower(S_ADDRESS)) from supplier group by lower(S_ADDRESS);";
         plan = getVerboseExplain(sql);
-        System.out.println("plan = " + plan);
+        Assert.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 13> : <string id 10>"));
+        Assert.assertTrue(plan.contains("  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  13 <-> upper[([12: lower, INT, true]); args: VARCHAR; result: INT; args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains("  4:AGGREGATE (merge finalize)\n" +
+                "  |  group by: [12: lower, INT, true]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
