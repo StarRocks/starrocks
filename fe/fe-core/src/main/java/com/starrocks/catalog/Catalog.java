@@ -150,6 +150,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.hive.HiveRepository;
+import com.starrocks.external.hive.events.MetastoreEventsProcessor;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
@@ -334,6 +335,7 @@ public class Catalog {
     private EsRepository esRepository;  // it is a daemon, so add it here
     private StarRocksRepository starRocksRepository;
     private HiveRepository hiveRepository;
+    private MetastoreEventsProcessor metastoreEventsProcessor;
 
     private boolean isFirstTimeStartUp = false;
     private boolean isElectable;
@@ -583,6 +585,7 @@ public class Catalog {
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
         this.hiveRepository = new HiveRepository();
+        this.metastoreEventsProcessor = new MetastoreEventsProcessor(hiveRepository);
 
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
@@ -1360,6 +1363,12 @@ public class Catalog {
         // ES state store
         esRepository.start();
         starRocksRepository.start();
+
+        if (Config.enable_hms_events_incremental_sync) {
+            // load hive table to event processor and start to process hms events.
+            metastoreEventsProcessor.init();
+            metastoreEventsProcessor.start();
+        }
         // domain resolver
         domainResolver.start();
     }
@@ -5349,6 +5358,10 @@ public class Catalog {
 
     public HiveRepository getHiveRepository() {
         return this.hiveRepository;
+    }
+
+    public MetastoreEventsProcessor getMetastoreEventsProcessor() {
+        return this.metastoreEventsProcessor;
     }
 
     public void setMaster(MasterInfo info) {
