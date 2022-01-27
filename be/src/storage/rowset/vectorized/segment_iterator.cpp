@@ -197,7 +197,7 @@ private:
 
     Status _build_final_chunk(ScanContext* ctx);
 
-    Status _encode_to_global_id(ScanContext* ctx);
+    Status _encode_to_global_id(ScanContext* ctx, Chunk* chunk);
 
     void _switch_context(ScanContext* to);
 
@@ -719,7 +719,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     }
 
     if (_context->_has_force_dict_encode) {
-        RETURN_IF_ERROR(_encode_to_global_id(_context));
+        RETURN_IF_ERROR(_encode_to_global_id(_context, chunk));
         chunk = _context->_adapt_global_dict_chunk.get();
     }
 
@@ -1156,14 +1156,12 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     return Status::OK();
 }
 
-Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
-    int num_columns = ctx->_final_chunk->num_columns();
-    auto final_chunk = ctx->_final_chunk;
-
+Status SegmentIterator::_encode_to_global_id(ScanContext* ctx, Chunk* chunk) {
+    int num_columns = chunk->num_columns();
     for (size_t i = 0; i < num_columns; i++) {
         const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
-        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(i);
+        ColumnPtr& col = chunk->get_column_by_index(i);
         ColumnPtr& dst = ctx->_adapt_global_dict_chunk->get_column_by_index(i);
         if (_column_decoders[cid].need_force_encode_to_global_id()) {
             RETURN_IF_ERROR(_column_decoders[cid].encode_to_global_id(col.get(), dst.get()));
