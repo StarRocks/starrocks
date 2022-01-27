@@ -32,6 +32,7 @@ import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
+import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.EnterStmt;
 import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
@@ -605,9 +606,14 @@ public class StmtExecutor {
 
     // Because this is called by other thread
     public void cancel() {
-        Coordinator coordRef = coord;
-        if (coordRef != null) {
-            coordRef.cancel();
+        if (parsedStmt instanceof DeleteStmt) {
+            DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
+            Catalog.getCurrentCatalog().getDeleteHandler().killJob(deleteStmt.getJobId());
+        } else {
+            Coordinator coordRef = coord;
+            if (coordRef != null) {
+                coordRef.cancel();
+            }
         }
     }
 
