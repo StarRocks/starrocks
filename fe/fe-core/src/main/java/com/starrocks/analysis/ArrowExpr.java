@@ -3,9 +3,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -38,15 +36,7 @@ public class ArrowExpr extends Expr {
 
     @Override
     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        Expr item = getChild(0);
-        Expr key = getChild(1);
-        if (!key.isLiteral() || !key.getType().isStringType()) {
-            throw new SemanticException("right operand of -> should be string literal, but got " + key);
-        }
-        if (!item.getType().isJsonType()) {
-            throw new SemanticException("-> operator could only be used for json column, but got " + item.getType());
-        }
-        this.type = Type.JSON;
+        Preconditions.checkState(false, "unreachable");
     }
 
     @Override
