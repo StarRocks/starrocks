@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
@@ -9,7 +10,16 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class CTEUtils {
+    private static final Map<OperatorType, Integer> OPERATOR_SCORES = ImmutableMap.<OperatorType, Integer>builder()
+            .put(OperatorType.LOGICAL_JOIN, 4)
+            .put(OperatorType.LOGICAL_AGGR, 6)
+            .put(OperatorType.LOGICAL_OLAP_SCAN, 4)
+            .put(OperatorType.LOGICAL_CTE_PRODUCE, 0)
+            .build();
 
     /*
      * Collect CTE operators info, why don't use TransformRule to search?
@@ -47,12 +57,42 @@ public class CTEUtils {
         context.getCteContext().reset();
         collectCteProduce(memo.getRootGroup(), context, true);
         collectCteConsume(memo.getRootGroup(), context, true);
+        collectCteProduceEstimate(context);
     }
 
     public static void collectCteOperatorsWithoutCosts(Memo memo, OptimizerContext context) {
         context.getCteContext().reset();
         collectCteProduce(memo.getRootGroup(), context, false);
         collectCteConsume(memo.getRootGroup(), context, false);
+    }
+
+    private static void collectCteProduceEstimate(OptimizerContext context) {
+        CTEContext cteContext = context.getCteContext();
+        for (Map.Entry<Integer, OptExpression> entry : cteContext.getAllCTEProduce().entrySet()) {
+            //            AtomicInteger totalNodes = new AtomicInteger(0);
+            AtomicInteger scores = new AtomicInteger(0);
+            cteProduceEstimate(entry.getValue().getGroupExpression().getGroup(), scores);
+
+            // score 15 = 1 join + 2 scan + 3 project = 1 agg + 1 scan + 2 project = (1 scan + 1 project) * 3
+            cteContext.addCTEProduceComplexityScores(entry.getKey(), 15.0 / scores.intValue());
+        }
+    }
+
+    /*
+     * Estimate the complexity of the produce plan
+     * */
+    private static void cteProduceEstimate(Group root, AtomicInteger scores) {
+        GroupExpression expression = root.getFirstLogicalExpression();
+        scores.addAndGet(OPERATOR_SCORES.getOrDefault(expression.getOp().getOpType(), 1));
+
+        if (OperatorType.LOGICAL_CTE_CONSUME.equals(expression.getOp().getOpType())) {
+            // don't ask consume children
+            return;
+        }
+
+        for (Group group : expression.getInputs()) {
+            cteProduceEstimate(group, scores);
+        }
     }
 
     private static void collectCteProduce(Group root, OptimizerContext context, boolean collectCosts) {
