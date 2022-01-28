@@ -14,7 +14,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.external.ObejctStorageUtils;
+import com.starrocks.external.ObjectStorageUtils;
 import com.starrocks.external.hive.text.TextFileFormatDesc;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
@@ -198,9 +198,9 @@ public class HiveMetaClient {
                 throw new DdlException("unsupported file format [" + sd.getInputFormat() + "]");
             }
 
-            String path = ObejctStorageUtils.formatObjectStoragePath(sd.getLocation());
+            String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
             List<HdfsFileDesc> fileDescs = getHdfsFileDescs(path,
-                    ObejctStorageUtils.isObjectStorage(path) || HdfsFileFormat.isSplittable(sd.getInputFormat()),
+                    ObjectStorageUtils.isObjectStorage(path) || HdfsFileFormat.isSplittable(sd.getInputFormat()),
                     sd);
             return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
         } catch (NoSuchObjectException e) {

@@ -2,7 +2,7 @@
 
 package com.starrocks.external;
 
-public class ObejctStorageUtils {
+public class ObjectStorageUtils {
     private static final String SCHEME_S3A = "s3a://";
     private static final String SCHEME_S3 = "s3://";
     private static final String SCHEME_S3N = "s3n://";
