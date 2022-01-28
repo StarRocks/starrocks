@@ -190,12 +190,6 @@ public:
             }
         }
 
-        if (_is_not_in) {
-            for (int i = 0; i < size; i++) {
-                output[i] = 1 - output[i];
-            }
-        }
-
         auto result = builder.build(lhs->is_constant());
         if (result->is_constant()) {
             result->resize(lhs->size());
