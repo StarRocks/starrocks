@@ -155,12 +155,10 @@ public:
     static void parse_json_paths(const std::string& path_strings, std::vector<SimpleJsonPath>* parsed_paths);
 
 private:
-    // TODO(mofei) deprecated
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
 
     /* Following functions are only used in test. */
-
     template <PrimitiveType primitive_type>
     static ColumnPtr _iterate_rows(FunctionContext* context, const Columns& columns);
 

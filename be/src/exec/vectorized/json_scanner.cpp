@@ -162,11 +162,6 @@ Status JsonScanner::_construct_json_types() {
             _json_types[column_pos] = std::move(varchar_type);
             break;
         }
-        case TYPE_JSON: {
-            auto json_type = TypeDescriptor::create_json_type();
-            _json_types[column_pos] = std::move(json_type);
-            break;
-        }
 
         case TYPE_JSON: {
             _json_types[column_pos] = TypeDescriptor::create_json_type();
@@ -218,7 +213,8 @@ Status JsonScanner::_construct_cast_exprs() {
     return Status::OK();
 }
 
-Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs) {
+Status JsonScanner::_parse_json_paths(const std::string& jsonpath,
+                                      std::vector<std::vector<SimpleJsonPath>>* path_vecs) {
     try {
         simdjson::dom::parser parser;
         simdjson::dom::element elem = parser.parse(jsonpath.c_str(), jsonpath.length());
