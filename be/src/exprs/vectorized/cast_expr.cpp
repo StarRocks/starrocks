@@ -768,16 +768,18 @@ public:
         }
         const TypeDescriptor& to_type = this->type();
 
+        ColumnPtr result_column;
         // NOTE
-        // For json type, it could be converted from decimal directly, as a workaround we cast decimal
-        // to double at first, then cast double to JSON
+        // For json type, it could not be converted from decimal directly, as a workaround we convert decimal
+        // to double at first, then convert double to JSON
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
+            ColumnPtr result_column;
             if constexpr (pt_is_decimal<FromType>) {
                 ColumnPtr double_column =
                         VectorizedUnaryFunction<DecimalTo<true>>::evaluate<FromType, TYPE_DOUBLE>(column);
-                return cast_fn<TYPE_DOUBLE, TYPE_JSON>(double_column);
+                result_column = cast_fn<TYPE_DOUBLE, TYPE_JSON>(double_column);
             } else {
-                return cast_fn<FromType, ToType>(column);
+                result_column = cast_fn<FromType, ToType>(column);
             }
         } else if constexpr (pt_is_decimal<FromType> && pt_is_decimal<ToType>) {
             return VectorizedUnaryFunction<DecimalToDecimal<true>>::evaluate<FromType, ToType>(
@@ -788,12 +790,13 @@ public:
             return VectorizedUnaryFunction<DecimalFrom<true>>::evaluate<FromType, ToType>(column, to_type.precision,
                                                                                           to_type.scale);
         } else {
-            auto result_column = cast_fn<FromType, ToType>(column);
-            if (result_column->is_constant()) {
-                result_column->resize(column->size());
-            }
-            return result_column;
+            result_column = cast_fn<FromType, ToType>(column);
         }
+        DCHECK_NOTNULL(result_column.get());
+        if (result_column->is_constant()) {
+            result_column->resize(column->size());
+        }
+        return result_column;
     };
     std::string debug_string() const override {
         std::stringstream out;

@@ -2,6 +2,7 @@
 
 #include "column/json_column.h"
 
+#include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks::vectorized {
@@ -16,7 +17,8 @@ int JsonColumn::compare_at(size_t left, size_t right, const starrocks::vectorize
 void JsonColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; i++) {
         JsonValue* json = get_object(i);
-        hash[i] = json->hash();
+        int64_t h = json->hash();
+        hash[i] = HashUtil::fnv_hash(&h, sizeof(h), hash[i]);
     }
 }
 
