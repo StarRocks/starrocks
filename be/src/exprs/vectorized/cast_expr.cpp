@@ -773,7 +773,6 @@ public:
         // For json type, it could not be converted from decimal directly, as a workaround we convert decimal
         // to double at first, then convert double to JSON
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
-            ColumnPtr result_column;
             if constexpr (pt_is_decimal<FromType>) {
                 ColumnPtr double_column =
                         VectorizedUnaryFunction<DecimalTo<true>>::evaluate<FromType, TYPE_DOUBLE>(column);
