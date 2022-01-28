@@ -22,21 +22,16 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TInPredicate;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,53 +42,12 @@ import java.util.List;
  * of values (remaining children).
  */
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class InPredicate extends Predicate {
-    private static final Logger LOG = LogManager.getLogger(InPredicate.class);
-
-    private static final String IN_SET_LOOKUP = "in_set_lookup";
-    private static final String NOT_IN_SET_LOOKUP = "not_in_set_lookup";
     private static final String IN_ITERATE = "in_iterate";
     private static final String NOT_IN_ITERATE = "not_in_iterate";
     private final boolean isNotIn;
 
     private static final NullLiteral NULL_LITERAL = new NullLiteral();
-
-    public static void initBuiltins(FunctionSet functionSet) {
-        for (Type t : Type.getSupportedTypes()) {
-            if (t.isNull() || t.isPseudoType()) {
-                continue;
-            }
-            // TODO we do not support codegen for CHAR and the In predicate must be codegened
-            // because it has variable number of arguments. This will force CHARs to be
-            // cast up to strings; meaning that "in" comparisons will not have CHAR comparison
-            // semantics.
-            if (t.getPrimitiveType() == PrimitiveType.CHAR) {
-                continue;
-            }
-
-            String typeString = Function.getUdfTypeName(t.getPrimitiveType());
-
-            functionSet.addBuiltin(ScalarFunction.createBuiltin(IN_ITERATE,
-                    Lists.newArrayList(t, t), true, Type.BOOLEAN,
-                    "starrocks::InPredicate::in_iterate", null, null, false));
-            functionSet.addBuiltin(ScalarFunction.createBuiltin(NOT_IN_ITERATE,
-                    Lists.newArrayList(t, t), true, Type.BOOLEAN,
-                    "starrocks::InPredicate::not_in_iterate", null, null, false));
-
-            String prepareFn = "starrocks::InPredicate::set_lookup_prepare_" + typeString;
-            String closeFn = "starrocks::InPredicate::set_lookup_close_" + typeString;
-            functionSet.addBuiltin(ScalarFunction.createBuiltin(IN_SET_LOOKUP,
-                    Lists.newArrayList(t, t), true, Type.BOOLEAN,
-                    "starrocks::InPredicate::in_set_lookup", prepareFn, closeFn, false));
-            functionSet.addBuiltin(ScalarFunction.createBuiltin(NOT_IN_SET_LOOKUP,
-                    Lists.newArrayList(t, t), true, Type.BOOLEAN,
-                    "starrocks::InPredicate::not_in_set_lookup", prepareFn, closeFn, false));
-
-        }
-    }
 
     // First child is the comparison expr for which we
     // should check membership in the inList (the remaining children).
