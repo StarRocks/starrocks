@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -43,6 +43,10 @@ public class StatisticRangeValues {
         return isNaN(low) && isNaN(high);
     }
 
+    public boolean isBothInfinite() {
+        return isInfinite(low) && isInfinite(high);
+    }
+
     public static StatisticRangeValues from(ColumnStatistic column) {
         return new StatisticRangeValues(column.getMinValue(), column.getMaxValue(), column.getDistinctValuesCount());
     }
@@ -70,8 +74,8 @@ public class StatisticRangeValues {
         if (this.isEmpty() || other.isEmpty()) {
             return 0.0;
         }
-
-        if (this.equals(other)) {
+        // If the low and high values is infinite, it represents either string type or unknown of column statistics.
+        if (this.equals(other) && !isBothInfinite()) {
             return 1.0;
         }
 
@@ -79,12 +83,12 @@ public class StatisticRangeValues {
         // lengthOfIntersect of char/varchar is infinite
         if (isInfinite(lengthOfIntersect)) {
             if (isFinite(this.distinctValues) && isFinite(other.distinctValues)) {
-                return min(other.distinctValues / this.distinctValues, 1);
+                return min(other.distinctValues / max(1, this.distinctValues), 1);
             }
-            return 0.5;
+            return StatisticsEstimateCoefficient.OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT;
         }
         if (lengthOfIntersect == 0) {
-            // distinctValues equals 1 means the column statistics is default,
+            // distinctValues equals 1 means the column statistics is unknown,
             // requires special treatment
             if (this.distinctValues == 1 && length() > 1) {
                 return 0.5;
@@ -97,7 +101,7 @@ public class StatisticRangeValues {
 
         double length = length();
         if (isInfinite(length)) {
-            return 0.5;
+            return StatisticsEstimateCoefficient.OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT;
         }
 
         if (lengthOfIntersect > 0) {

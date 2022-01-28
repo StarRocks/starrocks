@@ -44,6 +44,7 @@
 #include "http/http_response.h"
 #include "http/utils.h"
 #include "runtime/client_cache.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
@@ -54,6 +55,7 @@
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
+#include "util/defer_op.h"
 #include "util/json_util.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
@@ -139,7 +141,7 @@ void StreamLoadAction::handle(HttpRequest* req) {
             ctx->need_rollback = false;
         }
         if (ctx->body_sink != nullptr) {
-            ctx->body_sink->cancel();
+            ctx->body_sink->cancel(ctx->status);
         }
     }
 
@@ -155,9 +157,9 @@ void StreamLoadAction::handle(HttpRequest* req) {
 
 Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
     if (ctx->body_bytes > 0 && ctx->receive_bytes != ctx->body_bytes) {
-        LOG(WARNING) << "recevie body don't equal with body bytes, body_bytes=" << ctx->body_bytes
+        LOG(WARNING) << "receive body don't equal with body bytes, body_bytes=" << ctx->body_bytes
                      << ", receive_bytes=" << ctx->receive_bytes << ", id=" << ctx->id;
-        return Status::InternalError("receive body dont't equal with body bytes");
+        return Status::InternalError("receive body don't equal with body bytes");
     }
     if (!ctx->use_streaming) {
         // if we use non-streaming, we need to close file first,
@@ -207,7 +209,7 @@ int StreamLoadAction::on_header(HttpRequest* req) {
             ctx->need_rollback = false;
         }
         if (ctx->body_sink != nullptr) {
-            ctx->body_sink->cancel();
+            ctx->body_sink->cancel(st);
         }
         auto str = ctx->to_json();
         HttpChannel::send_reply(req, str);
@@ -254,10 +256,12 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
         if (ctx->format == TFileFormatType::FORMAT_JSON) {
             size_t max_body_bytes = config::streaming_load_max_batch_size_mb * 1024 * 1024;
-            if (ctx->body_bytes > max_body_bytes) {
+            auto ignore_json_size = boost::iequals(http_req->header(HTTP_IGNORE_JSON_SIZE), "true");
+            if (!ignore_json_size && ctx->body_bytes > max_body_bytes) {
                 std::stringstream ss;
                 ss << "The size of this batch exceed the max size [" << max_body_bytes << "]  of json type data "
-                   << " data [ " << ctx->body_bytes << " ]";
+                   << " data [ " << ctx->body_bytes
+                   << " ]. Set ignore_json_size to skip the check, although it may lead huge memory consuming.";
                 return Status::InternalError(ss.str());
             }
         }
@@ -289,13 +293,21 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
         return;
     }
 
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->instance_mem_tracker.get());
+
     struct evhttp_request* ev_req = req->get_evhttp_request();
     auto evbuf = evhttp_request_get_input_buffer(ev_req);
 
     int64_t start_read_data_time = MonotonicNanos();
     while (evbuffer_get_length(evbuf) > 0) {
-        auto bb = ByteBuffer::allocate(4096);
-        auto remove_bytes = evbuffer_remove(evbuf, bb->ptr, bb->capacity);
+        ByteBufferPtr bb = ByteBuffer::allocate(4096);
+        int remove_bytes;
+        {
+            // The memory is applied for in http server thread,
+            // so the release of this memory must be recorded in ProcessMemTracker
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+            remove_bytes = evbuffer_remove(evbuf, bb->ptr, bb->capacity);
+        }
         bb->pos = remove_bytes;
         bb->flip();
         auto st = ctx->body_sink->append(bb);
@@ -316,7 +328,7 @@ void StreamLoadAction::free_handler_ctx(void* param) {
     }
     // sender is going, make receiver know it
     if (ctx->body_sink != nullptr) {
-        ctx->body_sink->cancel();
+        ctx->body_sink->cancel(Status::Cancelled("Cancelled"));
     }
     if (ctx->unref()) {
         delete ctx;
@@ -396,7 +408,6 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     if (!http_req->header(HTTP_LOAD_MEM_LIMIT).empty()) {
         try {
             auto load_mem_limit = std::stoll(http_req->header(HTTP_LOAD_MEM_LIMIT));
-            LOG(INFO) << "compaction load_mem_limit:" << load_mem_limit;
             if (load_mem_limit < 0) {
                 return Status::InvalidArgument("load_mem_limit must be equal or greater than 0");
             }
@@ -419,6 +430,11 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         }
     } else {
         request.__set_strip_outer_array(false);
+    }
+    if (http_req->header(HTTP_PARTIAL_UPDATE) == "true") {
+        request.__set_partial_update(true);
+    } else {
+        request.__set_partial_update(false);
     }
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
@@ -449,6 +465,14 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     // to process this load
     if (!ctx->use_streaming) {
         return Status::OK();
+    }
+
+    if (!http_req->header(HTTP_EXEC_MEM_LIMIT).empty()) {
+        auto exec_mem_limit = std::stoll(http_req->header(HTTP_EXEC_MEM_LIMIT));
+        if (exec_mem_limit <= 0) {
+            return Status::InvalidArgument("exec_mem_limit must be greater than 0");
+        }
+        ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
 
     return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);

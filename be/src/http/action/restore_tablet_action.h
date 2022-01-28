@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_HTTP_RESTORE_TABLET_ACTION_H
-#define STARROCKS_BE_SRC_HTTP_RESTORE_TABLET_ACTION_H
+#pragma once
 
 #include <map>
 #include <mutex>
@@ -35,7 +34,7 @@ class ExecEnv;
 
 class RestoreTabletAction : public HttpHandler {
 public:
-    RestoreTabletAction(ExecEnv* exec_env);
+    explicit RestoreTabletAction(ExecEnv* exec_env);
 
     ~RestoreTabletAction() override = default;
 
@@ -64,7 +63,7 @@ private:
     // key: tablet_id + schema_hash
     // value: "" or tablet path in trash
     std::map<std::string, std::string> _tablet_path_map;
-}; // end class RestoreTabletAction
+    bool _is_primary_key = false;
+};
 
 } // end namespace starrocks
-#endif // STARROCKS_BE_SRC_HTTP_RESTORE_TABLET_ACTION_H

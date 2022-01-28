@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_DATETIME_VALUE_H
-#define STARROCKS_BE_RUNTIME_DATETIME_VALUE_H
+#pragma once
 
 #include <re2/re2.h>
 
@@ -167,12 +166,6 @@ public:
             return false;
         }
         return true;
-    }
-
-    uint64_t to_olap_datetime() const {
-        uint64_t date_val = _year * 10000 + _month * 100 + _day;
-        uint64_t time_val = _hour * 10000 + _minute * 100 + _second;
-        return date_val * 1000000 + time_val;
     }
 
     bool from_olap_date(uint64_t date) {
@@ -418,13 +411,7 @@ public:
         int day_diff = daynr() - rhs.daynr();
         int time_diff =
                 (hour() * 3600 + minute() * 60 + second()) - (rhs.hour() * 3600 + rhs.minute() * 60 + rhs.second());
-        return day_diff * 3600 * 24 + time_diff;
-    }
-
-    int64_t time_part_diff(const DateTimeValue& rhs) const {
-        int time_diff =
-                (hour() * 3600 + minute() * 60 + second()) - (rhs.hour() * 3600 + rhs.minute() * 60 + rhs.second());
-        return time_diff;
+        return static_cast<int64_t>(day_diff) * 3600 * 24 + static_cast<int64_t>(time_diff);
     }
 
     void set_type(int type);
@@ -455,14 +442,17 @@ private:
 
     // To compatitable with MySQL
     int64_t to_int64_datetime_packed() const {
-        int64_t ymd = ((_year * 13 + _month) << 5) | _day;
-        int64_t hms = (_hour << 12) | (_minute << 6) | _second;
+        int64_t ymd =
+                ((static_cast<int64_t>(_year) * 13 + static_cast<int64_t>(_month)) << 5) | static_cast<int64_t>(_day);
+        int64_t hms = (static_cast<int64_t>(_hour) << 12) | (static_cast<int64_t>(_minute) << 6) |
+                      static_cast<int64_t>(_second);
         int64_t tmp = make_packed_time(((ymd << 17) | hms), _microsecond);
         return _neg ? -tmp : tmp;
     }
 
     int64_t to_int64_date_packed() const {
-        int64_t ymd = ((_year * 13 + _month) << 5) | _day;
+        int64_t ymd =
+                ((static_cast<int64_t>(_year) * 13 + static_cast<int64_t>(_month)) << 5) | static_cast<int64_t>(_day);
         int64_t tmp = make_packed_time(ymd << 17, 0);
         return _neg ? -tmp : tmp;
     }
@@ -543,5 +533,3 @@ struct hash<starrocks::DateTimeValue> {
     size_t operator()(const starrocks::DateTimeValue& v) const { return starrocks::hash_value(v); }
 };
 } // namespace std
-
-#endif

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/parquet/encoding.h"
 
@@ -90,6 +90,8 @@ private:
 };
 
 EncodingInfoResolver::EncodingInfoResolver() {
+    // BOOL
+    _add_map<tparquet::Type::BOOLEAN, tparquet::Encoding::PLAIN>();
     // INT32
     _add_map<tparquet::Type::INT32, tparquet::Encoding::PLAIN>();
     _add_map<tparquet::Type::INT32, tparquet::Encoding::RLE_DICTIONARY>();

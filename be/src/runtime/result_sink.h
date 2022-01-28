@@ -19,18 +19,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_RESULT_SINK_H
-#define STARROCKS_BE_RUNTIME_RESULT_SINK_H
+#pragma once
 
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/file_result_writer.h"
 
 namespace starrocks {
 
 class ObjectPool;
-class RowBatch;
 class ObjectPool;
 class RuntimeState;
 class RuntimeProfile;
@@ -38,7 +37,6 @@ class BufferControlBlock;
 class ExprContext;
 class ResultWriter;
 class MemTracker;
-class ResultFileOptions;
 
 class ResultSink final : public DataSink {
 public:
@@ -50,10 +48,6 @@ public:
     ~ResultSink() override = default;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
-
-    // send data in 'batch' to this backend stream mgr
-    // Blocks until all rows in batch are placed in the buffer
-    Status send(RuntimeState* state, RowBatch* batch) override;
 
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
@@ -74,7 +68,6 @@ private:
     // set file options when sink type is FILE
     std::unique_ptr<ResultFileOptions> _file_opts;
 
-    ObjectPool* _obj_pool = nullptr;
     // Owned by the RuntimeState.
     const RowDescriptor& _row_desc;
 
@@ -89,4 +82,3 @@ private:
 };
 
 } // namespace starrocks
-#endif

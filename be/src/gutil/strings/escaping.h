@@ -18,8 +18,7 @@
 //                         - see RE2::QuoteMeta).
 // And probably many more places, as well.
 
-#ifndef STRINGS_ESCAPING_H_
-#define STRINGS_ESCAPING_H_
+#pragma once
 
 #include <cstddef>
 #include <string>
@@ -647,5 +646,3 @@ using strings::ShellEscapeCommandLine;
 using strings::ByteStringFromAscii;
 using strings::ByteStringToAscii;
 using strings::CleanStringLineEndings;
-
-#endif // STRINGS_ESCAPING_H_

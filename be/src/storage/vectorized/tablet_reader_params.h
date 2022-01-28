@@ -1,10 +1,12 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
+#include "runtime/global_dicts.h"
 #include "storage/olap_common.h"
 #include "storage/tuple.h"
 #include "storage/vectorized/chunk_iterator.h"
@@ -17,6 +19,8 @@ class RuntimeState;
 namespace vectorized {
 
 class ColumnPredicate;
+
+static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
 
 // Params for TabletReader
 struct TabletReaderParams {
@@ -47,6 +51,9 @@ struct TabletReaderParams {
 
     std::string to_string() const;
     int chunk_size = 1024;
+
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+    const std::unordered_set<uint32_t>* unused_output_column_ids = &EMPTY_FILTERED_COLUMN_IDS;
 };
 
 } // namespace vectorized

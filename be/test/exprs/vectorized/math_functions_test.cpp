@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/math_functions.h"
 
@@ -368,11 +368,40 @@ TEST_F(VecMathFunctionsTest, Conv_intTest) {
         auto tc2 = Int8Column::create();
         auto tc3 = Int8Column::create();
 
-        int64_t bigints[] = {1, 2, 35};
-        int8_t baseints[] = {10, 10, 10};
-        int8_t destints[] = {10, 16, 36};
+        int64_t bigints[] = {1,           2,           35,          10,         10,         10,         10,
+                             3,           3,           99999999,    99999999,   99999999,   99999999,   -99999999,
+                             -99999999,   -99999999,   -99999999,   4294967296, 4294967296, 4294967296, 4294967296,
+                             -4294967296, -4294967296, -4294967296, -4294967296};
+        int8_t baseints[] = {10,  10,  10, 2,  2,   -2,  -2, -2, -2,  -16, -16, 16, 16,
+                             -16, -16, 16, 16, -16, -16, 16, 16, -16, -16, -16, -16};
+        int8_t destints[] = {10, 16,  36, 10,  -10, 10,  -10, 10,  10, 10,  -10, 10, -10,
+                             10, -10, 10, -10, 10,  -10, 10,  -10, 10, -10, 10,  -10};
 
-        std::string results[] = {"1", "2", "Z"};
+        std::string results[] = {"1",
+                                 "2",
+                                 "Z",
+                                 "2",
+                                 "2",
+                                 "2",
+                                 "2",
+                                 "0",
+                                 "0",
+                                 "2576980377",
+                                 "2576980377",
+                                 "2576980377",
+                                 "2576980377",
+                                 "18446744071132571239",
+                                 "-2576980377",
+                                 "18446744071132571239",
+                                 "-2576980377",
+                                 "285960729238",
+                                 "285960729238",
+                                 "285960729238",
+                                 "285960729238",
+                                 "18446743787748822378",
+                                 "-285960729238",
+                                 "18446743787748822378",
+                                 "-285960729238"};
 
         for (int i = 0; i < sizeof(bigints) / sizeof(bigints[0]); ++i) {
             tc1->append(bigints[i]);
@@ -403,11 +432,79 @@ TEST_F(VecMathFunctionsTest, Conv_stringTest) {
         auto tc2 = Int8Column::create();
         auto tc3 = Int8Column::create();
 
-        std::string bigints[] = {"1", "2", "35", "1000", "103", "114"};
-        int8_t baseints[] = {10, 10, 10, 8, 35, 35};
-        int8_t destints[] = {10, 16, 36, 10, 10, 10};
+        std::string bigints[] = {"1",
+                                 "2",
+                                 "35",
+                                 "1000",
+                                 "103",
+                                 "114",
+                                 "18446744073709551617",
+                                 "10",
+                                 "10",
+                                 "10",
+                                 "10",
+                                 "-9223372036854775808",
+                                 "-9223372036854775808",
+                                 "-9223372036854775808",
+                                 "-9223372036854775808",
+                                 "9223372036854775808",
+                                 "9223372036854775808",
+                                 "9223372036854775808",
+                                 "9223372036854775808",
+                                 "-9223372036854775809",
+                                 "-9223372036854775809",
+                                 "-9223372036854775809",
+                                 "-9223372036854775809",
+                                 "18446744073709551616",
+                                 "18446744073709551616",
+                                 "18446744073709551616",
+                                 "18446744073709551616",
+                                 "-18446744073709551616",
+                                 "-18446744073709551616",
+                                 "-18446744073709551616",
+                                 "-18446744073709551616",
+                                 "de0b6b3a7640000",
+                                 "8ac7230489e80000",
+                                 "a"};
+        int8_t baseints[] = {10, 10, 10,  8,   35, 35, 10,  -2,  -2, 2,  2,   -10, -10, 10, 10, -10, -10,
+                             10, 10, -10, -10, 10, 10, -10, -10, 10, 10, -10, -10, 10,  10, 16, 16,  10};
+        int8_t destints[] = {10, 16,  36, 10,  10, 10,  10, 10,  -10, 10,  -10, 10,  -10, 10,  -10, 10, -10,
+                             10, -10, 10, -10, 10, -10, 10, -10, 10,  -10, 10,  -10, 10,  -10, 10,  10, 10};
 
-        std::string results[] = {"1", "2", "Z", "512", "1228", "1264"};
+        std::string results[] = {"1",
+                                 "2",
+                                 "Z",
+                                 "512",
+                                 "1228",
+                                 "1264",
+                                 "18446744073709551615",
+                                 "2",
+                                 "2",
+                                 "2",
+                                 "2",
+                                 "9223372036854775808",
+                                 "-9223372036854775808",
+                                 "9223372036854775808",
+                                 "-9223372036854775808",
+                                 "9223372036854775807",
+                                 "9223372036854775807",
+                                 "9223372036854775808",
+                                 "-9223372036854775808",
+                                 "9223372036854775808",
+                                 "-9223372036854775808",
+                                 "9223372036854775807",
+                                 "9223372036854775807",
+                                 "9223372036854775807",
+                                 "9223372036854775807",
+                                 "18446744073709551615",
+                                 "-1",
+                                 "9223372036854775808",
+                                 "-9223372036854775808",
+                                 "0",
+                                 "0",
+                                 "1000000000000000000",
+                                 "10000000000000000000",
+                                 "0"};
 
         for (int i = 0; i < sizeof(bigints) / sizeof(bigints[0]); ++i) {
             tc1->append(bigints[i]);
@@ -759,6 +856,54 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
         std::vector<bool> null_expect = {true, false, true};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::log2(ctx.get(), columns);
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
+    }
+
+    {
+        Columns binary_columns;
+        auto tc1 = DoubleColumn::create();
+        tc1->append(-0.9);
+        tc1->append(0.2);
+        tc1->append(0.3);
+        binary_columns.emplace_back(tc1);
+
+        auto tc2 = DoubleColumn::create();
+        tc2->append(0.8);
+        tc2->append(0.2);
+        tc2->append(0.3);
+        binary_columns.emplace_back(tc2);
+
+        std::vector<bool> null_expect = {true, false, false};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::pow(ctx.get(), binary_columns);
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
+    }
+
+    {
+        Columns binary_columns;
+        auto tc1 = DoubleColumn::create();
+        tc1->append(std::nan("not a double number"));
+        tc1->append(0.2);
+        tc1->append(0.3);
+        binary_columns.emplace_back(tc1);
+
+        auto tc2 = DoubleColumn::create();
+        tc2->append(0.8);
+        tc2->append(0.2);
+        tc2->append(0.3);
+        binary_columns.emplace_back(tc2);
+
+        std::vector<bool> null_expect = {true, false, false};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::atan2(ctx.get(), binary_columns);
         auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
         ASSERT_EQ(nullable->size(), null_expect.size());
         for (size_t i = 0; i < nullable->size(); i++) {

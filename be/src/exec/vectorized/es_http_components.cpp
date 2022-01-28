@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/es_http_components.h"
 
@@ -8,6 +8,7 @@
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "runtime/primitive_type.h"
+#include "runtime/runtime_state.h"
 #include "runtime/timestamp_value.h"
 
 namespace starrocks::vectorized {
@@ -51,7 +52,7 @@ std::string json_value_to_string(const rapidjson::Value& value) {
             std::stringstream ss;                                             \
             ss << "Expected value of type: " << type_to_string(type)          \
                << "; but found type: " << json_type_to_raw_str(col.GetType()) \
-               << "; Docuemnt slice is : " << json_value_to_string(col);      \
+               << "; Document slice is : " << json_value_to_string(col);      \
             return Status::RuntimeError(ss.str());                            \
         }                                                                     \
     } while (false)
@@ -62,7 +63,7 @@ std::string json_value_to_string(const rapidjson::Value& value) {
             std::stringstream ss;                                               \
             ss << "Expected value of type: " << type_to_string(type)            \
                << "; but found type: " << json_type_to_raw_str(col.GetType())   \
-               << "; Docuemnt source slice is : " << json_value_to_string(col); \
+               << "; Document source slice is : " << json_value_to_string(col); \
             return Status::RuntimeError(ss.str());                              \
         }                                                                       \
     } while (false)
@@ -84,7 +85,7 @@ std::string json_value_to_string(const rapidjson::Value& value) {
             std::stringstream ss;                                               \
             ss << "Expected value of type: " << type_to_string(type)            \
                << "; but found type: " << json_type_to_raw_str(col.GetType())   \
-               << "; Docuemnt source slice is : " << json_value_to_string(col); \
+               << "; Document source slice is : " << json_value_to_string(col); \
             return Status::RuntimeError(ss.str());                              \
         }                                                                       \
     } while (false)
@@ -94,7 +95,7 @@ std::string json_value_to_string(const rapidjson::Value& value) {
         std::stringstream ss;                                             \
         ss << "Expected value of type: " << type_to_string(type)          \
            << "; but found type: " << json_type_to_raw_str(col.GetType()) \
-           << "; Docuemnt slice is : " << json_value_to_string(col);      \
+           << "; Document slice is : " << json_value_to_string(col);      \
         return Status::RuntimeError(ss.str());                            \
     } while (false)
 
@@ -120,7 +121,7 @@ Status ScrollParser::parse(const std::string& scroll_result, bool exactly_once) 
     }
 
     if (!exactly_once && !_document_node.HasMember(FIELD_SCROLL_ID)) {
-        LOG(WARNING) << "Document has not a scroll id field scroll reponse:" << scroll_result;
+        LOG(WARNING) << "Document has not a scroll id field scroll response:" << scroll_result;
         return Status::InternalError("Document has not a scroll id field");
     }
 
@@ -147,11 +148,12 @@ Status ScrollParser::parse(const std::string& scroll_result, bool exactly_once) 
     return Status::OK();
 }
 
-Status ScrollParser::fill_chunk(ChunkPtr* chunk, bool* line_eos) {
+Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line_eos) {
     if (current_eos()) {
         *line_eos = true;
         return Status::OK();
     }
+    *line_eos = false;
 
     *chunk = std::make_shared<Chunk>();
     std::vector<SlotDescriptor*> slot_descs = _tuple_desc->slots();
@@ -163,7 +165,7 @@ Status ScrollParser::fill_chunk(ChunkPtr* chunk, bool* line_eos) {
     }
 
     size_t left_sz = _size - _cur_line;
-    size_t fill_sz = std::min(left_sz, (size_t)config::vector_chunk_size);
+    size_t fill_sz = std::min(left_sz, (size_t)state->chunk_size());
 
     auto slots = _tuple_desc->slots();
 
@@ -353,6 +355,7 @@ Status ScrollParser::_append_value_from_json_val(Column* column, PrimitiveType t
 }
 
 Slice ScrollParser::_json_val_to_slice(const rapidjson::Value& val) {
+    _scratch_buffer.Clear();
     _temp_writer.Reset(_scratch_buffer);
     val.Accept(_temp_writer);
     return {_scratch_buffer.GetString(), _scratch_buffer.GetSize()};
@@ -528,7 +531,7 @@ Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* colum
         if (col[0].IsString()) {
             RETURN_IF_ERROR(append_strval(col[0], column));
         } else {
-            append_timestamp(col, column);
+            append_timestamp(col[0], column);
         }
 
     } else {

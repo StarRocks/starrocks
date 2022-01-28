@@ -115,6 +115,7 @@ public class ExportJob implements Writable {
     private String clusterName;
     private long tableId;
     private BrokerDesc brokerDesc;
+    // exportPath has "/" suffix
     private String exportPath;
     private String exportTempPath;
     private String fileNamePrefix;
@@ -183,7 +184,7 @@ public class ExportJob implements Writable {
 
         exportPath = stmt.getPath();
         Preconditions.checkArgument(!Strings.isNullOrEmpty(exportPath));
-        exportTempPath = this.exportPath + "/__starrocks_export_tmp_" + queryId.toString() + "/";
+        exportTempPath = this.exportPath + "__starrocks_export_tmp_" + queryId.toString();
         fileNamePrefix = stmt.getFileNamePrefix();
         Preconditions.checkArgument(!Strings.isNullOrEmpty(fileNamePrefix));
         if (includeQueryId) {
@@ -202,7 +203,7 @@ public class ExportJob implements Writable {
             }
             this.tableId = exportTable.getId();
             this.tableName = stmt.getTblName();
-            genExecFragment();
+            genExecFragment(stmt);
         } finally {
             db.readUnlock();
         }
@@ -210,9 +211,9 @@ public class ExportJob implements Writable {
         this.sql = stmt.toSql();
     }
 
-    private void genExecFragment() throws UserException {
+    private void genExecFragment(ExportStmt stmt) throws UserException {
         registerToDesc();
-        plan();
+        plan(stmt);
     }
 
     private void registerToDesc() throws UserException {
@@ -248,7 +249,7 @@ public class ExportJob implements Writable {
         desc.computeMemLayout();
     }
 
-    private void plan() throws UserException {
+    private void plan(ExportStmt stmt) throws UserException {
         List<PlanFragment> fragments = Lists.newArrayList();
         List<ScanNode> scanNodes = Lists.newArrayList();
 
@@ -299,7 +300,7 @@ public class ExportJob implements Writable {
                     tabletLocations.size(), id, fragments.size());
         }
 
-        genCoordinators(fragments, scanNodes);
+        genCoordinators(stmt, fragments, scanNodes);
     }
 
     private ScanNode genScanNode() throws UserException {
@@ -349,9 +350,6 @@ public class ExportJob implements Writable {
                 break;
         }
         fragment.setOutputExprs(createOutputExprs());
-        if (Config.vectorized_load_enable && fragment.isOutPutExprsVectorized()) {
-            fragment.setOutPutExprsUseVectorized();
-        }
 
         scanNode.setFragmentId(fragment.getFragmentId());
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
@@ -359,7 +357,7 @@ public class ExportJob implements Writable {
         try {
             fragment.finalize(analyzer, false);
         } catch (Exception e) {
-            LOG.info("Fragment finalize failed. e= {}", e);
+            LOG.info("Fragment finalize failed. e=", e);
             throw new UserException("Fragment finalize failed");
         }
 
@@ -380,7 +378,7 @@ public class ExportJob implements Writable {
         return outputExprs;
     }
 
-    private void genCoordinators(List<PlanFragment> fragments, List<ScanNode> nodes) {
+    private void genCoordinators(ExportStmt stmt, List<PlanFragment> fragments, List<ScanNode> nodes) {
         UUID uuid = UUID.randomUUID();
         for (int i = 0; i < fragments.size(); ++i) {
             PlanFragment fragment = fragments.get(i);
@@ -388,7 +386,7 @@ public class ExportJob implements Writable {
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
             Coordinator coord = new Coordinator(
                     id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode), clusterName,
-                    TimeUtils.DEFAULT_TIME_ZONE);
+                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime());
             coord.setExecMemoryLimit(getMemLimit());
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, task idx: {}, task query id: {}",

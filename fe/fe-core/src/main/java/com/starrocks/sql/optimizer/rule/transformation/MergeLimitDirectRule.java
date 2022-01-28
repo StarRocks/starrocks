@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -17,12 +17,12 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule AGGREGATE = new MergeLimitDirectRule(OperatorType.LOGICAL_AGGR);
     public static final MergeLimitDirectRule OLAP_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_OLAP_SCAN);
     public static final MergeLimitDirectRule HIVE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_HIVE_SCAN);
+    public static final MergeLimitDirectRule ICEBERG_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final MergeLimitDirectRule SCHEMA_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final MergeLimitDirectRule MYSQL_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_MYSQL_SCAN);
     public static final MergeLimitDirectRule ES_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ES_SCAN);
     public static final MergeLimitDirectRule WINDOW = new MergeLimitDirectRule(OperatorType.LOGICAL_WINDOW);
     public static final MergeLimitDirectRule JOIN = new MergeLimitDirectRule(OperatorType.LOGICAL_JOIN);
-    public static final MergeLimitDirectRule UNION = new MergeLimitDirectRule(OperatorType.LOGICAL_UNION);
     public static final MergeLimitDirectRule INTERSECT = new MergeLimitDirectRule(OperatorType.LOGICAL_INTERSECT);
     public static final MergeLimitDirectRule EXCEPT = new MergeLimitDirectRule(OperatorType.LOGICAL_EXCEPT);
     public static final MergeLimitDirectRule VALUES = new MergeLimitDirectRule(OperatorType.LOGICAL_VALUES);

@@ -31,8 +31,11 @@ import com.starrocks.thrift.TExplainLevel;
  */
 public class DataStreamSink extends DataSink {
     private final PlanNodeId exchNodeId;
+    private int exchDop;
 
     private DataPartition outputPartition;
+
+    private boolean isMerge;
 
     public DataStreamSink(PlanNodeId exchNodeId) {
         this.exchNodeId = exchNodeId;
@@ -48,8 +51,16 @@ public class DataStreamSink extends DataSink {
         return outputPartition;
     }
 
+    public void setExchDop(int exchDop) {
+        this.exchDop = exchDop;
+    }
+
     public void setPartition(DataPartition partition) {
         outputPartition = partition;
+    }
+
+    public void setMerge(boolean isMerge) {
+        this.isMerge = isMerge;
     }
 
     @Override
@@ -79,6 +90,8 @@ public class DataStreamSink extends DataSink {
         TDataSink result = new TDataSink(TDataSinkType.DATA_STREAM_SINK);
         TDataStreamSink tStreamSink =
                 new TDataStreamSink(exchNodeId.asInt(), outputPartition.toThrift());
+        tStreamSink.setIs_merge(isMerge);
+        tStreamSink.setDest_dop(exchDop);
         result.setStream_sink(tStreamSink);
         return result;
     }

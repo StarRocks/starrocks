@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
@@ -76,15 +76,13 @@ public class PartitionPruneTest extends PlanTestBase {
     @Test
     public void testPredicatePrune5() throws Exception {
         String sql = getFragmentPlan("select * from ptest where d2 = '2020-08-01' and d2 < '2020-07-01';");
-        assertTrue(sql.contains("  0:EMPTYSET\n"
-                + "     use vectorized: true"));
+        assertTrue(sql.contains("  0:EMPTYSET\n"));
     }
 
     @Test
     public void testPredicatePrune6() throws Exception {
         String sql = getFragmentPlan("select * from ptest where d2 = '2020-08-01' and d2 = '2020-09-01';");
-        assertTrue(sql.contains("  0:EMPTYSET\n"
-                + "     use vectorized: true"));
+        assertTrue(sql.contains("  0:EMPTYSET\n"));
     }
 
     @Test

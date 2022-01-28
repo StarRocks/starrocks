@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
+#include <string_view>
 #include <utility>
 
 #include "column/field.h"
@@ -27,6 +28,11 @@ public:
     void insert(size_t idx, const FieldPtr& field);
     void remove(size_t idx);
     void set_fields(Fields fields);
+    void clear() {
+        _fields.clear();
+        _num_keys = 0;
+        _name_to_index.clear();
+    }
 
     const FieldPtr& field(size_t idx) const;
     const Fields& fields() const { return _fields; }
@@ -60,7 +66,7 @@ private:
 
     Fields _fields;
     size_t _num_keys = 0;
-    std::unordered_map<std::string, size_t> _name_to_index;
+    std::unordered_map<std::string_view, size_t> _name_to_index;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Schema& schema) {

@@ -21,8 +21,20 @@
 
 package com.starrocks.mysql;
 
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.common.Config;
+import com.starrocks.mysql.privilege.Password;
+import com.starrocks.system.SystemInfoService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.lang.reflect.Method;
+
 // MySQL protocol handshake packet.
 public class MysqlHandshakePacket extends MysqlPacket {
+    private static final Logger LOG = LogManager.getLogger(MysqlHandshakePacket.class);
+
     private static final int SCRAMBLE_LENGTH = 20;
     // Version of handshake packet, since MySQL 3.21.0, Handshake of protocol 10 is used
     private static final int PROTOCOL_VERSION = 10;
@@ -34,7 +46,14 @@ public class MysqlHandshakePacket extends MysqlPacket {
     private static final MysqlCapability CAPABILITY = MysqlCapability.DEFAULT_CAPABILITY;
     // status flags not supported in StarRocks
     private static final int STATUS_FLAGS = 0;
-    private static final String AUTH_PLUGIN_NAME = "mysql_native_password";
+    private static final String NATIVE_AUTH_PLUGIN_NAME = "mysql_native_password";
+    private static final String CLEAR_PASSWORD_PLUGIN_NAME = "mysql_clear_password";
+    public static final String AUTHENTICATION_KERBEROS_CLIENT = "authentication_kerberos_client";
+
+    private static final ImmutableMap<String, Boolean> supportedPlugins = new ImmutableMap.Builder<String, Boolean>()
+            .put(NATIVE_AUTH_PLUGIN_NAME, true)
+            .put(CLEAR_PASSWORD_PLUGIN_NAME, true)
+            .build();
 
     // connection id used in KILL statement.
     private int connectionId;
@@ -81,20 +100,38 @@ public class MysqlHandshakePacket extends MysqlPacket {
             serializer.writeInt1(0);
         }
         if (capability.isPluginAuth()) {
-            serializer.writeNulTerminateString(AUTH_PLUGIN_NAME);
+            serializer.writeNulTerminateString(NATIVE_AUTH_PLUGIN_NAME);
         }
     }
 
     public boolean checkAuthPluginSameAsStarRocks(String pluginName) {
-        return AUTH_PLUGIN_NAME.equals(pluginName);
+        return supportedPlugins.containsKey(pluginName) && supportedPlugins.get(pluginName);
     }
 
     // If the auth default plugin in client is different from StarRocks
     // it will create a AuthSwitchRequest
     public void buildAuthSwitchRequest(MysqlSerializer serializer) {
         serializer.writeInt1((byte) 0xfe);
-        serializer.writeNulTerminateString(AUTH_PLUGIN_NAME);
+        serializer.writeNulTerminateString(NATIVE_AUTH_PLUGIN_NAME);
         serializer.writeBytes(authPluginData);
         serializer.writeInt1(0);
+    }
+
+    // If user use kerberos for authentication, fe need to resend the handshake request.
+    public void buildKrb5AuthRequest(MysqlSerializer serializer, String remoteIp, String user) throws Exception {
+        String fullUserName = SystemInfoService.DEFAULT_CLUSTER + ":" + user;
+        Password password = Catalog.getCurrentCatalog().getAuth().getUserPrivTable()
+                .getPasswordByApproximate(fullUserName, remoteIp);
+        if (password == null) {
+            String msg = String.format("Can not find password with [user: %s, remoteIp: %s].", user, remoteIp);
+            LOG.error(msg);
+            throw new Exception(msg);
+        }
+
+        String userRealm = password.getUserForAuthPlugin();
+        Class<?> authClazz = Catalog.getCurrentCatalog().getAuth().getAuthClazz();
+        Method method = authClazz.getMethod("buildKrb5HandshakeRequest", String.class, String.class);
+        byte[] packet = (byte[]) method.invoke(null, Config.authentication_kerberos_service_principal, userRealm);
+        serializer.writeBytes(packet);
     }
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer;
 
@@ -9,7 +9,9 @@ import com.starrocks.common.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -189,6 +191,13 @@ public class Memo {
         for (GroupExpression groupExpression : needReinsertedExpressions) {
             if (!groupExpressions.containsKey(groupExpression)) {
                 groupExpressions.put(groupExpression, groupExpression);
+            } else {
+                // group expression is already in the Memo's groupExpressions, this indicates that
+                // this is a redundant group Expression, it's should be remove.
+                // And the redundant group expression may be already in the TaskScheduler stack, so it should be
+                // set unused.
+                groupExpression.getGroup().removeGroupExpression(groupExpression);
+                groupExpression.setUnused(true);
             }
         }
 
@@ -246,6 +255,32 @@ public class Memo {
                     iterator.remove();
                     break;
                 }
+            }
+        }
+    }
+
+    private void deepSearchGroup(Group root, LinkedList<Integer> touch) {
+        for (Group group : root.getFirstLogicalExpression().getInputs()) {
+            touch.add(group.getId());
+            deepSearchGroup(group, touch);
+        }
+    }
+
+    /**
+     * When performing replaceRewriteExpression, some groups may not be reachable by rootGroup.
+     * These groups should be replaced.
+     * In order to reduce the number of groups entering Memo,
+     * we will delete inaccessible groups in this function.
+     */
+    public void removeUnreachableGroup() {
+        LinkedList<Integer> touch = new LinkedList<>();
+        touch.add(rootGroup.getId());
+        deepSearchGroup(rootGroup, touch);
+
+        List<Group> groupsCopy = new ArrayList<>(groups);
+        for (Group group : groupsCopy) {
+            if (!touch.contains(group.getId())) {
+                removeOneGroup(group);
             }
         }
     }

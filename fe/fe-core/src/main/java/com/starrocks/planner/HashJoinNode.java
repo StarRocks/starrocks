@@ -41,6 +41,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THashJoinNode;
+import com.starrocks.thrift.TJoinDistributionMode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import org.apache.logging.log4j.LogManager;
@@ -76,15 +77,12 @@ public class HashJoinNode extends PlanNode {
     private boolean isShuffleHashBucket = false;
 
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
+    private final List<Integer> filter_null_value_columns = Lists.newArrayList();
+    private List<Expr> partitionExprs;
+    private List<Integer> outputSlots;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
-    }
-
-    private static final int runtimeFilterMaxSize = 64 * 1024 * 1024;
-
-    public static int getRuntimeFilterMaxSize() {
-        return runtimeFilterMaxSize;
     }
 
     public HashJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
@@ -94,8 +92,6 @@ public class HashJoinNode extends PlanNode {
         Preconditions.checkArgument(otherJoinConjuncts != null);
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
-        tblRefIds.addAll(outer.getTblRefIds());
-        tblRefIds.addAll(inner.getTblRefIds());
         this.innerRef = innerRef;
         this.joinOp = innerRef.getJoinOp();
         for (Expr eqJoinPredicate : eqJoinConjuncts) {
@@ -159,29 +155,32 @@ public class HashJoinNode extends PlanNode {
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator,
                                     PlanNode inner, List<BinaryPredicate> eqJoinConjuncts,
                                     JoinOperator joinOp) {
-        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin()) {
+        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin()) {
             return;
         }
 
         if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.LOCAL_HASH_BUCKET)) {
-            // if it's partitioned join and we can not get correct ndv
-            // then it's hard to estimate right bloom filter size or it's too big
+            // if it's partitioned join, and we can not get correct ndv
+            // then it's hard to estimate right bloom filter size, or it's too big.
             // so we'd better to skip this global runtime filter.
             long card = inner.getCardinality();
-            if (card <= 0 || card > runtimeFilterMaxSize) {
+            if (card <= 0 || card > RuntimeFilterDescription.BuildMaxSize) {
                 return;
             }
         }
 
         for (int i = 0; i < eqJoinConjuncts.size(); ++i) {
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
-            joinConjunct.setUseVectorized(joinConjunct.isVectorized());
+            Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
+                    BinaryPredicate.IS_EQ_PREDICATE.apply(joinConjunct));
             RuntimeFilterDescription rf = new RuntimeFilterDescription();
             rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
+            rf.setBuildPlanNodeId(this.id.asInt());
             rf.setExprOrder(i);
             rf.setJoinMode(distrMode);
             rf.setEqualCount(eqJoinConjuncts.size());
             rf.setBuildCardinality(inner.getCardinality());
+            rf.setEqualForNull(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct));
 
             Expr left = joinConjunct.getChild(0);
             Expr right = joinConjunct.getChild(1);
@@ -222,12 +221,16 @@ public class HashJoinNode extends PlanNode {
         this.distrMode = distrMode;
     }
 
-    public boolean isLocalHashBucket() {
-        return isLocalHashBucket;
+    public DistributionMode getDistributionMode() {
+        return this.distrMode;
     }
 
-    public boolean isShuffleHashBucket() {
-        return isShuffleHashBucket;
+    public boolean isBroadcast() {
+        return this.distrMode == DistributionMode.BROADCAST;
+    }
+
+    public boolean isLocalHashBucket() {
+        return isLocalHashBucket;
     }
 
     public void setColocate(boolean colocate, String reason) {
@@ -239,8 +242,8 @@ public class HashJoinNode extends PlanNode {
         isLocalHashBucket = localHashBucket;
     }
 
-    public void setShuffleHashBucket(boolean runtimeBucketShuffle) {
-        isShuffleHashBucket = runtimeBucketShuffle;
+    public void setPartitionExprs(List<Expr> exprs) {
+        partitionExprs = exprs;
     }
 
     @Override
@@ -363,6 +366,7 @@ public class HashJoinNode extends PlanNode {
         msg.node_type = TPlanNodeType.HASH_JOIN_NODE;
         msg.hash_join_node = new THashJoinNode();
         msg.hash_join_node.join_op = joinOp.toThrift();
+        msg.hash_join_node.distribution_mode = distrMode.toThrift();
         StringBuilder sqlJoinPredicatesBuilder = new StringBuilder();
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
             TEqJoinCondition eqJoinCondition = new TEqJoinCondition(eqJoinPredicate.getChild(0).treeToThrift(),
@@ -406,6 +410,14 @@ public class HashJoinNode extends PlanNode {
         }
         msg.hash_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
+        if (partitionExprs != null) {
+            msg.hash_join_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
+        }
+        msg.setFilter_null_value_columns(filter_null_value_columns);
+
+        if (outputSlots != null) {
+            msg.hash_join_node.setOutput_columns(outputSlots);
+        }
     }
 
     @Override
@@ -462,41 +474,19 @@ public class HashJoinNode extends PlanNode {
                 output.append(detailPrefix).append("- ").append(rf.toExplainString(-1)).append("\n");
             }
         }
+
+        if (outputSlots != null) {
+            output.append(detailPrefix).append("output columns: ");
+            output.append(outputSlots.stream().map(Object::toString).collect(Collectors.joining(", ")));
+            output.append("\n");
+        }
+
         return output.toString();
     }
 
     @Override
     public int getNumInstances() {
         return Math.max(children.get(0).getNumInstances(), children.get(1).getNumInstances());
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : eqJoinConjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : otherJoinConjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     public enum DistributionMode {
@@ -519,5 +509,52 @@ public class HashJoinNode extends PlanNode {
         public String toString() {
             return description;
         }
+
+        public TJoinDistributionMode toThrift() {
+            switch (this) {
+                case BROADCAST:
+                    return TJoinDistributionMode.BROADCAST;
+                case PARTITIONED:
+                    return TJoinDistributionMode.PARTITIONED;
+                case LOCAL_HASH_BUCKET:
+                    return TJoinDistributionMode.LOCAL_HASH_BUCKET;
+                case SHUFFLE_HASH_BUCKET:
+                    return TJoinDistributionMode.SHUFFLE_HASH_BUCKET;
+                case COLOCATE:
+                    return TJoinDistributionMode.COLOCATE;
+                case REPLICATED:
+                    return TJoinDistributionMode.REPLICATED;
+                default:
+                    return TJoinDistributionMode.NONE;
+            }
+        }
+    }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    public void checkRuntimeFilterOnNullValue(RuntimeFilterDescription description, Expr probeExpr) {
+        // note(yan): outer join may generate null values, and if runtime filter does not accept null value
+        // we have opportunity to filter those values out.
+        boolean slotRefWithNullValue = false;
+        SlotId slotId = null;
+        if (probeExpr instanceof SlotRef) {
+            SlotRef slotRef = (SlotRef) probeExpr;
+            if (slotRef.isNullable()) {
+                slotRefWithNullValue = true;
+                slotId = slotRef.getSlotId();
+            }
+        }
+
+        if (joinOp.isOuterJoin() && !description.getEqualForNull() && slotRefWithNullValue) {
+            filter_null_value_columns.add(slotId.asInt());
+        }
+    }
+
+    public void setOutputSlots(List<Integer> outputSlots) {
+        this.outputSlots = outputSlots;
     }
 }

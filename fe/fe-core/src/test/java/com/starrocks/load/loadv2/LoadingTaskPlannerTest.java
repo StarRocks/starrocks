@@ -25,12 +25,14 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -87,8 +89,6 @@ public class LoadingTaskPlannerTest {
     // config
     private int loadParallelInstanceNum;
     private int maxBrokerConcurrency;
-    private boolean enableVectorizedLoad;
-    private boolean enableVectorizedFileLoad;
 
     // backends
     private ImmutableMap<Long, Backend> idToBackend;
@@ -107,8 +107,6 @@ public class LoadingTaskPlannerTest {
 
         loadParallelInstanceNum = Config.load_parallel_instance_num;
         maxBrokerConcurrency = Config.max_broker_concurrency;
-        enableVectorizedLoad = Config.vectorized_load_enable;
-        enableVectorizedFileLoad = Config.enable_vectorized_file_load;
 
         // backends
         Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
@@ -125,8 +123,6 @@ public class LoadingTaskPlannerTest {
     public void tearDown() {
         Config.load_parallel_instance_num = loadParallelInstanceNum;
         Config.max_broker_concurrency = maxBrokerConcurrency;
-        Config.vectorized_load_enable = enableVectorizedLoad;
-        Config.enable_vectorized_file_load = enableVectorizedFileLoad;
     }
 
     @Test
@@ -182,10 +178,9 @@ public class LoadingTaskPlannerTest {
 
         // load_parallel_instance_num: 1
         Config.load_parallel_instance_num = 1;
-        Config.vectorized_load_enable = true;
-        Config.enable_vectorized_file_load = true;
+        long startTime = System.currentTimeMillis();
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false);
         planner.plan(loadId, fileStatusesList, 2);
         Assert.assertEquals(1, planner.getScanNodes().size());
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
@@ -195,7 +190,7 @@ public class LoadingTaskPlannerTest {
         // load_parallel_instance_num: 2
         Config.load_parallel_instance_num = 2;
         planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false);
         planner.plan(loadId, fileStatusesList, 2);
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
@@ -205,7 +200,7 @@ public class LoadingTaskPlannerTest {
         Config.load_parallel_instance_num = 2;
         Config.max_broker_concurrency = 3;
         planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false);
         planner.plan(loadId, fileStatusesList, 2);
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
@@ -286,10 +281,8 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        Config.vectorized_load_enable = true;
-        Config.enable_vectorized_file_load = true;
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 1. check fragment
@@ -316,7 +309,6 @@ public class LoadingTaskPlannerTest {
         TExprNode node = k1Expr.nodes.get(0);
         Assert.assertEquals(TExprNodeType.SLOT_REF, node.node_type);
         Assert.assertEquals(TPrimitiveType.TINYINT, node.type.types.get(0).scalar_type.type);
-        Assert.assertTrue(node.use_vectorized);
 
         // 2.2 check k2 from path
         TExpr k2Expr = exprOfDestSlot.get(1);
@@ -324,11 +316,9 @@ public class LoadingTaskPlannerTest {
         TExprNode castNode = k2Expr.nodes.get(0);
         Assert.assertEquals(TExprNodeType.CAST_EXPR, castNode.node_type);
         Assert.assertEquals(TPrimitiveType.INT, castNode.fn.ret_type.types.get(0).scalar_type.type);
-        Assert.assertTrue(castNode.use_vectorized);
         node = k2Expr.nodes.get(1);
         Assert.assertEquals(TExprNodeType.SLOT_REF, node.node_type);
         Assert.assertEquals(TPrimitiveType.VARCHAR, node.type.types.get(0).scalar_type.type);
-        Assert.assertTrue(node.use_vectorized);
 
         // 2.3 check k3 mapping
         TExpr k3Expr = exprOfDestSlot.get(2);
@@ -345,7 +335,102 @@ public class LoadingTaskPlannerTest {
         node = k3Expr.nodes.get(3);
         Assert.assertEquals(TExprNodeType.INT_LITERAL, node.node_type);
         Assert.assertEquals(5, node.int_literal.value);
-        Assert.assertTrue(node.use_vectorized);
+    }
+
+    @Test
+    public void testPartialUpdatePlan(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService,
+                                   @Injectable Database db, @Injectable OlapTable table) throws Exception {
+        // table schema
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
+        columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
+        columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
+        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
+
+        Function f1 = new Function(new FunctionName("substr"), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
+                Type.VARCHAR, true);
+        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
+                Type.INT, true);
+        new Expectations() {
+            {
+                Catalog.getCurrentSystemInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                table.getBaseSchema();
+                result = columns;
+                table.getFullSchema();
+                result = columns;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+                table.getColumn("k1");
+                result = columns.get(0);
+                table.getColumn("k2");
+                result = columns.get(1);
+                table.getColumn("k3");
+                result = columns.get(2);
+                table.getColumn("v");
+                result = columns.get(3);
+                table.getColumn("k33");
+                result = null;
+                catalog.getFunction((Function) any, (Function.CompareMode) any);
+                returns(f1, f1, f2);
+                table.getColumn(Load.LOAD_OP_COLUMN);
+                minTimes = 0;
+                result = null;
+            }
+        };
+
+        // column mappings
+        String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
+                "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
+        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
+        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
+                "columnMappingList");
+
+        // file groups
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("path/k2=1/file1");
+        List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
+        DataDescription desc = new DataDescription("t2", null, files, columnNames,
+                null, null, "ORC", Lists.newArrayList("k2"),
+                false, columnMappingList, null);
+        Deencapsulation.invoke(desc, "analyzeColumns");
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        Deencapsulation.setField(brokerFileGroup, "fileFormat", "ORC");
+        brokerFileGroup.parse(db, desc);
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("path/k2=1/file1", false, 268435456, true));
+        fileStatusesList.add(fileStatusList);
+
+        // plan
+        LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false);
+        planner.plan(loadId, fileStatusesList, 1);
+
+        // 1. check fragment
+        List<PlanFragment> fragments = planner.getFragments();
+        Assert.assertEquals(1, fragments.size());
+        PlanFragment fragment = fragments.get(0);
+        TPlanFragment tPlanFragment = fragment.toThrift();
+        List<TPlanNode> nodes = tPlanFragment.plan.nodes;
+        Assert.assertEquals(1, nodes.size());
+        TPlanNode tPlanNode = nodes.get(0);
+        Assert.assertEquals(TPlanNodeType.FILE_SCAN_NODE, tPlanNode.node_type);
     }
 
     @Test
@@ -415,9 +500,8 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        Config.vectorized_load_enable = true;
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr
@@ -501,9 +585,8 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        Config.vectorized_load_enable = true;
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr
@@ -606,9 +689,8 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        Config.vectorized_load_enable = true;
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr
@@ -631,9 +713,12 @@ public class LoadingTaskPlannerTest {
                                           @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("pk", Type.BIGINT, true, null, false, "123", ""));
-        columns.add(new Column("v1", Type.INT, false, null, false, "231", ""));
-        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true, "asdf", ""));
+        columns.add(new Column("pk", Type.BIGINT, true, null, false,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("123")), ""));
+        columns.add(new Column("v1", Type.INT, false, null, false,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("231")), ""));
+        columns.add(new Column("v2", ScalarType.createVarchar(50), false, null, true,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("asdf")), ""));
 
         Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
                 Type.BIGINT, true);
@@ -698,9 +783,8 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        Config.vectorized_load_enable = true;
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600);
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr

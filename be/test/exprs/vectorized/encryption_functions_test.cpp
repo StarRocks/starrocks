@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/encryption_functions.h"
 
@@ -687,6 +687,181 @@ TEST_F(EncryptionFunctionsTest, md5sumNullTest) {
     for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
         ASSERT_EQ(results[j], v->get_data()[j].to_string());
     }
+}
+
+TEST_F(EncryptionFunctionsTest, sha224Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto plain = BinaryColumn::create();
+
+    std::string plains[] = {"starrocks", "20211119"};
+
+    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+        plain->append(plains[j]);
+    }
+
+    auto hash_length = ColumnHelper::create_const_column<TYPE_INT>(224, 1);
+
+    columns.emplace_back(plain);
+    columns.emplace_back(hash_length);
+
+    ctx->impl()->set_constant_columns(columns);
+    ASSERT_TRUE(EncryptionFunctions::sha2_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    ASSERT_NE(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    ColumnPtr result = EncryptionFunctions::sha2(ctx.get(), columns);
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    std::string check_result[2] = {"0057da608f56e8cdd3c22208a93cdda3e142279a694dfc53007e80f3",
+                                   "b080f0657e5b67fd52b2f010328d2fad10775f81aa71c05313d46a24"};
+    for (int j = 0; j < sizeof(check_result) / sizeof(check_result[0]); ++j) {
+        ASSERT_EQ(check_result[j], v->get_data()[j].to_string());
+    }
+
+    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(EncryptionFunctionsTest, sha256Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto plain = BinaryColumn::create();
+
+    std::string plains[] = {"starrocks", "20211119"};
+
+    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+        plain->append(plains[j]);
+    }
+
+    auto hash_length = ColumnHelper::create_const_column<TYPE_INT>(256, 1);
+
+    columns.emplace_back(plain);
+    columns.emplace_back(hash_length);
+
+    ctx->impl()->set_constant_columns(columns);
+    ASSERT_TRUE(EncryptionFunctions::sha2_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr result = EncryptionFunctions::sha2(ctx.get(), columns);
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    std::string check_result[2] = {"87da3b6aefc0bd626a32626685dad2dba7435095f26c5a9628a6b13ced5721b0",
+                                   "1deab4a6f88c6cbab900c2ae0a1da4f0e7e981f8b0f0680d8ec6c25155ab4885"};
+    for (int j = 0; j < sizeof(check_result) / sizeof(check_result[0]); ++j) {
+        ASSERT_EQ(check_result[j], v->get_data()[j].to_string());
+    }
+
+    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(EncryptionFunctionsTest, sha384Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto plain = BinaryColumn::create();
+
+    std::string plains[] = {"starrocks", "20211119"};
+
+    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+        plain->append(plains[j]);
+    }
+
+    auto hash_length = ColumnHelper::create_const_column<TYPE_INT>(384, 1);
+
+    columns.emplace_back(plain);
+    columns.emplace_back(hash_length);
+
+    ctx->impl()->set_constant_columns(columns);
+    ASSERT_TRUE(EncryptionFunctions::sha2_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr result = EncryptionFunctions::sha2(ctx.get(), columns);
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    std::string check_result[2] = {
+            "eda8e790960d9ff4fdc6f481ec57bf443c147bf092086006e98a2ab0108afbaaf8e6f51d197f988dd798d2524b12de2c",
+            "6195d65242957bdf844e6623acabf2b0879c9cb282a9490ed332f7fdc41aedbda7802af06d07f38d7ed69449d3ff5bf8"};
+    for (int j = 0; j < sizeof(check_result) / sizeof(check_result[0]); ++j) {
+        ASSERT_EQ(check_result[j], v->get_data()[j].to_string());
+    }
+
+    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(EncryptionFunctionsTest, sha512Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto plain = BinaryColumn::create();
+
+    std::string plains[] = {"starrocks", "20211119"};
+
+    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+        plain->append(plains[j]);
+    }
+
+    auto hash_length = ColumnHelper::create_const_column<TYPE_INT>(512, 1);
+
+    columns.emplace_back(plain);
+    columns.emplace_back(hash_length);
+
+    ctx->impl()->set_constant_columns(columns);
+    ASSERT_TRUE(EncryptionFunctions::sha2_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr result = EncryptionFunctions::sha2(ctx.get(), columns);
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    std::string check_result[2] = {
+            "9df77afa38c688166eaa7511440dd3a0b1c32918e9ae60b8c74e4b0f530852cd1a0facc610b71ebfcbe345f5fa40983fe68a686144"
+            "d2c6981b8a3fab1b045cd0",
+            "eaf18d26b2976216790d95b2942d15b7db5f926c7d62d35f24c98b8eedbe96f2e6241e5e4fdc6b7d9e7893d94d86cd8a6f3bb6b180"
+            "4c22097b337ecc24f6015e"};
+    for (int j = 0; j < sizeof(check_result) / sizeof(check_result[0]); ++j) {
+        ASSERT_EQ(check_result[j], v->get_data()[j].to_string());
+    }
+
+    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(EncryptionFunctionsTest, invalidSHATest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto plain = BinaryColumn::create();
+
+    std::string plains[] = {"starrocks", "20211119"};
+
+    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+        plain->append(plains[j]);
+    }
+
+    auto hash_length = ColumnHelper::create_const_column<TYPE_INT>(225, 1);
+
+    columns.emplace_back(plain);
+    columns.emplace_back(hash_length);
+
+    ctx->impl()->set_constant_columns(columns);
+    ASSERT_TRUE(EncryptionFunctions::sha2_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    ASSERT_NE(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    ColumnPtr result = EncryptionFunctions::sha2(ctx.get(), columns);
+
+    std::string check_result[2] = {"0057da608f56e8cdd3c22208a93cdda3e142279a694dfc53007e80f3",
+                                   "b080f0657e5b67fd52b2f010328d2fad10775f81aa71c05313d46a24"};
+    for (int j = 0; j < sizeof(check_result) / sizeof(check_result[0]); ++j) {
+        ASSERT_TRUE(result->is_null(j));
+    }
+
+    ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 } // namespace vectorized

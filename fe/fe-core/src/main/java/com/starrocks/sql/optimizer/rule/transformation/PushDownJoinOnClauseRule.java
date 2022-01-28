@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -65,17 +65,17 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
         ScalarOperator derivedPredicate = JoinPredicateUtils.equivalenceDerive(on, false);
         List<ScalarOperator> derivedPredicates = Utils.extractConjuncts(derivedPredicate);
 
-        if (join.getJoinType().isInnerJoin()) {
+        if (join.getJoinType().isInnerJoin() || join.getJoinType().isSemiJoin()) {
             return Utils.compoundAnd(on, derivedPredicate);
-        } else if (join.getJoinType().isLeftOuterJoin() || join.getJoinType().isLeftSemiJoin()) {
+        } else if (join.getJoinType().isLeftOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (rightOutputColumns.contains(derivedPredicate.getUsedColumns())) {
+                if (rightOutputColumns.containsAll(p.getUsedColumns())) {
                     pushDown.add(p);
                 }
             }
-        } else if (join.getJoinType().isRightOuterJoin() || join.getJoinType().isRightSemiJoin()) {
+        } else if (join.getJoinType().isRightOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (leftOutputColumns.contains(derivedPredicate.getUsedColumns())) {
+                if (leftOutputColumns.containsAll(p.getUsedColumns())) {
                     pushDown.add(p);
                 }
             }

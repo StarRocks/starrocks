@@ -133,6 +133,8 @@ import java.util.Map;
 public class EtlJobConfig implements Serializable {
     // global dict
     public static final String GLOBAL_DICT_TABLE_NAME = "starrocks_global_dict_table_%d";
+    // Compatible with old global dict table name in previous version
+    public static final String DORIS_GLOBAL_DICT_TABLE_NAME = "doris_global_dict_table_%d";
     public static final String DISTINCT_KEY_TABLE_NAME = "starrocks_distinct_key_table_%d_%s";
     public static final String STARROCKS_INTERMEDIATE_HIVE_TABLE_NAME = "starrocks_intermediate_hive_table_%d_%s";
 
@@ -440,16 +442,19 @@ public class EtlJobConfig implements Serializable {
         public List<Object> startKeys;
         @SerializedName(value = "endKeys")
         public List<Object> endKeys;
+        @SerializedName(value = "isMinPartition")
+        public boolean isMinPartition;
         @SerializedName(value = "isMaxPartition")
         public boolean isMaxPartition;
         @SerializedName(value = "bucketNum")
         public int bucketNum;
 
         public EtlPartition(long partitionId, List<Object> startKeys, List<Object> endKeys,
-                            boolean isMaxPartition, int bucketNum) {
+                            boolean isMinPartition, boolean isMaxPartition, int bucketNum) {
             this.partitionId = partitionId;
             this.startKeys = startKeys;
             this.endKeys = endKeys;
+            this.isMinPartition = isMinPartition;
             this.isMaxPartition = isMaxPartition;
             this.bucketNum = bucketNum;
         }
@@ -460,6 +465,7 @@ public class EtlJobConfig implements Serializable {
                     "partitionId=" + partitionId +
                     ", startKeys=" + startKeys +
                     ", endKeys=" + endKeys +
+                    ", isMinPartition=" + isMinPartition +
                     ", isMaxPartition=" + isMaxPartition +
                     ", bucketNum=" + bucketNum +
                     '}';

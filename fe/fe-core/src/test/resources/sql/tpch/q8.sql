@@ -39,9 +39,9 @@ order by
 [result]
 TOP-N (order by [[69: year ASC NULLS FIRST]])
     TOP-N (order by [[69: year ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{72: sum(71: expr)=sum(72: sum(71: expr)), 73: sum(70: expr)=sum(73: sum(70: expr))}] group by [[69: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{72: sum=sum(72: sum), 73: sum(70: expr)=sum(73: sum(70: expr))}] group by [[69: year]] having [null]
             EXCHANGE SHUFFLE[69]
-                AGGREGATE ([LOCAL] aggregate [{72: sum(71: expr)=sum(71: expr), 73: sum(70: expr)=sum(70: expr)}] group by [[69: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{72: sum=sum(71: expr), 73: sum(70: expr)=sum(70: expr)}] group by [[69: year]] having [null]
                     INNER JOIN (join-predicate [65: R_REGIONKEY = 57: N_REGIONKEY] post-join-predicate [null])
                         SCAN (columns[65: R_REGIONKEY, 66: R_NAME] predicate[66: R_NAME = MIDDLE EAST])
                         EXCHANGE BROADCAST

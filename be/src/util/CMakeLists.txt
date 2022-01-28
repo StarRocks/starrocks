@@ -66,7 +66,6 @@ set(UTIL_FILES
   url_coding.cpp
   file_utils.cpp
   mysql_row_buffer.cpp
-  tuple_row_compare.cpp
   error_util.cc
   spinlock.cc
   filesystem_util.cc
@@ -105,6 +104,9 @@ set(UTIL_FILES
   buffered_stream.cpp
   int96.cpp
   hdfs_util.cpp
+  gc_helper.cpp
+  gc_helper_smoothstep.cpp
+  sha.cpp
 )
 
 set(UTIL_FILES ${UTIL_FILES}

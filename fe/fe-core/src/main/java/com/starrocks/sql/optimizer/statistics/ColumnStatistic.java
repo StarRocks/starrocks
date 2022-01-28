@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -14,6 +14,8 @@ public class ColumnStatistic {
         ESTIMATE
     }
 
+    // Used for the column statistics which we could not get from the statistics storage or
+    // can not compute the actual column statistics for now
     private static final ColumnStatistic
             UNKNOWN = new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1, StatisticType.UNKNOWN);
 
@@ -76,6 +78,15 @@ public class ColumnStatistic {
         return this.type == StatisticType.UNKNOWN;
     }
 
+    public boolean isInfiniteRange() {
+        return this.minValue == NEGATIVE_INFINITY || this.maxValue == POSITIVE_INFINITY;
+    }
+
+    public boolean hasNaNValue() {
+        return Double.isNaN(minValue) || Double.isNaN(maxValue);
+    }
+
+    // TODO(ywb): remove this after user can dump statistics with type
     public boolean isUnknownValue() {
         return this.minValue == NEGATIVE_INFINITY && this.maxValue == POSITIVE_INFINITY && this.nullsFraction == 0 &&
                 this.averageRowSize == 1 && this.distinctValuesCount == 1;
@@ -92,7 +103,8 @@ public class ColumnStatistic {
                 + maxValue + separator
                 + nullsFraction + separator
                 + averageRowSize + separator
-                + distinctValuesCount + "]";
+                + distinctValuesCount + "] "
+                + type;
     }
 
     public static Builder buildFrom(ColumnStatistic other) {
@@ -101,14 +113,19 @@ public class ColumnStatistic {
     }
 
     public static Builder buildFrom(String columnStatistic) {
-        String valueString = columnStatistic.substring(1, columnStatistic.length() - 1);
+        int endIndex = columnStatistic.indexOf(']');
+        String valueString = columnStatistic.substring(1, endIndex);
+        String typeString = endIndex == columnStatistic.length() - 1 ? "" : columnStatistic.substring(endIndex + 2);
+
         String[] valueArray = valueString.split(",");
         Preconditions.checkState(valueArray.length == 5);
 
         Builder builder = new Builder(Double.parseDouble(valueArray[0]), Double.parseDouble(valueArray[1]),
                 Double.parseDouble(valueArray[2]), Double.parseDouble(valueArray[3]),
                 Double.parseDouble(valueArray[4]));
-        if (builder.build().isUnknownValue()) {
+        if (!typeString.isEmpty()) {
+            builder.setType(StatisticType.valueOf(typeString));
+        } else if (builder.build().isUnknownValue()) {
             builder.setType(StatisticType.UNKNOWN);
         }
         return builder;

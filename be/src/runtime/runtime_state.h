@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_RUNTIME_RUNTIME_STATE_H
-#define STARROCKS_BE_SRC_QUERY_RUNTIME_RUNTIME_STATE_H
+#pragma once
 
 #include <atomic>
 #include <fstream>
@@ -82,7 +81,7 @@ public:
     // Specific parts of the fragment (i.e. exec nodes, sinks, data stream senders, etc)
     // will add a fourth level when they are initialized.
     // This function also initializes a user function mem tracker (in the fourth level).
-    Status init_mem_trackers(const TUniqueId& query_id);
+    void init_mem_trackers(const TUniqueId& query_id);
 
     // for ut only
     Status init_instance_mem_tracker();
@@ -92,8 +91,8 @@ public:
 
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
-    int batch_size() const { return _query_options.batch_size; }
-    void set_batch_size(int batch_size) { _query_options.batch_size = batch_size; }
+    int chunk_size() const { return _query_options.batch_size; }
+    void set_chunk_size(int chunk_size) { _query_options.batch_size = chunk_size; }
     bool abort_on_default_limit_exceeded() const { return _query_options.abort_on_default_limit_exceeded; }
     int64_t timestamp_ms() const { return _timestamp_ms; }
     const std::string& timezone() const { return _timezone; }
@@ -104,11 +103,13 @@ public:
     const TUniqueId& query_id() const { return _query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
     ExecEnv* exec_env() { return _exec_env; }
-    std::vector<MemTracker*>* mem_trackers() { return &_mem_trackers; }
-    MemTracker* fragment_mem_tracker() { return _fragment_mem_tracker; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
+    MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
+    std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
+    std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
     ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
+    const bool& cancelled_ref() const { return _is_cancelled; }
 
     void set_fragment_root_id(PlanNodeId id) {
         DCHECK(_root_node_id == -1) << "Should not set this twice.";
@@ -116,19 +117,13 @@ public:
     }
 
     // Returns runtime state profile
-    RuntimeProfile* runtime_profile() { return &_profile; }
+    RuntimeProfile* runtime_profile() { return _profile.get(); }
+    std::shared_ptr<RuntimeProfile> runtime_profile_ptr() { return _profile; }
 
     Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
         return _process_status;
     };
-
-    // Sets the fragment memory limit and adds it to _mem_trackers
-    void set_fragment_mem_tracker(MemTracker* limit) {
-        DCHECK(_fragment_mem_tracker == nullptr);
-        _fragment_mem_tracker = limit;
-        _mem_trackers.push_back(limit);
-    }
 
     // Appends error to the _error_log if there is space
     bool log_error(const std::string& error);
@@ -192,19 +187,13 @@ public:
     // doesn't continue if the query terminates abnormally.
     Status check_query_state(const std::string& msg);
 
+    Status check_mem_limit(const std::string& msg);
+
     std::vector<std::string>& output_files() { return _output_files; }
-
-    void set_import_label(const std::string& import_label) { _import_label = import_label; }
-
-    const std::string& import_label() { return _import_label; }
 
     const std::vector<std::string>& export_output_files() const { return _export_output_files; }
 
     void add_export_output_file(const std::string& file) { _export_output_files.push_back(file); }
-
-    void set_db_name(const std::string& db_name) { _db_name = db_name; }
-
-    const std::string& db_name() { return _db_name; }
 
     void set_load_job_id(int64_t job_id) { _load_job_id = job_id; }
 
@@ -271,18 +260,26 @@ public:
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
 
-    const vectorized::GlobalDictMaps& get_global_dict_map() const;
+    const vectorized::GlobalDictMaps& get_query_global_dict_map() const;
+    // for query global dict
+    vectorized::GlobalDictMaps* mutable_query_global_dict_map();
+
+    const vectorized::GlobalDictMaps& get_load_global_dict_map() const;
+
     using GlobalDictLists = std::vector<TGlobalDict>;
-    Status init_global_dict(const GlobalDictLists& global_dict_list);
+    Status init_query_global_dict(const GlobalDictLists& global_dict_list);
+    Status init_load_global_dict(const GlobalDictLists& global_dict_list);
 
 private:
     Status create_error_log_file();
 
-    static const int DEFAULT_BATCH_SIZE = 2048;
+    Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result);
+
+    static const int DEFAULT_CHUNK_SIZE = 2048;
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some of object in _obj_pool will use profile when deconstructing.
-    RuntimeProfile _profile;
+    std::shared_ptr<RuntimeProfile> _profile;
 
     DescriptorTbl* _desc_tbl = nullptr;
 
@@ -313,18 +310,12 @@ private:
     // state is responsible for returning this pool to the thread mgr.
     ThreadResourceMgr::ResourcePool* _resource_pool = nullptr;
 
-    // all mem limits that apply to this query
-    std::vector<MemTracker*> _mem_trackers;
-
-    // Fragment memory limit.  Also contained in _mem_trackers
-    MemTracker* _fragment_mem_tracker = nullptr;
-
     // MemTracker that is shared by all fragment instances running on this host.
     // The query mem tracker must be released after the _instance_mem_tracker.
-    std::unique_ptr<MemTracker> _query_mem_tracker;
+    std::shared_ptr<MemTracker> _query_mem_tracker;
 
     // Memory usage of this fragment instance
-    std::unique_ptr<MemTracker> _instance_mem_tracker;
+    std::shared_ptr<MemTracker> _instance_mem_tracker;
 
     std::shared_ptr<ObjectPool> _obj_pool;
 
@@ -342,7 +333,7 @@ private:
     // will not necessarily be set in all error cases.
     std::mutex _process_status_lock;
     Status _process_status;
-    //std::unique_ptr<MemPool> _udf_pool;
+    std::unique_ptr<MemPool> _instance_mem_pool;
 
     // This is the node id of the root node for this plan fragment. This is used as the
     // hash seed and has two useful properties:
@@ -364,8 +355,6 @@ private:
 
     std::vector<std::string> _export_output_files;
 
-    std::string _import_label;
-    std::string _db_name;
     int64_t _load_job_id = 0;
     std::unique_ptr<TLoadErrorHubInfo> _load_error_hub_info;
 
@@ -379,8 +368,51 @@ private:
 
     RuntimeFilterPort* _runtime_filter_port;
 
-    vectorized::GlobalDictMaps _global_dicts;
+    vectorized::GlobalDictMaps _query_global_dicts;
+    vectorized::GlobalDictMaps _load_global_dicts;
 };
+
+#define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \
+    do {                                                                                                            \
+        stringstream str;                                                                                           \
+        str << "Memory of " << tracker->label() << " exceed limit. " << msg << " ";                                 \
+        str << "Backend: " << BackendOptions::get_localhost() << ", ";                                              \
+        if (state != nullptr) {                                                                                     \
+            str << "fragment: " << print_id(state->fragment_instance_id()) << " ";                                  \
+        }                                                                                                           \
+        str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";                       \
+        switch (tracker->type()) {                                                                                  \
+        case MemTracker::NO_SET:                                                                                    \
+            break;                                                                                                  \
+        case MemTracker::QUERY:                                                                                     \
+            str << "Mem usage has exceed the limit of single query, You can change the limit by "                   \
+                   "set session variable exec_mem_limit.";                                                          \
+            break;                                                                                                  \
+        case MemTracker::PROCESS:                                                                                   \
+            str << "Mem usage has exceed the limit of BE";                                                          \
+            break;                                                                                                  \
+        case MemTracker::QUERY_POOL:                                                                                \
+            str << "Mem usage has exceed the limit of query pool";                                                  \
+            break;                                                                                                  \
+        case MemTracker::LOAD:                                                                                      \
+            str << "Mem usage has exceed the limit of load";                                                        \
+            break;                                                                                                  \
+        case MemTracker::SCHEMA_CHANGE_TASK:                                                                        \
+            str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]"; \
+            break;                                                                                                  \
+        default:                                                                                                    \
+            break;                                                                                                  \
+        }                                                                                                           \
+        return Status::MemoryLimitExceeded(str.str());                                                              \
+    } while (false)
+
+#define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \
+    do {                                                                                    \
+        MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker(); \
+        if (tracker != nullptr) {                                                           \
+            LIMIT_EXCEEDED(tracker, state, msg);                                            \
+        }                                                                                   \
+    } while (false)
 
 #define RETURN_IF_CANCELLED(state)                                                       \
     do {                                                                                 \
@@ -389,5 +421,3 @@ private:
     } while (false)
 
 } // namespace starrocks
-
-#endif // end of STARROCKS_BE_SRC_QUERY_RUNTIME_RUNTIME_STATE_H

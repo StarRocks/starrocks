@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "butil/file_util.h"
 #include "column/column_helper.h"
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
@@ -40,13 +41,10 @@ int main(int argc, char** argv) {
     starrocks::MemInfo::init();
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
 
-    starrocks::vectorized::ColumnHelper::init_static_variable();
     starrocks::vectorized::date::init_date_cache();
 
-    starrocks::ChunkAllocator::init_instance(starrocks::config::chunk_reserved_bytes_limit);
-
     std::vector<starrocks::StorePath> paths;
-    paths.emplace_back(starrocks::config::storage_root_path, -1);
+    paths.emplace_back(starrocks::config::storage_root_path);
 
     std::unique_ptr<starrocks::MemTracker> table_meta_mem_tracker = std::make_unique<starrocks::MemTracker>();
     std::unique_ptr<starrocks::MemTracker> schema_change_mem_tracker = std::make_unique<starrocks::MemTracker>();
@@ -74,11 +72,14 @@ int main(int argc, char** argv) {
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
-    // clear caches in update manager so mem_tracker checks will not fail
-    starrocks::StorageEngine::instance()->update_manager()->clear_cache();
     (void)butil::DeleteFile(storage_root, true);
     starrocks::vectorized::TEST_clear_all_columns_this_thread();
+    // delete engine
+    engine->stop();
+    delete engine;
+    exec_env->set_storage_engine(nullptr);
     // destroy exec env
+    starrocks::tls_thread_status.set_mem_tracker(nullptr);
     starrocks::ExecEnv::destroy(exec_env);
 
     return r;

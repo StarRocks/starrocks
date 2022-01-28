@@ -28,7 +28,6 @@
 namespace starrocks {
 
 class Status;
-class RowBatch;
 class RuntimeState;
 
 // abstract class of the result writer
@@ -39,9 +38,6 @@ public:
 
     virtual Status init(RuntimeState* state) = 0;
 
-    // convert and write one row batch
-    virtual Status append_row_batch(const RowBatch* batch) = 0;
-
     // convert one chunk to mysql result and
     // append this chunk to the result sink
     virtual Status append_chunk(vectorized::Chunk* chunk) = 0;
@@ -49,8 +45,6 @@ public:
     virtual Status close() = 0;
 
     int64_t get_written_rows() const { return _written_rows; }
-
-    static const std::string NULL_IN_CSV;
 
 protected:
     int64_t _written_rows = 0; // number of rows written

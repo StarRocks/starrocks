@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.external.hive;
 
@@ -117,7 +117,9 @@ public class Utils {
     public static String getTypeKeyword(String type) {
         String keyword = type;
         int parenthesesIndex;
-        if ((parenthesesIndex = keyword.indexOf('(')) >= 0) {
+        if ((parenthesesIndex = keyword.indexOf('<')) >= 0) {
+            keyword = keyword.substring(0, parenthesesIndex).trim();
+        } else if ((parenthesesIndex = keyword.indexOf('(')) >= 0) {
             keyword = keyword.substring(0, parenthesesIndex).trim();
         }
         return keyword;

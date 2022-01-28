@@ -1,13 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.base;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -83,8 +86,11 @@ public class LogicalProperty implements Property {
             if (node instanceof LogicalOlapScanOperator) {
                 return ((LogicalOlapScanOperator) node).getSelectedTabletId().size();
             } else {
-                // other scan operator, this is not 1 because avoid to generate 1 phase agg
-                return 2;
+                // It's very hard to estimate how many tablets scanned by this operator,
+                // because some operator even does not have the concept of tablets.
+                // The value should not be too low, otherwise it will make cost optimizer to underestimate the cost of broadcast.
+                // A thing to be noted that, this tablet number is better not to be 1, to avoid generate 1 phase agg.
+                return FeConstants.default_tablet_number;
             }
         }
 
@@ -96,6 +102,17 @@ public class LogicalProperty implements Property {
         @Override
         public Integer visitLogicalTableFunction(LogicalTableFunctionOperator node, ExpressionContext context) {
             return 1;
+        }
+
+        @Override
+        public Integer visitLogicalCTEAnchor(LogicalCTEAnchorOperator node, ExpressionContext context) {
+            Preconditions.checkState(context.arity() == 2);
+            return context.getChildLeftMostScanTabletsNum(1);
+        }
+
+        @Override
+        public Integer visitLogicalCTEConsume(LogicalCTEConsumeOperator node, ExpressionContext context) {
+            return 2;
         }
     }
 
@@ -147,6 +164,17 @@ public class LogicalProperty implements Property {
 
         @Override
         public Boolean visitLogicalTableFunction(LogicalTableFunctionOperator node, ExpressionContext context) {
+            return false;
+        }
+
+        @Override
+        public Boolean visitLogicalCTEAnchor(LogicalCTEAnchorOperator node, ExpressionContext context) {
+            Preconditions.checkState(context.arity() == 2);
+            return context.isExecuteInOneTablet(1);
+        }
+
+        @Override
+        public Boolean visitLogicalCTEConsume(LogicalCTEConsumeOperator node, ExpressionContext context) {
             return false;
         }
     }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -31,7 +31,8 @@ public class OlapScanImplementationRule extends ImplementationRule {
                 scan.getPredicate(),
                 scan.getSelectedIndexId(),
                 scan.getSelectedPartitionId(),
-                scan.getSelectedTabletId());
+                scan.getSelectedTabletId(),
+                scan.getProjection());
 
         OptExpression result = new OptExpression(physicalOlapScan);
         return Lists.newArrayList(result);

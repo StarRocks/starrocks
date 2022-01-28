@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql;
 
 import com.google.common.collect.Maps;
@@ -7,11 +7,12 @@ import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.planner.PlannerContext;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -24,6 +25,7 @@ import com.starrocks.sql.plan.PlanFragmentBuilder;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class StatementPlanner {
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
@@ -41,7 +43,12 @@ public class StatementPlanner {
 
             try {
                 lock(dbs);
-                return createQueryPlan(relation, session);
+                session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+                ExecPlan plan = createQueryPlan(relation, session);
+
+                setOutfileSink(queryStmt, plan);
+
+                return plan;
             } finally {
                 unLock(dbs);
             }
@@ -66,7 +73,7 @@ public class StatementPlanner {
 
         //1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(query);
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
 
         //2. Optimize logical plan and build physical plan
         Optimizer optimizer = new Optimizer();
@@ -78,9 +85,18 @@ public class StatementPlanner {
                 columnRefFactory);
 
         //3. Build fragment exec plan
-        PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
-        return new PlanFragmentBuilder().createPhysicalPlan(
-                optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+        /*
+         * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
+         * currently only used in Spark/Flink Connector
+         * Because the connector sends only simple queries, it only needs to remove the output fragment
+         */
+        if (session.getSessionVariable().isSingleNodeExecPlan()) {
+            return new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+        } else {
+            return new PlanFragmentBuilder().createPhysicalPlan(
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+        }
     }
 
     private ExecPlan createInsertPlan(Relation relation, ConnectContext session) {
@@ -105,5 +121,20 @@ public class StatementPlanner {
         for (Database db : dbs.values()) {
             db.readUnlock();
         }
+    }
+
+    // if query stmt has OUTFILE clause, set info into ResultSink.
+    // this should be done after fragments are generated.
+    private void setOutfileSink(QueryStmt queryStmt, ExecPlan plan) {
+        if (!queryStmt.hasOutFileClause()) {
+            return;
+        }
+        PlanFragment topFragment = plan.getFragments().get(0);
+        if (!(topFragment.getSink() instanceof ResultSink)) {
+            return;
+        }
+
+        ResultSink resultSink = (ResultSink) topFragment.getSink();
+        resultSink.setOutfileInfo(queryStmt.getOutFileClause());
     }
 }

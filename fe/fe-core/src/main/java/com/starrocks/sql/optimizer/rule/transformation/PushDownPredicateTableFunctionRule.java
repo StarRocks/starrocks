@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -32,7 +32,7 @@ public class PushDownPredicateTableFunctionRule extends TransformationRule {
         List<ScalarOperator> pushDownPredicates = Lists.newArrayList();
         for (Iterator<ScalarOperator> iter = filters.iterator(); iter.hasNext(); ) {
             ScalarOperator filter = iter.next();
-            if (!tvfOperator.getFnResultColumnRefSet().contains(filter.getUsedColumns())) {
+            if (tvfOperator.getOuterColumnRefSet().containsAll(filter.getUsedColumns())) {
                 iter.remove();
                 pushDownPredicates.add(filter);
             }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.utframe.UtFrameUtils;
@@ -42,5 +42,7 @@ public class AnalyzeInsertTest {
                 "must be explicitly mentioned in column permutation");
 
         analyzeSuccessUseInsert("insert into tarray(v1,v4) values (1,[NULL,9223372036854775808])");
+
+        analyzeFail("insert into t0 values (170141183460469231731687303715884105728)", "Number Overflow. literal");
     }
 }

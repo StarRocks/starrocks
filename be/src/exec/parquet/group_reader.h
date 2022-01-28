@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -9,6 +9,7 @@
 #include "exec/vectorized/hdfs_scanner.h"
 #include "gen_cpp/parquet_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "storage/vectorized/column_predicate.h"
 #include "util/runtime_profile.h"
 
@@ -53,7 +54,7 @@ struct GroupReaderParam {
 
 class GroupReader {
 public:
-    GroupReader(RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number);
+    GroupReader(int chunk_size, RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number);
     ~GroupReader() = default;
 
     Status init(const GroupReaderParam& _param);
@@ -76,6 +77,8 @@ private:
     Status _read(size_t* row_count);
     void _dict_filter();
     Status _dict_decode(vectorized::ChunkPtr* chunk);
+
+    int _chunk_size;
 
     RandomAccessFile* _file;
 

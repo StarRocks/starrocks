@@ -27,12 +27,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.builtins.ScalarBuiltins;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,7 +34,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -76,6 +69,10 @@ public class FunctionSet {
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
     public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum";
     public static final String DICT_MERGE = "dict_merge";
+    public static final String ANY_VALUE = "any_value";
+    public static final String RETENTION = "retention";
+    public static final String GROUP_CONCAT = "group_concat";
+    public static final String ARRAY_AGG = "array_agg";
 
     // Window functions:
     public static final String LEAD = "lead";
@@ -90,6 +87,7 @@ public class FunctionSet {
     public static final String TO_BITMAP = "to_bitmap";
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String IF = "if";
+    public static final String IF_NULL = "ifnull";
 
     // Arithmetic functions:
     public static final String ADD = "add";
@@ -98,21 +96,41 @@ public class FunctionSet {
     public static final String DIVIDE = "divide";
 
     // date functions
+    public static final String YEAR = "year";
     public static final String YEARS_ADD = "years_add";
     public static final String YEARS_SUB = "years_sub";
+    public static final String MONTH = "month";
     public static final String MONTHS_ADD = "months_add";
     public static final String MONTHS_SUB = "months_sub";
+    public static final String DAY = "day";
     public static final String DAYS_ADD = "days_add";
     public static final String DAYS_SUB = "days_sub";
     public static final String ADDDATE = "adddate";
     public static final String SUBDATE = "subdate";
     public static final String DATE_ADD = "date_add";
     public static final String DATE_SUB = "date_sub";
+    public static final String HOUR = "hour";
+    public static final String MINUTE = "minute";
+    public static final String SECOND = "second";
+    public static final String CURDATE = "curdate";
+    public static final String CURRENT_TIMESTAMP = "current_timestamp";
+    public static final String CURRENT_TIME = "current_time";
+    public static final String NOW = "now";
+    public static final String UNIX_TIMESTAMP = "unix_timestamp";
+    public static final String UTC_TIMESTAMP = "utc_timestamp";
+
+    // string functions
+    public static final String SUBSTRING = "substring";
+
+    // geo functions
+    public static final String ST_ASTEXT = "st_astext";
+    public static final String GEO_FUNCTION_PREFIX = "st_";
 
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
     private static final Map<Type, Type> MULTI_DISTINCT_SUM_RETURN_TYPE =
             ImmutableMap.<Type, Type>builder()
+                    .put(Type.BOOLEAN, Type.BIGINT)
                     .put(Type.TINYINT, Type.BIGINT)
                     .put(Type.SMALLINT, Type.BIGINT)
                     .put(Type.INT, Type.BIGINT)
@@ -138,13 +156,6 @@ public class FunctionSet {
                     .add(Type.FLOAT)
                     .add(Type.DOUBLE)
                     .build();
-
-    // All of the registered user functions. The key is the user facing name (e.g. "myUdf"),
-    // and the values are all the overloaded variants (e.g. myUdf(double), myUdf(string))
-    // This includes both UDFs and UDAs. Updates are made thread safe by synchronizing
-    // on this map. Functions are sorted in a canonical order defined by
-    // FunctionResolutionOrder.
-    private final HashMap<String, List<Function>> functions;
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -153,11 +164,55 @@ public class FunctionSet {
      * to row function when init.
      */
     private final Map<String, List<Function>> vectorizedFunctions;
-    // cmy: This does not contain any user defined functions. All UDFs handle null values by themselves.
-    private ImmutableSet<String> nonNullResultWithNullParamFunctions;
+    // This does not contain any user defined functions. All UDFs handle null values by themselves.
+    private final ImmutableSet<String> nonNullResultWithNullParamFunctions = ImmutableSet.of("if", "hll_hash",
+            "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce", "md5sum");
+
+    // If low cardinality string column with global dict, for some string functions,
+    // we could evaluate the function only with the dict content, not all string column data.
+    public final ImmutableSet<String> couldApplyDictOptimizationFunctions = ImmutableSet.of(
+           "append_trailing_char_if_absent",
+           "concat",
+           "concat_ws",
+           "hex",
+           "left",
+           "like",
+           "lower",
+           "lpad",
+           "ltrim",
+           "regexp_extract",
+           "regexp_replace",
+           "repeat",
+           "reverse",
+           "right",
+           "rpad",
+           "rtrim",
+           "split_part",
+           "substr",
+           "substring",
+           "trim",
+           "upper");
+
+    public static final Set<String> alwaysReturnNonNullableFunctions =
+            ImmutableSet.<String>builder()
+                    .add(FunctionSet.COUNT)
+                    .add(FunctionSet.MULTI_DISTINCT_COUNT)
+                    .add(FunctionSet.NULL_OR_EMPTY)
+                    .add(FunctionSet.HLL_HASH)
+                    .add(FunctionSet.HLL_UNION_AGG)
+                    .add(FunctionSet.NDV)
+                    .add(FunctionSet.APPROX_COUNT_DISTINCT)
+                    .add(FunctionSet.BITMAP_UNION_INT)
+                    .add(FunctionSet.BITMAP_UNION_COUNT)
+                    .add(FunctionSet.BITMAP_COUNT)
+                    .add(FunctionSet.CURDATE)
+                    .add(FunctionSet.CURRENT_TIMESTAMP)
+                    .add(FunctionSet.CURRENT_TIME)
+                    .add(FunctionSet.NOW)
+                    .add(FunctionSet.UTC_TIMESTAMP)
+                    .build();
 
     public FunctionSet() {
-        functions = Maps.newHashMap();
         vectorizedFunctions = Maps.newHashMap();
     }
 
@@ -217,27 +272,10 @@ public class FunctionSet {
     }
 
     public void init() {
-        ScalarBuiltins.initBuiltins(this);
         ArithmeticExpr.initBuiltins(this);
-        BinaryPredicate.initBuiltins(this);
-        CastExpr.initBuiltins(this);
-        IsNullPredicate.initBuiltins(this);
-        LikePredicate.initBuiltins(this);
-        InPredicate.initBuiltins(this);
         TableFunction.initBuiltins(this);
-
         VectorizedBuiltinFunctions.initBuiltins(this);
-
-        // Populate all aggregate builtins.
         initAggregateBuiltins();
-    }
-
-    public void buildNonNullResultWithNullParamFunction(Set<String> funcNames) {
-        ImmutableSet.Builder<String> setBuilder = new ImmutableSet.Builder<String>();
-        for (String funcName : funcNames) {
-            setBuilder.add(funcName);
-        }
-        this.nonNullResultWithNullParamFunctions = setBuilder.build();
     }
 
     public boolean isNonNullResultWithNullParamFunctions(String funcName) {
@@ -245,7 +283,7 @@ public class FunctionSet {
     }
 
     public Function getFunction(Function desc, Function.CompareMode mode) {
-        List<Function> fns = functions.get(desc.functionName());
+        List<Function> fns = vectorizedFunctions.get(desc.functionName());
         if (fns == null) {
             return null;
         }
@@ -294,29 +332,9 @@ public class FunctionSet {
         if (getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }
-        List<Function> fns = functions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
+        fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));
+        List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
         fns.add(fn);
-    }
-
-    /**
-     * Add a builtin with the specified name and signatures to this
-     * This defaults to not using a Prepare/Close function.
-     */
-    public void addScalarBuiltin(String fnName, String symbol, boolean userVisible,
-                                 boolean varArgs, Type retType, Type... args) {
-        addScalarBuiltin(fnName, symbol, userVisible, null, null, varArgs, retType, args);
-    }
-
-    /**
-     * Add a builtin with the specified name and signatures to this db.
-     */
-    public void addScalarBuiltin(String fnName, String symbol, boolean userVisible,
-                                 String prepareFnSymbol, String closeFnSymbol, boolean varArgs,
-                                 Type retType, Type... args) {
-        List<Type> argsType = Arrays.stream(args).collect(Collectors.toList());
-        addBuiltin(ScalarFunction.createBuiltin(
-                fnName, argsType, varArgs, retType,
-                symbol, prepareFnSymbol, closeFnSymbol, userVisible));
     }
 
     // for vectorized engine
@@ -328,36 +346,16 @@ public class FunctionSet {
     }
 
     private void addVectorizedBuiltin(Function fn) {
-        if (findVectorizedFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
+        if (findVectorizedFunction(fn) != null) {
             return;
         }
-
+        fn.setCouldApplyDictOptimize(couldApplyDictOptimizationFunctions.contains(fn.functionName()));
+        fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));
         List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
-        Function scalarFn = findScalarFunction(fn);
-        if (scalarFn != null) {
-            scalarFn.setFunctionId(fn.getFunctionId());
-        } else {
-            List<Function> scalarFns = functions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
-            scalarFns.add(fn);
-        }
         fns.add(fn);
     }
 
-    private Function findScalarFunction(Function desc) {
-        List<Function> fns = functions.get(desc.functionName());
-        if (fns == null) {
-            return null;
-        }
-        // First check for identical
-        for (Function f : fns) {
-            if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
-                return f;
-            }
-        }
-        return null;
-    }
-
-    private Function findVectorizedFunction(Function desc, Function.CompareMode mode) {
+    private Function findVectorizedFunction(Function desc) {
         List<Function> fns = vectorizedFunctions.get(desc.functionName());
 
         if (fns == null) {
@@ -370,9 +368,6 @@ public class FunctionSet {
                 return f;
             }
         }
-        if (mode == Function.CompareMode.IS_IDENTICAL) {
-            return null;
-        }
 
         // Next check for indistinguishable
         for (Function f : fns) {
@@ -380,11 +375,8 @@ public class FunctionSet {
                 return f;
             }
         }
-        if (mode == Function.CompareMode.IS_INDISTINGUISHABLE) {
-            return null;
-        }
-
         return null;
+
     }
 
     /**
@@ -398,15 +390,6 @@ public class FunctionSet {
     // null symbols indicate the function does not need that step of the evaluation.
     // An empty symbol indicates a TODO for the BE to implement the function.
     private void initAggregateBuiltins() {
-        final String prefix = "_ZN9starrocks18AggregateFunctions";
-        final String initNull = prefix + "9init_nullEPN13starrocks_udf15FunctionContextEPNS1_6AnyValE";
-        final String initNullString = prefix
-                + "16init_null_stringEPN13starrocks_udf15FunctionContextEPNS1_9StringValE";
-        final String stringValSerializeOrFinalize = prefix
-                + "32string_val_serialize_or_finalizeEPN13starrocks_udf15FunctionContextERKNS1_9StringValE";
-        final String stringValGetValue = prefix
-                + "20string_val_get_valueEPN13starrocks_udf15FunctionContextERKNS1_9StringValE";
-
         // count(*)
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
@@ -428,40 +411,41 @@ public class FunctionSet {
 
             // count in multi distinct
             if (t.isChar() || t.isVarchar()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_count", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(t),
                         Type.BIGINT,
                         Type.VARCHAR,
                         false, true, true));
-            } else if (t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint() || t.isDouble()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_count", Lists.newArrayList(t),
+            } else if (t.isBoolean() || t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() ||
+                    t.isLargeint() || t.isFloat() || t.isDouble()) {
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(t),
                         Type.BIGINT,
                         Type.VARCHAR,
                         false, true, true));
             } else if (t.isDate() || t.isDatetime()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_count", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(t),
                         Type.BIGINT,
                         Type.VARCHAR,
                         false, true, true));
             } else if (t.isDecimalV2() || t.isDecimalV3()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_count", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(t),
                         Type.BIGINT,
                         Type.VARCHAR,
                         false, true, true));
             }
 
             // sum in multi distinct
-            if (t.isTinyint() || t.isSmallint() || t.isInt() || t.isFloat()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_sum", Lists.newArrayList(t),
+            if (t.isBoolean() || t.isTinyint() || t.isSmallint() || t.isInt() || t.isFloat()) {
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_SUM, Lists.newArrayList(t),
                         MULTI_DISTINCT_SUM_RETURN_TYPE.get(t),
                         Type.VARCHAR,
                         false, true, true));
             } else if (t.isBigint() || t.isLargeint() || t.isDouble()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_sum", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_SUM, Lists.newArrayList(t),
                         t,
                         Type.VARCHAR,
                         false, true, true));
             } else if (t.isDecimalV2() || t.isDecimalV3()) {
-                addBuiltin(AggregateFunction.createBuiltin("multi_distinct_sum", Lists.newArrayList(t),
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_SUM, Lists.newArrayList(t),
                         MULTI_DISTINCT_SUM_RETURN_TYPE.get(t),
                         Type.VARCHAR,
                         false, true, true));
@@ -479,6 +463,10 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin("ndv",
                     Lists.newArrayList(t), Type.BIGINT, Type.VARCHAR,
                     true, false, true));
+
+            // ANY_VALUE
+            addBuiltin(AggregateFunction.createBuiltin("any_value",
+                    Lists.newArrayList(t), t, t, true, false, false));
 
             //APPROX_COUNT_DISTINCT
             //alias of ndv, compute approx count distinct use HyperLogLog
@@ -531,25 +519,27 @@ public class FunctionSet {
         String[] sumNames = {"sum", "sum_distinct"};
         for (String name : sumNames) {
             addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.BOOLEAN), Type.BIGINT, Type.BIGINT, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.TINYINT), Type.BIGINT, Type.BIGINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.SMALLINT), Type.BIGINT, Type.BIGINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.INT), Type.BIGINT, Type.BIGINT,  false, true, false));
+                    Lists.newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMAL32), Type.DECIMAL64, Type.DECIMAL64, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT,false, true, false));
+                    Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMAL64), Type.DECIMAL64, Type.DECIMAL64, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.FLOAT), Type.DOUBLE, Type.DOUBLE, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.DOUBLE,  false, true, false));
+                    Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.DOUBLE, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.DECIMALV2,  false, true, false));
+                    Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.DECIMALV2, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.LARGEINT), Type.LARGEINT, Type.LARGEINT,  false, true, false));
+                    Lists.newArrayList(Type.LARGEINT), Type.LARGEINT, Type.LARGEINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMAL128), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
         }
@@ -596,6 +586,9 @@ public class FunctionSet {
                 Lists.newArrayList(Type.PERCENTILE), Type.PERCENTILE, Type.PERCENTILE,
                 false, false, false));
 
+        addBuiltin(AggregateFunction.createBuiltin(RETENTION, Lists.newArrayList(Type.ARRAY_BOOLEAN),
+                Type.ARRAY_BOOLEAN, Type.ARRAY_BOOLEAN, false, false, false));
+
         // Avg
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
         addBuiltin(AggregateFunction.createBuiltin("avg",
@@ -638,6 +631,51 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin("avg",
                 Lists.newArrayList(Type.DATETIME), Type.DATETIME, Type.DATETIME,
                 false, true, false));
+
+        // array_agg
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.BOOLEAN), Type.ARRAY_BOOLEAN, Type.ARRAY_BOOLEAN,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.TINYINT), Type.ARRAY_TINYINT, Type.ARRAY_TINYINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.SMALLINT), Type.ARRAY_SMALLINT, Type.ARRAY_SMALLINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.INT), Type.ARRAY_INT, Type.ARRAY_INT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.BIGINT), Type.ARRAY_BIGINT, Type.ARRAY_BIGINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.LARGEINT), Type.ARRAY_LARGEINT, Type.ARRAY_LARGEINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.FLOAT), Type.ARRAY_FLOAT, Type.ARRAY_FLOAT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.DOUBLE), Type.ARRAY_DOUBLE, Type.ARRAY_DOUBLE,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.VARCHAR), Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.CHAR), Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.DATE), Type.ARRAY_DATE, Type.ARRAY_DATE,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.DATETIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.DECIMAL32), Type.ARRAY_DECIMALV2, Type.ARRAY_DECIMALV2,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
+                false, false, false));
+
         // Group_concat(string)
         addBuiltin(AggregateFunction.createBuiltin("group_concat",
                 Lists.newArrayList(Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
@@ -703,7 +741,7 @@ public class FunctionSet {
 
     public List<Function> getBuiltinFunctions() {
         List<Function> builtinFunctions = Lists.newArrayList();
-        for (Map.Entry<String, List<Function>> entry : functions.entrySet()) {
+        for (Map.Entry<String, List<Function>> entry : vectorizedFunctions.entrySet()) {
             builtinFunctions.addAll(entry.getValue());
         }
         return builtinFunctions;

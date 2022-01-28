@@ -29,7 +29,7 @@ public class ExecuteEnv {
     private static volatile ExecuteEnv INSTANCE;
     private ConnectScheduler scheduler;
 
-    public ExecuteEnv() {
+    private ExecuteEnv() {
     }
 
     public static ExecuteEnv getInstance() {

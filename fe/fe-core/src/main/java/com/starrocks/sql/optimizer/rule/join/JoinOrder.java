@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.join;
 
@@ -12,15 +12,23 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.statistic.Constants;
 
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public abstract class JoinOrder {
     /**
@@ -110,9 +118,16 @@ public abstract class JoinOrder {
     protected int edgeSize;
     protected final List<Edge> edges = Lists.newArrayList();
 
+    // Because there may be expression mapping between joins,
+    // in the process of reordering, it may need to be re-allocated,
+    // so in the initialization process, these expressions will be stored in expressionMap first
+    Map<ColumnRefOperator, ScalarOperator> expressionMap;
+
     // Atom: A child of the Multi join. This could be a table or some
     // other operator like a group by or a full outer join.
-    void init(List<OptExpression> atoms, List<ScalarOperator> predicates) {
+    void init(List<OptExpression> atoms, List<ScalarOperator> predicates,
+              Map<ColumnRefOperator, ScalarOperator> expressionMap) {
+
         // 1. calculate statistics for each atom expression
         for (OptExpression atom : atoms) {
             calculateStatistics(atom);
@@ -124,7 +139,9 @@ public abstract class JoinOrder {
         for (ScalarOperator predicate : predicates) {
             edges.add(new Edge(predicate));
         }
-        computeEdgeCover(atoms);
+
+        this.expressionMap = expressionMap;
+        computeEdgeCover(atoms, expressionMap);
 
         // 3. init join levels
         // For human read easily, the join level start with 1, not 0.
@@ -147,8 +164,9 @@ public abstract class JoinOrder {
         }
     }
 
-    public void reorder(List<OptExpression> atoms, List<ScalarOperator> predicates) {
-        init(atoms, predicates);
+    public void reorder(List<OptExpression> atoms, List<ScalarOperator> predicates,
+                        Map<ColumnRefOperator, ScalarOperator> expressionMap) {
+        init(atoms, predicates, expressionMap);
         enumerate();
     }
 
@@ -161,10 +179,16 @@ public abstract class JoinOrder {
     // Use graph to represent the join expression:
     // The vertex represent the join node,
     // The edge represent the join predicate
-    protected void computeEdgeCover(List<OptExpression> vertexes) {
+    protected void computeEdgeCover(List<OptExpression> vertexes,
+                                    Map<ColumnRefOperator, ScalarOperator> expressionMap) {
         for (int i = 0; i < edgeSize; ++i) {
             ScalarOperator predicate = edges.get(i).predicate;
             ColumnRefSet predicateColumn = predicate.getUsedColumns();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
+                if (predicate.getUsedColumns().contains(entry.getKey())) {
+                    predicateColumn.union(entry.getValue().getUsedColumns());
+                }
+            }
 
             for (int j = 0; j < atomSize; ++j) {
                 OptExpression atom = vertexes.get(j);
@@ -192,8 +216,7 @@ public abstract class JoinOrder {
 
         ExpressionContext expressionContext = new ExpressionContext(expr);
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                expressionContext, expr.getOutputColumns(),
-                context.getColumnRefFactory(), context.getDumpInfo());
+                expressionContext, context.getColumnRefFactory(), context);
         statisticsCalculator.estimatorStats();
         expr.setStatistics(expressionContext.getStatistics());
     }
@@ -227,6 +250,35 @@ public abstract class JoinOrder {
         }
         newJoin.setPredicate(predicates.second);
 
+        Map<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
+        Map<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
+            // If entry.getValue is Constant, then this ColumnRef does not belong to any child.
+            // Then you can add this constant mapping on any child
+            if (predicates.first != null && predicates.first.getUsedColumns().contains(entry.getKey())) {
+                if (leftExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
+                        || entry.getValue() instanceof ConstantOperator) {
+                    leftExpression.put(entry.getKey(), entry.getValue());
+                } else if (rightExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
+                        || entry.getValue() instanceof ConstantOperator) {
+                    rightExpression.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            if (predicates.second != null && predicates.second.getUsedColumns().contains(entry.getKey())) {
+                if (leftExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
+                        || entry.getValue() instanceof ConstantOperator) {
+                    leftExpression.put(entry.getKey(), entry.getValue());
+                } else if (rightExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
+                        || entry.getValue() instanceof ConstantOperator) {
+                    rightExpression.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        pushRequiredColumns(leftExprInfo, leftExpression);
+        pushRequiredColumns(rightExprInfo, rightExpression);
+
         // In StarRocks, we only support hash join.
         // So we always use small table as right child
         if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
@@ -238,6 +290,25 @@ public abstract class JoinOrder {
                     rightExprInfo.expr);
             return new ExpressionInfo(joinExpr, leftGroup, rightGroup);
         }
+    }
+
+    private void pushRequiredColumns(ExpressionInfo exprInfo, Map<ColumnRefOperator, ScalarOperator> expression) {
+        if (expression.isEmpty()) {
+            return;
+        }
+
+        Map<ColumnRefOperator, ScalarOperator> projection = exprInfo.expr.getOutputColumns()
+                .getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+                .collect(Collectors.toMap(Function.identity(), Function.identity()));
+        projection.putAll(expression);
+        if (exprInfo.expr.getOp().getProjection() != null) {
+            projection.putAll(exprInfo.expr.getOp().getProjection().getColumnRefMap());
+        }
+        Operator.Builder builder = OperatorBuilderFactory.build(exprInfo.expr.getOp());
+        exprInfo.expr = OptExpression.create(
+                builder.withOperator(exprInfo.expr.getOp()).setProjection(new Projection(projection)).build(),
+                exprInfo.expr.getInputs());
+        exprInfo.expr.deriveLogicalPropertyItself();
     }
 
     private Pair<ScalarOperator, ScalarOperator> buildInnerJoinPredicate(BitSet left, BitSet right) {

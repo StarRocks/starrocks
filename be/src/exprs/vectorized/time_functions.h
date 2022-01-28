@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -11,6 +11,7 @@
 
 namespace starrocks {
 namespace vectorized {
+// TODO:
 class TimeFunctions {
 public:
     /**
@@ -45,6 +46,12 @@ public:
 
     /**
      * @paramType columns: [TimestampColumn]
+     * @return Int16Column
+     */
+    DEFINE_VECTORIZED_FN(yearV2);
+
+    /**
+     * @paramType columns: [TimestampColumn]
      * @return IntColumn
      */
     DEFINE_VECTORIZED_FN(quarter);
@@ -56,6 +63,14 @@ public:
      * @return IntColumn    Code of a month in a year: [1, 12].
      */
     DEFINE_VECTORIZED_FN(month);
+
+    /**
+     * Get month of the timestamp.
+     * @param context
+     * @param columns [TimestampColumn] Columns that hold timestamps.
+     * @return Int8Column Code of a month in a year: [1, 12].
+     */
+    DEFINE_VECTORIZED_FN(monthV2);
 
     /**
      * Get day of week of the timestamp.
@@ -79,6 +94,14 @@ public:
      * @return  IntColumn Day of the week:
      */
     DEFINE_VECTORIZED_FN(day);
+
+    /**
+     * Get day of the timestamp.
+     * @param context
+     * @param columns [TimestampColumn] Columns that hold timestamps.
+     * @return  Int8Column Day of the week:
+     */
+    DEFINE_VECTORIZED_FN(dayV2);
 
     /**
      * Get day of the year.
@@ -105,6 +128,14 @@ public:
     DEFINE_VECTORIZED_FN(hour);
 
     /**
+     * Get hour of the day
+     * @param context
+     * @param columns [TimestampColumn] Columns that hold timestamps.
+     * @return  Int8Column hour of the day:
+     */
+    DEFINE_VECTORIZED_FN(hourV2);
+
+    /**
      * Get minute of the hour
      * @param context
      * @param columns [TimestampColumn] Columns that hold timestamps.
@@ -113,12 +144,28 @@ public:
     DEFINE_VECTORIZED_FN(minute);
 
     /**
+     * Get minute of the hour
+     * @param context
+     * @param columns [TimestampColumn] Columns that hold timestamps.
+     * @return  Int8Column minute of the hour:
+     */
+    DEFINE_VECTORIZED_FN(minuteV2);
+
+    /**
      * Get second of the minute
      * @param context
      * @param columns [TimestampColumn] Columns that hold timestamps.
      * @return  IntColumn second of the minute:
      */
     DEFINE_VECTORIZED_FN(second);
+
+    /**
+     * Get second of the minute
+     * @param context
+     * @param columns [TimestampColumn] Columns that hold timestamps.
+     * @return  IntColumn second of the minute:
+     */
+    DEFINE_VECTORIZED_FN(secondV2);
 
     /*
      * Called by datetime_trunc
@@ -364,11 +411,19 @@ public:
     static ColumnPtr str_to_date_uncommon(FunctionContext* context, const starrocks::vectorized::Columns& columns);
     /**
      *
+     * cast string to datetime
      * @param context
      * @param columns [BinaryColumn of TYPE_VARCHAR, BinaryColumn of TYPE_VARCHAR]  The first column holds the datetime string, the second column holds the format.
      * @return  TimestampColumn
      */
     DEFINE_VECTORIZED_FN(str_to_date);
+
+    /** 
+     * 
+     * cast string to date, the function will call by FE getStrToDateFunction, and is invisible to user
+     * 
+     */
+    DEFINE_VECTORIZED_FN(str2date);
 
     static bool is_date_format(const Slice& slice, char** start);
     static bool is_datetime_format(const Slice& slice, char** start);

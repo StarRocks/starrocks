@@ -179,27 +179,8 @@ build_openssl() {
     LDFLAGS="-L${TP_LIB_DIR}" \
     CFLAGS="-fPIC" \
     LIBDIR="lib" \
-    ./Configure --prefix=$TP_INSTALL_DIR -zlib -shared ${OPENSSL_PLATFORM}
-    make -j$PARALLEL && make install
-    if [ -f $TP_INSTALL_DIR/lib64/libcrypto.a ]; then
-        mkdir -p $TP_INSTALL_DIR/lib && \
-        cp $TP_INSTALL_DIR/lib64/libcrypto.a $TP_INSTALL_DIR/lib/libcrypto.a && \
-        cp $TP_INSTALL_DIR/lib64/libssl.a $TP_INSTALL_DIR/lib/libssl.a
-    fi
-    # NOTE(zc): remove this dynamic library files to make libcurl static link.
-    # If I don't remove this files, I don't known how to make libcurl link static library
-    if [ -f $TP_INSTALL_DIR/lib64/libcrypto.so ]; then
-        rm -rf $TP_INSTALL_DIR/lib64/libcrypto.so*
-    fi
-    if [ -f $TP_INSTALL_DIR/lib64/libssl.so ]; then
-        rm -rf $TP_INSTALL_DIR/lib64/libssl.so*
-    fi
-    if [ -f $TP_INSTALL_DIR/lib/libcrypto.so ]; then
-        rm -rf $TP_INSTALL_DIR/lib/libcrypto.so*
-    fi
-    if [ -f $TP_INSTALL_DIR/lib/libssl.so ]; then
-        rm -rf $TP_INSTALL_DIR/lib/libssl.so*
-    fi
+    ./Configure --prefix=$TP_INSTALL_DIR -zlib -no-shared ${OPENSSL_PLATFORM}
+    make -j$PARALLEL && make install_sw
 }
 
 # thrift
@@ -314,6 +295,20 @@ build_rapidjson() {
     cp -r $TP_SOURCE_DIR/$RAPIDJSON_SOURCE/include/rapidjson $TP_INCLUDE_DIR/
 }
 
+# simdjson
+build_simdjson() {
+    check_if_source_exist $SIMDJSON_SOURCE
+    cd $TP_SOURCE_DIR/$SIMDJSON_SOURCE
+
+    #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
+    mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    $CMAKE_CMD -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" ..
+    $CMAKE_CMD --build .
+    mkdir -p $TP_INSTALL_DIR/lib && cp $TP_SOURCE_DIR/$SIMDJSON_SOURCE/$BUILD_DIR/libsimdjson.a $TP_INSTALL_DIR/lib
+
+    cp -r $TP_SOURCE_DIR/$SIMDJSON_SOURCE/include/* $TP_INCLUDE_DIR/
+}
+
 # snappy
 build_snappy() {
     check_if_source_exist $SNAPPY_SOURCE
@@ -394,7 +389,7 @@ build_curl() {
     cd $TP_SOURCE_DIR/$CURL_SOURCE
 
     CPPFLAGS="-I${TP_INCLUDE_DIR}" \
-    LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lcrypto -lssl -lcrypto -ldl" \
+    LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lcrypto -lssl -ldl" \
     CFLAGS="-fPIC" \
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static \
     --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --disable-ldap --enable-ipv6
@@ -716,11 +711,48 @@ build_hyperscan() {
 }
 
 #mariadb-connector-c
+# static link plugins refer to:
+# https://mariadb.com/kb/en/configuration-settings-for-building-connectorc/
 build_mariadb() {
     check_if_source_exist $MARIADB_SOURCE
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE
     mkdir -p build && cd build
-    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release                \
+                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}  \
+                  -DCLIENT_PLUGIN_SHA256_PASSWORD=STATIC    \
+                  -DCLIENT_PLUGIN_AUTH_GSSAPI=STATIC        \
+                  -DCLIENT_PLUGIN_CLEARTEXT=STATIC          \
+                  -DCLIENT_PLUGIN_DIALOG=STATIC             \
+                  -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}      \
+                  -DOPENSSL_LIBRARYIES=${TP_INSTALL_DIR}/lib
+    make -j$PARALLEL && make install
+}
+
+# aliyun_oss_jars
+build_aliyun_oss_jars() {
+    check_if_source_exist $ALIYUN_OSS_JARS_SOURCE
+    cp -r $TP_SOURCE_DIR/$ALIYUN_OSS_JARS_SOURCE $TP_INSTALL_DIR/aliyun_oss_jars
+}
+
+build_aws_cpp_sdk() {
+    check_if_source_exist $AWS_SDK_CPP_SOURCE
+    cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
+    # only build s3 and s3-crt, you can add more components if you want.
+    $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF
+    cd build
+    make -j$PARALLEL && make install
+}
+
+# velocypack
+build_vpack() {
+    check_if_source_exist $VPACK_SOURCE
+    cd $TP_SOURCE_DIR/$VPACK_SOURCE
+    mkdir -p build && cd build
+    $CMAKE_CMD .. \
+        -DCMAKE_CXX_STANDARD="17" \
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
+        -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc 
+    
     make -j$PARALLEL && make install
 }
 
@@ -735,6 +767,7 @@ build_gflags
 build_gtest
 build_glog
 build_rapidjson
+build_simdjson
 build_snappy
 build_gperftools
 build_curl
@@ -757,10 +790,13 @@ build_jdk
 build_ragel
 build_hyperscan
 build_mariadb
+build_aliyun_oss_jars
+build_aws_cpp_sdk
+build_vpack
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
 fi
 
-echo "Finihsed to build all thirdparties"
+echo "Finished to build all thirdparties"
 

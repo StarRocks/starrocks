@@ -353,7 +353,8 @@ public class GlobalTransactionMgr implements Writable {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
         if (!db.tryWriteLock(timeoutMillis, TimeUnit.MILLISECONDS)) {
-            throw new UserException("get database write lock timeout, database=" + db.getFullName());
+            throw new UserException("get database write lock timeout, database="
+                    + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
         }
         try {
             commitTransaction(db.getId(), transactionId, tabletCommitInfos, txnCommitAttachment);
@@ -429,9 +430,10 @@ public class GlobalTransactionMgr implements Writable {
         dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds);
     }
 
-    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas) throws UserException {
+    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas,
+                                  Set<Long> unfinishedBackends) throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txn.getDbId());
-        return dbTransactionMgr.canTxnFinished(txn, errReplicas);
+        return dbTransactionMgr.canTxnFinished(txn, errReplicas, unfinishedBackends);
     }
 
     /**
@@ -461,10 +463,17 @@ public class GlobalTransactionMgr implements Writable {
      * expired: txn is in VISIBLE or ABORTED, and is expired.
      * timeout: txn is in PREPARE, but timeout
      */
-    public void removeExpiredAndTimeoutTxns() {
+    public void abortTimeoutTxns() {
         long currentMillis = System.currentTimeMillis();
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
-            dbTransactionMgr.removeExpiredAndTimeoutTxns(currentMillis);
+            dbTransactionMgr.abortTimeoutTxns(currentMillis);
+        }
+    }
+
+    public void removeExpiredTxns() {
+        long currentMillis = System.currentTimeMillis();
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            dbTransactionMgr.removeExpiredTxns(currentMillis);
         }
     }
 

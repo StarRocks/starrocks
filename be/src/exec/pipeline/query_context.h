@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -11,12 +11,10 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
-class MemTracker;
 namespace pipeline {
 
 using std::chrono::seconds;
@@ -27,9 +25,10 @@ using std::chrono::duration_cast;
 class QueryContext {
 public:
     QueryContext();
+    ~QueryContext();
+    void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     TUniqueId query_id() { return _query_id; }
-    RuntimeState* runtime_state() { return _runtime_state.get(); }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
     void increment_num_fragments() {
@@ -58,11 +57,10 @@ public:
 
     void cancel(const Status& status);
 
+    void set_is_runtime_filter_coordinator(bool flag) { _is_runtime_filter_coordinator = flag; }
+
 private:
-    std::unique_ptr<RuntimeState> _runtime_state;
-    std::shared_ptr<RuntimeProfile> _runtime_profile;
-    std::unique_ptr<MemTracker> _mem_tracker;
-    TQueryOptions _query_options;
+    ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
     size_t _total_fragments;
@@ -70,6 +68,7 @@ private:
     std::atomic<size_t> _num_active_fragments;
     int64_t _deadline;
     seconds _expire_seconds;
+    bool _is_runtime_filter_coordinator = false;
 };
 
 class QueryContextManager {

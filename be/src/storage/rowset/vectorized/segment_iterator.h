@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -7,17 +7,17 @@
 
 #include "storage/vectorized/chunk_iterator.h"
 
-namespace starrocks::segment_v2 {
+namespace starrocks {
 class Segment;
-}
 
-namespace starrocks::vectorized {
+namespace vectorized {
 
 class ColumnPredicate;
 class Schema;
 class SegmentReadOptions;
 
-ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<segment_v2::Segment>& segment,
-                                      const vectorized::Schema& schema, const SegmentReadOptions& options);
+ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const vectorized::Schema& schema,
+                                      const SegmentReadOptions& options);
+} // namespace vectorized
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

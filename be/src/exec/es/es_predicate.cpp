@@ -40,10 +40,8 @@
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/primitive_type.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "runtime/tuple_row.h"
 #include "service/backend_options.h"
 #include "storage/olap_common.h"
 #include "storage/utils.h"
@@ -288,13 +286,15 @@ Status EsPredicate::_build_binary_predicate(const Expr* conjunct, bool* handled)
             RETURN_ERROR_IF_EXPR_IS_NOT_SLOTREF(conjunct->get_child(0));
             // process cast expr, such as:
             // k (float) > 2.0, k(int) > 3.2
-            column_ref = (ColumnRef*)Expr::expr_without_cast(conjunct->get_child(0));
+            column_ref = const_cast<ColumnRef*>(
+                    down_cast<const ColumnRef*>(Expr::expr_without_cast(conjunct->get_child(0))));
             op = conjunct->op();
         } else if (TExprNodeType::SLOT_REF == conjunct->get_child(1)->node_type() ||
                    TExprNodeType::CAST_EXPR == conjunct->get_child(1)->node_type()) {
             expr = conjunct->get_child(0);
             RETURN_ERROR_IF_EXPR_IS_NOT_SLOTREF(conjunct->get_child(1));
-            column_ref = (ColumnRef*)Expr::expr_without_cast(conjunct->get_child(1));
+            column_ref = const_cast<ColumnRef*>(
+                    down_cast<const ColumnRef*>(Expr::expr_without_cast(conjunct->get_child(1))));
             op = conjunct->op();
         } else {
             return Status::InternalError("build disjuncts failed: no SLOT_REF child");
@@ -312,6 +312,12 @@ Status EsPredicate::_build_binary_predicate(const Expr* conjunct, bool* handled)
         // how to process literal
         auto literal = _pool->add(new VExtLiteral(expr->type().type, _context->evaluate(expr, nullptr)));
         std::string col = slot_desc->col_name();
+
+        // ES does not support non-bool literal pushdown for bool type
+        if (column_ref->type().type == TYPE_BOOLEAN && expr->type().type != TYPE_BOOLEAN) {
+            return Status::InternalError("ES does not support non-bool literal pushdown");
+        }
+
         if (_field_context.find(col) != _field_context.end()) {
             col = _field_context[col];
         }
@@ -356,7 +362,9 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             // conjunct->get_child(0)->node_type() == TExprNodeType::FUNCTION_CALL, at present doris on es can not support push down function
             RETURN_ERROR_IF_EXPR_IS_NOT_SLOTREF(conjunct->get_child(0));
 
-            ColumnRef* column_ref = (ColumnRef*)(conjunct->get_child(0));
+            ColumnRef* column_ref = const_cast<ColumnRef*>(
+                    down_cast<const ColumnRef*>(Expr::expr_without_cast(conjunct->get_child(0))));
+
             const SlotDescriptor* slot_desc = get_slot_desc(column_ref->slot_id());
 
             if (slot_desc == nullptr) {
@@ -379,10 +387,10 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             Expr* expr = nullptr;
             if (TExprNodeType::SLOT_REF == conjunct->get_child(0)->node_type()) {
                 expr = conjunct->get_child(1);
-                column_ref = (ColumnRef*)(conjunct->get_child(0));
+                column_ref = const_cast<ColumnRef*>(down_cast<const ColumnRef*>(conjunct->get_child(0)));
             } else if (TExprNodeType::SLOT_REF == conjunct->get_child(1)->node_type()) {
                 expr = conjunct->get_child(0);
-                column_ref = (ColumnRef*)(conjunct->get_child(1));
+                column_ref = const_cast<ColumnRef*>(down_cast<const ColumnRef*>(conjunct->get_child(1)));
             } else {
                 return Status::InternalError("build disjuncts failed: no SLOT_REF child");
             }
@@ -511,8 +519,8 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
             break;
         }
         default:
-            DCHECK(false) << "unsupport type:" << expr->type().type;
-            return Status::InternalError("unsupport type to push down to ES");
+            DCHECK(false) << "unsupported type:" << expr->type().type;
+            return Status::InternalError("unsupported type to push down to ES");
         }
 
         std::string col = slot_desc->col_name();

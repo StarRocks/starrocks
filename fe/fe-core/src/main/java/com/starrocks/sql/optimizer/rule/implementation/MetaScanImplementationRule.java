@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -21,8 +21,14 @@ public class MetaScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalMetaScanOperator logical = (LogicalMetaScanOperator) input.getOp();
-        PhysicalMetaScanOperator physical = new PhysicalMetaScanOperator(logical.getTable(),
-                logical.getColRefToColumnMetaMap(), logical.getAggColumnIdToNames());
+        PhysicalMetaScanOperator physical = new PhysicalMetaScanOperator(
+                logical.getAggColumnIdToNames(),
+                logical.getTable(),
+                logical.getOutputColumns(),
+                logical.getColRefToColumnMetaMap(),
+                logical.getLimit(),
+                logical.getPredicate(),
+                logical.getProjection());
         OptExpression result = new OptExpression(physical);
         return Lists.newArrayList(result);
     }

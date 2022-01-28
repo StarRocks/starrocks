@@ -68,20 +68,21 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/RuntimeProfile_types.cpp
     ${GEN_CPP_DIR}/Status_constants.cpp
     ${GEN_CPP_DIR}/Status_types.cpp
+    ${GEN_CPP_DIR}/StatusCode_constants.cpp
+    ${GEN_CPP_DIR}/StatusCode_types.cpp
     ${GEN_CPP_DIR}/Types_constants.cpp
     ${GEN_CPP_DIR}/Types_types.cpp
     ${GEN_CPP_DIR}/parquet_types.cpp
     ${GEN_CPP_DIR}/olap_common.pb.cc
     ${GEN_CPP_DIR}/olap_file.pb.cc
-    ${GEN_CPP_DIR}/column_data_file.pb.cc
     ${GEN_CPP_DIR}/data.pb.cc
     ${GEN_CPP_DIR}/descriptors.pb.cc
     ${GEN_CPP_DIR}/internal_service.pb.cc
-    ${GEN_CPP_DIR}/starrocks_internal_service.pb.cc
+    ${GEN_CPP_DIR}/doris_internal_service.pb.cc
     ${GEN_CPP_DIR}/types.pb.cc
     ${GEN_CPP_DIR}/snapshot.pb.cc
     ${GEN_CPP_DIR}/status.pb.cc
-    ${GEN_CPP_DIR}/segment_v2.pb.cc
+    ${GEN_CPP_DIR}/segment.pb.cc
     #$${GEN_CPP_DIR}/opcode/functions.cc
     #$${GEN_CPP_DIR}/opcode/vector-functions.cc
     #$${GEN_CPP_DIR}/opcode/opcode-registry-init.cc

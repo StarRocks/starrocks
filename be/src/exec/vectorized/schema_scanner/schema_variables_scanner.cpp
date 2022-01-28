@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/schema_scanner/schema_variables_scanner.h"
 
@@ -38,24 +38,37 @@ Status SchemaVariablesScanner::start(RuntimeState* state) {
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::show_varialbes(*(_param->ip), _param->port, var_params, &_var_result));
     } else {
-        return Status::InternalError("IP or port dosn't exists");
+        return Status::InternalError("IP or port doesn't exists");
     }
     _begin = _var_result.variables.begin();
     return Status::OK();
 }
 
 Status SchemaVariablesScanner::fill_chunk(ChunkPtr* chunk) {
-    // variables names
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[0]->id());
-        Slice value(_begin->first.c_str(), _begin->first.length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // value
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[1]->id());
-        Slice value(_begin->second.c_str(), _begin->second.length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        switch (slot_id) {
+        case 1: {
+            // variables names
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                Slice value(_begin->first.c_str(), _begin->first.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 2: {
+            // value
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                Slice value(_begin->second.c_str(), _begin->second.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        default:
+            break;
+        }
     }
     ++_begin;
     return Status::OK();

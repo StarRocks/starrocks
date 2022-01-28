@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -16,7 +16,7 @@ public:
     ~StreamPipeSequentialFile() override;
 
     Status read(Slice* result) override;
-    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length);
+    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding = 0);
 
     Status skip(uint64_t n) override;
     const std::string& filename() const override { return _filename; }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/parquet/schema.h"
 
@@ -159,6 +159,7 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
 
     field->name = level1_schema.name;
     field->type.type = TYPE_ARRAY;
+    field->type.children.push_back(field->children[0].type);
     field->is_nullable = is_optional;
     field->level_info = cur_level_info;
     field->level_info.immediate_repeated_ancestor_def_level = last_immediate_repeated_ancestor_def_level;
@@ -205,7 +206,7 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     }
     auto last_immediate_repeated_ancestor_def_level = cur_level_info.increment_repeated();
 
-    // we will generate a filed like map<struct<key, value>>
+    // we will generate a field like map<struct<key, value>>
     field->children.resize(1);
     auto kv_field = &field->children[0];
     RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, kv_field, next_pos));
@@ -354,7 +355,7 @@ std::string SchemaDescriptor::debug_string() const {
 
 int SchemaDescriptor::get_column_index(const std::string& column) const {
     for (size_t i = 0; i < _fields.size(); i++) {
-        if (_physical_fields[i]->name == column) {
+        if (_fields[i].name == column) {
             return i;
         }
     }

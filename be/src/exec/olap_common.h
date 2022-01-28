@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_OLAP_COMMON_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_OLAP_COMMON_H
+#pragma once
 
 #include <column/type_traits.h>
 
@@ -37,7 +36,8 @@
 #include "exec/scan_node.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/stl_util.h"
-#include "runtime/date_value.h"
+#include "gutil/strings/substitute.h"
+#include "runtime/date_value.hpp"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/string_value.hpp"
@@ -127,6 +127,10 @@ inline void increase(vectorized::TimestampValue& value) {
 
 } // namespace helper
 
+// There are two types of value range: Fixed Value Range and Range Value Range
+// I know "Range Value Range" sounds bad, but it's hard to turn over the de facto.
+// Fixed Value Range means discrete values in the set, like "IN (1,2,3)"
+// Range Value Range means range values like ">= 10 && <= 20"
 /**
  * @brief Column's value range
  **/
@@ -167,13 +171,6 @@ public:
 
     void convert_to_range_value();
 
-    void set_empty_value_range() {
-        _fixed_values.clear();
-        _low_value = _type_max;
-        _high_value = _type_min;
-        _fixed_op = FILTER_IN;
-    }
-
     const std::set<T>& get_fixed_value_set() const { return _fixed_values; }
 
     T get_range_max_value() const { return _high_value; }
@@ -194,35 +191,35 @@ public:
 
     void set_index_filter_only(bool is_index_only) { _is_index_filter_only = is_index_only; }
 
-    std::string to_olap_filter(std::list<TCondition>& filters) {
-        if (is_fixed_value_range() && _fixed_op != FILTER_NOT_IN) {
+    void to_olap_filter(std::vector<TCondition>& filters) {
+        // If we have fixed range value, we generate in/not-in predicates.
+        if (is_fixed_value_range()) {
+            DCHECK(_fixed_op == FILTER_IN || _fixed_op == FILTER_NOT_IN);
+            bool filter_in = (_fixed_op == FILTER_IN) ? true : false;
+            const std::string op = (filter_in) ? "*=" : "!=";
+
             TCondition condition;
             condition.__set_is_index_filter_only(_is_index_filter_only);
             condition.__set_column_name(_column_name);
-            condition.__set_condition_op("*=");
-
+            condition.__set_condition_op(op);
             for (auto value : _fixed_values) {
                 condition.condition_values.push_back(cast_to_string(value, type(), precision(), scale()));
             }
 
-            if (!condition.condition_values.empty()) {
-                filters.push_back(condition);
-            }
-        } else if (is_fixed_value_range()) {
-            TCondition condition;
-            condition.__set_is_index_filter_only(_is_index_filter_only);
-            condition.__set_column_name(_column_name);
-            condition.__set_condition_op("!=");
-
-            for (auto value : _fixed_values) {
-                condition.condition_values.push_back(cast_to_string(value, type(), precision(), scale()));
+            bool can_push = true;
+            if (condition.condition_values.empty()) {
+                // If we use IN clause, we wish to include empty set.
+                if (filter_in && _empty_range) {
+                    can_push = true;
+                } else {
+                    can_push = false;
+                }
             }
 
-            if (!condition.condition_values.empty()) {
+            if (can_push) {
                 filters.push_back(condition);
             }
         } else {
-            DCHECK(!is_fixed_value_range());
             TCondition low;
             low.__set_is_index_filter_only(_is_index_filter_only);
             if (_type_min != _low_value || FILTER_LARGER_OR_EQUAL != _low_op) {
@@ -247,7 +244,6 @@ public:
                 filters.push_back(high);
             }
         }
-        return "";
     }
 
     void clear() {
@@ -257,6 +253,7 @@ public:
         _low_op = FILTER_LARGER_OR_EQUAL;
         _high_op = FILTER_LESS_OR_EQUAL;
         _fixed_op = FILTER_IN;
+        _empty_range = false;
     }
 
 private:
@@ -276,6 +273,8 @@ private:
     bool _is_index_filter_only = false;
     // ColumnValueRange don't call add_range or add_fixed_values
     bool _is_init_state = true;
+
+    bool _empty_range = false;
 };
 
 class OlapScanKeys {
@@ -378,18 +377,27 @@ inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::s
             std::set<T> not_in_operands = STLSetDifference(_fixed_values, values);
             std::set<T> in_operands = STLSetDifference(values, _fixed_values);
             if (!not_in_operands.empty() && !in_operands.empty()) {
-                return Status::NotSupported("both in and not in operands are non-empty");
-            }
-            if (!in_operands.empty()) {
+                // X in (1,2) and X not in (3) equivalent to X in (1,2)
+                _fixed_values.swap(in_operands);
+                _fixed_op = FILTER_IN;
+            } else if (!in_operands.empty()) {
+                // X in (1, 3) and X not in (3)
+                // --> X in (1)
                 _fixed_values.swap(in_operands);
                 _fixed_op = FILTER_IN;
             } else {
-                _fixed_values.swap(not_in_operands);
-                _fixed_op = FILTER_NOT_IN;
+                // X in (2) and X not in (2, 3)
+                // -> false
+                // X in (1, 2) and X not in (1, 2)
+                // -> false
+                _fixed_values.clear();
+                _fixed_op = FILTER_IN;
+                _empty_range = true;
             }
         } else if (is_fixed_value_range()) {
             DCHECK_EQ(FILTER_IN, _fixed_op);
             _fixed_values = STLSetIntersection(_fixed_values, values);
+            _empty_range = _fixed_values.empty();
             _fixed_op = op;
         } else if (!values.empty()) {
             _fixed_values = values;
@@ -414,16 +422,26 @@ inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::s
             std::set<T> not_in_operands = STLSetDifference(values, _fixed_values);
             std::set<T> in_operands = STLSetDifference(_fixed_values, values);
             if (!not_in_operands.empty() && !in_operands.empty()) {
-                return Status::NotSupported("both in and not in operands are non-empty");
-            }
-            if (!in_operands.empty()) {
+                // X in (1,2) and X not in (3) equivalent to X in (1,2)
+                // X in (1,2,3,4) and X not in (1,3,5,7) equivalent to X in (2,4)
+                _fixed_values.swap(in_operands);
+                _fixed_op = FILTER_IN;
+            } else if (!in_operands.empty()) {
+                // X in (1, 3) and X not in (3)
+                // --> X in (1)
                 _fixed_values.swap(in_operands);
                 _fixed_op = FILTER_IN;
             } else {
-                _fixed_values.swap(not_in_operands);
-                _fixed_op = FILTER_NOT_IN;
+                // X in (2) and X not in (2, 3)
+                // -> false
+                // X in (1, 2) and X not in (1, 2)
+                // -> false
+                _fixed_values.clear();
+                _empty_range = true;
+                _fixed_op = FILTER_IN;
             }
-        } else if (is_low_value_mininum() && is_high_value_maximum()) {
+        } else if (is_low_value_mininum() && _low_op == FILTER_LARGER_OR_EQUAL && is_high_value_maximum() &&
+                   _high_op == FILTER_LESS_OR_EQUAL) {
             if (!values.empty()) {
                 _fixed_values = values;
                 _fixed_op = FILTER_NOT_IN;
@@ -442,16 +460,19 @@ inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::s
 
 template <class T>
 inline bool ColumnValueRange<T>::is_fixed_value_range() const {
-    return _fixed_values.size() != 0;
+    return _fixed_values.size() != 0 || _empty_range;
 }
 
 template <class T>
 inline bool ColumnValueRange<T>::is_empty_value_range() const {
     if (INVALID_TYPE == _column_type) {
         return true;
-    } else {
-        return _fixed_values.empty() && _high_value <= _low_value;
     }
+    // TODO(yan): sometimes we don't have Fixed Value Range, but have
+    // following value range like > 10 && < 5, which is also empty value range.
+    // Maybe we can add that check later. Without that check, there is no correctness problem
+    // but only performance performance.
+    return _fixed_values.empty() && _empty_range;
 }
 
 template <class T>
@@ -500,6 +521,13 @@ inline void ColumnValueRange<T>::convert_to_fixed_value() {
     }
 
     if (_low_op == FILTER_LARGER) {
+        // if _low_value was type::max(), _low_value + 1 will overflow to type::min(),
+        // there will be a very large number of elements added to the _fixed_values set.
+        // If there is a condition > type::max we simply return an empty scan range.
+        if (_low_value == _type_max) {
+            _fixed_values.clear();
+            return;
+        }
         helper::increase(_low_value);
     }
 
@@ -509,9 +537,16 @@ inline void ColumnValueRange<T>::convert_to_fixed_value() {
         }
         _fixed_op = FILTER_IN;
     } else {
-        for (T v = _low_value; v <= _high_value; helper::increase(v)) {
+        // if _low_value == _high_value == type::max
+        // v will overflow after increase, so we have to
+        // do some special treatment
+        if (_low_value <= _high_value) {
+            _fixed_values.insert(_high_value);
+        }
+        for (T v = _low_value; v < _high_value; helper::increase(v)) {
             _fixed_values.insert(v);
         }
+
         _fixed_op = FILTER_IN;
     }
 }
@@ -557,9 +592,10 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
         return Status::InternalError("AddRange failed, Invalid type");
     }
 
+    // If we already have IN value range, we can put `value` into it.
     if (is_fixed_value_range()) {
         if (_fixed_op != FILTER_IN) {
-            return Status::InternalError("operator is not FILTER_IN");
+            return Status::InternalError(strings::Substitute("Add Range Fail! Unsupported SQLFilterOp $0", op));
         }
         std::pair<iterator_type, iterator_type> bound_pair = _fixed_values.equal_range(value);
 
@@ -585,13 +621,14 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
             break;
         }
         default: {
-            return Status::InternalError("AddRangefail! Unsupport SQLFilterOp.");
+            return Status::InternalError(strings::Substitute("Add Range Fail! Unsupported SQLFilterOp $0", op));
         }
         }
 
-        _high_value = _type_min;
-        _low_value = _type_max;
+        _empty_range = _fixed_values.empty();
+
     } else {
+        // Otherwise we can put `value` into normal value range.
         if (_high_value > _low_value) {
             switch (op) {
             case FILTER_LARGER: {
@@ -639,7 +676,7 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
                 break;
             }
             default: {
-                return Status::InternalError("AddRangefail! Unsupport SQLFilterOp.");
+                return Status::InternalError(strings::Substitute("Add Range Fail! Unsupported SQLFilterOp $0", op));
             }
             }
         }
@@ -647,8 +684,8 @@ inline Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
         if (FILTER_LARGER_OR_EQUAL == _low_op && FILTER_LESS_OR_EQUAL == _high_op && _high_value == _low_value) {
             _fixed_values.insert(_high_value);
             _fixed_op = FILTER_IN;
-            _high_value = _type_min;
-            _low_value = _type_max;
+        } else {
+            _empty_range = _low_value > _high_value;
         }
     }
     _is_init_state = false;
@@ -681,7 +718,7 @@ inline Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t 
     bool has_converted = false;
     if (range.is_fixed_value_range()) {
         const size_t mul = std::max<size_t>(1, _begin_scan_keys.size());
-        if (range.get_fixed_value_size() * mul > max_scan_key_num) {
+        if (range.get_fixed_value_size() > max_scan_key_num / mul) {
             if (range.is_range_value_convertible()) {
                 range.convert_to_range_value();
             } else {
@@ -690,7 +727,7 @@ inline Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t 
         }
     } else if (range.is_fixed_value_convertible() && _is_convertible) {
         const size_t mul = std::max<size_t>(1, _begin_scan_keys.size());
-        if (range.get_convertible_fixed_value_size() * mul <= max_scan_key_num) {
+        if (range.get_convertible_fixed_value_size() <= max_scan_key_num / mul) {
             if (range.is_low_value_mininum() && range.is_high_value_maximum()) {
                 has_converted = true;
             }
@@ -793,7 +830,5 @@ inline Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t 
 }
 
 } // namespace starrocks
-
-#endif
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

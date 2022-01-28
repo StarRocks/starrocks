@@ -82,7 +82,7 @@ public class TableRef implements ParseNode, Writable {
     private static final Logger LOG = LogManager.getLogger(TableRef.class);
     protected TableName name;
     private PartitionNames partitionNames = null;
-    private List<Long> tabletIds = null;
+    private List<Long> tabletIds = Lists.newArrayList();
 
     // Legal aliases of this table ref. Contains the explicit alias as its sole element if
     // there is one. Otherwise, contains the two implicit aliases. Implicit aliases are set
@@ -176,7 +176,9 @@ public class TableRef implements ParseNode, Writable {
             hasExplicitAlias_ = false;
         }
         this.partitionNames = partitionNames;
-        this.tabletIds = tableIds;
+        if (tableIds != null) {
+            this.tabletIds = tableIds;
+        }
         this.commonHints = commonHints;
         isAnalyzed = false;
     }
@@ -551,7 +553,7 @@ public class TableRef implements ParseNode, Writable {
             onClause.analyze(analyzer);
             analyzer.setVisibleSemiJoinedTuple(null);
             onClause.checkReturnsBool("ON clause", true);
-            if (onClause.contains(Expr.isAggregatePredicate())) {
+            if (onClause.contains(Expr.isAggregatePredicate()::apply)) {
                 throw new AnalysisException(
                         "aggregate function not allowed in ON clause: " + toSql());
             }
@@ -636,12 +638,6 @@ public class TableRef implements ParseNode, Writable {
         if (alias != null) {
             aliasSql = ToSqlUtils.getIdentSql(alias);
         }
-
-        // TODO(zc):
-        // List<String> path = rawPath_;
-        // if (resolvedPath_ != null) path = resolvedPath_.getFullyQualifiedRawPath();
-        // return ToSqlUtils.getPathSql(path) + ((aliasSql != null) ? " " + aliasSql : "");
-
         return name.toSql() + ((aliasSql != null) ? " " + aliasSql : "");
     }
 

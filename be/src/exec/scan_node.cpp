@@ -25,16 +25,11 @@
 
 namespace starrocks {
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 const std::string ScanNode::_s_bytes_read_counter = "BytesRead";
 const std::string ScanNode::_s_rows_read_counter = "RowsRead";
 const std::string ScanNode::_s_total_read_timer = "TotalRawReadTime(*)";
 const std::string ScanNode::_s_total_throughput_counter = "TotalReadThroughput";
 const std::string ScanNode::_s_materialize_tuple_timer = "MaterializeTupleTime(*)";
-const std::string ScanNode::_s_per_read_thread_throughput_counter = "PerReadThreadRawHdfsThroughput";
 const std::string ScanNode::_s_num_disks_accessed_counter = "NumDiskAccess";
 const std::string ScanNode::_s_scanner_thread_counters_prefix = "ScannerThreads";
 const std::string ScanNode::_s_scanner_thread_total_wallclock_time = "ScannerThreadsTotalWallClockTime";
@@ -54,12 +49,6 @@ Status ScanNode::prepare(RuntimeState* state) {
 #endif
     _materialize_tuple_timer =
             ADD_CHILD_TIMER(runtime_profile(), _s_materialize_tuple_timer, _s_scanner_thread_total_wallclock_time);
-    _per_read_thread_throughput_counter = runtime_profile()->add_derived_counter(
-            _s_per_read_thread_throughput_counter, TUnit::BYTES_PER_SECOND,
-            [capture0 = _bytes_read_counter, capture1 = _read_timer] {
-                return RuntimeProfile::units_per_second(capture0, capture1);
-            },
-            "");
     _num_disks_accessed_counter = ADD_COUNTER(runtime_profile(), _s_num_disks_accessed_counter, TUnit::UNIT);
 
     return Status::OK();

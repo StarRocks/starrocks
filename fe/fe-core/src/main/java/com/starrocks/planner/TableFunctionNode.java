@@ -1,9 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.planner;
 
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -57,11 +56,7 @@ public class TableFunctionNode extends PlanNode {
     }
 
     @Override
-    public boolean isVectorized() {
-        if (!getChild(0).isVectorized()) {
-            throw UnsupportedException.unsupportedException("Not support non-vectorized table function node.");
-        }
-
-        return true;
+    public boolean canUsePipeLine() {
+        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 }

@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -39,7 +40,7 @@ public class SplitTopNRule extends TransformationRule {
 
         long limit = src.getLimit() + src.getOffset();
         LogicalTopNOperator partialSort = new LogicalTopNOperator(
-                src.getOrderByElements(), limit, 0, SortPhase.PARTIAL);
+                src.getOrderByElements(), limit, Operator.DEFAULT_OFFSET, SortPhase.PARTIAL);
 
         OptExpression partialSortExpression = OptExpression.create(partialSort, input.getInputs());
         OptExpression finalSortExpression = OptExpression.create(src, partialSortExpression);

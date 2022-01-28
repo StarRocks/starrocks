@@ -1,6 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/file_scanner.h"
+
+#include <memory>
 
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -13,7 +15,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 
@@ -27,15 +28,8 @@ FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfi
           _params(params),
           _counter(counter),
           _row_desc(nullptr),
-#if BE_TEST
-          _mem_tracker(new MemTracker()),
-#else
-          _mem_tracker(new MemTracker(-1, "Broker FileScanner", state->instance_mem_tracker())),
-//          _mem_pool(_state->instance_mem_tracker()),
-#endif
           _strict_mode(false),
-          _error_counter(0) {
-}
+          _error_counter(0) {}
 
 FileScanner::~FileScanner() {
     Expr::close(_dest_expr_ctx, _state);
@@ -90,7 +84,7 @@ Status FileScanner::init_expr_ctx() {
 
         ExprContext* ctx = nullptr;
         RETURN_IF_ERROR(Expr::create_expr_tree(_state->obj_pool(), it->second, &ctx));
-        RETURN_IF_ERROR(ctx->prepare(_state, *_row_desc.get(), _mem_tracker.get()));
+        RETURN_IF_ERROR(ctx->prepare(_state, *_row_desc.get()));
         RETURN_IF_ERROR(ctx->open(_state));
 
         _dest_expr_ctx.emplace_back(ctx);
@@ -189,11 +183,10 @@ ChunkPtr FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src, st
                     if (_error_counter > 50) {
                         continue;
                     }
-                    _state->append_error_msg_to_file(
-                            src->debug_row(i),
-                            strings::Substitute("column($0) value is incorrect while strict "
-                                                "mode is $1, src value is $2",
-                                                slot->col_name(), _strict_mode, src_col->debug_item(i)));
+                    std::stringstream error_msg;
+                    error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
+                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                    _state->append_error_msg_to_file(src->debug_row(i), error_msg.str());
                 }
             }
 
@@ -212,8 +205,7 @@ ChunkPtr FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src, st
                     }
                     _state->append_error_msg_to_file(
                             src->debug_row(i),
-                            strings::Substitute("column($0)) value is null while columns is not nullable",
-                                                slot->col_name()));
+                            strings::Substitute("NULL value in non-nullable column '$0'", slot->col_name()));
                 }
             }
         }
@@ -277,9 +269,9 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
     }
 
     using DecompressorPtr = std::shared_ptr<Decompressor>;
-    Decompressor* dec = nullptr;
+    std::unique_ptr<Decompressor> dec;
     RETURN_IF_ERROR(Decompressor::create_decompressor(compression, &dec));
-    *file = std::make_shared<CompressedSequentialFile>(std::move(src_file), DecompressorPtr(dec));
+    *file = std::make_shared<CompressedSequentialFile>(std::move(src_file), DecompressorPtr(dec.release()));
     return Status::OK();
 }
 

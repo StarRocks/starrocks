@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_UTIL_UID_UTIL_H
-#define STARROCKS_BE_SRC_UTIL_UID_UTIL_H
+#pragma once
 
 #include <ostream>
 #include <string>
@@ -29,7 +28,6 @@
 #include "gen_cpp/types.pb.h"    // for PUniqueId
 // #include "util/debug_util.h"
 #include "util/hash_util.hpp"
-#include "util/uuid_generator.h"
 
 namespace starrocks {
 
@@ -72,13 +70,7 @@ struct UniqueId {
     }
 
     // currently, the implementation is uuid, but it may change in the future
-    static UniqueId gen_uid() {
-        UniqueId uid(0, 0);
-        auto uuid = UUIDGenerator::instance()->next_uuid();
-        memcpy(&uid.hi, uuid.data, sizeof(int64_t));
-        memcpy(&uid.lo, uuid.data + sizeof(int64_t), sizeof(int64_t));
-        return uid;
-    }
+    static UniqueId gen_uid();
 
     ~UniqueId() noexcept = default;
 
@@ -131,18 +123,10 @@ inline std::size_t hash_value(const starrocks::TUniqueId& id) {
 }
 
 /// generates a 16 byte UUID
-inline std::string generate_uuid_string() {
-    return boost::uuids::to_string(boost::uuids::basic_random_generator<boost::mt19937>()());
-}
+std::string generate_uuid_string();
 
 /// generates a 16 byte UUID
-inline TUniqueId generate_uuid() {
-    auto uuid = boost::uuids::basic_random_generator<boost::mt19937>()();
-    TUniqueId uid;
-    memcpy(&uid.hi, uuid.data, sizeof(int64_t));
-    memcpy(&uid.lo, uuid.data + sizeof(int64_t), sizeof(int64_t));
-    return uid;
-}
+TUniqueId generate_uuid();
 
 std::ostream& operator<<(std::ostream& os, const UniqueId& uid);
 
@@ -159,5 +143,3 @@ struct hash<starrocks::UniqueId> {
 };
 
 } // namespace std
-
-#endif // STARROCKS_BE_SRC_UTIL_UID_UTIL_H

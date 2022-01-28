@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "common/status.h"
 #include "http/http_handler.h"
 
@@ -32,7 +34,7 @@ enum CompactionActionType { SHOW_INFO = 1, RUN_COMPACTION = 2 };
 // See compaction-action.md for details.
 class CompactionAction : public HttpHandler {
 public:
-    CompactionAction(CompactionActionType type) : _type(type) {}
+    explicit CompactionAction(CompactionActionType type) : _type(type) {}
 
     ~CompactionAction() override = default;
 
@@ -40,9 +42,11 @@ public:
 
 private:
     Status _handle_show_compaction(HttpRequest* req, std::string* json_result);
+    Status _handle_compaction(HttpRequest* req, std::string* json_result);
 
 private:
     CompactionActionType _type;
+    static std::atomic_bool _running;
 };
 
 } // end namespace starrocks

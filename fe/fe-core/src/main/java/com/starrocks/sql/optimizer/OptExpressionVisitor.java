@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer;
 
 /**
@@ -82,6 +82,18 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitLogicalCTEAnchor(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitLogicalCTEProduce(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitLogicalCTEConsume(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     /**
      * Physical operator visitor
      */
@@ -90,6 +102,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalHiveScan(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalIcebergScan(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 
@@ -168,4 +184,25 @@ public abstract class OptExpressionVisitor<R, C> {
     public R visitPhysicalDecode(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
+
+    public R visitPhysicalLimit(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalCTEAnchor(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalCTEConsume(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalCTEProduce(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalNoCTE(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
 }

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_DATA_STREAM_SENDER_H
-#define STARROCKS_BE_RUNTIME_DATA_STREAM_SENDER_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -30,7 +29,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
-#include "gen_cpp/data.pb.h" // for PRowBatch
+#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
@@ -42,13 +41,11 @@ class IOBuf;
 namespace starrocks {
 
 class ExprContext;
-class RowBatch;
 class RowDescriptor;
 class TDataStreamSink;
 class TNetworkAddress;
 class TPlanFragmentDestination;
 class PartitionInfo;
-class TupleRow;
 class PartRangeKey;
 class MemTracker;
 class BlockCompressionCodec;
@@ -68,9 +65,9 @@ public:
     // and is specified in bytes.
     // The RowDescriptor must live until close() is called.
     // NOTE: supported partition types are UNPARTITIONED (broadcast) and HASH_PARTITIONED
-    DataStreamSender(ObjectPool* pool, bool is_vectorized, int sender_id, const RowDescriptor& row_desc,
-                     const TDataStreamSink& sink, const std::vector<TPlanFragmentDestination>& destinations,
-                     int per_channel_buffer_size, bool send_query_statistics_with_every_batch);
+    DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc, const TDataStreamSink& sink,
+                     const std::vector<TPlanFragmentDestination>& destinations, int per_channel_buffer_size,
+                     bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through);
     ~DataStreamSender() override;
 
     Status init(const TDataSink& thrift_sink) override;
@@ -83,25 +80,12 @@ public:
     // compiled (i.e. in an ExecNode's Open() function).
     Status open(RuntimeState* state) override;
 
-    // send data in 'batch' to destination nodes according to partitioning
-    // specification provided in c'tor.
-    // Blocks until all rows in batch are placed in their appropriate outgoing
-    // buffers (ie, blocks if there are still in-flight rpcs from the last
-    // send() call).
-    Status send(RuntimeState* state, RowBatch* batch) override;
-
     // Send a chunk into this sink.
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
     // Flush all buffered data and close all existing channels to destination
     // hosts. Further send() calls are illegal after calling close().
     Status close(RuntimeState* state, Status exec_status) override;
-
-    /// Serializes the src batch into the dest thrift batch. Maintains metrics.
-    /// num_receivers is the number of receivers this batch will be sent to. Only
-    /// used to maintain metrics.
-    template <class T>
-    Status serialize_batch(RowBatch* src, T* dest, int num_receivers = 1);
 
     // For the first chunk , serialize the chunk data and meta to ChunkPB both.
     // For other chunk, only serialize the chunk data to ChunkPB.
@@ -123,17 +107,14 @@ public:
 
     PlanNodeId get_dest_node_id() const { return _dest_node_id; }
 
+    const std::vector<TPlanFragmentDestination>& destinations() { return _destinations; }
+
+    int sender_id() const { return _sender_id; }
+
+    const bool get_enable_exchange_pass_through() const { return _enable_exchange_pass_through; }
+
 private:
     class Channel;
-    Status compute_range_part_code(RuntimeState* state, TupleRow* row, size_t* hash_value, bool* ignore);
-
-    int binary_find_partition(const PartRangeKey& key) const;
-
-    Status find_partition(RuntimeState* state, TupleRow* row, PartitionInfo** info, bool* ignore);
-
-    Status process_distribute(RuntimeState* state, TupleRow* row, const PartitionInfo* part, size_t* hash_val);
-
-    bool _is_vectorized;
 
     // Sender instance id, unique within a fragment.
     int _sender_id;
@@ -150,12 +131,6 @@ private:
 
     TPartitionType::type _part_type;
     bool _ignore_not_found;
-
-    // serialized batches for broadcasting; we need two so we can write
-    // one while the other one is still being sent
-    PRowBatch _pb_batch1;
-    PRowBatch _pb_batch2;
-    PRowBatch* _current_pb_batch = nullptr;
 
     // Only used when broadcast
     PTransmitChunkParams _chunk_request;
@@ -175,6 +150,12 @@ private:
     std::vector<ExprContext*> _partition_expr_ctxs; // compute per-row partition values
 
     std::vector<Channel*> _channels;
+    // index list for channels
+    // We need a random order of sending channels to avoid rpc blocking at the same time.
+    // But we can't change the order in the vector<channel> directly,
+    // because the channel is selected based on the hash pattern,
+    // so we pick a random order for the index
+    std::vector<int> _channel_indices;
     std::vector<std::shared_ptr<Channel>> _channel_shared_ptrs;
 
     // map from range value to partition_id
@@ -214,15 +195,15 @@ private:
     RuntimeProfile::Counter* _shuffle_dispatch_timer{};
     RuntimeProfile::Counter* _shuffle_hash_timer{};
 
-    std::unique_ptr<MemTracker> _mem_tracker;
-
     // Throughput per total time spent in sender
     RuntimeProfile::Counter* _overall_throughput{};
 
     // Identifier of the destination plan node.
     PlanNodeId _dest_node_id;
+
+    std::vector<TPlanFragmentDestination> _destinations;
+
+    bool _enable_exchange_pass_through = false;
 };
 
 } // namespace starrocks
-
-#endif

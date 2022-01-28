@@ -1,26 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "aggregate_distinct_blocking_sink_operator.h"
+
+#include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {
 
 Status AggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    // _aggregator is shared by sink operator and source operator
-    // we must only prepare it at sink operator
-    RETURN_IF_ERROR(
-            _aggregator->prepare(state, state->obj_pool(), get_memtracker(), get_memtracker(), get_runtime_profile()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), get_runtime_profile(), _mem_tracker));
     return _aggregator->open(state);
 }
 
-bool AggregateDistinctBlockingSinkOperator::is_finished() const {
-    return _is_finished;
+Status AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
+    RETURN_IF_ERROR(_aggregator->unref(state));
+    return Operator::close(state);
 }
 
-void AggregateDistinctBlockingSinkOperator::finish(RuntimeState* state) {
-    if (_is_finished) {
-        return;
-    }
+void AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
@@ -48,7 +45,7 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSinkOperator::pull_chunk
 }
 
 Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    DCHECK_LE(chunk->num_rows(), config::vector_chunk_size);
+    DCHECK_LE(chunk->num_rows(), state->chunk_size());
     _aggregator->evaluate_exprs(chunk.get());
 
     {
@@ -57,12 +54,17 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
 
         if (false) {
         }
-#define HASH_SET_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_set_variant().type == vectorized::HashSetVariant::Type::NAME)           \
-            _aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, chunk->num_rows());
+#define HASH_SET_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_set_variant().type == vectorized::HashSetVariant::Type::NAME) {                         \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
+                *_aggregator->hash_set_variant().NAME, chunk->num_rows()));                                            \
+    }
         APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
+
+        _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
+                          _aggregator->mem_pool()->total_reserved_bytes());
+        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
         _aggregator->update_num_input_rows(chunk->num_rows());
         if (limit_with_no_agg) {
@@ -71,8 +73,6 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
                 // TODO(hcf) do something
             }
         }
-
-        RETURN_IF_ERROR(_aggregator->check_hash_set_memory_usage(state));
     }
 
     return Status::OK();

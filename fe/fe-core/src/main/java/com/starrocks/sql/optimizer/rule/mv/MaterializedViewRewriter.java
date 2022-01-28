@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.mv;
 
 import com.google.common.base.Preconditions;
@@ -12,6 +12,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -23,9 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
@@ -74,13 +73,13 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
     @Override
     public OptExpression visitLogicalTableScan(OptExpression optExpression,
                                                MaterializedViewRule.RewriteContext context) {
+        if (!OperatorType.LOGICAL_OLAP_SCAN.equals(optExpression.getOp().getOpType())) {
+            return optExpression;
+        }
+
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
 
         if (olapScanOperator.getColRefToColumnMetaMap().containsKey(context.queryColumnRef)) {
-            List<ColumnRefOperator> outputColumns = new ArrayList<>(olapScanOperator.getOutputColumns());
-            outputColumns.remove(context.queryColumnRef);
-            outputColumns.add(context.mvColumnRef);
-
             Map<ColumnRefOperator, Column> columnRefOperatorColumnMap =
                     new HashMap<>(olapScanOperator.getColRefToColumnMetaMap());
             columnRefOperatorColumnMap.remove(context.queryColumnRef);
@@ -88,7 +87,6 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
 
             LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
                     olapScanOperator.getTable(),
-                    outputColumns,
                     columnRefOperatorColumnMap,
                     olapScanOperator.getColumnMetaToColRefMap(),
                     olapScanOperator.getDistributionSpec(),
@@ -212,26 +210,6 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
         }
 
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
-        List<ColumnRefOperator> pruneOutputColumns = joinOperator.getPruneOutputColumns();
-
-        List<ColumnRefOperator> newPruneOutputColumns = new ArrayList<>();
-        for (ColumnRefOperator c : pruneOutputColumns) {
-            if (c.equals(context.queryColumnRef)) {
-                newPruneOutputColumns.add(context.mvColumnRef);
-            } else {
-                newPruneOutputColumns.add(c);
-            }
-        }
-
-        LogicalJoinOperator newJoinOperator = new LogicalJoinOperator(
-                joinOperator.getJoinType(),
-                joinOperator.getOnPredicate(),
-                joinOperator.getJoinHint(),
-                joinOperator.getLimit(),
-                joinOperator.getPredicate(),
-                newPruneOutputColumns,
-                joinOperator.isHasPushDownJoinOnClause());
-
-        return OptExpression.create(newJoinOperator, optExpression.getInputs());
+        return OptExpression.create(joinOperator, optExpression.getInputs());
     }
 }

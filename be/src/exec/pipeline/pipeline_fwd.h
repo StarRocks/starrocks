@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -23,6 +23,12 @@ class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using DriverRawPtr = PipelineDriver*;
 using Drivers = std::vector<DriverPtr>;
+class OperatorFactory;
+using OpFactoryPtr = std::shared_ptr<OperatorFactory>;
+using OpFactories = std::vector<OpFactoryPtr>;
+class Operator;
+using OperatorPtr = std::shared_ptr<Operator>;
+using Operators = std::vector<OperatorPtr>;
 class DriverDispatcher;
 using DriverDispatcherPtr = std::shared_ptr<DriverDispatcher>;
 class GlobalDriverDispatcher;

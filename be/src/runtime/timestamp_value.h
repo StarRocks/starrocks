@@ -25,11 +25,11 @@
 
 #include <string>
 
+#include "runtime/date_value.h"
 #include "runtime/vectorized/time_types.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks::vectorized {
-class DateValue;
 
 enum DateTimeType { TIMESTAMP_TIME = 1, TIMESTAMP_DATE = 2, TIMESTAMP_DATETIME = 3 };
 
@@ -126,7 +126,7 @@ public:
 
     static constexpr int max_string_length() { return 26; }
 
-    operator DateValue() const;
+    inline operator DateValue() const;
 
     static TimestampValue MAX_TIMESTAMP_VALUE;
     static TimestampValue MIN_TIMESTAMP_VALUE;

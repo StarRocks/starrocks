@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.OptExpression;
@@ -10,7 +10,9 @@ public class LogicalIntersectOperator extends LogicalSetOperator {
     private LogicalIntersectOperator(LogicalIntersectOperator.Builder builder) {
         super(OperatorType.LOGICAL_INTERSECT,
                 builder.outputColumnRefOp,
-                builder.childOutputColumns);
+                builder.childOutputColumns,
+                builder.getLimit(),
+                builder.getProjection());
     }
 
     @Override

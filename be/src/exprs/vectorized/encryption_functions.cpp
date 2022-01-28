@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/encryption_functions.h"
 
@@ -9,10 +9,10 @@
 #include "common/status.h"
 #include "exprs/base64.h"
 #include "exprs/expr.h"
-#include "runtime/tuple_row.h"
 #include "util/aes_util.h"
 #include "util/debug_util.h"
 #include "util/md5.h"
+#include "util/sha.h"
 
 namespace starrocks::vectorized {
 
@@ -21,7 +21,7 @@ ColumnPtr EncryptionFunctions::aes_encrypt(FunctionContext* ctx, const Columns& 
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
     const int size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result;
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (src_viewer.is_null(row)) {
             result.append_null();
@@ -56,7 +56,7 @@ ColumnPtr EncryptionFunctions::aes_decrypt(FunctionContext* ctx, const Columns& 
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
     const int size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result;
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (src_viewer.is_null(row) || key_viewer.is_null(row)) {
             result.append_null();
@@ -90,7 +90,7 @@ ColumnPtr EncryptionFunctions::aes_decrypt(FunctionContext* ctx, const Columns& 
 ColumnPtr EncryptionFunctions::from_base64(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     const int size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result;
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (src_viewer.is_null(row)) {
             result.append_null();
@@ -123,7 +123,7 @@ ColumnPtr EncryptionFunctions::to_base64(FunctionContext* ctx, const Columns& co
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     const int size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result;
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         if (src_viewer.is_null(row)) {
             result.append_null();
@@ -158,8 +158,8 @@ ColumnPtr EncryptionFunctions::md5sum(FunctionContext* ctx, const Columns& colum
         list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
     }
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; row++) {
         Md5Digest digest;
         for (auto& view : list) {
@@ -180,8 +180,8 @@ ColumnPtr EncryptionFunctions::md5sum(FunctionContext* ctx, const Columns& colum
 ColumnPtr EncryptionFunctions::md5(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; row++) {
         if (src_viewer.is_null(row)) {
             result.append_null();
@@ -197,6 +197,188 @@ ColumnPtr EncryptionFunctions::md5(FunctionContext* ctx, const Columns& columns)
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+Status EncryptionFunctions::sha2_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    if (!context->is_constant_column(1)) {
+        return Status::OK();
+    }
+
+    ColumnPtr column = context->get_constant_column(1);
+    auto hash_length = ColumnHelper::get_const_value<TYPE_INT>(column);
+
+    ScalarFunction function;
+    if (hash_length == 224) {
+        function = &EncryptionFunctions::sha224;
+    } else if (hash_length == 256 || hash_length == 0) {
+        function = &EncryptionFunctions::sha256;
+    } else if (hash_length == 384) {
+        function = &EncryptionFunctions::sha384;
+    } else if (hash_length == 512) {
+        function = &EncryptionFunctions::sha512;
+    } else {
+        function = EncryptionFunctions::invalid_sha;
+    }
+
+    auto fc = new EncryptionFunctions::SHA2Ctx();
+    fc->function = function;
+    context->set_function_state(scope, fc);
+    return Status::OK();
+}
+
+ColumnPtr EncryptionFunctions::invalid_sha(FunctionContext* ctx, const Columns& columns) {
+    auto size = columns[0]->size();
+    return ColumnHelper::create_const_null_column(size);
+}
+
+ColumnPtr EncryptionFunctions::sha224(FunctionContext* ctx, const Columns& columns) {
+    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; row++) {
+        if (src_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto src_value = src_viewer.value(row);
+        SHA224Digest digest;
+        digest.update(src_value.data, src_value.size);
+        digest.digest();
+
+        result.append(Slice(digest.hex().c_str(), digest.hex().size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr EncryptionFunctions::sha256(FunctionContext* ctx, const Columns& columns) {
+    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; row++) {
+        if (src_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto src_value = src_viewer.value(row);
+        SHA256Digest digest;
+        digest.update(src_value.data, src_value.size);
+        digest.digest();
+
+        result.append(Slice(digest.hex().c_str(), digest.hex().size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr EncryptionFunctions::sha384(FunctionContext* ctx, const Columns& columns) {
+    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; row++) {
+        if (src_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto src_value = src_viewer.value(row);
+        SHA384Digest digest;
+        digest.update(src_value.data, src_value.size);
+        digest.digest();
+
+        result.append(Slice(digest.hex().c_str(), digest.hex().size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr EncryptionFunctions::sha512(FunctionContext* ctx, const Columns& columns) {
+    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; row++) {
+        if (src_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto src_value = src_viewer.value(row);
+        SHA512Digest digest;
+        digest.update(src_value.data, src_value.size);
+        digest.digest();
+
+        result.append(Slice(digest.hex().c_str(), digest.hex().size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr EncryptionFunctions::sha2(FunctionContext* ctx, const Columns& columns) {
+    if (!ctx->is_constant_column(1)) {
+        auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+        auto length_viewer = ColumnViewer<TYPE_INT>(columns[1]);
+
+        auto size = columns[0]->size();
+        ColumnBuilder<TYPE_VARCHAR> result(size);
+
+        for (int row = 0; row < size; row++) {
+            if (src_viewer.is_null(row)) {
+                result.append_null();
+                continue;
+            }
+
+            auto src_value = src_viewer.value(row);
+            auto length = length_viewer.value(row);
+
+            if (length == 224) {
+                SHA224Digest digest;
+                digest.update(src_value.data, src_value.size);
+                digest.digest();
+                result.append(Slice(digest.hex().c_str(), digest.hex().size()));
+            } else if (length == 0 || length == 256) {
+                SHA256Digest digest;
+                digest.update(src_value.data, src_value.size);
+                digest.digest();
+                result.append(Slice(digest.hex().c_str(), digest.hex().size()));
+            } else if (length == 384) {
+                SHA384Digest digest;
+                digest.update(src_value.data, src_value.size);
+                digest.digest();
+                result.append(Slice(digest.hex().c_str(), digest.hex().size()));
+            } else if (length == 512) {
+                SHA512Digest digest;
+                digest.update(src_value.data, src_value.size);
+                digest.digest();
+                result.append(Slice(digest.hex().c_str(), digest.hex().size()));
+            } else {
+                result.append_null();
+            }
+        }
+
+        return result.build(ColumnHelper::is_all_const(columns));
+    }
+
+    auto ctc = reinterpret_cast<SHA2Ctx*>(ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    return ctc->function(ctx, columns);
+}
+
+Status EncryptionFunctions::sha2_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto fc = reinterpret_cast<SHA2Ctx*>(context->get_function_state(scope));
+        delete fc;
+    }
+
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized

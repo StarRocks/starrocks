@@ -16,8 +16,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_PROTO_WRAPPER_HH
-#define ORC_PROTO_WRAPPER_HH
+#pragma once
 
 #include "Adaptor.hh"
 
@@ -47,5 +46,3 @@ DIAGNOSTIC_IGNORE(4800) // forcing value to bool 'true' or 'false'
 #include "orc_proto.pb.h"
 
 DIAGNOSTIC_POP
-
-#endif

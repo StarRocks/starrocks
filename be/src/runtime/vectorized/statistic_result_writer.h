@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -7,7 +7,6 @@
 
 namespace starrocks {
 
-class RowBatch;
 class ExprContext;
 class MysqlRowBuffer;
 class BufferControlBlock;
@@ -23,8 +22,6 @@ public:
     ~StatisticResultWriter() override;
 
     Status init(RuntimeState* state) override;
-
-    Status append_row_batch(const RowBatch* batch) override;
 
     Status append_chunk(vectorized::Chunk* chunk) override;
 

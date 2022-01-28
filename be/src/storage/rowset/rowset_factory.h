@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_ROWSET_FACTORY_H
-#define STARROCKS_BE_SRC_OLAP_ROWSET_FACTORY_H
+#pragma once
 
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/data_dir.h"
@@ -35,7 +34,7 @@ class RowsetFactory {
 public:
     // return OK on success and set inited rowset in `*rowset`.
     // return error if failed to create or init rowset.
-    static Status create_rowset(MemTracker* mem_tracker, const TabletSchema* schema, const std::string& rowset_path,
+    static Status create_rowset(const TabletSchema* schema, const std::string& rowset_path,
                                 const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset);
 
     // create and init rowset writer.
@@ -45,5 +44,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_ROWSET_FACTORY_H

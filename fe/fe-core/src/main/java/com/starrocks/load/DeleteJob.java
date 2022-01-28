@@ -88,7 +88,6 @@ public class DeleteJob extends AbstractTxnStateChangeCallback {
      */
     public void checkAndUpdateQuorum() throws MetaNotFoundException {
         long dbId = deleteInfo.getDbId();
-        long tableId = deleteInfo.getTableId();
         Database db = Catalog.getCurrentCatalog().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("can not find database " + dbId + " when commit delete");

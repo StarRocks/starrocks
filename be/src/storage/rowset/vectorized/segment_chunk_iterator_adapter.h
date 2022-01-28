@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -32,6 +32,17 @@ public:
     const SegmentReadOptions& in_read_options() const { return _in_read_options; };
 
     void set_iterator(std::shared_ptr<ChunkIterator> iterator) { _inner_iter = std::move(iterator); }
+
+    virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) {
+        _inner_iter->init_encoded_schema(dict_maps);
+        ChunkIterator::init_encoded_schema(dict_maps);
+        return Status::OK();
+    }
+    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        _inner_iter->init_output_schema(unused_output_column_ids);
+        ChunkIterator::init_output_schema(unused_output_column_ids);
+        return Status::OK();
+    }
 
 protected:
     Status do_get_next(Chunk* chunk) override;

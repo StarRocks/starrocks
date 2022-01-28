@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
@@ -6,6 +6,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -22,27 +23,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class ScalarOperatorEvaluatorTest {
-
-    @Test
-    public void evaluationRight() {
-        CallOperator operator = new CallOperator("ifnull", Type.INT,
-                Lists.newArrayList(ConstantOperator.createInt(1), ConstantOperator.createInt(2)));
-
-        Function fn = new Function(new FunctionName("ifnull"), new Type[] {Type.INT, Type.INT}, Type.INT, false);
-
-        new Expectations(operator) {
-            {
-                operator.getFunction();
-                result = fn;
-            }
-        };
-
-        ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
-
-        assertEquals(OperatorType.CONSTANT, result.getOpType());
-        assertEquals(1, ((ConstantOperator) result).getInt());
-    }
-
     @Test
     public void evaluationNotConstant() {
         CallOperator operator = new CallOperator("ifnull", Type.INT,
@@ -96,6 +76,10 @@ public class ScalarOperatorEvaluatorTest {
     @Test
     public void evaluationUtc() throws AnalysisException {
         CallOperator operator = new CallOperator("utc_timestamp", Type.VARCHAR, Lists.newArrayList());
+
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setThreadLocalInfo();
+        ctx.setStartTime();
 
         Function fn = new Function(new FunctionName("utc_timestamp"), new Type[] {}, Type.DATETIME, false);
 

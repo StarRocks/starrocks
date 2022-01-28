@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -12,19 +12,33 @@
 
 namespace starrocks {
 
-class TextConverter;
-class Tuple;
 class TupleDescriptor;
 class RuntimeState;
 class MemPool;
 class Status;
 
 namespace vectorized {
+#define APPLY_FOR_NUMERICAL_TYPE(M, APPEND_TO_SQL) \
+    M(TYPE_TINYINT, APPEND_TO_SQL)                 \
+    M(TYPE_BOOLEAN, APPEND_TO_SQL)                 \
+    M(TYPE_SMALLINT, APPEND_TO_SQL)                \
+    M(TYPE_INT, APPEND_TO_SQL)                     \
+    M(TYPE_BIGINT, APPEND_TO_SQL)
 
-class MysqlScanNode : public ScanNode {
+#define APPLY_FOR_VARCHAR_DATE_TYPE(M, APPEND_TO_SQL) \
+    M(TYPE_DATE, APPEND_TO_SQL)                       \
+    M(TYPE_DATETIME, APPEND_TO_SQL)                   \
+    M(TYPE_CHAR, APPEND_TO_SQL)                       \
+    M(TYPE_VARCHAR, APPEND_TO_SQL)
+
+class MysqlScanNode final : public ScanNode {
 public:
     MysqlScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~MysqlScanNode() override = default;
+    ~MysqlScanNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     // initialize _mysql_scanner, and create _text_converter.
     Status prepare(RuntimeState* state) override;
@@ -35,10 +49,6 @@ public:
     // Fill the next chunk by calling next() on the _mysql_scanner,
     // converting text data in MySQL cells to binary data.
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-
-    // Fill the next row batch by calling next() on the _mysql_scanner,
-    // converting text data in MySQL cells to binary data.
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
 
     // Close the _mysql_scanner, and report errors.
     Status close(RuntimeState* state) override;
@@ -71,6 +81,8 @@ private:
     std::vector<std::string> _columns;
     // where clause
     std::vector<std::string> _filters;
+    // limit for query with external table.
+    int64_t _limit;
 
     // Descriptor of tuples read from MySQL table.
     const TupleDescriptor* _tuple_desc;
@@ -78,10 +90,7 @@ private:
     size_t _slot_num = 0;
     // Pool for allocating tuple data, including all varying-length slots.
     std::unique_ptr<MemPool> _tuple_pool;
-    // Jni helper for scanning an HBase table.
     std::unique_ptr<MysqlScanner> _mysql_scanner;
-    // Current tuple.
-    Tuple* _tuple = nullptr;
 };
 } // namespace vectorized
 } // namespace starrocks

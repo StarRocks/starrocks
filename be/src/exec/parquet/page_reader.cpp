@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/parquet/page_reader.h"
 
@@ -52,7 +52,7 @@ Status PageReader::next_header() {
 
 Status PageReader::read_bytes(const uint8_t** buffer, size_t size) {
     if (_offset + size > _next_header_pos) {
-        return Status::InternalError("Size to read exceede page size");
+        return Status::InternalError("Size to read exceed page size");
     }
     uint64_t nbytes = size;
     RETURN_IF_ERROR(_stream.get_bytes(buffer, &nbytes));

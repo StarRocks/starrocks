@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.analysis.DateLiteral;
@@ -16,6 +16,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -157,6 +158,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return false;
     }
 
+    public Object getValue() {
+        return value;
+    }
+
     @Override
     public List<ScalarOperator> getChildren() {
         // constant scalar operator should be the leaf node
@@ -281,7 +286,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
 
         PrimitiveType t = type.getPrimitiveType();
-        if (t != o.getType().getPrimitiveType()) {
+        // char is same with varchar, but equivalence expression deriver can't keep same in some expression
+        if (t != o.getType().getPrimitiveType()
+                && (!t.isCharFamily() && !o.getType().getPrimitiveType().isCharFamily())
+                && (!t.isDecimalOfAnyVersion() && !o.getType().getPrimitiveType().isDecimalOfAnyVersion())) {
             throw new StarRocksPlannerException(
                     "Constant " + this.toString() + " can't compare with Constant " + o.toString(),
                     ErrorType.INTERNAL_ERROR);
@@ -316,7 +324,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     @Override
     public boolean isNullable() {
-        return type.equals(Type.NULL);
+        return type.equals(Type.NULL) || isNull;
     }
 
     public ConstantOperator castTo(Type desc) throws Exception {
@@ -370,14 +378,24 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } else if (desc.isDecimalV2()) {
             return ConstantOperator.createDecimal(BigDecimal.valueOf(Double.parseDouble(childString)), Type.DECIMALV2);
         } else if (desc.isDecimalV3()) {
-            BigDecimal value = new BigDecimal(childString);
+            BigDecimal decimal = new BigDecimal(childString);
+            ScalarType scalarType = (ScalarType) desc;
             try {
-                DecimalLiteral.checkLiteralOverflow(value, (ScalarType) desc);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
+                DecimalLiteral.checkLiteralOverflow(decimal, scalarType);
+            } catch (AnalysisException ignored) {
+                return ConstantOperator.createNull(desc);
+            }
+            int realScale = DecimalLiteral.getRealScale(decimal);
+            int scale = scalarType.getScalarScale();
+            if (scale <= realScale) {
+                decimal = decimal.setScale(scale, RoundingMode.HALF_UP);
             }
 
-            return ConstantOperator.createDecimal(value, desc);
+            if (scalarType.getScalarScale() == 0 && scalarType.getScalarPrecision() == 0) {
+                throw new SemanticException("Forbidden cast to decimal(precision=0, scale=0)");
+            }
+
+            return ConstantOperator.createDecimal(decimal, desc);
         } else if (desc.isChar() || desc.isVarchar()) {
             return ConstantOperator.createChar(childString, desc);
         }

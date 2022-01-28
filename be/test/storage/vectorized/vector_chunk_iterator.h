@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <array>
 #include <initializer_list>
@@ -189,6 +189,8 @@ public:
         }
         return nr > 0 ? Status::OK() : Status::EndOfFile("eof");
     }
+
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override { return do_get_next(chunk); }
 
     void close() override {}
 

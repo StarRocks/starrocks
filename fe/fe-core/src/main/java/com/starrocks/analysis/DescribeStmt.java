@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MysqlTable;
@@ -137,22 +138,20 @@ public class DescribeStmt extends ShowStmt {
                         for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
                             if (olapTable.getIndexNameById(mvIdx.getId()).equalsIgnoreCase(dbTableName.getTbl())) {
                                 List<Column> columns = olapTable.getIndexIdToSchema().get(mvIdx.getId());
-                                for (int j = 0; j < columns.size(); ++j) {
-                                    Column column = columns.get(j);
-
+                                for (Column column : columns) {
                                     // Extra string (aggregation and bloom filter)
                                     List<String> extras = Lists.newArrayList();
-                                    if (column.getAggregationType() != null) {
+                                    if (column.getAggregationType() != null && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                                         extras.add(column.getAggregationType().name());
                                     }
+                                    String defaultStr = column.getMetaDefaultValue(extras);
                                     String extraStr = StringUtils.join(extras, ",");
                                     List<String> row = Arrays.asList(
                                             column.getDisplayName(),
                                             column.getType().toString(),
                                             column.isAllowNull() ? "Yes" : "No",
                                             ((Boolean) column.isKey()).toString(),
-                                            column.getDefaultValue() == null
-                                                    ? FeConstants.null_string : column.getDefaultValue(),
+                                            defaultStr,
                                             extraStr);
                                     totalRows.add(row);
                                 }
@@ -163,6 +162,11 @@ public class DescribeStmt extends ShowStmt {
                     }
                 }
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbTableName.getTbl());
+            }
+
+            if (table.getType() == TableType.HIVE) {
+                // Reuse the logic of `desc <table_name>` because hive external table doesn't support view.
+                isAllTables = false;
             }
 
             if (!isAllTables) {
@@ -206,22 +210,21 @@ public class DescribeStmt extends ShowStmt {
 
                             // Extra string (aggregation and bloom filter)
                             List<String> extras = Lists.newArrayList();
-                            if (column.getAggregationType() != null) {
+                            if (column.getAggregationType() != null && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                                 extras.add(column.getAggregationType().name());
                             }
                             if (bfColumns != null && bfColumns.contains(column.getName())) {
                                 extras.add("BLOOM_FILTER");
                             }
+                            String defaultStr = column.getMetaDefaultValue(extras);
                             String extraStr = StringUtils.join(extras, ",");
-
                             List<String> row = Arrays.asList("",
                                     "",
                                     column.getDisplayName(),
                                     column.getType().toString(),
                                     column.isAllowNull() ? "Yes" : "No",
                                     ((Boolean) column.isKey()).toString(),
-                                    column.getDefaultValue() == null
-                                            ? FeConstants.null_string : column.getDefaultValue(),
+                                    defaultStr,
                                     extraStr);
 
                             if (j == 0) {

@@ -30,18 +30,14 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
-
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
 
 namespace starrocks {
 
 ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
+          _texchange_node(tnode.exchange_node),
           _num_senders(0),
           _stream_recvr(nullptr),
           _input_row_desc(
@@ -74,10 +70,10 @@ Status ExchangeNode::prepare(RuntimeState* state) {
     _sub_plan_query_statistics_recvr.reset(new QueryStatisticsRecvr());
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _input_row_desc, state->fragment_instance_id(), _id, _num_senders,
-            config::exchg_node_buffer_size_bytes, _runtime_profile, _is_merging, _sub_plan_query_statistics_recvr);
+            config::exchg_node_buffer_size_bytes, _runtime_profile, _is_merging, _sub_plan_query_statistics_recvr,
+            false, DataStreamRecvr::INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE, false);
     if (_is_merging) {
-        RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _row_descriptor, _row_descriptor, expr_mem_tracker()));
-        // AddExprCtxsToFree(_sort_exec_exprs);
+        RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _row_descriptor, _row_descriptor));
     }
     return Status::OK();
 }
@@ -88,7 +84,7 @@ Status ExchangeNode::open(RuntimeState* state) {
     if (_use_vectorized) {
         if (_is_merging) {
             RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-            RETURN_IF_ERROR(_stream_recvr->create_merger(&_sort_exec_exprs, &_is_asc_order, &_nulls_first));
+            RETURN_IF_ERROR(_stream_recvr->create_merger(state, &_sort_exec_exprs, &_is_asc_order, &_nulls_first));
         }
         return Status::OK();
     }
@@ -126,7 +122,9 @@ Status ExchangeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     if (_is_merging) {
-        return get_next_merging(state, chunk, eos);
+        RETURN_IF_ERROR(get_next_merging(state, chunk, eos));
+        eval_join_runtime_filters(chunk);
+        return Status::OK();
     }
 
     do {
@@ -199,7 +197,7 @@ Status ExchangeNode::get_next_merging(RuntimeState* state, ChunkPtr* chunk, bool
             _num_rows_skipped = _offset;
             _num_rows_returned += size;
             COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-            // the first Chunk will have a size less than config::vector_chunk_size.
+            // the first Chunk will have a size less than chunk_size.
             return Status::OK();
         }
 
@@ -238,8 +236,10 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     using namespace pipeline;
     OpFactories operators;
     if (!_is_merging) {
-        operators.emplace_back(std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
-                                                                               _num_senders, _input_row_desc));
+        auto exchange_source_op = std::make_shared<ExchangeSourceOperatorFactory>(
+                context->next_operator_id(), id(), _texchange_node, _num_senders, _input_row_desc);
+        exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
+        operators.emplace_back(exchange_source_op);
         if (limit() != -1) {
             operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
         }
@@ -250,6 +250,10 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
         exchange_merge_sort_source_operator->set_degree_of_parallelism(1);
         operators.emplace_back(std::move(exchange_merge_sort_source_operator));
     }
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
     return operators;
 }
 

@@ -29,10 +29,12 @@ import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
+import com.sleepycat.je.rep.ReplicaWriteException;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
@@ -44,9 +46,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -83,7 +82,7 @@ public class BDBJEJournal implements Journal {
         environmentPath = Catalog.getCurrentCatalog().getBdbDir();
         try {
             Pair<String, Integer> selfNode = Catalog.getCurrentCatalog().getSelfNode();
-            if (isPortUsing(selfNode.first, selfNode.second)) {
+            if (NetUtils.isPortUsing(selfNode.first, selfNode.second)) {
                 LOG.error("edit_log_port {} is already in use. will exit.", selfNode.second);
                 System.exit(-1);
             }
@@ -161,6 +160,9 @@ public class BDBJEJournal implements Journal {
                             id, currentJournalDB.getDb().getDatabaseName(), System.currentTimeMillis());
                     break;
                 }
+            } catch (ReplicaWriteException e) {
+                LOG.error("non-master nodes should not write editLog. journal id {}", id, e);
+                throw e;
             } catch (DatabaseException e) {
                 LOG.error("catch an exception when writing to database. sleep and retry. journal id {}", id, e);
                 try {
@@ -388,16 +390,5 @@ public class BDBJEJournal implements Journal {
         return bdbEnvironment;
     }
 
-    public boolean isPortUsing(String host, int port) throws UnknownHostException {
-        boolean flag = false;
-        InetAddress theAddress = InetAddress.getByName(host);
-        try {
-            Socket socket = new Socket(theAddress, port);
-            flag = true;
-            socket.close();
-        } catch (IOException e) {
-            // do nothing
-        }
-        return flag;
-    }
+
 }

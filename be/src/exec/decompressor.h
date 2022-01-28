@@ -27,6 +27,8 @@
 #include <zstd/zstd.h>
 #include <zstd/zstd_errors.h>
 
+#include <memory>
+
 #include "common/status.h"
 #include "gen_cpp/types.pb.h"
 #include "gutil/strings/substitute.h"
@@ -35,7 +37,7 @@ namespace starrocks {
 
 class Decompressor {
 public:
-    virtual ~Decompressor();
+    virtual ~Decompressor() = default;
 
     // implement in derived class
     // input(in):               buf where decompress begin
@@ -52,7 +54,7 @@ public:
                               size_t output_len, size_t* output_bytes_written, bool* stream_end) = 0;
 
 public:
-    static Status create_decompressor(CompressionTypePB type, Decompressor** decompressor);
+    static Status create_decompressor(CompressionTypePB type, std::unique_ptr<Decompressor>* decompressor);
 
     virtual std::string debug_info();
 
@@ -75,8 +77,6 @@ public:
 
     std::string debug_info() override;
 
-private:
-    friend class Decompressor;
     GzipDecompressor(bool is_deflate);
     Status init() override;
 
@@ -99,8 +99,6 @@ public:
 
     std::string debug_info() override;
 
-private:
-    friend class Decompressor;
     Bzip2Decompressor() : Decompressor(CompressionTypePB::BZIP2) {}
     Status init() override;
 
@@ -117,8 +115,6 @@ public:
 
     std::string debug_info() override;
 
-private:
-    friend class Decompressor;
     Lz4FrameDecompressor() : Decompressor(CompressionTypePB::LZ4_FRAME) {}
     Status init() override;
 
@@ -141,10 +137,9 @@ public:
 
     std::string debug_info() override;
 
-private:
-    friend class Decompressor;
     ZstandardDecompressor() : Decompressor(CompressionTypePB::ZSTD) {}
 
+private:
     // Allocate one context per thread, and re-use for many time decompression.
     ZSTD_DCtx* _stream = nullptr;
 };

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_UDF_UDF_H
-#define STARROCKS_BE_UDF_UDF_H
+#pragma once
 
 #include <cstdint>
 #include <cstring>
@@ -66,6 +65,7 @@ public:
         V2_0,
     };
 
+    // keep the order with PrimitiveType
     enum Type {
         INVALID_TYPE = 0,
         TYPE_NULL,
@@ -77,15 +77,18 @@ public:
         TYPE_LARGEINT,
         TYPE_FLOAT,
         TYPE_DOUBLE,
-        TYPE_DECIMAL,
+        TYPE_VARCHAR,
         TYPE_DATE,
         TYPE_DATETIME,
+        TYPE_BINARY,
+        TYPE_DECIMAL,
         TYPE_CHAR,
-        TYPE_VARCHAR,
+        TYPE_STRUCT,
+        TYPE_ARRAY,
+        TYPE_MAP,
         TYPE_HLL,
-        TYPE_STRING,
-        TYPE_FIXED_BUFFER,
         TYPE_DECIMALV2,
+        TYPE_TIME,
         TYPE_OBJECT,
         TYPE_PERCENTILE,
         TYPE_DECIMAL32,
@@ -199,7 +202,7 @@ public:
     starrocks::FunctionContextImpl* impl() { return _impl; }
 
     /// Methods for maintaining state across UDF/UDA function calls. SetFunctionState() can
-    /// be used to store a pointer that can then be retreived via GetFunctionState(). If
+    /// be used to store a pointer that can then be retrieved via GetFunctionState(). If
     /// GetFunctionState() is called when no pointer is set, it will return
     /// NULL. SetFunctionState() does not take ownership of 'ptr'; it is up to the UDF/UDA
     /// to clean up any function state if necessary.
@@ -784,5 +787,3 @@ using starrocks_udf::DecimalV2Val;
 using starrocks_udf::DateTimeVal;
 using starrocks_udf::HllVal;
 using starrocks_udf::FunctionContext;
-
-#endif

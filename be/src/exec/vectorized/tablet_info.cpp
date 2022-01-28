@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/tablet_info.h"
 
@@ -7,7 +7,6 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks::vectorized {

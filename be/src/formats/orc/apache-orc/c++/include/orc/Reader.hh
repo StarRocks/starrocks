@@ -21,8 +21,7 @@
  */
 
 // clang-format off
-#ifndef ORC_READER_HH
-#define ORC_READER_HH
+#pragma once
 
 #include "orc/BloomFilter.hh"
 #include "orc/Common.hh"
@@ -508,7 +507,7 @@ namespace orc {
     virtual uint64_t getMemoryUseByTypeId(const std::list<uint64_t>& include, int stripeIx=-1) = 0;
 
     /**
-     * Get BloomFiters of all selected columns in the specified stripe
+     * Get BloomFilters of all selected columns in the specified stripe
      * @param stripeIndex index of the stripe to be read for bloom filters.
      * @param included index of selected columns to return (if not specified,
      *        all columns that have bloom filters are considered).
@@ -572,5 +571,3 @@ namespace orc {
 
   };
 }
-
-#endif

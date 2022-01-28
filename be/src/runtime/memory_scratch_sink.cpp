@@ -33,13 +33,10 @@
 #include "runtime/exec_env.h"
 #include "runtime/primitive_type.h"
 #include "runtime/result_queue_mgr.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
-#include "runtime/tuple_row.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 #include "util/date_func.h"
-#include "util/types.h"
 
 namespace starrocks {
 
@@ -63,7 +60,7 @@ Status MemoryScratchSink::prepare_exprs(RuntimeState* state) {
     // From the thrift expressions create the real exprs.
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs));
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc, _expr_mem_tracker.get()));
+    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc));
     // generate the arrow schema
     RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, &_arrow_schema));
     convert_to_slot_types_and_ids();
@@ -82,16 +79,6 @@ Status MemoryScratchSink::prepare(RuntimeState* state) {
     // create profile
     _profile = state->obj_pool()->add(new RuntimeProfile(title.str()));
 
-    return Status::OK();
-}
-
-Status MemoryScratchSink::send(RuntimeState* state, RowBatch* batch) {
-    if (nullptr == batch || 0 == batch->num_rows()) {
-        return Status::OK();
-    }
-    std::shared_ptr<arrow::RecordBatch> result;
-    RETURN_IF_ERROR(convert_to_arrow_batch(*batch, _arrow_schema, arrow::default_memory_pool(), &result));
-    _queue->blocking_put(result);
     return Status::OK();
 }
 

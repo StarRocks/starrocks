@@ -190,7 +190,7 @@ public class SparkEtlJobHandler {
     }
 
     public EtlStatus getEtlJobStatus(SparkLoadAppHandle handle, String appId, long loadJobId, String etlOutputPath,
-                                     SparkResource resource, BrokerDesc brokerDesc) throws LoadException {
+                                     SparkResource resource, BrokerDesc brokerDesc) throws UserException {
         EtlStatus status = new EtlStatus();
 
         Preconditions.checkState(appId != null && !appId.isEmpty());
@@ -206,18 +206,19 @@ public class SparkEtlJobHandler {
             CommandResult result = Util.executeCommand(yarnStatusCmd, envp, EXEC_CMD_TIMEOUT_MS);
             if (result.getReturnCode() != 0) {
                 String stderr = result.getStderr();
-                if (stderr != null) {
-                    // case application not exists
-                    if (stderr.contains("doesn't exist in RM")) {
-                        LOG.warn("spark app not found. spark app id: {}, load job id: {}", appId, loadJobId);
-                        status.setState(TEtlState.CANCELLED);
-                    }
+                // case application not exists
+                if (stderr != null && stderr.contains("doesn't exist in RM")) {
+                    LOG.warn("spark application not found. spark app id: {}, load job id: {}, stderr: {}",
+                            appId, loadJobId, stderr);
+                    status.setState(TEtlState.CANCELLED);
+                    status.setFailMsg("spark application not found");
+                    return status;
                 }
+
                 LOG.warn("yarn application status failed. spark app id: {}, load job id: {}, timeout: {}" +
                                 ", return code: {}, stderr: {}, stdout: {}",
                         appId, loadJobId, EXEC_CMD_TIMEOUT_MS, result.getReturnCode(), stderr, result.getStdout());
-                status.setState(TEtlState.CANCELLED);
-                return status;
+                throw new LoadException("yarn application status failed. error: " + stderr);
             }
             ApplicationReport report = new YarnApplicationReport(result.getStdout()).getReport();
             LOG.info("yarn application -status {}. load job id: {}, output: {}, report: {}",
@@ -272,7 +273,7 @@ public class SparkEtlJobHandler {
     }
 
     public void killEtlJob(SparkLoadAppHandle handle, String appId, long loadJobId, SparkResource resource)
-            throws LoadException {
+            throws UserException {
         if (resource.isYarnMaster()) {
             // The appId may be empty when the load job is in PENDING phase. This is because the appId is
             // parsed from the spark launcher process's output (spark launcher process submit job and then

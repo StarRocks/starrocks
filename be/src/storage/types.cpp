@@ -22,6 +22,7 @@
 #include "storage/types.h"
 
 #include "storage/decimal_type_info.h"
+#include "storage/olap_type_infra.h"
 
 namespace starrocks {
 
@@ -53,7 +54,7 @@ const TypeInfoPtr ScalarTypeInfoResolver::get_type_info(FieldType t) {
 }
 
 const ScalarTypeInfo* ScalarTypeInfoResolver::get_scalar_type_info(FieldType t) {
-    DCHECK(is_scalar_type(t));
+    DCHECK(is_scalar_field_type(t));
     return this->_mapping[t].get();
 }
 
@@ -65,33 +66,15 @@ void ScalarTypeInfoResolver::add_mapping() {
 }
 
 ScalarTypeInfoResolver::ScalarTypeInfoResolver() {
-    add_mapping<OLAP_FIELD_TYPE_TINYINT>();
-    add_mapping<OLAP_FIELD_TYPE_SMALLINT>();
-    add_mapping<OLAP_FIELD_TYPE_INT>();
-    add_mapping<OLAP_FIELD_TYPE_UNSIGNED_INT>();
-    add_mapping<OLAP_FIELD_TYPE_BOOL>();
-    add_mapping<OLAP_FIELD_TYPE_BIGINT>();
-    add_mapping<OLAP_FIELD_TYPE_UNSIGNED_BIGINT>();
-    add_mapping<OLAP_FIELD_TYPE_LARGEINT>();
-    add_mapping<OLAP_FIELD_TYPE_FLOAT>();
-    add_mapping<OLAP_FIELD_TYPE_DOUBLE>();
-    add_mapping<OLAP_FIELD_TYPE_DECIMAL>();
-    add_mapping<OLAP_FIELD_TYPE_DECIMAL_V2>();
-    add_mapping<OLAP_FIELD_TYPE_DATE>();
-    add_mapping<OLAP_FIELD_TYPE_DATE_V2>();
-    add_mapping<OLAP_FIELD_TYPE_DATETIME>();
-    add_mapping<OLAP_FIELD_TYPE_TIMESTAMP>();
-    add_mapping<OLAP_FIELD_TYPE_CHAR>();
-    add_mapping<OLAP_FIELD_TYPE_VARCHAR>();
-    add_mapping<OLAP_FIELD_TYPE_HLL>();
-    add_mapping<OLAP_FIELD_TYPE_OBJECT>();
-    add_mapping<OLAP_FIELD_TYPE_PERCENTILE>();
+#define M(ftype) add_mapping<ftype>();
+    APPLY_FOR_SUPPORTED_FIELD_TYPE(M)
+#undef M
     add_mapping<OLAP_FIELD_TYPE_NONE>();
 }
 
 ScalarTypeInfoResolver::~ScalarTypeInfoResolver() = default;
 
-bool is_scalar_type(FieldType field_type) {
+bool is_scalar_field_type(FieldType field_type) {
     switch (field_type) {
     case OLAP_FIELD_TYPE_STRUCT:
     case OLAP_FIELD_TYPE_ARRAY:
@@ -120,11 +103,11 @@ TypeInfoPtr get_type_info(FieldType field_type) {
     return ScalarTypeInfoResolver::instance()->get_type_info(field_type);
 }
 
-TypeInfoPtr get_type_info(const segment_v2::ColumnMetaPB& column_meta_pb) {
+TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
     FieldType type = static_cast<FieldType>(column_meta_pb.type());
     TypeInfoPtr type_info;
     if (type == OLAP_FIELD_TYPE_ARRAY) {
-        const segment_v2::ColumnMetaPB& child = column_meta_pb.children_columns(0);
+        const ColumnMetaPB& child = column_meta_pb.children_columns(0);
         TypeInfoPtr child_type_info = get_type_info(child);
         type_info.reset(new ArrayTypeInfo(child_type_info));
         return type_info;
@@ -146,7 +129,7 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
 }
 
 TypeInfoPtr get_type_info(FieldType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
-    if (is_scalar_type(field_type)) {
+    if (is_scalar_field_type(field_type)) {
         return get_type_info(field_type);
     } else if (field_type == OLAP_FIELD_TYPE_DECIMAL32) {
         return std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>>(precision, scale);
@@ -164,7 +147,7 @@ TypeInfoPtr get_type_info(const TypeInfo* type_info) {
 }
 
 const ScalarTypeInfo* get_scalar_type_info(FieldType type) {
-    DCHECK(is_scalar_type(type));
+    DCHECK(is_scalar_field_type(type));
     return ScalarTypeInfoResolver::instance()->get_scalar_type_info(type);
 }
 

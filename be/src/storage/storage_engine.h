@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_STORAGE_ENGINE_H
-#define STARROCKS_BE_SRC_OLAP_STORAGE_ENGINE_H
+#pragma once
 
 #include <pthread.h>
 #include <rapidjson/document.h>
@@ -55,6 +54,7 @@
 
 namespace starrocks {
 
+class AsyncDeltaWriterExecutor;
 class DataDir;
 class EngineTask;
 class BlockManager;
@@ -89,7 +89,7 @@ public:
     template <bool include_unused = false>
     std::vector<DataDir*> get_stores();
 
-    OLAPStatus get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
+    Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
     // get root path for creating tablet. The returned vector of root path should be random,
     // for avoiding that all the tablet would be deployed one disk.
@@ -107,17 +107,23 @@ public:
 
     // Obtain shard path for new tablet.
     //
-    // @param [out] shard_path choose an available root_path to clone new tablet
+    // @param [in] storage_medium specify medium needed
+    // @param [in] path_hash: If path_hash is not -1, get store by path hash.
+    //                        Else get store randomly by the specified medium.
+    // @param [out] shard_path choose an available shard_path to clone new tablet
+    // @param [out] store choose an available root_path to clone new tablet
     // @return error code
-    OLAPStatus obtain_shard_path(TStorageMedium::type storage_medium, std::string* shared_path, DataDir** store);
+    Status obtain_shard_path(TStorageMedium::type storage_medium, int64_t path_hash, std::string* shared_path,
+                             DataDir** store);
 
     // Load new tablet to make it effective.
     //
     // @param [in] root_path specify root path of new tablet
     // @param [in] request specify new tablet info
     // @param [in] restore whether we're restoring a tablet from trash
-    // @return OLAP_SUCCESS if load tablet success
-    OLAPStatus load_header(const std::string& shard_path, const TCloneReq& request, bool restore = false);
+    // @return Status::OK() if load tablet success
+    Status load_header(const std::string& shard_path, const TCloneReq& request, bool restore = false,
+                       bool is_primary_key = false);
 
     // To trigger a disk-stat and tablet report
     void trigger_report() {
@@ -144,12 +150,18 @@ public:
         }
     }
 
-    OLAPStatus execute_task(EngineTask* task);
+    Status execute_task(EngineTask* task);
 
     TabletManager* tablet_manager() { return _tablet_manager.get(); }
+
     TxnManager* txn_manager() { return _txn_manager.get(); }
+
+    AsyncDeltaWriterExecutor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
+
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
+
     fs::BlockManager* block_manager() { return _block_manager.get(); }
+
     UpdateManager* update_manager() { return _update_manager.get(); }
 
     bool check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id);
@@ -165,13 +177,16 @@ public:
     // start all backgroud threads. This should be call after env is ready.
     Status start_bg_threads();
 
+    void stop();
+
+    bool bg_worker_stopped() { return _bg_worker_stopped.load(std::memory_order_consume); }
+
+    MemTracker* tablet_meta_mem_tracker() { return _options.tablet_meta_mem_tracker; }
+
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
     Status _open();
-
-    // Clear status(tables, ...)
-    void _clear();
 
     Status _init_store_map();
 
@@ -188,7 +203,7 @@ private:
 
     void _clean_unused_rowset_metas();
 
-    OLAPStatus _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
+    Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 
     // All these xxx_callback() functions are for Background threads
     // update cache expire thread
@@ -224,7 +239,7 @@ private:
     Status _perform_cumulative_compaction(DataDir* data_dir);
     Status _perform_base_compaction(DataDir* data_dir);
     Status _perform_update_compaction(DataDir* data_dir);
-    OLAPStatus _start_trash_sweep(double* usage);
+    Status _start_trash_sweep(double* usage);
     void _start_disk_stat_monitor();
 
 private:
@@ -259,7 +274,6 @@ private:
     int32_t _effective_cluster_id;
     bool _is_all_cluster_id_exist;
 
-    Cache* _file_descriptor_lru_cache = nullptr;
     Cache* _index_stream_lru_cache = nullptr;
 
     // _file_cache is a lru_cache for file descriptors of files opened by starrocks,
@@ -277,7 +291,7 @@ private:
     // map<rowset_id(str), RowsetSharedPtr>, if we use RowsetId as the key, we need custom hash func
     std::unordered_map<std::string, RowsetSharedPtr> _unused_rowsets;
 
-    bool _stop_bg_worker = false;
+    std::atomic<bool> _bg_worker_stopped{false};
     // thread to expire update cache;
     std::thread _update_cache_expire_thread;
     std::thread _unused_rowset_monitor_thread;
@@ -312,6 +326,8 @@ private:
 
     std::unique_ptr<RowsetIdGenerator> _rowset_id_generator;
 
+    std::unique_ptr<AsyncDeltaWriterExecutor> _async_delta_writer_executor;
+
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 
     std::unique_ptr<fs::BlockManager> _block_manager;
@@ -325,5 +341,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_STORAGE_ENGINE_H

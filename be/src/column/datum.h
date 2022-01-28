@@ -1,14 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
 #include <variant>
 
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
 #include "storage/decimal12.h"
-#include "storage/hll.h"
 #include "storage/uint24.h"
 #include "util/int96.h"
 #include "util/percentile_value.h"
@@ -18,6 +17,8 @@ namespace starrocks {
 class MemPool;
 class Status;
 class BitmapValue;
+class HyperLogLog;
+class PercentileValue;
 } // namespace starrocks
 
 namespace starrocks::vectorized {
@@ -38,11 +39,15 @@ public:
     }
 
     int8_t get_int8() const { return get<int8_t>(); }
+    uint8_t get_uint8() const { return get<uint8_t>(); }
     int16_t get_int16() const { return get<int16_t>(); }
+    uint16_t get_uint16() const { return get<uint16_t>(); }
     uint24_t get_uint24() const { return get<uint24_t>(); }
     int96_t get_int96() const { return get<int96_t>(); }
     int32_t get_int32() const { return get<int32_t>(); }
+    uint32_t get_uint32() const { return get<uint32_t>(); }
     int64_t get_int64() const { return get<int64_t>(); }
+    uint64_t get_uint64() const { return get<uint64_t>(); }
     float get_float() const { return get<float>(); }
     double get_double() const { return get<double>(); }
     TimestampValue get_timestamp() const { return get<TimestampValue>(); }
@@ -121,9 +126,9 @@ public:
     }
 
 private:
-    using Variant = std::variant<std::monostate, int8_t, int16_t, uint24_t, int32_t, int64_t, int96_t, int128_t, Slice,
-                                 decimal12_t, DecimalV2Value, float, double, DatumArray, HyperLogLog*, BitmapValue*,
-                                 PercentileValue*>;
+    using Variant = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t,
+                                 int64_t, uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float,
+                                 double, DatumArray, HyperLogLog*, BitmapValue*, PercentileValue*>;
     Variant _value;
 };
 

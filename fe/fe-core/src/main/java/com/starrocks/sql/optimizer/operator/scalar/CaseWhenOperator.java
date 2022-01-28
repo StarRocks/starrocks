@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
@@ -8,6 +8,7 @@ import com.starrocks.catalog.Type;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 public class CaseWhenOperator extends CallOperator {
     private boolean hasCase;
@@ -97,6 +98,23 @@ public class CaseWhenOperator extends CallOperator {
 
     public void setThenClause(int i, ScalarOperator op) {
         arguments.set(2 * i + whenStart + 1, op);
+    }
+
+    public int getWhenStart() {
+        return this.whenStart;
+    }
+
+    // This method used for remove useless WhenThenClause,
+    // removeSet contains arguments index that should be removed.
+    public void removeArguments(Set<Integer> removeSet) {
+        List<ScalarOperator> newArguments = Lists.newArrayList();
+        for (int i = 0; i < this.arguments.size(); ++i) {
+            if (!removeSet.contains(i)) {
+                newArguments.add(this.arguments.get(i));
+            }
+        }
+        this.arguments = newArguments;
+        this.whenEnd = this.arguments.size();
     }
 
     @Override

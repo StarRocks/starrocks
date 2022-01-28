@@ -25,8 +25,8 @@
 #include <mutex>
 
 #include "gen_cpp/Types_types.h" // TNetworkAddress
+#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "gen_cpp/starrocks_internal_service.pb.h"
 #include "service/brpc.h"
 #include "util/spinlock.h"
 #include "util/starrocks_metrics.h"
@@ -49,7 +49,7 @@ public:
         }
     }
 
-    PBackendService_Stub* get_stub(const butil::EndPoint& endpoint) {
+    doris::PBackendService_Stub* get_stub(const butil::EndPoint& endpoint) {
         std::lock_guard<SpinLock> l(_lock);
         auto stub_ptr = _stub_map.seek(endpoint);
         if (stub_ptr != nullptr) {
@@ -61,12 +61,12 @@ public:
         if (channel->Init(endpoint, &options)) {
             return nullptr;
         }
-        auto stub = new PBackendService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+        auto stub = new doris::PBackendService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
         _stub_map.insert(endpoint, stub);
         return stub;
     }
 
-    PBackendService_Stub* get_stub(const TNetworkAddress& taddr) {
+    doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) {
         butil::EndPoint endpoint;
         if (str2endpoint(taddr.hostname.c_str(), taddr.port, &endpoint)) {
             LOG(WARNING) << "unknown endpoint, hostname=" << taddr.hostname;
@@ -75,7 +75,7 @@ public:
         return get_stub(endpoint);
     }
 
-    PBackendService_Stub* get_stub(const std::string& host, int port) {
+    doris::PBackendService_Stub* get_stub(const std::string& host, int port) {
         butil::EndPoint endpoint;
         if (str2endpoint(host.c_str(), port, &endpoint)) {
             LOG(WARNING) << "unknown endpoint, hostname=" << host;
@@ -86,7 +86,7 @@ public:
 
 private:
     SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, PBackendService_Stub*> _stub_map;
+    butil::FlatMap<butil::EndPoint, doris::PBackendService_Stub*> _stub_map;
 };
 
 } // namespace starrocks

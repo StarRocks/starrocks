@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -23,17 +23,21 @@ public:
              RowsetWriter* rowset_writer, MemTracker* mem_tracker);
 
     ~MemTable();
+
     int64_t tablet_id() const { return _tablet_id; }
 
     // the total memory used (contain tmp chunk and aggregator chunk)
     size_t memory_usage() const;
+    MemTracker* mem_tracker() { return _mem_tracker; }
 
     // buffer memory usage for write segment
     size_t write_buffer_size() const;
 
     // return true suggests caller should flush this memory table
-    bool insert(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
-    OLAPStatus flush();
+    bool insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+
+    Status flush();
+
     Status finalize();
 
     bool is_full() const;
@@ -48,7 +52,7 @@ private:
 
     void _aggregate(bool is_final);
 
-    void _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes);
+    Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes);
 
     friend class SortHelper;
 
@@ -84,14 +88,14 @@ private:
     std::unique_ptr<Column> _deletes;
 
     // memory statistic
-    std::unique_ptr<MemTracker> _mem_tracker;
+    MemTracker* _mem_tracker = nullptr;
     // memory usage and bytes usage calculation cost of object column is high,
     // so cache calculated memory usage and bytes usage to avoid repeated calculation.
     size_t _chunk_memory_usage = 0;
     size_t _chunk_bytes_usage = 0;
     size_t _aggregator_memory_usage = 0;
     size_t _aggregator_bytes_usage = 0;
-}; // class MemTable
+};
 
 } // namespace vectorized
 

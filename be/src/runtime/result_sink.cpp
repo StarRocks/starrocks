@@ -26,12 +26,12 @@
 #include "common/config.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/file_result_writer.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/result_buffer_mgr.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/vectorized/statistic_result_writer.h"
 #include "util/uid_util.h"
@@ -57,7 +57,7 @@ Status ResultSink::prepare_exprs(RuntimeState* state) {
     // From the thrift expressions create the real exprs.
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs));
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc, _expr_mem_tracker.get()));
+    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc));
     return Status::OK();
 }
 
@@ -101,11 +101,13 @@ Status ResultSink::open(RuntimeState* state) {
     return Expr::open(_output_expr_ctxs, state);
 }
 
-Status ResultSink::send(RuntimeState* state, RowBatch* batch) {
-    return _writer->append_row_batch(batch);
-}
-
 Status ResultSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+    // The ResultWriter memory that sends the results is no longer recorded to the query memory.
+    // There are two reason:
+    // 1. the query result has come out, and then the memory limit is triggered, cancel, it is not necessary
+    // 2. if this memory is counted, The memory of the receiving thread needs to be recorded,
+    // and the life cycle of MemTracker needs to be considered
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     return _writer->append_chunk(chunk);
 }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -6,7 +6,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
+import java.util.ArrayList;
 import java.util.Objects;
 
 public class LogicalLimitOperator extends LogicalOperator {
@@ -15,7 +17,7 @@ public class LogicalLimitOperator extends LogicalOperator {
     public LogicalLimitOperator(long limit) {
         super(OperatorType.LOGICAL_LIMIT);
         this.limit = limit;
-        offset = -1;
+        offset = DEFAULT_OFFSET;
     }
 
     public LogicalLimitOperator(long limit, long offset) {
@@ -24,8 +26,14 @@ public class LogicalLimitOperator extends LogicalOperator {
         this.offset = offset;
     }
 
+    public LogicalLimitOperator(Builder builder) {
+        super(OperatorType.LOGICAL_LIMIT, builder.getLimit(), builder.getPredicate(), builder.getProjection());
+        this.limit = builder.getLimit();
+        this.offset = builder.offset;
+    }
+
     public boolean hasOffset() {
-        return offset > 0;
+        return offset > DEFAULT_OFFSET;
     }
 
     public long getOffset() {
@@ -34,11 +42,20 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        return expressionContext.getChildLogicalProperty(0).getOutputColumns();
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            return expressionContext.getChildLogicalProperty(0).getOutputColumns();
+        }
     }
 
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalLimit(optExpression, context);
+    }
+
+    @Override
+    public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
+        return visitor.visitLogicalLimit(this, context);
     }
 
     @Override
@@ -59,5 +76,27 @@ public class LogicalLimitOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), offset);
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalLimitOperator, LogicalLimitOperator.Builder> {
+        private long offset = DEFAULT_OFFSET;
+
+        @Override
+        public LogicalLimitOperator build() {
+            return new LogicalLimitOperator(this);
+        }
+
+        @Override
+        public LogicalLimitOperator.Builder withOperator(LogicalLimitOperator operator) {
+            super.withOperator(operator);
+            this.offset = operator.offset;
+            return this;
+        }
+
+        public Builder setOffset(long offset) {
+            this.offset = offset;
+            return this;
+        }
     }
 }

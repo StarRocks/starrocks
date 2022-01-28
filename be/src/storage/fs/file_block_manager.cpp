@@ -33,7 +33,6 @@
 #include "env/env.h"
 #include "env/env_util.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_tracker.h"
 #include "storage/fs/block_id.h"
 #include "storage/fs/block_manager_metrics.h"
 #include "storage/storage_engine.h"
@@ -86,6 +85,8 @@ public:
     Status finalize() override;
 
     size_t bytes_appended() const override;
+
+    void set_bytes_appended(size_t bytes_appended) override { _bytes_appended = bytes_appended; }
 
     State state() const override;
 
@@ -218,9 +219,6 @@ Status FileWritableBlock::_close(SyncMode mode) {
             _block_manager->_metrics->total_disk_sync->increment(1);
         }
         sync = _writer->sync();
-        if (sync.ok()) {
-            sync = _block_manager->_sync_metadata(_path);
-        }
         WARN_IF_ERROR(sync, strings::Substitute("Failed to sync when closing block $0", _path));
     }
     Status close = _writer->close();
@@ -365,9 +363,7 @@ Status FileReadableBlock::readv(uint64_t offset, const Slice* results, size_t re
 ////////////////////////////////////////////////////////////
 
 FileBlockManager::FileBlockManager(Env* env, BlockManagerOptions opts)
-        : _env(DCHECK_NOTNULL(env)),
-          _opts(std::move(opts)),
-          _mem_tracker(new MemTracker(-1, "file_block_manager", _opts.parent_mem_tracker.get())) {
+        : _env(DCHECK_NOTNULL(env)), _opts(std::move(opts)) {
     if (_opts.enable_metric) {
         _metrics = std::make_unique<internal::BlockManagerMetrics>();
     }
@@ -392,7 +388,7 @@ Status FileBlockManager::create_block(const CreateBlockOptions& opts, std::uniqu
 
     shared_ptr<WritableFile> writer;
     WritableFileOptions wr_opts;
-    wr_opts.mode = Env::MUST_CREATE;
+    wr_opts.mode = opts.mode;
     RETURN_IF_ERROR(env_util::open_file_for_write(wr_opts, _env, opts.path, &writer));
 
     VLOG(1) << "Creating new block at " << opts.path;
@@ -412,6 +408,11 @@ Status FileBlockManager::open_block(const std::string& path, std::unique_ptr<Rea
 
     *block = std::make_unique<internal::FileReadableBlock>(this, path, file_handle);
     return Status::OK();
+}
+
+void FileBlockManager::erase_block_cache(const std::string& path) {
+    VLOG(1) << "erasing block cache with path at " << path;
+    _file_cache->erase(path);
 }
 
 // TODO(lingbin): We should do something to ensure that deletion can only be done

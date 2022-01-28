@@ -28,11 +28,14 @@ import com.starrocks.system.SystemInfoService;
 
 public class FeNameFormat {
     private static final String LABEL_REGEX = "^[-_A-Za-z0-9]{1,128}$";
-    private static final String COMMON_NAME_REGEX = "^[a-zA-Z][a-zA-Z0-9_]{0,63}$";
+    public static final String COMMON_NAME_REGEX = "^[a-zA-Z][a-zA-Z0-9_]{0,63}$";
     // Now we can not accept all characters because current design of delete save delete cond contains column name
     // so it can not distinguish whether it is an operator or a column name
     // the future new design will improve this problem and open this limitation
     private static final String COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,64}$";
+
+    // The user name  by kerberos authentication may include the host name, so additional adaptation is required.
+    private static final String MYSQL_USER_NAME_REGEX = "^[a-zA-Z][a-zA-Z0-9_]{1,63}/?[.a-zA-Z0-9_-]{0,63}$";
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
@@ -57,6 +60,12 @@ public class FeNameFormat {
         }
     }
 
+    public static void verifyTableName(String tableName) {
+        if (Strings.isNullOrEmpty(tableName) || !tableName.matches(COMMON_NAME_REGEX)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
+        }
+    }
+
     public static void checkPartitionName(String partitionName) throws AnalysisException {
         if (Strings.isNullOrEmpty(partitionName) || !partitionName.matches(COMMON_NAME_REGEX)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
@@ -74,6 +83,9 @@ public class FeNameFormat {
         if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
+        if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+        }
     }
 
     public static void checkLabel(String label) throws AnalysisException {
@@ -83,7 +95,7 @@ public class FeNameFormat {
     }
 
     public static void checkUserName(String userName) throws AnalysisException {
-        if (Strings.isNullOrEmpty(userName) || !userName.matches(COMMON_NAME_REGEX)) {
+        if (Strings.isNullOrEmpty(userName) || !userName.matches(MYSQL_USER_NAME_REGEX) || userName.length() > 64) {
             throw new AnalysisException("invalid user name: " + userName);
         }
     }

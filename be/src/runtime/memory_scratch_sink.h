@@ -40,7 +40,6 @@ class Schema;
 namespace starrocks {
 
 class ObjectPool;
-class RowBatch;
 class ObjectPool;
 class RuntimeState;
 class RuntimeProfile;
@@ -48,7 +47,6 @@ class BufferControlBlock;
 class ExprContext;
 class ResultWriter;
 class MemTracker;
-class TupleRow;
 
 // used to push data to blocking queue
 class MemoryScratchSink : public DataSink {
@@ -64,10 +62,6 @@ public:
     Status prepare(RuntimeState* state) override;
 
     Status open(RuntimeState* state) override;
-
-    // send data in 'batch' to this backend queue mgr
-    // Blocks until all rows in batch are pushed to the queue
-    Status send(RuntimeState* state, RowBatch* batch) override;
 
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 

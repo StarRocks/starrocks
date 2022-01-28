@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.task;
 
@@ -29,7 +29,11 @@ public class SeriallyTaskScheduler implements TaskScheduler {
                 // Should have at least one valid plan
                 if (!group.hasBestExpression(context.getRequiredProperty())) {
                     throw new StarRocksPlannerException("StarRocks planner use long time " + timeout +
-                            " remaining task num " + tasks.size(), ErrorType.INTERNAL_ERROR);
+                            " ms, This probably because 1. FE Full GC, 2. Hive external table fetch metadata took a long time, " +
+                            "3. The SQL is very complex. " +
+                            "You could 1. adjust FE JVM config, 2. try query again, " +
+                            "3. enlarge new_planner_optimize_timeout session variable",
+                            ErrorType.INTERNAL_ERROR);
                 }
                 break;
             }

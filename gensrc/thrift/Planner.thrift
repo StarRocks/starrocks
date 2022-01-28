@@ -66,7 +66,9 @@ struct TPlanFragment {
   // sink) in a single instance of this fragment. This is used for an optimization in
   // InitialReservation. Measured in bytes. required in V1
   8: optional i64 initial_reservation_total_claims
-  20: optional list<Data.TGlobalDict> global_dicts
+  20: optional list<Data.TGlobalDict> query_global_dicts
+  // For insert into table select * from table, we need to distinguish the global dicts for query and load
+  21: optional list<Data.TGlobalDict> load_global_dicts
 }
 
 // location information for a single scan range

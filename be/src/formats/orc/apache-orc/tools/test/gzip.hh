@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_GZIP
-#define ORC_GZIP
+#pragma once
 
 #include <stdio.h>
 
@@ -55,4 +54,3 @@ public:
 };
 
 } // namespace orc
-#endif

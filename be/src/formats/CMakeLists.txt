@@ -1,4 +1,4 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/converter")
@@ -8,6 +8,7 @@ add_library(Formats STATIC
         csv/binary_converter.cpp
         csv/boolean_converter.cpp
         csv/converter.cpp
+        csv/csv_reader.cpp
         csv/date_converter.cpp
         csv/datetime_converter.cpp
         csv/decimalv2_converter.cpp
@@ -15,6 +16,17 @@ add_library(Formats STATIC
         csv/float_converter.cpp
         csv/numeric_converter.cpp
         csv/nullable_converter.cpp
+        json/nullable_column.cpp
+        json/numeric_column.cpp
+        json/binary_column.cpp
         )
+
+# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    set_source_files_properties(json/nullable_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(json/binary_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(json/numeric_column.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+endif()
 
 add_subdirectory(orc/apache-orc)

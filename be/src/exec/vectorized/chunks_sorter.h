@@ -1,9 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "exec/sort_exec_exprs.h"
 #include "exprs/expr_context.h"
+#include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -18,9 +20,19 @@ struct DataSegment {
     ChunkPtr chunk;
     Columns order_by_columns;
 
+    uint32_t _next_output_row = 0;
+    uint64_t _partitions_rows;
+
+    // used for full sort.
+    Permutation* _sorted_permutation;
+
+    bool has_next() { return _next_output_row < _partitions_rows; }
+
     DataSegment() : chunk(std::make_shared<Chunk>()) {}
 
     DataSegment(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) { init(sort_exprs, cnk); }
+
+    int64_t mem_usage() const { return chunk->memory_usage(); }
 
     void init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) {
         chunk = cnk;
@@ -114,8 +126,7 @@ struct DataSegment {
     // Actually, we Count the results in the first compare for the second compare.
     Status get_filter_array(std::vector<DataSegment>& data_segments, size_t number_of_rows_to_sort,
                             std::vector<std::vector<uint8_t>>& filter_array, const std::vector<int>& sort_order_flags,
-                            const std::vector<int>& null_first_flags, uint32_t& least_num, uint32_t& middle_num,
-                            const std::function<Status(size_t bytes)>& consume_and_check_memory_limit) {
+                            const std::vector<int>& null_first_flags, uint32_t& least_num, uint32_t& middle_num) {
         size_t dats_segment_size = data_segments.size();
 
         std::vector<std::vector<int8_t>> compare_results_array;
@@ -146,8 +157,6 @@ struct DataSegment {
         // compare with first row of this DataSegment,
         // then we set BEFORE_LAST_RESULT and IN_LAST_RESULT at filter_array.
         if (number_of_rows_to_sort == 1) {
-            RETURN_IF_ERROR(consume_and_check_memory_limit(0));
-
             least_num = 0, middle_num = 0;
             filter_array.resize(dats_segment_size);
             for (size_t i = 0; i < dats_segment_size; ++i) {
@@ -186,9 +195,6 @@ struct DataSegment {
                 // obtain number of rows for second compare.
                 first_size_array[i] = middle_num - local_first_size;
             }
-
-            RETURN_IF_ERROR(
-                    consume_and_check_memory_limit(dats_segment_size * sizeof(size_t) + middle_num * sizeof(uint64_t)));
 
             // second compare with first row of this chunk, use rows from first compare.
             {
@@ -262,18 +268,24 @@ using DataSegments = std::vector<DataSegment>;
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorter {
 public:
+    static constexpr int USE_HEAP_SORTER_LIMIT_SZ = 1024;
     /**
      * Constructor.
-     * @param sort_exprs     The order-by columns or columns with expresion. This sorter will use but not own the object.
+     * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
      * @param is_asc         Orders on each column.
      * @param is_null_first  NULL values should at the head or tail.
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
-    ChunksSorter(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
+    ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
                  const std::vector<bool>* is_null_first, size_t size_of_chunk_batch = 1000);
     virtual ~ChunksSorter();
 
-    void setup_runtime(MemTracker* mem_tracker, RuntimeProfile* profile, const std::string& parent_timer);
+    static vectorized::ChunkPtr materialize_chunk_before_sort(vectorized::Chunk* chunk,
+                                                              TupleDescriptor* materialized_tuple_desc,
+                                                              const SortExecExprs& sort_exec_exprs,
+                                                              const std::vector<OrderByType>& order_by_types);
+
+    virtual void setup_runtime(RuntimeProfile* profile, const std::string& parent_timer);
 
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
@@ -282,17 +294,28 @@ public:
     // get_next only works after done().
     virtual void get_next(ChunkPtr* chunk, bool* eos) = 0;
 
-    // This
+    virtual DataSegment* get_result_data_segment() = 0;
+
     Status finish(RuntimeState* state);
+
+    // used to get size of partition chunks.
+    virtual uint64_t get_partition_rows() const = 0;
+
+    // used to get permutation for partition chunks,
+    // and this is used only with full sort.
+    virtual Permutation* get_permutation() const = 0;
+
     bool sink_complete();
 
     // pull_chunk for pipeline.
     virtual bool pull_chunk(ChunkPtr* chunk) = 0;
 
+    virtual int64_t mem_usage() const = 0;
+
 protected:
     inline size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
-    Status _consume_and_check_memory_limit(RuntimeState* state, int64_t mem_bytes);
+    RuntimeState* _state;
 
     // sort rules
     const std::vector<ExprContext*>* _sort_exprs;
@@ -302,8 +325,6 @@ protected:
     size_t _next_output_row = 0;
 
     const size_t _size_of_chunk_batch;
-    MemTracker* _mem_tracker;
-    int64_t _last_memory_usage;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _sort_timer = nullptr;

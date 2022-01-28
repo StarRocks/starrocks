@@ -34,19 +34,15 @@ class MemTracker;
 
 struct StorePath {
     StorePath() {}
-    StorePath(std::string path_, int64_t capacity_bytes_)
-            : path(std::move(path_)), capacity_bytes(capacity_bytes_), storage_medium(TStorageMedium::HDD) {}
-    StorePath(std::string path_, int64_t capacity_bytes_, TStorageMedium::type storage_medium_)
-            : path(std::move(path_)), capacity_bytes(capacity_bytes_), storage_medium(storage_medium_) {}
+    StorePath(std::string path_) : path(std::move(path_)), storage_medium(TStorageMedium::HDD) {}
     std::string path;
-    int64_t capacity_bytes{-1};
     TStorageMedium::type storage_medium{TStorageMedium::HDD};
 };
 
 // parse a single root path of storage_root_path
-OLAPStatus parse_root_path(const std::string& root_path, StorePath* path);
+Status parse_root_path(const std::string& root_path, StorePath* path);
 
-OLAPStatus parse_conf_store_paths(const std::string& config_path, std::vector<StorePath>* path);
+Status parse_conf_store_paths(const std::string& config_path, std::vector<StorePath>* path);
 
 struct EngineOptions {
     // list paths that tablet will be put into.

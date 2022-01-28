@@ -214,7 +214,6 @@ public class ColocateTableBalancer extends MasterDaemon {
                             continue;
                         }
                         long visibleVersion = partition.getVisibleVersion();
-                        long visibleVersionHash = partition.getVisibleVersionHash();
                         // Here we only get VISIBLE indexes. All other indexes are not queryable.
                         // So it does not matter if tablets of other indexes are not matched.
                         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
@@ -226,7 +225,7 @@ public class ColocateTableBalancer extends MasterDaemon {
                                 Preconditions.checkState(bucketsSeq.size() == replicationNum,
                                         bucketsSeq.size() + " vs. " + replicationNum);
                                 Tablet tablet = index.getTablet(tabletId);
-                                TabletStatus st = tablet.getColocateHealthStatus(visibleVersion, visibleVersionHash,
+                                TabletStatus st = tablet.getColocateHealthStatus(visibleVersion,
                                         replicationNum, bucketsSeq);
                                 if (st != TabletStatus.HEALTHY) {
                                     isGroupStable = false;
@@ -330,11 +329,8 @@ public class ColocateTableBalancer extends MasterDaemon {
             // update backends and hosts at each round
             backendsPerBucketSeq = Lists.partition(flatBackendsPerBucketSeq, replicationNum);
             List<List<String>> hostsPerBucketSeq = getHostsPerBucketSeq(backendsPerBucketSeq, infoService);
-            if (hostsPerBucketSeq == null) {
-                // error happens, change nothing
-                return false;
-            }
-            Preconditions.checkState(backendsPerBucketSeq.size() == hostsPerBucketSeq.size());
+            Preconditions
+                    .checkState(hostsPerBucketSeq != null && backendsPerBucketSeq.size() == hostsPerBucketSeq.size());
 
             long srcBeId = -1;
             List<Integer> srcBeSeqIndexes = null;
@@ -431,7 +427,8 @@ public class ColocateTableBalancer extends MasterDaemon {
     }
 
     // change the backend id to backend host
-    // return null if some of backends do not exist
+    // skip the backend that does not exist
+    // NOTE: the result list should not be null and list size should be same with backendsPerBucketSeq.
     private List<List<String>> getHostsPerBucketSeq(List<List<Long>> backendsPerBucketSeq,
                                                     SystemInfoService infoService) {
         List<List<String>> hostsPerBucketSeq = Lists.newArrayList();
@@ -440,8 +437,9 @@ public class ColocateTableBalancer extends MasterDaemon {
             for (Long beId : backendIds) {
                 Backend be = infoService.getBackend(beId);
                 if (be == null) {
+                    // just skip
                     LOG.info("backend {} does not exist", beId);
-                    return null;
+                    continue;
                 }
                 hosts.add(be.getHost());
             }

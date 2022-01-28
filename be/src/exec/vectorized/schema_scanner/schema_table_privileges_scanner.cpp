@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/schema_scanner/schema_table_privileges_scanner.h"
 
@@ -36,53 +36,79 @@ Status SchemaTablePrivilegesScanner::start(RuntimeState* state) {
         RETURN_IF_ERROR(
                 SchemaHelper::get_table_privs(*(_param->ip), _param->port, table_privs_params, &_table_privs_result));
     } else {
-        return Status::InternalError("IP or port dosn't exists");
+        return Status::InternalError("IP or port doesn't exists");
     }
     return Status::OK();
 }
 
 Status SchemaTablePrivilegesScanner::fill_chunk(ChunkPtr* chunk) {
     const TTablePrivDesc& table_priv_desc = _table_privs_result.table_privs[_table_priv_index];
-    // GRANTEE
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[0]->id());
-        const std::string* str = &table_priv_desc.user_ident_str;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        switch (slot_id) {
+        case 1: {
+            // GRANTEE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                const std::string* str = &table_priv_desc.user_ident_str;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 2: {
+            // TABLE_CATALOG
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 3: {
+            // TABLE_SCHEMA
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                const std::string* str = &table_priv_desc.db_name;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 4: {
+            // TABLE_NAME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                const std::string* str = &table_priv_desc.table_name;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 5: {
+            // PRIVILEGE_TYPE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                const std::string* str = &table_priv_desc.priv;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 6: {
+            // IS_GRANTABLE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                const char* str = table_priv_desc.is_grantable ? "YES" : "NO";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        default:
+            break;
+        }
     }
-    // TABLE_CATALOG
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[1]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // TABLE_SCHEMA
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[2]->id());
-        const std::string* str = &table_priv_desc.db_name;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // TABLE_NAME
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[3]->id());
-        const std::string* str = &table_priv_desc.table_name;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // PRIVILEGE_TYPE
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[4]->id());
-        const std::string* str = &table_priv_desc.priv;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // IS_GRANTABLE
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[5]->id());
-        const char* str = table_priv_desc.is_grantable ? "YES" : "NO";
-        Slice value(str, strlen(str));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
+
     _table_priv_index++;
     return Status::OK();
 }

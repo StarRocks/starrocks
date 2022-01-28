@@ -171,7 +171,6 @@ public class TabletInvertedIndex {
                                                     + " is bad: {}, is version missing: {}",
                                             replica.getId(), tabletId, backendId, replica,
                                             backendTabletInfo.getVersion(),
-                                            backendTabletInfo.getVersion_hash(),
                                             backendTabletInfo.getSchema_hash(),
                                             backendTabletInfo.isSetUsed() ? backendTabletInfo.isUsed() : "unknown",
                                             backendTabletInfo.isSetVersion_miss() ? backendTabletInfo.isVersion_miss() :
@@ -227,8 +226,7 @@ public class TabletInvertedIndex {
                                             } else {
                                                 TPartitionVersionInfo versionInfo =
                                                         new TPartitionVersionInfo(tabletMeta.getPartitionId(),
-                                                                partitionCommitInfo.getVersion(),
-                                                                partitionCommitInfo.getVersionHash());
+                                                                partitionCommitInfo.getVersion(), 0);
                                                 ListMultimap<Long, TPartitionVersionInfo> map =
                                                         transactionsToPublish.get(transactionState.getDbId());
                                                 if (map == null) {
@@ -315,14 +313,12 @@ public class TabletInvertedIndex {
         }
 
         long versionInFe = replicaInFe.getVersion();
-        long versionHashInFe = replicaInFe.getVersionHash();
 
         if (backendTabletInfo.getVersion() > versionInFe) {
             // backend replica's version is larger or newer than replica in FE, sync it.
             return true;
         } else if (versionInFe == backendTabletInfo.getVersion() &&
-                versionHashInFe == backendTabletInfo.getVersion_hash()
-                && replicaInFe.isBad()) {
+                replicaInFe.isBad()) {
             // backend replica's version is equal to replica in FE, but replica in FE is bad, while backend replica is good, sync it
             return true;
         }
@@ -352,12 +348,12 @@ public class TabletInvertedIndex {
         }
 
         if (schemaHashInFe != backendTabletInfo.getSchema_hash()
-                || backendTabletInfo.getVersion() == -1 && backendTabletInfo.getVersion_hash() == 0) {
+                || backendTabletInfo.getVersion() == -1) {
             // no data file exist on BE, maybe this is a newly created schema change tablet. no need to recovery
             return false;
         }
 
-        if (replicaInFe.getVersionHash() == 0 && backendTabletInfo.getVersion() == replicaInFe.getVersion() - 1) {
+        if (backendTabletInfo.getVersion() == replicaInFe.getVersion() - 1) {
             /*
              * This is very tricky:
              * 1. Assume that we want to create a replica with version (X, Y), the init version of replica in FE

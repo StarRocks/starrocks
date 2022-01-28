@@ -30,7 +30,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -340,6 +340,44 @@ public class TimestampArithmeticExpr extends Expr {
         return strBuilder.toString();
     }
 
+    @Override
+    public String toDigestImpl() {
+        StringBuilder strBuilder = new StringBuilder();
+        if (funcName != null) {
+            if (funcName.equalsIgnoreCase("TIMESTAMPDIFF") || funcName.equalsIgnoreCase("TIMESTAMPADD")) {
+                strBuilder.append(funcName).append("(");
+                strBuilder.append(timeUnitIdent).append(", ");
+                strBuilder.append(getChild(1).toDigest()).append(", ");
+                strBuilder.append(getChild(0).toDigest()).append(")");
+                return strBuilder.toString();
+            }
+            // Function-call like version.
+            strBuilder.append(funcName).append("(");
+            strBuilder.append(getChild(0).toDigest()).append(", ");
+            strBuilder.append("INTERVAL ");
+            strBuilder.append(getChild(1).toDigest());
+            strBuilder.append(" ").append(timeUnitIdent);
+            strBuilder.append(")");
+            return strBuilder.toString();
+        }
+        if (intervalFirst) {
+            // Non-function-call like version with interval as first operand.
+            strBuilder.append("INTERVAL ");
+            strBuilder.append(getChild(1).toDigest() + " ");
+            strBuilder.append(timeUnitIdent);
+            strBuilder.append(" ").append(op.toString()).append(" ");
+            strBuilder.append(getChild(0).toDigest());
+        } else {
+            // Non-function-call like version with interval as second operand.
+            strBuilder.append(getChild(0).toDigest());
+            strBuilder.append(" " + op.toString() + " ");
+            strBuilder.append("INTERVAL ");
+            strBuilder.append(getChild(1).toDigest() + " ");
+            strBuilder.append(timeUnitIdent);
+        }
+        return strBuilder.toString();
+    }
+
     // Time units supported in timestamp arithmetic.
     public enum TimeUnit {
         YEAR("YEAR"),                               // YEARS
@@ -390,26 +428,11 @@ public class TimestampArithmeticExpr extends Expr {
         }
     }
 
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        if (fn != null) {
-            return fn.isVectorized();
-        }
-
-        return false;
-    }
-
     /**
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitTimestampArithmeticExpr(this, context);
     }
 }

@@ -46,7 +46,7 @@ class TxnManager;
 // Now, After DataDir was created, it will never be deleted for easy implementation.
 class DataDir {
 public:
-    DataDir(std::string path, int64_t capacity_bytes = -1, TStorageMedium::type storage_medium = TStorageMedium::HDD,
+    DataDir(std::string path, TStorageMedium::type storage_medium = TStorageMedium::HDD,
             TabletManager* tablet_manager = nullptr, TxnManager* txn_manager = nullptr);
     ~DataDir();
 
@@ -76,7 +76,7 @@ public:
     Status set_cluster_id(int32_t cluster_id);
     void health_check();
 
-    OLAPStatus get_shard(uint64_t* shard);
+    Status get_shard(uint64_t* shard);
 
     KVStore* get_meta() { return _kv_store; }
 
@@ -96,7 +96,7 @@ public:
     static std::string get_root_path_from_schema_hash_path_in_trash(const std::string& schema_hash_dir_in_trash);
 
     // load data from meta and data files
-    OLAPStatus load();
+    Status load();
 
     // this function scans the paths in data dir to collect the paths to check
     // this is a producer function. After scan, it will notify the perform_path_gc function to gc
@@ -119,11 +119,12 @@ public:
 private:
     std::string _cluster_id_path() const { return _path + CLUSTER_ID_PREFIX; }
     Status _init_cluster_id();
-    Status _init_capacity();
+    Status _init_data_dir();
+    Status _init_tmp_dir();
     Status _init_file_system();
     Status _init_meta(bool read_only = false);
 
-    OLAPStatus _read_and_write_test_file();
+    Status _read_and_write_test_file();
     Status _read_cluster_id(const std::string& cluster_id_path, int32_t* cluster_id);
     Status _write_cluster_id_to_path(const std::string& path, int32_t cluster_id);
     Status _add_version_info_to_cluster_id(const std::string& path);
@@ -134,11 +135,7 @@ private:
 
     std::string _path;
     int64_t _path_hash;
-    // user specified capacity
-    int64_t _capacity_bytes;
     // the actual available capacity of the disk of this data dir
-    // NOTICE that _available_bytes may be larger than _capacity_bytes, if capacity is set
-    // by user, not the disk's actual capacity
     int64_t _available_bytes;
     // the actual capacity of the disk of this data dir
     int64_t _disk_capacity_bytes;

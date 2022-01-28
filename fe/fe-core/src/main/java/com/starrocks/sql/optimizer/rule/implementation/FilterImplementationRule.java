@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
@@ -24,7 +24,8 @@ public class FilterImplementationRule extends ImplementationRule {
 
         PhysicalFilterOperator filter = new PhysicalFilterOperator(
                 logical.getPredicate(),
-                logical.getLimit());
+                logical.getLimit(),
+                logical.getProjection());
         return Lists.newArrayList(OptExpression.create(filter, input.getInputs()));
     }
 }

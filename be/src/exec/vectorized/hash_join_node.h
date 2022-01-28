@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -20,17 +20,22 @@ namespace vectorized {
 class ColumnRef;
 class RuntimeFilterBuildDescriptor;
 
-class HashJoinNode : public ExecNode {
+static constexpr size_t kHashJoinKeyColumnOffset = 1;
+class HashJoinNode final : public ExecNode {
 public:
     HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~HashJoinNode() override = default;
+    ~HashJoinNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
+    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     static bool _has_null(const ColumnPtr& column);
@@ -69,19 +74,29 @@ private:
     static std::string _get_join_type_str(TJoinOp::type join_type);
 
     friend ExecNode;
-
+    // _hash_join_node is used to construct HashJoiner, the reference is sound since
+    // it's only used in FragmentExecutor::prepare function.
+    const THashJoinNode& _hash_join_node;
     std::vector<ExprContext*> _probe_expr_ctxs;
     std::vector<ExprContext*> _build_expr_ctxs;
     std::vector<ExprContext*> _other_join_conjunct_ctxs;
     std::vector<bool> _is_null_safes;
+
+    // If distribution type is SHUFFLE_HASH_BUCKET, local shuffle can use the
+    // equivalence of ExchagneNode's partition colums
+    std::vector<ExprContext*> _probe_equivalence_partition_expr_ctxs;
+    std::vector<ExprContext*> _build_equivalence_partition_expr_ctxs;
 
     std::list<ExprContext*> _runtime_in_filters;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
     bool _build_runtime_filters_from_planner;
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
+    TJoinDistributionMode::type _distribution_mode = TJoinDistributionMode::NONE;
+    std::set<SlotId> _output_slots;
 
     bool _is_push_down = false;
+    bool _need_create_tuple_columns = true;
 
     JoinHashTable _ht;
 
@@ -102,6 +117,7 @@ private:
     bool _right_table_has_remain = false;
     bool _build_eos = false;
     bool _probe_eos = false; // probe table scan finished;
+    size_t _runtime_join_filter_pushdown_limit = 1024000;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _build_ht_timer = nullptr;

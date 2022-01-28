@@ -123,7 +123,7 @@ void DownloadAction::handle(HttpRequest* req) {
         handle_normal(req, file_path);
     }
 
-    LOG(INFO) << "deal with download requesst finished! ";
+    LOG(INFO) << "deal with download request finished!";
 }
 
 Status DownloadAction::check_token(HttpRequest* req) {
@@ -143,10 +143,7 @@ Status DownloadAction::check_path_is_allowed(const std::string& file_path) {
     DCHECK_EQ(_download_type, NORMAL);
 
     std::string canonical_file_path;
-    RETURN_CODE_IF_ERROR_WITH_WARN(FileUtils::canonicalize(file_path, &canonical_file_path),
-                                   Status::InternalError("file path is invalid: " + file_path),
-                                   "file path is invalid: " + file_path);
-
+    RETURN_IF_ERROR(FileUtils::canonicalize(file_path, &canonical_file_path));
     for (auto& allow_path : _allow_paths) {
         if (FileSystemUtil::contain_path(allow_path, canonical_file_path)) {
             return Status::OK();
@@ -160,10 +157,7 @@ Status DownloadAction::check_log_path_is_allowed(const std::string& file_path) {
     DCHECK_EQ(_download_type, ERROR_LOG);
 
     std::string canonical_file_path;
-    RETURN_CODE_IF_ERROR_WITH_WARN(FileUtils::canonicalize(file_path, &canonical_file_path),
-                                   Status::InternalError("file path is invalid: " + file_path),
-                                   "file path is invalid: " + file_path);
-
+    RETURN_IF_ERROR(FileUtils::canonicalize(file_path, &canonical_file_path));
     if (FileSystemUtil::contain_path(_error_log_root_dir, canonical_file_path)) {
         return Status::OK();
     }

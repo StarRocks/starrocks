@@ -72,7 +72,6 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.thrift.TStorageFormat;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -169,6 +168,38 @@ public class OlapScanNode extends ScanNode {
 
     public Collection<Long> getSelectedPartitionIds() {
         return selectedPartitionIds;
+    }
+
+    // The dict id int column ids to dict string column ids
+    private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
+
+    public void setDictStringIdToIntIds(Map<Integer, Integer> dictStringIdToIntIds) {
+        this.dictStringIdToIntIds = dictStringIdToIntIds;
+    }
+
+    // The column names applied dict optimization
+    // used for explain
+    private List<String> appliedDictStringColumns = new ArrayList<>();
+
+    public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (appliedColumnIds.contains(slot.getId().asInt())) {
+                appliedDictStringColumns.add(slot.getColumn().getName());
+            }
+        }
+    }
+
+    private List<String> unUsedOutputStringColumns = new ArrayList<>();
+    
+    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds) {
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (!slot.isMaterialized()) {
+                continue;
+            }
+            if (unUsedOutputColumnIds.contains(slot.getId().asInt())) {
+                unUsedOutputStringColumns.add(slot.getColumn().getName());
+            }
+        }
     }
 
     /**
@@ -365,9 +396,7 @@ public class OlapScanNode extends ScanNode {
         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = partition.getVisibleVersion();
-        long visibleVersionHash = partition.getVisibleVersionHash();
         String visibleVersionStr = String.valueOf(visibleVersion);
-        String visibleVersionHashStr = String.valueOf(partition.getVisibleVersionHash());
 
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
@@ -378,17 +407,17 @@ public class OlapScanNode extends ScanNode {
             internalRange.setDb_name("");
             internalRange.setSchema_hash(schemaHashStr);
             internalRange.setVersion(visibleVersionStr);
-            internalRange.setVersion_hash(visibleVersionHashStr);
+            internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
 
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
             tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                    visibleVersion, visibleVersionHash, localBeId, schemaHash);
+                    visibleVersion, localBeId, schemaHash);
             if (allQueryableReplicas.isEmpty()) {
                 LOG.error("no queryable replica found in tablet {}. visible version {}-{}",
-                        tabletId, visibleVersion, visibleVersionHash);
+                        tabletId, visibleVersion);
                 if (LOG.isDebugEnabled()) {
                     for (Replica replica : tablet.getReplicas()) {
                         LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
@@ -620,6 +649,28 @@ public class OlapScanNode extends ScanNode {
             output.append(prefix).append("Predicates: ").append(getVerboseExplain(conjuncts)).append("\n");
         }
 
+        if (!dictStringIdToIntIds.isEmpty()) {
+            List<String> flatDictList = dictStringIdToIntIds.entrySet().stream().limit(5)
+                    .map((entry) -> "(" + entry.getKey() + "," + entry.getValue() + ")").collect(Collectors.toList());
+            String format_template = "dictStringIdToIntIds=%s";
+            if (dictStringIdToIntIds.size() > 5) {
+                format_template = format_template + "...";
+            }
+            output.append(prefix).append(String.format(format_template, Joiner.on(",").join(flatDictList)));
+            output.append("\n");
+        }
+
+        if (!appliedDictStringColumns.isEmpty()) {
+            int maxSize = Math.min(appliedDictStringColumns.size(), 5);
+            List<String> printList = appliedDictStringColumns.subList(0, maxSize);
+            String format_template = "dict_col=%s";
+            if (dictStringIdToIntIds.size() > 5) {
+                format_template = format_template + "...";
+            }
+            output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));
+            output.append("\n");
+        }
+
         output.append(prefix).append(String.format(
                 "partitionsRatio=%s/%s",
                 selectedPartitionNum,
@@ -668,6 +719,15 @@ public class OlapScanNode extends ScanNode {
         }
         if (null != sortColumn) {
             msg.olap_scan_node.setSort_column(sortColumn);
+        }
+        if (ConnectContext.get() != null) {
+            msg.olap_scan_node.setEnable_column_expr_predicate(
+                    ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
+        }
+        msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
+
+        if (!olapTable.hasDelete()) {
+            msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
         }
     }
 
@@ -791,22 +851,6 @@ public class OlapScanNode extends ScanNode {
             expr = expr.getChild(0);
         }
         return expr instanceof SlotRef;
-    }
-
-    @Override
-    public boolean isVectorized() {
-        // Vector query engine only support segment v2
-        if (olapTable.getStorageFormat() == TStorageFormat.V1) {
-            return false;
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     @Override

@@ -25,16 +25,12 @@
 
 #include <string>
 
-#include "runtime/mem_tracker.h"
-#include "util/logging.h"
-
 namespace starrocks {
 
 TEST(MemPoolTest, Basic) {
-    MemTracker tracker(-1);
-    MemPool p(&tracker);
-    MemPool p2(&tracker);
-    MemPool p3(&tracker);
+    MemPool p;
+    MemPool p2;
+    MemPool p3;
 
     // allocate a total of 24K in 32-byte pieces (for which we only request 25 bytes)
     for (int i = 0; i < 768; ++i) {
@@ -93,7 +89,7 @@ TEST(MemPoolTest, Basic) {
     EXPECT_EQ(256 * 1024, p2.total_reserved_bytes());
 
     {
-        MemPool p4(&tracker);
+        MemPool p4;
         p4.exchange_data(&p2);
         EXPECT_EQ(33 * 1024, p4.total_allocated_bytes());
         EXPECT_EQ(256 * 1024, p4.total_reserved_bytes());
@@ -105,8 +101,7 @@ TEST(MemPoolTest, Basic) {
 // remaining chunks are consistent if there were more than one used chunk and some
 // free chunks.
 TEST(MemPoolTest, Keep) {
-    MemTracker tracker(-1);
-    MemPool p(&tracker);
+    MemPool p;
     p.allocate(4 * 1024);
     p.allocate(8 * 1024);
     p.allocate(16 * 1024);
@@ -119,7 +114,7 @@ TEST(MemPoolTest, Keep) {
     p.allocate(4 * 1024);
     EXPECT_EQ(p.total_allocated_bytes(), (1 + 4) * 1024);
     EXPECT_EQ(p.total_reserved_bytes(), (4 + 8 + 16) * 1024);
-    MemPool p2(&tracker);
+    MemPool p2;
     p2.acquire_data(&p, true);
 
     {
@@ -138,8 +133,7 @@ TEST(MemPoolTest, MaxAllocation) {
     int64_t int_max_rounded = BitUtil::round_up(LARGE_ALLOC_SIZE, 8);
 
     // Allocate a single LARGE_ALLOC_SIZE chunk
-    MemTracker tracker(-1);
-    MemPool p1(&tracker);
+    MemPool p1;
     uint8_t* ptr = p1.allocate(LARGE_ALLOC_SIZE);
     EXPECT_TRUE(ptr != NULL);
     EXPECT_EQ(int_max_rounded, p1.total_reserved_bytes());
@@ -147,7 +141,7 @@ TEST(MemPoolTest, MaxAllocation) {
     p1.free_all();
 
     // Allocate a small chunk (DEFAULT_INITIAL_CHUNK_SIZE) followed by an LARGE_ALLOC_SIZE chunk
-    MemPool p2(&tracker);
+    MemPool p2;
     p2.allocate(8);
     EXPECT_EQ(p2.total_reserved_bytes(), 4096);
     EXPECT_EQ(p2.total_allocated_bytes(), 8);
@@ -159,7 +153,7 @@ TEST(MemPoolTest, MaxAllocation) {
 
     // Allocate three LARGE_ALLOC_SIZE chunks followed by a small chunk followed by another LARGE_ALLOC_SIZE
     // chunk
-    MemPool p3(&tracker);
+    MemPool p3;
     p3.allocate(LARGE_ALLOC_SIZE);
     // Allocates new int_max_rounded * 2 chunk
     // NOTE: exceed MAX_CHUNK_SIZE limit, will not *2

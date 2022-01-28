@@ -29,7 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -41,9 +41,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
 
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
@@ -242,11 +239,6 @@ public class SlotRef extends Expr {
     }
 
     @Override
-    public void markAgg() {
-        desc.setIsAgg(true);
-    }
-
-    @Override
     public int hashCode() {
         if (desc != null) {
             return desc.getId().hashCode();
@@ -321,32 +313,6 @@ public class SlotRef extends Expr {
         }
     }
 
-    @Override
-    public void getTableIdToColumnNames(Map<Long, Set<String>> tableIdToColumnNames) {
-        Preconditions.checkState(desc != null);
-        if (!desc.isMaterialized()) {
-            return;
-        }
-        if (col == null) {
-            for (Expr expr : desc.getSourceExprs()) {
-                expr.getTableIdToColumnNames(tableIdToColumnNames);
-            }
-        } else {
-            Table table = desc.getParent().getTable();
-            if (table == null) {
-                // Maybe this column comes from inline view.
-                return;
-            }
-            Long tableId = table.getId();
-            Set<String> columnNames = tableIdToColumnNames.get(tableId);
-            if (columnNames == null) {
-                columnNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-                tableIdToColumnNames.put(tableId, columnNames);
-            }
-            columnNames.add(desc.getColumn().getName());
-        }
-    }
-
     public Table getTable() {
         Preconditions.checkState(desc != null);
         Table table = desc.getParent().getTable();
@@ -392,20 +358,20 @@ public class SlotRef extends Expr {
         return slotRef;
     }
 
-    @Override
-    public boolean isVectorized() {
-        return true;
-    }
-
     /**
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitSlot(this, context);
     }
 
     public TableName getTblNameWithoutAnalyzed() {
         return tblName;
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return true;
     }
 }

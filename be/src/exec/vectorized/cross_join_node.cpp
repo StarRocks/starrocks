@@ -1,10 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/cross_join_node.h"
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "exec/pipeline/crossjoin/cross_join_context.h"
+#include "exec/pipeline/crossjoin/cross_join_left_operator.h"
+#include "exec/pipeline/crossjoin/cross_join_right_sink_operator.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr_context.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
@@ -13,6 +19,9 @@ CrossJoinNode::CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const Des
 
 Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    if (tnode.__isset.need_create_tuple_columns) {
+        _need_create_tuple_columns = tnode.need_create_tuple_columns;
+    }
     return Status::OK();
 }
 
@@ -36,11 +45,11 @@ Status CrossJoinNode::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(child(0)->open(state));
 
-    return Status::OK();
-}
+    if (_build_chunk != nullptr) {
+        _mem_tracker->set(_build_chunk->memory_usage());
+    }
 
-Status CrossJoinNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for row_batch is not supported");
+    return Status::OK();
 }
 
 Status CrossJoinNode::_get_next_probe_chunk(RuntimeState* state) {
@@ -241,14 +250,14 @@ void CrossJoinNode::_copy_build_rows_with_index_base_build(ColumnPtr& dest_col, 
 
 /*
 First, build a large chunk to contain the right table.
-Then the right table is divided into two parts. 
+Then the right table is divided into two parts.
 The number of rows is a multiple of 4096 (big_Chunk) and small with less than 4096 rows(small_chunk).
 
 right table is about _number_of_build_rows rows.
 big_chunk's range is    [0 - _build_chunks_size)
 small_chunk's range is  [_build_chunks_size - _number_of_build_rows)
 
-For each chunk probe in the left table, probe_chunk, 
+For each chunk probe in the left table, probe_chunk,
 we need to make it iterate with the right table, as iteratoe big_chunk and small_chunk separately.
 
 Our way is
@@ -299,7 +308,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
         }
 
         // need row_count to fill in chunk.
-        size_t row_count = config::vector_chunk_size - (*chunk)->num_rows();
+        size_t row_count = runtime_state()->chunk_size() - (*chunk)->num_rows();
 
         // means we have scan all chunks of right tables.
         // we should scan all remain rows of right table.
@@ -381,7 +390,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
             continue;
         }
 
-        if ((*chunk)->num_rows() < config::vector_chunk_size) {
+        if ((*chunk)->num_rows() < runtime_state()->chunk_size()) {
             continue;
         }
 
@@ -421,6 +430,13 @@ Status CrossJoinNode::close(RuntimeState* state) {
         return Status::OK();
     }
 
+    if (_build_chunk != nullptr) {
+        _build_chunk->reset();
+    }
+    if (_probe_chunk != nullptr) {
+        _probe_chunk->reset();
+    }
+
     child(0)->close(state);
     return ExecNode::close(state);
 }
@@ -431,8 +447,10 @@ void CrossJoinNode::_init_row_desc() {
             _col_types.emplace_back(slot);
             _probe_column_count++;
         }
-        if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-            _output_probe_tuple_ids.emplace_back(tuple_desc->id());
+        if (_need_create_tuple_columns) {
+            if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
+                _output_probe_tuple_ids.emplace_back(tuple_desc->id());
+            }
         }
     }
     for (auto& tuple_desc : child(1)->row_desc().tuple_descriptors()) {
@@ -440,8 +458,10 @@ void CrossJoinNode::_init_row_desc() {
             _col_types.emplace_back(slot);
             _build_column_count++;
         }
-        if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-            _output_build_tuple_ids.emplace_back(tuple_desc->id());
+        if (_need_create_tuple_columns) {
+            if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
+                _output_build_tuple_ids.emplace_back(tuple_desc->id());
+            }
         }
     }
 }
@@ -451,6 +471,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
     RETURN_IF_ERROR(child(1)->open(state));
 
     while (true) {
+        RETURN_IF_ERROR(state->check_mem_limit("CrossJoin"));
         bool eos = false;
         ChunkPtr chunk = nullptr;
         RETURN_IF_CANCELLED(state);
@@ -471,11 +492,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
                 // merge chunks from child(1) (the right table) into a big chunk, which can reduce
                 // the complexity and time of cross-join chunks from left table with small chunks
                 // from right table.
-                size_t col_number = chunk->num_columns();
-                for (size_t col = 0; col < col_number; ++col) {
-                    _build_chunk->get_column_by_index(col)->append(*(chunk->get_column_by_index(col).get()), 0,
-                                                                   row_number);
-                }
+                TRY_CATCH_BAD_ALLOC(_build_chunk->append(*chunk));
             }
         }
     }
@@ -483,7 +500,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
     // Should not call num_rows on nullptr.
     if (_build_chunk != nullptr) {
         _number_of_build_rows = _build_chunk->num_rows();
-        _build_chunks_size = (_number_of_build_rows / config::vector_chunk_size) * config::vector_chunk_size;
+        _build_chunks_size = (_number_of_build_rows / runtime_state()->chunk_size()) * runtime_state()->chunk_size();
     }
 
     RETURN_IF_ERROR(child(1)->close(state));
@@ -521,7 +538,42 @@ void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
     }
 
     *chunk = std::move(new_chunk);
-    (*chunk)->reserve(config::vector_chunk_size);
+    (*chunk)->reserve(runtime_state()->chunk_size());
+}
+
+pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+
+    // step 0: construct pipeline end with cross join right operator.
+    OpFactories right_ops = _children[1]->decompose_to_pipeline(context);
+
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
+    // communication with CrossJoinLeft through shared_datas.
+    auto* right_source = down_cast<SourceOperatorFactory*>(right_ops[0].get());
+    auto cross_join_context = std::make_shared<pipeline::CrossJoinContext>(right_source->degree_of_parallelism());
+
+    // cross_join_right as sink operator
+    auto right_factory =
+            std::make_shared<CrossJoinRightSinkOperatorFactory>(context->next_operator_id(), id(), cross_join_context);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(right_factory.get(), context, rc_rf_probe_collector);
+    right_ops.emplace_back(std::move(right_factory));
+    context->add_pipeline(right_ops);
+
+    // step 1: construct pipeline end with cross join left operator(cross join left maybe not sink operator).
+    OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
+
+    // communication with CrossJoioRight through shared_datas.
+    auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
+            context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
+            std::move(_conjunct_ctxs), std::move(cross_join_context));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
+    left_ops.emplace_back(std::move(left_factory));
+
+    // return as the following pipeline
+    return left_ops;
 }
 
 } // namespace starrocks::vectorized

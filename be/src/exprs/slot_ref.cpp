@@ -25,13 +25,8 @@
 
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/runtime_state.h"
-#include "util/types.h"
 
 namespace starrocks {
-
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
 
 SlotRef::SlotRef(const TExprNode& node)
         : Expr(node, true),
@@ -133,7 +128,6 @@ bool SlotRef::is_bound(const std::vector<TupleId>& tuple_ids) const {
             return true;
         }
     }
-
     return false;
 }
 
@@ -142,124 +136,6 @@ std::string SlotRef::debug_string() const {
     out << "SlotRef(slot_id=" << _slot_id << " tuple_idx=" << _tuple_idx << " slot_offset=" << _slot_offset
         << " null_indicator=" << _null_indicator_offset << " " << Expr::debug_string() << ")";
     return out.str();
-}
-
-BooleanVal SlotRef::get_boolean_val(ExprContext* context, TupleRow* row) {
-    DCHECK_EQ(_type.type, TYPE_BOOLEAN);
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return BooleanVal::null();
-    }
-    return BooleanVal(*reinterpret_cast<bool*>(t->get_slot(_slot_offset)));
-}
-
-TinyIntVal SlotRef::get_tiny_int_val(ExprContext* context, TupleRow* row) {
-    DCHECK_EQ(_type.type, TYPE_TINYINT);
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return TinyIntVal::null();
-    }
-
-    return TinyIntVal(*reinterpret_cast<int8_t*>(t->get_slot(_slot_offset)));
-}
-
-SmallIntVal SlotRef::get_small_int_val(ExprContext* context, TupleRow* row) {
-    DCHECK_EQ(_type.type, TYPE_SMALLINT);
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return SmallIntVal::null();
-    }
-    return SmallIntVal(*reinterpret_cast<int16_t*>(t->get_slot(_slot_offset)));
-}
-
-IntVal SlotRef::get_int_val(ExprContext* context, TupleRow* row) {
-    DCHECK_EQ(_type.type, TYPE_INT);
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return IntVal::null();
-    }
-    return IntVal(*reinterpret_cast<int32_t*>(t->get_slot(_slot_offset)));
-}
-
-BigIntVal SlotRef::get_big_int_val(ExprContext* context, TupleRow* row) {
-    DCHECK_EQ(_type.type, TYPE_BIGINT);
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return BigIntVal::null();
-    }
-    return BigIntVal(*reinterpret_cast<int64_t*>(t->get_slot(_slot_offset)));
-}
-
-LargeIntVal SlotRef::get_large_int_val(ExprContext* context, TupleRow* row) {
-    DCHECK_EQ(_type.type, TYPE_LARGEINT);
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return LargeIntVal::null();
-    }
-    return LargeIntVal(reinterpret_cast<PackedInt128*>(t->get_slot(_slot_offset))->value);
-}
-
-FloatVal SlotRef::get_float_val(ExprContext* context, TupleRow* row) {
-    DCHECK_EQ(_type.type, TYPE_FLOAT);
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return FloatVal::null();
-    }
-    return FloatVal(*reinterpret_cast<float*>(t->get_slot(_slot_offset)));
-}
-
-DoubleVal SlotRef::get_double_val(ExprContext* context, TupleRow* row) {
-    DCHECK_EQ(_type.type, TYPE_DOUBLE);
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return DoubleVal::null();
-    }
-    return DoubleVal(*reinterpret_cast<double*>(t->get_slot(_slot_offset)));
-}
-
-StringVal SlotRef::get_string_val(ExprContext* context, TupleRow* row) {
-    DCHECK(_type.is_string_type());
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return StringVal::null();
-    }
-    StringVal result;
-    StringValue* sv = reinterpret_cast<StringValue*>(t->get_slot(_slot_offset));
-    sv->to_string_val(&result);
-    return result;
-}
-
-DateTimeVal SlotRef::get_datetime_val(ExprContext* context, TupleRow* row) {
-    DCHECK(_type.is_date_type());
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return DateTimeVal::null();
-    }
-    DateTimeValue* tv = reinterpret_cast<DateTimeValue*>(t->get_slot(_slot_offset));
-    DateTimeVal result;
-    tv->to_datetime_val(&result);
-    return result;
-}
-
-DecimalVal SlotRef::get_decimal_val(ExprContext* context, TupleRow* row) {
-    DCHECK_EQ(_type.type, TYPE_DECIMAL);
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return DecimalVal::null();
-    }
-    DecimalVal dec_val;
-    reinterpret_cast<DecimalValue*>(t->get_slot(_slot_offset))->to_decimal_val(&dec_val);
-    return dec_val;
-}
-
-DecimalV2Val SlotRef::get_decimalv2_val(ExprContext* context, TupleRow* row) {
-    DCHECK_EQ(_type.type, TYPE_DECIMALV2);
-    Tuple* t = row->get_tuple(_tuple_idx);
-    if (t == nullptr || t->is_null(_null_indicator_offset)) {
-        return DecimalV2Val::null();
-    }
-
-    return DecimalV2Val(reinterpret_cast<PackedInt128*>(t->get_slot(_slot_offset))->value);
 }
 
 ColumnPtr SlotRef::evaluate(ExprContext* context, vectorized::Chunk* ptr) {

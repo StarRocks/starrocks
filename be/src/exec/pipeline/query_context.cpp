@@ -1,12 +1,25 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #include "exec/pipeline/query_context.h"
 
 #include "exec/pipeline/fragment_context.h"
+#include "runtime/data_stream_mgr.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 QueryContext::QueryContext()
-        : _fragment_mgr(new FragmentContextManager()), _num_fragments(0), _num_active_fragments(0) {}
+        : _fragment_mgr(new FragmentContextManager()),
+          _total_fragments(0),
+          _num_fragments(0),
+          _num_active_fragments(0),
+          _deadline(0) {}
 
+QueryContext::~QueryContext() {
+    if (_exec_env != nullptr) {
+        if (_is_runtime_filter_coordinator) {
+            _exec_env->runtime_filter_worker()->close_query(_query_id);
+        }
+    }
+}
 FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();
 }

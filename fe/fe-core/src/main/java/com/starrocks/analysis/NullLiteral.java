@@ -122,11 +122,6 @@ public class NullLiteral extends LiteralExpr {
     }
 
     @Override
-    protected boolean canCastTo(Type targetType) {
-        return true;
-    }
-
-    @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
         Preconditions.checkState(targetType.isValid());
         if (!type.equals(targetType)) {
@@ -155,10 +150,5 @@ public class NullLiteral extends LiteralExpr {
         NullLiteral literal = new NullLiteral();
         literal.readFields(in);
         return literal;
-    }
-
-    @Override
-    public boolean isVectorized() {
-        return true;
     }
 }

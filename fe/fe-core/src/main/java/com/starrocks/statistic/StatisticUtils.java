@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.statistic;
 
@@ -32,6 +32,8 @@ public class StatisticUtils {
         context.getSessionVariable().setReportSuccess(false);
         // Always use 1 parallel to avoid affect normal query
         context.getSessionVariable().setParallelExecInstanceNum(1);
+        // TODO(kks): remove this if pipeline support STATISTIC result sink type
+        context.getSessionVariable().setEnablePipelineEngine(false);
         context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         context.setDatabase(Constants.StatisticsDBName);
         context.setCatalog(Catalog.getCurrentCatalog());
@@ -77,6 +79,10 @@ public class StatisticUtils {
         long maxTime = ((OlapTable) table).getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
+    }
+
+    public static boolean isEmptyTable(Table table) {
+        return ((OlapTable) table).getPartitions().stream().noneMatch(Partition::hasData);
     }
 
 }

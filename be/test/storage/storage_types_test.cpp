@@ -22,7 +22,6 @@
 #include <gtest/gtest.h>
 
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/field.h"
 #include "storage/types.h"
 #include "util/slice.h"
@@ -43,8 +42,7 @@ void common_test(typename TypeTraits<field_type>::CppType src_val) {
     ASSERT_EQ(sizeof(src_val), type->size());
     {
         typename TypeTraits<field_type>::CppType dst_val;
-        MemTracker tracker;
-        MemPool pool(&tracker);
+        MemPool pool;
         type->deep_copy((char*)&dst_val, (char*)&src_val, &pool);
         ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
         ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));
@@ -83,8 +81,7 @@ void test_char(Slice src_val) {
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));
-        MemTracker tracker;
-        MemPool pool(&tracker);
+        MemPool pool;
         type->deep_copy((char*)&dst_val, (char*)&src_val, &pool);
         ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
         ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));

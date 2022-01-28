@@ -271,14 +271,14 @@ public class OlapTable extends Table {
         return indexNameToId.containsKey(indexName);
     }
 
-    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion, int schemaHash,
-                             short shortKeyColumnCount, TStorageType storageType, KeysType keysType) {
+    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+                             int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType) {
         setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
                 null);
     }
 
-    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion, int schemaHash,
-                             short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+                             int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                              OriginStatement origStmt) {
         // Nullable when meta comes from schema change log replay.
         // The replay log only save the index id, so we need to get name by id.
@@ -504,7 +504,7 @@ public class OlapTable extends Table {
                     for (Long beId : beIds) {
                         long newReplicaId = catalog.getNextId();
                         Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
-                                partition.getVisibleVersion(), partition.getVisibleVersionHash(), schemaHash);
+                                partition.getVisibleVersion(), schemaHash);
                         newTablet.addReplica(replica, true /* is restore */);
                     }
                 }
@@ -615,7 +615,7 @@ public class OlapTable extends Table {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
         for (Column column : partitionColumns) {
-            partitionColumnNames.add(column.getName().toLowerCase());
+            partitionColumnNames.add(column.getName());
         }
         return partitionColumnNames;
     }
@@ -1086,8 +1086,8 @@ public class OlapTable extends Table {
                 short shortKeyColumnCount = in.readShort();
 
                 // The keys type in here is incorrect
-                MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema,
-                        schemaVersion, schemaHash, shortKeyColumnCount, storageType, KeysType.AGG_KEYS, null);
+                MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion, schemaHash,
+                        shortKeyColumnCount, storageType, KeysType.AGG_KEYS, null);
                 tmpIndexMetaList.add(indexMeta);
             } else {
                 MaterializedIndexMeta indexMeta = MaterializedIndexMeta.read(in);
@@ -1321,7 +1321,6 @@ public class OlapTable extends Table {
         List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(clusterName, true);
         for (Partition partition : idToPartition.values()) {
             long visibleVersion = partition.getVisibleVersion();
-            long visibleVersionHash = partition.getVisibleVersionHash();
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : mIndex.getTablets()) {
@@ -1330,7 +1329,7 @@ public class OlapTable extends Table {
                     }
 
                     Pair<TabletStatus, TabletSchedCtx.Priority> statusPair = tablet.getHealthStatusWithPriority(
-                            infoService, clusterName, visibleVersion, visibleVersionHash, replicationNum,
+                            infoService, clusterName, visibleVersion, replicationNum,
                             aliveBeIdsInCluster);
                     if (statusPair.first != TabletStatus.HEALTHY) {
                         LOG.info("table {} is not stable because tablet {} status is {}. replicas: {}",
@@ -1373,12 +1372,11 @@ public class OlapTable extends Table {
         long totalCount = 0;
         for (Partition partition : getPartitions()) {
             long version = partition.getVisibleVersion();
-            long versionHash = partition.getVisibleVersionHash();
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
                     long tabletRowCount = 0L;
                     for (Replica replica : tablet.getReplicas()) {
-                        if (replica.checkVersionCatchUp(version, versionHash, false)
+                        if (replica.checkVersionCatchUp(version, false)
                                 && replica.getRowCount() > tabletRowCount) {
                             tabletRowCount = replica.getRowCount();
                         }
@@ -1460,6 +1458,42 @@ public class OlapTable extends Table {
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_INMEMORY, Boolean.valueOf(isInMemory).toString());
         tableProperty.buildInMemory();
+    }
+
+    public void setStorageMedium(TStorageMedium storageMedium) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium.name());
+    }
+
+    public boolean hasDelete() {
+        if (tableProperty == null) {
+            return false;
+        }
+        return tableProperty.hasDelete();
+    }
+
+    public void setHasDelete() {
+        if (tableProperty == null) {
+            return;
+        }
+        tableProperty.setHasDelete(true);
+    }
+
+    public boolean hasForbitGlobalDict() {
+        if (tableProperty == null) {
+            return false;
+        }
+        return tableProperty.hasForbitGlobalDict();
+    }
+
+    public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
+        if (tableProperty == null) {
+            return;
+        }
+        tableProperty.setHasForbitGlobalDict(hasForbitGlobalDict);
     }
 
     // return true if partition with given name already exist, both in partitions and temp partitions.

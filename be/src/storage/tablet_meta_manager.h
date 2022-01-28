@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TABLET_META_MANAGER_H
-#define STARROCKS_BE_SRC_OLAP_TABLET_META_MANAGER_H
+#pragma once
 
 #include <string>
 
@@ -80,7 +79,7 @@ public:
     static Status get_primary_meta(KVStore* meta, TTabletId tablet_id, TabletMetaPB& tablet_meta_pb, string* json_meta);
 
     static Status get_tablet_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
-                                  const TabletMetaSharedPtr& tablet_meta);
+                                  TabletMeta* tablet_meta);
 
     static Status get_json_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash, std::string* json_meta);
 
@@ -111,6 +110,10 @@ public:
     // commit a rowset into tablet
     static Status rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, EditVersionMetaPB* edit,
                                 const RowsetMetaPB& rowset, const string& rowset_meta_key);
+    // write rowset_meta into rocksdb
+    // this function is used for partial update so far
+    static Status write_rowset_meta(DataDir* store, TTabletId tablet_id, const RowsetMetaPB& rowset,
+                                    const string& rowset_meta_key);
 
     using RowsetIterateFunc = std::function<bool(RowsetMetaSharedPtr rowset_meta)>;
     static Status rowset_iterate(DataDir* store, TTabletId tablet_id, const RowsetIterateFunc& func);
@@ -180,5 +183,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_TABLET_META_MANAGER_H

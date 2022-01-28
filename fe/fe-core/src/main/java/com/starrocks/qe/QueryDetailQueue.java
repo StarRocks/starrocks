@@ -30,7 +30,7 @@ import java.util.List;
 // Queue of QueryDetail.
 // It's used to collect queries for monitor.
 public class QueryDetailQueue {
-    private static LinkedList<QueryDetail> totalQueries = new LinkedList<QueryDetail>();
+    private static final LinkedList<QueryDetail> totalQueries = new LinkedList<QueryDetail>();
 
     //starrocks-manager pull queries every 1 second
     //metrics calculate query latency every 15 second
@@ -59,9 +59,7 @@ public class QueryDetailQueue {
 
     public static synchronized List<QueryDetail> getQueryDetailsAfterTime(long eventTime) {
         List<QueryDetail> results = Lists.newArrayList();
-        Iterator<QueryDetail> it = totalQueries.iterator();
-        while (it.hasNext()) {
-            QueryDetail queryDetail = it.next();
+        for (QueryDetail queryDetail : totalQueries) {
             if (queryDetail.getEventTime() > eventTime) {
                 results.add(queryDetail);
             }

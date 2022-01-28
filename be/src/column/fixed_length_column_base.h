@@ -1,14 +1,15 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
 #include <utility>
 
 #include "column/column.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
 #include "util/raw_container.h"
+#include "util/value_generator.h"
 
 namespace starrocks::vectorized {
 
@@ -66,6 +67,8 @@ public:
 
     size_t size() const override { return _data.size(); }
 
+    size_t capacity() const override { return _data.capacity(); }
+
     size_t byte_size() const override { return _data.size() * sizeof(ValueType); }
 
     size_t byte_size(size_t idx __attribute__((unused))) const override { return sizeof(ValueType); }
@@ -117,9 +120,13 @@ public:
         _data.insert(_data.end(), count, *reinterpret_cast<const T*>(value));
     }
 
-    void append_default() override { _data.emplace_back(ValueType()); }
+    void append_default() override { _data.emplace_back(DefaultValueGenerator<ValueType>::next_value()); }
 
-    void append_default(size_t count) override { _data.resize(_data.size() + count); }
+    void append_default(size_t count) override {
+        _data.resize(_data.size() + count, DefaultValueGenerator<ValueType>::next_value());
+    }
+
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t serialize(size_t idx, uint8_t* pos) override;
 
@@ -138,15 +145,9 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) override;
+    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override { return sizeof(ValueType); }
-
-    size_t serialize_size() const override { return byte_size() + sizeof(uint32_t); }
-
-    uint8_t* serialize_column(uint8_t* dst) override;
-
-    const uint8_t* deserialize_column(const uint8_t* src) override;
 
     MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
 

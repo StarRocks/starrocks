@@ -80,6 +80,11 @@ struct TLoadErrorHubInfo {
     3: optional TBrokerErrorHubInfo broker_info;
 }
 
+enum TPipelineProfileMode {
+  BRIEF,
+  DETAIL
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   1: optional bool abort_on_error = 0
@@ -149,11 +154,9 @@ struct TQueryOptions {
   // Timeout in ms to send runtime filter across nodes.
   53: optional i32 runtime_filter_send_timeout_ms = 400;
   // For pipeline query engine
-  54: optional i32 query_threads;
+  54: optional i32 pipeline_dop;
   // For pipeline query engine
-  55: optional i32 pipeline_scan_mode;
-  // For query context expired period
-  56: optional i32 pipeline_query_expire_seconds
+  55: optional TPipelineProfileMode pipeline_profile_mode;
 }
 
 
@@ -179,16 +182,6 @@ struct TRuntimeFilterParams {
   4: optional i64 runtime_filter_max_size;
 }
 
-// Specification of one output destination of a plan fragment
-struct TPlanFragmentDestination {
-  // the globally unique fragment instance id
-  1: required Types.TUniqueId fragment_instance_id
-
-  // ... which is being executed on this server
-  2: required Types.TNetworkAddress server
-  3: optional Types.TNetworkAddress brpc_server
-}
-
 // Parameters for a single execution instance of a particular TPlanFragment
 // TODO: for range partitioning, we also need to specify the range boundaries
 struct TPlanFragmentExecParams {
@@ -210,7 +203,7 @@ struct TPlanFragmentExecParams {
   // The partitioning of the output is specified by
   // TPlanFragment.output_sink.output_partition.
   // The number of output partitions is destinations.size().
-  5: list<TPlanFragmentDestination> destinations
+  5: list<DataSinks.TPlanFragmentDestination> destinations
 
   // Debug options: perform some action in a particular phase of a particular node
   6: optional Types.TPlanNodeId debug_node_id
@@ -226,6 +219,8 @@ struct TPlanFragmentExecParams {
   // Global runtime filters
   50: optional TRuntimeFilterParams runtime_filter_params
   51: optional i32 instances_number
+  // To enable pass through chunks between sink/exchange if they are in the same process.
+  52: optional bool enable_exchange_pass_through
 }
 
 // Global query parameters assigned by the coordinator.
@@ -299,6 +294,8 @@ struct TExecPlanFragmentParams {
   14: optional TLoadErrorHubInfo load_error_hub_info
 
   50: optional bool is_pipeline
+  51: optional i32 pipeline_dop
+  52: optional map<Types.TPlanNodeId, i32> per_scan_node_dop;
 }
 
 struct TExecPlanFragmentResult {

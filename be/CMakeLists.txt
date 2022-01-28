@@ -55,11 +55,13 @@ set(BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(ENV{STARROCKS_HOME} "${BASE_DIR}/../")
 set(BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}/installed/")
+set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
 set(GENSRC_DIR "${BASE_DIR}/../gensrc/build/")
 set(SRC_DIR "${BASE_DIR}/src/")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
 set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
+set(CMAKE_EXPORT_COMPILECOMMANDS ON)
 
 if (APPLE)
     set(MAKE_TEST "ON")
@@ -264,6 +266,12 @@ endif()
 add_library(hyperscan STATIC IMPORTED)
 set_target_properties(hyperscan PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhs.a)
 
+add_library(simdjson STATIC IMPORTED)
+set_target_properties(simdjson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdjson.a)
+
+add_library(velocypack STATIC IMPORTED)
+set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
+
 find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
 
 # Check if functions are supported in this platform. All flags will generated
@@ -342,7 +350,7 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
 # Debug information is stored as dwarf2 to be as compatible as possible
 #   -Werror: compile warnings should be errors when using the toolchain compiler.
 # Only enable for debug builds because this is what we test in pre-commit tests.
-set(CXX_FLAGS_DEBUG "${CXX_GCC_FLAGS} -ggdb -O0 -gdwarf-4")
+set(CXX_FLAGS_DEBUG "${CXX_GCC_FLAGS} -ggdb -O0 -gdwarf-4 -DDEBUG")
 
 # For CMAKE_BUILD_TYPE=Release
 #   -O3: Enable all compiler optimizations
@@ -424,7 +432,9 @@ set(STARROCKS_LINK_LIBS
     Exprs
     Formats
     Gutil
-    Olap
+    IO
+    Serde
+    Storage
     Rowset
     OlapFs
     Runtime
@@ -448,7 +458,13 @@ if (WITH_HDFS)
     set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
         hdfs
         jvm
-        )
+    )
+    set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
+    add_library(jvm SHARED IMPORTED)
+    FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/jre/lib/*/libjvm.so)
+    set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
+    include_directories(${JAVA_HOME}/include)
+    include_directories(${JAVA_HOME}/include/linux)
 endif()
 
 # Set thirdparty libraries
@@ -456,8 +472,6 @@ set(STARROCKS_DEPENDENCIES
     ${STARROCKS_DEPENDENCIES}
     ${WL_START_GROUP}
     rocksdb
-    librdkafka_cpp
-    librdkafka
     libs2
     snappy
     ${Boost_LIBRARIES}
@@ -466,6 +480,8 @@ set(STARROCKS_DEPENDENCIES
     glog
     re2
     pprof
+    # Put lz4 in front of librdkafka to make sure that segment use the native lz4 library to compress/decompress page
+    # Otherwise, he will use the lz4 Library in librdkafka
     lz4
     libevent
     curl
@@ -491,6 +507,10 @@ set(STARROCKS_DEPENDENCIES
     fmt
     ryu
     hyperscan
+    simdjson
+    librdkafka_cpp
+    librdkafka
+    velocypack
     ${WL_END_GROUP}
 )
 
@@ -566,8 +586,10 @@ add_subdirectory(${SRC_DIR}/gen_cpp)
 add_subdirectory(${SRC_DIR}/geo)
 add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
+add_subdirectory(${SRC_DIR}/io)
 add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
+add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/udf)

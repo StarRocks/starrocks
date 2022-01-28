@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/meta_reader.h"
 
@@ -6,7 +6,8 @@
 
 #include "column/datum_convert.h"
 #include "storage/rowset/beta_rowset.h"
-#include "storage/rowset/segment_v2/column_reader.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/chunk_helper.h"
 
@@ -102,7 +103,7 @@ Status MetaReader::_build_collect_context(const MetaReaderParams& read_params) {
 }
 
 Status MetaReader::_init_seg_meta_collecters(const MetaReaderParams& params) {
-    std::vector<segment_v2::SegmentSharedPtr> segments;
+    std::vector<SegmentSharedPtr> segments;
     RETURN_IF_ERROR(_get_segments(params.tablet, params.version, &segments));
 
     for (auto& segment : segments) {
@@ -117,16 +118,18 @@ Status MetaReader::_init_seg_meta_collecters(const MetaReaderParams& params) {
 }
 
 Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& version,
-                                 std::vector<segment_v2::SegmentSharedPtr>* segments) {
+                                 std::vector<SegmentSharedPtr>* segments) {
     if (tablet->updates() != nullptr) {
         LOG(INFO) << "Skipped Update tablet";
         return Status::OK();
     }
 
     std::vector<RowsetSharedPtr> rowsets;
-    tablet->obtain_header_rdlock();
-    Status acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &rowsets);
-    tablet->release_header_lock();
+    Status acquire_rowset_st;
+    {
+        std::shared_lock l(tablet->get_header_lock());
+        acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &rowsets);
+    }
 
     if (!acquire_rowset_st.ok()) {
         std::stringstream ss;
@@ -212,7 +215,7 @@ bool MetaReader::has_more() {
     return _has_more;
 }
 
-SegmentMetaCollecter::SegmentMetaCollecter(segment_v2::SegmentSharedPtr segment) : _segment(segment) {}
+SegmentMetaCollecter::SegmentMetaCollecter(SegmentSharedPtr segment) : _segment(segment) {}
 
 SegmentMetaCollecter::~SegmentMetaCollecter() {}
 
@@ -273,15 +276,17 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vec
 // collect dict
 Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* column, FieldType type) {
     if (!_column_iterators[cid]) {
-        return Status::InvalidArgument("Invalid Collet Params.");
-    }
-
-    if (!_column_iterators[cid]->all_page_dict_encoded()) {
-        return Status::NotSupported("No all page dict encoded.");
+        return Status::InvalidArgument("Invalid Collect Params.");
     }
 
     std::vector<Slice> words;
-    RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
+    if (!_column_iterators[cid]->all_page_dict_encoded()) {
+        // if all_page_dict_encoded if false, return fake dict word which cardinality exceed low cardinality base size
+        // so FE will not collect again and mark this column not a low cardinality
+        words = FAKE_DICT_SLICE_WORDS;
+    } else {
+        RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
+    }
 
     vectorized::ArrayColumn* array_column = nullptr;
     array_column = down_cast<vectorized::ArrayColumn*>(column);
@@ -309,39 +314,32 @@ Status SegmentMetaCollecter::_collect_min(ColumnId cid, vectorized::Column* colu
 
 template <bool is_max>
 Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type) {
-    auto footer_pb = _segment->footer();
-    for (size_t i = 0; i < footer_pb.columns_size(); i++) {
-        if (footer_pb.columns(i).column_id() == cid) {
-            for (size_t j = 0; j < footer_pb.columns(i).indexes_size(); j++) {
-                if (footer_pb.columns(i).indexes(j).type() != ZONE_MAP_INDEX) {
-                    continue;
-                }
-                const ColumnIndexMetaPB& c_meta_pb = footer_pb.columns(i).indexes(j);
-                const ZoneMapIndexPB& zone_map_index_pb = c_meta_pb.zone_map_index();
-                const ZoneMapPB& segment_zone_map_pb = zone_map_index_pb.segment_zone_map();
-
-                TypeInfoPtr type_info = get_type_info(delegate_type(type));
-                if constexpr (!is_max) {
-                    vectorized::Datum min;
-                    if (!segment_zone_map_pb.has_null()) {
-                        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &min, segment_zone_map_pb.min(),
-                                                                      nullptr));
-                        column->append_datum(min);
-                    }
-                } else if constexpr (is_max) {
-                    vectorized::Datum max;
-                    if (segment_zone_map_pb.has_not_null()) {
-                        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &max, segment_zone_map_pb.max(),
-                                                                      nullptr));
-                        column->append_datum(max);
-                    }
-                }
-                return Status::OK();
-            }
-            break;
+    if (cid >= _segment->num_columns()) {
+        return Status::NotFound("");
+    }
+    const ColumnReader* col_reader = _segment->column(cid);
+    if (col_reader == nullptr || col_reader->segment_zone_map() == nullptr) {
+        return Status::NotFound("");
+    }
+    if (col_reader->column_type() != type) {
+        return Status::InternalError("column type mismatch");
+    }
+    const ZoneMapPB* segment_zone_map_pb = col_reader->segment_zone_map();
+    TypeInfoPtr type_info = get_type_info(delegate_type(type));
+    if constexpr (!is_max) {
+        vectorized::Datum min;
+        if (!segment_zone_map_pb->has_null()) {
+            RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &min, segment_zone_map_pb->min(), nullptr));
+            column->append_datum(min);
+        }
+    } else if constexpr (is_max) {
+        vectorized::Datum max;
+        if (segment_zone_map_pb->has_not_null()) {
+            RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &max, segment_zone_map_pb->max(), nullptr));
+            column->append_datum(max);
         }
     }
-    return Status::NotFound("");
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/binary_column.h"
 
@@ -186,6 +186,48 @@ void BinaryColumn::_build_slices() const {
     _slices_cache = true;
 }
 
+Status BinaryColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    const auto& src_column = down_cast<const BinaryColumn&>(src);
+    size_t replace_num = src.size();
+    bool need_resize = false;
+    for (size_t i = 0; i < replace_num; ++i) {
+        DCHECK_LT(indexes[i], _offsets.size());
+        uint32_t cur_len = _offsets[indexes[i] + 1] - _offsets[indexes[i]];
+        uint32_t new_len = src_column._offsets[i + 1] - src_column._offsets[i];
+        if (cur_len != new_len) {
+            need_resize = true;
+            break;
+        }
+    }
+
+    if (!need_resize) {
+        auto* dest_bytes = _bytes.data();
+        const auto& src_bytes = src_column.get_bytes();
+        const auto& src_offsets = src_column.get_offset();
+        for (size_t i = 0; i < replace_num; ++i) {
+            uint32_t str_size = src_offsets[i + 1] - src_offsets[i];
+            strings::memcpy_inlined(dest_bytes + _offsets[indexes[i]], src_bytes.data() + src_offsets[i], str_size);
+        }
+    } else {
+        auto new_binary_column = BinaryColumn::create();
+        size_t idx_begin = 0;
+        for (size_t i = 0; i < replace_num; i++) {
+            DCHECK_GE(_offsets.size() - 1, indexes[i]);
+            size_t count = indexes[i] - idx_begin;
+            new_binary_column->append(*this, idx_begin, count);
+            new_binary_column->append(src, i, 1);
+            idx_begin = indexes[i] + 1;
+        }
+        int32_t remain_count = _offsets.size() - idx_begin - 1;
+        if (remain_count > 0) {
+            new_binary_column->append(*this, idx_begin, remain_count);
+        }
+        swap_column(*new_binary_column.get());
+    }
+
+    return Status::OK();
+}
+
 void BinaryColumn::assign(size_t n, size_t idx) {
     std::string value = std::string((char*)_bytes.data() + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
     _bytes.clear();
@@ -300,7 +342,7 @@ size_t BinaryColumn::filter_range(const Column::Filter& filter, size_t from, siz
         if (filter[i]) {
             DCHECK_GE(_offsets[i + 1], _offsets[i]);
             uint32_t size = _offsets[i + 1] - _offsets[i];
-            // copy date
+            // copy data
             memmove(data + _offsets[result_offset], data + _offsets[i], size);
 
             // set offsets
@@ -365,46 +407,12 @@ const uint8_t* BinaryColumn::deserialize_and_append(const uint8_t* pos) {
     return pos + string_size;
 }
 
-void BinaryColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) {
+void BinaryColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
     uint32_t string_size = *((uint32_t*)srcs[0].data);
-    _bytes.reserve(batch_size * string_size * 2);
-    for (size_t i = 0; i < batch_size; ++i) {
+    _bytes.reserve(chunk_size * string_size * 2);
+    for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
     }
-}
-
-uint8_t* BinaryColumn::serialize_column(uint8_t* dst) {
-    uint32_t bytes_size = _bytes.size() * sizeof(uint8_t);
-    encode_fixed32_le(dst, bytes_size);
-    dst += sizeof(uint32_t);
-
-    strings::memcpy_inlined(dst, _bytes.data(), bytes_size);
-    dst += bytes_size;
-
-    uint32_t offsets_size = _offsets.size() * sizeof(Offset);
-    encode_fixed32_le(dst, offsets_size);
-    dst += sizeof(uint32_t);
-
-    strings::memcpy_inlined(dst, _offsets.data(), offsets_size);
-    dst += offsets_size;
-    return dst;
-}
-
-const uint8_t* BinaryColumn::deserialize_column(const uint8_t* src) {
-    uint32_t bytes_size = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
-    _bytes.resize(bytes_size);
-    strings::memcpy_inlined(_bytes.data(), src, bytes_size);
-    src += bytes_size;
-
-    uint32_t offsets_size = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
-    _offsets.resize(offsets_size / sizeof(Offset));
-    strings::memcpy_inlined(_offsets.data(), src, offsets_size);
-    src += offsets_size;
-    return src;
 }
 
 void BinaryColumn::fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {

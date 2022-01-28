@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_META_H
-#define STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_META_H
+#pragma once
 
 #include <memory>
 #include <string>
@@ -130,10 +129,6 @@ public:
 
     void set_end_version(int64_t end_version) { _rowset_meta_pb.set_end_version(end_version); }
 
-    VersionHash version_hash() const { return _rowset_meta_pb.version_hash(); }
-
-    void set_version_hash(VersionHash version_hash) { _rowset_meta_pb.set_version_hash(version_hash); }
-
     int64_t num_rows() const { return _rowset_meta_pb.num_rows(); }
 
     void set_num_rows(int64_t num_rows) { _rowset_meta_pb.set_num_rows(num_rows); }
@@ -154,12 +149,6 @@ public:
 
     void set_index_disk_size(size_t index_disk_size) { _rowset_meta_pb.set_index_disk_size(index_disk_size); }
 
-    void zone_maps(std::vector<ZoneMap>* zone_maps) {
-        for (const ZoneMap& zone_map : _rowset_meta_pb.zone_maps()) {
-            zone_maps->push_back(zone_map);
-        }
-    }
-
     bool has_delete_predicate() const { return _rowset_meta_pb.has_delete_predicate(); }
 
     const DeletePredicatePB& delete_predicate() const { return _rowset_meta_pb.delete_predicate(); }
@@ -167,9 +156,24 @@ public:
     DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta_pb.mutable_delete_predicate(); }
 
     void set_delete_predicate(const DeletePredicatePB& delete_predicate) {
-        DeletePredicatePB* new_delete_condition = _rowset_meta_pb.mutable_delete_predicate();
-        *new_delete_condition = delete_predicate;
+        *_rowset_meta_pb.mutable_delete_predicate() = delete_predicate;
     }
+
+    const RowsetTxnMetaPB& txn_meta() const { return _rowset_meta_pb.txn_meta(); }
+
+    RowsetTxnMetaPB* mutable_txn_meta() { return _rowset_meta_pb.mutable_txn_meta(); }
+
+    // return semgent_footer position and size if rowset is partial_rowset
+    const FooterPointerPB* partial_rowset_footer(size_t segment_id) const {
+        if (!_rowset_meta_pb.has_txn_meta()) {
+            return nullptr;
+        }
+        return &_rowset_meta_pb.txn_meta().partial_rowset_footers(segment_id);
+    }
+
+    void set_txn_meta(const RowsetTxnMetaPB& txn_meta) { *_rowset_meta_pb.mutable_txn_meta() = txn_meta; }
+
+    void release_txn_meta() { _rowset_meta_pb.release_txn_meta(); }
 
     bool empty() const { return _rowset_meta_pb.empty(); }
 
@@ -298,5 +302,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_ROWSET_ROWSET_META_H

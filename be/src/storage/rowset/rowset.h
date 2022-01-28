@@ -30,7 +30,6 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_tracker.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/vectorized/chunk_iterator.h"
 
@@ -38,7 +37,7 @@ namespace starrocks {
 
 class DataDir;
 class OlapTuple;
-class RowCursor;
+class PrimaryIndex;
 class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class RowsetFactory;
@@ -126,9 +125,7 @@ public:
     Status load();
 
     const TabletSchema& schema() const { return *_schema; }
-
-    // returns OLAP_ERR_ROWSET_CREATE_READER when failed to create reader
-    virtual OLAPStatus create_reader(std::shared_ptr<RowsetReader>* result) = 0;
+    inline void set_schema(const TabletSchema* schema) { _schema = schema; }
 
     virtual StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                                                 const vectorized::RowsetReadOptions& options) = 0;
@@ -139,21 +136,10 @@ public:
     virtual Status get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
                                          std::vector<vectorized::ChunkIteratorPtr>* seg_iterators) = 0;
 
-    // Split range denoted by `start_key` and `end_key` into sub-ranges, each contains roughly
-    // `request_block_row_count` rows. Sub-range is represented by pair of OlapTuples and added to `ranges`.
-    //
-    // e.g., if the function generates 2 sub-ranges, the result `ranges` should contain 4 tuple: t1, t2, t2, t3.
-    // Note that the end tuple of sub-range i is the same as the start tuple of sub-range i+1.
-    //
-    // The first/last tuple must be start_key/end_key.to_tuple(). If we can't divide the input range,
-    // the result `ranges` should be [start_key.to_tuple(), end_key.to_tuple()]
-    virtual OLAPStatus split_range(const RowCursor& start_key, const RowCursor& end_key,
-                                   uint64_t request_block_row_count, std::vector<OlapTuple>* ranges) = 0;
-
     const RowsetMetaSharedPtr& rowset_meta() const { return _rowset_meta; }
 
     // publish rowset to make it visible to read
-    void make_visible(Version version, VersionHash version_hash);
+    void make_visible(Version version);
 
     // like make_visible but updatable tablet has different mechanism
     // NOTE: only used for updatable tablet's rowset
@@ -162,7 +148,6 @@ public:
     // helper class to access RowsetMeta
     int64_t start_version() const { return rowset_meta()->version().first; }
     int64_t end_version() const { return rowset_meta()->version().second; }
-    VersionHash version_hash() const { return rowset_meta()->version_hash(); }
     size_t index_disk_size() const { return rowset_meta()->index_disk_size(); }
     size_t data_disk_size() const { return rowset_meta()->total_disk_size(); }
     bool empty() const { return rowset_meta()->empty(); }
@@ -182,7 +167,7 @@ public:
 
     // remove all files in this rowset
     // TODO should we rename the method to remove_files() to be more specific?
-    virtual OLAPStatus remove() = 0;
+    virtual Status remove() = 0;
 
     // close to clear the resource owned by rowset
     // including: open files, indexes and so on
@@ -218,7 +203,7 @@ public:
     virtual Status link_files_to(const std::string& dir, RowsetId new_rowset_id) = 0;
 
     // copy all files to `dir`
-    virtual OLAPStatus copy_files_to(const std::string& dir) = 0;
+    virtual Status copy_files_to(const std::string& dir) = 0;
 
     // return whether `path` is one of the files in this rowset
     virtual bool check_path(const std::string& path) = 0;
@@ -268,11 +253,10 @@ protected:
     Rowset(const Rowset&) = delete;
     const Rowset& operator=(const Rowset&) = delete;
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
-    Rowset(MemTracker* mem_tracker, const TabletSchema* schema, std::string rowset_path,
-           RowsetMetaSharedPtr rowset_meta);
+    Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
 
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
-    virtual OLAPStatus init() = 0;
+    virtual Status init() = 0;
 
     // The actual implementation of load(). Guaranteed by to called exactly once.
     virtual Status do_load() = 0;
@@ -281,9 +265,7 @@ protected:
     virtual void do_close() = 0;
 
     // allow subclass to add custom logic when rowset is being published
-    virtual void make_visible_extra(Version version, VersionHash version_hash) {}
-
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    virtual void make_visible_extra(Version version) {}
 
     const TabletSchema* _schema;
     std::string _rowset_path;

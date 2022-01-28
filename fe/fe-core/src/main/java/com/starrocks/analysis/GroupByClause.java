@@ -21,8 +21,11 @@
 
 package com.starrocks.analysis;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import org.apache.commons.collections.CollectionUtils;
@@ -64,6 +67,10 @@ public class GroupByClause implements ParseNode {
     // reserve this info for toSQL
     private List<ArrayList<Expr>> groupingSetList;
 
+    private Table<Integer, Integer, Integer> groupingSetIndexToGroupingExprs;
+
+    protected boolean needToSql = false;
+
     public GroupByClause(List<ArrayList<Expr>> groupingSetList, GroupingType type) {
         this.groupingType = type;
         this.groupingSetList = groupingSetList;
@@ -90,6 +97,10 @@ public class GroupByClause implements ParseNode {
                 this.groupingSetList.add(Expr.cloneAndResetList(exprList));
             }
         }
+    }
+
+    public void setNeedToSql(boolean needToSql) {
+        this.needToSql = needToSql;
     }
 
     public List<ArrayList<Expr>> getGroupingSetList() {
@@ -156,11 +167,18 @@ public class GroupByClause implements ParseNode {
                 throw new AnalysisException("The expresions in GROUPINGING SETS can not be empty");
             }
             // collect all Expr elements
-            Set<Expr> groupingExprSet = new LinkedHashSet<>();
-            for (ArrayList<Expr> list : groupingSetList) {
-                groupingExprSet.addAll(list);
+            groupingSetIndexToGroupingExprs = HashBasedTable.create();
+            groupingExprs = new ArrayList<>();
+            for (int i = 0; i < groupingSetList.size(); i++) {
+                for (int j = 0; j < groupingSetList.get(i).size(); j++) {
+                    if (!groupingExprs.contains(groupingSetList.get(i).get(j))) {
+                        groupingSetIndexToGroupingExprs.put(i, j, groupingExprs.size());
+                        groupingExprs.add(groupingSetList.get(i).get(j));
+                    } else {
+                        groupingSetIndexToGroupingExprs.put(i, j, groupingExprs.indexOf(groupingSetList.get(i).get(j)));
+                    }
+                }
             }
-            groupingExprs = new ArrayList<>(groupingExprSet);
         }
         exprGenerated = true;
     }
@@ -214,6 +232,10 @@ public class GroupByClause implements ParseNode {
 
     @Override
     public String toSql() {
+        if (needToSql) {
+            return toViewSql();
+        }
+
         StringBuilder strBuilder = new StringBuilder();
         switch (groupingType) {
             case GROUP_BY:
@@ -261,6 +283,54 @@ public class GroupByClause implements ParseNode {
                         strBuilder.append(oriGroupingExprs.get(i).toSql());
                         strBuilder.append((i + 1 != oriGroupingExprs.size()) ? ", " : "");
                     }
+                    strBuilder.append(")");
+                }
+                break;
+            default:
+                break;
+        }
+        return strBuilder.toString();
+    }
+
+    private String toViewSql() {
+        StringBuilder strBuilder = new StringBuilder();
+        switch (groupingType) {
+            case GROUP_BY:
+                if (groupingExprs != null) {
+                    strBuilder.append(groupingExprs.stream().map(Expr::toSql).collect(Collectors.joining(", ")));
+                }
+                break;
+            case GROUPING_SETS:
+                if (groupingSetList != null) {
+                    Preconditions.checkState(groupingSetIndexToGroupingExprs != null);
+                    strBuilder.append("GROUPING SETS (");
+                    List<String> allExprs = Lists.newArrayList();
+                    List<String> rows = Lists.newArrayList();
+                    for (int i = 0; i < groupingSetList.size(); i++) {
+                        rows.clear();
+                        for (int j = 0; j < groupingSetList.get(i).size(); j++) {
+                            Expr e = groupingExprs.get(groupingSetIndexToGroupingExprs.get(i, j));
+                            rows.add(e.toSql());
+                        }
+                        allExprs.add("(" + String.join(", ", rows) + ")");
+                    }
+                    strBuilder.append(String.join(", ", allExprs));
+                    strBuilder.append(")");
+                }
+                break;
+            case CUBE:
+                if (groupingExprs != null) {
+                    strBuilder.append("CUBE (");
+                    strBuilder.append(groupingExprs.stream().filter(e -> !(e instanceof VirtualSlotRef))
+                            .map(Expr::toSql).collect(Collectors.joining(", ")));
+                    strBuilder.append(")");
+                }
+                break;
+            case ROLLUP:
+                if (groupingExprs != null) {
+                    strBuilder.append("ROLLUP (");
+                    strBuilder.append(groupingExprs.stream().filter(e -> !(e instanceof VirtualSlotRef))
+                            .map(Expr::toSql).collect(Collectors.joining(", ")));
                     strBuilder.append(")");
                 }
                 break;

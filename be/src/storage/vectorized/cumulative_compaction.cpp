@@ -1,7 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/cumulative_compaction.h"
 
+#include "runtime/current_thread.h"
+#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 #include "util/trace.h"
@@ -12,11 +14,7 @@ CumulativeCompaction::CumulativeCompaction(MemTracker* mem_tracker, TabletShared
         : Compaction(mem_tracker, std::move(tablet)),
           _cumulative_rowset_size_threshold(config::cumulative_compaction_budgeted_bytes) {}
 
-CumulativeCompaction::~CumulativeCompaction() {
-    DCHECK_EQ(0, _mem_tracker->consumption());
-    // release the memory statistics just for safe
-    _mem_tracker->release(_mem_tracker->consumption());
-}
+CumulativeCompaction::~CumulativeCompaction() {}
 
 Status CumulativeCompaction::compact() {
     if (!_tablet->init_succeeded()) {
@@ -37,6 +35,8 @@ Status CumulativeCompaction::compact() {
     RETURN_IF_ERROR(pick_rowsets_to_compact());
     TRACE("rowsets picked");
     TRACE_COUNTER_INCREMENT("input_rowsets_count", _input_rowsets.size());
+
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
 
     // 3. do cumulative compaction, merge rowsets
     RETURN_IF_ERROR(do_compaction());

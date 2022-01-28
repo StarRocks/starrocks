@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.planner;
 
@@ -19,6 +19,7 @@ import java.util.Map;
 // `toExplainString()` for explaining sql
 public class RuntimeFilterDescription {
     private int filterId;
+    private int buildPlanNodeId;
     private Expr buildExpr;
     private int exprOrder; // order of expr in eq conjuncts.
     private final Map<Integer, Expr> nodeIdToProbeExpr;
@@ -28,9 +29,11 @@ public class RuntimeFilterDescription {
     private TUniqueId senderFragmentInstanceId;
     private int equalCount;
     private int crossExchangeNodeTimes;
+    private boolean equalForNull;
 
     private static final int ProbeMinSize = 100 * 1024;
     private static final float ProbeMinSelectivity = 0.5f;
+    public static final int BuildMaxSize = 64 * 1024 * 1024;
     private long buildCardinality;
 
     public RuntimeFilterDescription() {
@@ -44,6 +47,15 @@ public class RuntimeFilterDescription {
         equalCount = 0;
         crossExchangeNodeTimes = 0;
         buildCardinality = 0;
+        equalForNull = false;
+    }
+
+    public boolean getEqualForNull() {
+        return equalForNull;
+    }
+
+    public void setEqualForNull(boolean v) {
+        equalForNull = v;
     }
 
     public void setFilterId(int id) {
@@ -113,8 +125,12 @@ public class RuntimeFilterDescription {
         joinMode = mode;
     }
 
-    public HashJoinNode.DistributionMode getJoinMode() {
-        return joinMode;
+    public int getBuildPlanNodeId() {
+        return buildPlanNodeId;
+    }
+
+    public void setBuildPlanNodeId(int buildPlanNodeId) {
+        this.buildPlanNodeId = buildPlanNodeId;
     }
 
     public boolean isLocalApplicable() {
@@ -179,6 +195,7 @@ public class RuntimeFilterDescription {
             t.putToPlan_node_id_to_target_expr(entry.getKey(), entry.getValue().treeToThrift());
         }
         t.setHas_remote_targets(hasRemoteTargets);
+        t.setBuild_plan_node_id(buildPlanNodeId);
         if (!mergeNodes.isEmpty()) {
             t.setRuntime_filter_merge_nodes(mergeNodes);
         }

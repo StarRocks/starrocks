@@ -144,6 +144,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("cross", new Integer(SqlParserSymbols.KW_CROSS));
         keywordMap.put("cube", new Integer(SqlParserSymbols.KW_CUBE));
         keywordMap.put("current", new Integer(SqlParserSymbols.KW_CURRENT));
+        keywordMap.put("current_timestamp", new Integer(SqlParserSymbols.KW_CURRENT_TIMESTAMP));
         keywordMap.put("current_user", new Integer(SqlParserSymbols.KW_CURRENT_USER));
         keywordMap.put("data", new Integer(SqlParserSymbols.KW_DATA));
         keywordMap.put("database", new Integer(SqlParserSymbols.KW_DATABASE));
@@ -254,6 +255,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("load", new Integer(SqlParserSymbols.KW_LOAD));
         keywordMap.put("local", new Integer(SqlParserSymbols.KW_LOCAL));
         keywordMap.put("location", new Integer(SqlParserSymbols.KW_LOCATION));
+        keywordMap.put("logical", new Integer(SqlParserSymbols.KW_LOGICAL));
         keywordMap.put("materialized", new Integer(SqlParserSymbols.KW_MATERIALIZED));
         keywordMap.put("max", new Integer(SqlParserSymbols.KW_MAX));
         keywordMap.put("maxvalue", new Integer(SqlParserSymbols.KW_MAX_VALUE));
@@ -633,7 +635,7 @@ EndOfLineComment = "--" !({HintContent}|{ContainsLineTerminator}) {LineTerminato
 
 {DoubleQuoteStringLiteral} {
   return newToken(SqlParserSymbols.STRING_LITERAL,
-                  escapeBackSlash(yytext().substring(1, yytext().length()-1)).replaceAll("\"\"", "\""));
+                  escapeBackSlash(yytext().substring(1, yytext().length()-1)));
 }
 
 {CommentedHintBegin} {

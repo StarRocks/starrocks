@@ -31,6 +31,7 @@ BrokerLoadErrorHub::BrokerLoadErrorHub(ExecEnv* env, const TBrokerErrorHubInfo& 
         : _env(env), _info(info, error_log_file_name), _broker_writer(nullptr) {}
 
 BrokerLoadErrorHub::~BrokerLoadErrorHub() {
+    close();
     delete _broker_writer;
     _broker_writer = nullptr;
 }
@@ -93,7 +94,7 @@ Status BrokerLoadErrorHub::write_to_broker() {
 
 std::string BrokerLoadErrorHub::debug_string() const {
     std::stringstream out;
-    out << "(tatal_error_num=" << _total_error_num << ")";
+    out << "(total_error_num=" << _total_error_num << ")";
     return out.str();
 }
 

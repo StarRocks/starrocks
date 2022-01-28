@@ -34,13 +34,14 @@
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "util/file_utils.h"
+#include "util/thread.h"
 
 namespace starrocks {
 
 static const uint32_t MAX_SHARD_NUM = 1024;
 static const std::string SHARD_PREFIX = "__shard_";
 
-LoadPathMgr::LoadPathMgr(ExecEnv* exec_env) : _exec_env(exec_env), _idx(0), _next_shard(0), _error_path_next_shard(0) {}
+LoadPathMgr::LoadPathMgr(ExecEnv* exec_env) : _exec_env(exec_env), _idx(0), _next_shard(0) {}
 
 Status LoadPathMgr::init() {
     _path_vec.clear();
@@ -56,6 +57,7 @@ Status LoadPathMgr::init() {
 
     _idx = 0;
     pthread_create(&_cleaner_id, nullptr, LoadPathMgr::cleaner, this);
+    Thread::set_thread_name(_cleaner_id, "load_path_mgr");
     return Status::OK();
 }
 
@@ -117,23 +119,10 @@ void LoadPathMgr::get_load_data_path(std::vector<std::string>* data_paths) {
 
 const std::string ERROR_FILE_NAME = "error_log";
 
-Status LoadPathMgr::get_load_error_file_name(const std::string& db, const std::string& label,
-                                             const TUniqueId& fragment_instance_id, std::string* error_path) {
+Status LoadPathMgr::get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) {
     std::stringstream ss;
-    std::string shard;
-    {
-        std::lock_guard<std::mutex> l(_lock);
-        shard = SHARD_PREFIX + std::to_string(_error_path_next_shard++ % MAX_SHARD_NUM);
-    }
-    std::string shard_path = _error_log_dir + "/" + shard;
-    // check and create shard path
-    Status status = FileUtils::create_dir(shard_path);
-    if (!status.ok()) {
-        LOG(WARNING) << "create error sub path failed. path=" << shard_path;
-    }
     // add shard sub dir to file path
-    ss << shard << "/" << ERROR_FILE_NAME << "_" << db << "_" << label << "_" << std::hex << fragment_instance_id.hi
-       << "_" << fragment_instance_id.lo;
+    ss << ERROR_FILE_NAME << "_" << std::hex << fragment_instance_id.hi << "_" << fragment_instance_id.lo;
     *error_path = ss.str();
     return Status::OK();
 }

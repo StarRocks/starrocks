@@ -19,10 +19,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_UTIL_FILE_UTILS_H
-#define STARROCKS_BE_UTIL_FILE_UTILS_H
+#pragma once
 
 #include <functional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -124,5 +124,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif

@@ -81,6 +81,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /*
  * MaterializedViewHandler is responsible for ADD/DROP materialized view.
@@ -388,8 +389,7 @@ public class MaterializedViewHandler extends AlterHandler {
                             .checkState(baseReplica.getState() == Replica.ReplicaState.NORMAL, baseReplica.getState());
                     // replica's init state is ALTER, so that tablet report process will ignore its report
                     Replica mvReplica = new Replica(mvReplicaId, backendId, Replica.ReplicaState.ALTER,
-                            Partition.PARTITION_INIT_VERSION, Partition
-                            .PARTITION_INIT_VERSION_HASH,
+                            Partition.PARTITION_INIT_VERSION,
                             mvSchemaHash);
                     newTablet.addReplica(mvReplica);
                     healthyReplicaNum++;
@@ -486,7 +486,9 @@ public class MaterializedViewHandler extends AlterHandler {
                 newMVColumns.add(mvColumnItem.toMVColumn(olapTable));
             }
         } else {
-            Set<String> partitionOrDistributedColumnName = olapTable.getPartitionColumnNames();
+            Set<String> partitionOrDistributedColumnName =
+                    olapTable.getPartitionColumnNames().stream().map(String::toLowerCase).collect(
+                            Collectors.toSet());
             //The restriction on bucket column was temporarily opened
             //partitionOrDistributedColumnName.addAll(olapTable.getDistributionColumnNames());
             for (MVColumnItem mvColumnItem : mvColumnItemList) {
@@ -1156,6 +1158,10 @@ public class MaterializedViewHandler extends AlterHandler {
         Optional<AlterClause> alterClauseOptional = alterClauses.stream().findAny();
         if (alterClauseOptional.isPresent()) {
             if (alterClauseOptional.get() instanceof AddRollupClause) {
+                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    throw new DdlException(
+                            "Do not support add rollup on primary key table[" + olapTable.getName() + "]");
+                }
                 processBatchAddRollup(alterClauses, db, olapTable);
             } else if (alterClauseOptional.get() instanceof DropRollupClause) {
                 processBatchDropRollup(alterClauses, db, olapTable);

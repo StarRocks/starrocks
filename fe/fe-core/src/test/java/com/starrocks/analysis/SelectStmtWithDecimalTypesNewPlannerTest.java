@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.analysis;
 
@@ -16,8 +16,8 @@ import org.junit.rules.ExpectedException;
 import java.util.UUID;
 
 public class SelectStmtWithDecimalTypesNewPlannerTest {
-    private static String runningDir = "fe/mocked/DecimalDemoTestNewPlanner/" + UUID.randomUUID().toString() + "/";
-    private static StarRocksAssert starRocksAssert;
+    private static final String runningDir =
+            "fe/mocked/DecimalDemoTestNewPlanner/" + UUID.randomUUID().toString() + "/";
     private static ConnectContext ctx;
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
@@ -39,7 +39,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`key0`)\n" +
                 "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`key0`) BUCKETS 1\n" +
+                "DISTRIBUTED BY HASH(`key0`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
@@ -48,7 +48,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
 
         ctx = UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
-        starRocksAssert = new StarRocksAssert(ctx);
+        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr);
     }
@@ -61,11 +61,11 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))])], " +
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))]), " +
                 "has_var_args:false, signature:nullif(DOUBLE, DOUBLE), scalar_fn:TScalarFunction(symbol:), " +
-                "id:0, fid:70307)";
-        String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
+                "id:0, fid:70307";
+        String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
 
-        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
+        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
     }
 
@@ -76,11 +76,11 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "arg_types:[TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))])], " +
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))]), " +
                 "has_var_args:true, signature:coalesce(DOUBLE...), scalar_fn:TScalarFunction(symbol:), " +
-                "id:0, fid:70407)";
-        String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
+                "id:0, fid:70407";
+        String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
 
-        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
+        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
     }
 
@@ -88,13 +88,14 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testIf() throws Exception {
         String sql = " select  if(1, cast('3.14' AS decimal32(9, 2)), cast('1.9999' AS decimal32(5, 4))) " +
                 "AS res0 from db1.decimal_table;";
-        String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
+        String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        System.out.println(thrift);
         Assert.assertTrue(thrift.contains(
-                "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
+                "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
 
-        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
+        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(
-                "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
+                "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
     }
 
     @Test
@@ -105,20 +106,17 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                         "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))])], ret_type:TTypeDesc" +
                         "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), has_var_args:false, signature:" +
                         "money_format(DECIMAL128(20,3)), scalar_fn:" +
-                        "TScalarFunction(symbol:_ZN9starrocks15StringFunctions12money_formatEPN13starrocks_udf15FunctionContextERKNS1_9BigIntValE)" +
-                        ", id:0, fid:304022)";
-        String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
-        System.out.println(thrift);
+                        "TScalarFunction(symbol:)" +
+                        ", id:0, fid:304022";
+        String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
 
         expectString =
                 "fn:TFunction(name:TFunctionName(function_name:money_format), binary_type:BUILTIN, arg_types:[TTypeDesc(types:" +
                         "[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))])], ret_type:TTypeDesc" +
                         "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), has_var_args:false, " +
-                        "signature:money_format(DECIMAL128(20,3)), scalar_fn:TScalarFunction(symbol:" +
-                        "_ZN9starrocks15StringFunctions12money_formatEPN13starrocks_udf15FunctionContextERKNS1_9BigIntValE), id:0, fid:304022)";
-        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
-        System.out.println(thrift);
+                        "signature:money_format(DECIMAL128(20,3)), scalar_fn:TScalarFunction(symbol:), id:0, fid:304022";
+        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
     }
 
@@ -127,18 +125,37 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select col_decimal128p20s3 * 3.14 from db1.decimal_table";
         String expectString = "TExprNode(node_type:ARITHMETIC_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL128, precision:38, scale:5))]), opcode:MULTIPLY, num_children:2," +
-                " output_scale:-1, output_column:-1, use_vectorized:true, has_nullable_child:true, is_nullable:true)," +
-                " TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType" +
+                " output_scale:-1, output_column:-1, has_nullable_child:true, is_nullable:true, is_monotonic:false)," +
+                " TExprNode(node_type:CAST_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:38, scale:3))])," +
+                " opcode:INVALID_OPCODE, num_children:1, output_scale:-1, output_column:-1, child_type:DECIMAL128, has_nullable_child:true, is_nullable:true, is_monotonic:false), " +
+                "TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType" +
                 "(type:DECIMAL128, precision:20, scale:3))]), num_children:0, slot_ref:TSlotRef(slot_id:3, tuple_id:0)," +
-                " output_scale:-1, output_column:-1, use_vectorized:true, has_nullable_child:false, is_nullable:true)," +
+                " output_scale:-1, output_column:-1, has_nullable_child:false, is_nullable:true, is_monotonic:true)," +
                 " TExprNode(node_type:DECIMAL_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:" +
                 "TScalarType(type:DECIMAL128, precision:38, scale:2))]), num_children:0, decimal_literal:" +
-                "TDecimalLiteral(value:3.14), output_scale:-1, use_vectorized:true, has_nullable_child:false," +
-                " is_nullable:false)";
-
-        String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
-        System.out.println(thrift);
+                "TDecimalLiteral(value:3.14), output_scale:-1, has_nullable_child:false," +
+                " is_nullable:false, is_monotonic:true)";
+        String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
+    }
+
+    @Test
+    public void testMod() throws Exception {
+        String sql = "select mod(0.022330165, NULL) as result from db1.decimal_table";
+        String expectString = "TScalarType(type:DECIMAL32, precision:9, scale:9))";
+        String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        Assert.assertTrue(thrift.contains(expectString));
+    }
+
+    @Test
+    public void testCountDecimal() throws Exception {
+        String sql = "select count(col_decimal128p20s3) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("args: DECIMAL128; result: BIGINT;"));
+
+        String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        Assert.assertTrue(thrift.contains("arg_types:[TTypeDesc(types:[TTypeNode(type:SCALAR, " +
+                "scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))"));
     }
 }
 

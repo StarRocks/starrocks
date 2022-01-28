@@ -35,6 +35,7 @@ import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogBuilder;
@@ -65,7 +66,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 /**
- * The broker and mini load jobs(v2) are included in this class.
+ * The broker and spark load jobs are included in this class.
  * <p>
  * The lock sequence:
  * Database.lock
@@ -326,6 +327,9 @@ public class LoadManager implements Writable {
                         job.cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED,
                                         DataQualityException.QUALITY_FAIL_MSG),
                                 true, true);
+                    } catch (TimeoutException e) {
+                        // timeout, retry next time
+                        LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                     } catch (UserException e) {
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);

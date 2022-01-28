@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_PLAN_FRAGMENT_EXECUTOR_H
-#define STARROCKS_BE_RUNTIME_PLAN_FRAGMENT_EXECUTOR_H
+#pragma once
 
 #include <condition_variable>
 #include <functional>
@@ -38,7 +37,6 @@ namespace starrocks {
 
 class ExecNode;
 class RowDescriptor;
-class RowBatch;
 class DataSink;
 class DataStreamMgr;
 class RuntimeProfile;
@@ -106,13 +104,6 @@ public:
     // time when open() returns, and the status-reporting thread will have been stopped.
     Status open();
 
-    // Return results through 'batch'. Sets '*batch' to NULL if no more results.
-    // '*batch' is owned by PlanFragmentExecutor and must not be deleted.
-    // When *batch == NULL, get_next() should not be called anymore. Also, report_status_cb
-    // will have been called for the final time and the status-reporting thread
-    // will have been stopped.
-    Status get_next(RowBatch** batch);
-
     Status get_next(vectorized::ChunkPtr* chunk);
 
     // Closes the underlying plan fragment and frees up all resources allocated
@@ -126,7 +117,10 @@ public:
     void release_thread_token();
 
     // call these only after prepare()
-    RuntimeState* runtime_state() { return _runtime_state.get(); }
+    RuntimeState* runtime_state() { return _runtime_state; }
+
+    void set_runtime_state(RuntimeState* runtime_state) { _runtime_state = runtime_state; }
+
     const RowDescriptor& row_desc();
 
     // Profile information for plan and output sink.
@@ -141,7 +135,6 @@ public:
     void set_is_report_on_cancel(bool val) { _is_report_on_cancel = val; }
 
 private:
-    bool _is_vectorized = true;
     ExecEnv* _exec_env;        // not owned
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     TUniqueId _query_id;
@@ -180,7 +173,7 @@ private:
 
     // note that RuntimeState should be constructed before and destructed after `_sink' and `_row_batch',
     // therefore we declare it before `_sink' and `_row_batch'
-    std::unique_ptr<RuntimeState> _runtime_state;
+    RuntimeState* _runtime_state = nullptr;
     // Output sink for rows sent to this fragment. May not be set, in which case rows are
     // returned via get_next's row batch
     // Created in prepare (if required), owned by this object.
@@ -231,5 +224,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

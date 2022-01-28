@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_RUNTIME_LOAD_PATH_MGR_H
-#define STARROCKS_BE_SRC_RUNTIME_LOAD_PATH_MGR_H
+#pragma once
 
 #include <pthread.h>
 
@@ -49,8 +48,7 @@ public:
 
     void get_load_data_path(std::vector<std::string>* data_paths);
 
-    Status get_load_error_file_name(const std::string& db, const std::string& label,
-                                    const TUniqueId& fragment_instance_id, std::string* error_path);
+    Status get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path);
     std::string get_load_error_absolute_path(const std::string& file_path);
     const std::string& get_load_error_file_dir() const { return _error_log_dir; }
 
@@ -74,5 +72,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

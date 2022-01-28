@@ -59,7 +59,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
 
 public class CreateTableStmt extends DdlStmt {
-    private static final Logger LOG = LogManager.getLogger(CreateTableStmt.class);
 
     private static final String DEFAULT_ENGINE_NAME = "olap";
 
@@ -91,6 +90,7 @@ public class CreateTableStmt extends DdlStmt {
         engineNames.add("broker");
         engineNames.add("elasticsearch");
         engineNames.add("hive");
+        engineNames.add("iceberg");
     }
 
     // for backup. set to -1 for normal use
@@ -264,7 +264,8 @@ public class CreateTableStmt extends DdlStmt {
         analyzeEngineName();
 
         // analyze key desc
-        if (!(engineName.equals("mysql") || engineName.equals("broker") || engineName.equals("hive"))) {
+        if (!(engineName.equals("mysql") || engineName.equals("broker") ||
+                engineName.equals("hive") || engineName.equals("iceberg"))) {
             // olap table
             if (keysDesc == null) {
                 List<String> keysColumnNames = Lists.newArrayList();
@@ -331,7 +332,7 @@ public class CreateTableStmt extends DdlStmt {
                 }
             }
         } else {
-            // mysql, broker and hive do not need key desc
+            // mysql, broker, iceberg and hive do not need key desc
             if (keysDesc != null) {
                 throw new AnalysisException("Create " + engineName + " table should not contain keys desc");
             }
@@ -411,7 +412,8 @@ public class CreateTableStmt extends DdlStmt {
 
         for (ColumnDef columnDef : columnDefs) {
             Column col = columnDef.toColumn();
-            if (keysDesc != null && keysDesc.getKeysType() == KeysType.UNIQUE_KEYS) {
+            if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
+                    || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS || keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
                 if (!col.isKey()) {
                     col.setAggregationTypeImplicit(true);
                 }
@@ -454,6 +456,26 @@ public class CreateTableStmt extends DdlStmt {
                 throw new AnalysisException("same index columns have multiple index name is not allowed.");
             }
         }
+    }
+
+    public List<ColumnDef> getColumnDefs() {
+        return columnDefs;
+    }
+
+    public List<IndexDef> getIndexDefs() {
+        return indexDefs;
+    }
+
+    public void setKeysDesc(KeysDesc keysDesc) {
+        this.keysDesc = keysDesc;
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
+    public void setDistributionDesc(DistributionDesc distributionDesc) {
+        this.distributionDesc = distributionDesc;
     }
 
     private void analyzeEngineName() throws AnalysisException {

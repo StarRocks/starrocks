@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -8,16 +8,20 @@
 namespace starrocks::pipeline {
 class AnalyticSinkOperator : public Operator {
 public:
-    AnalyticSinkOperator(int32_t id, int32_t plan_node_id, const TPlanNode& tnode, AnalytorPtr analytor)
-            : Operator(id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(analytor) {}
+    AnalyticSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const TPlanNode& tnode,
+                         AnalytorPtr&& analytor)
+            : Operator(factory, id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(std::move(analytor)) {
+        _analytor->ref();
+    }
     ~AnalyticSinkOperator() = default;
 
     bool has_output() const override { return false; }
-    bool need_input() const override { return true; }
-    bool is_finished() const override;
-    void finish(RuntimeState* state) override;
+    bool need_input() const override { return !is_finished(); }
+    bool is_finished() const override { return _is_finished || _analytor->is_finished(); }
+    void set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
@@ -40,17 +44,19 @@ private:
 
 class AnalyticSinkOperatorFactory final : public OperatorFactory {
 public:
-    AnalyticSinkOperatorFactory(int32_t id, int32_t plan_node_id, const TPlanNode& tnode, AnalytorPtr analytor)
-            : OperatorFactory(id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(analytor) {}
+    AnalyticSinkOperatorFactory(int32_t id, int32_t plan_node_id, const TPlanNode& tnode,
+                                const AnalytorFactoryPtr& analytor_factory)
+            : OperatorFactory(id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor_factory(analytor_factory) {}
 
     ~AnalyticSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AnalyticSinkOperator>(_id, _plan_node_id, _tnode, _analytor);
+        auto analytor = _analytor_factory->create(driver_sequence);
+        return std::make_shared<AnalyticSinkOperator>(this, _id, _plan_node_id, _tnode, std::move(analytor));
     }
 
 private:
     TPlanNode _tnode;
-    AnalytorPtr _analytor = nullptr;
+    AnalytorFactoryPtr _analytor_factory;
 };
 } // namespace starrocks::pipeline

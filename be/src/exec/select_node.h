@@ -19,16 +19,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_SELECT_NODE_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_SELECT_NODE_H
+#pragma once
 
 #include "exec/exec_node.h"
 #include "runtime/mem_pool.h"
 
 namespace starrocks {
-
-class Tuple;
-class TupleRow;
 
 // Node that evaluates conjuncts and enforces a limit but otherwise passes along
 // the rows pulled from its child unchanged.
@@ -36,11 +32,14 @@ class TupleRow;
 class SelectNode : public ExecNode {
 public:
     SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
+    ~SelectNode();
 
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
 
 private:
     // true if last get_next() call on child signalled eos
@@ -50,5 +49,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

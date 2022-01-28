@@ -4,8 +4,7 @@
 // #category: operations on strings
 // #summary: Merges strings or numbers with no delimiter.
 //
-#ifndef STRINGS_STRCAT_H_
-#define STRINGS_STRCAT_H_
+#pragma once
 
 #include <string>
 using std::string;
@@ -304,5 +303,3 @@ void StrAppend(string* dest, const AlphaNum& a, const AlphaNum& b, const AlphaNu
 void StrAppend(string* dest, const AlphaNum& a, const AlphaNum& b, const AlphaNum& c, const AlphaNum& d,
                const AlphaNum& e, const AlphaNum& f = gEmptyAlphaNum, const AlphaNum& g = gEmptyAlphaNum,
                const AlphaNum& h = gEmptyAlphaNum, const AlphaNum& i = gEmptyAlphaNum);
-
-#endif // STRINGS_STRCAT_H_

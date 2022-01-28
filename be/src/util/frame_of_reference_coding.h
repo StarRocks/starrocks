@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_FRAME_OF_REFERENCE_CODING_H
-#define STARROCKS_FRAME_OF_REFERENCE_CODING_H
+#pragma once
 
 #include <cstdlib>
 #include <iostream>
@@ -191,5 +190,3 @@ private:
     std::vector<T> _out_buffer; // store values of decoded frame
 };
 } // namespace starrocks
-
-#endif //STARROCKS_FRAME_OF_REFERENCE_CODING_H

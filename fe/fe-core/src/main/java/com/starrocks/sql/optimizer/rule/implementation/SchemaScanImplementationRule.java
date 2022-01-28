@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -26,7 +26,8 @@ public class SchemaScanImplementationRule extends ImplementationRule {
                         logical.getOutputColumns(),
                         logical.getColRefToColumnMetaMap(),
                         logical.getLimit(),
-                        logical.getPredicate());
+                        logical.getPredicate(),
+                        logical.getProjection());
 
         OptExpression result = new OptExpression(physical);
         return Lists.newArrayList(result);

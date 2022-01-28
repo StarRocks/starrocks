@@ -31,11 +31,11 @@ group by
 order by
     revenue desc limit 20;
 [result]
-TOP-N (order by [[43: sum(42: expr) DESC NULLS LAST]])
-    TOP-N (order by [[43: sum(42: expr) DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{43: sum(42: expr)=sum(43: sum(42: expr))}] group by [[1: C_CUSTKEY, 2: C_NAME, 6: C_ACCTBAL, 5: C_PHONE, 38: N_NAME, 3: C_ADDRESS, 8: C_COMMENT]] having [null]
+TOP-N (order by [[43: sum DESC NULLS LAST]])
+    TOP-N (order by [[43: sum DESC NULLS LAST]])
+        AGGREGATE ([GLOBAL] aggregate [{43: sum=sum(43: sum)}] group by [[1: C_CUSTKEY, 2: C_NAME, 6: C_ACCTBAL, 5: C_PHONE, 38: N_NAME, 3: C_ADDRESS, 8: C_COMMENT]] having [null]
             EXCHANGE SHUFFLE[1, 2, 6, 5, 38, 3, 8]
-                AGGREGATE ([LOCAL] aggregate [{43: sum(42: expr)=sum(42: expr)}] group by [[1: C_CUSTKEY, 2: C_NAME, 6: C_ACCTBAL, 5: C_PHONE, 38: N_NAME, 3: C_ADDRESS, 8: C_COMMENT]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{43: sum=sum(42: expr)}] group by [[1: C_CUSTKEY, 2: C_NAME, 6: C_ACCTBAL, 5: C_PHONE, 38: N_NAME, 3: C_ADDRESS, 8: C_COMMENT]] having [null]
                     INNER JOIN (join-predicate [37: N_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
                         SCAN (columns[37: N_NATIONKEY, 38: N_NAME] predicate[null])
                         EXCHANGE SHUFFLE[4]

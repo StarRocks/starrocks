@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -220,6 +220,7 @@ public:
         _has_null |= rf->_has_null;
         _bf.merge(rf->_bf);
     }
+
     virtual void concat(JoinRuntimeFilter* rf) {
         _has_null |= rf->_has_null;
         _hash_partition_bf.emplace_back(std::move(rf->_bf));
@@ -253,6 +254,7 @@ public:
 
     void init_min_max() {
         _has_min_max = false;
+
         if constexpr (IsSlice<CppType>) {
             _min = Slice::max_value();
             _max = Slice::min_value();
@@ -299,6 +301,7 @@ public:
 
         size_t hash = compute_hash(*value);
         _bf.insert_hash(hash);
+
         _min = std::min(*value, _min);
         _max = std::max(*value, _max);
         _has_min_max = true;
@@ -307,6 +310,8 @@ public:
     CppType min_value() const { return _min; }
 
     CppType max_value() const { return _max; }
+
+    bool has_min_max() const { return _has_min_max; }
 
     bool test_data(CppType value) const {
         if constexpr (!IsSlice<CppType>) {

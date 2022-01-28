@@ -19,9 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef IMPALA_COMMON_LOGGING_H
-#define IMPALA_COMMON_LOGGING_H
-
+#pragma once
 // This is a wrapper around the glog header.  When we are compiling to IR,
 // we don't want to pull in the glog headers.  Pulling them in causes linking
 // issues when we try to dynamically link the codegen'd functions.
@@ -79,7 +77,5 @@ class TUniqueId;
 }
 
 // Print log with query id.
-#define QUERY_LOG(level) LOG(level) << "[" << CurrentThread::query_id_string() << "] "
-#define QUERY_LOG_IF(level, cond) LOG_IF(level, cond) << "[" << CurrentThread::query_id_string() << "] "
-
-#endif
+#define QUERY_LOG(level) LOG(level) << "[" << tls_thread_status.query_id() << "] "
+#define QUERY_LOG_IF(level, cond) LOG_IF(level, cond) << "[" << tls_thread_status.query_id() << "] "

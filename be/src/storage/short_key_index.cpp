@@ -37,12 +37,11 @@ Status ShortKeyIndexBuilder::add_item(const Slice& key) {
     return Status::OK();
 }
 
-Status ShortKeyIndexBuilder::finalize(uint32_t num_segment_rows, std::vector<Slice>* body,
-                                      segment_v2::PageFooterPB* page_footer) {
-    page_footer->set_type(segment_v2::SHORT_KEY_PAGE);
+Status ShortKeyIndexBuilder::finalize(uint32_t num_segment_rows, std::vector<Slice>* body, PageFooterPB* page_footer) {
+    page_footer->set_type(SHORT_KEY_PAGE);
     page_footer->set_uncompressed_size(_key_buf.size() + _offset_buf.size());
 
-    segment_v2::ShortKeyFooterPB* footer = page_footer->mutable_short_key_page_footer();
+    ShortKeyFooterPB* footer = page_footer->mutable_short_key_page_footer();
     footer->set_num_items(_num_items);
     footer->set_key_bytes(_key_buf.size());
     footer->set_offset_bytes(_offset_buf.size());
@@ -55,7 +54,7 @@ Status ShortKeyIndexBuilder::finalize(uint32_t num_segment_rows, std::vector<Sli
     return Status::OK();
 }
 
-Status ShortKeyIndexDecoder::parse(const Slice& body, const segment_v2::ShortKeyFooterPB& footer) {
+Status ShortKeyIndexDecoder::parse(const Slice& body, const ShortKeyFooterPB& footer) {
     _footer = footer;
 
     // check if body size match footer's information

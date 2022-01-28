@@ -44,8 +44,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
-import com.starrocks.sql.analyzer.ExprVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -58,6 +58,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
@@ -85,6 +86,10 @@ public class FunctionCallExpr extends Expr {
             new ImmutableSortedSet.Builder(String.CASE_INSENSITIVE_ORDER)
                     .add("stddev").add("stddev_val").add("stddev_samp")
                     .add("variance").add("variance_pop").add("variance_pop").add("var_samp").add("var_pop").build();
+
+    // TODO(yan): add more known functions which are monotonic.
+    private static final ImmutableSet<String> MONOTONIC_FUNCTION_SET =
+            new ImmutableSet.Builder().add("year").build();
 
     public boolean isAnalyticFnCall() {
         return isAnalyticFnCall;
@@ -169,6 +174,17 @@ public class FunctionCallExpr extends Expr {
         fn = other.fn;
     }
 
+    public static final Set<String> nullableSameWithChildrenFunctions =
+            ImmutableSet.<String>builder()
+                    .add(FunctionSet.YEAR)
+                    .add(FunctionSet.MONTH)
+                    .add(FunctionSet.DAY)
+                    .add(FunctionSet.HOUR)
+                    .add(FunctionSet.ADD)
+                    .add(FunctionSet.SUBTRACT)
+                    .add(FunctionSet.MULTIPLY)
+                    .build();
+
     public boolean isMergeAggFn() {
         return isMergeAggFn;
     }
@@ -214,6 +230,22 @@ public class FunctionCallExpr extends Expr {
             sb.append("DISTINCT ");
         }
         sb.append(Joiner.on(", ").join(childrenToSql())).append(")");
+        return sb.toString();
+    }
+
+    @Override
+    public String toDigestImpl() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(fnName);
+
+        sb.append("(");
+        if (fnParams.isStar()) {
+            sb.append("*");
+        }
+        if (fnParams.isDistinct()) {
+            sb.append("distinct ");
+        }
+        sb.append(Joiner.on(", ").join(childrenToDigest())).append(")");
         return sb.toString();
     }
 
@@ -359,14 +391,14 @@ public class FunctionCallExpr extends Expr {
             }
 
             for (Expr child : children) {
-                if (child.type.isOnlyMetricType()) {
+                if (child.type.isPercentile()) {
                     throw new AnalysisException(Type.OnlyMetricTypeErrorMsg);
                 }
             }
             return;
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("group_concat")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
             if (children.size() > 2 || children.isEmpty()) {
                 throw new AnalysisException(
                         "group_concat requires one or two parameters: " + this.toSql());
@@ -423,6 +455,15 @@ public class FunctionCallExpr extends Expr {
         Expr arg = getChild(0);
         if (arg == null) {
             return;
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+            if (fnParams.isDistinct()) {
+                throw new AnalysisException("array_agg does not support DISTINCT");
+            }
+            if (arg.type.isDecimalV3()) {
+                throw new AnalysisException("array_agg does not support DecimalV3");
+            }
         }
 
         // SUM and AVG cannot be applied to non-numeric types
@@ -572,11 +613,12 @@ public class FunctionCallExpr extends Expr {
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
-                    .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE).build();
+                    .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
+                    .add(FunctionSet.ANY_VALUE).build();
 
     private static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-                    .add("sum").add("sum_distinct").add("multi_distinct_sum").add("avg").add("variance")
+                    .add("sum").add("sum_distinct").add(FunctionSet.MULTI_DISTINCT_SUM).add("avg").add("variance")
                     .add("variance_pop").add("var_pop").add("variance_samp").add("var_samp")
                     .add("stddev").add("stddev_pop").add("std").add("stddev_samp").build();
 
@@ -682,21 +724,6 @@ public class FunctionCallExpr extends Expr {
             throw new AnalysisException(getFunctionNotFoundError(collectChildReturnTypes()));
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("from_unixtime")
-                || fnName.getFunction().equalsIgnoreCase("date_format")) {
-            // if has only one child, it has default time format: yyyy-MM-dd HH:mm:ss.SSSSSS
-            if (children.size() > 1) {
-                final StringLiteral fmtLiteral = (StringLiteral) children.get(1);
-                if (fmtLiteral.getStringValue().equals("yyyyMMdd")) {
-                    children.set(1, new StringLiteral("%Y%m%d"));
-                } else if (fmtLiteral.getStringValue().equals("yyyy-MM-dd")) {
-                    children.set(1, new StringLiteral("%Y-%m-%d"));
-                } else if (fmtLiteral.getStringValue().equals("yyyy-MM-dd HH:mm:ss")) {
-                    children.set(1, new StringLiteral("%Y-%m-%d %H:%i:%s"));
-                }
-            }
-        }
-
         if (fnName.getFunction().equalsIgnoreCase("date_trunc")) {
             if (children.size() != 2) {
                 throw new AnalysisException("date_trunc function must have 2 arguments");
@@ -745,7 +772,7 @@ public class FunctionCallExpr extends Expr {
                 throw new AnalysisException("Stddev/variance function do not support Date/Datetime type");
             }
 
-            if (functionName.equalsIgnoreCase("multi_distinct_sum") && argTypes[0].isDateType()) {
+            if (functionName.equalsIgnoreCase(FunctionSet.MULTI_DISTINCT_SUM) && argTypes[0].isDateType()) {
                 throw new AnalysisException("Sum in multi distinct functions do not support Date/Datetime type");
             }
 
@@ -822,7 +849,15 @@ public class FunctionCallExpr extends Expr {
 
     // TODO(kks): improve this
     public boolean isNullable() {
-        return !CallOperator.AlwaysReturnNonNullableFunctions.contains(fnName.getFunction());
+        // check if fn always return non null
+        if (fn != null && !fn.isNullable()) {
+            return false;
+        }
+        // check children nullable
+        if (nullableSameWithChildrenFunctions.contains(fnName.getFunction())) {
+            return children.stream().anyMatch(Expr::isNullable);
+        }
+        return true;
     }
 
     public static FunctionCallExpr createMergeAggCall(
@@ -909,34 +944,24 @@ public class FunctionCallExpr extends Expr {
         return result;
     }
 
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        if (fn instanceof AggregateFunction) {
-            return true;
-        }
-
-        if (fn != null) {
-            return fn.isVectorized();
-        }
-
-        return false;
-    }
-
     /**
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitFunctionCall(this, context);
     }
 
     public void setMergeAggFn() {
         isMergeAggFn = true;
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        FunctionName name = getFnName();
+        if (name.getDb() == null && MONOTONIC_FUNCTION_SET.contains(name.getFunction())) {
+            return true;
+        }
+        return false;
     }
 }

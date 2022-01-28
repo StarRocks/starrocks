@@ -1,25 +1,33 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
 #include "column/chunk.h"
 #include "exec/exec_node.h"
 
-namespace starrocks::vectorized {
-class CrossJoinNode : public ExecNode {
+namespace starrocks {
+namespace vectorized {
+class CrossJoinNode final : public ExecNode {
 public:
     CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~CrossJoinNode() override = default;
+
+    ~CrossJoinNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
 
     Status get_next_internal(RuntimeState* state, ChunkPtr* chunk, bool* eos,
                              ScopedTimer<MonotonicStopWatch>& probe_timer);
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
+
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
 
 private:
     Status _build(RuntimeState* state);
@@ -71,6 +79,7 @@ private:
     size_t _probe_rows_index = 0;
 
     bool _eos = false;
+    bool _need_create_tuple_columns = true;
 
     Buffer<SlotDescriptor*> _col_types;
     Buffer<TupleId> _output_build_tuple_ids;
@@ -85,4 +94,5 @@ private:
 
     std::vector<uint32_t> _buf_selective;
 };
-} // namespace starrocks::vectorized
+} // namespace vectorized
+} // namespace starrocks

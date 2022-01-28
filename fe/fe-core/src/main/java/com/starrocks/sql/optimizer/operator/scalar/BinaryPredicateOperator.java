@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
@@ -8,8 +8,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ_FOR_NULL;
 
 public class BinaryPredicateOperator extends PredicateOperator {
     private static final Map<BinaryType, BinaryType> BINARY_COMMUTATIVE_MAP =
@@ -96,6 +94,14 @@ public class BinaryPredicateOperator extends PredicateOperator {
             return this == EQ || this == EQ_FOR_NULL;
         }
 
+        public boolean isUnequivalence() {
+            return this == NE;
+        }
+
+        public boolean isNotRangeComparison() {
+            return isEquivalence() || isUnequivalence();
+        }
+
         public boolean isRange() {
             return type.equals(LT.type)
                     || type.equals(LE.type)
@@ -145,12 +151,7 @@ public class BinaryPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public boolean isStrictPredicate() {
-        if (type == EQ_FOR_NULL) {
-            return false;
-        }
-        // To exclude 1 = 1;
-        // TODO(kks): Currently, we only allow column ref and cast, we should allow some functions
-        return getChild(0).isColumnRefOrCast() || getChild(1).isColumnRefOrCast();
+    public boolean isNullable() {
+        return !this.type.equals(BinaryType.EQ_FOR_NULL) && super.isNullable();
     }
 }

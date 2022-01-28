@@ -21,13 +21,20 @@
 
 #include "storage/utils.h"
 
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bvar/bvar.h>
+DIAGNOSTIC_POP
 #include <dirent.h>
+#include <fmt/format.h>
 #include <lz4/lz4.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <boost/regex.hpp>
 #include <cerrno>
+#include <chrono>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
@@ -54,124 +61,93 @@ using std::vector;
 
 namespace starrocks {
 
+static bvar::LatencyRecorder g_move_trash("starrocks", "move_to_trash");
+
 uint32_t olap_adler32(uint32_t adler, const char* buf, size_t len) {
     return adler32(adler, reinterpret_cast<const Bytef*>(buf), len);
 }
 
-OLAPStatus gen_timestamp_string(string* out_string) {
+Status gen_timestamp_string(string* out_string) {
     time_t now = time(nullptr);
     tm local_tm;
 
     if (localtime_r(&now, &local_tm) == nullptr) {
-        LOG(WARNING) << "fail to localtime_r time. time=" << now;
-        return OLAP_ERR_OS_ERROR;
+        return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
     }
     char time_suffix[16] = {0}; // Example: 20150706111404
     if (strftime(time_suffix, sizeof(time_suffix), "%Y%m%d%H%M%S", &local_tm) == 0) {
-        LOG(WARNING) << "fail to strftime time. time=" << now;
-        return OLAP_ERR_OS_ERROR;
+        return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
     }
 
     *out_string = time_suffix;
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
-OLAPStatus move_to_trash(const std::filesystem::path& schema_hash_root, const std::filesystem::path& file_path) {
-    OLAPStatus res = OLAP_SUCCESS;
-    string old_file_path = file_path.string();
-    string old_file_name = file_path.filename().string();
-    string storage_root = schema_hash_root
-                                  .parent_path() // tablet_path
-                                  .parent_path() // shard_path
-                                  .parent_path() // DATA_PREFIX
-                                  .parent_path() // storage_root
-                                  .string();
+Status move_to_trash(const std::filesystem::path& file_path) {
+    static std::atomic<uint64_t> delete_counter{0}; // a global counter to avoid file name duplication.
+
+    auto t0 = std::chrono::steady_clock::now();
+
+    std::string old_file_path = file_path.string();
+    std::string old_file_name = file_path.filename().string();
+    std::string storage_root = file_path
+                                       .parent_path() // shard_path
+                                       .parent_path() // DATA_PREFIX
+                                       .parent_path() // storage_root
+                                       .string();
 
     // 1. get timestamp string
-    string time_str;
-    if ((res = gen_timestamp_string(&time_str)) != OLAP_SUCCESS) {
-        LOG(WARNING) << "failed to generate time_string when move file to trash."
-                        " err code="
-                     << res;
-        return res;
-    }
+    std::string time_str;
+    RETURN_IF_ERROR(gen_timestamp_string(&time_str));
 
-    // 2. generate new file path
-    static uint64_t delete_counter = 0; // a global counter to avoid file name duplication.
-    static std::mutex lock;             // lock for delete_counter
-    std::stringstream new_file_dir_stream;
-    lock.lock();
-    // when file_path points to a schema_path, we need to save tablet info in trash_path,
-    // so we add file_path.parent_path().filename() in new_file_path.
-    // other conditions are not considered, for they are nothing serious.
-    new_file_dir_stream << storage_root << TRASH_PREFIX << "/" << time_str << "." << delete_counter++ << "/"
-                        << file_path.parent_path().filename().string();
-    lock.unlock();
-    string new_file_dir = new_file_dir_stream.str();
-    string new_file_path = new_file_dir + "/" + old_file_name;
-    // create target dir, or the rename() function will fail.
-    if (!FileUtils::check_exist(new_file_dir) && !FileUtils::create_dir(new_file_dir).ok()) {
-        LOG(WARNING) << "delete file failed. due to mkdir failed. file=" << old_file_path
-                     << " new_dir=" << new_file_dir;
-        return OLAP_ERR_OS_ERROR;
+    std::string new_file_dir = fmt::format("{}{}/{}.{}/", storage_root, TRASH_PREFIX, time_str,
+                                           delete_counter.fetch_add(1, std::memory_order_relaxed));
+    std::string new_file_path = fmt::format("{}/{}", new_file_dir, old_file_name);
+    // 2. create target dir, or the rename() function will fail.
+    if (auto st = Env::Default()->create_dir(new_file_dir); !st.ok()) {
+        // May be because the parent directory does not exist, try create directories recursively.
+        RETURN_IF_ERROR(FileUtils::create_dir(new_file_dir));
     }
 
     // 3. remove file to trash
-    VLOG(3) << "move file to trash. " << old_file_path << " -> " << new_file_path;
-    if (rename(old_file_path.c_str(), new_file_path.c_str()) < 0) {
-        LOG(WARNING) << "move file to trash failed. file=" << old_file_path << " target=" << new_file_path;
-        return OLAP_ERR_OS_ERROR;
-    }
-
-    // 4. check parent dir of source file, delete it when empty
-    string source_parent_dir = schema_hash_root.parent_path().string(); // tablet_id level
-    std::set<std::string> sub_dirs, sub_files;
-
-    RETURN_CODE_IF_ERROR_WITH_WARN(FileUtils::list_dirs_files(source_parent_dir, &sub_dirs, &sub_files, Env::Default()),
-                                   OLAP_SUCCESS, "access dir failed. [dir=" + source_parent_dir);
-
-    if (sub_dirs.empty() && sub_files.empty()) {
-        LOG(INFO) << "remove empty dir " << source_parent_dir;
-        // no need to exam return status
-        Env::Default()->delete_dir(source_parent_dir);
-    }
-
-    return OLAP_SUCCESS;
+    auto st = Env::Default()->rename_file(old_file_path, new_file_path);
+    auto t1 = std::chrono::steady_clock::now();
+    g_move_trash << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+    return st;
 }
 
-OLAPStatus copy_file(const string& src, const string& dest) {
+Status copy_file(const string& src, const string& dest) {
     int src_fd = -1;
     int dest_fd = -1;
     char buf[1024 * 1024];
-    OLAPStatus res = OLAP_SUCCESS;
+    Status res = Status::OK();
 
     src_fd = ::open(src.c_str(), O_RDONLY);
     if (src_fd < 0) {
-        PLOG(WARNING) << "failed to open " << src;
-        res = OLAP_ERR_FILE_NOT_EXIST;
+        PLOG(WARNING) << "Not found file: " << src;
+        res = Status::NotFound(fmt::format("Not found file: {}", src));
         goto COPY_EXIT;
     }
 
     dest_fd = ::open(dest.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
     if (dest_fd < 0) {
-        PLOG(WARNING) << "failed to open " << dest;
-        res = OLAP_ERR_FILE_NOT_EXIST;
+        PLOG(WARNING) << "Not found file: " << dest;
+        res = Status::NotFound(fmt::format("Not found file: {}", dest));
         goto COPY_EXIT;
     }
 
     while (true) {
         ssize_t rd_size = ::read(src_fd, buf, sizeof(buf));
         if (rd_size < 0) {
-            PLOG(WARNING) << "failed to read from " << src;
-            return OLAP_ERR_IO_ERROR;
+            res = Status::IOError(fmt::format("Error to read file: {}, error:{} ", src, std::strerror(Errno::no())));
+            goto COPY_EXIT;
         } else if (0 == rd_size) {
             break;
         }
 
         ssize_t wr_size = ::write(dest_fd, buf, rd_size);
         if (wr_size != rd_size) {
-            PLOG(WARNING) << "failed to write to " << dest;
-            res = OLAP_ERR_IO_ERROR;
+            res = Status::IOError(fmt::format("Error to write file: {}, error:{} ", dest, std::strerror(Errno::no())));
             goto COPY_EXIT;
         }
     }
@@ -189,23 +165,24 @@ COPY_EXIT:
 
     return res;
 }
-OLAPStatus read_write_test_file(const string& test_file_path) {
+
+Status read_write_test_file(const string& test_file_path) {
     if (access(test_file_path.c_str(), F_OK) == 0) {
         if (remove(test_file_path.c_str()) != 0) {
-            PLOG(WARNING) << "fail to delete " << test_file_path;
-            return OLAP_ERR_IO_ERROR;
+            return Status::IOError(
+                    fmt::format("Error to remove file: {}, error:{} ", test_file_path, std::strerror(Errno::no())));
         }
     } else {
         if (errno != ENOENT) {
-            PLOG(WARNING) << "fail to access " << test_file_path;
-            return OLAP_ERR_IO_ERROR;
+            return Status::IOError(
+                    fmt::format("Error to access file: {}, error:{} ", test_file_path, std::strerror(Errno::no())));
         }
     }
     std::unique_ptr<RandomRWFile> file;
     Status st = Env::Default()->new_random_rw_file(test_file_path, &file);
     if (!st.ok()) {
-        LOG(WARNING) << "fail to create test file " << test_file_path << ": " << st;
-        return OLAP_ERR_IO_ERROR;
+        return Status::IOError(
+                fmt::format("Error to create test file: {}, error:{} ", test_file_path, std::strerror(Errno::no())));
     }
     const size_t TEST_FILE_BUF_SIZE = 4096;
     const size_t DIRECT_IO_ALIGNMENT = 512;
@@ -213,12 +190,12 @@ OLAPStatus read_write_test_file(const string& test_file_path) {
     char* read_test_buff = nullptr;
     if (posix_memalign((void**)&write_test_buff, DIRECT_IO_ALIGNMENT, TEST_FILE_BUF_SIZE) != 0) {
         LOG(WARNING) << "fail to allocate write buffer memory. size=" << TEST_FILE_BUF_SIZE;
-        return OLAP_ERR_MALLOC_ERROR;
+        return Status::Corruption("Fail to allocate write buffer memory");
     }
     std::unique_ptr<char, decltype(&std::free)> write_buff(write_test_buff, &std::free);
     if (posix_memalign((void**)&read_test_buff, DIRECT_IO_ALIGNMENT, TEST_FILE_BUF_SIZE) != 0) {
         LOG(WARNING) << "fail to allocate read buffer memory. size=" << TEST_FILE_BUF_SIZE;
-        return OLAP_ERR_MALLOC_ERROR;
+        return Status::Corruption("Fail to allocate write buffer memory");
     }
     std::unique_ptr<char, decltype(&std::free)> read_buff(read_test_buff, &std::free);
     // generate random numbers
@@ -229,38 +206,39 @@ OLAPStatus read_write_test_file(const string& test_file_path) {
     }
     st = file->write_at(0, Slice(write_buff.get(), TEST_FILE_BUF_SIZE));
     if (!st.ok()) {
-        LOG(WARNING) << "fail to write " << test_file_path << ": " << st;
-        return OLAP_ERR_IO_ERROR;
+        LOG(WARNING) << "Error to write " << test_file_path << ", error: " << st;
+        return Status::IOError(
+                fmt::format("Error to write file: {}, error:{} ", test_file_path, std::strerror(Errno::no())));
     }
     st = file->read_at(0, Slice(read_buff.get(), TEST_FILE_BUF_SIZE));
     if (!st.ok()) {
-        LOG(WARNING) << "fail to read " << test_file_path << ": " << st;
-        return OLAP_ERR_IO_ERROR;
+        LOG(WARNING) << "Error to read file: " << test_file_path << ", error: " << st;
+        return Status::IOError(
+                fmt::format("Error to read file: {}, error:{} ", test_file_path, std::strerror(Errno::no())));
     }
     if (memcmp(write_buff.get(), read_buff.get(), TEST_FILE_BUF_SIZE) != 0) {
         LOG(WARNING) << "the test file write_buf and read_buf not equal, [file_name = " << test_file_path << "]";
-        return OLAP_ERR_TEST_FILE_ERROR;
+        return Status::InternalError("test file write_buf and read_buf not equal");
     }
     st = file->close();
     if (!st.ok()) {
-        LOG(WARNING) << "fail to close " << test_file_path << ": " << st;
-        return OLAP_ERR_IO_ERROR;
+        LOG(WARNING) << "Error to close " << test_file_path << ", error: " << st;
+        return Status::IOError(
+                fmt::format("Error to close file: {}, error:{} ", test_file_path, std::strerror(Errno::no())));
     }
     if (remove(test_file_path.c_str()) != 0) {
-        char errmsg[64];
-        VLOG(3) << "fail to delete test file. [err='" << strerror_r(errno, errmsg, 64) << "' path='" << test_file_path
-                << "']";
-        return OLAP_ERR_IO_ERROR;
+        return Status::IOError(
+                fmt::format("Error to revmoe file: {}, error:{} ", test_file_path, std::strerror(Errno::no())));
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 bool check_datapath_rw(const string& path) {
     if (!FileUtils::check_exist(path)) return false;
     string file_path = path + "/.read_write_test_file";
     try {
-        OLAPStatus res = read_write_test_file(file_path);
-        return res == OLAP_SUCCESS;
+        Status res = read_write_test_file(file_path);
+        return res.ok();
     } catch (...) {
         // do nothing
     }
@@ -270,30 +248,31 @@ bool check_datapath_rw(const string& path) {
     return false;
 }
 
-OLAPStatus copy_dir(const string& src_dir, const string& dst_dir) {
+Status copy_dir(const string& src_dir, const string& dst_dir) {
     std::filesystem::path src_path(src_dir.c_str());
     std::filesystem::path dst_path(dst_dir.c_str());
 
     try {
         // Check whether the function call is valid
         if (!std::filesystem::exists(src_path) || !std::filesystem::is_directory(src_path)) {
-            LOG(WARNING) << "Source dir not exist or is not a dir. src_path=" << src_path.string();
-            return OLAP_ERR_CREATE_FILE_ERROR;
+            LOG(WARNING) << "Not found dir:" << src_path.string();
+            return Status::NotFound(fmt::format("Not found dir: {}", src_path.string()));
         }
 
         if (std::filesystem::exists(dst_path)) {
-            LOG(WARNING) << "Dst dir already exists.[dst_path=" << dst_path.string() << "]";
-            return OLAP_ERR_CREATE_FILE_ERROR;
+            LOG(WARNING) << "Dir already exist: " << dst_path.string();
+            return Status::AlreadyExist(fmt::format("Dir already exist: {}", dst_path.string()));
         }
 
         // Create the destination directory
         if (!std::filesystem::create_directory(dst_path)) {
-            LOG(WARNING) << "Unable to create dst dir.[dst_path=" << dst_path.string() << "]";
-            return OLAP_ERR_CREATE_FILE_ERROR;
+            LOG(WARNING) << "Error to create dir: " << dst_path.string();
+            return Status::IOError(
+                    fmt::format("Error to create dir: {}, error:{} ", dst_path.string(), std::strerror(Errno::no())));
         }
     } catch (...) {
         LOG(WARNING) << "input invalid. src_path=" << src_path.string() << " dst_path=" << dst_path.string();
-        return OLAP_ERR_STL_ERROR;
+        return Status::InternalError("Invalid input path");
     }
 
     // Iterate through the source directory
@@ -302,11 +281,11 @@ OLAPStatus copy_dir(const string& src_dir, const string& dst_dir) {
             const std::filesystem::path& current(file.path());
             if (std::filesystem::is_directory(current)) {
                 // Found directory: Recursion
-                OLAPStatus res = OLAP_SUCCESS;
-                if (OLAP_SUCCESS != (res = copy_dir(current.string(), (dst_path / current.filename()).string()))) {
+                Status res = copy_dir(current.string(), (dst_path / current.filename()).string());
+                if (!res.ok()) {
                     LOG(WARNING) << "Fail to copy file. src_path=" << src_path.string()
                                  << " dst_path=" << dst_path.string();
-                    return OLAP_ERR_CREATE_FILE_ERROR;
+                    return Status::InternalError("Fail to copy file.");
                 }
             } else {
                 // Found file: Copy
@@ -314,10 +293,10 @@ OLAPStatus copy_dir(const string& src_dir, const string& dst_dir) {
             }
         } catch (...) {
             LOG(WARNING) << "Fail to copy " << src_path.string() << " to " << dst_path.string();
-            return OLAP_ERR_STL_ERROR;
+            return Status::InternalError("Fail to copy file.");
         }
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 __thread char Errno::_buf[BUF_SIZE]; ///< buffer instance

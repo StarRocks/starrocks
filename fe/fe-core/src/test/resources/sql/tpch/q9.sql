@@ -34,9 +34,9 @@ order by
 [result]
 TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
     TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{59: sum(58: expr)=sum(59: sum(58: expr))}] group by [[53: N_NAME, 57: year]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{59: sum=sum(59: sum)}] group by [[53: N_NAME, 57: year]] having [null]
             EXCHANGE SHUFFLE[53, 57]
-                AGGREGATE ([LOCAL] aggregate [{59: sum(58: expr)=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{59: sum=sum(58: expr)}] group by [[53: N_NAME, 57: year]] having [null]
                     INNER JOIN (join-predicate [37: PS_SUPPKEY = 21: L_SUPPKEY AND 36: PS_PARTKEY = 20: L_PARTKEY] post-join-predicate [null])
                         SCAN (columns[36: PS_PARTKEY, 37: PS_SUPPKEY, 39: PS_SUPPLYCOST] predicate[null])
                         EXCHANGE BROADCAST

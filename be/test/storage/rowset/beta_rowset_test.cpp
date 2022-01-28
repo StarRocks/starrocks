@@ -18,6 +18,9 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
+#include "storage/rowset/beta_rowset.h"
+
 #include <string>
 #include <vector>
 
@@ -27,13 +30,8 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/comparison_predicate.h"
 #include "storage/data_dir.h"
-#include "storage/row_block.h"
-#include "storage/row_cursor.h"
-#include "storage/rowset/beta_rowset_reader.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/rowset_reader_context.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/vectorized/rowset_options.h"
@@ -42,6 +40,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/column_predicate.h"
+#include "testutil/assert.h"
 #include "util/defer_op.h"
 #include "util/file_utils.h"
 
@@ -70,7 +69,7 @@ protected:
         ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
 
         std::vector<StorePath> paths;
-        paths.emplace_back(config::storage_root_path, -1);
+        paths.emplace_back(config::storage_root_path);
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
@@ -89,8 +88,10 @@ protected:
     }
 
     void TearDown() override {
+        k_engine->stop();
         delete k_engine;
         k_engine = nullptr;
+        starrocks::ExecEnv::GetInstance()->set_storage_engine(nullptr);
         if (FileUtils::check_exist(config::storage_root_path)) {
             ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
         }
@@ -184,7 +185,6 @@ protected:
     void create_rowset_writer_context(const TabletSchema* tablet_schema, RowsetWriterContext* rowset_writer_context) {
         RowsetId rowset_id;
         rowset_id.init(10000);
-        rowset_writer_context->mem_tracker = _tablet_meta_mem_tracker.get();
         rowset_writer_context->rowset_id = rowset_id;
         rowset_writer_context->tablet_id = 12345;
         rowset_writer_context->tablet_schema_hash = 1111;
@@ -197,442 +197,11 @@ protected:
         rowset_writer_context->version.second = 0;
     }
 
-    void create_and_init_rowset_reader(Rowset* rowset, RowsetReaderContext& context, RowsetReaderSharedPtr* result) {
-        auto s = rowset->create_reader(result);
-        ASSERT_EQ(OLAP_SUCCESS, s);
-        ASSERT_TRUE(*result != nullptr);
-
-        s = (*result)->init(&context);
-        ASSERT_EQ(OLAP_SUCCESS, s);
-    }
-
 private:
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _schema_change_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
-
-TEST_F(BetaRowsetTest, BasicFunctionTest) {
-    OLAPStatus s;
-    TabletSchema tablet_schema;
-    create_tablet_schema(&tablet_schema);
-    RowsetSharedPtr rowset;
-    const int num_segments = 3;
-    const uint32_t rows_per_segment = 4096;
-    { // write `num_segments * rows_per_segment` rows to rowset
-        RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
-        create_rowset_writer_context(&tablet_schema, &writer_context);
-
-        std::unique_ptr<RowsetWriter> rowset_writer;
-        ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
-
-        RowCursor input_row;
-        input_row.init(tablet_schema);
-
-        // for segment "i", row "rid"
-        // k1 := rid*10 + i
-        // k2 := k1 * 10
-        // k3 := 4096 * i + rid
-        for (int i = 0; i < num_segments; ++i) {
-            MemTracker mem_tracker(-1);
-            MemPool mem_pool(&mem_tracker);
-            for (int rid = 0; rid < rows_per_segment; ++rid) {
-                uint32_t k1 = rid * 10 + i;
-                uint32_t k2 = k1 * 10;
-                uint32_t k3 = rows_per_segment * i + rid;
-                input_row.set_field_content(0, reinterpret_cast<char*>(&k1), &mem_pool);
-                input_row.set_field_content(1, reinterpret_cast<char*>(&k2), &mem_pool);
-                input_row.set_field_content(2, reinterpret_cast<char*>(&k3), &mem_pool);
-                s = rowset_writer->add_row(input_row);
-                ASSERT_EQ(OLAP_SUCCESS, s);
-            }
-            s = rowset_writer->flush();
-            ASSERT_EQ(OLAP_SUCCESS, s);
-        }
-
-        rowset = rowset_writer->build();
-        ASSERT_TRUE(rowset != nullptr);
-        ASSERT_EQ(num_segments, rowset->rowset_meta()->num_segments());
-        ASSERT_EQ(num_segments * rows_per_segment, rowset->rowset_meta()->num_rows());
-    }
-
-    { // test return ordered results and return k1 and k2
-        RowsetReaderContext reader_context;
-        reader_context.tablet_schema = &tablet_schema;
-        reader_context.need_ordered_result = true;
-        std::vector<uint32_t> return_columns = {0, 1};
-        reader_context.return_columns = &return_columns;
-        reader_context.seek_columns = &return_columns;
-        reader_context.stats = &_stats;
-
-        // without predicates
-        {
-            RowsetReaderSharedPtr rowset_reader;
-            create_and_init_rowset_reader(rowset.get(), reader_context, &rowset_reader);
-            RowBlock* output_block;
-            uint32_t num_rows_read = 0;
-            while ((s = rowset_reader->next_block(&output_block)) == OLAP_SUCCESS) {
-                ASSERT_TRUE(output_block != nullptr);
-                ASSERT_GT(output_block->row_num(), 0);
-                ASSERT_EQ(0, output_block->pos());
-                ASSERT_EQ(output_block->row_num(), output_block->limit());
-                ASSERT_EQ(return_columns, output_block->row_block_info().column_ids);
-                // after sort merge segments, k1 will be 0, 1, 2, 10, 11, 12, 20, 21, 22, ..., 40950, 40951, 40952
-                for (int i = 0; i < output_block->row_num(); ++i) {
-                    char* field1 = output_block->field_ptr(i, 0);
-                    char* field2 = output_block->field_ptr(i, 1);
-                    // test null bit
-                    ASSERT_FALSE(*reinterpret_cast<bool*>(field1));
-                    ASSERT_FALSE(*reinterpret_cast<bool*>(field2));
-                    uint32_t k1 = *reinterpret_cast<uint32_t*>(field1 + 1);
-                    uint32_t k2 = *reinterpret_cast<uint32_t*>(field2 + 1);
-                    ASSERT_EQ(k1 * 10, k2);
-
-                    int rid = num_rows_read / 3;
-                    int seg_id = num_rows_read % 3;
-                    ASSERT_EQ(rid * 10 + seg_id, k1);
-                    num_rows_read++;
-                }
-            }
-            EXPECT_EQ(OLAP_ERR_DATA_EOF, s);
-            EXPECT_TRUE(output_block == nullptr);
-            EXPECT_EQ(rowset->rowset_meta()->num_rows(), num_rows_read);
-        }
-
-        // merge segments with predicates
-        {
-            std::vector<const ColumnPredicate*> column_predicates;
-            // column predicate: k1 = 10
-            std::unique_ptr<ColumnPredicate> predicate(new EqualPredicate<int32_t>(0, 10));
-            column_predicates.emplace_back(predicate.get());
-            reader_context.predicates = &column_predicates;
-            RowsetReaderSharedPtr rowset_reader;
-            create_and_init_rowset_reader(rowset.get(), reader_context, &rowset_reader);
-            RowBlock* output_block;
-            uint32_t num_rows_read = 0;
-            while ((s = rowset_reader->next_block(&output_block)) == OLAP_SUCCESS) {
-                ASSERT_TRUE(output_block != nullptr);
-                ASSERT_EQ(1, output_block->row_num());
-                ASSERT_EQ(0, output_block->pos());
-                ASSERT_EQ(output_block->row_num(), output_block->limit());
-                ASSERT_EQ(return_columns, output_block->row_block_info().column_ids);
-                // after sort merge segments, k1 will be 10
-                for (int i = 0; i < output_block->row_num(); ++i) {
-                    char* field1 = output_block->field_ptr(i, 0);
-                    char* field2 = output_block->field_ptr(i, 1);
-                    // test null bit
-                    ASSERT_FALSE(*reinterpret_cast<bool*>(field1));
-                    ASSERT_FALSE(*reinterpret_cast<bool*>(field2));
-                    uint32_t k1 = *reinterpret_cast<uint32_t*>(field1 + 1);
-                    uint32_t k2 = *reinterpret_cast<uint32_t*>(field2 + 1);
-                    ASSERT_EQ(10, k1);
-                    ASSERT_EQ(k1 * 10, k2);
-                    num_rows_read++;
-                }
-            }
-            EXPECT_EQ(OLAP_ERR_DATA_EOF, s);
-            EXPECT_TRUE(output_block == nullptr);
-            EXPECT_EQ(1, num_rows_read);
-        }
-    }
-
-    { // test return unordered data and only k3
-        RowsetReaderContext reader_context;
-        reader_context.tablet_schema = &tablet_schema;
-        reader_context.need_ordered_result = false;
-        std::vector<uint32_t> return_columns = {2};
-        reader_context.return_columns = &return_columns;
-        reader_context.seek_columns = &return_columns;
-        reader_context.stats = &_stats;
-
-        // without predicate
-        {
-            RowsetReaderSharedPtr rowset_reader;
-            create_and_init_rowset_reader(rowset.get(), reader_context, &rowset_reader);
-
-            RowBlock* output_block;
-            uint32_t num_rows_read = 0;
-            while ((s = rowset_reader->next_block(&output_block)) == OLAP_SUCCESS) {
-                ASSERT_TRUE(output_block != nullptr);
-                ASSERT_GT(output_block->row_num(), 0);
-                ASSERT_EQ(0, output_block->pos());
-                ASSERT_EQ(output_block->row_num(), output_block->limit());
-                ASSERT_EQ(return_columns, output_block->row_block_info().column_ids);
-                // for unordered result, k3 will be 0, 1, 2, ..., 4096*3-1
-                for (int i = 0; i < output_block->row_num(); ++i) {
-                    char* field3 = output_block->field_ptr(i, 2);
-                    // test null bit
-                    ASSERT_FALSE(*reinterpret_cast<bool*>(field3));
-                    uint32_t k3 = *reinterpret_cast<uint32_t*>(field3 + 1);
-                    ASSERT_EQ(num_rows_read, k3);
-                    num_rows_read++;
-                }
-            }
-            EXPECT_EQ(OLAP_ERR_DATA_EOF, s);
-            EXPECT_TRUE(output_block == nullptr);
-            EXPECT_EQ(rowset->rowset_meta()->num_rows(), num_rows_read);
-        }
-
-        // with predicate
-        {
-            std::vector<const ColumnPredicate*> column_predicates;
-            // column predicate: k3 < 100
-            ColumnPredicate* predicate = new LessPredicate<int32_t>(2, 100);
-            column_predicates.emplace_back(predicate);
-            reader_context.predicates = &column_predicates;
-            RowsetReaderSharedPtr rowset_reader;
-            create_and_init_rowset_reader(rowset.get(), reader_context, &rowset_reader);
-
-            RowBlock* output_block;
-            uint32_t num_rows_read = 0;
-            while ((s = rowset_reader->next_block(&output_block)) == OLAP_SUCCESS) {
-                ASSERT_TRUE(output_block != nullptr);
-                ASSERT_LE(output_block->row_num(), 100);
-                ASSERT_EQ(0, output_block->pos());
-                ASSERT_EQ(output_block->row_num(), output_block->limit());
-                ASSERT_EQ(return_columns, output_block->row_block_info().column_ids);
-                // for unordered result, k3 will be 0, 1, 2, ..., 99
-                for (int i = 0; i < output_block->row_num(); ++i) {
-                    char* field3 = output_block->field_ptr(i, 2);
-                    // test null bit
-                    ASSERT_FALSE(*reinterpret_cast<bool*>(field3));
-                    uint32_t k3 = *reinterpret_cast<uint32_t*>(field3 + 1);
-                    ASSERT_EQ(num_rows_read, k3);
-                    num_rows_read++;
-                }
-            }
-            EXPECT_EQ(OLAP_ERR_DATA_EOF, s);
-            EXPECT_TRUE(output_block == nullptr);
-            EXPECT_EQ(100, num_rows_read);
-            delete predicate;
-        }
-    }
-}
-
-TEST_F(BetaRowsetTest, DiscontinuousRowidTest) {
-    OLAPStatus s;
-    TabletSchema tablet_schema;
-    create_tablet_schema(&tablet_schema);
-    RowsetSharedPtr rowset;
-    const int num_segments = 1;
-    const uint32_t rows_per_segment = 4096;
-
-    {
-        // write num_segments * rows_per_segment` rows to rowset
-        RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
-        create_rowset_writer_context(&tablet_schema, &writer_context);
-
-        std::unique_ptr<RowsetWriter> rowset_writer;
-        ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
-
-        RowCursor input_row;
-        input_row.init(tablet_schema);
-
-        for (int i = 0; i < num_segments; ++i) {
-            MemTracker mem_tracker(-1);
-            MemPool mem_pool(&mem_tracker);
-            for (int rid = 0; rid < rows_per_segment; ++rid) {
-                uint32_t k1 = rid;
-                uint32_t k2 = rid;
-                uint32_t k3 = rid;
-                input_row.set_field_content(0, reinterpret_cast<char*>(&k1), &mem_pool);
-                input_row.set_field_content(1, reinterpret_cast<char*>(&k2), &mem_pool);
-                input_row.set_field_content(2, reinterpret_cast<char*>(&k3), &mem_pool);
-                s = rowset_writer->add_row(input_row);
-                ASSERT_EQ(OLAP_SUCCESS, s);
-            }
-            s = rowset_writer->flush();
-            ASSERT_EQ(OLAP_SUCCESS, s);
-        }
-
-        rowset = rowset_writer->build();
-        ASSERT_TRUE(rowset != nullptr);
-        ASSERT_EQ(num_segments, rowset->rowset_meta()->num_segments());
-        ASSERT_EQ(num_segments * rows_per_segment, rowset->rowset_meta()->num_rows());
-    }
-
-    {
-        auto& schema = rowset->schema();
-        vector<uint32_t> pk_columns;
-        for (size_t i = 0; i < schema.num_key_columns(); i++) {
-            pk_columns.push_back((uint32_t)i);
-        }
-        vectorized::Schema pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
-
-        OlapReaderStatistics stats;
-        vectorized::RowsetReadOptions rs_opts;
-
-        rs_opts.is_primary_keys = false;
-        rs_opts.sorted = false;
-        rs_opts.version = 0;
-        rs_opts.stats = &stats;
-
-        std::unique_ptr<vectorized::ColumnPredicate> predicate(
-                vectorized::new_column_ne_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, "1"));
-
-        rs_opts.predicates[predicate->column_id()].emplace_back(predicate.get());
-
-        auto res = rowset->new_iterator(pkey_schema, rs_opts);
-        if (!res.ok()) {
-            ASSERT_TRUE(res.ok()) << res.status().to_string();
-        }
-
-        // TODO(cbl): refactor chunkandrowid
-        //            while (true) {
-        //                vectorized::ChunkAndRowid chunk_and_rowid;
-        //                chunk_and_rowid.chunk =
-        //                        vectorized::ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
-        //
-        //                Status st = itr->get_next(&chunk_and_rowid);
-        //
-        //                if (chunk_and_rowid.rowids_offset_col.empty()) {
-        //                    if (i == 0) {
-        //                        DCHECK_NE(UINT32_MAX, chunk_and_rowid.start_rowid);
-        //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 0);
-        //                    }
-        //                } else {
-        //                    ASSERT_EQ(chunk_and_rowid.rowids_offset_col.size(), 4095);
-        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-        //                                      chunk_and_rowid.rowids_offset_col.get_data()[0],
-        //                              0);
-        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-        //                                      chunk_and_rowid.rowids_offset_col.get_data()[1],
-        //                              2);
-        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-        //                                      chunk_and_rowid.rowids_offset_col.get_data()[2],
-        //                              3);
-        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-        //                                      chunk_and_rowid.rowids_offset_col.get_data()[4094],
-        //                              4095);
-        //                }
-        //                DCHECK_NE(UINT32_MAX, chunk_and_rowid.segment_id);
-        //
-        //                i++;
-        //
-        //                if (st.is_end_of_file()) {
-        //                    break;
-        //                } else if (!st.ok()) {
-        //                    ASSERT_TRUE(st.ok()) << st.to_string();
-        //                }
-        //            }
-    }
-}
-
-TEST_F(BetaRowsetTest, DiscontinuousRowid1Test) {
-    OLAPStatus s;
-    TabletSchema tablet_schema;
-    create_tablet_schema(&tablet_schema);
-    RowsetSharedPtr rowset;
-    const int num_segments = 1;
-    const uint32_t rows_per_segment = 4096 * 3;
-
-    {
-        // write `num_segments * rows_per_segment` rows to rowset
-        RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
-        create_rowset_writer_context(&tablet_schema, &writer_context);
-
-        std::unique_ptr<RowsetWriter> rowset_writer;
-        ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
-
-        RowCursor input_row;
-        input_row.init(tablet_schema);
-
-        for (int i = 0; i < num_segments; ++i) {
-            MemTracker mem_tracker(-1);
-            MemPool mem_pool(&mem_tracker);
-            for (int rid = 0; rid < rows_per_segment; ++rid) {
-                uint32_t k1 = rid;
-                uint32_t k2 = rid;
-                uint32_t k3 = rid;
-                input_row.set_field_content(0, reinterpret_cast<char*>(&k1), &mem_pool);
-                input_row.set_field_content(1, reinterpret_cast<char*>(&k2), &mem_pool);
-                input_row.set_field_content(2, reinterpret_cast<char*>(&k3), &mem_pool);
-                s = rowset_writer->add_row(input_row);
-                ASSERT_EQ(OLAP_SUCCESS, s);
-            }
-            s = rowset_writer->flush();
-            ASSERT_EQ(OLAP_SUCCESS, s);
-        }
-
-        rowset = rowset_writer->build();
-        ASSERT_TRUE(rowset != nullptr);
-        ASSERT_EQ(num_segments, rowset->rowset_meta()->num_segments());
-        ASSERT_EQ(num_segments * rows_per_segment, rowset->rowset_meta()->num_rows());
-    }
-
-    {
-        auto& schema = rowset->schema();
-        vector<uint32_t> pk_columns;
-        for (size_t i = 0; i < schema.num_key_columns(); i++) {
-            pk_columns.push_back((uint32_t)i);
-        }
-        vectorized::Schema pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
-
-        OlapReaderStatistics stats;
-        vectorized::RowsetReadOptions rs_opts;
-
-        rs_opts.is_primary_keys = false;
-        rs_opts.sorted = false;
-        rs_opts.version = 0;
-        rs_opts.stats = &stats;
-
-        std::unique_ptr<vectorized::ColumnPredicate> predicate(
-                vectorized::new_column_ne_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, "1"));
-
-        rs_opts.predicates[predicate->column_id()].emplace_back(predicate.get());
-
-        auto res = rowset->new_iterator(pkey_schema, rs_opts);
-        if (!res.ok()) {
-            ASSERT_TRUE(res.ok()) << res.status().to_string();
-        }
-
-        // TODO(cbl): refactor chunkandrowid
-        //            while (true) {
-        //                vectorized::ChunkAndRowid chunk_and_rowid;
-        //                chunk_and_rowid.chunk =
-        //                        vectorized::ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
-        //
-        //                Status st = itr->get_next(&chunk_and_rowid);
-        //
-        //                if (chunk_and_rowid.rowids_offset_col.empty()) {
-        //                    switch (i) {
-        //                    case 0:
-        //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 0);
-        //                        break;
-        //                    case 1:
-        //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 4097);
-        //                        break;
-        //                    case 2:
-        //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 8193);
-        //                        break;
-        //                    }
-        //                } else {
-        //                    ASSERT_EQ(chunk_and_rowid.rowids_offset_col.size(), 4095);
-        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-        //                                      chunk_and_rowid.rowids_offset_col.get_data()[0],
-        //                              0);
-        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-        //                                      chunk_and_rowid.rowids_offset_col.get_data()[1],
-        //                              2);
-        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-        //                                      chunk_and_rowid.rowids_offset_col.get_data()[2],
-        //                              3);
-        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-        //                                      chunk_and_rowid.rowids_offset_col.get_data()[4094],
-        //                              4095);
-        //                }
-        //                DCHECK_NE(UINT32_MAX, chunk_and_rowid.segment_id);
-        //
-        //                i++;
-        //
-        //                if (st.is_end_of_file()) {
-        //                    break;
-        //                } else if (!st.ok()) {
-        //                    ASSERT_TRUE(st.ok()) << st.to_string();
-        //                }
-        //            }
-    }
-}
 
 TEST_F(BetaRowsetTest, FinalMergeTest) {
     TabletSchema tablet_schema;
@@ -657,8 +226,8 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
                 cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
                 cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
             }
-            rowset_writer->add_chunk(*chunk.get());
-            EXPECT_EQ(OLAP_SUCCESS, rowset_writer->flush());
+            ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+            ASSERT_OK(rowset_writer->flush());
         }
 
         {
@@ -669,8 +238,8 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
                 cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
                 cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
             }
-            rowset_writer->add_chunk(*chunk.get());
-            EXPECT_EQ(OLAP_SUCCESS, rowset_writer->flush());
+            ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+            ASSERT_OK(rowset_writer->flush());
         }
 
         {
@@ -681,11 +250,11 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
                 cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
                 cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
             }
-            rowset_writer->add_chunk(*chunk.get());
-            EXPECT_EQ(OLAP_SUCCESS, rowset_writer->flush());
+            ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+            ASSERT_OK(rowset_writer->flush());
         }
 
-        rowset = rowset_writer->build();
+        rowset = rowset_writer->build().value();
         ASSERT_TRUE(rowset != nullptr);
         ASSERT_EQ(1, rowset->rowset_meta()->num_segments());
         ASSERT_EQ(rows_per_segment * 2, rowset->rowset_meta()->num_rows());
@@ -694,18 +263,17 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
         seg_options.block_mgr = fs::fs_util::block_manager();
         seg_options.stats = &_stats;
 
-        MemTracker tracker;
-        DeferOp memory_tracker_releaser([&tracker] { return tracker.release(tracker.consumption()); });
-
         std::string segment_file =
                 BetaRowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
 
-        auto segment =
-                *segment_v2::Segment::open(&tracker, fs::fs_util::block_manager(), segment_file, 0, &tablet_schema);
+        auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), fs::fs_util::block_manager(), segment_file, 0,
+                                      &tablet_schema);
         ASSERT_NE(segment->num_rows(), 0);
         auto res = segment->new_iterator(schema, seg_options);
         ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
         auto seg_iterator = res.value();
+
+        seg_iterator->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
 
         auto chunk = vectorized::ChunkHelper::new_chunk(seg_iterator->schema(), 100);
 
@@ -732,6 +300,95 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
         }
         EXPECT_EQ(count, rows_per_segment * 2);
     }
+}
+
+TEST_F(BetaRowsetTest, VerticalWriteTest) {
+    TabletSchema tablet_schema;
+    create_tablet_schema(&tablet_schema);
+
+    RowsetWriterContext writer_context(kDataFormatV2, kDataFormatV2);
+    create_rowset_writer_context(&tablet_schema, &writer_context);
+    writer_context.max_rows_per_segment = 5000;
+    writer_context.writer_type = kVertical;
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
+
+    int32_t chunk_size = 3000;
+    size_t num_rows = 10000;
+
+    {
+        // k1 k2
+        std::vector<uint32_t> column_indexes{0, 1};
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+        for (auto i = 0; i < num_rows % chunk_size; ++i) {
+            chunk->reset();
+            auto& cols = chunk->columns();
+            for (auto j = 0; j < chunk_size; ++j) {
+                if (i * chunk_size + j >= num_rows) {
+                    break;
+                }
+                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+            }
+            ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, true));
+        }
+        ASSERT_OK(rowset_writer->flush_columns());
+    }
+
+    {
+        // v1
+        std::vector<uint32_t> column_indexes{2};
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+        for (auto i = 0; i < num_rows % chunk_size; ++i) {
+            chunk->reset();
+            auto& cols = chunk->columns();
+            for (auto j = 0; j < chunk_size; ++j) {
+                if (i * chunk_size + j >= num_rows) {
+                    break;
+                }
+                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+            }
+            ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, false));
+        }
+        ASSERT_OK(rowset_writer->flush_columns());
+    }
+    ASSERT_OK(rowset_writer->final_flush());
+
+    // check rowset
+    RowsetSharedPtr rowset = rowset_writer->build().value();
+    ASSERT_EQ(num_rows, rowset->rowset_meta()->num_rows());
+    ASSERT_EQ(3, rowset->rowset_meta()->num_segments());
+
+    vectorized::RowsetReadOptions rs_opts;
+    rs_opts.is_primary_keys = false;
+    rs_opts.sorted = true;
+    rs_opts.version = 0;
+    rs_opts.stats = &_stats;
+    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+    auto res = rowset->new_iterator(schema, rs_opts);
+    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
+
+    auto iterator = res.value();
+    int count = 0;
+    auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+    while (true) {
+        chunk->reset();
+        auto st = iterator->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_FALSE(!st.ok());
+        for (auto i = 0; i < chunk->num_rows(); ++i) {
+            EXPECT_EQ(count, chunk->get(i)[0].get_int32());
+            EXPECT_EQ(count + 1, chunk->get(i)[1].get_int32());
+            EXPECT_EQ(count + 2, chunk->get(i)[2].get_int32());
+            ++count;
+        }
+    }
+    EXPECT_EQ(count, num_rows);
 }
 
 } // namespace starrocks

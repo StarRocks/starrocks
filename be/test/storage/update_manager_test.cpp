@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/update_manager.h"
 
@@ -14,6 +14,7 @@
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 
 using namespace std;
@@ -41,7 +42,7 @@ public:
         writer_context.tablet_schema_hash = _tablet->schema_hash();
         writer_context.partition_id = 0;
         writer_context.rowset_type = BETA_ROWSET;
-        writer_context.rowset_path_prefix = _tablet->tablet_path();
+        writer_context.rowset_path_prefix = _tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
         writer_context.tablet_schema = &_tablet->tablet_schema();
         writer_context.version.first = 0;
@@ -58,11 +59,11 @@ public:
             cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
         }
         if (one_delete == nullptr) {
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk(*chunk));
+            CHECK_OK(writer->flush_chunk(*chunk));
         } else {
-            EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk_with_deletes(*chunk, *one_delete));
+            CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
         }
-        return writer->build();
+        return *writer->build();
     }
 
     void create_tablet(int64_t tablet_id, int32_t schema_hash) {
@@ -94,7 +95,7 @@ public:
         request.tablet_schema.columns.push_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         ASSERT_TRUE(st.ok()) << st.to_string();
-        _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+        _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
         ASSERT_TRUE(_tablet);
     }
 
@@ -104,8 +105,7 @@ public:
         _meta.reset();
         FileUtils::remove_all(_root_path);
         if (_tablet) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), _tablet->schema_hash(),
-                                                                     false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             _tablet.reset();
         }
     }

@@ -1,6 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
+
+#include <vector>
 
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/conjunctive_predicates.h"
@@ -56,6 +58,8 @@ public:
         }
         return Status::OK();
     }
+
+    std::vector<ConjunctivePredicates>& predicate_list() { return _preds; }
 
 private:
     // TODO: reorder for better performance.

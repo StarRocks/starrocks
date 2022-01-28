@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_COLUMN_READER_HH
-#define ORC_COLUMN_READER_HH
+#pragma once
 
 #include <unordered_map>
 
@@ -159,5 +158,3 @@ std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& strip
 // collect string dictionary from column reader
 void collectStringDictionary(ColumnReader* reader, std::unordered_map<uint64_t, StringDictionary*>& coll);
 } // namespace orc
-
-#endif

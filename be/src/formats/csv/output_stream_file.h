@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -18,6 +18,8 @@ public:
         RETURN_IF_ERROR(OutputStream::finalize());
         return _file->close();
     }
+
+    std::size_t size() override { return _file->size(); }
 
 protected:
     Status _sync(const char* data, size_t size) override { return _file->append(Slice(data, size)); }

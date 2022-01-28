@@ -29,14 +29,9 @@
 #include "runtime/raw_value.h"
 #include "util/debug_util.h"
 #include "util/starrocks_metrics.h"
+#include "util/thread.h"
 
 namespace starrocks {
-
-//std::size_t hash_value(const TUniqueId& fragment_id) {
-//    uint32_t value = RawValue::get_hash_value(&fragment_id.lo, TypeDescriptor(TYPE_BIGINT), 0);
-//    value = RawValue::get_hash_value(&fragment_id.hi, TypeDescriptor(TYPE_BIGINT), value);
-//    return value;
-//}
 
 ResultBufferMgr::ResultBufferMgr() {
     // Each BufferControlBlock has a limited queue size of 1024, it's not needed to count the
@@ -53,8 +48,8 @@ ResultBufferMgr::~ResultBufferMgr() {
 }
 
 Status ResultBufferMgr::init() {
-    _cancel_thread =
-            std::make_unique<boost::thread>(std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this));
+    _cancel_thread = std::make_unique<std::thread>(std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this));
+    Thread::set_thread_name(_cancel_thread->native_handle(), "res_buf_mgr");
     return Status::OK();
 }
 

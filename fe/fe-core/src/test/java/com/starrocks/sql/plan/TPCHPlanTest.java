@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.Catalog;
@@ -114,7 +114,7 @@ public class TPCHPlanTest extends PlanTestBase {
         runFileUnitTest("tpch/q7");
     }
 
-    @Test
+    //@Test
     public void testTPCH8() {
         runFileUnitTest("tpch/q8");
     }

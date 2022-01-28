@@ -28,11 +28,11 @@
 #include <vector>
 
 #include "common/status.h"
+#include "env/env.h"
 
 namespace starrocks {
 
 class BlockId;
-class Env;
 class MemTracker;
 class Slice;
 
@@ -133,6 +133,8 @@ public:
 
     // Returns the number of bytes successfully appended via Append().
     virtual size_t bytes_appended() const = 0;
+    // Set the number of bytes has been appended
+    virtual void set_bytes_appended(size_t bytes_appended) = 0;
 
     virtual State state() const = 0;
 };
@@ -176,15 +178,13 @@ public:
 struct CreateBlockOptions {
     // const std::string tablet_id;
     const std::string path;
+    // create mode
+    Env::OpenMode mode = Env::MUST_CREATE;
 };
 
 // Block manager creation options.
 struct BlockManagerOptions {
     BlockManagerOptions() = default;
-
-    // The memory tracker under which all new memory trackers will be parented.
-    // If NULL, new memory trackers will be parented to the root tracker.
-    std::shared_ptr<MemTracker> parent_mem_tracker;
 
     // If false, metrics will not be produced.
     bool enable_metric = false;
@@ -233,6 +233,8 @@ public:
     //
     // Does not modify 'block' on error.
     virtual Status open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) = 0;
+
+    virtual void erase_block_cache(const std::string& path) = 0;
 
     // Retrieves the IDs of all blocks under management by this block manager.
     // These include ReadableBlocks as well as WritableBlocks.

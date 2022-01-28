@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -32,7 +32,7 @@ public:
 
     bool filter(const BloomFilter& bf) const override { return true; }
 
-    bool zone_map_filter(const Datum& min, const Datum& max) const override;
+    bool zone_map_filter(const ZoneMapDetail& detail) const override;
 
     bool can_vectorized() const override { return false; }
 

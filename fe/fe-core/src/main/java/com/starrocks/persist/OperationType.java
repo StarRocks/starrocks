@@ -38,6 +38,7 @@ public class OperationType {
     public static final short OP_ADD_PARTITION = 12;
     public static final short OP_DROP_PARTITION = 13;
     public static final short OP_MODIFY_PARTITION = 14;
+    @Deprecated
     public static final short OP_ERASE_TABLE = 15;
     public static final short OP_ERASE_PARTITION = 16;
     public static final short OP_RECOVER_TABLE = 17;
@@ -170,10 +171,13 @@ public class OperationType {
     // dynamic partition 261~265
     public static final short OP_DYNAMIC_PARTITION = 261;
 
-    // set table replicatin_num config 266
+    // set table replication_num config 266
     public static final short OP_MODIFY_REPLICATION_NUM = 266;
     // set table in memory
     public static final short OP_MODIFY_IN_MEMORY = 267;
+
+    // global dict
+    public static final short OP_SET_FORBIT_GLOBAL_DICT = 268;
 
     // plugin 270~275
     public static final short OP_INSTALL_PLUGIN = 270;
@@ -190,8 +194,12 @@ public class OperationType {
     public static final short OP_SWAP_TABLE = 10001;
     public static final short OP_ADD_PARTITIONS = 10002;
     public static final short OP_FINISH_MULTI_DELETE = 10003;
+    public static final short OP_ERASE_MULTI_TABLES = 10004;
 
     // statistic 10010 ~ 10020
     public static final short OP_ADD_ANALYZER_JOB = 10010;
     public static final short OP_REMOVE_ANALYZER_JOB = 10011;
+
+    // workgroup 10021 ~ 10030
+    public static final short OP_WORKGROUP = 10021;
 }

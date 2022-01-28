@@ -117,7 +117,7 @@ public class QueryAction extends WebBaseAction {
                 buffer.append("<td>");
                 buffer.append("<a href=\"/query_profile?query_id="
                         + queryId
-                        + "\">Profile</a>");
+                        + "\">" + queryId + "</a>");
                 buffer.append("</td>");
             }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -112,8 +112,8 @@ public class CachedStatisticStorage implements StatisticStorage {
             };
 
     AsyncLoadingCache<CacheKey, Optional<ColumnStatistic>> cachedStatistics = Caffeine.newBuilder()
-            .expireAfterWrite(Config.statistic_collect_interval_sec * 2, TimeUnit.SECONDS)
-            .refreshAfterWrite(Config.statistic_collect_interval_sec, TimeUnit.SECONDS)
+            .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
             .maximumSize(Config.statistic_cache_columns)
             .buildAsync(loader);
 
@@ -300,7 +300,7 @@ public class CachedStatisticStorage implements StatisticStorage {
             if (tableId != cacheKey.tableId) {
                 return false;
             }
-            return column.equalsIgnoreCase(cacheKey.column);
+            return column.equals(cacheKey.column);
         }
 
         @Override

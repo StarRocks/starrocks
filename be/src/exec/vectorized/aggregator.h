@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -10,6 +10,7 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/context_with_dependency.h"
 #include "exec/vectorized/aggregate/agg_hash_variant.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
@@ -54,22 +55,24 @@ using AggregatorPtr = std::shared_ptr<Aggregator>;
 
 // Component used to process aggregation including bloking aggregate and streaming aggregate
 // it contains common data struct and algorithm of aggregation
-// TODO(hcf) this component is shared by multiply sink/source operators in pipeline engine
-// TODO(hcf) all the data should be protected by lightweight lock
-class Aggregator {
+class Aggregator final : public pipeline::ContextWithDependency {
 public:
-    Aggregator(const TPlanNode& tnode, const RowDescriptor& child_row_desc);
+    Aggregator(const TPlanNode& tnode);
 
-    ~Aggregator() = default;
+    ~Aggregator() {
+        if (_state != nullptr) {
+            close(_state);
+        }
+    }
 
     Status open(RuntimeState* state);
-    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
-                   RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile, MemTracker* mem_tracker);
 
-    Status close(RuntimeState* state);
+    Status close(RuntimeState* state) override;
 
     std::unique_ptr<MemPool>& mem_pool() { return _mem_pool; };
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
+    const std::vector<ExprContext*>& conjunct_ctxs() { return _conjunct_ctxs; }
     const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
@@ -130,31 +133,34 @@ public:
     // selection[1] = 1: not found in hash table
     void output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk);
 
-    Status check_hash_map_memory_usage(RuntimeState* state);
-    Status check_hash_set_memory_usage(RuntimeState* state);
-
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
     // two level hash map is better in large data set.
     void try_convert_to_two_level_map();
+    void try_convert_to_two_level_set();
 
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
     static constexpr size_t streaming_hash_table_size_threshold = 10000000;
-    static constexpr size_t memory_check_batch_size = 65535;
 #else
     static constexpr size_t two_level_memory_threshold = 64;
     static constexpr size_t streaming_hash_table_size_threshold = 4;
-    static constexpr size_t memory_check_batch_size = 1;
 #endif
 
 private:
+    bool _is_closed = false;
+    RuntimeState* _state = nullptr;
+
+    // TPlanNode is only valid in the PREPARE and INIT phase
     const TPlanNode& _tnode;
-    const RowDescriptor& _child_row_desc;
+
+    MemTracker* _mem_tracker = nullptr;
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
-    MemTracker* _mem_tracker;
+    // The open phase still relies on the TFunction object for some initialization operations
+    std::vector<TFunction> _fns;
+
     RuntimeProfile* _runtime_profile;
 
     int64_t _limit = -1;
@@ -177,10 +183,6 @@ private:
     // At least one group by column is nullable
     bool _has_nullable_key = false;
     int64_t _num_input_rows = 0;
-    // memory used for hashmap or hashset
-    int64_t _last_ht_memory_usage = 0;
-    // memory used for agg function
-    int64_t _last_agg_func_memory_usage = 0;
     int64_t _num_pass_through_rows = 0;
 
     TStreamingPreaggregationMode::type _streaming_preaggregation_mode;
@@ -212,6 +214,9 @@ private:
     // In order batch update agg states
     vectorized::Buffer<vectorized::AggDataPtr> _tmp_agg_states;
     std::vector<AggFunctionTypes> _agg_fn_types;
+
+    // Exprs used to evaluate conjunct
+    std::vector<ExprContext*> _conjunct_ctxs;
 
     // Exprs used to evaluate group by column
     std::vector<ExprContext*> _group_by_expr_ctxs;
@@ -261,8 +266,9 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
-                        _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
+                        _agg_functions[i]->create(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i]);
                     }
                     return agg_state;
                 },
@@ -276,8 +282,9 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
-                        _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
+                        _agg_functions[i]->create(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i]);
                     }
                     return agg_state;
                 },
@@ -330,8 +337,8 @@ public:
                 }
             } else {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    _agg_functions[i]->batch_serialize(read_index, _tmp_agg_states, _agg_states_offsets[i],
-                                                       agg_result_column[i].get());
+                    _agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
+                                                       _agg_states_offsets[i], agg_result_column[i].get());
                 }
             }
         }
@@ -341,8 +348,8 @@ public:
         // If there is null key, output it last
         if constexpr (HashMapWithKey::has_single_null_key) {
             if (_is_ht_eos && hash_map_with_key.null_key_data != nullptr) {
-                // The output chunk size couldn't larger than config::vector_chunk_size
-                if (read_index < config::vector_chunk_size) {
+                // The output chunk size couldn't larger than _state->chunk_size()
+                if (read_index < _state->chunk_size()) {
                     // For multi group by key, we don't need to special handle null key
                     DCHECK(group_by_columns.size() == 1);
                     DCHECK(group_by_columns[0]->is_nullable());
@@ -416,8 +423,8 @@ public:
         // IF there is null key, output it last
         if constexpr (HashSetWithKey::has_single_null_key) {
             if (_is_ht_eos && hash_set.has_null_key) {
-                // The output chunk size couldn't larger than config::vector_chunk_size
-                if (read_index < config::vector_chunk_size) {
+                // The output chunk size couldn't larger than _state->chunk_size()
+                if (read_index < _state->chunk_size()) {
                     // For multi group by key, we don't need to special handle null key
                     DCHECK(group_by_columns.size() == 1);
                     DCHECK(group_by_columns[0]->is_nullable());
@@ -457,8 +464,10 @@ private:
     vectorized::Columns _create_agg_result_columns();
     vectorized::Columns _create_group_by_columns();
 
-    void _serialize_to_chunk(vectorized::ConstAggDataPtr state, const vectorized::Columns& agg_result_columns);
-    void _finalize_to_chunk(vectorized::ConstAggDataPtr state, const vectorized::Columns& agg_result_columns);
+    void _serialize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
+                             const vectorized::Columns& agg_result_columns);
+    void _finalize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
+                            const vectorized::Columns& agg_result_columns);
 
     void _evaluate_group_by_exprs(vectorized::Chunk* chunk);
     void _evaluate_agg_fn_exprs(vectorized::Chunk* chunk);
@@ -468,15 +477,40 @@ private:
     void _init_agg_hash_variant(HashVariantType& hash_variant);
 
     template <typename HashMapWithKey>
-    void _release_agg_memory(HashMapWithKey& hash_map_with_key) {
-        auto it = hash_map_with_key.hash_map.begin();
-        auto end = hash_map_with_key.hash_map.end();
-        while (it != end) {
-            for (int i = 0; i < _agg_functions.size(); i++) {
-                _agg_functions[i]->destroy(it->second + _agg_states_offsets[i]);
+    void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
+        if (hash_map_with_key != nullptr) {
+            auto it = hash_map_with_key->hash_map.begin();
+            auto end = hash_map_with_key->hash_map.end();
+            while (it != end) {
+                for (int i = 0; i < _agg_functions.size(); i++) {
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], it->second + _agg_states_offsets[i]);
+                }
+                ++it;
             }
-            ++it;
         }
     }
 };
+
+class AggregatorFactory;
+using AggregatorFactoryPtr = std::shared_ptr<AggregatorFactory>;
+
+class AggregatorFactory {
+public:
+    AggregatorFactory(const TPlanNode& tnode) : _tnode(tnode) {}
+
+    AggregatorPtr get_or_create(size_t id) {
+        auto it = _aggregators.find(id);
+        if (it != _aggregators.end()) {
+            return it->second;
+        }
+        auto aggregator = std::make_shared<Aggregator>(_tnode);
+        _aggregators[id] = aggregator;
+        return aggregator;
+    }
+
+private:
+    const TPlanNode& _tnode;
+    std::unordered_map<size_t, AggregatorPtr> _aggregators;
+};
+
 } // namespace starrocks

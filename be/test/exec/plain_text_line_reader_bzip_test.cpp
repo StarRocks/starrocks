@@ -45,11 +45,11 @@ TEST_F(PlainTextLineReaderTest, bzip2_normal_use) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::BZIP2, &decompressor);
     ASSERT_TRUE(st.ok());
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, -1, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), -1, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -88,7 +88,6 @@ TEST_F(PlainTextLineReaderTest, bzip2_normal_use) {
     st = line_reader.read_line(&ptr, &size, &eof);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(eof);
-    delete decompressor;
 }
 
 TEST_F(PlainTextLineReaderTest, bzip2_test_limit) {
@@ -96,11 +95,11 @@ TEST_F(PlainTextLineReaderTest, bzip2_test_limit) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::BZIP2, &decompressor);
     ASSERT_TRUE(st.ok());
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, 8, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), 8, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -125,7 +124,6 @@ TEST_F(PlainTextLineReaderTest, bzip2_test_limit) {
     st = line_reader.read_line(&ptr, &size, &eof);
     ASSERT_TRUE(st.ok());
     ASSERT_FALSE(eof);
-    delete decompressor;
 }
 
 TEST_F(PlainTextLineReaderTest, bzip2_test_limit2) {
@@ -133,11 +131,11 @@ TEST_F(PlainTextLineReaderTest, bzip2_test_limit2) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::BZIP2, &decompressor);
     ASSERT_TRUE(st.ok());
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, 6, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), 6, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -149,7 +147,6 @@ TEST_F(PlainTextLineReaderTest, bzip2_test_limit2) {
     // Empty
     st = line_reader.read_line(&ptr, &size, &eof);
     ASSERT_TRUE(st.ok());
-    delete decompressor;
 }
 
 TEST_F(PlainTextLineReaderTest, bzip2_test_limit3) {
@@ -157,11 +154,11 @@ TEST_F(PlainTextLineReaderTest, bzip2_test_limit3) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::BZIP2, &decompressor);
     ASSERT_TRUE(st.ok());
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, 7, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), 7, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -179,7 +176,6 @@ TEST_F(PlainTextLineReaderTest, bzip2_test_limit3) {
     // Empty
     st = line_reader.read_line(&ptr, &size, &eof);
     ASSERT_TRUE(st.ok());
-    delete decompressor;
 }
 
 TEST_F(PlainTextLineReaderTest, bzip2_test_limit4) {
@@ -187,11 +183,11 @@ TEST_F(PlainTextLineReaderTest, bzip2_test_limit4) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::BZIP2, &decompressor);
     ASSERT_TRUE(st.ok());
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, 7, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), 7, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -209,7 +205,6 @@ TEST_F(PlainTextLineReaderTest, bzip2_test_limit4) {
     // Empty
     st = line_reader.read_line(&ptr, &size, &eof);
     ASSERT_TRUE(st.ok());
-    delete decompressor;
 }
 
 TEST_F(PlainTextLineReaderTest, bzip2_test_limit5) {
@@ -217,11 +212,11 @@ TEST_F(PlainTextLineReaderTest, bzip2_test_limit5) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::BZIP2, &decompressor);
     ASSERT_TRUE(st.ok());
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, 0, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), 0, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -229,7 +224,6 @@ TEST_F(PlainTextLineReaderTest, bzip2_test_limit5) {
     // Empty
     st = line_reader.read_line(&ptr, &size, &eof);
     ASSERT_TRUE(st.ok());
-    delete decompressor;
 }
 
 } // end namespace starrocks

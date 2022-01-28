@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_NULL_PREDICATE_H
-#define STARROCKS_BE_SRC_OLAP_NULL_PREDICATE_H
+#pragma once
 
 #include <cstdint>
 #include <roaring/roaring.hh>
@@ -29,14 +28,10 @@
 
 namespace starrocks {
 
-class VectorizedRowBatch;
-
 class NullPredicate : public ColumnPredicate {
 public:
     NullPredicate(uint32_t column_id, bool is_null);
     ~NullPredicate() override;
-
-    void evaluate(VectorizedRowBatch* batch) const override;
 
     void evaluate(ColumnBlock* block, uint16_t* sel, uint16_t* size) const override;
 
@@ -54,5 +49,3 @@ private:
 };
 
 } //namespace starrocks
-
-#endif //STARROCKS_BE_SRC_OLAP_NULL_PREDICATE_H

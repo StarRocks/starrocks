@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -10,6 +10,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 // forehead declar class, because jni function init in StarRocksServer.
@@ -30,6 +31,9 @@ struct SchemaScannerParam {
     const std::string* ip{nullptr};                   // frontend ip
     int32_t port{0};                                  // frontend thrift port
     int64_t thread_id = 0;
+
+    RuntimeProfile::Counter* _rpc_timer = nullptr;
+    RuntimeProfile::Counter* _fill_chunk_timer = nullptr;
 
     SchemaScannerParam()
 
@@ -54,7 +58,7 @@ public:
     virtual Status start(RuntimeState* state);
     virtual Status get_next(vectorized::ChunkPtr* chunk, bool* eos);
     // factory function
-    static SchemaScanner* create(TSchemaTableType::type type);
+    static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);
 
     static void set_starrocks_server(StarRocksServer* starrocks_server) { _s_starrocks_server = starrocks_server; }
 

@@ -82,8 +82,6 @@ public final class AggregateInfo extends AggregateInfoBase {
         }
     }
 
-    ;
-
     // created by createMergeAggInfo()
     private AggregateInfo mergeAggInfo_;
 
@@ -721,11 +719,6 @@ public final class AggregateInfo extends AggregateInfoBase {
             outputToIntermediateTupleSmap_.put(
                     new SlotRef(outputTupleDesc_.getSlots().get(i)),
                     new SlotRef(intermediateTupleDesc_.getSlots().get(i)));
-            if (i < groupingExprs_.size()) {
-                analyzer.createAuxEquivPredicate(
-                        new SlotRef(outputTupleDesc_.getSlots().get(i)),
-                        new SlotRef(intermediateTupleDesc_.getSlots().get(i)));
-            }
         }
         if (!requiresIntermediateTuple()) {
             intermediateTupleSmap_ = outputTupleSmap_;

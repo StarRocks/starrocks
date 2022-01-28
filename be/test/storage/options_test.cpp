@@ -51,63 +51,37 @@ TEST_F(OptionsTest, parse_root_path) {
     std::string root_path;
     StorePath path;
 
-    // /path<.extension>, <capacity>
+    // /path<.extension>
     {
         root_path = path1;
-        ASSERT_EQ(OLAP_SUCCESS, parse_root_path(root_path, &path));
+        ASSERT_TRUE(parse_root_path(root_path, &path).ok());
         ASSERT_STREQ(path1.c_str(), path.path.c_str());
-        ASSERT_EQ(-1, path.capacity_bytes);
         ASSERT_EQ(TStorageMedium::HDD, path.storage_medium);
     }
     {
         root_path = path2;
-        ASSERT_EQ(OLAP_SUCCESS, parse_root_path(root_path, &path));
+        ASSERT_TRUE(parse_root_path(root_path, &path).ok());
         ASSERT_STREQ(path2.c_str(), path.path.c_str());
-        ASSERT_EQ(-1, path.capacity_bytes);
-        ASSERT_EQ(TStorageMedium::SSD, path.storage_medium);
-    }
-    {
-        root_path = path2 + ", 50";
-        ASSERT_EQ(OLAP_SUCCESS, parse_root_path(root_path, &path));
-        ASSERT_STREQ(path2.c_str(), path.path.c_str());
-        ASSERT_EQ(50 * GB_EXCHANGE_BYTE, path.capacity_bytes);
         ASSERT_EQ(TStorageMedium::SSD, path.storage_medium);
     }
 
     // /path, <property>:<value>,...
     {
-        root_path = path1 + ", capacity:50, medium: ssd";
-        ASSERT_EQ(OLAP_SUCCESS, parse_root_path(root_path, &path));
+        root_path = path1 + ", medium: ssd";
+        ASSERT_TRUE(parse_root_path(root_path, &path).ok());
         ASSERT_STREQ(path1.c_str(), path.path.c_str());
-        ASSERT_EQ(50 * GB_EXCHANGE_BYTE, path.capacity_bytes);
         ASSERT_EQ(TStorageMedium::SSD, path.storage_medium);
     }
     {
-        root_path = path1 + ", medium: ssd, capacity:30";
-        ASSERT_EQ(OLAP_SUCCESS, parse_root_path(root_path, &path));
+        root_path = path1 + ", medium: hdd";
+        ASSERT_TRUE(parse_root_path(root_path, &path).ok());
         ASSERT_STREQ(path1.c_str(), path.path.c_str());
-        ASSERT_EQ(30 * GB_EXCHANGE_BYTE, path.capacity_bytes);
-        ASSERT_EQ(TStorageMedium::SSD, path.storage_medium);
-    }
-    {
-        root_path = path1 + " , medium: ssd, 60";
-        ASSERT_EQ(OLAP_SUCCESS, parse_root_path(root_path, &path));
-        ASSERT_STREQ(path1.c_str(), path.path.c_str());
-        ASSERT_EQ(60 * GB_EXCHANGE_BYTE, path.capacity_bytes);
-        ASSERT_EQ(TStorageMedium::SSD, path.storage_medium);
-    }
-    {
-        root_path = path1 + ", medium: ssd, 60, medium: hdd, capacity: 10";
-        ASSERT_EQ(OLAP_SUCCESS, parse_root_path(root_path, &path));
-        ASSERT_STREQ(path1.c_str(), path.path.c_str());
-        ASSERT_EQ(10 * GB_EXCHANGE_BYTE, path.capacity_bytes);
         ASSERT_EQ(TStorageMedium::HDD, path.storage_medium);
     }
     {
-        root_path = path2 + ", medium: hdd, 60, capacity: 10";
-        ASSERT_EQ(OLAP_SUCCESS, parse_root_path(root_path, &path));
-        ASSERT_STREQ(path2.c_str(), path.path.c_str());
-        ASSERT_EQ(10 * GB_EXCHANGE_BYTE, path.capacity_bytes);
+        root_path = path1 + ", medium: ssd, medium: hdd";
+        ASSERT_TRUE(parse_root_path(root_path, &path).ok());
+        ASSERT_STREQ(path1.c_str(), path.path.c_str());
         ASSERT_EQ(TStorageMedium::HDD, path.storage_medium);
     }
 }
@@ -117,7 +91,7 @@ TEST_F(OptionsTest, parse_root_path) {
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
 
-    int ret = starrocks::OLAP_SUCCESS;
+    int ret = 0;
     starrocks::set_up();
     ret = RUN_ALL_TESTS();
     starrocks::tear_down();

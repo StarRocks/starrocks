@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -10,6 +10,7 @@
 #include "column/chunk.h"
 #include "exec/olap_common.h"
 #include "exec/scan_node.h"
+#include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/vectorized/tablet_scanner.h"
 
 namespace starrocks {
@@ -42,7 +43,6 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* statue) override;
 
@@ -72,6 +72,8 @@ private:
         void push(const T& p) { _items.push_back(p); }
 
         void push(T&& v) { _items.emplace_back(std::move(v)); }
+
+        void clear() { _items.clear(); }
 
         // REQUIRES: not empty.
         T pop() {
@@ -105,26 +107,17 @@ private:
     void _close_pending_scanners();
     int _compute_priority(int32_t num_submitted_tasks);
 
-    // params
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     RuntimeState* _runtime_state = nullptr;
-
-    // constructed from params
-    const TupleDescriptor* _tuple_desc = nullptr;                     // from _runtime_state
-    std::map<std::string, ColumnValueRangeType> _column_value_ranges; // from expr
-    OlapScanKeys _scan_keys;                                          // from _column_value_ranges
-    std::vector<TCondition> _olap_filter;                             // from _column_value_ranges
-    std::vector<TCondition> _is_null_vector;                          // from expr
-
+    TupleDescriptor* _tuple_desc = nullptr;
+    OlapScanConjunctsManager _conjuncts_manager;
+    DictOptimizeParser _dict_optimize_parser;
+    const Schema* _chunk_schema = nullptr;
     ObjectPool _obj_pool;
 
-    const Schema* _chunk_schema = nullptr;
-    // same size with |_conjunct_ctxs|, indicate which element has been normalized.
-    std::vector<bool> _normalized_conjuncts;
     int32_t _num_scanners = 0;
     int32_t _chunks_per_scanner = 10;
-    int32_t _max_scan_key_num = 1024;
     bool _start = false;
 
     mutable SpinLock _status_mutex;
@@ -132,15 +125,17 @@ private:
 
     // _mtx protects _chunk_pool and _pending_scanners.
     std::mutex _mtx;
-    Stack<Chunk*> _chunk_pool;
+    Stack<ChunkPtr> _chunk_pool;
     Stack<TabletScanner*> _pending_scanners;
 
-    UnboundedBlockingQueue<Chunk*> _result_chunks;
+    UnboundedBlockingQueue<ChunkPtr> _result_chunks;
 
     // used to compute task priority.
     std::atomic<int32_t> _scanner_submit_count{0};
     std::atomic<int32_t> _running_threads{0};
     std::atomic<int32_t> _closed_scanners{0};
+
+    std::vector<std::string> _unused_output_columns;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;
@@ -158,6 +153,7 @@ private:
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
+    RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
     RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
@@ -167,11 +163,14 @@ private:
     RuntimeProfile::Counter* _block_load_counter = nullptr;
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _index_load_timer = nullptr;
-    RuntimeProfile::Counter* _total_pages_num_counter = nullptr;
+    RuntimeProfile::Counter* _read_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
+    RuntimeProfile::Counter* _rowsets_read_count = nullptr;
+    RuntimeProfile::Counter* _segments_read_count = nullptr;
+    RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
 };
 
 } // namespace starrocks::vectorized

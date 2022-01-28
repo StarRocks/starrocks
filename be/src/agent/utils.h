@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_AGENT_UTILS_H
-#define STARROCKS_BE_SRC_AGENT_UTILS_H
+#pragma once
 
 #include "agent/status.h"
 #include "gen_cpp/FrontendService.h"
@@ -34,7 +33,6 @@ class MasterServerClient {
 public:
     MasterServerClient(const TMasterInfo& master_info, FrontendServiceClientCache* client_cache);
     virtual ~MasterServerClient() = default;
-    ;
 
     // Reprot finished task to the master server
     //
@@ -66,9 +64,7 @@ private:
 class AgentUtils {
 public:
     AgentUtils() = default;
-    ;
     virtual ~AgentUtils() = default;
-    ;
 
     // Use rsync synchronize folder from remote agent to local folder
     //
@@ -99,4 +95,3 @@ private:
 }; // class AgentUtils
 
 } // namespace starrocks
-#endif // STARROCKS_BE_SRC_AGENT_UTILS_H

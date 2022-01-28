@@ -1,20 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 
 #include <boost/thread/thread.hpp>
 #include <sstream>
 
-#include "exec/text_converter.hpp"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "runtime/tuple_row.h"
 #include "util/debug_util.h"
 #include "util/network_util.h"
 #include "util/runtime_profile.h"

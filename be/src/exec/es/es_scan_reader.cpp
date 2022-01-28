@@ -30,6 +30,7 @@
 #include "common/status.h"
 #include "exec/es/es_scroll_query.h"
 #include "exec/vectorized/es_http_components.h"
+#include "fmt/compile.h"
 
 namespace starrocks {
 
@@ -107,11 +108,10 @@ Status ESScanReader::open() {
     _network_client.set_content_type("application/json");
     // phase open, we cached the first response for `get_next` phase
     Status status = _network_client.execute_post_request(_query, &_cached_response);
+    VLOG(1) << "ES Query:" << _query;
     if (!status.ok() || _network_client.get_http_status() != 200) {
-        std::stringstream ss;
-        ss << "Failed to connect to ES server, errmsg is: " << status.get_error_msg();
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
+        std::string err_msg = fmt::format("Failed to connect to ES server, errmsg is: {}", status.get_error_msg());
+        return Status::InternalError(err_msg);
     }
     VLOG(1) << "open _cached response: " << _cached_response;
     return Status::OK();

@@ -82,7 +82,8 @@ enum TPrimitiveType {
   PERCENTILE,
   DECIMAL32,
   DECIMAL64,
-  DECIMAL128
+  DECIMAL128,
+  JSON
 }
 
 enum TTypeNodeType {
@@ -149,7 +150,8 @@ enum TPushType {
     DELETE,
     LOAD_DELETE,
     // for spark load push request
-    LOAD_V2
+    LOAD_V2,
+    CANCEL_DELETE
 }
 
 enum TTaskType {
@@ -246,6 +248,9 @@ enum TFunctionBinaryType {
 
   // Native-interface, precompiled to IR; loaded from *.ll
   IR,
+
+  // StarRocks customized UDF in jar.
+  SRJAR
 }
 
 // Represents a fully qualified function name.
@@ -275,6 +280,7 @@ struct TAggregateFunction {
   8: optional string get_value_fn_symbol
   9: optional string remove_fn_symbol
   10: optional bool is_analytic_only_fn = false
+  11: optional string symbol
 }
 
 struct TTableFunction {
@@ -319,6 +325,7 @@ struct TFunction {
   // UDF function.
   30: optional i64 fid
   31: optional TTableFunction table_fn
+  32: optional bool could_apply_dict_optimize
 }
 
 enum TLoadJobState {
@@ -344,6 +351,7 @@ enum TTableType {
     BROKER_TABLE,
     ES_TABLE,
     HDFS_TABLE,
+    ICEBERG_TABLE,
     VIEW = 20
 }
 
@@ -386,6 +394,8 @@ enum TFileType {
 struct TTabletCommitInfo {
     1: required i64 tabletId
     2: required i64 backendId
+    3: optional list<string> invalid_dict_cache_columns
+    4: optional list<string> valid_dict_cache_columns
 }
 
 enum TLoadType {
@@ -430,4 +440,3 @@ enum TCompressionType {
     BZIP2 = 10;
     LZO = 11; // Deprecated
 }
-

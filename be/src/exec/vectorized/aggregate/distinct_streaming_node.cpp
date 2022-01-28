@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/aggregate/distinct_streaming_node.h"
 
@@ -7,6 +7,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
+#include "runtime/current_thread.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {
@@ -51,7 +52,6 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
             size_t input_chunk_size = input_chunk->num_rows();
             _aggregator->update_num_input_rows(input_chunk_size);
             COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
-            RETURN_IF_ERROR(_aggregator->check_hash_set_memory_usage(state));
             _aggregator->evaluate_exprs(input_chunk.get());
 
             if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
@@ -61,27 +61,28 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                 break;
             } else if (_aggregator->streaming_preaggregation_mode() ==
                        TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
+                RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
 
                 if (false) {
                 }
-#define HASH_MAP_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME)                       \
-            _aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, input_chunk_size);
+#define HASH_MAP_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) {                                     \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
+                *_aggregator->hash_set_variant().NAME, input_chunk_size));                                             \
+    }
                 APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                 else {
                     DCHECK(false);
                 }
 
-                if (_aggregator->is_none_group_by_exprs()) {
-                    _aggregator->compute_single_agg_state(input_chunk_size);
-                } else {
-                    _aggregator->compute_batch_agg_states(input_chunk_size);
-                }
-
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
+
+                _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
+                                  _aggregator->mem_pool()->total_reserved_bytes());
+                TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
+
                 continue;
             } else {
                 // TODO: calc the real capacity of hashtable, will add one interface in the class of habletable
@@ -93,38 +94,41 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     _aggregator->should_expand_preagg_hash_tables(_children[0]->rows_returned(), input_chunk_size,
                                                                   _aggregator->mem_pool()->total_allocated_bytes(),
                                                                   _aggregator->hash_set_variant().size())) {
+                    RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                     // hash table is not full or allow expand the hash table according reduction rate
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
 
                     if (false) {
                     }
-#define HASH_MAP_METHOD(NAME)                                                                          \
-    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME)                       \
-            _aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, input_chunk_size);
+#define HASH_MAP_METHOD(NAME)                                                                                          \
+    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) {                                     \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
+                *_aggregator->hash_set_variant().NAME, input_chunk_size));                                             \
+    }
                     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                     else {
                         DCHECK(false);
                     }
 
-                    if (_aggregator->is_none_group_by_exprs()) {
-                        _aggregator->compute_single_agg_state(input_chunk_size);
-                    } else {
-                        _aggregator->compute_batch_agg_states(input_chunk_size);
-                    }
-
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
+
+                    _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
+                                      _aggregator->mem_pool()->total_reserved_bytes());
+                    TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
+
                     continue;
                 } else {
                     {
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
                         if (false) {
                         }
-#define HASH_MAP_METHOD(NAME)                                                                                       \
-    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) _aggregator                        \
-            ->build_hash_set_with_selection<typename decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, input_chunk_size);
+#define HASH_MAP_METHOD(NAME)                                                             \
+    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) {        \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection<typename decltype( \
+                                    _aggregator->hash_set_variant().NAME)::element_type>( \
+                *_aggregator->hash_set_variant().NAME, input_chunk_size));                \
+    }
                         APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                         else {
@@ -196,7 +200,7 @@ void DistinctStreamingNode::_output_chunk_from_hash_set(ChunkPtr* chunk) {
 #define HASH_MAP_METHOD(NAME)                                                                                     \
     else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME)                                  \
             _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, config::vector_chunk_size, chunk);
+                    *_aggregator->hash_set_variant().NAME, runtime_state()->chunk_size(), chunk);
     APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {
@@ -208,22 +212,31 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctStreamingNode::
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    operators_with_sink = context->maybe_interpolate_local_exchange(operators_with_sink);
+    // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
+    // and we may set other parallelism for source operator in many special cases
+    size_t degree_of_parallelism =
+            down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
 
-    // shared by sink operator and source operator
-    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode, child(0)->row_desc());
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
+    // shared by sink operator factory and source operator factory
+    AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
 
-    operators_with_sink.emplace_back(std::make_shared<AggregateDistinctStreamingSinkOperatorFactory>(
-            context->next_operator_id(), id(), aggregator));
+    auto sink_operator = std::make_shared<AggregateDistinctStreamingSinkOperatorFactory>(context->next_operator_id(),
+                                                                                         id(), aggregator_factory);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
+    operators_with_sink.emplace_back(sink_operator);
     context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
     auto source_operator = std::make_shared<AggregateDistinctStreamingSourceOperatorFactory>(
-            context->next_operator_id(), id(), aggregator);
-
-    // TODO(hcf) Currently, the shared data structure aggregator does not support concurrency.
-    // So the degree of parallism must set to 1, we'll fix it later
-    source_operator->set_degree_of_parallelism(1);
+            context->next_operator_id(), id(), aggregator_factory);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
+    // Aggregator must be used by a pair of sink and source operators,
+    // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
+    source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;
 }

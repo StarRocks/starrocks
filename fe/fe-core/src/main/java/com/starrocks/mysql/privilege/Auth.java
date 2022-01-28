@@ -23,8 +23,10 @@ package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.StarRocksFE;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.CreateClusterStmt;
 import com.starrocks.analysis.CreateRoleStmt;
@@ -53,13 +55,15 @@ import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TFetchResourceResult;
-import org.apache.directory.api.util.Strings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.File;
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -73,6 +77,9 @@ public class Auth implements Writable {
     public static final String ROOT_USER = "root";
     public static final String ADMIN_USER = "admin";
 
+    public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.plugins.auth.KerberosAuthentication";
+    public static final String KRB5_AUTH_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-kerberos.jar";
+
     private UserPrivTable userPrivTable = new UserPrivTable();
     private DbPrivTable dbPrivTable = new DbPrivTable();
     private TablePrivTable tablePrivTable = new TablePrivTable();
@@ -82,6 +89,7 @@ public class Auth implements Writable {
     private UserPropertyMgr propertyMgr = new UserPropertyMgr();
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private Class<?> authClazz = null;
 
     private void readLock() {
         lock.readLock().lock();
@@ -251,7 +259,6 @@ public class Auth implements Writable {
         //     }
         //     return true;
         // }
-
         readLock();
         try {
             return userPrivTable.checkPassword(remoteUser, remoteHost, remotePasswd, randomString, currentUser);
@@ -498,7 +505,7 @@ public class Auth implements Writable {
     // create user
     public void createUser(CreateUserStmt stmt) throws DdlException {
         AuthPlugin authPlugin = null;
-        if (!Strings.isEmpty(stmt.getAuthPlugin())) {
+        if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
             authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
         }
         createUserInternal(stmt.getUserIdent(), stmt.getQualifiedRole(),
@@ -508,7 +515,7 @@ public class Auth implements Writable {
     // alter user
     public void alterUser(AlterUserStmt stmt) throws DdlException {
         AuthPlugin authPlugin = null;
-        if (!Strings.isEmpty(stmt.getAuthPlugin())) {
+        if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
             authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
         }
         // alter user only support change password till now
@@ -613,7 +620,16 @@ public class Auth implements Writable {
             // Allow dropping `superuser@%` when doing `DROP CLUSTER`, but not for `DROP USER`.
             throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
         }
-        dropUserInternal(stmt.getUserIdentity(), false);
+
+        writeLock(); 
+        try {
+            if (!doesUserExist(stmt.getUserIdentity())) {
+                throw new DdlException(String.format("User `%s`@`%s` does not exist.", user, host));
+            }
+            dropUserInternal(stmt.getUserIdentity(), false);
+        } finally {
+            writeUnlock();
+        }
     }
 
     public void replayDropUser(UserIdentity userIdent) {
@@ -1199,7 +1215,7 @@ public class Auth implements Writable {
                     userAuthInfo.add(password.getAuthPlugin().name());
                 }
 
-                if (Strings.isEmpty(password.getUserForAuthPlugin())) {
+                if (Strings.isNullOrEmpty(password.getUserForAuthPlugin())) {
                     userAuthInfo.add(FeConstants.null_string);
                 } else {
                     userAuthInfo.add(password.getUserForAuthPlugin());
@@ -1388,6 +1404,48 @@ public class Auth implements Writable {
         } finally {
             readUnlock();
         }
+    }
+
+    public boolean isSupportKerberosAuth() {
+        if (!Config.enable_authentication_kerberos) {
+            LOG.error("enable_authentication_kerberos need to be set to true");
+            return false;
+        }
+
+        if (Config.authentication_kerberos_service_principal.isEmpty()) {
+            LOG.error("authentication_kerberos_service_principal must be set in config");
+            return false;
+        }
+
+        if (Config.authentication_kerberos_service_key_tab.isEmpty()) {
+            LOG.error("authentication_kerberos_service_key_tab must be set in config");
+            return false;
+        }
+
+        if (authClazz == null) {
+            try {
+                File jarFile = new File(KRB5_AUTH_JAR_PATH);
+                if (!jarFile.exists()) {
+                    LOG.error("Can not found jar file at {}", KRB5_AUTH_JAR_PATH);
+                    return false;
+                } else {
+                    ClassLoader loader = URLClassLoader.newInstance(
+                            new URL[] { jarFile.toURL() },
+                            getClass().getClassLoader()
+                    );
+                    authClazz = Class.forName(Auth.KRB5_AUTH_CLASS_NAME, true, loader);
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to load {}", Auth.KRB5_AUTH_CLASS_NAME, e);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public Class<?> getAuthClazz() {
+        return authClazz;
     }
 
     public static Auth read(DataInput in) throws IOException {

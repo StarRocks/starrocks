@@ -128,11 +128,10 @@ public class SparkLoadJob extends BulkLoadJob {
     // members below updated when job state changed to loading
     // { tableId.partitionId.indexId.bucket.schemaHash -> (etlFilePath, etlFileSize) }
     private Map<String, Pair<String, Long>> tabletMetaToFileInfo = Maps.newHashMap();
+    private SparkLoadAppHandle sparkLoadAppHandle = new SparkLoadAppHandle();
 
     // --- members below not persist ---
     private ResourceDesc resourceDesc;
-    // for spark standalone
-    private SparkLoadAppHandle sparkLoadAppHandle = new SparkLoadAppHandle();
     // for straggler wait long time to commit transaction
     private long quorumFinishTimestamp = -1;
     // below for push task
@@ -695,7 +694,6 @@ public class SparkLoadJob extends BulkLoadJob {
                 }
             }
             // clear job infos that not persist
-            sparkLoadAppHandle = null;
             resourceDesc = null;
             tableToLoadPartitions.clear();
             indexToPushBrokerReaderParams.clear();
@@ -760,6 +758,10 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     public void clearSparkLauncherLog() {
+        if (sparkLoadAppHandle == null) {
+            return;
+        }
+
         String logPath = sparkLoadAppHandle.getLogPath();
         if (!Strings.isNullOrEmpty(logPath)) {
             File file = new File(logPath);
@@ -900,7 +902,7 @@ public class SparkLoadJob extends BulkLoadJob {
         public PushBrokerReaderParams() {
             this.tBrokerScanRange = new TBrokerScanRange();
             this.tDescriptorTable = null;
-            this.useVectorized = Config.enable_vectorized_file_load;
+            this.useVectorized = true;
         }
 
         public void init(List<Column> columns, BrokerDesc brokerDesc) throws UserException {
@@ -968,7 +970,6 @@ public class SparkLoadJob extends BulkLoadJob {
                 destSidToSrcSidWithoutTrans.put(destSlotDesc.getId().asInt(), srcSlotDesc.getId().asInt());
                 Expr expr = new SlotRef(srcSlotDesc);
                 expr = castToSlot(destSlotDesc, expr);
-                expr.setUseVectorized(useVectorized);
                 params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), expr.treeToThrift());
             }
             params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);

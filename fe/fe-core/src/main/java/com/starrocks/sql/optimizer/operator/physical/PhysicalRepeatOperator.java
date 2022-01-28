@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
@@ -6,23 +6,29 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 public class PhysicalRepeatOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> outputGrouping;
-    private final List<Set<ColumnRefOperator>> repeatColumnRef;
+    private final List<List<ColumnRefOperator>> repeatColumnRef;
     private final List<List<Long>> groupingIds;
 
-    public PhysicalRepeatOperator(List<ColumnRefOperator> outputGrouping, List<Set<ColumnRefOperator>> repeatColumnRef,
-                                  List<List<Long>> groupingIds) {
+    public PhysicalRepeatOperator(List<ColumnRefOperator> outputGrouping, List<List<ColumnRefOperator>> repeatColumnRef,
+                                  List<List<Long>> groupingIds, long limit,
+                                  ScalarOperator predicate,
+                                  Projection projection) {
         super(OperatorType.PHYSICAL_REPEAT);
         this.outputGrouping = outputGrouping;
         this.repeatColumnRef = repeatColumnRef;
         this.groupingIds = groupingIds;
+        this.limit = limit;
+        this.predicate = predicate;
+        this.projection = projection;
     }
 
     @Override
@@ -35,7 +41,7 @@ public class PhysicalRepeatOperator extends PhysicalOperator {
         return visitor.visitPhysicalRepeat(optExpression, context);
     }
 
-    public List<Set<ColumnRefOperator>> getRepeatColumnRef() {
+    public List<List<ColumnRefOperator>> getRepeatColumnRef() {
         return repeatColumnRef;
     }
 

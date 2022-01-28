@@ -30,6 +30,7 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.Version;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.http.rest.BootstrapFinishAction;
@@ -67,8 +68,8 @@ public class HeartbeatMgr extends MasterDaemon {
     private static final Logger LOG = LogManager.getLogger(HeartbeatMgr.class);
 
     private final ExecutorService executor;
-    private SystemInfoService nodeMgr;
-    private HeartbeatFlags heartbeatFlags;
+    private final SystemInfoService nodeMgr;
+    private final HeartbeatFlags heartbeatFlags;
 
     private static volatile AtomicReference<TMasterInfo> masterInfo = new AtomicReference<>();
 
@@ -153,9 +154,10 @@ public class HeartbeatMgr extends MasterDaemon {
         } // end for all results
 
         // we also add a 'mocked' master Frontends heartbeat response to synchronize master info to other Frontends.
-        hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName,
-                Config.query_port, Config.rpc_port, Catalog.getCurrentCatalog().getEditLog().getMaxJournalId(),
-                System.currentTimeMillis()));
+        hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
+                Catalog.getCurrentCatalog().getEditLog().getMaxJournalId(),
+                System.currentTimeMillis(), Catalog.getCurrentCatalog().getFeStartTime(),
+                Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH));
 
         // write edit log
         Catalog.getCurrentCatalog().getEditLog().logHeartbeat(hbPackage);
@@ -246,6 +248,11 @@ public class HeartbeatMgr extends MasterDaemon {
                         version = tBackendInfo.getVersion();
                     }
 
+                    // Update number of hardare of cores of corresponding backend.
+                    if (tBackendInfo.isSetNum_hardware_cores()) {
+                        BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, tBackendInfo.getNum_hardware_cores());
+                    }
+
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
                     return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, System.currentTimeMillis(),
                             version);
@@ -286,7 +293,9 @@ public class HeartbeatMgr extends MasterDaemon {
                 // heartbeat to self
                 if (Catalog.getCurrentCatalog().isReady()) {
                     return new FrontendHbResponse(fe.getNodeName(), Config.query_port, Config.rpc_port,
-                            Catalog.getCurrentCatalog().getReplayedJournalId(), System.currentTimeMillis());
+                            Catalog.getCurrentCatalog().getReplayedJournalId(), System.currentTimeMillis(),
+                            Catalog.getCurrentCatalog().getFeStartTime(),
+                            Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
                 } else {
                     return new FrontendHbResponse(fe.getNodeName(), "not ready");
                 }
@@ -309,8 +318,10 @@ public class HeartbeatMgr extends MasterDaemon {
                     long replayedJournalId = root.getLong(BootstrapFinishAction.REPLAYED_JOURNAL_ID);
                     int queryPort = root.getInt(BootstrapFinishAction.QUERY_PORT);
                     int rpcPort = root.getInt(BootstrapFinishAction.RPC_PORT);
+                    long feStartTime = root.getLong(BootstrapFinishAction.FE_START_TIME);
+                    String feVersion = root.getString(BootstrapFinishAction.FE_VERSION);
                     return new FrontendHbResponse(fe.getNodeName(), queryPort, rpcPort, replayedJournalId,
-                            System.currentTimeMillis());
+                            System.currentTimeMillis(), feStartTime, feVersion);
                 }
             } catch (Exception e) {
                 return new FrontendHbResponse(fe.getNodeName(),

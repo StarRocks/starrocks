@@ -21,6 +21,7 @@
 
 package com.starrocks.persist;
 
+import com.sleepycat.je.rep.ReplicaWriteException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.alter.DecommissionBackendJob;
@@ -71,7 +72,6 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
@@ -239,6 +239,11 @@ public class EditLog {
                 case OperationType.OP_ERASE_TABLE: {
                     Text tableId = (Text) journal.getData();
                     catalog.replayEraseTable(Long.parseLong(tableId.toString()));
+                    break;
+                }
+                case OperationType.OP_ERASE_MULTI_TABLES: {
+                    MultiEraseTableInfo multiEraseTableInfo = (MultiEraseTableInfo) journal.getData();
+                    catalog.replayEraseMultiTables(multiEraseTableInfo);
                     break;
                 }
                 case OperationType.OP_ERASE_PARTITION: {
@@ -541,16 +546,10 @@ public class EditLog {
                     catalog.replayExpandCluster(info);
                     break;
                 }
-                case OperationType.OP_LINK_CLUSTER: {
-                    final BaseParam param = (BaseParam) journal.getData();
-                    catalog.replayLinkDb(param);
+                // for compatibility
+                case OperationType.OP_LINK_CLUSTER:
+                case OperationType.OP_MIGRATE_CLUSTER:
                     break;
-                }
-                case OperationType.OP_MIGRATE_CLUSTER: {
-                    final BaseParam param = (BaseParam) journal.getData();
-                    catalog.replayMigrateDb(param);
-                    break;
-                }
                 case OperationType.OP_UPDATE_DB: {
                     final DatabaseInfo param = (DatabaseInfo) journal.getData();
                     catalog.replayUpdateDb(param);
@@ -704,6 +703,10 @@ public class EditLog {
                     catalog.getResourceMgr().replayDropResource(operationLog);
                     break;
                 }
+                case OperationType.OP_WORKGROUP: {
+                    // TODO(by satanson) read out workgroup entry and ignore it, go on processing sequential entries
+                    break;
+                }
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     catalog.getSmallFileMgr().replayCreateFile(smallFile);
@@ -742,6 +745,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
+                case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
@@ -829,12 +833,6 @@ public class EditLog {
         journal.close();
     }
 
-    public synchronized void createEditLogFile(File name) throws IOException {
-        EditLogOutputStream editLogOutputStream = new EditLogFileOutputStream(name);
-        editLogOutputStream.create();
-        editLogOutputStream.close();
-    }
-
     public void open() {
         journal.open();
     }
@@ -859,6 +857,8 @@ public class EditLog {
 
         try {
             journal.write(op, writable);
+        } catch (ReplicaWriteException e) {
+            throw e;
         } catch (Exception e) {
             LOG.error("Fatal Error : write stream Exception", e);
             System.exit(-1);
@@ -967,8 +967,8 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_TABLE, info);
     }
 
-    public void logEraseTable(long tableId) {
-        logEdit(OperationType.OP_ERASE_TABLE, new Text(Long.toString(tableId)));
+    public void logEraseMultiTables(List<Long> tableIds) {
+        logEdit(OperationType.OP_ERASE_MULTI_TABLES, new MultiEraseTableInfo(tableIds));
     }
 
     public void logRecoverTable(RecoverInfo info) {
@@ -1263,6 +1263,10 @@ public class EditLog {
 
     public void logDropFunction(FunctionSearchDesc function) {
         logEdit(OperationType.OP_DROP_FUNCTION, function);
+    }
+
+    public void logSetHasForbitGlobalDict(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
     }
 
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {

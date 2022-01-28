@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
+import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
@@ -16,7 +17,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.StatisticUtils;
@@ -53,6 +54,10 @@ public class Analyzer {
             return analyzeAnalyzeStmt((AnalyzeStmt) node);
         } else if (node instanceof CreateAnalyzeJobStmt) {
             return analyzeCreateAnalyzeStmt((CreateAnalyzeJobStmt) node);
+        } else if (node instanceof CreateTableAsSelectStmt) {
+            // this phrase do not analyze insertStmt, insertStmt will analyze in
+            // StmtExecutor.handleCreateTableAsSelectStmt because planner will not do meta operations
+            return new CTASAnalyzer(catalog, session).transformCTASStmt((CreateTableAsSelectStmt) node);
         } else {
             throw unsupportedException("New Planner only support Query Statement");
         }

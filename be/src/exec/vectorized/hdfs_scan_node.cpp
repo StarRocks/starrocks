@@ -1,44 +1,63 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/hdfs_scan_node.h"
 
+#include <atomic>
 #include <memory>
 
 #include "env/env_hdfs.h"
+#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/vectorized/hdfs_scanner_text.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter.h"
+#include "fmt/core.h"
+#include "glog/logging.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "util/defer_op.h"
+#include "util/hdfs_util.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::vectorized {
+
 HdfsScanNode::HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {}
 
+Status HdfsScanNode::_init_table() {
+    if (dynamic_cast<const HdfsTableDescriptor*>(_tuple_desc->table_desc())) {
+        _hdfs_table = dynamic_cast<const HdfsTableDescriptor*>(_tuple_desc->table_desc());
+    } else if (dynamic_cast<const IcebergTableDescriptor*>(_tuple_desc->table_desc())) {
+        _iceberg_table = dynamic_cast<const IcebergTableDescriptor*>(_tuple_desc->table_desc());
+    } else {
+        return Status::RuntimeError("invalid table type");
+    }
+    return Status::OK();
+}
+
 Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    const auto& hdfs_scan_node = tnode.hdfs_scan_node;
 
-    if (tnode.hdfs_scan_node.__isset.min_max_conjuncts) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs));
+    if (hdfs_scan_node.__isset.min_max_conjuncts) {
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs));
     }
 
-    if (tnode.hdfs_scan_node.__isset.partition_conjuncts) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs));
+    if (hdfs_scan_node.__isset.partition_conjuncts) {
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs));
         _has_partition_conjuncts = true;
     }
 
-    _tuple_id = tnode.hdfs_scan_node.tuple_id;
+    _tuple_id = hdfs_scan_node.tuple_id;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
-    _hdfs_table = dynamic_cast<const HdfsTableDescriptor*>(_tuple_desc->table_desc());
+    RETURN_IF_ERROR(_init_table());
 
-    if (tnode.hdfs_scan_node.__isset.min_max_tuple_id) {
-        _min_max_tuple_id = tnode.hdfs_scan_node.min_max_tuple_id;
+    if (hdfs_scan_node.__isset.min_max_tuple_id) {
+        _min_max_tuple_id = hdfs_scan_node.min_max_tuple_id;
         _min_max_tuple_desc = state->desc_tbl().get_tuple_descriptor(_min_max_tuple_id);
         _min_max_row_desc = _pool->add(new RowDescriptor(state->desc_tbl(), std::vector<TTupleId>{_min_max_tuple_id},
                                                          std::vector<bool>{true}));
@@ -46,7 +65,7 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     const auto& slots = _tuple_desc->slots();
     for (size_t i = 0; i < slots.size(); i++) {
-        if (_hdfs_table->is_partition_col(slots[i])) {
+        if (_hdfs_table != nullptr && _hdfs_table->is_partition_col(slots[i])) {
             _partition_slots.push_back(slots[i]);
             _partition_index_in_chunk.push_back(i);
             _partition_index_in_hdfs_partition_columns.push_back(_hdfs_table->get_partition_col_index(slots[i]));
@@ -61,11 +80,26 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _partition_chunk = ChunkHelper::new_chunk(_partition_slots, 1);
     }
 
-    if (tnode.hdfs_scan_node.__isset.hive_column_names) {
-        _hive_column_names = tnode.hdfs_scan_node.hive_column_names;
+    if (hdfs_scan_node.__isset.hive_column_names) {
+        _hive_column_names = hdfs_scan_node.hive_column_names;
     }
+    if (hdfs_scan_node.__isset.table_name) {
+        _runtime_profile->add_info_string("Table", hdfs_scan_node.table_name);
+    }
+    if (hdfs_scan_node.__isset.sql_predicates) {
+        _runtime_profile->add_info_string("Predicates", hdfs_scan_node.sql_predicates);
+    }
+    if (hdfs_scan_node.__isset.min_max_sql_predicates) {
+        _runtime_profile->add_info_string("PredicatesMinMax", hdfs_scan_node.min_max_sql_predicates);
+    }
+    if (hdfs_scan_node.__isset.partition_sql_predicates) {
+        _runtime_profile->add_info_string("PredicatesPartition", hdfs_scan_node.partition_sql_predicates);
+    }
+    _scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
+    _scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
+    _hdfs_io_profile.init(_runtime_profile.get());
 
-    _mem_pool = std::make_unique<MemPool>(state->fragment_mem_tracker());
+    _mem_pool = std::make_unique<MemPool>();
 
     return Status::OK();
 }
@@ -80,10 +114,9 @@ Status HdfsScanNode::prepare(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(ScanNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state, *_min_max_row_desc, expr_mem_tracker()));
-    RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state, row_desc(), expr_mem_tracker()));
+    RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state, *_min_max_row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state, row_desc()));
     _init_counter(state);
-
     _runtime_state = state;
     return Status::OK();
 }
@@ -97,7 +130,7 @@ Status HdfsScanNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
 
     _pre_process_conjunct_ctxs();
-    _init_partition_expr_map();
+    if (_hdfs_table != nullptr) _init_partition_expr_map();
 
     for (auto& scan_range : _scan_ranges) {
         RETURN_IF_ERROR(_find_and_insert_hdfs_file(scan_range));
@@ -153,17 +186,17 @@ Status HdfsScanNode::_start_scan_thread(RuntimeState* state) {
     // init chunk pool
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
-    _chunks_per_scanner = config::doris_scanner_row_num / config::vector_chunk_size;
-    _chunks_per_scanner += static_cast<int>(config::doris_scanner_row_num % config::vector_chunk_size != 0);
+    _chunks_per_scanner = config::doris_scanner_row_num / runtime_state()->chunk_size();
+    _chunks_per_scanner += static_cast<int>(config::doris_scanner_row_num % runtime_state()->chunk_size() != 0);
     int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    _fill_chunk_pool(chunks);
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks));
 
     // start scanner
     std::lock_guard<std::mutex> l(_mtx);
     for (int i = 0; i < concurrency; i++) {
-        CHECK(_submit_scanner(_pending_scanners.pop(), true));
+        CHECK(_submit_scanner(_pop_pending_scanner(), true));
     }
 
     return Status::OK();
@@ -187,20 +220,24 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
     scanner_params.parent = this;
+    scanner_params.open_limit = hdfs_file_desc.open_limit;
 
     HdfsScanner* scanner = nullptr;
     if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::PARQUET) {
+        _parquet_profile.init(_runtime_profile.get());
         scanner = _pool->add(new HdfsParquetScanner());
     } else if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::ORC) {
         scanner = _pool->add(new HdfsOrcScanner());
+    } else if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::TEXT) {
+        scanner = _pool->add(new HdfsTextScanner());
     } else {
-        string msg = "unsupported hdfs file format: " + hdfs_file_desc.hdfs_file_format;
+        std::string msg = fmt::format("unsupported hdfs file format: {}", hdfs_file_desc.hdfs_file_format);
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }
 
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
-    _pending_scanners.push(scanner);
+    _push_pending_scanner(scanner);
 
     return Status::OK();
 }
@@ -260,6 +297,62 @@ int HdfsScanNode::_compute_priority(int32_t num_submitted_tasks) {
 }
 
 void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
+    DeferOp op([&] {
+        tls_thread_status.set_mem_tracker(prev_tracker);
+        _running_threads.fetch_sub(1, std::memory_order_release);
+
+        if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {
+            _result_chunks.shutdown();
+        }
+    });
+
+    // if global status was not ok
+    // we need fast failure
+    if (!_get_status().ok()) {
+        scanner->release_pending_token(&_pending_token);
+        scanner->close(_runtime_state);
+        _closed_scanners.fetch_add(1, std::memory_order_release);
+        _close_pending_scanners();
+        return;
+    }
+
+    int concurrency_limit = config::max_hdfs_file_handle;
+
+    // There is a situation where once a resource overrun has occurred,
+    // the scanners that were previously overrun are basically in a pending state,
+    // so even if there are enough resources to follow, they cannot be fully utilized,
+    // and we need to schedule the scanners that are in a pending state as well.
+    if (scanner->has_pending_token()) {
+        int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
+        int need_put = concurrency - _running_threads;
+        int left_resource = concurrency_limit - scanner->open_limit();
+        if (left_resource > 0) {
+            need_put = std::min(left_resource, need_put);
+            std::lock_guard<std::mutex> l(_mtx);
+            while (need_put-- > 0 && !_pending_scanners.empty()) {
+                if (!_submit_scanner(_pop_pending_scanner(), false)) {
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!scanner->has_pending_token()) {
+        scanner->acquire_pending_token(&_pending_token);
+    }
+
+    // if opened file greater than this. scanner will push back to pending list.
+    // We can't have all scanners in the pending state, we need to
+    // make sure there is at least one thread on each SCAN NODE that can be running
+    if (!scanner->is_open() && scanner->open_limit() > concurrency_limit) {
+        if (!scanner->has_pending_token()) {
+            std::lock_guard<std::mutex> l(_mtx);
+            _push_pending_scanner(scanner);
+            return;
+        }
+    }
+
     Status status = scanner->open(_runtime_state);
     scanner->set_keep_priority(false);
 
@@ -273,7 +366,8 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
             std::lock_guard<std::mutex> l(_mtx);
             if (_chunk_pool.empty()) {
                 scanner->set_keep_priority(true);
-                _pending_scanners.push(scanner);
+                scanner->release_pending_token(&_pending_token);
+                _push_pending_scanner(scanner);
                 scanner = nullptr;
                 break;
             }
@@ -302,44 +396,57 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
         if (status.ok() && resubmit) {
             if (!_submit_scanner(scanner, false)) {
                 std::lock_guard<std::mutex> l(_mtx);
-                _pending_scanners.push(scanner);
+                scanner->release_pending_token(&_pending_token);
+                _push_pending_scanner(scanner);
             }
         } else if (status.ok()) {
             DCHECK(scanner == nullptr);
         } else if (status.is_end_of_file()) {
+            scanner->release_pending_token(&_pending_token);
             scanner->close(_runtime_state);
             _closed_scanners.fetch_add(1, std::memory_order_release);
             std::lock_guard<std::mutex> l(_mtx);
-            scanner = _pending_scanners.empty() ? nullptr : _pending_scanners.pop();
-            if (scanner != nullptr && !_submit_scanner(scanner, false)) {
-                _pending_scanners.push(scanner);
+            auto nscanner = _pending_scanners.empty() ? nullptr : _pop_pending_scanner();
+            if (nscanner != nullptr && !_submit_scanner(nscanner, false)) {
+                _push_pending_scanner(nscanner);
             }
         } else {
             _update_status(status);
+            scanner->release_pending_token(&_pending_token);
             scanner->close(_runtime_state);
             _closed_scanners.fetch_add(1, std::memory_order_release);
             _close_pending_scanners();
         }
     } else {
-        DCHECK(scanner != nullptr);
-        scanner->close(_runtime_state);
-        _closed_scanners.fetch_add(1, std::memory_order_release);
-        _close_pending_scanners();
+        // sometimes state == ok but global_status was not ok
+        if (scanner != nullptr) {
+            scanner->release_pending_token(&_pending_token);
+            scanner->close(_runtime_state);
+            _closed_scanners.fetch_add(1, std::memory_order_release);
+            _close_pending_scanners();
+        }
     }
-
-    if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {
-        _result_chunks.shutdown();
-    }
-    _running_threads.fetch_sub(1, std::memory_order_release);
 }
 
 void HdfsScanNode::_close_pending_scanners() {
     std::lock_guard<std::mutex> l(_mtx);
     while (!_pending_scanners.empty()) {
-        auto* scanner = _pending_scanners.pop();
+        auto* scanner = _pop_pending_scanner();
         scanner->close(_runtime_state);
         _closed_scanners.fetch_add(1, std::memory_order_release);
     }
+}
+
+void HdfsScanNode::_push_pending_scanner(HdfsScanner* scanner) {
+    scanner->enter_pending_queue();
+    _pending_scanners.push(scanner);
+}
+
+HdfsScanner* HdfsScanNode::_pop_pending_scanner() {
+    HdfsScanner* scanner = _pending_scanners.pop();
+    uint64_t time = scanner->exit_pending_queue();
+    COUNTER_UPDATE(_scanner_queue_timer, time);
+    return scanner;
 }
 
 Status HdfsScanNode::_get_status() {
@@ -351,13 +458,9 @@ void HdfsScanNode::_fill_chunk_pool(int count) {
     std::lock_guard<std::mutex> l(_mtx);
 
     for (int i = 0; i < count; i++) {
-        auto chunk = ChunkHelper::new_chunk(*_tuple_desc, config::vector_chunk_size);
+        auto chunk = ChunkHelper::new_chunk(*_tuple_desc, runtime_state()->chunk_size());
         _chunk_pool.push(std::move(chunk));
     }
-}
-
-Status HdfsScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("HdfsScanNode don't support row_batch");
 }
 
 Status HdfsScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
@@ -389,13 +492,13 @@ Status HdfsScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         const int32_t num_running = _num_scanners - num_pending - num_closed;
         if ((num_pending > 0) && (num_running < kMaxConcurrency)) {
             if (_chunk_pool.size() >= (num_running + 1) * _chunks_per_scanner) {
-                (void)_submit_scanner(_pending_scanners.pop(), true);
+                (void)_submit_scanner(_pop_pending_scanner(), true);
             }
         }
     }
 
     if (_result_chunks.blocking_get(chunk)) {
-        _fill_chunk_pool(1);
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1));
 
         eval_join_runtime_filters(chunk);
 
@@ -429,13 +532,10 @@ Status HdfsScanNode::close(RuntimeState* state) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    for (auto* hdfsFile : _hdfs_files) {
-        if (hdfsFile->hdfs_fs != nullptr && hdfsFile->hdfs_file != nullptr) {
-            hdfsCloseFile(hdfsFile->hdfs_fs, hdfsFile->hdfs_file);
-        }
-    }
-
     _close_pending_scanners();
+    for (auto* hdfsFile : _hdfs_files) {
+        hdfsFile->fs.reset();
+    }
 
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
@@ -447,6 +547,7 @@ Status HdfsScanNode::close(RuntimeState* state) {
 Status HdfsScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     for (const auto& scan_range : scan_ranges) {
         _scan_ranges.emplace_back(scan_range.scan_range.hdfs_scan_range);
+        COUNTER_UPDATE(_scan_ranges_counter, 1);
     }
 
     return Status::OK();
@@ -505,30 +606,42 @@ bool HdfsScanNode::_filter_partition(const std::vector<ExprContext*>& partition_
 }
 
 Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range) {
-    if (_partition_values_map.find(scan_range.partition_id) == _partition_values_map.end()) {
+    if (_iceberg_table == nullptr &&
+        (_partition_values_map.find(scan_range.partition_id) == _partition_values_map.end())) {
         // partition has been filtered
         return Status::OK();
+    }
+
+    std::string scan_range_path = scan_range.full_path;
+    if (_hdfs_table != nullptr) {
+        scan_range_path = scan_range.relative_path;
     }
 
     // search file in hdfs file array
     // if found, add file splits to hdfs file desc
     // if not found, create
     for (auto& item : _hdfs_files) {
-        if (item->partition_id == scan_range.partition_id && item->path == scan_range.relative_path) {
+        if (item->partition_id == scan_range.partition_id && item->path == scan_range_path) {
             item->splits.emplace_back(&scan_range);
             return Status::OK();
         }
     }
 
-    auto* partition_desc = _hdfs_table->get_partition(scan_range.partition_id);
+    COUNTER_UPDATE(_scan_files_counter, 1);
+    std::string native_file_path = scan_range.full_path;
+    if (_hdfs_table != nullptr) {
+        auto* partition_desc = _hdfs_table->get_partition(scan_range.partition_id);
 
-    SCOPED_TIMER(_open_file_timer);
+        SCOPED_TIMER(_open_file_timer);
 
-    std::filesystem::path file_path(partition_desc->location());
-    file_path /= scan_range.relative_path;
-    const std::string& native_file_path = file_path.native();
+        std::filesystem::path file_path(partition_desc->location());
+        file_path /= scan_range.relative_path;
+        native_file_path = file_path.native();
+    }
     std::string namenode;
-    RETURN_IF_ERROR(_get_name_node_from_path(native_file_path, &namenode));
+    RETURN_IF_ERROR(get_name_node_from_path(native_file_path, &namenode));
+    _is_hdfs_fs = is_hdfs_path(namenode.c_str());
+    bool usePread = starrocks::config::use_hdfs_pread || is_object_storage_path(namenode.c_str());
 
     if (namenode.compare("default") == 0) {
         // local file, current only for test
@@ -538,61 +651,30 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
 
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
         hdfs_file_desc->hdfs_fs = nullptr;
-        hdfs_file_desc->hdfs_file = nullptr;
         hdfs_file_desc->fs = std::move(file);
         hdfs_file_desc->partition_id = scan_range.partition_id;
-        hdfs_file_desc->path = scan_range.relative_path;
+        hdfs_file_desc->path = scan_range_path;
         hdfs_file_desc->file_length = scan_range.file_length;
         hdfs_file_desc->splits.emplace_back(&scan_range);
         hdfs_file_desc->hdfs_file_format = scan_range.file_format;
+        hdfs_file_desc->open_limit = nullptr;
         _hdfs_files.emplace_back(hdfs_file_desc);
     } else {
         hdfsFS hdfs;
-        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &hdfs));
-        auto* file = hdfsOpenFile(hdfs, native_file_path.c_str(), O_RDONLY, 0, 0, 0);
-        if (file == nullptr) {
-            return Status::InternalError(strings::Substitute("open file failed, file=$0", native_file_path));
-        }
-
+        std::atomic<int32_t>* open_limit = nullptr;
+        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &hdfs, &open_limit));
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
         hdfs_file_desc->hdfs_fs = hdfs;
-        hdfs_file_desc->hdfs_file = file;
-        hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(hdfs, file, native_file_path);
+        hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(hdfs, native_file_path, usePread);
         hdfs_file_desc->partition_id = scan_range.partition_id;
-        hdfs_file_desc->path = scan_range.relative_path;
+        hdfs_file_desc->path = scan_range_path;
         hdfs_file_desc->file_length = scan_range.file_length;
         hdfs_file_desc->splits.emplace_back(&scan_range);
         hdfs_file_desc->hdfs_file_format = scan_range.file_format;
+        hdfs_file_desc->open_limit = open_limit;
         _hdfs_files.emplace_back(hdfs_file_desc);
     }
 
-    return Status::OK();
-}
-
-Status HdfsScanNode::_get_name_node_from_path(const std::string& path, std::string* namenode) {
-    const string local_fs("file:/");
-    size_t n = path.find("://");
-
-    if (n == string::npos) {
-        if (path.compare(0, local_fs.length(), local_fs) == 0) {
-            // Hadoop Path routines strip out consecutive /'s, so recognize 'file:/blah'.
-            *namenode = "file:///";
-        } else {
-            // Path is not qualified, so use the default FS.
-            *namenode = "default";
-        }
-    } else if (n == 0) {
-        return Status::InternalError("Path missing schema");
-    } else {
-        // Path is qualified, i.e. "scheme://authority/path/to/file".  Extract
-        // "scheme://authority/".
-        n = path.find('/', n + 3);
-        if (n == string::npos) {
-            return Status::InternalError("Path missing '/' after authority");
-        }
-        // Include the trailing '/' for local filesystem case, i.e. "file:///".
-        *namenode = path.substr(0, n + 1);
-    }
     return Status::OK();
 }
 
@@ -605,34 +687,15 @@ void HdfsScanNode::_update_status(const Status& status) {
 
 void HdfsScanNode::_init_counter(RuntimeState* state) {
     _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+    _scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
     _reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
-    _raw_rows_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
 
     _io_timer = ADD_TIMER(_runtime_profile, "IoTime");
     _io_counter = ADD_COUNTER(_runtime_profile, "IoCounter", TUnit::UNIT);
-    _bytes_read_from_disk_counter = ADD_COUNTER(_runtime_profile, "BytesReadFromDisk", TUnit::BYTES);
     _column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
-    _level_decode_timer = ADD_TIMER(_runtime_profile, "LevelDecodeTime");
-    _value_decode_timer = ADD_TIMER(_runtime_profile, "ValueDecodeTime");
-    _page_read_timer = ADD_TIMER(_runtime_profile, "PageReadTime");
     _column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
-
-    _bytes_total_read = ADD_COUNTER(_runtime_profile, "BytesTotalRead", TUnit::BYTES);
-    _bytes_read_local = ADD_COUNTER(_runtime_profile, "BytesReadLocal", TUnit::BYTES);
-    _bytes_read_short_circuit = ADD_COUNTER(_runtime_profile, "BytesReadShortCircuit", TUnit::BYTES);
-    _bytes_read_dn_cache = ADD_COUNTER(_runtime_profile, "BytesReadDataNodeCache", TUnit::BYTES);
-    _bytes_read_remote = ADD_COUNTER(_runtime_profile, "BytesReadRemote", TUnit::BYTES);
-
-    // reader init
-    _footer_read_timer = ADD_TIMER(_runtime_profile, "ReaderInitFooterRead");
-    _column_reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInitColumnReaderInit");
-
-    // dict filter
-    _group_chunk_read_timer = ADD_TIMER(_runtime_profile, "GroupChunkRead");
-    _group_dict_filter_timer = ADD_TIMER(_runtime_profile, "GroupDictFilter");
-    _group_dict_decode_timer = ADD_TIMER(_runtime_profile, "GroupDictDecode");
 }
 
 } // namespace starrocks::vectorized

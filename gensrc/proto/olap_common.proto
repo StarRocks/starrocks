@@ -46,6 +46,8 @@ message ColumnMessage {
     optional bool has_bitmap_index = 16 [default=false]; // ColumnPB.has_bitmap_index
 }
 
+// Please keep the defined value less than 256, because the enum will be casted to uint8_t in some
+// cases.
 enum CompressKind {
     COMPRESS_NONE = 0;
     COMPRESS_LZO = 1;

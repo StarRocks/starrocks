@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -6,7 +6,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
@@ -26,13 +25,6 @@ public class PruneAssertOneRowRule extends TransformationRule {
             LogicalAggregationOperator lao = (LogicalAggregationOperator) input.getInputs().get(0).getOp();
 
             return lao.getGroupingKeys().isEmpty();
-        }
-
-        // if child is limit 1, remove AssertOneRow node
-        if (OperatorType.LOGICAL_LIMIT.equals(input.getInputs().get(0).getOp().getOpType())) {
-            LogicalLimitOperator llo = (LogicalLimitOperator) input.getInputs().get(0).getOp();
-
-            return llo.getLimit() == 1;
         }
 
         return false;

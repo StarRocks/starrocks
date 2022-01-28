@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_STRING_SLICE_H
-#define STARROCKS_BE_SRC_OLAP_STRING_SLICE_H
+#pragma once
 
 #include <cassert>
 #include <cstddef>
@@ -314,6 +313,8 @@ public:
         swap(_slice, rhs._slice);
     }
 
+    bool is_loaded() { return _slice.get_data() && (_slice.get_size() > 0); }
+
 private:
     friend void swap(OwnedSlice& s1, OwnedSlice& s2);
 
@@ -325,4 +326,3 @@ inline void swap(OwnedSlice& s1, OwnedSlice& s2) {
 }
 
 } // namespace starrocks
-#endif // STARROCKS_BE_SRC_OLAP_STRING_SLICE_H

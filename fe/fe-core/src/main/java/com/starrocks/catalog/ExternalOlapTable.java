@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.catalog;
 
@@ -453,10 +453,8 @@ public class ExternalOlapTable extends OlapTable {
                                                     null, // TODO(wulei): fix it
                                                     defaultDistributionInfo);
                 partition.setNextVersion(partitionMeta.getNext_version());
-                partition.setNextVersionHash(partitionMeta.getNext_version_hash(), partitionMeta.getCommit_version_hash());
-                partition.updateVisibleVersionAndVersionHash(partitionMeta.getVisible_version(),
-                                                            partitionMeta.getVisible_version_hash(),
-                                                            partitionMeta.getVisible_time());
+                partition.updateVisibleVersion(partitionMeta.getVisible_version(),
+                                               partitionMeta.getVisible_time());
                 for (TIndexMeta indexMeta : meta.getIndexes()) {
                     MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),
                                                                     IndexState.fromThrift(indexMeta.getIndex_state()));
@@ -464,17 +462,15 @@ public class ExternalOlapTable extends OlapTable {
                     index.setRollupIndexInfo(indexMeta.getRollup_index_id(), indexMeta.getRollup_finished_version());
                     for (TTabletMeta tTabletMeta : indexMeta.getTablets()) {
                         Tablet tablet = new Tablet(tTabletMeta.getTablet_id());
-                        tablet.setCheckedVersion(tTabletMeta.getChecked_version(), tTabletMeta.getChecked_version_hash());
+                        tablet.setCheckedVersion(tTabletMeta.getChecked_version());
                         tablet.setIsConsistent(tTabletMeta.isConsistent());
                         for (TReplicaMeta replicaMeta : tTabletMeta.getReplicas()) {
                             Replica replica = new Replica(replicaMeta.getReplica_id(), replicaMeta.getBackend_id(),
-                                                        replicaMeta.getVersion(), replicaMeta.getVersion_hash(),
+                                                        replicaMeta.getVersion(),
                                                         replicaMeta.getSchema_hash(), replicaMeta.getData_size(),
                                                         replicaMeta.getRow_count(), ReplicaState.valueOf(replicaMeta.getState()),
                                                         replicaMeta.getLast_failed_version(),
-                                                        replicaMeta.getLast_failed_version_hash(),
-                                                        replicaMeta.getLast_success_version(),
-                                                        replicaMeta.getLast_success_version_hash());
+                                                        replicaMeta.getLast_success_version());
                             replica.setLastFailedTime(replicaMeta.getLast_failed_time());
                             // forbidden repair for external table
                             replica.setNeedFurtherRepair(false);

@@ -27,6 +27,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.TimeoutException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -35,9 +36,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -138,11 +141,11 @@ public class Util {
         }
     }
 
-    public static CommandResult executeCommand(String cmd, String[] envp) {
+    public static CommandResult executeCommand(String cmd, String[] envp) throws TimeoutException {
         return executeCommand(cmd, envp, DEFAULT_EXEC_CMD_TIMEOUT_MS);
     }
 
-    public static CommandResult executeCommand(String cmd, String[] envp, long timeoutMs) {
+    public static CommandResult executeCommand(String cmd, String[] envp, long timeoutMs) throws TimeoutException {
         CommandResult result = new CommandResult();
         List<String> cmdList = shellSplit(cmd);
         String[] cmds = cmdList.toArray(new String[0]);
@@ -157,10 +160,10 @@ public class Util {
                 cmdWorker.join(timeoutMs);
                 exitValue = cmdWorker.getExitValue();
                 if (exitValue == null) {
-                    // if we get this far then we never got an exit value from the worker thread
-                    // as a result of a timeout 
-                    LOG.warn("exec command [{}] timed out.", cmd);
-                    exitValue = -1;
+                    // timeout if we get null exit value from work thread
+                    String msg = String.format("exec command [%s] timed out.", cmd);
+                    LOG.warn(msg);
+                    throw new TimeoutException(msg);
                 }
             } catch (InterruptedException ex) {
                 cmdWorker.interrupt();
@@ -284,10 +287,6 @@ public class Util {
         }
 
         return Math.abs((int) adler32.getValue());
-    }
-
-    public static long generateVersionHash() {
-        return Math.abs(new Random().nextLong());
     }
 
     public static int generateSchemaHash() {
@@ -417,6 +416,22 @@ public class Util {
         conn.setConnectTimeout(connectTimeoutMs);
         conn.setReadTimeout(readTimeoutMs);
         return conn.getInputStream();
+    }
+
+    public static void validateMetastoreUris(String uris) {
+        URI[] parsedUris = Arrays.stream(uris.split(",")).map(URI::create).toArray(URI[]::new);
+        for (URI uri : parsedUris) {
+            if (Strings.isNullOrEmpty(uri.getScheme()) || !uri.getScheme().equals("thrift")) {
+                throw new IllegalArgumentException("Invalid scheme of URI in hive.metastore.uris: " + uri +
+                        " it should be thrift.");
+            }
+            if (Strings.isNullOrEmpty(uri.getHost())) {
+                throw new IllegalArgumentException("Invalid host of URI in hive.metastore.uris URI: " + uri);
+            }
+            if (uri.getPort() == -1) {
+                throw new IllegalArgumentException("Invalid port of URI in hive.metastore.uris URI: " + uri);
+            }
+        }
     }
 }
 

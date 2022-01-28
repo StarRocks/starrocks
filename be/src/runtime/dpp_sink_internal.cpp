@@ -24,7 +24,6 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include "common/object_pool.h"
-#include "exec/text_converter.hpp"
 #include "exprs/expr.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "runtime/descriptors.h"
@@ -138,7 +137,8 @@ Status PartRange::from_thrift(ObjectPool* pool, const TPartitionRange& t_part_ra
     return Status::OK();
 }
 
-Status PartitionInfo::from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition) {
+Status PartitionInfo::from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition,
+                                  int32_t chunk_size) {
     partition->_id = t_partition.partition_id;
     RETURN_IF_ERROR(PartRange::from_thrift(pool, t_partition.range, &partition->_range));
     if (t_partition.__isset.distributed_exprs) {
@@ -152,9 +152,9 @@ Status PartitionInfo::from_thrift(ObjectPool* pool, const TRangePartition& t_par
     return Status::OK();
 }
 
-Status PartitionInfo::prepare(RuntimeState* state, const RowDescriptor& row_desc, MemTracker* mem_tracker) {
+Status PartitionInfo::prepare(RuntimeState* state, const RowDescriptor& row_desc) {
     if (_distributed_expr_ctxs.size() > 0) {
-        RETURN_IF_ERROR(Expr::prepare(_distributed_expr_ctxs, state, row_desc, mem_tracker));
+        RETURN_IF_ERROR(Expr::prepare(_distributed_expr_ctxs, state, row_desc));
     }
     return Status::OK();
 }

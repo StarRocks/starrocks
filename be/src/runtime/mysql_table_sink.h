@@ -19,9 +19,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_MYSQL_TABLE_SINK_H
-#define STARROCKS_BE_RUNTIME_MYSQL_TABLE_SINK_H
+#pragma once
 
+#include <memory>
 #include <vector>
 
 #include "common/status.h"
@@ -36,7 +36,6 @@ class TMysqlTableSink;
 class RuntimeState;
 class RuntimeProfile;
 class ExprContext;
-class MemTracker;
 
 // This class is a sinker, which put input data to mysql table
 class MysqlTableSink : public DataSink {
@@ -51,9 +50,7 @@ public:
 
     Status open(RuntimeState* state) override;
 
-    // send data in 'batch' to this backend stream mgr
-    // Blocks until all rows in batch are placed in the buffer
-    Status send(RuntimeState* state, RowBatch* batch) override;
+    Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
     // Flush all buffered data and close all existing channels to destination
     // hosts. Further send() calls are illegal after calling close().
@@ -62,20 +59,18 @@ public:
     RuntimeProfile* profile() override { return _profile; }
 
 private:
-    // owned by RuntimeState
     ObjectPool* _pool;
     const RowDescriptor& _row_desc;
     const std::vector<TExpr>& _t_output_expr;
+    int _chunk_size;
 
     std::vector<ExprContext*> _output_expr_ctxs;
+
     MysqlConnInfo _conn_info;
     std::string _mysql_tbl;
-    MysqlTableWriter* _writer = nullptr;
 
+    std::unique_ptr<MysqlTableWriter> _writer;
     RuntimeProfile* _profile = nullptr;
-    std::unique_ptr<MemTracker> _mem_tracker;
 };
 
 } // namespace starrocks
-
-#endif

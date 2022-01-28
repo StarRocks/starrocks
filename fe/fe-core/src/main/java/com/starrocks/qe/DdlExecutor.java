@@ -69,9 +69,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InstallPluginStmt;
-import com.starrocks.analysis.LinkDbStmt;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.analysis.MigrateDbStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
@@ -99,10 +97,6 @@ public class DdlExecutor {
             catalog.processModifyCluster((AlterClusterStmt) ddlStmt);
         } else if (ddlStmt instanceof DropClusterStmt) {
             catalog.dropCluster((DropClusterStmt) ddlStmt);
-        } else if (ddlStmt instanceof MigrateDbStmt) {
-            catalog.migrateDb((MigrateDbStmt) ddlStmt);
-        } else if (ddlStmt instanceof LinkDbStmt) {
-            catalog.linkDb((LinkDbStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateDbStmt) {
             catalog.createDb((CreateDbStmt) ddlStmt);
         } else if (ddlStmt instanceof DropDbStmt) {

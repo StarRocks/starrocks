@@ -224,9 +224,6 @@ public class InlineViewRef extends TableRef {
             SlotRef slotRef = new SlotRef(slotDesc);
             sMap.put(slotRef, colExpr);
             baseTblSmap.put(slotRef, queryStmt.getBaseTblResultExprs().get(i));
-            if (createAuxPredicate(colExpr)) {
-                analyzer.createAuxEquivPredicate(new SlotRef(slotDesc), colExpr.clone());
-            }
         }
         if (LOG.isDebugEnabled()) {
             LOG.debug("inline view " + getUniqueAlias() + " smap: " + sMap.debugString());
@@ -235,20 +232,6 @@ public class InlineViewRef extends TableRef {
 
         // Now do the remaining join analysis
         analyzeJoin(analyzer);
-    }
-
-    /**
-     * Checks if an auxiliary predicate should be created for an expr. Returns False if the
-     * inline view has a SELECT stmt with analytic functions and the expr is not in the
-     * common partition exprs of all the analytic functions computed by this inline view.
-     */
-    public boolean createAuxPredicate(Expr e) {
-        if (!(queryStmt instanceof SelectStmt)
-                || !((SelectStmt) queryStmt).hasAnalyticInfo()) {
-            return true;
-        }
-        AnalyticInfo analyticInfo = ((SelectStmt) queryStmt).getAnalyticInfo();
-        return analyticInfo.getCommonPartitionExprs().contains(e);
     }
 
     /**
@@ -286,47 +269,6 @@ public class InlineViewRef extends TableRef {
         result.setIsMaterialized(false);
         result.setTable(inlineView);
         return result;
-    }
-
-    protected void makeOutputNullableHelper(Analyzer analyzer, ExprSubstitutionMap smap)
-            throws Exception {
-        // Gather all unique rhs SlotRefs into rhsSlotRefs
-        List<SlotRef> rhsSlotRefs = Lists.newArrayList();
-        Expr.collectList(smap.getRhs(), SlotRef.class, rhsSlotRefs);
-        // Map for substituting SlotRefs with NullLiterals.
-        ExprSubstitutionMap nullSMap = new ExprSubstitutionMap();
-        for (SlotRef rhsSlotRef : rhsSlotRefs) {
-            nullSMap.put(rhsSlotRef.clone(), NullLiteral.create(rhsSlotRef.getType()));
-        }
-
-        // Make rhs exprs nullable if necessary.
-        for (int i = 0; i < smap.getRhs().size(); ++i) {
-            List<Expr> params = Lists.newArrayList();
-            if (!requiresNullWrapping(analyzer, smap.getRhs().get(i), nullSMap)) {
-                continue;
-            }
-            params.add(new TupleIsNullPredicate(materializedTupleIds));
-            params.add(NullLiteral.create(smap.getRhs().get(i).getType()));
-            params.add(smap.getRhs().get(i));
-            Expr ifExpr = new FunctionCallExpr("if", params);
-            ifExpr.analyze(analyzer);
-            smap.getRhs().set(i, ifExpr);
-        }
-    }
-
-    /**
-     * Replaces all SloRefs in expr with a NullLiteral using nullSMap, and evaluates the
-     * resulting constant expr. Returns true if the constant expr yields a non-NULL value,
-     * false otherwise.
-     */
-    private boolean requiresNullWrapping(Analyzer analyzer, Expr expr, ExprSubstitutionMap nullSMap)
-            throws UserException {
-        // If the expr is already wrapped in an IF(TupleIsNull(), NULL, expr)
-        // then do not try to execute it.
-        if (expr.contains(TupleIsNullPredicate.class)) {
-            return true;
-        }
-        return true;
     }
 
     @Override

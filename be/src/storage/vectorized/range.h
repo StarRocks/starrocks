@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -7,7 +7,8 @@
 #include <string>
 #include <vector>
 
-#include "storage/rowset/segment_v2/common.h"
+#include "column/datum.h"
+#include "storage/rowset/common.h"
 #include "util/logging.h"
 
 namespace starrocks::vectorized {
@@ -15,7 +16,7 @@ namespace starrocks::vectorized {
 // Range represent a logical contiguous range of a segment file.
 // Range contains a inclusive start row number and an exclusive end row number.
 class Range {
-    using rowid_t = starrocks::segment_v2::rowid_t;
+    using rowid_t = starrocks::rowid_t;
 
 public:
     Range() {}
@@ -36,9 +37,9 @@ public:
     // return a new range that represent the intersection of |this| and |r|.
     Range intersection(const Range& r) const;
 
-    bool has_intersection(const Range& rhs) const { return !(_end <= rhs.begin() || rhs._end <= _begin); }
+    bool has_intersection(const Range& rhs) const { return !(_end <= rhs.begin() || rhs.end() <= _begin); }
 
-    bool contains(rowid_t row) const { return row - _begin < _end - _begin; }
+    bool contains(rowid_t row) const { return row < _end; }
 
     std::string to_string() const;
 
@@ -83,11 +84,14 @@ class SparseRange;
 
 // SparseRangeIterator used to travel a SparseRange.
 class SparseRangeIterator {
-    using rowid_t = starrocks::segment_v2::rowid_t;
+    using rowid_t = starrocks::rowid_t;
 
 public:
     SparseRangeIterator() {}
     explicit SparseRangeIterator(const SparseRange* r);
+
+    SparseRangeIterator(const SparseRangeIterator& iter)
+            : _range(iter._range), _index(iter._index), _next_rowid(iter._next_rowid) {}
 
     rowid_t begin() const { return _next_rowid; }
 
@@ -97,6 +101,9 @@ public:
     // Return the next contiguous range contains at most |size| rows.
     // `has_more` must be checked before calling this method.
     Range next(size_t size);
+
+    // Return the next discontiguous range contains at most |size| rows
+    void next_range(size_t size, SparseRange* range);
 
     size_t covered_ranges(size_t size) const;
 
@@ -113,7 +120,7 @@ private:
 // SparseRange represent a set of non-intersected contiguous ranges, or, in other words, represent
 // a single non-contiguous range.
 class SparseRange {
-    using rowid_t = starrocks::segment_v2::rowid_t;
+    using rowid_t = starrocks::rowid_t;
 
 public:
     SparseRange() = default;
@@ -290,17 +297,25 @@ inline bool SparseRangeIterator::has_more() const {
 
 inline Range SparseRangeIterator::next(size_t size) {
     const std::vector<Range>& ranges = _range->_ranges;
-    const Range& r = ranges[_index];
-    size = std::min<size_t>(size, r.end() - _next_rowid);
+    const Range& range = ranges[_index];
+    size = std::min<size_t>(size, range.end() - _next_rowid);
     Range ret(_next_rowid, _next_rowid + size);
     _next_rowid += size;
-    if (_next_rowid == r.end()) {
+    if (_next_rowid == range.end()) {
         ++_index;
         if (_index < ranges.size()) {
             _next_rowid = ranges[_index].begin();
         }
     }
     return ret;
+}
+
+inline void SparseRangeIterator::next_range(size_t size, SparseRange* range) {
+    while (size > 0 && has_more()) {
+        Range r = next(size);
+        range->add(r);
+        size -= r.span_size();
+    }
 }
 
 inline size_t SparseRangeIterator::covered_ranges(size_t size) const {

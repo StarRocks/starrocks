@@ -1,7 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -167,6 +167,12 @@ public class AnalyzeSingleTest {
         analyzeSuccess("with w as (select * from t0) select * from w except select * from w");
         analyzeSuccess("with w as (select * from t0) select * from w intersect select * from w");
         analyzeSuccess(" with w as (select * from t0) select 1 from w");
+
+        /**
+         * Test cte with different relationId
+         */
+        analyzeSuccess("with w as (select * from t0) select v1,sum(v2) from w group by v1 " +
+                "having v1 in (select v3 from w where v2 = 2)");
     }
 
     @Test
@@ -235,7 +241,7 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1 from t0 order by v1 asc ,v2 desc");
         analyzeSuccess("select v1 from t0 order by v1 limit 10");
         analyzeSuccess("select v1 from t0 order by v1, v2");
-        analyzeFail("select v1 from t0 limit 2, 10");
+        analyzeSuccess("select v1 from t0 limit 2, 10");
 
         /**
          * Test output scope resolve
@@ -328,7 +334,7 @@ public class AnalyzeSingleTest {
                         "abs(`v1`)," +
                         "`v1` * `v1` / `v1` % `v1` + `v1` - `v1` DIV `v1`,`v2` & ~ `v1` | `v3` ^ 1," +
                         "`v1` + 20," +
-                        "CASE`v2` WHEN `v3` THEN 1 ELSE 0 END",
+                        "CASE `v2` WHEN `v3` THEN 1 ELSE 0 END",
                 String.join(",", query.getColumnOutputNames()));
 
         query = analyzeSuccess(
@@ -363,5 +369,14 @@ public class AnalyzeSingleTest {
 
         query = analyzeSuccess("select * from (select t0.*, v4 from t0 inner join t1 on v1 = v5) tmp");
         Assert.assertEquals("v1,v2,v3,v4", String.join(",", query.getColumnOutputNames()));
+
+        query = analyzeSuccess("select t1.* from t0 inner join t1 on v1 = v4 order by v1");
+        Assert.assertEquals("v4,v5,v6", String.join(",", query.getColumnOutputNames()));
+
+        query = analyzeSuccess("select v4,v1,t1.* from t0 inner join t1 on v1 = v4 order by v1");
+        Assert.assertEquals("v4,v1,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
+
+        query = analyzeSuccess("select v1+2 as v, * from t0 order by v+1");
+        Assert.assertEquals("v,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
     }
 }

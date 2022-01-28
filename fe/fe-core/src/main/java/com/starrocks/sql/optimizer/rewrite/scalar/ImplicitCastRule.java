@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
@@ -9,13 +9,13 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -109,20 +109,21 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
 
         // we will try cast const operator to variable operator
         if (rightChild.isVariable() && leftChild.isConstantRef()) {
-            Optional<ScalarOperator> op = tryCastConstant(leftChild, type2);
+            Optional<ScalarOperator> op = Utils.tryCastConstant(leftChild, type2);
             if (op.isPresent()) {
                 predicate.getChildren().set(0, op.get());
                 return predicate;
             }
         } else if (leftChild.isVariable() && rightChild.isConstantRef()) {
-            Optional<ScalarOperator> op = tryCastConstant(rightChild, type1);
+            Optional<ScalarOperator> op = Utils.tryCastConstant(rightChild, type1);
             if (op.isPresent()) {
                 predicate.getChildren().set(1, op.get());
                 return predicate;
             }
         }
 
-        Type compatibleType = TypeManager.getCompatibleTypeForBinary(type1, type2);
+        Type compatibleType = TypeManager.getCompatibleTypeForBinary(
+                predicate.getBinaryType().isNotRangeComparison(), type1, type2);
 
         if (!type1.matchesType(compatibleType)) {
             addCastChild(compatibleType, predicate, 0);
@@ -217,7 +218,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             List<ScalarOperator> newChild = Lists.newArrayList();
             newChild.add(predicate.getChild(0));
             for (int i = 1; i < types.size(); i++) {
-                Optional<ScalarOperator> op = tryCastConstant(predicate.getChild(i), firstType);
+                Optional<ScalarOperator> op = Utils.tryCastConstant(predicate.getChild(i), firstType);
                 op.ifPresent(newChild::add);
             }
 
@@ -241,29 +242,5 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
 
     private void addCastChild(Type returnType, ScalarOperator node, int index) {
         node.getChildren().set(index, new CastOperator(returnType, node.getChild(index), true));
-    }
-
-    /**
-     * Try cast op to descType, return empty if failed
-     */
-    private Optional<ScalarOperator> tryCastConstant(ScalarOperator op, Type descType) {
-        // Forbidden cast float, because behavior isn't same with before
-        if (!op.isConstantRef() || op.getType().matchesType(descType) || Type.FLOAT.equals(op.getType())
-                || descType.equals(Type.FLOAT)) {
-            return Optional.empty();
-        }
-
-        try {
-            if (((ConstantOperator) op).isNull()) {
-                return Optional.of(ConstantOperator.createNull(descType));
-            }
-
-            ConstantOperator result = ((ConstantOperator) op).castTo(descType);
-            if (result.toString().equalsIgnoreCase(op.toString())) {
-                return Optional.of(result);
-            }
-        } catch (Exception ignored) {
-        }
-        return Optional.empty();
     }
 }

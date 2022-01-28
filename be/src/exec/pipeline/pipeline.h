@@ -1,22 +1,26 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/source_operator.h"
+#include <ctime>
 
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/source_operator.h"
+#include "gutil/strings/substitute.h"
 namespace starrocks {
-class MemTracker;
 namespace pipeline {
 
 class Pipeline;
 using PipelinePtr = std::shared_ptr<Pipeline>;
 using Pipelines = std::vector<PipelinePtr>;
-
 class Pipeline {
 public:
     Pipeline() = delete;
-    Pipeline(uint32_t id, const OpFactories& op_factories) : _id(id), _op_factories(op_factories) {}
+    Pipeline(uint32_t id, const OpFactories& op_factories) : _id(id), _op_factories(op_factories) {
+        _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("Pipeline (id=$0)", _id));
+        _runtime_profile->add_info_string("ContainsAllPipelineDrivers", "true");
+    }
 
     uint32_t get_id() const { return _id; }
 
@@ -37,9 +41,11 @@ public:
         return down_cast<SourceOperatorFactory*>(_op_factories[0].get());
     }
 
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker) {
+    RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+
+    Status prepare(RuntimeState* state) {
         for (auto& op : _op_factories) {
-            RETURN_IF_ERROR(op->prepare(state, mem_tracker));
+            RETURN_IF_ERROR(op->prepare(state));
         }
         return Status::OK();
     }
@@ -50,9 +56,29 @@ public:
         }
     }
 
+    std::string to_readable_string() const {
+        std::stringstream ss;
+        ss << "operator-chain: [";
+        for (size_t i = 0; i < _op_factories.size(); ++i) {
+            if (i == 0) {
+                ss << _op_factories[i]->get_name();
+            } else {
+                ss << " -> " << _op_factories[i]->get_name();
+            }
+        }
+        ss << "]";
+        return ss.str();
+    }
+
+    bool is_root() const { return _is_root; }
+    void set_root() { _is_root = true; }
+    void unset_root() { _is_root = false; }
+
 private:
     uint32_t _id = 0;
+    std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     OpFactories _op_factories;
+    bool _is_root = false;
 };
 
 } // namespace pipeline

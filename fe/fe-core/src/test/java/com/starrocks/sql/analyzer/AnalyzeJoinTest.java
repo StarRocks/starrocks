@@ -1,7 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -38,7 +38,7 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select * from (select v1, v2 from t0 inner join t1 on t0.v1 = t1.v4) a");
         analyzeSuccess("select a.v1 from (select v1, v2, v5, v4 from t0 inner join t1 on t0.v1 = t1.v4) a");
 
-        /**
+        /*
          * Test alias
          */
         analyzeSuccess("select * from t0 a join t1 b on a.v1=b.v4");
@@ -74,6 +74,13 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select * from t0 a join t0 b using(v1, v2, v3)");
         analyzeFail("select * from t0 join t0 using(v1)");
         analyzeFail("select * from t0 join t1 using(v1)");
+        analyzeFail("select * from t0 x,t0 y inner join t0 z using(v1)", "Column 'v1' is ambiguous");
+        analyzeSuccess("select * from t0,t1 inner join tnotnull using(v1)");
+        analyzeSuccess("select * from t0,t1 inner join tnotnull using(v1,v2)");
+        analyzeSuccess("select * from tnotnull inner join (select * from t0,t1) t using (v1)");
+        analyzeFail("select * from (select * from t0,tnotnull) t inner join t0 using (v1)",
+                "Column 'v1' is ambiguous");
+        analyzeSuccess("select * from tnotnull inner join (select * from t0) t using (v1)");
     }
 
     @Test
@@ -97,6 +104,12 @@ public class AnalyzeJoinTest {
 
         query = analyzeSuccess("select t1.*,v1,t0.* from t0 join t1 on t0.v1=t1.v4");
         Assert.assertEquals("v4,v5,v6,v1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
+
+        query = analyzeSuccess("select a.v1 as v, a.v2 as v, b.v1 as v from t0 a,t0 b");
+        Assert.assertEquals("v,v,v", String.join(",", query.getColumnOutputNames()));
+        analyzeFail("select a.v1 as v, a.v2 as v, b.v1 as v from t0 a,t0 b order by v", "Column 'v' is ambiguous");
+        analyzeFail("select v1 from (select * from t0 a,t0 b) t", "Column 'v1' is ambiguous");
+        analyzeFail("select v from (select a.v1 as v, b.v1 as v from t0 a,t0 b) t", "Column 'v' is ambiguous");
     }
 
     @Test

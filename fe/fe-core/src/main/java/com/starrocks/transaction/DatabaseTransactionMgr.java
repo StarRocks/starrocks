@@ -51,11 +51,12 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.Util;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -279,7 +280,7 @@ public class DatabaseTransactionMgr {
                 if (!notAbortedTxns.isEmpty()) {
                     TransactionState notAbortedTxn = notAbortedTxns.get(0);
                     if (requestId != null && notAbortedTxn.getTransactionStatus() == TransactionStatus.PREPARE
-                            && notAbortedTxn.getRequsetId() != null && notAbortedTxn.getRequsetId().equals(requestId)) {
+                            && notAbortedTxn.getRequestId() != null && notAbortedTxn.getRequestId().equals(requestId)) {
                         // this may be a retry request for same job, just return existing txn id.
                         throw new DuplicatedRequestException(DebugUtil.printId(requestId),
                                 notAbortedTxn.getTransactionId(), "");
@@ -393,13 +394,16 @@ public class DatabaseTransactionMgr {
         TabletInvertedIndex tabletInvertedIndex = catalog.getTabletInvertedIndex();
         Map<Long, Set<Long>> tabletToBackends = new HashMap<>();
         Map<Long, Set<Long>> tableToPartition = new HashMap<>();
+        Map<Long, Set<String>> tableToInvalidDictCacheColumns = new HashMap<>();
+        Map<Long, Set<String>> tableToValidDictCacheColumns = new HashMap<>();
+
         // 2. validate potential exists problem: db->table->partition
         // guarantee exist exception during a transaction
         // if index is dropped, it does not matter.
         // if table or partition is dropped during load, just ignore that tablet,
         // because we should allow dropping rollup or partition during load
         List<Long> tabletIds = tabletCommitInfos.stream().map(
-                tabletCommitInfo -> tabletCommitInfo.getTabletId()).collect(Collectors.toList());
+                TabletCommitInfo::getTabletId).collect(Collectors.toList());
         List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
         for (int i = 0; i < tabletMetaList.size(); i++) {
             TabletMeta tabletMeta = tabletMetaList.get(i);
@@ -435,6 +439,26 @@ public class DatabaseTransactionMgr {
                 tabletToBackends.put(tabletId, new HashSet<>());
             }
             tabletToBackends.get(tabletId).add(tabletCommitInfos.get(i).getBackendId());
+
+            if (!tableToInvalidDictCacheColumns.containsKey(tableId)) {
+                tableToInvalidDictCacheColumns.put(tableId, new HashSet<>());
+            }
+            // Invalid column set should union
+            tableToInvalidDictCacheColumns.get(tableId).addAll(tabletCommitInfos.get(i).getInvalidDictCacheColumns());
+
+            if (!tableToValidDictCacheColumns.containsKey(tableId)) {
+                tableToValidDictCacheColumns.put(tableId, new HashSet<>());
+            }
+            // Valid column set should intersect and remove all invalid columns
+            // Only need to add valid column set once
+            if (tableToValidDictCacheColumns.get(tableId).isEmpty() &&
+                    !tabletCommitInfos.get(i).getValidDictCacheColumns().isEmpty()) {
+                tableToValidDictCacheColumns.get(tableId).addAll(tabletCommitInfos.get(i).getValidDictCacheColumns());
+            }
+
+            if (i == tabletMetaList.size() - 1) {
+                tableToValidDictCacheColumns.get(tableId).removeAll(tableToInvalidDictCacheColumns.get(tableId));
+            }
         }
 
         if (tableToPartition.isEmpty()) {
@@ -469,8 +493,9 @@ public class DatabaseTransactionMgr {
                         for (long tabletBackend : tabletBackends) {
                             Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
                             if (replica == null) {
-                                throw new TransactionCommitFailedException("could not find replica for tablet ["
-                                        + tabletId + "], backend [" + tabletBackend + "]");
+                                Backend backend = Catalog.getCurrentSystemInfo().getBackend(tabletBackend);
+                                throw new TransactionCommitFailedException("Not found replicas of tablet. "
+                                        + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
                             }
                             // if the tablet have no replica's to commit or the tablet is a rolling up tablet, the commit backends maybe null
                             // if the commit backends is null, set all replicas as error replicas
@@ -490,14 +515,15 @@ public class DatabaseTransactionMgr {
                         }
 
                         if (successReplicaNum < quorumReplicaNum) {
-                            LOG.warn("Failed to commit txn [{}]. "
-                                            + "Tablet [{}] success replica num is {} < quorum replica num {} "
-                                            + "while error backends {}",
-                                    transactionId, tablet.getId(), successReplicaNum, quorumReplicaNum,
-                                    Joiner.on(",").join(errorBackendIdsForTablet));
-                            throw new TabletQuorumFailedException(transactionId, tablet.getId(),
-                                    successReplicaNum, quorumReplicaNum,
-                                    errorBackendIdsForTablet);
+                            List<String> errorBackends = new ArrayList<String>();
+                            for (long backendId : errorBackendIdsForTablet) {
+                                Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
+                                errorBackends.add(backend.getHost());
+                            }
+
+                            LOG.warn("Fail to load files. tablet_id: {}, txn_id: {}, backends: {}",
+                                     tablet.getId(), transactionId, tablet.getId(), Joiner.on(",").join(errorBackends));
+                            throw new TabletQuorumFailedException(tablet.getId(), transactionId, errorBackends);
                         }
                     }
                 }
@@ -510,8 +536,9 @@ public class DatabaseTransactionMgr {
         boolean txnOperated = false;
         writeLock();
         try {
-            unprotectedCommitTransaction(transactionState, errorReplicaIds, tableToPartition, totalInvolvedBackends,
-                    db);
+            unprotectedCommitTransaction(transactionState, errorReplicaIds, tableToPartition,
+                    tableToInvalidDictCacheColumns, tableToValidDictCacheColumns,
+                    totalInvolvedBackends, db);
             txnOperated = true;
         } finally {
             writeUnlock();
@@ -605,7 +632,7 @@ public class DatabaseTransactionMgr {
     // check whether transaction can be finished or not
     // for each tablet of load txn, if most replicas version publish successed
     // the trasaction can be treated as successful and can be finished
-    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas) {
+    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends) {
         Database db = catalog.getDb(txn.getDbId());
         if (db == null) {
             return true;
@@ -645,6 +672,9 @@ public class DatabaseTransactionMgr {
                                 if (!errReplicas.contains(replica.getId()) && replica.getLastFailedVersion() < 0) {
                                     if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
                                         ++healthReplicaNum;
+                                    } else if (unfinishedBackends != null
+                                            && unfinishedBackends.contains(replica.getBackendId())) {
+                                        errReplicas.add(replica.getId());
                                     }
                                 }
                             }
@@ -745,13 +775,9 @@ public class DatabaseTransactionMgr {
                                         && replica.getLastFailedVersion() < 0) {
                                     // this means the replica is a healthy replica,
                                     // it is healthy in the past and does not have error in current load
-                                    if (replica.checkVersionCatchUp(partition.getVisibleVersion(),
-                                            partition.getVisibleVersionHash(), true)) {
+                                    if (replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
                                         // during rollup, the rollup replica's last failed version < 0,
                                         // it may be treated as a normal replica.
-                                        // the replica is not failed during commit or publish
-                                        // during upgrade, one replica's last version maybe invalid,
-                                        // has to compare version hash.
 
                                         // Here we still update the replica's info even if we failed to publish
                                         // this txn, for the following case:
@@ -761,8 +787,7 @@ public class DatabaseTransactionMgr {
                                         // So, here we update A's version info, so that clone task will clone
                                         // the latest version of data.
 
-                                        replica.updateVersionInfo(partitionCommitInfo.getVersion(),
-                                                partitionCommitInfo.getVersionHash(),
+                                        replica.updateRowCount(partitionCommitInfo.getVersion(),
                                                 replica.getDataSize(), replica.getRowCount());
                                         ++healthReplicaNum;
                                     } else {
@@ -771,9 +796,9 @@ public class DatabaseTransactionMgr {
                                         // A,B 's version is 10, C's version is 10 but C' 10 is abnormal should be rollback
                                         // then we will detect this and set C's last failed version to 10 and last success version to 11
                                         // this logic has to be replayed in checkpoint thread
-                                        replica.updateVersionInfo(replica.getVersion(), replica.getVersionHash(),
-                                                partition.getVisibleVersion(), partition.getVisibleVersionHash(),
-                                                partitionCommitInfo.getVersion(), partitionCommitInfo.getVersionHash());
+                                        replica.updateVersionInfo(replica.getVersion(),
+                                                partition.getVisibleVersion(),
+                                                partitionCommitInfo.getVersion());
                                         LOG.warn("transaction state {} has error, the replica [{}] not appeared " +
                                                         "in error replica list and its version not equal to partition " +
                                                         "commit version or commit version - 1 if its not a upgrate " +
@@ -836,7 +861,10 @@ public class DatabaseTransactionMgr {
     }
 
     protected void unprotectedCommitTransaction(TransactionState transactionState, Set<Long> errorReplicaIds,
-                                                Map<Long, Set<Long>> tableToPartition, Set<Long> totalInvolvedBackends,
+                                                Map<Long, Set<Long>> tableToPartition,
+                                                Map<Long, Set<String>> tableToInvalidDictColumns,
+                                                Map<Long, Set<String>> tableToValidDictColumns,
+                                                Set<Long> totalInvolvedBackends,
                                                 Database db) {
         // transaction state is modified during check if the transaction could committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
@@ -848,13 +876,24 @@ public class DatabaseTransactionMgr {
         transactionState.setErrorReplicas(errorReplicaIds);
         for (long tableId : tableToPartition.keySet()) {
             TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+            boolean isFirstPartition = true;
             for (long partitionId : tableToPartition.get(tableId)) {
                 OlapTable table = (OlapTable) db.getTable(tableId);
                 Partition partition = table.getPartition(partitionId);
-                PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(partitionId,
-                        partition.getNextVersion(), partition.getNextVersionHash(),
-                        System.currentTimeMillis() /* use as partition visible time */);
+                PartitionCommitInfo partitionCommitInfo;
+                if (isFirstPartition) {
+                    partitionCommitInfo = new PartitionCommitInfo(partitionId,
+                            partition.getNextVersion(),
+                            System.currentTimeMillis(),
+                            Lists.newArrayList(tableToInvalidDictColumns.get(tableId)),
+                            Lists.newArrayList(tableToValidDictColumns.get(tableId)));
+                } else {
+                    partitionCommitInfo = new PartitionCommitInfo(partitionId,
+                            partition.getNextVersion(),
+                            System.currentTimeMillis() /* use as partition visible time */);
+                }
                 tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+                isFirstPartition = false;
             }
             transactionState.putIdToTableCommitInfo(tableId, tableCommitInfo);
         }
@@ -1075,7 +1114,6 @@ public class DatabaseTransactionMgr {
                 List<Comparable> partitionInfo = new ArrayList<Comparable>();
                 partitionInfo.add(entry.getKey());
                 partitionInfo.add(entry.getValue().getVersion());
-                partitionInfo.add(entry.getValue().getVersionHash());
                 partitionInfos.add(partitionInfo);
             }
         } finally {
@@ -1087,18 +1125,18 @@ public class DatabaseTransactionMgr {
     public void removeExpiredTxns(long currentMillis) {
         writeLock();
         try {
+            int numJobsToRemove = getTransactionNum() - Config.label_keep_max_num;
             while (!finalStatusTransactionStateDeque.isEmpty()) {
                 TransactionState transactionState = finalStatusTransactionStateDeque.getFirst();
-                if (transactionState.isExpired(currentMillis)) {
+                if (transactionState.isExpired(currentMillis) || numJobsToRemove > 0) {
                     finalStatusTransactionStateDeque.pop();
                     clearTransactionState(transactionState);
-                    editLog.logDeleteTransactionState(transactionState);
+                    --numJobsToRemove;
                     LOG.info("transaction [" + transactionState.getTransactionId() +
                             "] is expired, remove it from transaction manager");
                 } else {
                     break;
                 }
-
             }
         } finally {
             writeUnlock();
@@ -1246,23 +1284,13 @@ public class DatabaseTransactionMgr {
                     for (Tablet tablet : tablets) {
                         for (Replica replica : tablet.getReplicas()) {
                             if (errorReplicaIds.contains(replica.getId())) {
-                                // should not use partition.getNextVersion and partition.getNextVersionHash because partition's next version hash is generated locally
                                 // should get from transaction state
-                                replica.updateLastFailedVersion(partitionCommitInfo.getVersion(),
-                                        partitionCommitInfo.getVersionHash());
+                                replica.updateLastFailedVersion(partitionCommitInfo.getVersion());
                             }
                         }
                     }
                 }
                 partition.setNextVersion(partition.getNextVersion() + 1);
-                // Although committed version(hash) is not visible to user,
-                // but they need to be synchronized among Frontends.
-                // because we use committed version(hash) to create clone task, if the first Master FE
-                // send clone task with committed version hash X, and than Master changed, the new Master FE
-                // received the clone task report with version hash X, which not equals to it own committed
-                // version hash, than the clone task is failed.
-                partition.setNextVersionHash(Util.generateVersionHash() /* next version hash */,
-                        partitionCommitInfo.getVersionHash() /* committed version hash*/);
             }
         }
     }
@@ -1272,10 +1300,11 @@ public class DatabaseTransactionMgr {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             long tableId = tableCommitInfo.getTableId();
             OlapTable table = (OlapTable) db.getTable(tableId);
+            List<String> validDictCacheColumns = Lists.newArrayList();
+            long maxPartitionVersionTime = -1;
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                 long partitionId = partitionCommitInfo.getPartitionId();
                 long newCommitVersion = partitionCommitInfo.getVersion();
-                long newCommitVersionHash = partitionCommitInfo.getVersionHash();
                 Partition partition = table.getPartition(partitionId);
                 List<MaterializedIndex> allIndices =
                         partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
@@ -1283,32 +1312,24 @@ public class DatabaseTransactionMgr {
                     for (Tablet tablet : index.getTablets()) {
                         for (Replica replica : tablet.getReplicas()) {
                             long lastFailedVersion = replica.getLastFailedVersion();
-                            long lastFailedVersionHash = replica.getLastFailedVersionHash();
                             long newVersion = newCommitVersion;
-                            long newVersionHash = newCommitVersionHash;
                             long lastSucessVersion = replica.getLastSuccessVersion();
-                            long lastSuccessVersionHash = replica.getLastSuccessVersionHash();
                             if (!errorReplicaIds.contains(replica.getId())) {
                                 if (replica.getLastFailedVersion() > 0) {
-                                    // if the replica is a failed replica, then not changing version and version hash
+                                    // if the replica is a failed replica, then not changing version
                                     newVersion = replica.getVersion();
-                                    newVersionHash = replica.getVersionHash();
-                                } else if (!replica.checkVersionCatchUp(partition.getVisibleVersion(),
-                                        partition.getVisibleVersionHash(), true)) {
+                                } else if (!replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
                                     // this means the replica has error in the past, but we did not observe it
                                     // during upgrade, one job maybe in quorum finished state, for example, A,B,C 3 replica
                                     // A,B 's version is 10, C's version is 10 but C' 10 is abnormal should be rollback
                                     // then we will detect this and set C's last failed version to 10 and last success version to 11
                                     // this logic has to be replayed in checkpoint thread
                                     lastFailedVersion = partition.getVisibleVersion();
-                                    lastFailedVersionHash = partition.getVisibleVersionHash();
                                     newVersion = replica.getVersion();
-                                    newVersionHash = replica.getVersionHash();
                                 }
 
                                 // success version always move forward
                                 lastSucessVersion = newCommitVersion;
-                                lastSuccessVersionHash = newCommitVersionHash;
                             } else {
                                 // for example, A,B,C 3 replicas, B,C failed during publish version, then B C will be set abnormal
                                 // all loading will failed, B,C will have to recovery by clone, it is very inefficient and maybe lost data
@@ -1316,25 +1337,33 @@ public class DatabaseTransactionMgr {
                                 // if B is publish successfully in next turn, then B is normal and C will be set abnormal so that quorum is maintained
                                 // and loading will go on.
                                 newVersion = replica.getVersion();
-                                newVersionHash = replica.getVersionHash();
                                 if (newCommitVersion > lastFailedVersion) {
                                     lastFailedVersion = newCommitVersion;
-                                    lastFailedVersionHash = newCommitVersionHash;
                                 }
                             }
-                            replica.updateVersionInfo(newVersion, newVersionHash, lastFailedVersion,
-                                    lastFailedVersionHash, lastSucessVersion, lastSuccessVersionHash);
+                            replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
                         }
                     }
                 } // end for indices
                 long version = partitionCommitInfo.getVersion();
                 long versionTime = partitionCommitInfo.getVersionTime();
-                long versionHash = partitionCommitInfo.getVersionHash();
-                partition.updateVisibleVersionAndVersionHash(version, versionTime, versionHash);
+                partition.updateVisibleVersion(version, versionTime);
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("transaction state {} set partition {}'s version to [{}] and version hash to [{}]",
-                            transactionState, partition.getId(), version, versionHash);
+                    LOG.debug("transaction state {} set partition {}'s version to [{}]",
+                            transactionState, partition.getId(), version);
                 }
+                if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
+                    for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+                        IDictManager.getInstance().removeGlobalDict(tableId, column);
+                    }
+                }
+                if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
+                    validDictCacheColumns = partitionCommitInfo.getValidDictCacheColumns();
+                }
+                maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
+            }
+            for (String column : validDictCacheColumns) {
+                IDictManager.getInstance().updateGlobalDict(tableId, column, maxPartitionVersionTime);
             }
         }
         return true;
@@ -1395,8 +1424,7 @@ public class DatabaseTransactionMgr {
         return timeoutTxns;
     }
 
-    public void removeExpiredAndTimeoutTxns(long currentMillis) {
-        removeExpiredTxns(currentMillis);
+    public void abortTimeoutTxns(long currentMillis) {
         List<Long> timeoutTxns = getTimeoutTxns(currentMillis);
         // abort timeout txns
         for (Long txnId : timeoutTxns) {

@@ -58,7 +58,7 @@ public abstract class AbstractJob implements Writable {
      * In BackupJob, jobId will be generated every time before we call prepareAndSendSnapshotTask();
      * Because prepareAndSendSnapshotTask() may be called several times due to FE restart.
      * And each time this method is called, the snapshot tasks will be sent with (maybe) different
-     * version and version hash. So we have to use different job id to identify the tasks in different batches.
+     * version. So we have to use different job id to identify the tasks in different batches.
      */
     protected long jobId = -1;
 

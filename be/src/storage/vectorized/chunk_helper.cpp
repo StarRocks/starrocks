@@ -1,11 +1,14 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/chunk_helper.h"
 
 #include "column/chunk.h"
 #include "column/column_pool.h"
 #include "column/schema.h"
+#include "column/type_traits.h"
+#include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
+#include "storage/types.h"
 #include "storage/vectorized/type_utils.h"
 #include "util/metrics.h"
 
@@ -93,17 +96,19 @@ ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::Schema& schema)
 
 template <typename T>
 struct ColumnDeleter {
-    void operator()(Column* ptr) const { return_column<T>(down_cast<T*>(ptr)); }
+    ColumnDeleter(uint32_t chunk_size) : chunk_size(chunk_size) {}
+    void operator()(Column* ptr) const { return_column<T>(down_cast<T*>(ptr), chunk_size); }
+    uint32_t chunk_size;
 };
 
 template <typename T, bool force>
-inline std::shared_ptr<T> get_column_ptr() {
+inline std::shared_ptr<T> get_column_ptr(size_t chunk_size) {
     if constexpr (std::negation_v<HasColumnPool<T>>) {
         return std::make_shared<T>();
     } else {
         T* ptr = get_column<T, force>();
         if (LIKELY(ptr != nullptr)) {
-            return std::shared_ptr<T>(ptr, ColumnDeleter<T>());
+            return std::shared_ptr<T>(ptr, ColumnDeleter<T>(chunk_size));
         } else {
             return std::make_shared<T>();
         }
@@ -111,97 +116,60 @@ inline std::shared_ptr<T> get_column_ptr() {
 }
 
 template <typename T, bool force>
-inline std::shared_ptr<DecimalColumnType<T>> get_decimal_column_ptr(int precision, int scale) {
-    auto column = get_column_ptr<T, force>();
+inline std::shared_ptr<DecimalColumnType<T>> get_decimal_column_ptr(int precision, int scale, size_t chunk_size) {
+    auto column = get_column_ptr<T, force>(chunk_size);
     column->set_precision(precision);
     column->set_scale(scale);
     return column;
 }
 
 template <bool force>
-ColumnPtr column_from_pool(const Field& field) {
-    auto Nullable = [&](ColumnPtr c) -> ColumnPtr {
-        return field.is_nullable() ? NullableColumn::create(std::move(c), get_column_ptr<NullColumn, force>()) : c;
-    };
+struct ColumnPtrBuilder {
+    template <FieldType ftype>
+    ColumnPtr operator()(size_t chunk_size, const Field& field, int precision, int scale) {
+        auto nullable = [&](ColumnPtr c) -> ColumnPtr {
+            return field.is_nullable()
+                           ? NullableColumn::create(std::move(c), get_column_ptr<NullColumn, force>(chunk_size))
+                           : c;
+        };
 
+        if constexpr (ftype == OLAP_FIELD_TYPE_ARRAY) {
+            auto elements = field.sub_field(0).create_column();
+            auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
+            auto array = ArrayColumn::create(std::move(elements), offsets);
+            return nullable(array);
+        } else {
+            switch (ftype) {
+            case OLAP_FIELD_TYPE_DECIMAL32:
+                return nullable(get_decimal_column_ptr<Decimal32Column, force>(precision, scale, chunk_size));
+            case OLAP_FIELD_TYPE_DECIMAL64:
+                return nullable(get_decimal_column_ptr<Decimal64Column, force>(precision, scale, chunk_size));
+            case OLAP_FIELD_TYPE_DECIMAL128:
+                return nullable(get_decimal_column_ptr<Decimal128Column, force>(precision, scale, chunk_size));
+            default: {
+                return nullable(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size));
+            }
+            }
+        }
+    }
+};
+
+template <bool force>
+ColumnPtr column_from_pool(const Field& field, size_t chunk_size) {
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
-    switch (field.type()->type()) {
-    case OLAP_FIELD_TYPE_HLL:
-        return Nullable(get_column_ptr<HyperLogLogColumn, force>());
-    case OLAP_FIELD_TYPE_OBJECT:
-        return Nullable(get_column_ptr<BitmapColumn, force>());
-    case OLAP_FIELD_TYPE_PERCENTILE:
-        return Nullable(get_column_ptr<PercentileColumn, force>());
-    case OLAP_FIELD_TYPE_CHAR:
-    case OLAP_FIELD_TYPE_VARCHAR:
-        return Nullable(get_column_ptr<BinaryColumn, force>());
-    case OLAP_FIELD_TYPE_BOOL:
-        return Nullable(get_column_ptr<UInt8Column, force>());
-    case OLAP_FIELD_TYPE_TINYINT:
-        return Nullable(get_column_ptr<Int8Column, force>());
-    case OLAP_FIELD_TYPE_SMALLINT:
-        return Nullable(get_column_ptr<Int16Column, force>());
-    case OLAP_FIELD_TYPE_INT:
-        return Nullable(get_column_ptr<Int32Column, force>());
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
-        return Nullable(get_column_ptr<FixedLengthColumn<uint32_t>, force>());
-    case OLAP_FIELD_TYPE_BIGINT:
-        return Nullable(get_column_ptr<Int64Column, force>());
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-        return Nullable(get_column_ptr<FixedLengthColumn<uint64_t>, force>());
-    case OLAP_FIELD_TYPE_LARGEINT:
-        return Nullable(get_column_ptr<Int128Column, force>());
-    case OLAP_FIELD_TYPE_FLOAT:
-        return Nullable(get_column_ptr<FloatColumn, force>());
-    case OLAP_FIELD_TYPE_DOUBLE:
-        return Nullable(get_column_ptr<DoubleColumn, force>());
-    case OLAP_FIELD_TYPE_DATE:
-        return Nullable(get_column_ptr<FixedLengthColumn<uint24_t>, force>());
-    case OLAP_FIELD_TYPE_DATE_V2:
-        return Nullable(get_column_ptr<DateColumn, force>());
-    case OLAP_FIELD_TYPE_DATETIME:
-        return Nullable(get_column_ptr<FixedLengthColumn<int64_t>, force>());
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-        return Nullable(get_column_ptr<TimestampColumn, force>());
-    case OLAP_FIELD_TYPE_DECIMAL:
-        return Nullable(get_column_ptr<FixedLengthColumn<decimal12_t>, force>());
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
-        return Nullable(get_column_ptr<DecimalColumn, force>());
-    case OLAP_FIELD_TYPE_DECIMAL32:
-        return Nullable(get_decimal_column_ptr<Decimal32Column, force>(precision, scale));
-    case OLAP_FIELD_TYPE_DECIMAL64:
-        return Nullable(get_decimal_column_ptr<Decimal64Column, force>(precision, scale));
-    case OLAP_FIELD_TYPE_DECIMAL128:
-        return Nullable(get_decimal_column_ptr<Decimal128Column, force>(precision, scale));
-    case OLAP_FIELD_TYPE_ARRAY: {
-        // Never allocate array element columns from column-pool, because its max size is unknown.
-        auto elements = field.get_sub_field(0).create_column();
-        auto offsets = get_column_ptr<UInt32Column, force>();
-        auto array = ArrayColumn::create(std::move(elements), offsets);
-        return Nullable(array);
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-    case OLAP_FIELD_TYPE_STRUCT:
-    case OLAP_FIELD_TYPE_MAP:
-    case OLAP_FIELD_TYPE_UNKNOWN:
-    case OLAP_FIELD_TYPE_NONE:
-    case OLAP_FIELD_TYPE_MAX_VALUE:
-        CHECK(false) << "unsupported column type " << field.type()->type();
-        return nullptr;
-    }
-    return nullptr;
+    return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder<force>(), chunk_size, field, precision,
+                                      scale);
 }
 
-Chunk* ChunkHelper::new_chunk_pooled(const vectorized::Schema& schema, size_t n, bool force) {
+Chunk* ChunkHelper::new_chunk_pooled(const vectorized::Schema& schema, size_t chunk_size, bool force) {
     Columns columns;
     columns.reserve(schema.num_fields());
     for (size_t i = 0; i < schema.num_fields(); i++) {
         const vectorized::FieldPtr& f = schema.field(i);
-        auto column = force ? column_from_pool<true>(*f) : column_from_pool<false>(*f);
-        column->reserve(n);
+        auto column = (force && !config::disable_column_pool) ? column_from_pool<true>(*f, chunk_size)
+                                                              : column_from_pool<false>(*f, chunk_size);
+        column->reserve(chunk_size);
         columns.emplace_back(std::move(column));
     }
     return new Chunk(std::move(columns), std::make_shared<vectorized::Schema>(schema));
@@ -290,7 +258,8 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
         vectorized::Offsets& new_offset = new_binary->get_offset();
         vectorized::Bytes& new_bytes = new_binary->get_bytes();
 
-        uint32_t len = tschema.column(field_index).length();
+        // |schema| maybe partial columns in vertical compaction, so get char column length by name.
+        uint32_t len = tschema.column(tschema.field_index(schema.field(field_index)->name())).length();
 
         new_offset.resize(num_rows + 1);
         new_bytes.assign(num_rows * len, 0); // padding 0
@@ -315,6 +284,46 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
         } else {
             new_binary->swap_column(*column);
         }
+    }
+}
+
+struct ColumnBuilder {
+    template <FieldType ftype>
+    ColumnPtr operator()(bool nullable) {
+        [[maybe_unused]] auto NullableIfNeed = [&](ColumnPtr col) -> ColumnPtr {
+            return nullable ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
+        };
+
+        if constexpr (ftype == OLAP_FIELD_TYPE_ARRAY) {
+            CHECK(false) << "array not supported";
+        } else {
+            return NullableIfNeed(CppColumnTraits<ftype>::ColumnType::create());
+        }
+    }
+};
+
+ColumnPtr ChunkHelper::column_from_field_type(FieldType type, bool nullable) {
+    return field_type_dispatch_column(type, ColumnBuilder(), nullable);
+}
+
+ColumnPtr ChunkHelper::column_from_field(const Field& field) {
+    auto NullableIfNeed = [&](ColumnPtr col) -> ColumnPtr {
+        return field.is_nullable() ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
+    };
+
+    auto type = field.type()->type();
+    switch (type) {
+    case OLAP_FIELD_TYPE_DECIMAL32:
+        return NullableIfNeed(Decimal32Column::create(field.type()->precision(), field.type()->scale()));
+    case OLAP_FIELD_TYPE_DECIMAL64:
+        return NullableIfNeed(Decimal64Column::create(field.type()->precision(), field.type()->scale()));
+    case OLAP_FIELD_TYPE_DECIMAL128:
+        return NullableIfNeed(Decimal128Column::create(field.type()->precision(), field.type()->scale()));
+    case OLAP_FIELD_TYPE_ARRAY: {
+        return NullableIfNeed(ArrayColumn::create(column_from_field(field.sub_field(0)), UInt32Column::create()));
+    }
+    default:
+        return NullableIfNeed(column_from_field_type(type, false));
     }
 }
 

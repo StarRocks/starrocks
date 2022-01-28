@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/memtable.h"
 
@@ -16,6 +16,7 @@
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/schema.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 
 namespace starrocks::vectorized {
@@ -51,7 +52,6 @@ static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nke
     tspb.set_keys_type(key_type);
     tspb.set_next_column_unique_id(cid);
     tspb.set_num_short_key_columns(nkey);
-    tspb.set_is_in_memory(false);
     shared_ptr<TabletSchema> ts(new TabletSchema());
     ts->init_from_pb(tspb);
     return ts;
@@ -141,7 +141,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(const string&
     tuple_builder.build(&dtb);
     TDescriptorTable tdesc_tbl = dtb.desc_tbl();
     DescriptorTbl* desc_tbl = nullptr;
-    DescriptorTbl::create(&pool, tdesc_tbl, &desc_tbl);
+    DescriptorTbl::create(&pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
     return &(desc_tbl->get_tuple_descriptor(0)->slots());
 }
 
@@ -232,10 +232,10 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
         indexes.emplace_back(i);
     }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(pchunk.get(), indexes.data(), 0, indexes.size());
+    _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
-    ASSERT_EQ(OLAP_SUCCESS, _mem_table->flush());
-    RowsetSharedPtr rowset = _writer->build();
+    ASSERT_OK(_mem_table->flush());
+    RowsetSharedPtr rowset = *_writer->build();
     unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
     vectorized::RowsetReadOptions rs_opts;
@@ -279,10 +279,10 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
         indexes.emplace_back(i);
     }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(pchunk.get(), indexes.data(), 0, indexes.size());
+    _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
-    ASSERT_EQ(OLAP_SUCCESS, _mem_table->flush());
-    RowsetSharedPtr rowset = _writer->build();
+    ASSERT_OK(_mem_table->flush());
+    RowsetSharedPtr rowset = *_writer->build();
     unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
     vectorized::RowsetReadOptions rs_opts;
@@ -333,10 +333,10 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
         indexes.emplace_back(i);
     }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(chunk.get(), indexes.data(), 0, indexes.size());
+    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
-    ASSERT_EQ(OLAP_SUCCESS, _mem_table->flush());
-    RowsetSharedPtr rowset = _writer->build();
+    ASSERT_OK(_mem_table->flush());
+    RowsetSharedPtr rowset = *_writer->build();
     EXPECT_EQ(1, rowset->rowset_meta()->get_num_delete_files());
 }
 
@@ -365,7 +365,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
         indexes.emplace_back(i);
     }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(chunk.get(), indexes.data(), 0, indexes.size());
+    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
 }
 
@@ -401,7 +401,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
         indexes.emplace_back(i);
     }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(chunk.get(), indexes.data(), 0, indexes.size());
+    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_FALSE(_mem_table->finalize().ok());
 }
 

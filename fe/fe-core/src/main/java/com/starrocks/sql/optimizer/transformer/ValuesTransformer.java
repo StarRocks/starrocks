@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.transformer;
 
@@ -8,11 +8,12 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.relation.ValuesRelation;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -30,12 +31,16 @@ import java.util.Map;
 
 public class ValuesTransformer {
     private final ColumnRefFactory columnRefFactory;
+    private final ConnectContext session;
+    Map<Integer, ExpressionMapping> cteContex;
 
     private final BitSet subqueriesIndex = new BitSet();
     private final List<ColumnRefOperator> outputColumns = Lists.newArrayList();
 
-    ValuesTransformer(ColumnRefFactory columnRefFactory) {
+    ValuesTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, Map<Integer, ExpressionMapping> cteContex) {
         this.columnRefFactory = columnRefFactory;
+        this.session = session;
+        this.cteContex = cteContex;
     }
 
     public LogicalPlan plan(ValuesRelation node) {
@@ -57,6 +62,15 @@ public class ValuesTransformer {
             subqueriesIndex.set(i, !tmp.isEmpty());
             ColumnRefOperator output = columnRefFactory
                     .create(expr, node.getRelationFields().getFieldByIndex(i).getType(), expr.isNullable());
+            if (!output.isNullable()) {
+                // The output column should be nullable, if the expression of any row is nullable.
+                for (List<Expr> row : node.getRows()) {
+                    if (row.get(i).isNullable()) {
+                        output.setNullable(true);
+                        break;
+                    }
+                }
+            }
             outputColumns.add(output);
             if (tmp.isEmpty()) {
                 valuesOutputColumns.add(output);
@@ -111,7 +125,7 @@ public class ValuesTransformer {
 
         ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer();
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
         for (int i = 0; i < node.getOutputExpr().size(); i++) {
             if (!subqueriesIndex.get(i)) {
@@ -120,7 +134,7 @@ public class ValuesTransformer {
             }
 
             Expr output = node.getOutputExpr().get(i);
-            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, output);
+            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, output, cteContex);
             ColumnRefOperator columnRef = SqlToScalarOperatorTranslator
                     .findOrCreateColumnRefForExpr(node.getOutputExpr().get(i), subOpt.getExpressionMapping(),
                             projections, columnRefFactory);

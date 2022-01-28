@@ -31,8 +31,10 @@ set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
     client_cache.cpp
+    local_pass_through_buffer.cpp
     data_stream_mgr.cpp
     data_stream_sender.cpp
+    multi_cast_data_stream_sink.cpp
     datetime_value.cpp
     descriptors.cpp
     exec_env.cpp
@@ -45,27 +47,18 @@ set(RUNTIME_FILES
     result_sink.cpp
     result_buffer_mgr.cpp
     result_writer.cpp
-    row_batch.cpp
     runtime_state.cpp
     string_value.cpp
     thread_resource_mgr.cpp
-    #  timestamp_value.cpp
     decimal_value.cpp
     decimalv2_value.cpp
     large_int_value.cpp
-    tuple.cpp
-    tuple_row.cpp
-    vectorized_row_batch.cpp
     fragment_mgr.cpp
     dpp_sink_internal.cpp
     load_path_mgr.cpp
     types.cpp
-    disk_io_mgr.cc
-    disk_io_mgr_reader_context.cc
-    disk_io_mgr_scan_range.cc 
     mem_tracker.cpp
     data_stream_recvr.cc
-    #  export_task_mgr.cpp
     export_sink.cpp
     load_channel_mgr.cpp
     load_channel.cpp
@@ -96,6 +89,8 @@ set(RUNTIME_FILES
     vectorized/statistic_result_writer.cpp
     hdfs/hdfs_fs_cache.cpp
     runtime_filter_worker.cpp
+    global_dicts.cpp
+    current_thread.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

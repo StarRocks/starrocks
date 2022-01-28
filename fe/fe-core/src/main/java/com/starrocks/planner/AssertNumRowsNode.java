@@ -22,7 +22,6 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.AssertNumRowsElement;
-import com.starrocks.analysis.Expr;
 import com.starrocks.thrift.TAssertNumRowsNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
@@ -47,7 +46,6 @@ public class AssertNumRowsNode extends PlanNode {
         this.assertion = assertNumRowsElement.getAssertion();
         this.children.add(input);
         this.tupleIds.addAll(input.getTupleIds());
-        this.tblRefIds.addAll(input.getTblRefIds());
         this.nullableTupleIds.addAll(input.getNullableTupleIds());
     }
 
@@ -69,19 +67,7 @@ public class AssertNumRowsNode extends PlanNode {
     }
 
     @Override
-    public boolean isVectorized() {
-        for (PlanNode node : getChildren()) {
-            if (!node.isVectorized()) {
-                return false;
-            }
-        }
-
-        for (Expr expr : conjuncts) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
+    public boolean canUsePipeLine() {
+        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 }

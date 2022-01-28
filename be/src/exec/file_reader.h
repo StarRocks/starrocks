@@ -29,10 +29,6 @@
 namespace starrocks {
 
 // NOTE: Deprecated, use `Env::RandomAccessFile` instead.
-
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
 class FileReader {
 public:
     virtual ~FileReader() = default;
@@ -50,7 +46,7 @@ public:
      * if read eof then return Status::OK and length is set 0 and buf is set NULL,
      *  other return readed bytes.
      */
-    virtual Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length) = 0;
+    virtual Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding = 0) = 0;
     virtual int64_t size() = 0;
     virtual Status seek(int64_t position) = 0;
     virtual Status tell(int64_t* position) = 0;

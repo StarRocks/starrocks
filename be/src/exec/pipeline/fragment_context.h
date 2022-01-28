@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -9,23 +9,28 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
 namespace starrocks {
-class MemTracker;
 namespace pipeline {
+
+using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 class FragmentContext {
     friend FragmentContextManager;
 
 public:
     FragmentContext() : _cancel_flag(false) {}
     ~FragmentContext() {
+        auto runtime_state_ptr = _runtime_state;
+        _runtime_filter_hub.close_all_in_filters(runtime_state_ptr.get());
         _drivers.clear();
         close_all_pipelines();
         if (_plan != nullptr) {
@@ -40,10 +45,13 @@ public:
     }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
     const TNetworkAddress& fe_addr() { return _fe_addr; }
+    void set_report_profile() { _is_report_profile = true; }
+    bool is_report_profile() { return _is_report_profile; }
+    void set_profile_mode(const TPipelineProfileMode::type& profile_mode) { _profile_mode = profile_mode; }
+    const TPipelineProfileMode::type& profile_mode() { return _profile_mode; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
-    MemTracker* mem_tracker() const { return _mem_tracker.get(); }
-    void set_mem_tracker(std::unique_ptr<MemTracker> mem_tracker) { _mem_tracker = std::move(mem_tracker); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
+    std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
     void set_runtime_state(std::shared_ptr<RuntimeState>&& runtime_state) { _runtime_state = std::move(runtime_state); }
     ExecNode* plan() const { return _plan; }
     void set_plan(ExecNode* plan) { _plan = plan; }
@@ -68,6 +76,11 @@ public:
         }
         Status* old_status = nullptr;
         if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
+            if (_final_status.load()->is_cancelled()) {
+                LOG(WARNING) << "[Driver] Canceled, query_id=" << print_id(_query_id)
+                             << ", instance_id=" << print_id(_fragment_instance_id)
+                             << ", reason=" << final_status().to_string();
+            }
             _s_status = status;
         }
     }
@@ -90,7 +103,7 @@ public:
 
     Status prepare_all_pipelines() {
         for (auto& pipe : _pipelines) {
-            RETURN_IF_ERROR(pipe->prepare(_runtime_state.get(), _mem_tracker.get()));
+            RETURN_IF_ERROR(pipe->prepare(_runtime_state.get()));
         }
         return Status::OK();
     }
@@ -101,6 +114,13 @@ public:
         }
     }
 
+    RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
+
+    RuntimeFilterPort* runtime_filter_port() { return _runtime_state->runtime_filter_port(); }
+
+    void prepare_pass_through_chunk_buffer();
+    void destroy_pass_through_chunk_buffer();
+
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -108,16 +128,21 @@ private:
     TUniqueId _fragment_instance_id;
     TNetworkAddress _fe_addr;
 
+    bool _is_report_profile = false;
+    // Mode of profile
+    TPipelineProfileMode::type _profile_mode;
+
     // promise used to determine whether fragment finished its execution
     FragmentPromise _finish_promise;
 
-    // never adjust the order of _mem_tracker, _runtime_state, _plan, _pipelines and _drivers, since
-    // _plan depends on _runtime_state and _drivers depends on _mem_tracker and _runtime_state.
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    // never adjust the order of _runtime_state, _plan, _pipelines and _drivers, since
+    // _plan depends on _runtime_state and _drivers depends on _runtime_state.
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     Pipelines _pipelines;
     Drivers _drivers;
+
+    RuntimeFilterHub _runtime_filter_hub;
     // _morsel_queues is mapping from an source_id to its corresponding
     // MorselQueue that is shared among drivers created from the same pipeline,
     // drivers contend for Morsels from MorselQueue.
@@ -147,7 +172,10 @@ public:
 
     FragmentContext* get_or_register(const TUniqueId& fragment_id);
     FragmentContextPtr get(const TUniqueId& fragment_id);
+
+    void register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
     void unregister(const TUniqueId& fragment_id);
+
     void cancel(const Status& status);
 
 private:

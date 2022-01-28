@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
@@ -49,6 +49,7 @@ public abstract class TopDownRewriteTask extends OptimizerTask {
                 newExpressions.addAll(rule.transform(extractExpr, context.getOptimizerContext()));
                 Preconditions.checkState(newExpressions.size() <= 1,
                         "Rewrite rule should provide at most 1 expression");
+
                 if (!newExpressions.isEmpty()) {
                     context.getOptimizerContext().getMemo().replaceRewriteExpression(
                             group, newExpressions.get(0));
@@ -59,11 +60,13 @@ public abstract class TopDownRewriteTask extends OptimizerTask {
 
                     if (rewriteOnlyOnce) {
                         curGroupExpression = group.getFirstLogicalExpression();
+                        break;
                     } else {
                         pushTask(new TopDownRewriteIterativeTask(context, group, candidateRules));
                         return;
                     }
                 }
+
                 extractExpr = binder.next();
             }
         }

@@ -372,78 +372,6 @@ TEST(FixedLengthColumnTest, test_decimal) {
 }
 
 // NOLINTNEXTLINE
-TEST(FixedLengthColumnTest, test_serde) {
-    // int32
-    {
-        auto c1 = DecimalColumn::create();
-
-        c1->append(DecimalV2Value(1));
-        c1->append(DecimalV2Value(2));
-        c1->append(DecimalV2Value(3));
-
-        auto c2 = DecimalColumn::create();
-
-        std::vector<uint8_t> buffer;
-        buffer.resize(c1->serialize_size());
-        c1->serialize_column(buffer.data());
-        c2->deserialize_column(buffer.data());
-
-        for (size_t i = 0; i < c1->size(); i++) {
-            ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
-        }
-    }
-    // decimal
-    {
-        std::vector<int32_t> numbers{1, 2, 3, 4, 5, 6, 7};
-        auto c1 = Int32Column::create();
-        auto c2 = Int32Column::create();
-        c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
-
-        std::vector<uint8_t> buffer;
-        buffer.resize(c1->serialize_size());
-        c1->serialize_column(buffer.data());
-        c2->deserialize_column(buffer.data());
-
-        for (size_t i = 0; i < numbers.size(); i++) {
-            ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
-        }
-    }
-    // double
-    {
-        std::vector<double> numbers{1.0, 2, 3.3, 4, 5.9, 6, 7};
-        auto c1 = DoubleColumn::create();
-        auto c2 = DoubleColumn::create();
-        c1->append_numbers(numbers.data(), numbers.size() * sizeof(double));
-
-        std::vector<uint8_t> buffer;
-        buffer.resize(c1->serialize_size());
-        c1->serialize_column(buffer.data());
-        c2->deserialize_column(buffer.data());
-
-        for (size_t i = 0; i < numbers.size(); i++) {
-            ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
-        }
-    }
-    // nullable int32
-    {
-        std::vector<int32_t> numbers{1, 2, 3, 4, 5, 6, 7};
-        auto c1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        auto c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
-
-        std::vector<uint8_t> buffer;
-        buffer.resize(c1->serialize_size());
-        c1->serialize_column(buffer.data());
-        c2->deserialize_column(buffer.data());
-
-        for (size_t i = 0; i < c1->size(); i++) {
-            ASSERT_EQ(c1->is_null(i), c2->is_null(i));
-            ASSERT_EQ(c1->get(i).get_int32(), c2->get(i).get_int32());
-        }
-    }
-}
-
-// NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_append_numeric) {
     auto c1 = FixedLengthColumn<int64_t>::create();
     auto c2 = FixedLengthColumn<int64_t>::create();
@@ -580,6 +508,37 @@ TEST(FixedLengthColumnTest, test_swap_column) {
     ASSERT_EQ(1, c2->get_data()[0]);
     ASSERT_EQ(2, c2->get_data()[1]);
     ASSERT_EQ(3, c2->get_data()[2]);
+}
+
+TEST(FixedLengthColumnTest, test_update_rows) {
+    auto column = FixedLengthColumn<int32_t>::create();
+    for (int i = 0; i < 100; i++) {
+        column->append(i);
+    }
+
+    ASSERT_EQ(true, column->is_numeric());
+    ASSERT_EQ(100, column->size());
+    ASSERT_EQ(100 * 4, column->byte_size());
+
+    for (int i = 0; i < 100; i++) {
+        ASSERT_EQ(column->get_data()[i], i);
+    }
+
+    auto replace_column = FixedLengthColumn<int32_t>::create();
+    for (int i = 0; i < 10; i++) {
+        replace_column->append(i + 100);
+    }
+
+    std::vector<uint32_t> replace_idxes = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    ASSERT_TRUE(column->update_rows(*replace_column.get(), replace_idxes.data()).ok());
+
+    for (int i = 0; i < 10; i++) {
+        ASSERT_EQ(column->get_data()[i], i + 100);
+    }
+
+    for (int i = 10; i < 100; i++) {
+        ASSERT_EQ(column->get_data()[i], i);
+    }
 }
 
 } // namespace starrocks::vectorized

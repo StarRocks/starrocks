@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
@@ -78,14 +78,5 @@ public class CompoundPredicateOperator extends PredicateOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), type);
-    }
-
-    @Override
-    public boolean isStrictPredicate() {
-        if (type == CompoundType.NOT) {
-            return false; // Always return false for NOT
-        }
-
-        return getChild(0).isStrictPredicate() && getChild(1).isStrictPredicate();
     }
 }

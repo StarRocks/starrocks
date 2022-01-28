@@ -18,9 +18,14 @@
 
 ##############################################################
 # This script is used to compile StarRocks
-# Usage:
-#    sh build.sh        build both Backend and Frontend.
-#    sh build.sh -clean clean previous output and build.
+# Usage: 
+#    sh build.sh --help
+# Eg:
+#    sh build.sh                            build all
+#    sh build.sh  --be                      build Backend without clean
+#    sh build.sh  --fe --clean              clean and build Frontend and Spark Dpp application
+#    sh build.sh  --fe --be --clean         clean and build Frontend, Spark Dpp application and Backend
+#    sh build.sh  --spark-dpp               build Spark DPP application alone
 #
 # You need to make sure all thirdparty libraries have been
 # compiled and installed correctly.
@@ -61,7 +66,6 @@ Usage: $0 <options>
   Eg.
     $0                                      build all
     $0 --be                                 build Backend without clean
-    $0 --be --without-lzo                   build Backend with LZO disable
     $0 --fe --clean                         clean and build Frontend and Spark Dpp application
     $0 --fe --be --clean                    clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                          build Spark DPP application alone
@@ -190,7 +194,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     mkdir -p ${CMAKE_BUILD_DIR}
     cd ${CMAKE_BUILD_DIR}
     ${CMAKE_CMD} .. -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} -DSTARROCKS_HOME=${STARROCKS_HOME} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-                    -DMAKE_TEST=OFF -DWITH_HDFS=${WITH_HDFS} -DWITH_GCOV=${WITH_GCOV} -DUSE_AVX2=$USE_AVX2
+                    -DMAKE_TEST=OFF -DWITH_HDFS=${WITH_HDFS} -DWITH_GCOV=${WITH_GCOV} -DUSE_AVX2=$USE_AVX2 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     time make -j${PARALLEL}
     make install
     cd ${STARROCKS_HOME}
@@ -241,6 +245,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/aliyun_oss_jars/* ${STARROCKS_OUTPUT}/fe/lib/
 
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
@@ -265,6 +270,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
     cp -r -p ${STARROCKS_HOME}/be/output/udf/*.a ${STARROCKS_OUTPUT}/udf/lib/
     cp -r -p ${STARROCKS_HOME}/be/output/udf/include/* ${STARROCKS_OUTPUT}/udf/include/
+    cp -r -p ${STARROCKS_HOME}/gensrc/build/gen_java/udf-class-loader.jar ${STARROCKS_OUTPUT}/be/lib
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
@@ -274,6 +280,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     else
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/amd64 ${STARROCKS_OUTPUT}/be/lib/jvm/
     fi
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/aliyun_oss_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
 fi
 
 cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"

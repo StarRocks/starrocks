@@ -36,18 +36,16 @@ where
     ) ;
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:29: sum(28: expr)
+OUTPUT EXPRS:29: sum
 PARTITION: UNPARTITIONED
 
 RESULT SINK
 
 9:AGGREGATE (merge finalize)
-|  output: sum(29: sum(28: expr))
+|  output: sum(29: sum)
 |  group by:
-|  use vectorized: true
 |
 8:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
@@ -60,11 +58,9 @@ UNPARTITIONED
 7:AGGREGATE (update serialize)
 |  output: sum(28: expr)
 |  group by:
-|  use vectorized: true
 |
 6:Project
 |  <slot 28> : 6: L_EXTENDEDPRICE * 1.0 - 7: L_DISCOUNT
-|  use vectorized: true
 |
 5:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
@@ -72,13 +68,10 @@ UNPARTITIONED
 |  colocate: false, reason:
 |  equal join conjunct: 2: L_PARTKEY = 18: P_PARTKEY
 |  other join predicates: (((((21: P_BRAND = 'Brand#45') AND (24: P_CONTAINER IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG'))) AND ((5: L_QUANTITY >= 5.0) AND (5: L_QUANTITY <= 15.0))) AND (23: P_SIZE <= 5)) OR ((((21: P_BRAND = 'Brand#11') AND (24: P_CONTAINER IN ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK'))) AND ((5: L_QUANTITY >= 15.0) AND (5: L_QUANTITY <= 25.0))) AND (23: P_SIZE <= 10))) OR ((((21: P_BRAND = 'Brand#21') AND (24: P_CONTAINER IN ('LG CASE', 'LG BOX', 'LG PACK', 'LG PKG'))) AND ((5: L_QUANTITY >= 25.0) AND (5: L_QUANTITY <= 35.0))) AND (23: P_SIZE <= 15))
-|  use vectorized: true
 |
 |----4:EXCHANGE
-|       use vectorized: true
 |
 2:EXCHANGE
-use vectorized: true
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -99,7 +92,6 @@ tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=5714286
 avgRowSize=32.0
 numNodes=0
-use vectorized: true
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -114,7 +106,6 @@ HASH_PARTITIONED: 2: L_PARTKEY
 |  <slot 5> : 5: L_QUANTITY
 |  <slot 6> : 6: L_EXTENDEDPRICE
 |  <slot 7> : 7: L_DISCOUNT
-|  use vectorized: true
 |
 0:OlapScanNode
 TABLE: lineitem
@@ -127,6 +118,5 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=26239067
 avgRowSize=67.0
 numNodes=0
-use vectorized: true
 [end]
 

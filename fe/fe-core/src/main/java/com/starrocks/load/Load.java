@@ -66,10 +66,12 @@ import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class Load {
     private static final Logger LOG = LogManager.getLogger(Load.class);
@@ -93,11 +95,12 @@ public class Load {
     public static List<ImportColumnDesc> getSchemaChangeShadowColumnDesc(Table tbl, Map<String, Expr> columnExprMap) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
-            if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
+            if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) && 
+                    !column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 continue;
             }
 
-            String originCol = column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX);
+            String originCol = Column.removeNamePrefix(column.getName());
             if (columnExprMap.containsKey(originCol)) {
                 Expr mappingExpr = columnExprMap.get(originCol);
                 if (mappingExpr != null) {
@@ -135,7 +138,7 @@ public class Load {
         return shadowColumnDescs;
     }
 
-    public static boolean tableSupportsOpColumn(Table tbl) {
+    public static boolean tableSupportOpColumn(Table tbl) {
         return tbl instanceof OlapTable && ((OlapTable) tbl).getKeysType() == KeysType.PRIMARY_KEYS;
     }
 
@@ -174,11 +177,23 @@ public class Load {
      * 5. init slot descs and expr map for load plan
      */
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+            Map<String, Pair<String, List<String>>> columnToHadoopFunction,
+            Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
+            Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
+            boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+            List<String> columnsFromPath) throws UserException {
+        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, analyzer,
+                srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
+                columnsFromPath, false, false);
+    }
+
+    public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
                                    Map<String, Pair<String, List<String>>> columnToHadoopFunction,
                                    Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
-                                   List<String> columnsFromPath) throws UserException {
+                                   List<String> columnsFromPath, boolean isStreamLoadJson,
+                                   boolean partialUpdate) throws UserException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
         Set<String> importColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -208,7 +223,18 @@ public class Load {
         // to the columnExprs will not affect the original columnExprs.
         List<ImportColumnDesc> copiedColumnExprs = Lists.newArrayList(columnExprs);
 
-        if (tbl instanceof OlapTable && ((OlapTable) tbl).getKeysType() == KeysType.PRIMARY_KEYS) {
+        // If user does not specify the file field names, generate it by using base schema of table.
+        // So that the following process can be unified
+        boolean specifyFileFieldNames = copiedColumnExprs.stream().anyMatch(p -> p.isColumn());
+        if (!specifyFileFieldNames) {
+            List<Column> columns = tbl.getBaseSchema();
+            for (Column column : columns) {
+                ImportColumnDesc columnDesc = new ImportColumnDesc(column.getName());
+                copiedColumnExprs.add(columnDesc);
+            }
+        }
+
+        if (tableSupportOpColumn(tbl)) {
             boolean found = false;
             for (ImportColumnDesc c : copiedColumnExprs) {
                 if (c.getColumnName().equals(Load.LOAD_OP_COLUMN)) {
@@ -229,8 +255,8 @@ public class Load {
                                 throw new AnalysisException("load op type string not supported: " + ops);
                             }
                             c.reset(Load.LOAD_OP_COLUMN, new IntLiteral(op));
-                        } else {
-                            throw new AnalysisException("const load op type column should only be upsert/delete");
+                        } else if (!(expr instanceof IntLiteral)) {
+                            throw new AnalysisException("const load op type column should only be upsert(0)/delete(1)");
                         }
                     }
                     LOG.info("load __op column expr: " + (expr != null ? expr.toSql() : "null"));
@@ -238,21 +264,14 @@ public class Load {
                 }
             }
             if (!found) {
-                copiedColumnExprs
-                        .add(new ImportColumnDesc(Load.LOAD_OP_COLUMN, new IntLiteral(TOpType.UPSERT.getValue())));
+                // stream load json will automatically check __op field in json object iff:
+                // 1. streamload using json
+                // 2. __op is not specified
+                copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_OP_COLUMN,
+                        isStreamLoadJson ? null : new IntLiteral(TOpType.UPSERT.getValue())));
             }
         }
 
-        // If user does not specify the file field names, generate it by using base schema of table.
-        // So that the following process can be unified
-        boolean specifyFileFieldNames = copiedColumnExprs.stream().anyMatch(p -> p.isColumn());
-        if (!specifyFileFieldNames) {
-            List<Column> columns = tbl.getBaseSchema();
-            for (Column column : columns) {
-                ImportColumnDesc columnDesc = new ImportColumnDesc(column.getName());
-                copiedColumnExprs.add(columnDesc);
-            }
-        }
         // generate a map for checking easily
         // columnExprMap should be case insensitive map, because column list in load sql is case insensitive.
         // for such case:
@@ -274,16 +293,19 @@ public class Load {
             }
         }
 
-        // check default value
-        for (Column column : tbl.getBaseSchema()) {
-            String columnName = column.getName();
-            if (columnExprMap.containsKey(columnName)) {
-                continue;
+        // partial update do not check default value
+        if (!partialUpdate) {
+            // check default value
+            for (Column column : tbl.getBaseSchema()) {
+                String columnName = column.getName();
+                if (columnExprMap.containsKey(columnName)) {
+                    continue;
+                }
+                Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull()) {
+                    throw new DdlException("Column has no default value. column: " + columnName);
+                }
             }
-            if (column.getDefaultValue() != null || column.isAllowNull()) {
-                continue;
-            }
-            throw new DdlException("Column has no default value. column: " + columnName);
         }
 
         // get shadow column desc when table schema change
@@ -471,6 +493,19 @@ public class Load {
         LOG.debug("after init column, exprMap: {}", exprsByName);
     }
 
+    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs) throws UserException {
+        Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
+        List<Column> ret = new ArrayList<>();
+        for (Column col : tbl.getBaseSchema()) {
+            if (specified.contains(col.getName())) {
+                ret.add(col);
+            } else if (col.isKey()) {
+                throw new DdlException("key column " + col.getName() + " not in partial update columns");
+            }
+        }
+        return ret;
+    }
+
     /**
      * @param excludedColumns: columns that the type should not be inferred from expr.
      *                         Such as, the type of column from path is VARCHAR, whether it is in expr args or not,
@@ -619,9 +654,13 @@ public class Load {
                     if (funcExpr.hasChild(1)) {
                         exprs.add(funcExpr.getChild(1));
                     } else {
-                        if (column.getDefaultValue() != null) {
-                            exprs.add(new StringLiteral(column.getDefaultValue()));
-                        } else {
+                        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                        if (defaultValueType == Column.DefaultValueType.CONST) {
+                            exprs.add(new StringLiteral(column.calculatedDefaultValue()));
+                        } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                            throw new UserException("Column(" + columnName + ") has unsupported default value:"
+                                    + column.getDefaultExpr().getExpr());
+                        } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 exprs.add(NullLiteral.create(Type.VARCHAR));
                             } else {
@@ -638,9 +677,13 @@ public class Load {
                     if (funcExpr.hasChild(1)) {
                         innerIfExprs.add(funcExpr.getChild(1));
                     } else {
-                        if (column.getDefaultValue() != null) {
-                            innerIfExprs.add(new StringLiteral(column.getDefaultValue()));
-                        } else {
+                        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                        if (defaultValueType == Column.DefaultValueType.CONST) {
+                            innerIfExprs.add(new StringLiteral(column.calculatedDefaultValue()));
+                        } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                            throw new UserException("Column(" + columnName + ") has unsupported default value:"
+                                    + column.getDefaultExpr().getExpr());
+                        } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 innerIfExprs.add(NullLiteral.create(Type.VARCHAR));
                             } else {

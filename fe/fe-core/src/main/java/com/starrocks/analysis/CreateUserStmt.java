@@ -24,11 +24,13 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.Auth.PrivLevel;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -147,9 +149,9 @@ public class CreateUserStmt extends DdlStmt {
          */
         if (!Strings.isNullOrEmpty(authPlugin)) {
             authPlugin = authPlugin.toUpperCase();
-            if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equals(authPlugin)) {
+            if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equalsIgnoreCase(authPlugin)) {
                 this.userForAuthPlugin = this.authString;
-            } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(authPlugin)) {
+            } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equalsIgnoreCase(authPlugin)) {
                 // in this case, authString is password
                 // convert password to hashed password
                 if (!Strings.isNullOrEmpty(authString)) {
@@ -161,6 +163,16 @@ public class CreateUserStmt extends DdlStmt {
                     }
                 } else {
                     scramblePassword = new byte[0];
+                }
+            } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(authPlugin) &&
+                    Catalog.getCurrentCatalog().getAuth().isSupportKerberosAuth()) {
+                // In kerberos authentication, userForAuthPlugin represents the user principal realm.
+                // If user realm is not specified when creating user, the service principal realm will be used as
+                // the user principal realm by default.
+                if (authString != null) {
+                    userForAuthPlugin = this.authString;
+                } else {
+                    userForAuthPlugin = Config.authentication_kerberos_service_principal.split("@")[1];
                 }
             } else {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, authPlugin);

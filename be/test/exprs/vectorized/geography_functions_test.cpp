@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -369,6 +369,47 @@ TEST_F(geographyFunctionsTest, st_containsGeneralTest) {
     auto bools = ColumnHelper::cast_to<TYPE_BOOLEAN>(res);
     ASSERT_FALSE(res->is_null(0));
     ASSERT_TRUE(bools->get_data()[0]);
+    GeoFunctions::st_contains_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+}
+
+TEST_F(geographyFunctionsTest, st_containsWithUnexpectedInputTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+
+    ASSERT_EQ(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    std::string polygon_wkt = "POLYGON ((10 10, 50 10, 50 50, 10 50, 10 10))";
+    auto polygon_column = BinaryColumn::create();
+    polygon_column->append(polygon_wkt);
+    columns.emplace_back(polygon_column);
+    ctx->impl()->set_constant_columns(columns);
+    GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+    auto result1 = GeoFunctions::st_from_wkt(ctx.get(), columns);
+
+    columns.clear();
+    std::string point_wkt = "POINT (25 25)";
+    auto point_column = BinaryColumn::create();
+    point_column->append(point_wkt);
+    columns.emplace_back(point_column);
+    ctx->impl()->set_constant_columns(columns);
+    GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+    auto result2 = GeoFunctions::st_from_wkt(ctx.get(), columns);
+
+    columns.clear();
+    auto varchar_column = ColumnHelper::cast_to<TYPE_VARCHAR>(result1);
+    ASSERT_TRUE(varchar_column->size() == 1);
+    ASSERT_FALSE(varchar_column->is_null(0));
+    auto value = varchar_column->get_data()[0];
+    std::string string_value(value.get_data(), value.get_size());
+    string_value.append("A");
+    auto input_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(string_value), varchar_column->size());
+
+    columns.emplace_back(input_column);
+    columns.emplace_back(result2);
+    ctx->impl()->set_constant_columns(columns);
+    GeoFunctions::st_contains_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+    auto res = GeoFunctions::st_contains(ctx.get(), columns);
+    ASSERT_FALSE(res->only_null());
     GeoFunctions::st_contains_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 }
 

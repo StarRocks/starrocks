@@ -2,7 +2,7 @@
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/kudu/blob/master/src/kudu/common/key_encoder.h
 
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 // Some code copy from Kudu
 // Licensed to the Apache Software Foundation (ASF) under one
@@ -33,7 +33,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "gutil/endian.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {

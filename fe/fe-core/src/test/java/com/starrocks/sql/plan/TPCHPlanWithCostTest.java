@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
@@ -97,9 +97,7 @@ public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testTPCH17() {
-        connectContext.getSessionVariable().setEnableNewPlannerPushDownJoinToAgg(true);
         runFileUnitTest("tpchcost/q17");
-        connectContext.getSessionVariable().setEnableNewPlannerPushDownJoinToAgg(false);
     }
 
     @Test

@@ -183,9 +183,9 @@ public class DatabaseTest {
 
         List<Column> column = Lists.newArrayList();
         column.add(column2);
-        table.setIndexMeta(new Long(1), "test", column, 1, 1, shortKeyColumnCount,
+        table.setIndexMeta(1, "test", column, 1, 1, shortKeyColumnCount,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setIndexMeta(new Long(1), "test", column, 1, 1, shortKeyColumnCount, TStorageType.COLUMN,
+        table.setIndexMeta(1, "test", column, 1, 1, shortKeyColumnCount, TStorageType.COLUMN,
                 KeysType.AGG_KEYS);
         Deencapsulation.setField(table, "baseIndexId", 1);
         table.addPartition(partition);

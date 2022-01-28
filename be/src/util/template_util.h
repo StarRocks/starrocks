@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef IMPALA_UTIL_TEMPLATE_UTIL_H
-#define IMPALA_UTIL_TEMPLATE_UTIL_H
+#pragma once
 
 #include <boost/type_traits/is_arithmetic.hpp>
 #include <boost/type_traits/is_float.hpp>
@@ -52,5 +51,3 @@
 /// float or double.
 #define ENABLE_IF_FLOAT(type_param, return_type) \
     typename boost::enable_if_c<!boost::is_integral<type_param>::value, return_type>::type
-
-#endif

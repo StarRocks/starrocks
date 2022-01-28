@@ -54,8 +54,8 @@ public class BackendsProcDir implements ProcDirInterface {
             .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
             .add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
             .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
-            .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status")
-            .build();
+            .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
+            .add("DataUsedPct").build();
 
     public static final int HOSTNAME_INDEX = 3;
 
@@ -171,6 +171,21 @@ public class BackendsProcDir implements ProcDirInterface {
             backendInfo.add(backend.getHeartbeatErrMsg());
             backendInfo.add(backend.getVersion());
             backendInfo.add(new Gson().toJson(backend.getBackendStatus()));
+
+            // data total
+            long dataTotalB = backend.getDataTotalCapacityB();
+            Pair<Double, String> dataTotalCapacity = DebugUtil.getByteUint(dataTotalB);
+            backendInfo.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(dataTotalCapacity.first) + " " +
+                    dataTotalCapacity.second);
+
+            // data used percent
+            double dataUsed = 0.0;
+            if (dataTotalB <= 0) {
+                dataUsed = 0.0;
+            } else {
+                dataUsed = (double) dataUsedB * 100 / dataTotalB;
+            }
+            backendInfo.add(String.format("%.2f", dataUsed) + " %");
 
             comparableBackendInfos.add(backendInfo);
         }

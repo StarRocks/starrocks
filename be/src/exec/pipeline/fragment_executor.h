@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -10,6 +10,7 @@ class DataSink;
 class ExecEnv;
 class RuntimeProfile;
 class TPlanFragmentExecParams;
+class RuntimeState;
 
 namespace pipeline {
 class FragmentContext;
@@ -21,8 +22,8 @@ public:
     Status execute(ExecEnv* exec_env);
 
 private:
-    void _convert_data_sink_to_operator(const TPlanFragmentExecParams& params, PipelineBuilderContext* context,
-                                        DataSink* datasink);
+    void _decompose_data_sink_to_operator(RuntimeState* state, PipelineBuilderContext* context,
+                                          const TDataSink& t_datasink, DataSink* datasink);
     QueryContext* _query_ctx = nullptr;
     FragmentContext* _fragment_ctx = nullptr;
 };

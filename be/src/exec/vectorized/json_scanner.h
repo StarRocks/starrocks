@@ -1,22 +1,15 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
+#include "column/nullable_column.h"
 #include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <rapidjson/document.h>
-DIAGNOSTIC_POP
-
-#include <rapidjson/error/en.h>
-#include <rapidjson/stringbuffer.h>
-#include <rapidjson/writer.h>
-
 #include "env/env.h"
 #include "env/env_stream_pipe.h"
 #include "env/env_util.h"
 #include "exec/vectorized/file_scanner.h"
 #include "runtime/stream_load/load_stream_mgr.h"
+#include "simdjson.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
 
@@ -24,6 +17,7 @@ namespace starrocks::vectorized {
 
 struct JsonPath;
 class JsonReader;
+class JsonParser;
 class JsonScanner : public FileScanner {
 public:
     JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
@@ -73,8 +67,8 @@ private:
 // return other error Status if encounter other errors.
 class JsonReader {
 public:
-    JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner,
-               std::shared_ptr<SequentialFile> file);
+    JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner, std::shared_ptr<SequentialFile> file,
+               bool strict_mode);
     ~JsonReader();
 
     Status read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs);
@@ -82,13 +76,28 @@ public:
     Status close();
 
 private:
+    Status _read_chunk_from_document_stream(Chunk* chunk, int32_t rows_to_read,
+                                            const std::vector<SlotDescriptor*>& slot_descs);
+    Status _read_chunk_from_array(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs);
+
     Status _read_and_parse_json();
-    void _construct_column(const rapidjson::Value& objectValue, Column* column, const TypeDescriptor& type_desc);
+
+    Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk,
+                          const std::vector<SlotDescriptor*>& slot_descs);
+
+    Status _filter_row_with_jsonroot(simdjson::ondemand::object* row);
+
+    Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
+                             const std::string& col_name);
+
+    // Reorder column to accelerate simdjson iteration.
+    void _reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdjson::ondemand::object& obj);
 
 private:
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;
     JsonScanner* _scanner = nullptr;
+    bool _strict_mode = false;
 
     std::shared_ptr<SequentialFile> _file;
     int _next_line;
@@ -99,18 +108,58 @@ private:
     std::vector<std::vector<JsonPath>> _json_paths;
     std::vector<JsonPath> _root_paths;
 
-    rapidjson::Document _origin_json_doc;  // origin json document object from parsed json string
-    rapidjson::Value* _json_doc = nullptr; // _json_doc equals _final_json_doc iff not set `json_root`
+    std::unique_ptr<uint8_t[]> _json_binary_ptr;
 
+    std::unique_ptr<JsonParser> _parser;
+    bool _empty_parser = true;
     // only used in unit test.
     // TODO: The semantics of Streaming Load And Routine Load is non-consistent.
     //       Import a json library supporting streaming parse.
 #if BE_TEST
     size_t _buf_size = 1048576; // 1MB, the buf size for parsing json in unit test
-#else
-    size_t _buf_size = 104857600; // 100MB, the max size rapidjson can parse
-#endif
     raw::RawVector<char> _buf;
+#endif
+};
+
+class JsonParser {
+public:
+    JsonParser() = default;
+    virtual ~JsonParser() = default;
+    // parse initiates the parser. The inner iterator would point to the first object to be returned.
+    virtual Status parse(uint8_t* data, size_t len, size_t allocated) = 0;
+    // get returns the object pointed by the inner iterator.
+    virtual Status get_current(simdjson::ondemand::object* row) = 0;
+    // next forwards the inner iterator.
+    virtual Status advance() = 0;
+};
+
+class JsonDocumentStreamParser : public JsonParser {
+public:
+    Status parse(uint8_t* data, size_t len, size_t allocated) override;
+    Status get_current(simdjson::ondemand::object* row) override;
+    Status advance() override;
+
+private:
+    uint8_t* _data;
+    simdjson::ondemand::parser _parser;
+
+    simdjson::ondemand::document_stream _doc_stream;
+    simdjson::ondemand::document_stream::iterator _doc_stream_itr;
+};
+
+class JsonArrayParser : public JsonParser {
+public:
+    Status parse(uint8_t* data, size_t len, size_t allocated) override;
+    Status get_current(simdjson::ondemand::object* row) override;
+    Status advance() override;
+
+private:
+    uint8_t* _data;
+    simdjson::ondemand::parser _parser;
+
+    simdjson::ondemand::document _doc;
+    simdjson::ondemand::array _array;
+    simdjson::ondemand::array_iterator _array_itr;
 };
 
 } // namespace starrocks::vectorized

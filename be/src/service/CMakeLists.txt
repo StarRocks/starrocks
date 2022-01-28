@@ -31,6 +31,7 @@ add_library(Service
     brpc_service.cpp
     http_service.cpp
     internal_service.cpp
+    mem_hook.cpp
 )
 
 add_executable(starrocks_be

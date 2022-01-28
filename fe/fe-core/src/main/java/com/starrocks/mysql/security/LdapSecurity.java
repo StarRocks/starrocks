@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.mysql.security;
 
@@ -34,6 +34,7 @@ public class LdapSecurity {
             ctx = new InitialDirContext(env);
             return true;
         } catch (Exception e) {
+            LOG.warn("check ldap password failed, dn = {}, password = {}", dn, password, e);
         } finally {
             if (ctx != null) {
                 try {

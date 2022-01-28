@@ -74,8 +74,8 @@ public class AgentTaskQueue {
         LOG.debug("add task: type[{}], backend[{}], signature[{}]", type, backendId, signature);
         if (type == TTaskType.PUSH) {
             PushTask pushTask = (PushTask) task;
-            LOG.debug("push task info: version[{}], version hash[{}]",
-                    pushTask.getVersion(), pushTask.getVersionHash());
+            LOG.debug("push task info: version[{}]",
+                    pushTask.getVersion());
         }
         return true;
     }
@@ -103,9 +103,9 @@ public class AgentTaskQueue {
 
     /*
      * we cannot define a push task with only 'backendId', 'signature' and 'TTaskType'
-     * add version, versionHash and TPushType to help
+     * add version, and TPushType to help
      */
-    public static synchronized void removePushTask(long backendId, long signature, long version, long versionHash,
+    public static synchronized void removePushTask(long backendId, long signature, long version,
                                                    TPushType pushType, TTaskType taskType) {
         if (!tasks.contains(backendId, taskType)) {
             return;
@@ -125,6 +125,41 @@ public class AgentTaskQueue {
         signatureMap.remove(signature);
         LOG.debug("remove task: type[{}], backend[{}], signature[{}]", taskType, backendId, signature);
         --taskNum;
+    }
+
+    /*
+     * we cannot define a push task with only 'backendId', 'signature' and 'TTaskType'
+     * add version, and TPushType to help
+     */
+    public static synchronized void removePushTaskByTransactionId(long backendId, long transactionId,
+                                                   TPushType pushType, TTaskType taskType) {
+        if (!tasks.contains(backendId, taskType)) {
+            return;
+        }
+
+        Map<Long, AgentTask> signatureMap = tasks.get(backendId, taskType);
+        if (signatureMap == null) {
+            return;
+        }
+
+        int numOfRemove = 0;
+        Iterator<Long> signatureIt = signatureMap.keySet().iterator();
+        while (signatureIt.hasNext()) {
+            Long signature = signatureIt.next();
+            AgentTask agentTask = signatureMap.get(signature);
+            if (agentTask instanceof PushTask) {
+                PushTask pushTask = (PushTask) agentTask;
+                if (pushTask.getPushType() == pushType && pushTask.getTransactionId() == transactionId) {
+                    signatureIt.remove();
+                    --taskNum;
+                    ++numOfRemove;
+                }
+            }
+        }
+
+        LOG.info("remove task: type[{}], backend[{}], transactionId[{}], numOfRemove[{}]",
+                taskType, backendId, transactionId, numOfRemove);
+
     }
 
     public static synchronized void removeTaskOfType(TTaskType type, long signature) {

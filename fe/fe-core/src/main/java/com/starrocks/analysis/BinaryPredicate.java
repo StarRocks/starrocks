@@ -22,18 +22,14 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.Reference;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -48,9 +44,6 @@ import java.util.Objects;
 /**
  * Most predicates with two operands..
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class BinaryPredicate extends Predicate implements Writable {
     private static final Logger LOG = LogManager.getLogger(BinaryPredicate.class);
 
@@ -63,28 +56,34 @@ public class BinaryPredicate extends Predicate implements Writable {
     public static final com.google.common.base.Predicate<BinaryPredicate> IS_EQ_PREDICATE =
             arg -> arg.getOp() == Operator.EQ;
 
+    public static final com.google.common.base.Predicate<BinaryPredicate> IS_EQ_NULL_PREDICATE =
+            arg -> arg.getOp() == Operator.EQ_FOR_NULL;
+
     // true if this BinaryPredicate is inferred from slot equivalences, false otherwise.
     private boolean isInferred_ = false;
 
     public enum Operator {
-        EQ("=", "eq", TExprOpcode.EQ),
-        NE("!=", "ne", TExprOpcode.NE),
-        LE("<=", "le", TExprOpcode.LE),
-        GE(">=", "ge", TExprOpcode.GE),
-        LT("<", "lt", TExprOpcode.LT),
-        GT(">", "gt", TExprOpcode.GT),
-        EQ_FOR_NULL("<=>", "eq_for_null", TExprOpcode.EQ_FOR_NULL);
+        EQ("=", "eq", TExprOpcode.EQ, false),
+        NE("!=", "ne", TExprOpcode.NE, false),
+        LE("<=", "le", TExprOpcode.LE, true),
+        GE(">=", "ge", TExprOpcode.GE, true),
+        LT("<", "lt", TExprOpcode.LT, true),
+        GT(">", "gt", TExprOpcode.GT, true),
+        EQ_FOR_NULL("<=>", "eq_for_null", TExprOpcode.EQ_FOR_NULL, false);
 
         private final String description;
         private final String name;
         private final TExprOpcode opcode;
+        private final boolean monotonic;
 
         Operator(String description,
                  String name,
-                 TExprOpcode opcode) {
+                 TExprOpcode opcode,
+                 boolean monotonic) {
             this.description = description;
             this.name = name;
             this.opcode = opcode;
+            this.monotonic = monotonic;
         }
 
         @Override
@@ -149,10 +148,16 @@ public class BinaryPredicate extends Predicate implements Writable {
             return this == EQ || this == EQ_FOR_NULL;
         }
 
-        ;
+        public boolean isMonotonic() {
+            return monotonic;
+        }
 
         public boolean isUnequivalence() {
             return this == NE;
+        }
+
+        public boolean isNotRangeComparison() {
+            return isEquivalence() || isUnequivalence();
         }
     }
 
@@ -180,36 +185,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         op = other.op;
         slotIsleft = other.slotIsleft;
         isInferred_ = other.isInferred_;
-    }
-
-    public boolean isInferred() {
-        return isInferred_;
-    }
-
-    public void setIsInferred() {
-        isInferred_ = true;
-    }
-
-    public static void initBuiltins(FunctionSet functionSet) {
-        for (Type t : Type.getSupportedTypes()) {
-            if (t.isNull() || t.isPseudoType()) {
-                continue; // NULL is handled through type promotion.
-            }
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.EQ.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.NE.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.LE.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.GE.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.LT.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.GT.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.EQ_FOR_NULL.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-        }
     }
 
     @Override
@@ -263,6 +238,11 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     @Override
+    public String toDigestImpl() {
+        return getChild(0).toDigest() + " " + op.toString() + " " + getChild(1).toDigest();
+    }
+
+    @Override
     public String explainImpl() {
         return getChild(0).explain() + " " + op.toString() + " " + getChild(1).explain();
     }
@@ -288,9 +268,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         }
         Preconditions.checkState(match != null);
         Preconditions.checkState(match.getReturnType().getPrimitiveType() == PrimitiveType.BOOLEAN);
-        //todo(dhc): should add oppCode
-        //this.vectorOpcode = match.opcode;
-        LOG.debug(debugString() + " opcode: " + vectorOpcode);
     }
 
     private static boolean canCompareDate(PrimitiveType t1, PrimitiveType t2) {
@@ -406,20 +383,8 @@ public class BinaryPredicate extends Predicate implements Writable {
 
         this.opcode = op.getOpcode();
         String opName = op.getName();
-        fn = getBuiltinFunction(analyzer, opName, collectChildReturnTypes(), Function.CompareMode.IS_SUPERTYPE_OF);
-        Preconditions.checkArgument(fn != null, String.format("Unsupported binary predicate %s", toSql()));
 
-        // determine selectivity
-        Reference<SlotRef> slotRefRef = new Reference<SlotRef>();
-        if (op == Operator.EQ && isSingleColumnPredicate(slotRefRef,
-                null) && slotRefRef.getRef().getNumDistinctValues() > 0) {
-            Preconditions.checkState(slotRefRef.getRef() != null);
-            selectivity = 1.0 / slotRefRef.getRef().getNumDistinctValues();
-            selectivity = Math.max(0, Math.min(1, selectivity));
-        } else {
-            // TODO: improve using histograms, once they show up
-            selectivity = Expr.DEFAULT_SELECTIVITY;
-        }
+        selectivity = Expr.DEFAULT_SELECTIVITY;
     }
 
     public boolean isValidDate(LiteralExpr expr) {
@@ -619,35 +584,20 @@ public class BinaryPredicate extends Predicate implements Writable {
         return 31 * super.hashCode() + Objects.hashCode(op);
     }
 
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     public boolean isNullable() {
         return op != Operator.EQ_FOR_NULL;
-    }
-
-    @Override
-    public boolean isStrictPredicate() {
-        if (op == Operator.EQ_FOR_NULL) {
-            return false;
-        }
-        // To exclude 1 = 1;
-        return getChild(0).unwrapSlotRef() != null || getChild(1).unwrapSlotRef() != null;
     }
 
     /**
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitBinaryPredicate(this, context);
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return op.isMonotonic();
     }
 }

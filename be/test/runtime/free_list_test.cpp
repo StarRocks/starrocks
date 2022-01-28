@@ -26,13 +26,11 @@
 #include <string>
 
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
 TEST(FreeListTest, Basic) {
-    MemTracker tracker;
-    MemPool pool(&tracker);
+    MemPool pool;
     FreeList list;
 
     int allocated_size;

@@ -149,7 +149,8 @@ public enum ErrorCode {
             "Number of partitions in unpartitioned table is not 1"),
     ERR_NO_ALTER_OPERATION(5023, new byte[] {'H', 'Y', '0', '0', '0'},
             "No operation in alter statement"),
-    ERR_EXECUTE_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'}, "Execute timeout"),
+    ERR_QUERY_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Query timeout. Increase the query_timeout session variable and retry"),
     ERR_FAILED_WHEN_INSERT(5025, new byte[] {'H', 'Y', '0', '0', '0'}, "Failed when INSERT execute"),
     ERR_UNSUPPORTED_TYPE_IN_CTAS(5026, new byte[] {'H', 'Y', '0', '0', '0'},
             "Unsupported type '%s' in create table as select statement"),
@@ -251,7 +252,9 @@ public enum ErrorCode {
     ERROR_REFRESH_EXTERNAL_TABLE_FAILED(5074, new byte[] {'4', '2', '0', '0', '0'},
             "refresh external table failed: %s"),
     ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW(5075, new byte[] {'4', '2', '0', '0', '0'},
-            "Create table like does not support create view.");
+            "Create table like does not support create view."),
+    ERROR_SET_CONFIG_FAILED(5076, new byte[] {'4', '2', '0', '0', '0'},
+            "set config failed: %s");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "env/env_memory.h"
 
@@ -6,27 +6,9 @@
 #include <gtest/gtest.h>
 
 #include "gutil/strings/join.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
-
-#define CHECK_OK(stmt)                                \
-    do {                                              \
-        Status __status = (stmt);                     \
-        CHECK(__status.ok()) << __status.to_string(); \
-    } while (0)
-
-#define ASSERT_OK(stmt)                                    \
-    do {                                                   \
-        Status __status = (stmt);                          \
-        ASSERT_TRUE(_status.ok()) << __status.to_string(); \
-    }
-
-#define EXPECT_STATUS(expect, stmt)                                                          \
-    do {                                                                                     \
-        Status exp = (expect);                                                               \
-        Status real = (stmt);                                                                \
-        EXPECT_EQ(exp.code(), real.code()) << exp.to_string() << " vs " << real.to_string(); \
-    } while (0)
 
 class EnvMemoryTest : public ::testing::Test {
 protected:

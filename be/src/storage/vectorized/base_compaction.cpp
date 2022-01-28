@@ -1,7 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/base_compaction.h"
 
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.cpp"
+#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/trace.h"
 
@@ -10,11 +13,7 @@ namespace starrocks::vectorized {
 BaseCompaction::BaseCompaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
         : Compaction(mem_tracker, std::move(tablet)) {}
 
-BaseCompaction::~BaseCompaction() {
-    DCHECK_EQ(0, _mem_tracker->consumption());
-    // release the memory statistics just for safe
-    _mem_tracker->release(_mem_tracker->consumption());
-}
+BaseCompaction::~BaseCompaction() {}
 
 Status BaseCompaction::compact() {
     if (!_tablet->init_succeeded()) {
@@ -31,6 +30,9 @@ Status BaseCompaction::compact() {
     RETURN_IF_ERROR(pick_rowsets_to_compact());
     TRACE("rowsets picked");
     TRACE_COUNTER_INCREMENT("input_rowsets_count", _input_rowsets.size());
+
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     // 2. do base compaction, merge rowsets
     RETURN_IF_ERROR(do_compaction());
@@ -93,7 +95,7 @@ Status BaseCompaction::pick_rowsets_to_compact() {
 
     if (cumulative_base_ratio > base_cumulative_delta_ratio) {
         LOG(INFO) << "satisfy the base compaction policy. tablet=" << _tablet->full_name()
-                  << ", cumualtive_total_size=" << cumulative_total_size << ", base_size=" << base_size
+                  << ", cumulative_total_size=" << cumulative_total_size << ", base_size=" << base_size
                   << ", cumulative_base_ratio=" << cumulative_base_ratio
                   << ", policy_ratio=" << base_cumulative_delta_ratio;
         return Status::OK();
@@ -120,7 +122,7 @@ Status BaseCompaction::pick_rowsets_to_compact() {
 Status BaseCompaction::_check_rowset_overlapping(const std::vector<RowsetSharedPtr>& rowsets) {
     for (auto& rs : rowsets) {
         if (rs->rowset_meta()->is_segments_overlapping()) {
-            return Status::InternalError("base compaction segments overlappinng error.");
+            return Status::InternalError("base compaction segments overlapping error.");
         }
     }
     return Status::OK();

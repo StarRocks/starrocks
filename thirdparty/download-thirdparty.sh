@@ -239,6 +239,7 @@ if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.3.3" ]; then
 fi
 if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.4.0" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.4.0-for-starrocks2.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch 
     touch $PATCHED_MARK
 fi
 cd -
@@ -330,4 +331,38 @@ if [ ! -f $PATCHED_MARK ] && [ $PROTOBUF_SOURCE == "protobuf-3.5.1" ]; then
 fi
 cd -
 echo "Finished patching $PROTOBUF_SOURCE"
+
+# patch tcmalloc_hook
+cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $GPERFTOOLS_SOURCE = "gperftools-gperftools-2.7" ]; then
+    patch -p1 < $TP_PATCH_DIR/tcmalloc_hook.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $GPERFTOOLS_SOURCE"
+
+# patch mariadb-connector-c-3.2.5
+cd $TP_SOURCE_DIR/$MARIADB_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; then
+    patch -p0 < $TP_PATCH_DIR/mariadb-connector-c-3.2.5-for-starrocks-static-link.patch
+    touch $PATCHED_MARK
+    echo "Finished patching $MARIADB_SOURCE"
+else
+    echo "$MARIADB_SOURCE not patched"
+fi
+
+cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.9.179" ]; then
+    if [ ! -f prefetch_crt_dep_ok ]; then
+        bash ./prefetch_crt_dependency.sh
+        touch prefetch_crt_dep_ok
+    fi
+    patch -p0 < $TP_PATCH_DIR/aws-sdk-cpp-1.9.179.patch    
+    touch $PATCHED_MARK
+    echo "Finished patching $AWS_SDK_CPP_SOURCE"
+else
+    echo "$AWS_SDK_CPP_SOURCE not patched"
+fi
+
+cd -
 

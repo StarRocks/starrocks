@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TASK_ENGINE_PUBLISH_VERSION_TASK_H
-#define STARROCKS_BE_SRC_OLAP_TASK_ENGINE_PUBLISH_VERSION_TASK_H
+#pragma once
 
 #include "gen_cpp/AgentService_types.h"
 #include "storage/olap_define.h"
@@ -33,7 +32,7 @@ public:
     EnginePublishVersionTask(TPublishVersionRequest& publish_version_req, vector<TTabletId>* error_tablet_ids);
     ~EnginePublishVersionTask() override = default;
 
-    OLAPStatus finish() override;
+    Status finish() override;
 
 private:
     const TPublishVersionRequest& _publish_version_req;
@@ -41,5 +40,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_TASK_ENGINE_PUBLISH_VERSION_TASK_H

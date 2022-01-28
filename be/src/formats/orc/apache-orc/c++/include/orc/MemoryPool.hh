@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef MEMORYPOOL_HH_
-#define MEMORYPOOL_HH_
+#pragma once
 
 #include <memory>
 
@@ -141,5 +140,3 @@ extern template class DataBuffer<unsigned char>;
 #pragma clang diagnostic pop
 #endif
 } // namespace orc
-
-#endif /* MEMORYPOOL_HH_ */

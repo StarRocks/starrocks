@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -14,25 +14,26 @@
 namespace starrocks::vectorized {
 class TableFunctionNode final : public ExecNode {
 public:
-    TableFunctionNode(ObjectPool* pool, const TPlanNode& node, const DescriptorTbl& desc);
+    TableFunctionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& desc);
 
     ~TableFunctionNode() override;
 
-    Status init(const TPlanNode& node, RuntimeState* state) override;
+    Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status reset(RuntimeState* state) override;
     Status close(RuntimeState* state) override;
 
-    // Only for compatibility
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
-
     Status build_chunk(ChunkPtr* chunk, const std::vector<ColumnPtr>& output_columns);
 
     Status get_next_input_chunk(RuntimeState* state, bool* eos);
 
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
+
 private:
+    const TPlanNode& _tnode;
     const TableFunction* _table_function;
 
     //Slots of output by table function

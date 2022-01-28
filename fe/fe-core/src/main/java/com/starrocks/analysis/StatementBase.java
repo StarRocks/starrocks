@@ -38,12 +38,18 @@ public abstract class StatementBase implements ParseNode {
 
     private String clusterName;
 
+    public enum ExplainLevel {
+        NORMAL,
+        LOGICAL,
+        // True if the describe_stmt print verbose information, if `isVerbose` is true, `isExplain` must be set to true.
+        VERBOSE,
+        // True if the describe_stmt print costs information, if `isCosts` is true, `isExplain` must be set to true.
+        COST,
+    }
+    private ExplainLevel explainLevel;
+
     // True if this QueryStmt is the top level query from an EXPLAIN <query>
     protected boolean isExplain = false;
-    // True if the describe_stmt print verbose information, if `isVerbose` is true, `isExplain` must be set to true.
-    protected boolean isVerbose = false;
-    // True if the describe_stmt print costs information, if `isCosts` is true, `isExplain` must be set to true.
-    protected boolean isCosts = false;
 
     /////////////////////////////////////////
     // BEGIN: Members that need to be reset()
@@ -98,22 +104,21 @@ public abstract class StatementBase implements ParseNode {
         return analyzer != null;
     }
 
-    public void setIsExplain(boolean isExplain, boolean isVerbose, boolean isCosts) {
+    public void setIsExplain(boolean isExplain, ExplainLevel explainLevel) {
         this.isExplain = isExplain;
-        this.isVerbose = isVerbose;
-        this.isCosts = isCosts;
+        this.explainLevel = explainLevel;
     }
 
     public boolean isExplain() {
         return isExplain;
     }
 
-    public boolean isVerbose() {
-        return isVerbose;
-    }
-
-    public boolean isCosts() {
-        return isCosts;
+    public ExplainLevel getExplainLevel() {
+        if (explainLevel == null) {
+            return ExplainLevel.NORMAL;
+        } else {
+            return explainLevel;
+        }
     }
 
     /*

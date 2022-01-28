@@ -26,25 +26,22 @@
 
 namespace starrocks {
 
-BaseTablet::BaseTablet(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
-        : _mem_tracker(mem_tracker),
-          _state(tablet_meta->tablet_state()),
-          _tablet_meta(tablet_meta),
-          _data_dir(data_dir) {
+BaseTablet::BaseTablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
+        : _state(tablet_meta->tablet_state()), _tablet_meta(tablet_meta), _data_dir(data_dir) {
     _gen_tablet_path();
 }
 
-OLAPStatus BaseTablet::set_tablet_state(TabletState state) {
+Status BaseTablet::set_tablet_state(TabletState state) {
     if (_tablet_meta->tablet_state() == TABLET_SHUTDOWN && state != TABLET_SHUTDOWN) {
         LOG(WARNING) << "could not change tablet state from shutdown to " << state;
-        return OLAP_ERR_META_INVALID_ARGUMENT;
+        return Status::InvalidArgument(fmt::format("Change tablet state from SHUTODWN to {} is forbidden", state));
     }
     _tablet_meta->set_tablet_state(state);
     _state = state;
     if (state == TABLET_SHUTDOWN) {
         on_shutdown();
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 void BaseTablet::_gen_tablet_path() {
@@ -55,6 +52,10 @@ void BaseTablet::_gen_tablet_path() {
         path = path_util::join_path_segments(path, std::to_string(_tablet_meta->schema_hash()));
         _tablet_path = path;
     }
+}
+
+std::string BaseTablet::tablet_id_path() const {
+    return _tablet_path.substr(0, _tablet_path.rfind('/'));
 }
 
 } /* namespace starrocks */

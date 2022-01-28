@@ -20,8 +20,7 @@
  * limitations under the License.
  */
 
-#ifndef ORC_STATISTICS_HH
-#define ORC_STATISTICS_HH
+#pragma once
 
 #include "orc/Type.hh"
 #include "orc/Vector.hh"
@@ -407,5 +406,3 @@ public:
     virtual uint32_t getNumberOfRowIndexStats(uint32_t columnId) const = 0;
 };
 } // namespace orc
-
-#endif

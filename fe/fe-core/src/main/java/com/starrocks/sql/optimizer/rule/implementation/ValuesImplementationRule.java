@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
@@ -25,7 +25,8 @@ public class ValuesImplementationRule extends ImplementationRule {
                 valuesOperator.getColumnRefSet(),
                 valuesOperator.getRows(),
                 valuesOperator.getLimit(),
-                valuesOperator.getPredicate());
+                valuesOperator.getPredicate(),
+                valuesOperator.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalValues, Collections.emptyList()));
     }
 }

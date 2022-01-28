@@ -23,10 +23,6 @@
 
 namespace starrocks {
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 Status SortExecExprs::init(const TSortInfo& sort_info, ObjectPool* pool) {
     return init(sort_info.ordering_exprs,
                 sort_info.__isset.sort_tuple_slot_exprs ? &sort_info.sort_tuple_slot_exprs : nullptr, pool);
@@ -52,11 +48,12 @@ Status SortExecExprs::init(const std::vector<ExprContext*>& lhs_ordering_expr_ct
 }
 
 Status SortExecExprs::prepare(RuntimeState* state, const RowDescriptor& child_row_desc,
-                              const RowDescriptor& output_row_desc, MemTracker* expr_mem_tracker) {
+                              const RowDescriptor& output_row_desc) {
+    _runtime_state = state;
     if (_materialize_tuple) {
-        RETURN_IF_ERROR(Expr::prepare(_sort_tuple_slot_expr_ctxs, state, child_row_desc, expr_mem_tracker));
+        RETURN_IF_ERROR(Expr::prepare(_sort_tuple_slot_expr_ctxs, state, child_row_desc));
     }
-    RETURN_IF_ERROR(Expr::prepare(_lhs_ordering_expr_ctxs, state, output_row_desc, expr_mem_tracker));
+    RETURN_IF_ERROR(Expr::prepare(_lhs_ordering_expr_ctxs, state, output_row_desc));
     return Status::OK();
 }
 
@@ -70,11 +67,21 @@ Status SortExecExprs::open(RuntimeState* state) {
 }
 
 void SortExecExprs::close(RuntimeState* state) {
+    if (_is_closed) {
+        return;
+    }
+    _is_closed = true;
     if (_materialize_tuple) {
         Expr::close(_sort_tuple_slot_expr_ctxs, state);
     }
     Expr::close(_lhs_ordering_expr_ctxs, state);
     Expr::close(_rhs_ordering_expr_ctxs, state);
+}
+
+SortExecExprs::~SortExecExprs() {
+    if (_runtime_state != nullptr) {
+        close(_runtime_state);
+    }
 }
 
 } //namespace starrocks

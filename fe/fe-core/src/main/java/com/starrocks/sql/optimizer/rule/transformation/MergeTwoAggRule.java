@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -37,7 +37,7 @@ import java.util.Map;
 public class MergeTwoAggRule extends TransformationRule {
     private static final List<String> ALLOW_MERGE_AGGREGATE_FUNCTIONS = Lists.newArrayList(FunctionSet.SUM,
             FunctionSet.MAX, FunctionSet.MIN, FunctionSet.BITMAP_UNION, FunctionSet.HLL_UNION,
-            FunctionSet.PERCENTILE_UNION);
+            FunctionSet.PERCENTILE_UNION, FunctionSet.ANY_VALUE);
 
     public MergeTwoAggRule() {
         super(RuleType.TF_MERGE_TWO_AGG_RULE, Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(
@@ -80,15 +80,18 @@ public class MergeTwoAggRule extends TransformationRule {
                 return false;
             }
 
-            // max/min on grouping column is equals with direct aggregate on column
-            if (!aggCallMapBelow.containsKey(ref) && !FunctionSet.MAX.equalsIgnoreCase(call.getFnName()) &&
-                    !FunctionSet.MIN.equalsIgnoreCase(call.getFnName())) {
-                return false;
-            }
-
-            if (!aggCallMapBelow.get(ref).getFnName().equalsIgnoreCase(call.getFnName()) ||
-                    aggCallMapBelow.get(ref).isDistinct()) {
-                return false;
+            if (!aggCallMapBelow.containsKey(ref)) {
+                // max/min on grouping column is equals with direct aggregate on column
+                if (!FunctionSet.MAX.equalsIgnoreCase(call.getFnName()) &&
+                        !FunctionSet.MIN.equalsIgnoreCase(call.getFnName()) &&
+                        !FunctionSet.ANY_VALUE.equalsIgnoreCase(call.getFnName())) {
+                    return false;
+                }
+            } else {
+                if (!aggCallMapBelow.get(ref).getFnName().equalsIgnoreCase(call.getFnName()) ||
+                        aggCallMapBelow.get(ref).isDistinct()) {
+                    return false;
+                }
             }
         }
 
@@ -112,8 +115,9 @@ public class MergeTwoAggRule extends TransformationRule {
 
             CallOperator newFn;
             if (aggCallMapBelow.containsKey(ref)) {
-                newFn = new CallOperator(fn.getFnName(), fn.getType(), aggCallMapBelow.get(ref).getChildren(),
-                        fn.getFunction(), fn.isDistinct());
+                CallOperator belowOp = aggCallMapBelow.get(ref);
+                newFn = new CallOperator(fn.getFnName(), fn.getType(), belowOp.getChildren(),
+                        belowOp.getFunction(), fn.isDistinct());
             } else {
                 newFn = new CallOperator(fn.getFnName(), fn.getType(), Lists.newArrayList(ref), fn.getFunction(),
                         fn.isDistinct());

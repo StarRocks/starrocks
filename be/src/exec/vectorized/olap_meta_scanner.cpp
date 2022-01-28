@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/olap_meta_scanner.h"
 
@@ -8,7 +8,8 @@
 namespace starrocks {
 namespace vectorized {
 
-OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent) : _parent(parent), _is_open(false) {}
+OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent)
+        : _parent(parent), _runtime_state(nullptr), _is_open(false) {}
 
 Status OlapMetaScanner::init(RuntimeState* runtime_state, const OlapMetaScannerParams& params) {
     _runtime_state = runtime_state;
@@ -31,7 +32,7 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     _reader_params.tablet = _tablet;
     _reader_params.version = Version(0, _version);
     _reader_params.runtime_state = _runtime_state;
-    _reader_params.chunk_size = config::vector_chunk_size;
+    _reader_params.chunk_size = _runtime_state->chunk_size();
     _reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
     _reader_params.desc_tbl = &_parent->_desc_tbl;
 
@@ -67,7 +68,7 @@ Status OlapMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
     std::string err;
-    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash, true, &err);
+    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
     if (!_tablet) {
         std::stringstream ss;
         ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash

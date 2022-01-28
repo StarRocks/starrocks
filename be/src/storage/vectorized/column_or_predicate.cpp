@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/column_or_predicate.h"
 
@@ -26,9 +26,9 @@ void ColumnOrPredicate::evaluate_or(const Column* column, uint8_t* selection, ui
     }
 }
 
-bool ColumnOrPredicate::zone_map_filter(const Datum& min, const Datum& max) const {
+bool ColumnOrPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     for (const ColumnPredicate* child : _child) {
-        RETURN_IF(child->zone_map_filter(min, max), true);
+        RETURN_IF(child->zone_map_filter(detail), true);
     }
     return _child.empty();
 }

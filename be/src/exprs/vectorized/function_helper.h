@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/type_traits.h"
-#include "util/types.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -39,6 +38,9 @@ public:
                                               NullColumnPtr* produce_null_column);
 
     static NullColumnPtr union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2);
+
+    // merge a column and null_column and generate a column with null values.
+    static ColumnPtr merge_column_and_null_column(ColumnPtr&& column, NullColumnPtr&& null_column);
 };
 
 #define DEFINE_VECTORIZED_FN(NAME) static ColumnPtr NAME(FunctionContext* context, const Columns& columns)

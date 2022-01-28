@@ -23,8 +23,11 @@
 
 #include <thread>
 
+#include "column/column_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "exec/pipeline/pipeline_driver_dispatcher.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -33,7 +36,6 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
-#include "runtime/disk_io_mgr.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/heartbeat_flags.h"
@@ -50,6 +52,7 @@
 #include "runtime/thread_resource_mgr.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
@@ -61,10 +64,11 @@
 #include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
+
 namespace starrocks {
 
 // Calculate the total memory limit of all load tasks on this BE
-static int64_t calc_process_max_load_memory(int64_t process_mem_limit) {
+static int64_t calc_max_load_memory(int64_t process_mem_limit) {
     if (process_mem_limit == -1) {
         // no limit
         return -1;
@@ -72,6 +76,42 @@ static int64_t calc_process_max_load_memory(int64_t process_mem_limit) {
     int32_t max_load_memory_percent = config::load_process_max_memory_limit_percent;
     int64_t max_load_memory_bytes = process_mem_limit * max_load_memory_percent / 100;
     return std::min<int64_t>(max_load_memory_bytes, config::load_process_max_memory_limit_bytes);
+}
+
+static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
+    int64_t limit = config::compaction_max_memory_limit;
+    int64_t percent = config::compaction_max_memory_limit_percent;
+
+    if (config::compaction_memory_limit_per_worker < 0) {
+        config::compaction_memory_limit_per_worker = 2147483648; // 2G
+    }
+
+    if (process_mem_limit < 0) {
+        return -1;
+    }
+    if (limit < 0) {
+        limit = process_mem_limit;
+    }
+    if (percent < 0 || percent > 100) {
+        percent = 100;
+    }
+    return std::min<int64_t>(limit, process_mem_limit * percent / 100);
+}
+
+static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
+    int64_t limit = ParseUtil::parse_mem_spec(config::consistency_max_memory_limit);
+    int64_t percent = config::consistency_max_memory_limit_percent;
+
+    if (process_mem_limit < 0) {
+        return -1;
+    }
+    if (limit < 0) {
+        limit = process_mem_limit;
+    }
+    if (percent < 0 || percent > 100) {
+        percent = 100;
+    }
+    return std::min<int64_t>(limit, process_mem_limit * percent / 100);
 }
 
 Status ExecEnv::init(ExecEnv* env, const std::vector<StorePath>& store_paths) {
@@ -89,15 +129,16 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
     _thread_mgr = new ThreadResourceMgr();
-    _thread_pool = new PriorityThreadPool(config::doris_scanner_thread_pool_thread_num,
+    _thread_pool = new PriorityThreadPool("olap_scan_io", // olap scan io
+                                          config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
-    LOG(INFO) << strings::Substitute("[PIPELINE] IO thread pool: thread_num=$0, queue_size=$1",
-                                     config::pipeline_io_thread_pool_thread_num,
-                                     config::pipeline_io_thread_pool_queue_size);
-    _pipeline_io_thread_pool = new PriorityThreadPool(config::pipeline_io_thread_pool_thread_num,
-                                                      config::pipeline_io_thread_pool_queue_size);
+    _pipeline_scan_io_thread_pool = new PriorityThreadPool("pip_scan_io", // pipeline scan io
+                                                           config::pipeline_scan_thread_pool_thread_num <= 0
+                                                                   ? std::thread::hardware_concurrency()
+                                                                   : config::pipeline_scan_thread_pool_thread_num,
+                                                           config::pipeline_scan_thread_pool_queue_size);
     _num_scan_operators = 0;
-    _etl_thread_pool = new PriorityThreadPool(config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
+    _etl_thread_pool = new PriorityThreadPool("elt", config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _fragment_mgr = new FragmentMgr(this);
 
     std::unique_ptr<ThreadPool> driver_dispatcher_thread_pool;
@@ -106,7 +147,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
         max_thread_num = config::pipeline_exec_thread_pool_thread_num;
     }
     LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", max_thread_num);
-    RETURN_IF_ERROR(ThreadPoolBuilder("driver_dispatcher_thread_pool")
+    RETURN_IF_ERROR(ThreadPoolBuilder("pip_dispatcher") // pipeline dispatcher
                             .set_min_threads(0)
                             .set_max_threads(max_thread_num)
                             .set_max_queue_size(1000)
@@ -117,8 +158,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
-    _disk_io_mgr = new DiskIoMgr();
     _broker_mgr = new BrokerMgr(this);
+    _bfd_parser = BfdParser::create();
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache();
@@ -150,12 +191,26 @@ const std::string& ExecEnv::token() const {
     return _master_info->token;
 }
 
+class SetMemTrackerForColumnPool {
+public:
+    SetMemTrackerForColumnPool(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
+
+    template <typename Pool>
+    void operator()() {
+        Pool::singleton()->set_mem_tracker(_mem_tracker);
+    }
+
+private:
+    MemTracker* _mem_tracker = nullptr;
+};
+
 Status ExecEnv::init_mem_tracker() {
     int64_t bytes_limit = 0;
-    bool is_percent = false;
     std::stringstream ss;
     // --mem_limit="" means no memory limit
-    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit, &is_percent);
+    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit);
+    // use 90% of mem_limit as the soft mem limit of BE
+    bytes_limit = bytes_limit * 0.9;
     if (bytes_limit <= 0) {
         ss << "Failed to parse mem limit from '" + config::mem_limit + "'.";
         return Status::InternalError(ss.str());
@@ -176,24 +231,33 @@ Status ExecEnv::init_mem_tracker() {
     _mem_tracker = new MemTracker(MemTracker::PROCESS, bytes_limit, "process");
     _query_pool_mem_tracker = new MemTracker(MemTracker::QUERY_POOL, bytes_limit * 0.9, "query_pool", _mem_tracker);
 
-    int64_t load_mem_limit = calc_process_max_load_memory(_mem_tracker->limit());
+    int64_t load_mem_limit = calc_max_load_memory(_mem_tracker->limit());
     _load_mem_tracker = new MemTracker(MemTracker::LOAD, load_mem_limit, "load", _mem_tracker);
-    _tablet_meta_mem_tracker = new MemTracker(-1, "tablet_meta", _mem_tracker);
-    _compaction_mem_tracker = new MemTracker(-1, "compaction", _mem_tracker);
+    // Metadata statistics memory statistics do not use new mem statistics framework with hook
+    _tablet_meta_mem_tracker = new MemTracker(-1, "tablet_meta", nullptr);
+
+    int64_t compaction_mem_limit = calc_max_compaction_memory(_mem_tracker->limit());
+    _compaction_mem_tracker = new MemTracker(compaction_mem_limit, "compaction", _mem_tracker);
     _schema_change_mem_tracker = new MemTracker(-1, "schema_change", _mem_tracker);
-    _snapshot_mem_tracker = new MemTracker(-1, "snapshot", _mem_tracker);
     _column_pool_mem_tracker = new MemTracker(-1, "column_pool", _mem_tracker);
-    _central_column_pool_mem_tracker = new MemTracker(-1, "central_column_pool", _column_pool_mem_tracker);
-    _local_column_pool_mem_tracker = new MemTracker(-1, "local_column_pool", _column_pool_mem_tracker);
     _page_cache_mem_tracker = new MemTracker(-1, "page_cache", _mem_tracker);
-    _update_mem_tracker = new MemTracker(bytes_limit * 0.6, "update", _mem_tracker);
+    _update_mem_tracker = new MemTracker(bytes_limit * 0.6, "update", nullptr);
+    _chunk_allocator_mem_tracker = new MemTracker(-1, "chunk_allocator", _mem_tracker);
+    _clone_mem_tracker = new MemTracker(-1, "clone", _mem_tracker);
+    int64_t consistency_mem_limit = calc_max_consistency_memory(_mem_tracker->limit());
+    _consistency_mem_tracker = new MemTracker(consistency_mem_limit, "consistency", _mem_tracker);
+
+    ChunkAllocator::init_instance(_chunk_allocator_mem_tracker, config::chunk_reserved_bytes_limit);
+
+    GlobalTabletSchemaMap::Instance()->set_mem_tracker(_tablet_meta_mem_tracker);
+    SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
+    vectorized::ForEach<vectorized::ColumnPoolList>(op);
 
     return Status::OK();
 }
 
 Status ExecEnv::_init_mem_tracker() {
     // Initialize global memory limit.
-    bool is_percent = false;
     std::stringstream ss;
 
     if (!BitUtil::IsPowerOf2(config::min_buffer_size)) {
@@ -201,26 +265,7 @@ Status ExecEnv::_init_mem_tracker() {
         return Status::InternalError(ss.str());
     }
 
-    int64_t buffer_pool_limit = ParseUtil::parse_mem_spec(config::buffer_pool_limit, &is_percent);
-    if (buffer_pool_limit <= 0) {
-        ss << "Invalid --buffer_pool_limit value, must be a percentage or "
-              "positive bytes value or percentage: "
-           << config::buffer_pool_limit;
-        return Status::InternalError(ss.str());
-    }
-    buffer_pool_limit = BitUtil::RoundDown(buffer_pool_limit, config::min_buffer_size);
-
-    int64_t clean_pages_limit = ParseUtil::parse_mem_spec(config::buffer_pool_clean_pages_limit, &is_percent);
-    if (clean_pages_limit <= 0) {
-        ss << "Invalid --buffer_pool_clean_pages_limit value, must be a percentage or "
-              "positive bytes value or percentage: "
-           << config::buffer_pool_clean_pages_limit;
-        return Status::InternalError(ss.str());
-    }
-
-    RETURN_IF_ERROR(_disk_io_mgr->init(_mem_tracker));
-
-    int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit, &is_percent);
+    int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit);
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
                      << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
@@ -232,7 +277,7 @@ Status ExecEnv::_init_mem_tracker() {
     return Status::OK();
 }
 
-void ExecEnv::_destory() {
+void ExecEnv::_destroy() {
     if (_runtime_filter_worker) {
         delete _runtime_filter_worker;
         _runtime_filter_worker = nullptr;
@@ -257,10 +302,6 @@ void ExecEnv::_destory() {
         delete _stream_load_executor;
         _stream_load_executor = nullptr;
     }
-    if (_storage_engine) {
-        delete _storage_engine;
-        _storage_engine = nullptr;
-    }
     if (_brpc_stub_cache) {
         delete _brpc_stub_cache;
         _brpc_stub_cache = nullptr;
@@ -280,10 +321,6 @@ void ExecEnv::_destory() {
     if (_bfd_parser) {
         delete _bfd_parser;
         _bfd_parser = nullptr;
-    }
-    if (_disk_io_mgr) {
-        delete _disk_io_mgr;
-        _disk_io_mgr = nullptr;
     }
     if (_load_path_mgr) {
         delete _load_path_mgr;
@@ -305,9 +342,9 @@ void ExecEnv::_destory() {
         delete _etl_thread_pool;
         _etl_thread_pool = nullptr;
     }
-    if (_pipeline_io_thread_pool) {
-        delete _pipeline_io_thread_pool;
-        _pipeline_io_thread_pool = nullptr;
+    if (_pipeline_scan_io_thread_pool) {
+        delete _pipeline_scan_io_thread_pool;
+        _pipeline_scan_io_thread_pool = nullptr;
     }
     if (_thread_pool) {
         delete _thread_pool;
@@ -317,6 +354,18 @@ void ExecEnv::_destory() {
         delete _thread_mgr;
         _thread_mgr = nullptr;
     }
+    if (_consistency_mem_tracker) {
+        delete _consistency_mem_tracker;
+        _consistency_mem_tracker = nullptr;
+    }
+    if (_clone_mem_tracker) {
+        delete _clone_mem_tracker;
+        _clone_mem_tracker = nullptr;
+    }
+    if (_chunk_allocator_mem_tracker) {
+        delete _chunk_allocator_mem_tracker;
+        _chunk_allocator_mem_tracker = nullptr;
+    }
     if (_update_mem_tracker) {
         delete _update_mem_tracker;
         _update_mem_tracker = nullptr;
@@ -325,21 +374,9 @@ void ExecEnv::_destory() {
         delete _page_cache_mem_tracker;
         _page_cache_mem_tracker = nullptr;
     }
-    if (_local_column_pool_mem_tracker) {
-        delete _local_column_pool_mem_tracker;
-        _local_column_pool_mem_tracker = nullptr;
-    }
-    if (_central_column_pool_mem_tracker) {
-        delete _central_column_pool_mem_tracker;
-        _central_column_pool_mem_tracker = nullptr;
-    }
     if (_column_pool_mem_tracker) {
         delete _column_pool_mem_tracker;
         _column_pool_mem_tracker = nullptr;
-    }
-    if (_snapshot_mem_tracker) {
-        delete _snapshot_mem_tracker;
-        _snapshot_mem_tracker = nullptr;
     }
     if (_schema_change_mem_tracker) {
         delete _schema_change_mem_tracker;
@@ -397,7 +434,7 @@ void ExecEnv::_destory() {
 }
 
 void ExecEnv::destroy(ExecEnv* env) {
-    env->_destory();
+    env->_destroy();
 }
 
 void ExecEnv::set_storage_engine(StorageEngine* storage_engine) {

@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Optional;
 import java.util.OptionalDouble;
@@ -63,17 +64,23 @@ public class BinaryPredicateStatisticCalculator {
         StatisticRangeValues columnRange = StatisticRangeValues.from(columnStatistic);
         StatisticRangeValues intersectRange = columnRange.intersect(predicateRange);
 
-        double predicateFactor = 1.0 - columnRange.overlapPercentWith(intersectRange);
-        double rowCount = statistics.getOutputRowCount() * predicateFactor;
+        double intersectFactor = columnRange.overlapPercentWith(intersectRange);
+        // Column range is infinite if column data type is String or column statistics type is UNKNOWN.
+        // If column range is not both infinite, we can calculate the overlap accurately, but if column range is infinite,
+        // we assume intersect range is exist in the infinite range，the estimated value of overlap percent will be larger,
+        // and the percent of not overlap will be estimated too small.
+        if (intersectRange.isBothInfinite()) {
+            // If intersect column range is infinite, it need to adjust the intersect factor
+            intersectFactor = intersectFactor != 1.0 ? intersectFactor :
+                    StatisticsEstimateCoefficient.OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT;
+        }
+        double predicateFactor = 1.0 - intersectFactor;
+
+        double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
         // TODO(ywb) use origin column distinct values as new column statistics now, we should re-compute column
         //  distinct values actually.
-        ColumnStatistic newEstimateColumnStatistics = ColumnStatistic.builder().
-                setAverageRowSize(columnStatistic.getAverageRowSize()).
-                setMaxValue(intersectRange.getHigh()).
-                setMinValue(intersectRange.getLow()).
-                setDistinctValuesCount(columnStatistic.getDistinctValuesCount()).
-                setType(columnStatistic.getType()).
-                build();
+        ColumnStatistic newEstimateColumnStatistics =
+                ColumnStatistic.buildFrom(columnStatistic).setNullsFraction(0).build();
         return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
                 addColumnStatistic(operator, newEstimateColumnStatistics).build()).
                 orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
@@ -97,16 +104,21 @@ public class BinaryPredicateStatisticCalculator {
         return estimatePredicateRange(columnRefOperator, columnStatistic, predicateRange, statistics);
     }
 
-    public static Statistics estimateColumnToColumnComparison(
-            ColumnStatistic leftColumn,
-            ColumnStatistic rightColumn,
-            BinaryPredicateOperator predicate, Statistics statistics) {
+    public static Statistics estimateColumnToColumnComparison(ScalarOperator leftColumn,
+                                                              ColumnStatistic leftColumnStatistic,
+                                                              ScalarOperator rightColumn,
+                                                              ColumnStatistic rightColumnStatistic,
+                                                              BinaryPredicateOperator predicate,
+                                                              Statistics statistics) {
         switch (predicate.getBinaryType()) {
             case EQ:
+                return estimateColumnEqualToColumn(leftColumn, leftColumnStatistic,
+                        rightColumn, rightColumnStatistic, statistics, false);
             case EQ_FOR_NULL:
-                return estimateColumnEqualToColumn(leftColumn, rightColumn, statistics);
+                return estimateColumnEqualToColumn(leftColumn, leftColumnStatistic,
+                        rightColumn, rightColumnStatistic, statistics, true);
             case NE:
-                return estimateColumnNotEqualToColumn(leftColumn, rightColumn, statistics);
+                return estimateColumnNotEqualToColumn(leftColumnStatistic, rightColumnStatistic, statistics);
             case LE:
             case GE:
             case LT:
@@ -119,15 +131,54 @@ public class BinaryPredicateStatisticCalculator {
         }
     }
 
-    public static Statistics estimateColumnEqualToColumn(
-            ColumnStatistic leftColumn,
-            ColumnStatistic rightColumn,
-            Statistics statistics) {
-        double leftDistinctValuesCount = leftColumn.getDistinctValuesCount();
-        double rightDistinctValuesCount = rightColumn.getDistinctValuesCount();
+    public static Statistics estimateColumnEqualToColumn(ScalarOperator leftColumn,
+                                                         ColumnStatistic leftColumnStatistic,
+                                                         ScalarOperator rightColumn,
+                                                         ColumnStatistic rightColumnStatistic,
+                                                         Statistics statistics,
+                                                         boolean isEqualForNull) {
+        double leftDistinctValuesCount = leftColumnStatistic.getDistinctValuesCount();
+        double rightDistinctValuesCount = rightColumnStatistic.getDistinctValuesCount();
         double selectivity = 1.0 / Math.max(1, Math.max(leftDistinctValuesCount, rightDistinctValuesCount));
-        double rowCount = statistics.getOutputRowCount() * selectivity;
-        return Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build();
+        double rowCount = statistics.getOutputRowCount() * selectivity *
+                (isEqualForNull ? 1 :
+                        (1 - leftColumnStatistic.getNullsFraction()) * (1 - rightColumnStatistic.getNullsFraction()));
+
+        StatisticRangeValues intersect = StatisticRangeValues.from(leftColumnStatistic)
+                .intersect(StatisticRangeValues.from(rightColumnStatistic));
+        ColumnStatistic.Builder newEstimateColumnStatistics = ColumnStatistic.builder().
+                setMaxValue(intersect.getHigh()).
+                setMinValue(intersect.getLow()).
+                setDistinctValuesCount(intersect.getDistinctValues());
+
+        ColumnStatistic newLeftStatistic;
+        ColumnStatistic newRightStatistic;
+        if (!isEqualForNull) {
+            newEstimateColumnStatistics.setNullsFraction(0);
+            newLeftStatistic = newEstimateColumnStatistics
+                    .setAverageRowSize(leftColumnStatistic.getAverageRowSize()).build();
+            newRightStatistic = newEstimateColumnStatistics
+                    .setAverageRowSize(rightColumnStatistic.getAverageRowSize()).build();
+        } else {
+            newLeftStatistic = newEstimateColumnStatistics
+                    .setAverageRowSize(leftColumnStatistic.getAverageRowSize())
+                    .setNullsFraction(leftColumnStatistic.getNullsFraction())
+                    .build();
+            newRightStatistic = newEstimateColumnStatistics
+                    .setAverageRowSize(rightColumnStatistic.getAverageRowSize())
+                    .setNullsFraction(rightColumnStatistic.getNullsFraction())
+                    .build();
+        }
+
+        Statistics.Builder builder = Statistics.buildFrom(statistics);
+        if (leftColumn instanceof ColumnRefOperator) {
+            builder.addColumnStatistic((ColumnRefOperator) leftColumn, newLeftStatistic);
+        }
+        if (rightColumn instanceof ColumnRefOperator) {
+            builder.addColumnStatistic((ColumnRefOperator) rightColumn, newRightStatistic);
+        }
+        builder.setOutputRowCount(rowCount);
+        return builder.build();
     }
 
     public static Statistics estimateColumnNotEqualToColumn(
@@ -143,7 +194,8 @@ public class BinaryPredicateStatisticCalculator {
         if (leftColumn.isUnknown() || rightColumn.isUnknown()) {
             rowCount = rowCount * 0.8;
         } else {
-            rowCount = rowCount * (1.0 - selectivity);
+            rowCount = rowCount * (1.0 - selectivity)
+                    * (1 - leftColumn.getNullsFraction()) * (1 - rightColumn.getNullsFraction());
         }
         return Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build();
     }
@@ -155,8 +207,17 @@ public class BinaryPredicateStatisticCalculator {
         StatisticRangeValues columnRange = StatisticRangeValues.from(columnStatistic);
         StatisticRangeValues intersectRange = columnRange.intersect(predicateRange);
 
+        // If column range is not both infinite, we can calculate the overlap accurately, but if column range is infinite,
+        // we assume intersect range is exist in the infinite range，the estimated value of overlap percent will be larger.
+        // eg.
+        //    column_string = 'xxx'
+        // column range of column_string is (NEGATIVE_INFINITY, POSITIVE_INFINITY, distinct_val),
+        // and column range of 'xxx' is also (NEGATIVE_INFINITY, POSITIVE_INFINITY, 1) because of we can not get min/max
+        // value of the string type. we assume that 'xxx' is exist in the column range,
+        // so the predicate factor :
+        //          pf = 1.0 / distinct_val.
         double predicateFactor = columnRange.overlapPercentWith(intersectRange);
-        double rowCount = statistics.getOutputRowCount() * predicateFactor;
+        double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
         // TODO(ywb) use origin column distinct values as new column statistics now, we should re-compute column
         //  distinct values actually.
         ColumnStatistic newEstimateColumnStatistics = ColumnStatistic.builder().

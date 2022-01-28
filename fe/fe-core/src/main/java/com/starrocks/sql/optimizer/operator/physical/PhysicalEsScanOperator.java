@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.operator.physical;
 
@@ -9,6 +9,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -24,8 +25,9 @@ public class PhysicalEsScanOperator extends PhysicalScanOperator {
                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                   List<EsShardPartitions> selectedIndex,
                                   long limit,
-                                  ScalarOperator predicate) {
-        super(OperatorType.PHYSICAL_ES_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate);
+                                  ScalarOperator predicate,
+                                  Projection projection) {
+        super(OperatorType.PHYSICAL_ES_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate, projection);
         this.selectedIndex = selectedIndex;
     }
 

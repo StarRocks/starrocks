@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer;
 
@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
+import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
@@ -26,10 +27,15 @@ public class OptExpression {
 
     private LogicalProperty property;
     private Statistics statistics;
+    // The number of plans in the entire search space，this parameter is valid only when cbo_use_nth_exec_plan configured.
+    // Default value is 0
+    private int planCount = 0;
 
     // For easily convert a GroupExpression to OptExpression when pattern match
     // we just use OptExpression to wrap GroupExpression
     private GroupExpression groupExpression;
+    // required properties for children.
+    private List<PhysicalPropertySet> requiredProperties;
 
     public OptExpression() {
         this.inputs = Lists.newArrayList();
@@ -105,6 +111,14 @@ public class OptExpression {
         return property.getOutputColumns();
     }
 
+    public void setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
+        this.requiredProperties = requiredProperties;
+    }
+
+    public List<PhysicalPropertySet> getRequiredProperties() {
+        return this.requiredProperties;
+    }
+
     // This function assume the child expr logical property has been derived
     public void deriveLogicalPropertyItself() {
         ExpressionContext context = new ExpressionContext(this);
@@ -118,6 +132,14 @@ public class OptExpression {
 
     public void setStatistics(Statistics statistics) {
         this.statistics = statistics;
+    }
+
+    public int getPlanCount() {
+        return planCount;
+    }
+
+    public void setPlanCount(int planCount) {
+        this.planCount = planCount;
     }
 
     @Override

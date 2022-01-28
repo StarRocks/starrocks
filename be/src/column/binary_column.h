@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -30,22 +30,18 @@ public:
         }
     };
 
-    // Copy constructor
     // NOTE: do *NOT* copy |_slices|
     BinaryColumn(const BinaryColumn& rhs) : _bytes(rhs._bytes), _offsets(rhs._offsets) {}
 
-    // Move constructor
     // NOTE: do *NOT* copy |_slices|
     BinaryColumn(BinaryColumn&& rhs) noexcept : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
 
-    // Copy assignment
     BinaryColumn& operator=(const BinaryColumn& rhs) {
         BinaryColumn tmp(rhs);
         this->swap_column(tmp);
         return *this;
     }
 
-    // Move assignment
     BinaryColumn& operator=(BinaryColumn&& rhs) noexcept {
         BinaryColumn tmp(std::move(rhs));
         this->swap_column(tmp);
@@ -78,6 +74,8 @@ public:
     }
 
     size_t size() const override { return _offsets.size() - 1; }
+
+    size_t capacity() const override { return _offsets.capacity() - 1; }
 
     size_t type_size() const override { return sizeof(Slice); }
 
@@ -169,6 +167,8 @@ public:
         _slices_cache = false;
     }
 
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
+
     uint32_t max_one_element_serialize_size() const override;
 
     uint32_t serialize(size_t idx, uint8_t* pos) override;
@@ -180,18 +180,9 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) override;
+    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override { return sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]; }
-
-    size_t serialize_size() const override {
-        DCHECK_EQ(_bytes.size(), _offsets.back());
-        return byte_size() + sizeof(uint32_t) * 2; // _offsets size + _bytes size;
-    }
-
-    uint8_t* serialize_column(uint8_t* dst) override;
-
-    const uint8_t* deserialize_column(const uint8_t* src) override;
 
     MutableColumnPtr clone_empty() const override { return create_mutable(); }
 
@@ -265,10 +256,14 @@ public:
     std::string debug_string() const override {
         std::stringstream ss;
         ss << "[";
-        for (int i = 0; i < size() - 1; ++i) {
+        size_t size = this->size();
+        for (int i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }
-        ss << debug_item(size() - 1) << "]";
+        if (size > 0) {
+            ss << debug_item(size - 1);
+        }
+        ss << "]";
         return ss.str();
     }
 

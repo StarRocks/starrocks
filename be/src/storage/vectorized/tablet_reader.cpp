@@ -1,12 +1,14 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "storage/vectorized/tablet_reader.h"
 
 #include <column/datum_convert.h>
 
+#include "common/status.h"
 #include "gutil/stl_util.h"
 #include "service/backend_options.h"
 #include "storage/tablet.h"
+#include "storage/types.h"
 #include "storage/vectorized/aggregate_iterator.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/column_predicate.h"
@@ -21,7 +23,23 @@
 namespace starrocks::vectorized {
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
-        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version), _mempool(&_memtracker) {}
+        : ChunkIterator(std::move(schema)),
+          _tablet(tablet),
+          _version(version),
+          _delete_predicates_version(version),
+          _is_vertical_merge(false) {}
+
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
+                           RowSourceMaskBuffer* mask_buffer)
+        : ChunkIterator(std::move(schema)),
+          _tablet(tablet),
+          _version(version),
+          _delete_predicates_version(version),
+          _is_vertical_merge(true),
+          _is_key(is_key),
+          _mask_buffer(mask_buffer) {
+    DCHECK(_mask_buffer);
+}
 
 void TabletReader::close() {
     if (_collect_iter != nullptr) {
@@ -32,14 +50,15 @@ void TabletReader::close() {
 }
 
 Status TabletReader::prepare() {
-    _tablet->obtain_header_rdlock();
+    std::shared_lock l(_tablet->get_header_lock());
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
-    _tablet->release_header_lock();
+    _stats.rowsets_read_count += _rowsets.size();
     return st;
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
-    if (read_params.reader_type != ReaderType::READER_QUERY && !is_compaction(read_params.reader_type)) {
+    if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
+        read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
         return Status::NotSupported("reader type not supported now");
     }
     Status st = _init_collector(read_params);
@@ -48,18 +67,18 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 }
 
 Status TabletReader::do_get_next(Chunk* chunk) {
-    return _collect_iter->get_next(chunk);
-}
-
-Status TabletReader::_get_segment_iterators(const RowsetReadOptions& options, std::vector<ChunkIteratorPtr>* iters) {
-    SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
-    for (auto& rowset : _rowsets) {
-        RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), options, iters));
-    }
+    DCHECK(!_is_vertical_merge);
+    RETURN_IF_ERROR(_collect_iter->get_next(chunk));
     return Status::OK();
 }
 
-Status TabletReader::_init_collector(const TabletReaderParams& params) {
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
+    DCHECK(_is_vertical_merge);
+    RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks));
+    return Status::OK();
+}
+
+Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
     KeysType keys_type = _tablet->tablet_schema().keys_type();
     RETURN_IF_ERROR(_init_predicates(params));
@@ -74,15 +93,25 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     rs_opts.runtime_state = params.runtime_state;
     rs_opts.profile = params.profile;
     rs_opts.use_page_cache = params.use_page_cache;
-    rs_opts.tablet_schema = &(_tablet->tablet_schema());
+    rs_opts.tablet_schema = &_tablet->tablet_schema();
+    rs_opts.global_dictmaps = params.global_dictmaps;
+    rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
         rs_opts.meta = _tablet->data_dir()->get_meta();
     }
 
+    SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
+    for (auto& rowset : _rowsets) {
+        RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, iters));
+    }
+    return Status::OK();
+}
+
+Status TabletReader::_init_collector(const TabletReaderParams& params) {
     std::vector<ChunkIteratorPtr> seg_iters;
-    RETURN_IF_ERROR(_get_segment_iterators(rs_opts, &seg_iters));
+    RETURN_IF_ERROR(get_segment_iterators(params, &seg_iters));
 
     // Put each SegmentIterator into a TimedChunkIterator, if a profile is provided.
     if (params.profile != nullptr) {
@@ -97,6 +126,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
 
     // If |keys_type| is UNIQUE_KEYS and |params.skip_aggregation| is true, must disable aggregate totally.
     // If |keys_type| is AGG_KEYS and |params.skip_aggregation| is true, aggregate is an optional operation.
+    KeysType keys_type = _tablet->tablet_schema().keys_type();
     const auto skip_aggr = params.skip_aggregation;
     const auto select_all_keys = _schema.num_key_fields() == _tablet->num_key_columns();
     DCHECK_LE(_schema.num_key_fields(), _tablet->num_key_columns());
@@ -112,7 +142,11 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         //       |           |           |
         // SegmentIterator  ...    SegmentIterator
         //
-        _collect_iter = new_merge_iterator(seg_iters);
+        if (_is_vertical_merge && !_is_key) {
+            _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+        } else {
+            _collect_iter = new_heap_merge_iterator(seg_iters);
+        }
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
         //             UnionIterator
@@ -144,13 +178,29 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
             RuntimeProfile::Counter* sort_timer = ADD_TIMER(p, "sort");
             RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "aggr");
 
-            _collect_iter = new_merge_iterator(seg_iters);
+            if (_is_vertical_merge && !_is_key) {
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+            } else {
+                _collect_iter = new_heap_merge_iterator(seg_iters);
+            }
             _collect_iter = timed_chunk_iterator(_collect_iter, sort_timer);
-            _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
+            if (!_is_vertical_merge) {
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
+            } else {
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), _is_key);
+            }
             _collect_iter = timed_chunk_iterator(_collect_iter, aggr_timer);
         } else {
-            _collect_iter = new_merge_iterator(seg_iters);
-            _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
+            if (_is_vertical_merge && !_is_key) {
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+            } else {
+                _collect_iter = new_heap_merge_iterator(seg_iters);
+            }
+            if (!_is_vertical_merge) {
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
+            } else {
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), _is_key);
+            }
         }
     } else if (keys_type == AGG_KEYS) {
         CHECK(skip_aggr);
@@ -185,6 +235,12 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     } else {
         return Status::InternalError("Unknown keys type");
     }
+
+    if (_collect_iter != nullptr) {
+        RETURN_IF_ERROR(_collect_iter->init_encoded_schema(*params.global_dictmaps));
+        RETURN_IF_ERROR(_collect_iter->init_output_schema(*params.unused_output_column_ids));
+    }
+
     return Status::OK();
 }
 
@@ -198,10 +254,9 @@ Status TabletReader::_init_predicates(const TabletReaderParams& params) {
 Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
     PredicateParser pred_parser(_tablet->tablet_schema());
 
-    _tablet->obtain_header_rdlock();
-
+    std::shared_lock header_lock(_tablet->get_header_lock());
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
-        if (pred_pb.version() > _version.second) {
+        if (pred_pb.version() > _delete_predicates_version.second) {
             continue;
         }
 
@@ -210,15 +265,14 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
             TCondition cond;
             if (!DeleteHandler::parse_condition(pred_pb.sub_predicates(i), &cond)) {
                 LOG(WARNING) << "invalid delete condition: " << pred_pb.sub_predicates(i) << "]";
-                _tablet->release_header_lock();
                 return Status::InternalError("invalid delete condition string");
             }
-            size_t idx = _tablet->tablet_schema().field_index(cond.column_name);
-            if (idx >= _tablet->num_key_columns() && _tablet->keys_type() != DUP_KEYS) {
+            if (_tablet->tablet_schema().field_index(cond.column_name) >= _tablet->num_key_columns() &&
+                _tablet->keys_type() != DUP_KEYS) {
                 LOG(WARNING) << "ignore delete condition of non-key column: " << pred_pb.sub_predicates(i);
                 continue;
             }
-            ColumnPredicate* pred = pred_parser.parse(cond);
+            ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
             if (pred == nullptr) {
                 LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
                              << "], condition_op[" << cond.condition_op << "], condition_values["
@@ -242,7 +296,7 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
             for (const auto& value : in_predicate.values()) {
                 cond.condition_values.push_back(value);
             }
-            ColumnPredicate* pred = pred_parser.parse(cond);
+            ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
             if (pred == nullptr) {
                 LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
                              << "], condition_op[" << cond.condition_op << "], condition_values["
@@ -257,7 +311,6 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
         dels->add(pred_pb.version(), conjunctions);
     }
 
-    _tablet->release_header_lock();
     return Status::OK();
 }
 
@@ -273,7 +326,15 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
         if (input.is_null(i)) {
             continue;
         }
-        RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), &_mempool));
+        // If the type of the storage level is CHAR,
+        // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
+        // CHAR type strings are truncated at the storage level after '\0'.
+        if (f->type()->type() == OLAP_FIELD_TYPE_CHAR) {
+            RETURN_IF_ERROR(datum_from_string(get_type_info(OLAP_FIELD_TYPE_VARCHAR).get(), &values.back(),
+                                              input.get_value(i), &_mempool));
+        } else {
+            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), &_mempool));
+        }
     }
     *tuple = SeekTuple(std::move(schema), std::move(values));
     return Status::OK();

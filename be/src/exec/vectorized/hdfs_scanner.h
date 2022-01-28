@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
+#include <atomic>
 #include <utility>
 
 #include "column/chunk.h"
@@ -17,17 +18,34 @@ namespace starrocks::vectorized {
 class HdfsScanNode;
 class RuntimeFilterProbeCollector;
 
+class HdfsIOProfile {
+public:
+    RuntimeProfile::Counter* bytes_total_read = nullptr;
+    RuntimeProfile::Counter* bytes_read_local = nullptr;
+    RuntimeProfile::Counter* bytes_read_short_circuit = nullptr;
+    RuntimeProfile::Counter* bytes_read_dn_cache = nullptr;
+    RuntimeProfile::Counter* bytes_read_remote = nullptr;
+
+    void init(RuntimeProfile* root);
+
+private:
+    RuntimeProfile::Counter* _toplev = nullptr;
+};
+
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t expr_filter_ns = 0;
     int64_t io_ns = 0;
     int64_t io_count = 0;
-    int64_t bytes_read_from_disk = 0;
+    int64_t bytes_read = 0;
     int64_t column_read_ns = 0;
+    int64_t column_convert_ns = 0;
+
+    // parquet only!
+    // read & decode
     int64_t level_decode_ns = 0;
     int64_t value_decode_ns = 0;
     int64_t page_read_ns = 0;
-    int64_t column_convert_ns = 0;
     // reader init
     int64_t footer_read_ns = 0;
     int64_t column_reader_init_ns = 0;
@@ -77,6 +95,8 @@ struct HdfsScannerParams {
     std::vector<std::string>* hive_column_names;
 
     HdfsScanNode* parent = nullptr;
+
+    std::atomic<int32_t>* open_limit;
 };
 
 struct HdfsFileReaderParam {
@@ -133,13 +153,20 @@ struct HdfsFileReaderParam {
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
 };
 
+// if *lvalue == expect, swap(*lvalue,*rvalue)
+inline bool atomic_cas(std::atomic_bool* lvalue, std::atomic_bool* rvalue, bool expect) {
+    bool res = lvalue->compare_exchange_strong(expect, *rvalue);
+    if (res) *rvalue = expect;
+    return res;
+}
+
 class HdfsScanner {
 public:
     HdfsScanner() = default;
     virtual ~HdfsScanner() = default;
 
     Status open(RuntimeState* runtime_state);
-    Status close(RuntimeState* runtime_state);
+    void close(RuntimeState* runtime_state) noexcept;
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
 
@@ -148,18 +175,47 @@ public:
     bool keep_priority() const { return _keep_priority; }
     void update_counter();
 
+    RuntimeState* runtime_state() { return _runtime_state; }
+
+    int open_limit() { return *_scanner_params.open_limit; }
+
+    bool is_open() { return _is_open; }
+
+    bool acquire_pending_token(std::atomic_bool* token) {
+        // acquire resource
+        return atomic_cas(token, &_pending_token, true);
+    }
+
+    bool release_pending_token(std::atomic_bool* token) {
+        if (_pending_token) {
+            _pending_token = false;
+            *token = true;
+            return true;
+        }
+        return false;
+    }
+
+    bool has_pending_token() { return _pending_token; }
+
     virtual Status do_open(RuntimeState* runtime_state) = 0;
-    virtual Status do_close(RuntimeState* runtime_state) = 0;
+    virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
+
+    void enter_pending_queue();
+    // how long it stays inside pending queue.
+    uint64_t exit_pending_queue();
 
 private:
     bool _is_open = false;
     bool _is_closed = false;
     bool _keep_priority = false;
     void _build_file_read_param();
+    MonotonicStopWatch _pending_queue_sw;
 
 protected:
+    std::atomic_bool _pending_token = false;
+
     HdfsFileReaderParam _file_read_param;
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
@@ -172,21 +228,6 @@ protected:
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
     // predicate which havs min/max
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
-};
-
-class HdfsParquetScanner final : public HdfsScanner {
-public:
-    HdfsParquetScanner() = default;
-    ~HdfsParquetScanner() override = default;
-
-    void update_counter();
-    Status do_open(RuntimeState* runtime_state) override;
-    Status do_close(RuntimeState* runtime_state) override;
-    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
-    Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
-
-private:
-    std::shared_ptr<parquet::FileReader> _reader = nullptr;
 };
 
 } // namespace starrocks::vectorized

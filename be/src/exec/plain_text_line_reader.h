@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "exec/line_reader.h"
 #include "util/runtime_profile.h"
 
@@ -29,10 +31,6 @@ namespace starrocks {
 class FileReader;
 class Decompressor;
 class Status;
-
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
 
 class PlainTextLineReader : public LineReader {
 public:
@@ -71,13 +69,13 @@ private:
     uint8_t _row_delimiter;
 
     // save the data read from file reader
-    uint8_t* _input_buf;
+    std::unique_ptr<uint8_t[]> _input_buf;
     size_t _input_buf_size;
     size_t _input_buf_pos;
     size_t _input_buf_limit;
 
     // save the data decompressed from decompressor.
-    uint8_t* _output_buf;
+    std::unique_ptr<uint8_t[]> _output_buf;
     size_t _output_buf_size;
     size_t _output_buf_pos;
     size_t _output_buf_limit;

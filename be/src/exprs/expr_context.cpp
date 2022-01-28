@@ -26,23 +26,15 @@
 #include <memory>
 #include <sstream>
 
-#include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/slot_ref.h"
-#include "exprs/vectorized/column_ref.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
 #include "util/debug_util.h"
 #include "util/stack_util.h"
 
 namespace starrocks {
-
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
 
 ExprContext::ExprContext(Expr* root)
         : _fn_contexts_ptr(nullptr), _root(root), _is_clone(false), _prepared(false), _opened(false), _closed(false) {}
@@ -54,17 +46,13 @@ ExprContext::~ExprContext() {
     }
 }
 
-// TODO(zc): memory tracker
-Status ExprContext::prepare(RuntimeState* state, const RowDescriptor& row_desc, MemTracker* tracker) {
+Status ExprContext::prepare(RuntimeState* state, const RowDescriptor& row_desc) {
     if (_prepared) {
         return Status::OK();
     }
-    DCHECK(tracker != nullptr) << std::endl << get_stack_trace();
     DCHECK(_pool.get() == nullptr);
     _prepared = true;
-    // TODO: use param tracker to replace instance_mem_tracker
-    // _pool.reset(new MemPool(new MemTracker(-1)));
-    _pool = std::make_unique<MemPool>(state->instance_mem_tracker());
+    _pool = std::make_unique<MemPool>();
     return _root->prepare(state, row_desc, this);
 }
 
@@ -121,7 +109,7 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx) {
     DCHECK(*new_ctx == nullptr);
 
     *new_ctx = state->obj_pool()->add(new ExprContext(_root));
-    (*new_ctx)->_pool = std::make_unique<MemPool>(_pool->mem_tracker());
+    (*new_ctx)->_pool = std::make_unique<MemPool>();
     for (auto& _fn_context : _fn_contexts) {
         (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));
     }
@@ -140,7 +128,7 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root
     DCHECK(*new_ctx == nullptr);
 
     *new_ctx = state->obj_pool()->add(new ExprContext(root));
-    (*new_ctx)->_pool = std::make_unique<MemPool>(_pool->mem_tracker());
+    (*new_ctx)->_pool = std::make_unique<MemPool>();
     for (auto& _fn_context : _fn_contexts) {
         (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));
     }
@@ -153,80 +141,11 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root
     return root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
 }
 
-void ExprContext::free_local_allocations() {
-    free_local_allocations(_fn_contexts);
-}
-
-void ExprContext::free_local_allocations(const std::vector<ExprContext*>& ctxs) {
-    for (auto ctx : ctxs) {
-        ctx->free_local_allocations();
-    }
-}
-
-void ExprContext::free_local_allocations(const std::vector<FunctionContext*>& fn_ctxs) {
-    for (auto fn_ctx : fn_ctxs) {
-        if (fn_ctx->impl()->closed()) {
-            continue;
-        }
-        fn_ctx->impl()->free_local_allocations();
-    }
-}
-
-void ExprContext::get_value(TupleRow* row, bool as_ascii, TColumnValue* col_val) {}
-
-void* ExprContext::get_value(TupleRow* row) {
-    return nullptr;
-}
-
 bool ExprContext::is_nullable() {
     if (_root->is_slotref()) {
         return SlotRef::is_nullable(_root);
     }
     return false;
-}
-
-BooleanVal ExprContext::get_boolean_val(TupleRow* row) {
-    return _root->get_boolean_val(this, row);
-}
-
-TinyIntVal ExprContext::get_tiny_int_val(TupleRow* row) {
-    return _root->get_tiny_int_val(this, row);
-}
-
-SmallIntVal ExprContext::get_small_int_val(TupleRow* row) {
-    return _root->get_small_int_val(this, row);
-}
-
-IntVal ExprContext::get_int_val(TupleRow* row) {
-    return _root->get_int_val(this, row);
-}
-
-BigIntVal ExprContext::get_big_int_val(TupleRow* row) {
-    return _root->get_big_int_val(this, row);
-}
-
-FloatVal ExprContext::get_float_val(TupleRow* row) {
-    return _root->get_float_val(this, row);
-}
-
-DoubleVal ExprContext::get_double_val(TupleRow* row) {
-    return _root->get_double_val(this, row);
-}
-
-StringVal ExprContext::get_string_val(TupleRow* row) {
-    return _root->get_string_val(this, row);
-}
-
-DateTimeVal ExprContext::get_datetime_val(TupleRow* row) {
-    return _root->get_datetime_val(this, row);
-}
-
-DecimalVal ExprContext::get_decimal_val(TupleRow* row) {
-    return _root->get_decimal_val(this, row);
-}
-
-DecimalV2Val ExprContext::get_decimalv2_val(TupleRow* row) {
-    return _root->get_decimalv2_val(this, row);
 }
 
 Status ExprContext::get_const_value(RuntimeState* state, Expr& expr, AnyVal** const_val) {

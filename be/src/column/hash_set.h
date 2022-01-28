@@ -1,10 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
+
+#include <cstdint>
 
 #include "column/column_hash.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
+#include "util/slice.h"
 
 namespace starrocks::vectorized {
 
@@ -67,6 +70,25 @@ using SliceHashSet = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, Eq
 
 using SliceNormalHashSet = phmap::flat_hash_set<Slice, SliceHash, SliceNormalEqual>;
 
+struct SliceKey4 {
+    union U {
+        struct {
+            char data[3];
+            uint8_t size;
+        } __attribute__((packed));
+        int32_t value;
+    } u;
+    static_assert(sizeof(u) == sizeof(u.value));
+    bool operator==(const SliceKey4& k) const { return u.value == k.u.value; }
+    SliceKey4() = default;
+    SliceKey4(const SliceKey4& x) { u.value = x.u.value; }
+    SliceKey4& operator=(const SliceKey4& x) {
+        u.value = x.u.value;
+        return *this;
+    }
+    SliceKey4(SliceKey4&& x) noexcept { u.value = x.u.value; }
+};
+
 struct SliceKey8 {
     union U {
         struct {
@@ -112,19 +134,13 @@ template <typename SliceKey, PhmapSeed seed>
 class FixedSizeSliceKeyHash {
 public:
     std::size_t operator()(const SliceKey& s) const {
-        if constexpr (sizeof(SliceKey) == 8) {
-            if constexpr (seed == PhmapSeed1) {
-                return crc_hash_uint64(s.u.value, CRC_HASH_SEED1);
-            } else {
-                return crc_hash_uint64(s.u.value, CRC_HASH_SEED2);
-            }
+        if constexpr (sizeof(SliceKey) == 4) {
+            return phmap_mix_with_seed<sizeof(size_t), seed>()(std::hash<int32_t>()(s.u.value));
+        } else if constexpr (sizeof(SliceKey) == 8) {
+            return phmap_mix_with_seed<sizeof(size_t), seed>()(std::hash<size_t>()(s.u.value));
         } else {
-            static_assert(sizeof(SliceKey) == 16);
-            if constexpr (seed == PhmapSeed1) {
-                return crc_hash_uint128(s.u.ui64[0], s.u.ui64[1], CRC_HASH_SEED1);
-            } else {
-                return crc_hash_uint128(s.u.ui64[0], s.u.ui64[1], CRC_HASH_SEED2);
-            }
+            static_assert(sizeof(s.u.value) == 16);
+            return Hash128WithSeed<seed>()(s.u.value);
         }
     }
 };

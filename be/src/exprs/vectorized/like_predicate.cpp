@@ -1,12 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/like_predicate.h"
 
 #include <memory>
 
-#include "column/column_builder.h"
-#include "column/column_helper.h"
-#include "column/column_viewer.h"
 #include "exprs/vectorized/binary_function.h"
 #include "glog/logging.h"
 #include "gutil/strings/substitute.h"
@@ -337,35 +334,65 @@ ColumnPtr LikePredicate::regex_match(FunctionContext* context, const starrocks::
     }
 }
 
+ColumnPtr LikePredicate::_predicate_const_regex(FunctionContext* context, ColumnBuilder<TYPE_BOOLEAN>* result,
+                                                const ColumnViewer<TYPE_VARCHAR>& value_viewer,
+                                                const ColumnPtr& value_column) {
+    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+
+    hs_scratch_t* scratch = nullptr;
+    hs_error_t status;
+    if ((status = hs_clone_scratch(state->scratch, &scratch)) != HS_SUCCESS) {
+        CHECK(false) << "ERROR: Unable to clone scratch space."
+                     << " status: " << status;
+    }
+
+    for (int row = 0; row < value_viewer.size(); ++row) {
+        if (value_viewer.is_null(row)) {
+            result->append_null();
+            continue;
+        }
+
+        bool v = false;
+        auto value_size = value_viewer.value(row).size;
+        auto status = hs_scan(
+                // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
+                state->database, (value_size) ? value_viewer.value(row).data : &_DUMMY_STRING_FOR_EMPTY_PATTERN,
+                value_size, 0, scratch,
+                [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
+                   void* ctx) -> int {
+                    *((bool*)ctx) = true;
+                    return 1;
+                },
+                &v);
+
+        DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED) << " status: " << status;
+        result->append(v);
+    }
+
+    if ((status = hs_free_scratch(scratch)) != HS_SUCCESS) {
+        CHECK(false) << "ERROR: free scratch space failure"
+                     << " status: " << status;
+    }
+    return result->build(value_column->is_constant());
+}
+
 ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     auto value_column = VECTORIZED_FN_ARGS(0);
+    auto pattern_column = VECTORIZED_FN_ARGS(1);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result;
+    ColumnBuilder<TYPE_BOOLEAN> result(value_viewer.size());
 
     // pattern is constant value, use context's regex
     if (context->is_constant_column(1)) {
-        auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-
-        for (int row = 0; row < value_viewer.size(); ++row) {
-            bool v = false;
-            auto status = hs_scan(
-                    state->database, value_viewer.value(row).data, value_viewer.value(row).size, 0, state->scratch,
-                    [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
-                       void* ctx) -> int {
-                        *((bool*)ctx) = true;
-                        return 1;
-                    },
-                    &v);
-
-            DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED);
-            result.append(v, value_viewer.is_null(row));
+        if (!pattern_column->only_null()) {
+            return _predicate_const_regex(context, &result, value_viewer, value_column);
+        } else {
+            // because pattern_column is constant, so if it is nullable means it is only_null.
+            return ColumnHelper::create_const_null_column(value_column->size());
         }
-        return result.build(value_column->is_constant());
     }
 
-    // pattern is variables row, build by rows
-    auto pattern_column = VECTORIZED_FN_ARGS(1);
     ColumnViewer<TYPE_VARCHAR> pattern_viewer(pattern_column);
 
     RE2::Options opts;
@@ -397,33 +424,21 @@ ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starro
 
 ColumnPtr LikePredicate::regex_match_partial(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     auto value_column = VECTORIZED_FN_ARGS(0);
+    auto pattern_column = VECTORIZED_FN_ARGS(1);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result;
+    ColumnBuilder<TYPE_BOOLEAN> result(value_viewer.size());
 
     // pattern is constant value, use context's regex
     if (context->is_constant_column(1)) {
-        auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-
-        for (int row = 0; row < value_viewer.size(); ++row) {
-            bool v = false;
-            auto status = hs_scan(
-                    state->database, value_viewer.value(row).data, value_viewer.value(row).size, 0, state->scratch,
-                    [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
-                       void* ctx) -> int {
-                        *((bool*)ctx) = true;
-                        return 1;
-                    },
-                    &v);
-
-            DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED);
-            result.append(v, value_viewer.is_null(row));
+        if (!pattern_column->only_null()) {
+            return _predicate_const_regex(context, &result, value_viewer, value_column);
+        } else {
+            // because pattern_column is constant, so if it is nullable means it is only_null.
+            return ColumnHelper::create_const_null_column(value_column->size());
         }
-        return result.build(value_column->is_constant());
     }
 
-    // pattern is variables row, build by rows
-    auto pattern_column = VECTORIZED_FN_ARGS(1);
     ColumnViewer<TYPE_VARCHAR> pattern_viewer(pattern_column);
 
     RE2::Options opts;

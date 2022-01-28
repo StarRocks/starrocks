@@ -126,6 +126,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     protected long watershedTxnId = -1;
     @SerializedName(value = "storageFormat")
     private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
+    @SerializedName(value = "startTime")
+    private long startTime;
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
@@ -151,9 +153,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         partitionIndexMap.put(partitionId, shadowIdxId, shadowIdx);
     }
 
-    public void addIndexSchema(long shadowIdxId, long originIdxId,
-                               String shadowIndexName, int shadowSchemaVersion, int shadowSchemaHash,
-                               short shadowIdxShortKeyCount, List<Column> shadowIdxSchema) {
+    public void addIndexSchema(long shadowIdxId, long originIdxId, String shadowIndexName, int shadowSchemaVersion,
+                               int shadowSchemaHash, short shadowIdxShortKeyCount, List<Column> shadowIdxSchema) {
         indexIdMap.put(shadowIdxId, originIdxId);
         indexIdToName.put(shadowIdxId, shadowIndexName);
         indexSchemaVersionAndHashMap.put(shadowIdxId, new SchemaVersionAndHash(shadowSchemaVersion, shadowSchemaHash));
@@ -170,6 +171,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     public void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
         this.indexChange = indexChange;
         this.indexes = indexes;
+    }
+
+    public long getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(long startTime) {
+        this.startTime = startTime;
     }
 
     public void setStorageFormat(TStorageFormat storageFormat) {
@@ -244,6 +253,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     int originSchemaHash = tbl.getSchemaHashByIndexId(originIndexId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
 
+                    // copy for generate some const default value
+                    List<Column> copiedShadowSchema = Lists.newArrayList();
+                    for (Column column : shadowSchema) {
+                        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                        if (defaultValueType == Column.DefaultValueType.CONST) {
+                            Column copiedColumn = new Column(column);
+                            copiedColumn.setDefaultValue(column.calculatedDefaultValueWithTime(startTime));
+                            copiedShadowSchema.add(copiedColumn);
+                        } else {
+                            copiedShadowSchema.add(column);
+                        }
+                    }
+
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         List<Replica> shadowReplicas = shadowTablet.getReplicas();
@@ -253,9 +275,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             CreateReplicaTask createReplicaTask = new CreateReplicaTask(
                                     backendId, dbId, tableId, partitionId, shadowIdxId, shadowTabletId,
                                     shadowShortKeyColumnCount, shadowSchemaHash,
-                                    Partition.PARTITION_INIT_VERSION, Partition.PARTITION_INIT_VERSION_HASH,
+                                    Partition.PARTITION_INIT_VERSION,
                                     originKeysType, TStorageType.COLUMN, storageMedium,
-                                    shadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
+                                    copiedShadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
                                     tbl.isInMemory(),
                                     tbl.getPartitionInfo().getTabletType(partitionId));
                             createReplicaTask.setBaseTablet(
@@ -344,7 +366,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         for (long shadowIdxId : indexIdMap.keySet()) {
-            tbl.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId),
+            tbl.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId),
+                    indexSchemaMap.get(shadowIdxId),
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
@@ -393,7 +416,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                 // the schema change task will transform the data before visible version(included).
                 long visibleVersion = partition.getVisibleVersion();
-                long visibleVersionHash = partition.getVisibleVersionHash();
 
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
@@ -407,14 +429,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         long originTabletId = partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId);
-                        List<Replica> shadowReplicas = shadowTablet.getReplicas();
-                        for (Replica shadowReplica : shadowReplicas) {
+                        for (Replica shadowReplica : shadowTablet.getReplicas()) {
                             AlterReplicaTask rollupTask = new AlterReplicaTask(
                                     shadowReplica.getBackendId(), dbId, tableId, partitionId,
                                     shadowIdxId, originIdxId,
                                     shadowTabletId, originTabletId, shadowReplica.getId(),
                                     shadowSchemaHash, originSchemaHash,
-                                    visibleVersion, visibleVersionHash, jobId, JobType.SCHEMA_CHANGE);
+                                    visibleVersion, jobId, JobType.SCHEMA_CHANGE);
                             schemaChangeBatchTask.addTask(rollupTask);
                         }
                     }
@@ -491,7 +512,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 Preconditions.checkNotNull(partition, partitionId);
 
                 long visiableVersion = partition.getVisibleVersion();
-                long visiableVersionHash = partition.getVisibleVersionHash();
                 short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getId());
 
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
@@ -503,7 +523,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
                             if (replica.getLastFailedVersion() < 0
-                                    && replica.checkVersionCatchUp(visiableVersion, visiableVersionHash, false)) {
+                                    && replica.checkVersionCatchUp(visiableVersion, false)) {
                                 healthyReplicaNum++;
                             }
                         }
@@ -553,7 +573,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 }
                 Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
-                // set replica state
+                // set the replica state from ReplicaState.ALTER to ReplicaState.NORMAL since the schema change is done.
                 for (Tablet tablet : shadowIdx.getTablets()) {
                     for (Replica replica : tablet.getReplicas()) {
                         replica.setState(ReplicaState.NORMAL);
@@ -562,7 +582,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                 partition.visualiseShadowIndex(shadowIdxId, originIdxId == partition.getBaseIndex().getId());
 
-                // delete origin replicas
+                // the origin tablet created by old schema can be deleted from FE meta data
                 for (Tablet originTablet : droppedIdx.getTablets()) {
                     Catalog.getCurrentInvertedIndex().deleteTablet(originTablet.getId());
                 }
@@ -818,7 +838,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             info.add(TimeUtils.longToTimeString(createTimeMs));
             info.add(TimeUtils.longToTimeString(finishedTimeMs));
             // only show the origin index name
-            info.add(indexIdToName.get(shadowIndexId).substring(SchemaChangeHandler.SHADOW_NAME_PRFIX.length()));
+            info.add(Column.removeNamePrefix(indexIdToName.get(shadowIndexId)));
             info.add(shadowIndexId);
             info.add(entry.getValue());
             info.add(indexSchemaVersionAndHashMap.get(shadowIndexId).toString());

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -58,6 +58,8 @@ public:
 
     size_t size() const override { return _pool.size(); }
 
+    size_t capacity() const override { return _pool.capacity(); }
+
     size_t type_size() const override { return sizeof(T); }
 
     size_t byte_size() const override { return byte_size(0, size()); }
@@ -98,6 +100,8 @@ public:
 
     void append_default(size_t count) override;
 
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
+
     uint32_t serialize(size_t idx, uint8_t* pos) override;
     uint32_t serialize_default(uint8_t* pos) override;
 
@@ -106,15 +110,9 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) override;
+    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override;
-
-    size_t serialize_size() const override;
-
-    uint8_t* serialize_column(uint8_t* dst) override;
-
-    const uint8_t* deserialize_column(const uint8_t* src) override;
 
     MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
 
@@ -184,10 +182,14 @@ public:
     std::string debug_string() const override {
         std::stringstream ss;
         ss << "[";
-        for (int i = 0; i < size() - 1; ++i) {
+        size_t size = this->size();
+        for (int i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }
-        ss << debug_item(size() - 1) << "]";
+        if (size > 0) {
+            ss << debug_item(size - 1);
+        }
+        ss << "]";
         return ss.str();
     }
 

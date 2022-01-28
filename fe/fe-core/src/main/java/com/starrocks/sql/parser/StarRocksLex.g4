@@ -1,0 +1,190 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+lexer grammar StarRocksLex;
+
+ALL: 'ALL';
+AND: 'AND';
+ANTI: 'ANTI';
+ARRAY: 'ARRAY';
+AS: 'AS';
+ASC: 'ASC';
+BETWEEN: 'BETWEEN';
+BY: 'BY';
+CASE: 'CASE';
+CAST: 'CAST';
+CONNECTION_ID: 'CONNECTION_ID';
+CROSS: 'CROSS';
+CUBE: 'CUBE';
+CURRENT: 'CURRENT';
+CURRENT_USER: 'CURRENT_USER';
+DATA: 'DATA';
+DATABASE: 'DATABASE';
+DATABASES: 'DATABASES';
+DATE: 'DATE';
+DATETIME: 'DATETIME';
+DAY: 'DAY';
+DECIMAL: 'DECIMAL';
+DECIMALV2: 'DECIMALV2';
+DECIMAL32: 'DECIMAL32';
+DECIMAL64: 'DECIMAL64';
+DECIMAL128: 'DECIMAL128';
+DESC: 'DESC';
+DESCRIBE: 'DESCRIBE';
+DISTINCT: 'DISTINCT';
+DUAL: 'DUAL';
+ELSE: 'ELSE';
+END: 'END';
+EXCEPT: 'EXCEPT';
+EXISTS: 'EXISTS';
+EXPLAIN: 'EXPLAIN';
+EXTRACT: 'EXTRACT';
+FALSE: 'FALSE';
+FILTER: 'FILTER';
+FIRST: 'FIRST';
+FOLLOWING: 'FOLLOWING';
+FOR: 'FOR';
+FROM: 'FROM';
+FULL: 'FULL';
+GROUP: 'GROUP';
+GROUPING: 'GROUPING';
+GROUPING_ID: 'GROUPING_ID';
+HAVING: 'HAVING';
+HOUR: 'HOUR';
+IF: 'IF';
+IN: 'IN';
+INNER: 'INNER';
+INTERSECT: 'INTERSECT';
+INTERVAL: 'INTERVAL';
+IS: 'IS';
+JOIN: 'JOIN';
+LAST: 'LAST';
+LATERAL: 'LATERAL';
+LEFT: 'LEFT';
+LIKE: 'LIKE';
+LIMIT: 'LIMIT';
+MINUTE: 'MINUTE';
+MONTH: 'MONTH';
+NONE: 'NONE';
+NOT: 'NOT';
+NULL: 'NULL';
+NULLS: 'NULLS';
+OFFSET: 'OFFSET';
+ON: 'ON';
+OR: 'OR';
+ORDER: 'ORDER';
+OUTER: 'OUTER';
+OVER: 'OVER';
+PARTITION: 'PARTITION';
+PRECEDING: 'PRECEDING';
+RANGE: 'RANGE';
+REGEXP: 'REGEXP';
+RIGHT: 'RIGHT';
+ROLLUP: 'ROLLUP';
+ROW: 'ROW';
+ROWS: 'ROWS';
+SCHEMA: 'SCHEMA';
+SECOND: 'SECOND';
+SELECT: 'SELECT';
+SEMI: 'SEMI';
+SESSION: 'SESSION';
+SET: 'SET';
+SETS: 'SETS';
+SHOW: 'SHOW';
+
+TABLES: 'TABLES';
+THEN: 'THEN';
+TIME: 'TIME';
+TRUE: 'TRUE';
+TYPE: 'TYPE';
+UNBOUNDED: 'UNBOUNDED';
+UNION: 'UNION';
+UNNEST: 'UNNEST';
+USE: 'USE';
+USER: 'USER';
+USING: 'USING';
+VARCHAR: 'VARCHAAR';
+VALUES: 'VALUES';
+VIEW: 'VIEW';
+WHEN: 'WHEN';
+WHERE: 'WHERE';
+WITH: 'WITH';
+YEAR: 'YEAR';
+
+EQ  : '=';
+NEQ : '<>' | '!=';
+LT  : '<';
+LTE : '<=';
+GT  : '>';
+GTE : '>=';
+EQ_FOR_NULL: '<=>';
+
+PLUS: '+';
+MINUS: '-';
+ASTERISK: '*';
+SLASH: '/';
+PERCENT: '%';
+CONCAT: '||';
+
+INT_DIV: 'DIV';
+BITAND: '&';
+BITOR: '|';
+BITXOR: '^';
+BITNOT: '~';
+LOGICAL_NOT: '!';
+
+STRING
+    : '\'' ( ~'\'' | '\'\'' )* '\''
+    | '"' ( ~'"' | '""' )* '"'
+    ;
+
+INTEGER_VALUE
+    : DIGIT+
+    ;
+
+DECIMAL_VALUE
+    : DIGIT+ '.' DIGIT*
+    | '.' DIGIT+
+    ;
+
+DOUBLE_VALUE
+    : DIGIT+ ('.' DIGIT*)? EXPONENT
+    | '.' DIGIT+ EXPONENT
+    ;
+
+IDENTIFIER
+    : (LETTER | '_') (LETTER | DIGIT | '_' | '@' | ':')*
+    ;
+
+DIGIT_IDENTIFIER
+    : DIGIT (LETTER | DIGIT | '_' | '@' | ':')+
+    ;
+
+BACKQUOTED_IDENTIFIER
+    : '`' ( ~'`' | '``' )* '`'
+    ;
+
+fragment EXPONENT
+    : 'E' [+-]? DIGIT+
+    ;
+
+fragment DIGIT
+    : [0-9]
+    ;
+
+fragment LETTER
+    : [A-Z]
+    ;
+
+SIMPLE_COMMENT
+    : '--' ~[\r\n]* '\r'? '\n'? -> channel(HIDDEN)
+    ;
+
+BRACKETED_COMMENT
+    : '/*' .*? '*/' -> channel(HIDDEN)
+    ;
+
+SEMICOLON: ';';
+
+WS
+    : [ \r\n\t]+ -> channel(HIDDEN)
+    ;

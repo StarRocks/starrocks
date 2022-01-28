@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -12,15 +12,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 public class LogicalRepeatOperator extends LogicalOperator {
     private final List<ColumnRefOperator> outputGrouping;
-    private final List<Set<ColumnRefOperator>> repeatColumnRefList;
+    private final List<List<ColumnRefOperator>> repeatColumnRefList;
     private final List<List<Long>> groupingIds;
 
     public LogicalRepeatOperator(List<ColumnRefOperator> outputGrouping,
-                                 List<Set<ColumnRefOperator>> repeatColumnRefList,
+                                 List<List<ColumnRefOperator>> repeatColumnRefList,
                                  List<List<Long>> groupingIds) {
         super(OperatorType.LOGICAL_REPEAT);
         this.outputGrouping = outputGrouping;
@@ -28,11 +27,18 @@ public class LogicalRepeatOperator extends LogicalOperator {
         this.groupingIds = groupingIds;
     }
 
+    private LogicalRepeatOperator(LogicalRepeatOperator.Builder builder) {
+        super(OperatorType.LOGICAL_REPEAT, builder.getLimit(), builder.getPredicate(), builder.getProjection());
+        this.outputGrouping = builder.outputGrouping;
+        this.repeatColumnRefList = builder.repeatColumnRefList;
+        this.groupingIds = builder.groupingIds;
+    }
+
     public List<ColumnRefOperator> getOutputGrouping() {
         return outputGrouping;
     }
 
-    public List<Set<ColumnRefOperator>> getRepeatColumnRef() {
+    public List<List<ColumnRefOperator>> getRepeatColumnRef() {
         return repeatColumnRefList;
     }
 
@@ -43,7 +49,7 @@ public class LogicalRepeatOperator extends LogicalOperator {
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         ColumnRefSet outputColumns = new ColumnRefSet(outputGrouping);
-        for (Set<ColumnRefOperator> refSets : repeatColumnRefList) {
+        for (List<ColumnRefOperator> refSets : repeatColumnRefList) {
             outputColumns.union(new ArrayList<>(refSets));
         }
 
@@ -79,5 +85,26 @@ public class LogicalRepeatOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), outputGrouping, repeatColumnRefList);
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalRepeatOperator, LogicalRepeatOperator.Builder> {
+        private List<ColumnRefOperator> outputGrouping;
+        private List<List<ColumnRefOperator>> repeatColumnRefList;
+        private List<List<Long>> groupingIds;
+
+        @Override
+        public LogicalRepeatOperator build() {
+            return new LogicalRepeatOperator(this);
+        }
+
+        @Override
+        public LogicalRepeatOperator.Builder withOperator(LogicalRepeatOperator operator) {
+            super.withOperator(operator);
+            this.outputGrouping = operator.outputGrouping;
+            this.repeatColumnRefList = operator.repeatColumnRefList;
+            this.groupingIds = operator.groupingIds;
+            return this;
+        }
     }
 }

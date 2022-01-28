@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_DESCRIPTORS_H
-#define STARROCKS_BE_RUNTIME_DESCRIPTORS_H
+#pragma once
 
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/stubs/common.h>
@@ -78,9 +77,9 @@ std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indic
 
 class SlotDescriptor {
 public:
-    // virtual ~SlotDescriptor() {};
     SlotId id() const { return _id; }
     const TypeDescriptor& type() const { return _type; }
+    TypeDescriptor& type() { return _type; }
     TupleId parent() const { return _parent; }
     // Returns the column index of this slot, including partition keys.
     // (e.g., col_pos - num_partition_keys = the table column this slot corresponds to)
@@ -111,7 +110,7 @@ private:
     friend class OlapTableSchemaParam;
 
     const SlotId _id;
-    const TypeDescriptor _type;
+    TypeDescriptor _type;
     const TupleId _parent;
     const int _col_pos;
     const int _tuple_offset;
@@ -175,7 +174,7 @@ public:
     // partition slots would be [x, y]
     // partition key values wold be [1, 2]
     std::vector<ExprContext*>& partition_key_value_evals() { return _partition_key_value_evals; }
-    Status create_part_key_exprs(ObjectPool* pool);
+    Status create_part_key_exprs(ObjectPool* pool, int32_t chunk_size);
 
 private:
     int64_t _id = 0;
@@ -197,9 +196,9 @@ public:
 
     const std::string& hdfs_base_dir() const { return _hdfs_base_dir; }
 
-    Status create_key_exprs(ObjectPool* pool) {
+    Status create_key_exprs(ObjectPool* pool, int32_t chunk_size) {
         for (auto& part : _partition_id_to_desc_map) {
-            RETURN_IF_ERROR(part.second->create_part_key_exprs(pool));
+            RETURN_IF_ERROR(part.second->create_part_key_exprs(pool, chunk_size));
         }
         return Status::OK();
     }
@@ -209,6 +208,16 @@ private:
     std::vector<TColumn> _columns;
     std::vector<TColumn> _partition_columns;
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
+};
+
+class IcebergTableDescriptor : public TableDescriptor {
+public:
+    IcebergTableDescriptor(const TTableDescriptor& tdesc);
+    ~IcebergTableDescriptor() override = default;
+
+private:
+    std::string _table_location;
+    std::vector<TColumn> _columns;
 };
 
 class OlapTableDescriptor : public TableDescriptor {
@@ -272,8 +281,9 @@ public:
     int num_null_slots() const { return _num_null_slots; }
     int num_null_bytes() const { return _num_null_bytes; }
     const std::vector<SlotDescriptor*>& slots() const { return _slots; }
-    const std::vector<SlotDescriptor*>& string_slots() const { return _string_slots; }
-    const std::vector<SlotDescriptor*>& no_string_slots() const { return _no_string_slots; }
+    std::vector<SlotDescriptor*>& slots() { return _slots; }
+    const std::vector<SlotDescriptor*>& decoded_slots() const { return _decoded_slots; }
+    std::vector<SlotDescriptor*>& decoded_slots() { return _decoded_slots; }
     bool has_varlen_slots() const { return _has_varlen_slots; }
     const TableDescriptor* table_desc() const { return _table_desc; }
     void set_table_desc(TableDescriptor* table_desc) { _table_desc = table_desc; }
@@ -297,11 +307,10 @@ private:
     int _byte_size;
     int _num_null_slots;
     int _num_null_bytes;
-    int _num_materialized_slots;
-    std::vector<SlotDescriptor*> _slots;        // contains all slots
-    std::vector<SlotDescriptor*> _string_slots; // contains only materialized string slots
-    // contains only materialized slots except string slots
-    std::vector<SlotDescriptor*> _no_string_slots;
+    std::vector<SlotDescriptor*> _slots; // contains all slots
+    // For a low cardinality string column with global dict,
+    // The type in _slots is int, in _decode_slots is varchar
+    std::vector<SlotDescriptor*> _decoded_slots;
 
     // Provide quick way to check if there are variable length slots.
     // True if _string_slots or _collection_slots have entries.
@@ -319,7 +328,7 @@ class DescriptorTbl {
 public:
     // Creates a descriptor tbl within 'pool' from thrift_tbl and returns it via 'tbl'.
     // Returns OK on success, otherwise error (in which case 'tbl' will be unset).
-    static Status create(ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl);
+    static Status create(ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl, int32_t chunk_size);
 
     TableDescriptor* get_table_descriptor(TableId id) const;
     TupleDescriptor* get_tuple_descriptor(TupleId id) const;
@@ -444,5 +453,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

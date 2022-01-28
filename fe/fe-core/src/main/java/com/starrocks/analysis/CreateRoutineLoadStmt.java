@@ -121,6 +121,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(JSONROOT)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
+            .add(LoadStmt.PARTIAL_UPDATE)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -148,6 +149,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private long maxBatchRows = -1;
     private boolean strictMode = true;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
+    private boolean partialUpdate = false;
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -228,6 +230,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return timezone;
     }
 
+    public boolean isPartialUpdate() {
+        return partialUpdate;
+    }
+
     public String getFormat() {
         return format;
     }
@@ -260,6 +266,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return customKafkaProperties;
     }
 
+    public List<ParseNode> getLoadPropertyList() {
+        return loadPropertyList;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
@@ -268,7 +278,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         // check name
         FeNameFormat.checkCommonName(NAME_TYPE, name);
         // check load properties include column separator etc.
-        checkLoadProperties();
+        routineLoadDesc = buildLoadDesc(loadPropertyList);
         // check routine load job properties include desired concurrent number etc.
         checkJobProperties();
         // check data source properties
@@ -284,9 +294,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
     }
 
-    public void checkLoadProperties() throws UserException {
+    public static RoutineLoadDesc buildLoadDesc(List<ParseNode> loadPropertyList) throws UserException {
         if (loadPropertyList == null) {
-            return;
+            return null;
         }
         ColumnSeparator columnSeparator = null;
         RowDelimiter rowDelimiter = null;
@@ -302,7 +312,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 columnSeparator = (ColumnSeparator) parseNode;
                 columnSeparator.analyze(null);
             } else if (parseNode instanceof RowDelimiter) {
-                // check row delimiter 
+                // check row delimiter
                 if (rowDelimiter != null) {
                     throw new AnalysisException("repeat setting of row delimiter");
                 }
@@ -329,7 +339,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 partitionNames.analyze(null);
             }
         }
-        routineLoadDesc = new RoutineLoadDesc(columnSeparator, rowDelimiter, importColumnsStmt, importWhereStmt,
+        return new RoutineLoadDesc(columnSeparator, rowDelimiter, importColumnsStmt, importWhereStmt,
                 partitionNames);
     }
 
@@ -361,6 +371,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         strictMode = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.STRICT_MODE),
                 RoutineLoadJob.DEFAULT_STRICT_MODE,
                 LoadStmt.STRICT_MODE + " should be a boolean");
+
+        partialUpdate = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.PARTIAL_UPDATE),
+                false,
+                LoadStmt.PARTIAL_UPDATE + " should be a boolean");
 
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();

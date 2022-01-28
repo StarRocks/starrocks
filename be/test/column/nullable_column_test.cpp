@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/nullable_column.h"
 
 #include <gtest/gtest.h>
 
+#include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "testutil/parallel_test.h"
 
@@ -195,6 +196,57 @@ PARALLEL_TEST(NullableColumnTest, test_clone_empty) {
     ASSERT_TRUE(down_cast<NullableColumn*>(c2.get())->null_column().unique());
     ASSERT_EQ(0, down_cast<NullableColumn*>(c2.get())->data_column()->size());
     ASSERT_EQ(0, down_cast<NullableColumn*>(c2.get())->null_column()->size());
+}
+
+PARALLEL_TEST(NullableColumnTest, test_update_rows) {
+    auto column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    column->append_datum((int32_t)1);
+    column->append_datum((int32_t)2);
+    column->append_datum({});
+    column->append_datum((int32_t)4);
+    column->append_datum({});
+
+    auto replace_col1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    replace_col1->append_datum({});
+    replace_col1->append_datum((int32_t)5);
+
+    std::vector<uint32_t> replace_idxes = {1, 4};
+    ASSERT_TRUE(column->update_rows(*replace_col1.get(), replace_idxes.data()).ok());
+    ASSERT_EQ(5, column->size());
+    ASSERT_TRUE(column->data_column().unique());
+    ASSERT_TRUE(column->null_column().unique());
+    ASSERT_EQ(5, column->data_column()->size());
+    ASSERT_EQ(5, column->null_column()->size());
+
+    ASSERT_EQ(1, column->get(0).get_int32());
+    ASSERT_TRUE(column->get(1).is_null());
+    ASSERT_TRUE(column->get(2).is_null());
+    ASSERT_EQ(4, column->get(3).get_int32());
+    ASSERT_EQ(5, column->get(4).get_int32());
+
+    auto column1 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    column1->append_datum("abc");
+    column1->append_datum("def");
+    column1->append_datum({});
+    column1->append_datum("ghi");
+    column1->append_datum({});
+
+    auto replace_col2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    replace_col2->append_datum({});
+    replace_col2->append_datum("jk");
+
+    ASSERT_TRUE(column1->update_rows(*replace_col2.get(), replace_idxes.data()).ok());
+    ASSERT_EQ(5, column1->size());
+    ASSERT_TRUE(column1->data_column().unique());
+    ASSERT_TRUE(column1->null_column().unique());
+    ASSERT_EQ(5, column1->data_column()->size());
+    ASSERT_EQ(5, column1->null_column()->size());
+
+    ASSERT_EQ("abc", column1->get(0).get_slice().to_string());
+    ASSERT_TRUE(column1->get(1).is_null());
+    ASSERT_TRUE(column1->get(2).is_null());
+    ASSERT_EQ("ghi", column1->get(3).get_slice().to_string());
+    ASSERT_EQ("jk", column1->get(4).get_slice().to_string());
 }
 
 } // namespace starrocks::vectorized

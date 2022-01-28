@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -19,8 +19,25 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public boolean hasGlobalDict(long tableId, String columnName, long version) {
+    public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
         return true;
+    }
+
+    @Override
+    public void updateGlobalDict(long tableId, String columnName, long versionTime) {
+    }
+
+    @Override
+    public boolean hasGlobalDict(long tableId, String columnName) {
+        return true;
+    }
+
+    @Override
+    public void removeGlobalDict(long tableId, String columnName) {
+    }
+
+    @Override
+    public void forbitGlobalDict(long tableId) {
     }
 
     @Override

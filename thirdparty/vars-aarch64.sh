@@ -1,5 +1,5 @@
 #!/bin/bash
-# This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #####################################################
 # Download url, filename and unpaced filename
@@ -13,7 +13,7 @@
 HADOOP_DOWNLOAD="https://cdn-thirdparty.starrocks.com/hadoop-3.3.0-aarch64.tar.gz"
 HADOOP_NAME="hadoop-3.3.0-aarch64.tar.gz"
 HADOOP_SOURCE="hadoop-3.3.0-aarch64"
-HADOOP_MD5SUM="4e2e3e0dc8a1d80e1940565bbf6199a4"
+HADOOP_MD5SUM="c84cfa985175341d3df0b2b57521eec9"
 
 # OPEN JDK FOR aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/devkit/compiler)
 JDK_DOWNLOAD="https://mirror.iscas.ac.cn/kunpeng/archive/compiler/bisheng_jdk/bisheng-jdk-8u262-linux-aarch64.tar.gz"

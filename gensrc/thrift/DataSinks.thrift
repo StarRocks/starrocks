@@ -35,7 +35,8 @@ enum TDataSinkType {
     MYSQL_TABLE_SINK,
     EXPORT_SINK,
     OLAP_TABLE_SINK,
-    MEMORY_SCRATCH_SINK
+    MEMORY_SCRATCH_SINK,
+    MULTI_CAST_DATA_STREAM_SINK,
 }
 
 enum TResultSinkType {
@@ -58,6 +59,16 @@ struct TMemoryScratchSink {
 
 }
 
+// Specification of one output destination of a plan fragment
+struct TPlanFragmentDestination {
+  // the globally unique fragment instance id
+  1: required Types.TUniqueId fragment_instance_id
+
+  // ... which is being executed on this server
+  2: required Types.TNetworkAddress server
+  3: optional Types.TNetworkAddress brpc_server
+}
+
 // Sink which forwards data to a remote plan fragment,
 // according to the given output partition specification
 // (ie, the m:1 part of an m:n data stream)
@@ -71,6 +82,22 @@ struct TDataStreamSink {
   2: required Partitions.TDataPartition output_partition
 
   3: optional bool ignore_not_found
+
+  // Only useful in pipeline mode
+  // If receiver side is ExchangeMergeSortSourceOperator, then all the
+  // packets should be kept in order (according sequence), so the sender
+  // side need to maintain a send window in order to avoiding the receiver
+  // buffer too many out-of-order packets
+  4: optional bool is_merge
+
+  // degree of paralleliasm of destination
+  // only used in pipeline engine
+  5: optional i32 dest_dop
+}
+
+struct TMultiCastDataStreamSink {
+    1: required list<TDataStreamSink> sinks;
+    2: required list< list<TPlanFragmentDestination> > destinations;
 }
 
 struct TResultSink {
@@ -125,5 +152,5 @@ struct TDataSink {
   6: optional TExportSink export_sink
   7: optional TOlapTableSink olap_table_sink
   8: optional TMemoryScratchSink memory_scratch_sink
+  9: optional TMultiCastDataStreamSink multi_cast_stream_sink
 }
-

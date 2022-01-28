@@ -25,7 +25,7 @@
 #include <iostream>
 #include <string>
 
-#include "storage/olap_define.h"
+#include "common/status.h"
 
 namespace starrocks {
 
@@ -100,7 +100,7 @@ struct decimal12_t {
         return std::string(buf);
     }
 
-    OLAPStatus from_string(const std::string& str);
+    Status from_string(const std::string& str);
 
     static const int32_t FRAC_RATIO = 1000000000;
     static const int32_t MAX_INT_DIGITS_NUM = 18;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -44,7 +44,10 @@ public:
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeMinAggregateFunction();
 
-    template <typename NestedState>
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeAnyValueAggregateFunction();
+
+    template <typename NestedState, bool IgnoreNull = true>
     static AggregateFunctionPtr MakeNullableAggregateFunctionUnary(AggregateFunctionPtr nested_function);
 
     template <typename NestedState>
@@ -65,6 +68,7 @@ public:
     static AggregateFunctionPtr MakeSumDistinctAggregateFunctionV2();
 
     static AggregateFunctionPtr MakeDictMergeAggregateFunction();
+    static AggregateFunctionPtr MakeRetentionAggregateFunction();
 
     // Hyperloglog functions:
     static AggregateFunctionPtr MakeHllUnionAggregateFunction();
@@ -77,6 +81,9 @@ public:
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeArrayAggAggregateFunction();
 
     // Windows functions:
     static AggregateFunctionPtr MakeDenseRankWindowFunction();
@@ -95,9 +102,14 @@ public:
     static AggregateFunctionPtr MakeLeadLagWindowFunction();
 };
 
-extern const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
-                                                       PrimitiveType return_type, bool is_null,
-                                                       int agg_func_set_version = 1);
+const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
+                                                PrimitiveType return_type, bool is_null,
+                                                TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN,
+                                                int agg_func_set_version = 1);
+
+const AggregateFunction* get_window_function(const std::string& name, PrimitiveType arg_type, PrimitiveType return_type,
+                                             bool is_null,
+                                             TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN);
 
 } // namespace vectorized
 } // namespace starrocks

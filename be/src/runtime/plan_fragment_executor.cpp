@@ -39,7 +39,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/parse_util.h"
 #include "util/pretty_printer.h"
@@ -71,21 +70,9 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
               << " fragment_instance_id=" << print_id(params.fragment_instance_id)
               << " backend_num=" << request.backend_num;
 
-    _runtime_state = std::make_unique<RuntimeState>(params.query_id, params.fragment_instance_id, request.query_options,
-                                                    request.query_globals, _exec_env);
+    DCHECK(_runtime_state->chunk_size() > 0);
 
-    if (_is_vectorized) {
-        _runtime_state->set_batch_size(config::vector_chunk_size);
-    }
-
-    RETURN_IF_ERROR(_runtime_state->init_mem_trackers(_query_id));
     _runtime_state->set_be_number(request.backend_num);
-    if (request.__isset.import_label) {
-        _runtime_state->set_import_label(request.import_label);
-    }
-    if (request.__isset.db_name) {
-        _runtime_state->set_db_name(request.db_name);
-    }
     if (request.__isset.load_job_id) {
         _runtime_state->set_load_job_id(request.load_job_id);
     }
@@ -105,44 +92,27 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
             "AverageThreadTokens", std::bind<int64_t>(std::mem_fn(&ThreadResourceMgr::ResourcePool::num_threads),
                                                       _runtime_state->resource_pool()));
 
-    int64_t bytes_limit = request.query_options.mem_limit;
-    if (bytes_limit <= 0) {
-        // sometimes the request does not set the query mem limit, we use default one.
-        // TODO(cmy): we should not allow request without query mem limit.
-        bytes_limit = 2 * 1024 * 1024 * 1024L;
-    }
-
-    if (bytes_limit > _exec_env->query_pool_mem_tracker()->limit()) {
-        LOG(WARNING) << "Query memory limit " << PrettyPrinter::print(bytes_limit, TUnit::BYTES)
-                     << " exceeds process memory limit of "
-                     << PrettyPrinter::print(_exec_env->query_pool_mem_tracker()->limit(), TUnit::BYTES)
-                     << ". Using process memory limit instead";
-        bytes_limit = _exec_env->query_pool_mem_tracker()->limit();
-    }
-    // NOTE: this MemTracker only for olap
-    _mem_tracker =
-            std::make_unique<MemTracker>(bytes_limit, "fragment mem-limit", _exec_env->query_pool_mem_tracker(), true);
-    _runtime_state->set_fragment_mem_tracker(_mem_tracker.get());
-
-    LOG(INFO) << "Using query memory limit: " << PrettyPrinter::print(bytes_limit, TUnit::BYTES);
-
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
     DCHECK(request.__isset.desc_tbl);
-    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl));
+    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl, _runtime_state->chunk_size()));
     _runtime_state->set_desc_tbl(desc_tbl);
 
     // set up plan
     DCHECK(request.__isset.fragment);
-    RETURN_IF_ERROR(ExecNode::create_tree(_runtime_state.get(), obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
+    RETURN_IF_ERROR(ExecNode::create_tree(_runtime_state, obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
     _runtime_state->set_fragment_root_id(_plan->id());
 
-    if (request.params.__isset.debug_node_id) {
-        DCHECK(request.params.__isset.debug_action);
-        DCHECK(request.params.__isset.debug_phase);
-        ExecNode::set_debug_options(request.params.debug_node_id, request.params.debug_phase,
-                                    request.params.debug_action, _plan);
+    if (request.fragment.__isset.query_global_dicts) {
+        RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
     }
+
+    if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
+        _is_runtime_filter_merge_node = true;
+        _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params,
+                                                       false);
+    }
+    _exec_env->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
 
     // set #senders of exchange nodes before calling Prepare()
     std::vector<ExecNode*> exch_nodes;
@@ -154,15 +124,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         static_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
 
-    // when has adapter node, set the batch_size with the config::vector_chunk_size
-    // otherwise the adapter node will crash when convert
-    std::vector<ExecNode*> adaptor_nodes;
-    _plan->collect_nodes(TPlanNodeType::ADAPTER_NODE, &adaptor_nodes);
-    if (!adaptor_nodes.empty()) {
-        _runtime_state->set_batch_size(config::vector_chunk_size);
-    }
-
-    RETURN_IF_ERROR(_plan->prepare(_runtime_state.get()));
+    RETURN_IF_ERROR(_plan->prepare(_runtime_state));
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;
@@ -183,7 +145,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     // set up sink, if required
     if (request.fragment.__isset.output_sink) {
-        RETURN_IF_ERROR(DataSink::create_data_sink(obj_pool(), request.fragment.output_sink,
+        RETURN_IF_ERROR(DataSink::create_data_sink(_runtime_state, request.fragment.output_sink,
                                                    request.fragment.output_exprs, params, row_desc(), &_sink));
         RETURN_IF_ERROR(_sink->prepare(runtime_state()));
 
@@ -214,20 +176,16 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         _sink->set_query_statistics(_query_statistics);
     }
 
-    if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
-        _is_runtime_filter_merge_node = true;
-        _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params);
-    }
     return Status::OK();
 }
 
 Status PlanFragmentExecutor::open() {
     LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
-    CurrentThread::set_query_id(_runtime_state->query_id());
+    tls_thread_status.set_query_id(_runtime_state->query_id());
 
     Status status = _open_internal_vectorized();
     if (!status.ok() && !status.is_cancelled() && _runtime_state->log_has_space()) {
-        LOG(WARNING) << "fail to open fragment, instance_id=" << print_id(_runtime_state->fragment_instance_id())
+        LOG(WARNING) << "Fail to open fragment, instance_id=" << print_id(_runtime_state->fragment_instance_id())
                      << ", status=" << status.to_string();
         // Log error message in addition to returning in Status. Queries that do not
         // fetch results (e.g. insert) may not receive the message directly and can
@@ -242,7 +200,7 @@ Status PlanFragmentExecutor::open() {
 Status PlanFragmentExecutor::_open_internal_vectorized() {
     {
         SCOPED_TIMER(profile()->total_time_counter());
-        RETURN_IF_ERROR(_plan->open(_runtime_state.get()));
+        RETURN_IF_ERROR(_plan->open(_runtime_state));
     }
 
     if (_sink == nullptr) {
@@ -254,6 +212,8 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
     // when this returns the query has actually finished
     vectorized::ChunkPtr chunk;
     while (true) {
+        RETURN_IF_ERROR(runtime_state()->check_mem_limit("QUERY"));
+
         RETURN_IF_ERROR(_get_next_internal_vectorized(&chunk));
 
         if (chunk == nullptr) {
@@ -366,7 +326,7 @@ Status PlanFragmentExecutor::_get_next_internal_vectorized(vectorized::ChunkPtr*
     // If we set chunk to nullptr, means this fragment read done
     while (!_done) {
         SCOPED_TIMER(profile()->total_time_counter());
-        RETURN_IF_ERROR(_plan->get_next(_runtime_state.get(), &_chunk, &_done));
+        RETURN_IF_ERROR(_plan->get_next(_runtime_state, &_chunk, &_done));
         if (_done) {
             *chunk = nullptr;
             return Status::OK();
@@ -413,6 +373,7 @@ void PlanFragmentExecutor::cancel() {
     if (_is_runtime_filter_merge_node) {
         _runtime_state->exec_env()->runtime_filter_worker()->close_query(_query_id);
     }
+    _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
 }
 
 const RowDescriptor& PlanFragmentExecutor::row_desc() {
@@ -455,12 +416,13 @@ void PlanFragmentExecutor::close() {
     if (_is_runtime_filter_merge_node) {
         _exec_env->runtime_filter_worker()->close_query(_query_id);
     }
+    _exec_env->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
 
     // Prepare may not have been called, which sets _runtime_state
     if (_runtime_state != nullptr) {
         // _runtime_state init failed
         if (_plan != nullptr) {
-            _plan->close(_runtime_state.get());
+            _plan->close(_runtime_state);
         }
 
         if (_sink != nullptr) {
@@ -490,10 +452,6 @@ void PlanFragmentExecutor::close() {
         }
     }
 
-    // _mem_tracker init failed
-    if (_mem_tracker != nullptr) {
-        _mem_tracker->release(_mem_tracker->consumption());
-    }
     _closed = true;
 }
 

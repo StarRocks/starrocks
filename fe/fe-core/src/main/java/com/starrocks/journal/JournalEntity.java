@@ -73,6 +73,7 @@ import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PrivInfo;
@@ -139,13 +140,14 @@ public class JournalEntity implements Writable {
         boolean isRead = false;
         LOG.debug("get opcode: {}", opCode);
         switch (opCode) {
-            case OperationType.OP_SAVE_NEXTID: {
-                data = new Text();
-                ((Text) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_SAVE_TRANSACTION_ID: {
+            case OperationType.OP_SAVE_NEXTID:
+            case OperationType.OP_SAVE_TRANSACTION_ID:
+            case OperationType.OP_ERASE_DB:
+            case OperationType.OP_ERASE_TABLE:
+            case OperationType.OP_ERASE_PARTITION:
+            case OperationType.OP_META_VERSION:
+            case OperationType.OP_DROP_ALL_BROKER:
+            case OperationType.OP_DROP_REPOSITORY: {
                 data = new Text();
                 ((Text) data).readFields(in);
                 isRead = true;
@@ -163,7 +165,8 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_ALTER_DB:
-            case OperationType.OP_RENAME_DB: {
+            case OperationType.OP_RENAME_DB:
+            case OperationType.OP_UPDATE_DB: {
                 data = new DatabaseInfo();
                 ((DatabaseInfo) data).readFields(in);
                 isRead = true;
@@ -175,9 +178,15 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_DROP_TABLE: {
+            case OperationType.OP_DROP_TABLE:
+            case OperationType.OP_DROP_ROLLUP: {
                 data = new DropInfo();
                 ((DropInfo) data).readFields(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ERASE_MULTI_TABLES: {
+                data = MultiEraseTableInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -208,14 +217,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_ERASE_DB:
-            case OperationType.OP_ERASE_TABLE:
-            case OperationType.OP_ERASE_PARTITION: {
-                data = new Text();
-                ((Text) data).readFields(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_RECOVER_DB:
             case OperationType.OP_RECOVER_TABLE:
             case OperationType.OP_RECOVER_PARTITION: {
@@ -235,12 +236,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_START_DECOMMISSION_BACKEND:
             case OperationType.OP_FINISH_DECOMMISSION_BACKEND: {
                 data = AlterJob.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_DROP_ROLLUP: {
-                data = new DropInfo();
-                ((DropInfo) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -360,13 +355,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            //compatible with old community meta, newly added log using OP_META_VERSION_V2
-            case OperationType.OP_META_VERSION: {
-                data = new Text();
-                ((Text) data).readFields(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_META_VERSION_V2: {
                 data = MetaVersion.read(in);
                 isRead = true;
@@ -397,12 +385,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_UPDATE_DB: {
-                data = new DatabaseInfo();
-                ((DatabaseInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_DROP_LINKDB: {
                 data = new DropLinkDbAndUpdateDbInfo();
                 ((DropLinkDbAndUpdateDbInfo) data).readFields(in);
@@ -413,12 +395,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DROP_BROKER: {
                 data = new BrokerMgr.ModifyBrokerInfo();
                 ((BrokerMgr.ModifyBrokerInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_DROP_ALL_BROKER: {
-                data = new Text();
-                ((Text) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -437,12 +413,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_CREATE_REPOSITORY: {
                 data = Repository.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_DROP_REPOSITORY: {
-                data = new Text();
-                ((Text) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -523,6 +493,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_WORKGROUP: {
+                Text.readString(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_CREATE_SMALL_FILE:
             case OperationType.OP_DROP_SMALL_FILE: {
                 data = SmallFile.read(in);
@@ -551,6 +526,7 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DYNAMIC_PARTITION:
             case OperationType.OP_MODIFY_IN_MEMORY:
+            case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
             case OperationType.OP_MODIFY_REPLICATION_NUM: {
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;

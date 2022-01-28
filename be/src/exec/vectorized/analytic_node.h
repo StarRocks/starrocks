@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -11,16 +11,19 @@
 namespace starrocks {
 namespace vectorized {
 
-class AnalyticNode : public ExecNode {
+class AnalyticNode final : public ExecNode {
 public:
-    ~AnalyticNode() override = default;
     AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
+    ~AnalyticNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status close(RuntimeState* state) override;
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(

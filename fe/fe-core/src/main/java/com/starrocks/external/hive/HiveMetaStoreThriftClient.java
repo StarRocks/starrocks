@@ -75,6 +75,7 @@ import org.apache.hadoop.hive.metastore.api.NoSuchLockException;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.NoSuchTxnException;
 import org.apache.hadoop.hive.metastore.api.NotNullConstraintsRequest;
+import org.apache.hadoop.hive.metastore.api.NotificationEventRequest;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.NotificationEventsCountRequest;
 import org.apache.hadoop.hive.metastore.api.NotificationEventsCountResponse;
@@ -137,12 +138,11 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.thrift.TConfiguration;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.layered.TFramedTransport;
+import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
@@ -301,7 +301,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
             if (MetastoreConf.getVar(conf, ConfVars.THRIFT_URI_SELECTION).equalsIgnoreCase("RANDOM")) {
                 List<URI> uriList = Arrays.asList(metastoreUris);
                 Collections.shuffle(uriList);
-                metastoreUris = (URI[]) uriList.toArray();
+                metastoreUris = uriList.toArray(metastoreUris);
             }
         } catch (IllegalArgumentException e) {
             throw (e);
@@ -440,7 +440,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
                             throw new MetaException(e.toString());
                         }
                     } else {
-                        transport = new TSocket(TConfiguration.custom().build(), store.getHost(), store.getPort(), clientSocketTimeout);
+                        transport = new TSocket(store.getHost(), store.getPort(), clientSocketTimeout);
                     }
 
                     if (useSasl) {
@@ -524,7 +524,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
                                     + "Continuing without it.", e);
                         }
                     }
-                } catch (MetaException | TTransportException e) {
+                } catch (MetaException e) {
                     LOG.error("Unable to connect to metastore with URI " + store
                             + " in attempt " + attempt, e);
                 }
@@ -691,6 +691,20 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
         PartitionsStatsRequest rqst = new PartitionsStatsRequest(dbName, tableName, colNames,
                 partNames);
         return client.get_partitions_statistics_req(rqst).getPartStats();
+    }
+
+    @Override
+    public NotificationEventResponse getNextNotification(long lastEventId, int maxEvents, NotificationFilter filter)
+            throws TException {
+        NotificationEventRequest eventRequest = new NotificationEventRequest();
+        eventRequest.setMaxEvents(maxEvents);
+        eventRequest.setLastEvent(lastEventId);
+        return client.get_next_notification(eventRequest);
+    }
+
+    @Override
+    public CurrentNotificationEventId getCurrentNotificationEventId() throws TException {
+        return client.get_current_notificationEventId();
     }
 
     public void setMetaConf(String key, String value) throws MetaException, TException {
@@ -1868,17 +1882,6 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     @Override
     public void insertTable(Table table, boolean overwrite) throws MetaException {
         throw new MetaException("method not implemented");
-    }
-
-    @Override
-    public NotificationEventResponse getNextNotification(long lastEventId, int maxEvents, NotificationFilter filter)
-            throws TException {
-        throw new TException("method not implemented");
-    }
-
-    @Override
-    public CurrentNotificationEventId getCurrentNotificationEventId() throws TException {
-        throw new TException("method not implemented");
     }
 
     @Override

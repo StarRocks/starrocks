@@ -59,7 +59,6 @@ private:
 TEST_F(ExternalScanContextMgrTest, create_normal) {
     std::shared_ptr<ScanContext> context;
     ExternalScanContextMgr context_mgr(&_exec_env);
-    context_mgr._is_stop = true;
     Status st = context_mgr.create_scan_context(&context);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(context != nullptr);
@@ -68,7 +67,6 @@ TEST_F(ExternalScanContextMgrTest, create_normal) {
 TEST_F(ExternalScanContextMgrTest, get_normal) {
     std::shared_ptr<ScanContext> context;
     ExternalScanContextMgr context_mgr(&_exec_env);
-    context_mgr._is_stop = true;
     Status st = context_mgr.create_scan_context(&context);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(context != nullptr);
@@ -84,7 +82,6 @@ TEST_F(ExternalScanContextMgrTest, get_abnormal) {
     std::string context_id = "not_exist";
     std::shared_ptr<ScanContext> result;
     ExternalScanContextMgr context_mgr(&_exec_env);
-    context_mgr._is_stop = true;
     Status st = context_mgr.get_scan_context(context_id, &result);
     ASSERT_TRUE(!st.ok());
     ASSERT_TRUE(result == nullptr);
@@ -93,7 +90,6 @@ TEST_F(ExternalScanContextMgrTest, get_abnormal) {
 TEST_F(ExternalScanContextMgrTest, clear_context) {
     std::shared_ptr<ScanContext> context;
     ExternalScanContextMgr context_mgr(&_exec_env);
-    context_mgr._is_stop = true;
     Status st = context_mgr.create_scan_context(&context);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(context != nullptr);

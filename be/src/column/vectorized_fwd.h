@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <memory>
 #include <vector>
@@ -23,7 +23,7 @@ class Chunk;
 class Field;
 class Column;
 class Schema;
-struct RuntimeChunkMeta;
+struct ProtobufChunkMeta;
 
 // We may change the Buffer implementation in the future.
 template <typename T>
@@ -31,9 +31,14 @@ using Buffer = std::vector<T>;
 
 class ArrayColumn;
 class BinaryColumn;
+class NullableColumn;
+class ConstColumn;
 
 template <typename T>
 class FixedLengthColumn;
+
+template <typename T>
+class FixedLengthColumnBase;
 
 template <typename T>
 class DecimalV3Column;
@@ -43,10 +48,11 @@ using MutableColumnPtr = std::unique_ptr<Column>;
 using Columns = std::vector<ColumnPtr>;
 using MutableColumns = std::vector<MutableColumnPtr>;
 
+using Int8Column = FixedLengthColumn<int8_t>;
 using UInt8Column = FixedLengthColumn<uint8_t>;
 using BooleanColumn = UInt8Column;
-using Int8Column = FixedLengthColumn<int8_t>;
 using Int16Column = FixedLengthColumn<int16_t>;
+using UInt16Column = FixedLengthColumn<uint16_t>;
 using Int32Column = FixedLengthColumn<int32_t>;
 using UInt32Column = FixedLengthColumn<uint32_t>;
 using Int64Column = FixedLengthColumn<int64_t>;

@@ -1,6 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.base;
+
+import com.starrocks.sql.optimizer.operator.Operator;
 
 import java.util.Objects;
 
@@ -9,7 +11,7 @@ import java.util.Objects;
  */
 public class GatherDistributionSpec extends DistributionSpec {
     // limit doesn't affect distribution property
-    private long limit = -1;
+    private long limit = Operator.DEFAULT_LIMIT;
 
     public GatherDistributionSpec() {
         super(DistributionType.GATHER);
@@ -33,7 +35,7 @@ public class GatherDistributionSpec extends DistributionSpec {
     }
 
     public boolean hasLimit() {
-        return limit != -1;
+        return limit != Operator.DEFAULT_LIMIT;
     }
 
     @Override

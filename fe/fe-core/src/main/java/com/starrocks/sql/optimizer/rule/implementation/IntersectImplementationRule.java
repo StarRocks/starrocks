@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
@@ -23,7 +23,8 @@ public class IntersectImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalSetOperator setOperator = (LogicalSetOperator) input.getOp();
         PhysicalIntersectOperator physicalIntersect = new PhysicalIntersectOperator(setOperator.getOutputColumnRefOp(),
-                setOperator.getChildOutputColumns(), setOperator.getLimit(), setOperator.getPredicate());
+                setOperator.getChildOutputColumns(), setOperator.getLimit(), setOperator.getPredicate(),
+                setOperator.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalIntersect, input.getInputs()));
     }
 }

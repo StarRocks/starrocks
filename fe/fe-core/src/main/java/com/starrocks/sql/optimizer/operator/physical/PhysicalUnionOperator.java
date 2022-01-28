@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -16,8 +17,9 @@ public class PhysicalUnionOperator extends PhysicalSetOperation {
     public PhysicalUnionOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns,
                                  boolean isUnionAll,
                                  long limit,
-                                 ScalarOperator predicate) {
-        super(OperatorType.PHYSICAL_UNION, columnRef, childOutputColumns, limit, predicate);
+                                 ScalarOperator predicate,
+                                 Projection projection) {
+        super(OperatorType.PHYSICAL_UNION, columnRef, childOutputColumns, limit, predicate, projection);
         this.isUnionAll = isUnionAll;
     }
 

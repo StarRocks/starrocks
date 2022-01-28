@@ -21,19 +21,19 @@
 
 #include "storage/rowset/rowset.h"
 
-#include <runtime/mem_tracker.h>
 #include <util/time.h>
+
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
-Rowset::Rowset(MemTracker* mem_tracker, const TabletSchema* schema, std::string rowset_path,
-               RowsetMetaSharedPtr rowset_meta)
+Rowset::Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta)
         : _schema(schema),
           _rowset_path(std::move(rowset_path)),
           _rowset_meta(std::move(rowset_meta)),
-          _refs_by_reader(0) {
-    _mem_tracker = std::make_unique<MemTracker>(-1, "", mem_tracker, true);
-}
+          _refs_by_reader(0) {}
 
 Status Rowset::load() {
     // if the state is ROWSET_UNLOADING it means close() is called
@@ -57,9 +57,8 @@ Status Rowset::load() {
     return Status::OK();
 }
 
-void Rowset::make_visible(Version version, VersionHash version_hash) {
+void Rowset::make_visible(Version version) {
     _rowset_meta->set_version(version);
-    _rowset_meta->set_version_hash(version_hash);
     _rowset_meta->set_rowset_state(VISIBLE);
     // update create time to the visible time,
     // it's used to skip recently published version during compaction
@@ -69,14 +68,13 @@ void Rowset::make_visible(Version version, VersionHash version_hash) {
         _rowset_meta->mutable_delete_predicate()->set_version(version.first);
         return;
     }
-    make_visible_extra(version, version_hash);
+    make_visible_extra(version);
 }
 
 void Rowset::make_commit(int64_t version, uint32_t rowset_seg_id) {
     _rowset_meta->set_rowset_seg_id(rowset_seg_id);
     Version v(version, version);
     _rowset_meta->set_version(v);
-    _rowset_meta->set_version_hash(0);
     _rowset_meta->set_rowset_state(VISIBLE);
     // update create time to the visible time,
     // it's used to skip recently published version during compaction
@@ -86,7 +84,7 @@ void Rowset::make_commit(int64_t version, uint32_t rowset_seg_id) {
         _rowset_meta->mutable_delete_predicate()->set_version(version);
         return;
     }
-    make_visible_extra(v, 0);
+    make_visible_extra(v);
 }
 
 } // namespace starrocks

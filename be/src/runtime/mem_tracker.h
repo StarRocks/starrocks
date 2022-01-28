@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_BE_RUNTIME_MEM_LIMIT_H
-#define STARROCKS_BE_SRC_QUERY_BE_RUNTIME_MEM_LIMIT_H
+#pragma once
 
 #include <cstdint>
 #include <memory>
@@ -28,17 +27,14 @@
 #include <unordered_map>
 
 #include "common/status.h"
-#include "gen_cpp/Types_types.h"
 #include "util/metrics.h"
 #include "util/runtime_profile.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
 
-class ObjectPool;
 class MemTracker;
 class RuntimeState;
-class TQueryOptions;
 
 /// A MemTracker tracks memory consumption; it contains an optional limit
 /// and can be arranged into a tree structure such that the consumption tracked
@@ -81,18 +77,18 @@ public:
         int64_t peak_consumption = 0;
     };
 
-    enum Type { NO_SET, PROCESS, QUERY_POOL, QUERY, LOAD };
+    enum Type { NO_SET, PROCESS, QUERY_POOL, QUERY, LOAD, CONSISTENCY, COMPACTION, SCHEMA_CHANGE_TASK };
 
     /// 'byte_limit' < 0 means no limit
     /// 'label' is the label used in the usage string (LogUsage())
     /// If 'auto_unregister' is true, never call unregister_from_parent().
     /// If 'log_usage_if_zero' is false, this tracker (and its children) will not be included
     /// in LogUsage() output if consumption is 0.
-    MemTracker(int64_t byte_limit = -1, std::string label = std::string(), MemTracker* parent = nullptr,
-               bool auto_unregister = true, bool log_usage_if_zero = true);
+    explicit MemTracker(int64_t byte_limit = -1, std::string label = std::string(), MemTracker* parent = nullptr,
+                        bool auto_unregister = true, bool log_usage_if_zero = true);
 
-    MemTracker(Type type, int64_t byte_limit = -1, std::string label = std::string(), MemTracker* parent = nullptr,
-               bool auto_unregister = true, bool log_usage_if_zero = true);
+    explicit MemTracker(Type type, int64_t byte_limit = -1, std::string label = std::string(),
+                        MemTracker* parent = nullptr, bool auto_unregister = true, bool log_usage_if_zero = true);
 
     /// C'tor for tracker for which consumption counter is created as part of a profile.
     /// The counter is created with name COUNTER_NAME.
@@ -100,13 +96,6 @@ public:
                MemTracker* parent = nullptr, bool auto_unregister = true);
 
     ~MemTracker();
-
-    /// Closes this MemTracker. After closing it is invalid to consume memory on this
-    /// tracker and the tracker's consumption counter (which may be owned by a
-    /// RuntimeProfile, not this MemTracker) can be safely destroyed. MemTrackers without
-    /// consumption metrics in the context of a daemon must always be closed.
-    /// Idempotent: calling multiple times has no effect.
-    void close();
 
     // Removes this tracker from _parent->_child_trackers.
     void unregister_from_parent() {
@@ -116,31 +105,27 @@ public:
         _child_tracker_it = _parent->_child_trackers.end();
     }
 
+    // used for single mem_tracker
+    void set(int64_t bytes) { _consumption->set(bytes); }
+
     void consume(int64_t bytes) {
         if (bytes <= 0) {
             if (bytes < 0) release(-bytes);
             return;
         }
-        for (auto& _all_tracker : _all_trackers) {
-            _all_tracker->_consumption->add(bytes);
+        for (auto* tracker : _all_trackers) {
+            tracker->_consumption->add(bytes);
         }
     }
 
-    /// Increases/Decreases the consumption of this tracker and the ancestors up to (but
-    /// not including) end_tracker. This is useful if we want to move tracking between
-    /// trackers that share a common (i.e. end_tracker) ancestor. This happens when we want
-    /// to update tracking on a particular mem tracker but the consumption against
-    /// the limit recorded in one of its ancestors already happened.
-    void consume_local(int64_t bytes, MemTracker* end_tracker) {
-        for (auto& _all_tracker : _all_trackers) {
-            if (_all_tracker == end_tracker) return;
-            DCHECK(!_all_tracker->has_limit());
-            _all_tracker->_consumption->add(bytes);
+    void release_without_root() {
+        int64_t bytes = consumption();
+        if (bytes != 0) {
+            for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
+                _all_trackers[i]->_consumption->add(-bytes);
+            }
         }
-        DCHECK(false) << "end_tracker is not an ancestor";
     }
-
-    void release_local(int64_t bytes, MemTracker* end_tracker) { consume_local(-bytes, end_tracker); }
 
     void list_mem_usage(std::vector<SimpleItem>* items, size_t cur_level, size_t upper_level) const {
         SimpleItem item;
@@ -170,9 +155,9 @@ public:
     /// are updated.
     /// Returns true if the try succeeded.
     WARN_UNUSED_RESULT
-    bool try_consume(int64_t bytes) {
-        if (UNLIKELY(bytes <= 0)) return true;
-        int i;
+    MemTracker* try_consume(int64_t bytes) {
+        if (UNLIKELY(bytes <= 0)) return nullptr;
+        int64_t i;
         // Walk the tracker tree top-down.
         for (i = _all_trackers.size() - 1; i >= 0; --i) {
             MemTracker* tracker = _all_trackers[i];
@@ -184,16 +169,16 @@ public:
                     continue;
                 } else {
                     // Failed for this mem tracker. Roll back the ones that succeeded.
-                    for (int j = _all_trackers.size() - 1; j > i; --j) {
+                    for (int64_t j = _all_trackers.size() - 1; j > i; --j) {
                         _all_trackers[j]->_consumption->add(-bytes);
                     }
-                    return false;
+                    return tracker;
                 }
             }
         }
         // Everyone succeeded, return.
         DCHECK_EQ(i, -1);
-        return true;
+        return nullptr;
     }
 
     /// Decreases consumption of this tracker and its ancestors by 'bytes'.
@@ -202,11 +187,9 @@ public:
             if (bytes < 0) consume(-bytes);
             return;
         }
-        for (auto& _all_tracker : _all_trackers) {
-            _all_tracker->_consumption->add(-bytes);
+        for (auto* tracker : _all_trackers) {
+            tracker->_consumption->add(-bytes);
         }
-
-        /// TODO: Release brokered memory?
     }
 
     // Returns true if a valid limit of this tracker or one of its ancestors is exceeded.
@@ -220,7 +203,7 @@ public:
     }
 
     // Return limit exceeded tracker or null
-    MemTracker* find_limit_exceeded_tracker() {
+    MemTracker* find_limit_exceeded_tracker() const {
         for (auto& _limit_tracker : _limit_trackers) {
             if (_limit_tracker->limit_exceeded()) {
                 return _limit_tracker;
@@ -269,12 +252,6 @@ public:
 
     MemTracker* parent() const { return _parent; }
 
-    /// Signature for function that can be called to free some memory after limit is
-    /// reached. The function should try to free at least 'bytes_to_free' bytes of
-    /// memory. See the class header for further details on the expected behaviour of
-    /// these functions.
-    typedef std::function<void(int64_t bytes_to_free)> GcFunction;
-
     /// Logs the usage of this tracker and optionally its children (recursively).
     /// If 'logged_consumption' is non-NULL, sets the consumption value logged.
     /// 'max_recursive_depth' specifies the maximum number of levels of children
@@ -285,15 +262,16 @@ public:
     /// reporting there.
     std::string LogUsage(int max_recursive_depth, const std::string& prefix = "",
                          int64_t* logged_consumption = nullptr) const;
-    /// Unlimited dumping is useful for query memtrackers or error conditions that
-    /// are not performance sensitive
-    static const int UNLIMITED_DEPTH = INT_MAX;
 
     /// Log the memory usage when memory limit is exceeded and return a status object with
     /// details of the allocation which caused the limit to be exceeded.
     /// If 'failed_allocation_size' is greater than zero, logs the allocation size. If
     /// 'failed_allocation_size' is zero, nothing about the allocation size is logged.
     Status MemLimitExceeded(RuntimeState* state, const std::string& details, int64_t failed_allocation = 0);
+
+    Status check_mem_limit(const std::string& msg) const;
+
+    std::string err_msg(const std::string& msg) const;
 
     static const std::string COUNTER_NAME;
 
@@ -362,6 +340,18 @@ private:
     bool _auto_unregister = false;
 };
 
-} // namespace starrocks
+template <typename T>
+class DeleterWithMemTracker {
+public:
+    DeleterWithMemTracker(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
 
-#endif
+    void operator()(T* ptr) const {
+        _mem_tracker->release(ptr->mem_usage());
+        delete ptr;
+    }
+
+private:
+    MemTracker* _mem_tracker = nullptr;
+};
+
+} // namespace starrocks

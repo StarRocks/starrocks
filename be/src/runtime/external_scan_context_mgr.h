@@ -51,10 +51,7 @@ class ExternalScanContextMgr {
 public:
     ExternalScanContextMgr(ExecEnv* exec_env);
 
-    ~ExternalScanContextMgr() {
-        _is_stop = true;
-        _keep_alive_reaper->join();
-    }
+    ~ExternalScanContextMgr() {}
 
     Status create_scan_context(std::shared_ptr<ScanContext>* p_context);
 
@@ -66,7 +63,6 @@ private:
     ExecEnv* _exec_env;
     std::map<std::string, std::shared_ptr<ScanContext>> _active_contexts;
     void gc_expired_context();
-    bool _is_stop;
     std::unique_ptr<std::thread> _keep_alive_reaper;
     std::mutex _lock;
 };

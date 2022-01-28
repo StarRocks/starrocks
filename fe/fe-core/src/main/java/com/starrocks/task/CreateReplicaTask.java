@@ -52,7 +52,6 @@ public class CreateReplicaTask extends AgentTask {
     private int schemaHash;
 
     private long version;
-    private long versionHash;
 
     private KeysType keysType;
     private TStorageType storageType;
@@ -86,7 +85,7 @@ public class CreateReplicaTask extends AgentTask {
     private boolean isRecoverTask = false;
 
     public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
-                             short shortKeyColumnCount, int schemaHash, long version, long versionHash,
+                             short shortKeyColumnCount, int schemaHash, long version,
                              KeysType keysType, TStorageType storageType,
                              TStorageMedium storageMedium, List<Column> columns,
                              Set<String> bfColumns, double bfFpp, MarkedCountDownLatch<Long, Long> latch,
@@ -99,7 +98,6 @@ public class CreateReplicaTask extends AgentTask {
         this.schemaHash = schemaHash;
 
         this.version = version;
-        this.versionHash = versionHash;
 
         this.keysType = keysType;
         this.storageType = storageType;
@@ -168,6 +166,7 @@ public class CreateReplicaTask extends AgentTask {
         tSchema.setSchema_hash(schemaHash);
         tSchema.setKeys_type(keysType.toThrift());
         tSchema.setStorage_type(storageType);
+        tSchema.setId(indexId); // use index id as the schema id. assume schema change will assign a new index id.
 
         List<TColumn> tColumns = new ArrayList<TColumn>();
         for (Column column : columns) {
@@ -180,6 +179,9 @@ public class CreateReplicaTask extends AgentTask {
             // this prefix is only used in FE, not visible to BE, so we should remove this prefix.
             if (column.getName().startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
                 tColumn.setColumn_name(column.getName().substring(SchemaChangeHandler.SHADOW_NAME_PRFIX.length()));
+            }
+            if (column.getName().startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+                tColumn.setColumn_name(column.getName().substring(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1.length()));
             }
             tColumns.add(tColumn);
         }
@@ -201,7 +203,6 @@ public class CreateReplicaTask extends AgentTask {
         createTabletReq.setTablet_schema(tSchema);
 
         createTabletReq.setVersion(version);
-        createTabletReq.setVersion_hash(versionHash);
 
         createTabletReq.setStorage_medium(storageMedium);
         if (inRestoreMode) {

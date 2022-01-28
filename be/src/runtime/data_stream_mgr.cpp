@@ -29,7 +29,6 @@
 #include "gen_cpp/types.pb.h" // PUniqueId
 #include "runtime/data_stream_recvr.h"
 #include "runtime/raw_value.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/starrocks_metrics.h"
 
@@ -56,12 +55,16 @@ inline uint32_t DataStreamMgr::get_hash_value(const TUniqueId& fragment_instance
 std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
         RuntimeState* state, const RowDescriptor& row_desc, const TUniqueId& fragment_instance_id,
         PlanNodeId dest_node_id, int num_senders, int buffer_size, const std::shared_ptr<RuntimeProfile>& profile,
-        bool is_merging, std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline) {
+        bool is_merging, std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline,
+        int32_t degree_of_parallelism, bool keep_order) {
     DCHECK(profile != nullptr);
     VLOG_FILE << "creating receiver for fragment=" << fragment_instance_id << ", node=" << dest_node_id;
-    std::shared_ptr<DataStreamRecvr> recvr(new DataStreamRecvr(
-            this, state->instance_mem_tracker(), row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
-            buffer_size, profile, std::move(sub_plan_query_statistics_recvr), is_pipeline));
+    PassThroughChunkBuffer* pass_through_chunk_buffer = get_pass_through_chunk_buffer(state->query_id());
+    DCHECK(pass_through_chunk_buffer != nullptr);
+    std::shared_ptr<DataStreamRecvr> recvr(
+            new DataStreamRecvr(this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
+                                buffer_size, profile, std::move(sub_plan_query_statistics_recvr), is_pipeline,
+                                degree_of_parallelism, keep_order, pass_through_chunk_buffer));
     uint32_t hash_value = get_hash_value(fragment_instance_id, dest_node_id);
     std::lock_guard<std::mutex> l(_lock);
     _fragment_stream_set.emplace(fragment_instance_id, dest_node_id);
@@ -119,8 +122,7 @@ Status DataStreamMgr::transmit_data(const PTransmitDataParams* request, ::google
 
     bool eos = request->eos();
     if (request->has_row_batch()) {
-        recvr->add_batch(request->row_batch(), request->sender_id(), request->be_number(), request->packet_seq(),
-                         eos ? nullptr : done);
+        return Status::InternalError("Non-vectorized execute engine is not supported");
     }
 
     if (eos) {
@@ -157,7 +159,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     }
 
     bool eos = request.eos();
-    if (request.chunks_size() > 0) {
+    if (request.chunks_size() > 0 || request.use_pass_through()) {
         RETURN_IF_ERROR(recvr->add_chunks(request, eos ? nullptr : done));
     }
     if (eos) {
@@ -222,6 +224,18 @@ void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
     for (auto& it : recvrs) {
         it->cancel_stream();
     }
+}
+
+void DataStreamMgr::prepare_pass_through_chunk_buffer(const TUniqueId& query_id) {
+    _pass_through_chunk_buffer_manager.open_fragment_instance(query_id);
+}
+
+void DataStreamMgr::destroy_pass_through_chunk_buffer(const TUniqueId& query_id) {
+    _pass_through_chunk_buffer_manager.close_fragment_instance(query_id);
+}
+
+PassThroughChunkBuffer* DataStreamMgr::get_pass_through_chunk_buffer(const TUniqueId& query_id) {
+    return _pass_through_chunk_buffer_manager.get(query_id);
 }
 
 } // namespace starrocks

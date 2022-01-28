@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.external.hive;
 
@@ -140,7 +140,7 @@ public class HiveRepository {
                 result.add(future.get());
             } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("get table {}.{} partition meta info failed.", dbName, tableName,  e);
-                throw new DdlException("get table " + dbName + "." + tableName + " partition meta info failed.", e);
+                throw new DdlException(e.getMessage());
             }
         }
         return result;
@@ -172,7 +172,7 @@ public class HiveRepository {
                 result.add(future.get());
             } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("get table {}.{} partition stats meta info failed.", dbName, tableName,  e);
-                throw new DdlException("get table " + dbName + "." + tableName + " partition meta info failed.", e);
+                throw new DdlException(e.getMessage());
             }
         }
         return result;
@@ -197,6 +197,13 @@ public class HiveRepository {
             throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
         metaCache.refreshPartition(dbName, tableName, partNames);
+    }
+
+    public void refreshTableColumnStats(String resourceName, String dbName, String tableName, List<Column> partColumns,
+                                        List<String> columnNames)
+            throws DdlException {
+        HiveMetaCache metaCache = getMetaCache(resourceName);
+        metaCache.refreshColumnStats(dbName, tableName, partColumns, columnNames);
     }
 
     public void clearCache(String resourceName, String dbName, String tableName) {

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.SqlParser;
@@ -8,8 +8,8 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.relation.InsertRelation;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.ast.InsertRelation;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;

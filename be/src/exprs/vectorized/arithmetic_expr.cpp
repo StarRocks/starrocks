@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/arithmetic_expr.h"
 
@@ -12,13 +12,11 @@
 
 namespace starrocks::vectorized {
 
-#define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)                                                          \
-    CLASS_NAME(const TExprNode& node) : Expr(node) {}                                                 \
-    virtual ~CLASS_NAME() {}                                                                          \
-                                                                                                      \
-    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); } \
-                                                                                                      \
-    virtual bool is_vectorized() const override { return true; };
+#define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)          \
+    CLASS_NAME(const TExprNode& node) : Expr(node) {} \
+    virtual ~CLASS_NAME() {}                          \
+                                                      \
+    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
 
 template <PrimitiveType Type, typename OP>
 class VectorizedArithmeticExpr final : public Expr {
@@ -79,7 +77,7 @@ private:
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
         if constexpr (pt_is_decimal<LType>) {
-            using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<LType, DivOp, false>;
+            using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<LType, DivOp, true>;
             return VectorizedDiv::template evaluate<LType>(l, r);
         } else {
             using RightZeroCheck = ArithmeticRightZeroCheck<LType>;

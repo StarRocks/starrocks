@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.OptExpression;
@@ -8,7 +8,9 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
 public class LogicalExceptOperator extends LogicalSetOperator {
     private LogicalExceptOperator(Builder builder) {
-        super(OperatorType.LOGICAL_EXCEPT, builder.outputColumnRefOp, builder.childOutputColumns);
+        super(OperatorType.LOGICAL_EXCEPT, builder.outputColumnRefOp, builder.childOutputColumns,
+                builder.getLimit(),
+                builder.getProjection());
     }
 
     @Override

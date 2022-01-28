@@ -1,8 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "env/compressed_file.h"
 
 #include <gtest/gtest.h>
+
+#include <memory>
 
 #include "env/env_memory.h"
 #include "exec/decompressor.h"
@@ -41,9 +43,9 @@ protected:
     }
 
     std::shared_ptr<Decompressor> LZ4F_decompressor() {
-        Decompressor* dec = nullptr;
+        std::unique_ptr<Decompressor> dec;
         CHECK(Decompressor::create_decompressor(CompressionTypePB::LZ4_FRAME, &dec).ok());
-        return std::shared_ptr<Decompressor>(dec);
+        return std::shared_ptr<Decompressor>(dec.release());
     }
 
     void test(const TestCase& t) {

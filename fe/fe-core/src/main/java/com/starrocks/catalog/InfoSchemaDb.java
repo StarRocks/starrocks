@@ -43,7 +43,7 @@ public class InfoSchemaDb extends Database {
     }
 
     @Override
-    public boolean createTableWithLock(Table table, boolean isReplay, boolean setIfNotExist) {
+    public boolean createTableWithLock(Table table, boolean isReplay) {
         return false;
     }
 

@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_OLAP_COMMON_H
-#define STARROCKS_BE_SRC_OLAP_OLAP_COMMON_H
+#pragma once
 
 #include <netinet/in.h>
 
@@ -49,13 +48,25 @@ namespace starrocks {
 static const int64_t MAX_ROWSET_ID = 1L << 56;
 
 typedef int32_t SchemaHash;
-typedef int64_t VersionHash;
 typedef __int128 int128_t;
 typedef unsigned __int128 uint128_t;
 
 typedef UniqueId TabletUid;
 
 enum CompactionType { BASE_COMPACTION = 1, CUMULATIVE_COMPACTION = 2, UPDATE_COMPACTION = 3 };
+
+inline std::string to_string(CompactionType type) {
+    switch (type) {
+    case BASE_COMPACTION:
+        return "base";
+    case CUMULATIVE_COMPACTION:
+        return "cumulative";
+    case UPDATE_COMPACTION:
+        return "update";
+    default:
+        return "unknown";
+    }
+}
 
 struct DataDirInfo {
     DataDirInfo() {}
@@ -99,6 +110,14 @@ enum RangeCondition {
     GE = 1, // greater or equal
     LT = 2, // less than
     LE = 3, // less or equal
+};
+
+enum MaterializeType {
+    OLAP_MATERIALIZE_TYPE_UNKNOWN = 0,
+    OLAP_MATERIALIZE_TYPE_PERCENTILE = 1,
+    OLAP_MATERIALIZE_TYPE_HLL = 2,
+    OLAP_MATERIALIZE_TYPE_BITMAP = 3,
+    OLAP_MATERIALIZE_TYPE_COUNT = 4
 };
 
 enum FieldType {
@@ -404,6 +423,7 @@ struct OlapReaderStatistics {
     int64_t segment_init_ns = 0;
     int64_t segment_create_chunk_ns = 0;
 
+    int64_t segment_stats_filtered = 0;
     int64_t rows_key_range_filtered = 0;
     int64_t rows_stats_filtered = 0;
     int64_t rows_bf_filtered = 0;
@@ -419,6 +439,10 @@ struct OlapReaderStatistics {
     int64_t bitmap_index_filter_timer = 0;
 
     int64_t rows_del_vec_filtered = 0;
+
+    int64_t rowsets_read_count = 0;
+    int64_t segments_read_count = 0;
+    int64_t total_columns_data_page_count = 0;
 };
 
 typedef uint32_t ColumnId;
@@ -522,5 +546,3 @@ struct hash<starrocks::TabletSegmentId> {
     }
 };
 } // namespace std
-
-#endif // STARROCKS_BE_SRC_OLAP_OLAP_COMMON_H

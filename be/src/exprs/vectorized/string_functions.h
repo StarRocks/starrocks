@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -82,6 +82,7 @@ public:
 
     /**
      * Repeat a string the specified number of times
+     * we will truncate the result length to 65535
      *
      * @param: [string_value, times]
      * @paramType: [BinaryColumn, IntColumn]
@@ -474,8 +475,8 @@ ColumnPtr StringFunctions::money_format_decimal(FunctionContext* context,
     const auto& type = context->get_arg_type(0);
     int scale = type->scale;
 
-    ColumnBuilder<TYPE_VARCHAR> result;
     auto num_rows = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
     if (scale > 2) {
         // scale down
         money_format_decimal_impl<Type, false, true>(context, money_viewer, num_rows, scale - 2, &result);

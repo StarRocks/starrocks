@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.common;
 
 import com.google.common.base.Preconditions;
@@ -74,12 +74,12 @@ public class TypeManager {
                             "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
                 }
 
-                if (!canCastTo(originArrayItemType, ((ArrayType) targetType).getItemType())) {
+                if (!Type.canCastTo(originArrayItemType, ((ArrayType) targetType).getItemType())) {
                     throw new SemanticException("Cannot cast '" + expr.toSql()
                             + "' from " + originArrayItemType + " to " + ((ArrayType) targetType).getItemType());
                 }
             } else {
-                if (!canCastTo(expr.getType(), targetType)) {
+                if (!Type.canCastTo(expr.getType(), targetType)) {
                     throw new SemanticException("Cannot cast '" + expr.toSql()
                             + "' from " + expr.getType() + " to " + targetType);
                 }
@@ -87,20 +87,6 @@ public class TypeManager {
             return expr.uncheckedCastTo(targetType);
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
-        }
-    }
-
-    public static boolean canCastTo(Type from, Type to) {
-        if (from.isNull()) {
-            return true;
-        }
-
-        if (from.isScalarType() && to.isScalarType()) {
-            return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
-        } else if (from.isArrayType() && to.isArrayType()) {
-            return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
-        } else {
-            return false;
         }
     }
 
@@ -121,7 +107,18 @@ public class TypeManager {
         return compatibleType;
     }
 
-    public static Type getCompatibleTypeForBinary(Type type1, Type type2) {
+    public static Type getCompatibleTypeForBinary(boolean isNotRangeComparison, Type type1, Type type2) {
+        // 1. Many join on-clause use string = int predicate, follow mysql will cast to double, but
+        //    starrocks cast to double will lose precision, the predicate result will error
+        // 2. Why only support equivalence and unequivalence expression cast to string? Because string order is different
+        //    with number order, like: '12' > '2' is false, but 12 > 2 is true
+        if (isNotRangeComparison) {
+            if ((type1.isStringType() && type2.isExactNumericType()) ||
+                    (type1.isExactNumericType() && type2.isStringType())) {
+                return Type.STRING;
+            }
+        }
+
         return BinaryPredicate.getCmpType(type1, type2);
     }
 

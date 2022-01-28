@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -14,10 +14,10 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -38,7 +38,7 @@ import java.util.stream.Collectors;
  * and turning on PreAggregation will help optimize the storage layer merge on read.
  * This rule traverses the query plan from the top down, and the Olap Scan node determines
  * whether preAggregation can be turned on or not based on the information recorded by the PreAggregationContext.
- *
+ * <p>
  * A cross join cannot turn on PreAggregation, and other types of joins can only be turn on on one side.
  * If both sides are opened, many-to-many join results will appear, leading to errors in the upper aggregation results
  */
@@ -52,24 +52,40 @@ public class PreAggregateTurnOnRule {
     private static class PreAggregateVisitor extends OptExpressionVisitor<Void, PreAggregationContext> {
         private static final List<String> AGGREGATE_ONLY_KEY = ImmutableList.<String>builder()
                 .add("NDV")
-                .add("MULTI_DISTINCT_COUNT")
+                .add(FunctionSet.MULTI_DISTINCT_COUNT)
                 .add("APPROX_COUNT_DISTINCT")
                 .add(FunctionSet.BITMAP_UNION_INT.toUpperCase()).build();
 
         @Override
-        public Void visit(OptExpression optExpression, PreAggregationContext context) {
-            // Avoid left child modify context will effect right child
-            if (optExpression.getInputs().size() <= 1) {
-                for (OptExpression opt : optExpression.getInputs()) {
-                    opt.getOp().accept(this, opt, context);
-                }
-            } else {
-                for (OptExpression opt : optExpression.getInputs()) {
-                    opt.getOp().accept(this, opt, context.clone());
-                }
+        public Void visit(OptExpression opt, PreAggregationContext context) {
+            opt.getInputs().forEach(o -> process(o, context.clone()));
+            return null;
+        }
+
+        public Void process(OptExpression opt, PreAggregationContext context) {
+            if (opt.getOp().getProjection() != null) {
+                rewriteProject(opt, context);
             }
 
+            opt.getOp().accept(this, opt, context.clone());
             return null;
+        }
+
+        void rewriteProject(OptExpression opt, PreAggregationContext context) {
+            Projection projection = opt.getOp().getProjection();
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
+
+            context.aggregations = context.aggregations.stream()
+                    .map(d -> d.accept(rewriter, null))
+                    .collect(Collectors.toList());
+
+            context.groupings = context.groupings.stream()
+                    .map(d -> d.accept(rewriter, null))
+                    .collect(Collectors.toList());
+
+            context.joinPredicates = context.joinPredicates.stream().filter(Objects::nonNull)
+                    .map(d -> d.accept(rewriter, null))
+                    .collect(Collectors.toList());
         }
 
         @Override
@@ -82,25 +98,7 @@ public class PreAggregateTurnOnRule {
                     aggregate.getGroupBys().stream().map(ScalarOperator::clone).collect(Collectors.toList());
             context.notPreAggregationJoin = false;
 
-            return visit(optExpression, context);
-        }
-
-        @Override
-        public Void visitPhysicalProject(OptExpression optExpression, PreAggregationContext context) {
-            PhysicalProjectOperator project = (PhysicalProjectOperator) optExpression.getOp();
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(project.getColumnRefMap());
-            ReplaceColumnRefRewriter subRewriter =
-                    new ReplaceColumnRefRewriter(project.getCommonSubOperatorMap(), true);
-
-            context.aggregations = context.aggregations.stream()
-                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
-                    .collect(Collectors.toList());
-
-            context.groupings = context.groupings.stream()
-                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
-                    .collect(Collectors.toList());
-
-            return visit(optExpression, context);
+            return process(optExpression.inputAt(0), context);
         }
 
         @Override
@@ -129,7 +127,7 @@ public class PreAggregateTurnOnRule {
             // check has value conjunct
             boolean allKeyConjunct =
                     Utils.extractColumnRef(
-                            Utils.compoundAnd(scan.getPredicate(), Utils.compoundAnd(context.joinPredicates))).stream()
+                                    Utils.compoundAnd(scan.getPredicate(), Utils.compoundAnd(context.joinPredicates))).stream()
                             .map(ref -> scan.getColRefToColumnMetaMap().get(ref)).filter(Objects::nonNull)
                             .allMatch(Column::isKey);
             if (!allKeyConjunct) {
@@ -184,6 +182,12 @@ public class PreAggregateTurnOnRule {
 
                 ScalarOperator child = call.getChild(0);
 
+                if (child instanceof CallOperator &&
+                        FunctionSet.IF.equalsIgnoreCase(((CallOperator) child).getFnName())) {
+                    child = new CaseWhenOperator(child.getType(), null, child.getChild(2),
+                            Lists.newArrayList(child.getChild(0), child.getChild(1)));
+                }
+
                 List<ColumnRefOperator> returns = Lists.newArrayList();
                 List<ColumnRefOperator> conditions = Lists.newArrayList();
 
@@ -197,11 +201,11 @@ public class PreAggregateTurnOnRule {
                         scan.setTurnOffReason("The parameter of aggregate function isn't numeric type");
                         return true;
                     }
-                } else if (call.getChild(0) instanceof CaseWhenOperator) {
-                    CaseWhenOperator cwo = (CaseWhenOperator) call.getChild(0);
+                } else if (child instanceof CaseWhenOperator) {
+                    CaseWhenOperator cwo = (CaseWhenOperator) child;
 
                     for (int i = 0; i < cwo.getWhenClauseSize(); i++) {
-                        if (!OperatorType.VARIABLE.equals(cwo.getThenClause(i).getOpType())) {
+                        if (!cwo.getThenClause(i).isColumnRef()) {
                             scan.setTurnOffReason("The result of THEN isn't value column");
                             return true;
                         }
@@ -296,13 +300,16 @@ public class PreAggregateTurnOnRule {
             ColumnRefSet rightOutputColumns = optExpression.getInputs().get(1).getOutputColumns();
 
             List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftOutputColumns,
-                    rightOutputColumns, Utils.extractConjuncts(hashJoinOperator.getJoinPredicate()));
+                    rightOutputColumns, Utils.extractConjuncts(hashJoinOperator.getOnPredicate()));
             // cross join can not do pre-aggregation
             if (hashJoinOperator.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
                 context.notPreAggregationJoin = true;
                 context.groupings.clear();
                 context.aggregations.clear();
-                return visit(optExpression, context);
+                process(optExpression.inputAt(0), context);
+                // Avoid left child modify context will effect right child
+                process(optExpression.inputAt(1), context.clone());
+                return null;
             }
 
             // For other types of joins, only one side can turn on pre aggregation which side has aggregation.
@@ -314,36 +321,40 @@ public class PreAggregateTurnOnRule {
             List<ScalarOperator> rightGroupOperator = Lists.newArrayList();
 
             context.groupings.forEach(g -> {
-                if (leftOutputColumns.contains(g.getUsedColumns())) {
+                if (g.getUsedColumns().isIntersect(leftOutputColumns)) {
                     leftGroupOperator.add(g);
                 }
             });
             context.groupings.forEach(g -> {
-                if (rightOutputColumns.contains(g.getUsedColumns())) {
+                if (g.getUsedColumns().isIntersect(rightOutputColumns)) {
                     rightGroupOperator.add(g);
                 }
             });
             context.aggregations.forEach(a -> aggregationColumns.union(a.getUsedColumns()));
-            boolean checkLeft = leftOutputColumns.contains(aggregationColumns);
-            boolean checkRight = rightOutputColumns.contains(aggregationColumns);
+            boolean checkLeft = leftOutputColumns.containsAll(aggregationColumns);
+            boolean checkRight = rightOutputColumns.containsAll(aggregationColumns);
             // Add join on predicate and predicate to context
-            context.joinPredicates.add(hashJoinOperator.getJoinPredicate());
-            context.joinPredicates.add(hashJoinOperator.getPredicate());
+            if (hashJoinOperator.getOnPredicate() != null) {
+                context.joinPredicates.add(hashJoinOperator.getOnPredicate().clone());
+            }
+            if (hashJoinOperator.getPredicate() != null) {
+                context.joinPredicates.add(hashJoinOperator.getPredicate().clone());
+            }
 
             PreAggregationContext disableContext = new PreAggregationContext();
             disableContext.notPreAggregationJoin = true;
 
             if (checkLeft) {
                 context.groupings = leftGroupOperator;
-                leftChild.getOp().accept(this, leftChild, context);
-                rightChild.getOp().accept(this, rightChild, disableContext);
+                process(leftChild, context);
+                process(rightChild, disableContext);
             } else if (checkRight) {
                 context.groupings = rightGroupOperator;
-                rightChild.getOp().accept(this, rightChild, context);
-                leftChild.getOp().accept(this, leftChild, disableContext);
+                process(rightChild, context);
+                process(leftChild, disableContext);
             } else {
-                leftChild.getOp().accept(this, leftChild, disableContext);
-                rightChild.getOp().accept(this, rightChild, disableContext);
+                process(leftChild, disableContext);
+                process(rightChild, disableContext);
             }
             return null;
         }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-# This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 # The format is:
 #   <function id> <name>, <return_type>, [<args>], <backend fn>,
@@ -254,19 +254,27 @@ vectorized_functions = [
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
 
     # 50xxx: timestamp functions
+    [50009, 'year', 'SMALLINT', ['DATETIME'], 'TimeFunctions::yearV2'],
     [50010, 'year', 'INT', ['DATETIME'], 'TimeFunctions::year'],
+    [50019, 'month', 'TINYINT', ['DATETIME'], 'TimeFunctions::monthV2'],
     [50020, 'month', 'INT', ['DATETIME'], 'TimeFunctions::month'],
     [50030, 'quarter', 'INT', ['DATETIME'], 'TimeFunctions::quarter'],
     [50040, 'dayofweek', 'INT', ['DATETIME'], 'TimeFunctions::day_of_week'],
     [50050, 'to_date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
     [50051, 'date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
+
+    [50058, 'day', 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],
+    [50059, 'dayofmonth', 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],
     [50060, 'dayofmonth', 'INT', ['DATETIME'], 'TimeFunctions::day'],
     [50061, 'day', 'INT', ['DATETIME'], 'TimeFunctions::day'],
     [50062, 'dayofyear', 'INT', ['DATETIME'], 'TimeFunctions::day_of_year'],
     [50063, 'weekofyear', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year'],
 
+    [50069, 'hour', 'TINYINT', ['DATETIME'], 'TimeFunctions::hourV2'],
     [50070, 'hour', 'INT', ['DATETIME'], 'TimeFunctions::hour'],
+    [50079, 'minute', 'TINYINT', ['DATETIME'], 'TimeFunctions::minuteV2'],
     [50080, 'minute', 'INT', ['DATETIME'], 'TimeFunctions::minute'],
+    [50089, 'second', 'TINYINT', ['DATETIME'], 'TimeFunctions::secondV2'],
     [50090, 'second', 'INT', ['DATETIME'], 'TimeFunctions::second'],
 
     [50110, 'years_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_add'],
@@ -317,6 +325,8 @@ vectorized_functions = [
      'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
     [50242, 'date_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::date_format',
      'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
+    # cast string to date, the function will call by FE getStrToDateFunction, and is invisible to user
+    [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
     [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
 
     [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now'],
@@ -366,6 +376,7 @@ vectorized_functions = [
     [70112, 'if', 'BITMAP', ['BOOLEAN', 'BITMAP', 'BITMAP'], 'nullptr'],
     [70113, 'if', 'PERCENTILE', ['BOOLEAN', 'PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70114, 'if', 'HLL', ['BOOLEAN', 'HLL', 'HLL'], 'nullptr'],
+    [70115, 'if', 'TIME', ['BOOLEAN', 'TIME', 'TIME'], 'nullptr'],
 
     [70200, 'ifnull', 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70201, 'ifnull', 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -385,6 +396,7 @@ vectorized_functions = [
     [70212, 'ifnull', 'BITMAP', ['BITMAP', 'BITMAP'], 'nullptr'],
     [70213, 'ifnull', 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70214, 'ifnull', 'HLL', ['HLL', 'HLL'], 'nullptr'],
+    [70215, 'ifnull', 'TIME', ['TIME', 'TIME'], 'nullptr'],
 
     [70300, 'nullif', 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70301, 'nullif', 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -404,6 +416,7 @@ vectorized_functions = [
     [70312, 'nullif', 'BITMAP', ['BITMAP', 'BITMAP'], 'nullptr'],
     [70313, 'nullif', 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70314, 'nullif', 'HLL', ['HLL', 'HLL'], 'nullptr'],
+    [70315, 'nullif', 'TIME', ['TIME', 'TIME'], 'nullptr'],
 
     [70400, 'coalesce', 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
     [70401, 'coalesce', 'TINYINT', ['TINYINT', '...'], 'nullptr'],
@@ -423,6 +436,7 @@ vectorized_functions = [
     [70412, 'coalesce', 'BITMAP', ['BITMAP', '...'], 'nullptr'],
     [70413, 'coalesce', 'PERCENTILE', ['PERCENTILE', '...'], 'nullptr'],
     [70414, 'coalesce', 'HLL', ['HLL', '...'], 'nullptr'],
+    [70416, 'coalesce', 'TIME', ['TIME', '...'], 'nullptr'],
 
     [70415, 'esquery', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
@@ -456,6 +470,7 @@ vectorized_functions = [
     [100012, 'version', 'VARCHAR', [], "UtilityFunctions::version"],
     [100013, 'current_version', 'VARCHAR', [], "UtilityFunctions::current_version"],
     [100014, 'last_query_id', 'VARCHAR', [], "UtilityFunctions::last_query_id"],
+    [100015, 'uuid', 'VARCHAR', [], "UtilityFunctions::uuid"],
 
     # json function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",
@@ -472,6 +487,7 @@ vectorized_functions = [
     [120130, "to_base64", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::to_base64"],
     [120140, "md5", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::md5"],
     [120150, "md5sum", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum"],
+    [120160, "sha2", "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2", "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close"],
 
       # geo function
     [120000, "ST_Point", "VARCHAR", ["DOUBLE", "DOUBLE"], "GeoFunctions::st_point"],
@@ -565,4 +581,20 @@ vectorized_functions = [
     #[150012, 'array_max', 'DECIMAL64', ['ARRAY_DECIMAL32'], 'ArrayFunctions::array_max'],
     #[150013, 'array_max', 'DECIMAL64', ['ARRAY_DECIMAL64'], 'ArrayFunctions::array_max'],
     #[150014, 'array_max', 'DECIMAL128', ['ARRAY_DECIMAL128'], 'ArrayFunctions::array_max'],
+
+    [150083, 'array_remove', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_remove'],
+    [150084, 'array_position', 'INT', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_position'],
+
+    [150090, 'array_distinct', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::array_distinct_boolean'],
+    [150091, 'array_distinct', 'ARRAY_TINYINT',   ['ARRAY_TINYINT'],   'ArrayFunctions::array_distinct_tinyint'],
+    [150092, 'array_distinct', 'ARRAY_SMALLINT',  ['ARRAY_SMALLINT'],  'ArrayFunctions::array_distinct_smallint'],
+    [150093, 'array_distinct', 'ARRAY_INT',       ['ARRAY_INT'],       'ArrayFunctions::array_distinct_int'],
+    [150094, 'array_distinct', 'ARRAY_BIGINT',    ['ARRAY_BIGINT'],    'ArrayFunctions::array_distinct_bigint'],
+    [150095, 'array_distinct', 'ARRAY_LARGEINT',  ['ARRAY_LARGEINT'],  'ArrayFunctions::array_distinct_largeint'],
+    [150096, 'array_distinct', 'ARRAY_FLOAT',     ['ARRAY_FLOAT'],     'ArrayFunctions::array_distinct_float'],
+    [150097, 'array_distinct', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE'],    'ArrayFunctions::array_distinct_double'],
+    [150098, 'array_distinct', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR'],   'ArrayFunctions::array_distinct_varchar'],
+    [150099, 'array_distinct', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_distinct_decimalv2'],
+    [150100, 'array_distinct', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_distinct_datetime'],
+    [150101, 'array_distinct', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_distinct_date'],
 ]

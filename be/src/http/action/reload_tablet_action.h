@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_HTTP_RELOAD_TABLET_ACTION_H
-#define STARROCKS_BE_SRC_HTTP_RELOAD_TABLET_ACTION_H
+#pragma once
 
 #include "gen_cpp/AgentService_types.h"
 #include "http/http_handler.h"
@@ -31,7 +30,7 @@ class ExecEnv;
 
 class ReloadTabletAction : public HttpHandler {
 public:
-    ReloadTabletAction(ExecEnv* exec_env);
+    explicit ReloadTabletAction(ExecEnv* exec_env);
 
     ~ReloadTabletAction() override = default;
 
@@ -45,4 +44,3 @@ private:
 }; // end class ReloadTabletAction
 
 } // end namespace starrocks
-#endif // STARROCKS_BE_SRC_COMMON_UTIL_DOWNLOAD_ACTION_H

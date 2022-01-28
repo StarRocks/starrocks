@@ -21,16 +21,17 @@
 
 #include "runtime/mysql_table_sink.h"
 
+#include <memory>
 #include <sstream>
 
 #include "exprs/expr.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/mysql_table_sink.h"
 #include "runtime/runtime_state.h"
 #include "util/debug_util.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
+
+const int MYSQL_SINK_BATCH_SIZE = 1024;
 
 MysqlTableSink::MysqlTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
         : _pool(pool), _row_desc(row_desc), _t_output_expr(t_exprs) {}
@@ -47,6 +48,7 @@ Status MysqlTableSink::init(const TDataSink& t_sink) {
     _conn_info.passwd = t_mysql_sink.passwd;
     _conn_info.db = t_mysql_sink.db;
     _mysql_tbl = t_mysql_sink.table;
+    _chunk_size = MYSQL_SINK_BATCH_SIZE;
 
     // From the thrift expressions create the real exprs.
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs));
@@ -56,7 +58,7 @@ Status MysqlTableSink::init(const TDataSink& t_sink) {
 Status MysqlTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc, _mem_tracker.get()));
+    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc));
     std::stringstream title;
     title << "MysqlTableSink (frag_id=" << state->fragment_instance_id() << ")";
     // create profile
@@ -68,13 +70,13 @@ Status MysqlTableSink::open(RuntimeState* state) {
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
     // create writer
-    _writer = state->obj_pool()->add(new MysqlTableWriter(_output_expr_ctxs));
+    _writer = std::make_unique<MysqlTableWriter>(_output_expr_ctxs, _chunk_size);
     RETURN_IF_ERROR(_writer->open(_conn_info, _mysql_tbl));
     return Status::OK();
 }
 
-Status MysqlTableSink::send(RuntimeState* state, RowBatch* batch) {
-    return _writer->append(batch);
+Status MysqlTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+    return _writer->append(chunk);
 }
 
 Status MysqlTableSink::close(RuntimeState* state, Status exec_status) {

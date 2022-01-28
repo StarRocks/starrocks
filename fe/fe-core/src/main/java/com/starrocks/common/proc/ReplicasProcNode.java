@@ -41,7 +41,7 @@ public class ReplicasProcNode implements ProcNodeInterface {
             .add("LstSuccessVersion").add("LstSuccessVersionHash")
             .add("LstFailedVersion").add("LstFailedVersionHash")
             .add("LstFailedTime").add("SchemaHash").add("DataSize").add("RowCount").add("State")
-            .add("IsBad").add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus")
+            .add("IsBad").add("IsSetBadForce").add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus")
             .build();
 
     private long tabletId;
@@ -82,17 +82,18 @@ public class ReplicasProcNode implements ProcNodeInterface {
             result.addRow(Arrays.asList(String.valueOf(replica.getId()),
                     String.valueOf(replica.getBackendId()),
                     String.valueOf(replica.getVersion()),
-                    String.valueOf(replica.getVersionHash()),
+                    String.valueOf(0),
                     String.valueOf(replica.getLastSuccessVersion()),
-                    String.valueOf(replica.getLastSuccessVersionHash()),
+                    String.valueOf(0),
                     String.valueOf(replica.getLastFailedVersion()),
-                    String.valueOf(replica.getLastFailedVersionHash()),
+                    String.valueOf(0),
                     TimeUtils.longToTimeString(replica.getLastFailedTimestamp()),
                     String.valueOf(replica.getSchemaHash()),
                     String.valueOf(replica.getDataSize()),
                     String.valueOf(replica.getRowCount()),
                     String.valueOf(replica.getState()),
                     String.valueOf(replica.isBad()),
+                    String.valueOf(replica.isSetBadForce()),
                     String.valueOf(replica.getVersionCount()),
                     String.valueOf(replica.getPathHash()),
                     metaUrl,

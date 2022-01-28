@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.plan;
 
@@ -30,10 +30,17 @@ public class ViewPlanTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from " + viewName);
 
-        sqlPlan = sqlPlan.replaceAll("bitmap_union_count\\(", "count(distinct ");
-        viewPlan = viewPlan.replaceAll("bitmap_union_count\\(", "count(distinct ");
-        sqlPlan = sqlPlan.replaceAll("hll_union_agg\\(", "count(distinct ");
-        viewPlan = viewPlan.replaceAll("hll_union_agg\\(", "count(distinct ");
+        System.out.println(sqlPlan);
+        System.out.println(viewPlan);
+
+        sqlPlan = sqlPlan.replaceAll("bitmap_union_count\\(", "count");
+        viewPlan = viewPlan.replaceAll("bitmap_union_count\\(", "count");
+        sqlPlan = sqlPlan.replaceAll("bitmap_union_count", "count");
+        viewPlan = viewPlan.replaceAll("bitmap_union_count", "count");
+        sqlPlan = sqlPlan.replaceAll("hll_union_agg\\(", "count");
+        viewPlan = viewPlan.replaceAll("hll_union_agg\\(", "count");
+        sqlPlan = sqlPlan.replaceAll("hll_union_agg", "count");
+        viewPlan = viewPlan.replaceAll("hll_union_agg", "count");
         Assert.assertEquals(sqlPlan, viewPlan);
     }
 
@@ -1183,8 +1190,10 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql257() throws Exception {
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
         String sql = "select v1 as v2 from t0 group by v1, v2;";
         testView(sql);
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(false);
     }
 
     @Test
@@ -1501,5 +1510,144 @@ public class ViewPlanTest extends PlanTestBase {
                 "on t1.l_orderkey = t3.o_orderkey and t3.O_ORDERDATE = t1.L_SHIPDATE join [shuffle] orders t4 on\n" +
                 "t1.l_orderkey = t4.o_orderkey and t4.O_ORDERDATE = t1.L_SHIPDATE;";
         testView(sql);
+    }
+
+    @Test
+    public void test311() throws Exception {
+        String sql = "SELECT v1 FROM t0 WHERE NOT ((v2 > 93 AND v1 < 27) OR v1 >= 22);";
+        testView(sql);
+    }
+
+    @Test
+    public void testArray() throws Exception {
+        String sql = "select split('1,2,3', ',') from t1;";
+        testView(sql);
+
+        sql = "select v3 from tarray";
+        testView(sql);
+
+        sql = "select array_sum(v3) from tarray";
+        testView(sql);
+    }
+
+    @Test
+    public void testAliasView() throws Exception {
+        String sql = "select * from (select a.A, count(*) as cnt from ( SELECT 1 AS A UNION ALL SELECT 2 UNION ALL " +
+                "SELECT 2 UNION ALL SELECT 5 UNION ALL SELECT 3 UNION ALL SELECT 0 AS A ) a group by a.A order by a.A ) b;";
+        String createView = "create view alias_view(col1, col2) as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from alias_view");
+        Assert.assertEquals(sqlPlan, viewPlan);
+        starRocksAssert.dropView("alias_view");
+    }
+
+    @Test
+    public void testAliasView2() throws Exception {
+        String sql = "select SUM(A.v1), SUM(A.v2) from t0 A inner join t1 B on A.v1 = B.v4";
+        String createView = "create view alias_view(col1, col2) as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from alias_view");
+        Assert.assertEquals(sqlPlan, viewPlan);
+        starRocksAssert.dropView("alias_view");
+    }
+
+    @Test
+    public void testExpressionRewriteView() throws Exception {
+        String sql =
+                "select from_unixtime(unix_timestamp(id_datetime, 'yyyy-MM-dd'), 'yyyy-MM-dd') as x1, sum(t1c) as x3 " +
+                        "from test_all_type " +
+                        "group by from_unixtime(unix_timestamp(id_datetime, 'yyyy-MM-dd'), 'yyyy-MM-dd')";
+        testView(sql);
+    }
+
+    @Test
+    public void testUnionView() throws Exception {
+        String sql = "select count(c_1) c1 ,cast(c_1 as string) c2 from (" +
+                "select 1 c_1 union all select 2) a group by cast(c_1 as string)  union all  " +
+                "select count(c_1) c1 ,cast(c_1 as string) c2 from (select 1 c_1 union all select 2) a " +
+                "group by cast(c_1 as string);";
+        String createView = "create view test_view15 (col_1,col_2) as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from test_view15");
+        Assert.assertEquals(sqlPlan, viewPlan);
+        starRocksAssert.dropView("test_view15");
+    }
+
+    @Test
+    public void testGroupByView() throws Exception {
+        String sql = "select case  when c1=1 then 1 end from " +
+                "(select '1' c1  union  all select '2') a group by case  when c1=1 then 1 end;";
+        testView(sql);
+
+        sql = "select case  when c1=1 then 1 end from " +
+                "(select '1' c1  union  all select '2') a group by rollup(case  when c1=1 then 1 end, a.c1);";
+        testView(sql);
+
+        sql = "select case when c1=1 then 1 end from " +
+                "(select '1' c1  union  all select '2') a " +
+                "group by grouping sets((case when c1=1 then 1 end, c1), (case  when c1=1 then 1 end));";
+
+        String viewName = "view" + INDEX.getAndIncrement();
+        String createView = "create view " + viewName + " as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from " + viewName);
+
+        Assert.assertTrue(sqlPlan.contains("  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 1 lines [[3, 4], [4]]") || sqlPlan.contains("" +
+                "  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 1 lines [[4], [3, 4]]"));
+
+        Assert.assertTrue(viewPlan.contains("  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 1 lines [[3, 4], [4]]") || viewPlan.contains("" +
+                "  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 1 lines [[4], [3, 4]]"));
+
+        starRocksAssert.dropView(viewName);
+    }
+
+    @Test
+    public void testGroupByView2() throws Exception {
+        String sql = "select case  when c1=1 then 1 end from " +
+                "(select '1' c1  union  all select '2') a group by cube(case when c1=1 then 1 end, a.c1);";
+        String viewName = "view" + INDEX.getAndIncrement();
+        String createView = "create view " + viewName + " as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from " + viewName);
+
+        Assert.assertTrue(sqlPlan.contains("  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 3 lines [[], [3], [4], [3, 4]]\n") ||
+                sqlPlan.contains("  6:REPEAT_NODE\n" +
+                        "  |  repeat: repeat 3 lines [[], [4], [3], [3, 4]]"));
+        Assert.assertTrue(viewPlan.contains("  6:REPEAT_NODE\n" +
+                "  |  repeat: repeat 3 lines [[], [3], [4], [3, 4]]\n") ||
+                viewPlan.contains("  6:REPEAT_NODE\n" +
+                        "  |  repeat: repeat 3 lines [[], [4], [3], [3, 4]]\n"));
+        starRocksAssert.dropView(viewName);
+    }
+
+    @Test
+    public void testUnionWith() throws Exception {
+        String sql = "with a as (select 1 c1 union all select 2 ), b as (select 1 c1 union all select 2 ) " +
+                "select * from a union all select * from b;";
+
+        String createView = "create view test_view16 (c_1) as with a as (select 1 c1 union all select 2 ), " +
+                "b as (select 1 c1 union all select 2 ) select * from a union all select * from b;";
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from test_view16;");
+        Assert.assertEquals(sqlPlan, viewPlan);
+
+        starRocksAssert.dropView("test_view16");
     }
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -12,11 +12,18 @@ public class StatisticsEstimateCoefficient {
     // expand estimate aggregates row count with default group by columns statistics
     public static final double DEFAULT_GROUP_BY_EXPAND_COEFFICIENT = 1.05;
     // IN predicate default filter rate
-    public static final Double IN_PREDICATE_DEFAULT_FILTER_COEFFICIENT = 0.5;
+    public static final double IN_PREDICATE_DEFAULT_FILTER_COEFFICIENT = 0.5;
     // Is null predicate default filter rate
-    public static final Double IS_NULL_PREDICATE_DEFAULT_FILTER_COEFFICIENT = 0.1;
+    public static final double IS_NULL_PREDICATE_DEFAULT_FILTER_COEFFICIENT = 0.1;
     // unknown filter coefficient for now
-    public static final Double PREDICATE_UNKNOWN_FILTER_COEFFICIENT = 0.25;
+    public static final double PREDICATE_UNKNOWN_FILTER_COEFFICIENT = 0.25;
     // constant value compare constant value filter coefficient
-    public static final Double CONSTANT_TO_CONSTANT_PREDICATE_COEFFICIENT = 0.5;
+    public static final double CONSTANT_TO_CONSTANT_PREDICATE_COEFFICIENT = 0.5;
+    // coefficient of overlap percent which overlap range is infinite
+    public static final double OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT = 0.5;
+    // used in compute extra cost for multi distinct function, estimate whether to trigger streaming
+    public static final double STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT = 0.8;
+
+    // used in compute cte choose reuse or inline
+    public static double DEFAULT_CTE_INLINE_COST_RATE = 1.5;
 }

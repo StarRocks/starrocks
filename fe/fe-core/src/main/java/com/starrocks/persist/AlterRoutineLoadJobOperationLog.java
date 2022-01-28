@@ -26,6 +26,7 @@ import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.OriginStatement;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -40,12 +41,16 @@ public class AlterRoutineLoadJobOperationLog implements Writable {
     private Map<String, String> jobProperties;
     @SerializedName(value = "dataSourceProperties")
     private RoutineLoadDataSourceProperties dataSourceProperties;
+    @SerializedName(value = "originStatement")
+    private OriginStatement originStatement;
 
     public AlterRoutineLoadJobOperationLog(long jobId, Map<String, String> jobProperties,
-                                           RoutineLoadDataSourceProperties dataSourceProperties) {
+                                           RoutineLoadDataSourceProperties dataSourceProperties,
+                                           OriginStatement originStatement) {
         this.jobId = jobId;
         this.jobProperties = jobProperties;
         this.dataSourceProperties = dataSourceProperties;
+        this.originStatement = originStatement;
     }
 
     public long getJobId() {
@@ -58,6 +63,10 @@ public class AlterRoutineLoadJobOperationLog implements Writable {
 
     public RoutineLoadDataSourceProperties getDataSourceProperties() {
         return dataSourceProperties;
+    }
+
+    public OriginStatement getOriginStatement() {
+        return originStatement;
     }
 
     public static AlterRoutineLoadJobOperationLog read(DataInput in) throws IOException {

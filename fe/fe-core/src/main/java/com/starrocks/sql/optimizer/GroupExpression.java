@@ -1,11 +1,14 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.OutputInputProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.rule.Rule;
@@ -15,6 +18,7 @@ import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * A group-expression is the same as an expression except
@@ -35,11 +39,16 @@ public class GroupExpression {
     private final BitSet ruleMasks = new BitSet(RuleType.NUM_RULES.ordinal() + 1);
     private boolean statsDerived = false;
     private final Map<PhysicalPropertySet, Pair<Double, List<PhysicalPropertySet>>> lowestCostTable;
+    private final Set<OutputInputProperty> validOutputInputProperties;
+    private Map<OutputInputProperty, Integer> propertiesPlanCountMap;
+    private boolean isUnused = false;
 
     public GroupExpression(Operator op, List<Group> inputs) {
         this.op = op;
         this.inputs = inputs;
         this.lowestCostTable = Maps.newHashMap();
+        this.validOutputInputProperties = Sets.newLinkedHashSet();
+        this.propertiesPlanCountMap = Maps.newLinkedHashMap();
     }
 
     public Group getGroup() {
@@ -71,7 +80,7 @@ public class GroupExpression {
     }
 
     public boolean isUnused() {
-        return hasEmptyRootGroup() || hasEmptyChildGroup();
+        return hasEmptyRootGroup() || hasEmptyChildGroup() || isUnused;
     }
 
     private boolean hasEmptyChildGroup() {
@@ -90,8 +99,50 @@ public class GroupExpression {
         ruleMasks.set(rule.type().ordinal());
     }
 
+    public void setUnused(boolean isUnused) {
+        this.isUnused = isUnused;
+    }
+
     public boolean hasRuleExplored(Rule rule) {
         return ruleMasks.get(rule.type().ordinal());
+    }
+
+    public void addValidOutputInputProperties(PhysicalPropertySet outputProperty,
+                                              List<PhysicalPropertySet> inputProperties) {
+        validOutputInputProperties.add(OutputInputProperty.of(outputProperty, inputProperties));
+    }
+
+    public List<List<PhysicalPropertySet>> getRequiredInputProperties(PhysicalPropertySet requiredProperty) {
+        List<List<PhysicalPropertySet>> result = Lists.newArrayList();
+        for (OutputInputProperty outputInputProperty : validOutputInputProperties) {
+            if (outputInputProperty.getOutputProperty().equals(requiredProperty)) {
+                result.add(outputInputProperty.getInputProperties());
+            }
+        }
+        return result;
+    }
+
+    public boolean hasValidSubPlan() {
+        return !validOutputInputProperties.isEmpty();
+    }
+
+    public void addPlanCountOfProperties(OutputInputProperty properties, int count) {
+        propertiesPlanCountMap.put(properties, count);
+    }
+
+    public Map<OutputInputProperty, Integer> getPropertiesPlanCountMap(
+            PhysicalPropertySet requiredProperty) {
+        Map<OutputInputProperty, Integer> result = Maps.newLinkedHashMap();
+        propertiesPlanCountMap.entrySet().stream()
+                .filter(entry -> entry.getKey().getOutputProperty().equals(requiredProperty))
+                .forEach(entry -> result.put(entry.getKey(), entry.getValue()));
+        return result;
+    }
+
+    public int getRequiredPropertyPlanCount(PhysicalPropertySet requiredProperty) {
+        return propertiesPlanCountMap.entrySet().stream()
+                .filter(entry -> entry.getKey().getOutputProperty().equals(requiredProperty))
+                .mapToInt(Map.Entry::getValue).sum();
     }
 
     /**

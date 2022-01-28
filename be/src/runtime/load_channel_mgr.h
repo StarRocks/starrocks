@@ -27,17 +27,23 @@
 #include <thread>
 #include <unordered_map>
 
-#include "common/status.h"
+#include "common/statusor.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/load_channel.h"
 #include "runtime/tablets_channel.h"
+#include "util/blocking_queue.hpp"
+#include "util/threadpool.h"
 #include "util/uid_util.h"
+
+namespace brpc {
+class Controller;
+}
 
 namespace starrocks {
 
 class Cache;
-class LoadChannel;
 
 // LoadChannelMgr -> LoadChannel -> TabletsChannel -> DeltaWriter
 // All dispatched load data for this backend is routed from this class
@@ -48,37 +54,26 @@ public:
 
     Status init(MemTracker* mem_tracker);
 
-    // open a new load channel if not exist
-    Status open(const PTabletWriterOpenRequest& request);
+    void open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request, PTabletWriterOpenResult* response,
+              google::protobuf::Closure* done);
 
-    Status add_batch(const PTabletWriterAddBatchRequest& request,
-                     google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec, int64_t* wait_lock_time_ns);
+    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
+                   PTabletWriterAddBatchResult* response, google::protobuf::Closure* done);
 
-    Status add_chunk(const PTabletWriterAddChunkRequest& request,
-                     google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec, int64_t* wait_lock_time_ns);
+    void cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest& request, PTabletWriterCancelResult* response,
+                google::protobuf::Closure* done);
 
-    // cancel all tablet stream for 'load_id' load
-    Status cancel(const PTabletWriterCancelRequest& request);
+    scoped_refptr<LoadChannel> remove_load_channel(const UniqueId& load_id);
 
 private:
-    // check if the total load mem consumption exceeds limit.
-    // If yes, it will pick several load channels to try to reduce memory consumption to limit.
-    void _handle_mem_exceed_limit(const std::shared_ptr<LoadChannel>& data_channel);
-
-    // find a load channel to reduce memory consumption
-    // 1. select the load channel that consume this batch data if limit exceeded.
-    // 2. select the largest limit exceeded load channel.
-    // 3. select the largest consumption load channel.
-    bool _find_candidate_load_channel(const std::shared_ptr<LoadChannel>& data_channel,
-                                      std::shared_ptr<LoadChannel>* candidate_channel);
-
     Status _start_bg_worker();
+
+    scoped_refptr<LoadChannel> _find_load_channel(const UniqueId& load_id);
 
     // lock protect the load channel map
     std::mutex _lock;
     // load id -> load channel
-    std::unordered_map<UniqueId, std::shared_ptr<LoadChannel>> _load_channels;
-    Cache* _lastest_success_channel = nullptr;
+    std::unordered_map<UniqueId, scoped_refptr<LoadChannel>> _load_channels;
 
     // check the total load mem consumption of this Backend
     MemTracker* _mem_tracker = nullptr;

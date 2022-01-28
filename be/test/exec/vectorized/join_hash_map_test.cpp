@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/join_hash_map.h"
 
@@ -13,8 +13,7 @@ protected:
     void SetUp() override {
         config::vector_chunk_size = 4096;
         _object_pool = std::make_shared<ObjectPool>();
-        _mem_tracker = std::make_shared<MemTracker>();
-        _mem_pool = std::make_shared<MemPool>(_mem_tracker.get());
+        _mem_pool = std::make_shared<MemPool>();
         _runtime_profile = create_runtime_profile();
         _runtime_state = create_runtime_state();
     }
@@ -42,7 +41,6 @@ private:
                                                             TDescriptorTableBuilder* probe_desc_builder, bool nullable);
     static std::shared_ptr<RowDescriptor> create_build_desc(const std::shared_ptr<ObjectPool>& object_pool,
                                                             TDescriptorTableBuilder* build_desc_builder, bool nullable);
-    static std::shared_ptr<MemTracker> create_mem_tracker(const std::shared_ptr<RuntimeProfile>& profile);
     static std::shared_ptr<RuntimeState> create_runtime_state();
 
     static void check_probe_index(const Buffer<uint32_t>& probe_index, uint32_t step, uint32_t match_count,
@@ -85,7 +83,6 @@ private:
                                             uint32_t count);
 
     std::shared_ptr<ObjectPool> _object_pool = nullptr;
-    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemPool> _mem_pool = nullptr;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
@@ -494,9 +491,8 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, uint3
     table_items->first.resize(table_items->bucket_size);
     table_items->row_count = row_count;
     table_items->next.resize(row_count + 1);
-    table_items->build_pool = std::make_unique<MemPool>(_mem_tracker.get());
-    table_items->probe_pool = std::make_unique<MemPool>(_mem_tracker.get());
-    table_items->mem_tracker = _mem_tracker.get();
+    table_items->build_pool = std::make_unique<MemPool>();
+    table_items->probe_pool = std::make_unique<MemPool>();
     table_items->search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTimer");
     table_items->output_build_column_timer = ADD_TIMER(_runtime_profile, "OutputBuildColumnTimer");
     table_items->output_probe_column_timer = ADD_TIMER(_runtime_profile, "OutputProbeColumnTimer");
@@ -506,7 +502,7 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, uint3
 void JoinHashMapTest::prepare_probe_state(HashTableProbeState* probe_state, uint32_t probe_row_count) {
     probe_state->probe_row_count = probe_row_count;
     probe_state->cur_probe_index = 0;
-    JoinHashMapHelper::prepare_map_index(probe_state);
+    JoinHashMapHelper::prepare_map_index(probe_state, config::vector_chunk_size);
 
     for (size_t i = 0; i < probe_row_count; i++) {
         probe_state->next[i] = 1 + 2 * config::vector_chunk_size + i;
@@ -667,7 +663,7 @@ std::shared_ptr<RowDescriptor> JoinHashMapTest::create_row_desc(const std::share
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0, 1};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable, nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(object_pool.get(), table_desc_builder->desc_tbl(), &tbl);
+    DescriptorTbl::create(object_pool.get(), table_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }
@@ -678,7 +674,7 @@ std::shared_ptr<RowDescriptor> JoinHashMapTest::create_probe_desc(const std::sha
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(object_pool.get(), probe_desc_builder->desc_tbl(), &tbl);
+    DescriptorTbl::create(object_pool.get(), probe_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }
@@ -689,18 +685,15 @@ std::shared_ptr<RowDescriptor> JoinHashMapTest::create_build_desc(const std::sha
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{1};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(object_pool.get(), build_desc_builder->desc_tbl(), &tbl);
+    DescriptorTbl::create(object_pool.get(), build_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
-}
-
-std::shared_ptr<MemTracker> JoinHashMapTest::create_mem_tracker(const std::shared_ptr<RuntimeProfile>& profile) {
-    return std::make_shared<MemTracker>(profile.get(), 1024 * 1024, "test", nullptr);
 }
 
 std::shared_ptr<RuntimeState> JoinHashMapTest::create_runtime_state() {
     TUniqueId fragment_id;
     TQueryOptions query_options;
+    query_options.batch_size = config::vector_chunk_size;
     TQueryGlobals query_globals;
     auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
     runtime_state->init_instance_mem_tracker();
@@ -748,7 +741,7 @@ TEST_F(JoinHashMapTest, CalcBucketNums) {
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, PrepareMapIndex) {
     HashTableProbeState probe_state;
-    JoinHashMapHelper::prepare_map_index(&probe_state);
+    JoinHashMapHelper::prepare_map_index(&probe_state, config::vector_chunk_size);
 
     ASSERT_EQ(probe_state.build_index.size(), config::vector_chunk_size + 8);
     ASSERT_EQ(probe_state.probe_index.size(), config::vector_chunk_size + 8);
@@ -756,25 +749,6 @@ TEST_F(JoinHashMapTest, PrepareMapIndex) {
     ASSERT_EQ(probe_state.probe_match_index.size(), config::vector_chunk_size);
     ASSERT_EQ(probe_state.probe_match_filter.size(), config::vector_chunk_size);
     ASSERT_EQ(probe_state.buckets.size(), config::vector_chunk_size);
-}
-
-// NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, CheckAndAddMemoryUsage) {
-    auto runtime_state = create_runtime_state();
-    runtime_state->init_instance_mem_tracker();
-    runtime_state->instance_mem_tracker()->set_limit(1024 * 1024);
-    runtime_state->instance_mem_tracker()->Init();
-
-    JoinHashTableItems table_items;
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
-
-    auto status = JoinHashMapHelper::check_and_add_memory_usage(runtime_state.get(), &table_items, 512 * 1024);
-    ASSERT_TRUE(status.ok());
-
-    status = JoinHashMapHelper::check_and_add_memory_usage(runtime_state.get(), &table_items, 1024 * 1024);
-    ASSERT_TRUE(!status.ok());
-
-    table_items.mem_tracker->release(1536 * 1024);
 }
 
 // NOLINTNEXTLINE
@@ -821,7 +795,14 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     auto row_desc = create_row_desc(object_pool, &row_desc_builder, false);
-    table_items.probe_slots = row_desc->tuple_descriptors()[0]->slots();
+    vector<HashTableSlotDescriptor> hash_table_slot_vec;
+    for (size_t i = 0; i < row_desc->tuple_descriptors()[0]->slots().size(); ++i) {
+        HashTableSlotDescriptor hash_table_slot;
+        hash_table_slot.slot = row_desc->tuple_descriptors()[0]->slots()[i];
+        hash_table_slot.need_output = true;
+        hash_table_slot_vec.emplace_back(hash_table_slot);
+    }
+    table_items.probe_slots = hash_table_slot_vec;
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
 
@@ -850,7 +831,15 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     auto row_desc = create_row_desc(object_pool, &row_desc_builder, false);
-    table_items.build_slots = row_desc->tuple_descriptors()[0]->slots();
+
+    vector<HashTableSlotDescriptor> hash_table_slot_vec;
+    for (size_t i = 0; i < row_desc->tuple_descriptors()[0]->slots().size(); ++i) {
+        HashTableSlotDescriptor hash_table_slot;
+        hash_table_slot.slot = row_desc->tuple_descriptors()[0]->slots()[i];
+        hash_table_slot.need_output = true;
+        hash_table_slot_vec.emplace_back(hash_table_slot);
+    }
+    table_items.build_slots = hash_table_slot_vec;
 
     auto chunk = std::make_shared<Chunk>();
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
@@ -884,7 +873,6 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
     table_items.bucket_size = 16;
     table_items.row_count = 10;
     table_items.next.resize(11);
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -893,8 +881,8 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
 
     auto status = JoinBuildFunc<PrimitiveType::TYPE_INT>::prepare(nullptr, &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
-    JoinBuildFunc<PrimitiveType::TYPE_INT>::construct_hash_table(&table_items, &probe_state);
-    JoinProbeFunc<PrimitiveType::TYPE_INT>::prepare(&table_items, &probe_state);
+    JoinBuildFunc<PrimitiveType::TYPE_INT>::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
+    JoinProbeFunc<PrimitiveType::TYPE_INT>::prepare(runtime_state.get(), &table_items, &probe_state);
     JoinProbeFunc<PrimitiveType::TYPE_INT>::lookup_init(table_items, &probe_state);
 
     for (size_t i = 0; i < 10; i++) {
@@ -909,7 +897,6 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
         }
         ASSERT_EQ(found_count, 1);
     }
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -929,7 +916,6 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
     table_items.bucket_size = 16;
     table_items.row_count = 10;
     table_items.next.resize(11);
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -938,8 +924,8 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
 
     auto status = JoinBuildFunc<TYPE_INT>::prepare(nullptr, &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
-    JoinBuildFunc<TYPE_INT>::construct_hash_table(&table_items, &probe_state);
-    JoinProbeFunc<TYPE_INT>::prepare(&table_items, &probe_state);
+    JoinBuildFunc<TYPE_INT>::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
+    JoinProbeFunc<TYPE_INT>::prepare(runtime_state.get(), &table_items, &probe_state);
     JoinProbeFunc<TYPE_INT>::lookup_init(table_items, &probe_state);
 
     for (size_t i = 0; i < 10; i++) {
@@ -959,7 +945,6 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
             ASSERT_EQ(found_count, 1);
         }
     }
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -990,7 +975,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
     table_items.next.resize(11);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -999,9 +983,9 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
 
     auto status = FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(&table_items, &probe_state);
+    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
 
-    status = FixedSizeJoinProbeFunc<TYPE_BIGINT>::prepare(&table_items, &probe_state);
+    status = FixedSizeJoinProbeFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
     FixedSizeJoinProbeFunc<TYPE_BIGINT>::lookup_init(table_items, &probe_state);
 
@@ -1018,7 +1002,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
         }
         ASSERT_EQ(found_count, 1);
     }
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -1049,7 +1032,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
     table_items.next.resize(11);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -1058,9 +1040,9 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
 
     auto status = FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(&table_items, &probe_state);
+    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
 
-    status = FixedSizeJoinProbeFunc<TYPE_BIGINT>::prepare(&table_items, &probe_state);
+    status = FixedSizeJoinProbeFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
     FixedSizeJoinProbeFunc<TYPE_BIGINT>::lookup_init(table_items, &probe_state);
 
@@ -1081,7 +1063,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
             ASSERT_EQ(found_count, 0);
         }
     }
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -1112,9 +1093,8 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
     table_items.next.resize(11);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
-    table_items.build_pool = std::make_unique<MemPool>(runtime_state->instance_mem_tracker());
-    table_items.probe_pool = std::make_unique<MemPool>(runtime_state->instance_mem_tracker());
+    table_items.build_pool = std::make_unique<MemPool>();
+    table_items.probe_pool = std::make_unique<MemPool>();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -1125,8 +1105,8 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
     auto status = SerializedJoinBuildFunc::prepare(runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
 
-    SerializedJoinBuildFunc::construct_hash_table(&table_items, &probe_state);
-    SerializedJoinProbeFunc::prepare(&table_items, &probe_state);
+    SerializedJoinBuildFunc::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
+    SerializedJoinProbeFunc::prepare(runtime_state.get(), &table_items, &probe_state);
     SerializedJoinProbeFunc::lookup_init(table_items, &probe_state);
 
     for (size_t i = 0; i < 10; i++) {
@@ -1144,7 +1124,6 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
     }
     table_items.build_pool.reset();
     table_items.probe_pool.reset();
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -1175,9 +1154,8 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.next.resize(11);
-    table_items.mem_tracker = runtime_state->instance_mem_tracker();
-    table_items.build_pool = std::make_unique<MemPool>(runtime_state->instance_mem_tracker());
-    table_items.probe_pool = std::make_unique<MemPool>(runtime_state->instance_mem_tracker());
+    table_items.build_pool = std::make_unique<MemPool>();
+    table_items.probe_pool = std::make_unique<MemPool>();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -1188,8 +1166,8 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     auto status = SerializedJoinBuildFunc::prepare(runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
 
-    SerializedJoinBuildFunc::construct_hash_table(&table_items, &probe_state);
-    SerializedJoinProbeFunc::prepare(&table_items, &probe_state);
+    SerializedJoinBuildFunc::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
+    SerializedJoinProbeFunc::prepare(runtime_state.get(), &table_items, &probe_state);
     SerializedJoinProbeFunc::lookup_init(table_items, &probe_state);
 
     Columns probe_data_columns;
@@ -1217,7 +1195,6 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     }
     table_items.build_pool.reset();
     table_items.probe_pool.reset();
-    table_items.mem_tracker->release(table_items.mem_tracker->consumption());
 }
 
 // NOLINTNEXTLINE
@@ -1229,7 +1206,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneAllMatch) {
     probe_state.next.resize(config::vector_chunk_size);
     table_items.next.resize(8193);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    JoinHashMapHelper::prepare_map_index(&probe_state);
+    JoinHashMapHelper::prepare_map_index(&probe_state, config::vector_chunk_size);
     auto runtime_state = create_runtime_state();
     runtime_state->init_instance_mem_tracker();
 
@@ -1250,7 +1227,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneAllMatch) {
     }
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht<true>(build_data, probe_data);
+    join_hash_map->_probe_from_ht<true>(runtime_state.get(), build_data, probe_data);
 
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::ALL_MATCH_ONE);
     ASSERT_FALSE(probe_state.has_remain);
@@ -1272,7 +1249,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneMostMatch) {
     probe_state.next.resize(config::vector_chunk_size);
     table_items.next.resize(8193);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    JoinHashMapHelper::prepare_map_index(&probe_state);
+    JoinHashMapHelper::prepare_map_index(&probe_state, config::vector_chunk_size);
     auto runtime_state = create_runtime_state();
     runtime_state->init_instance_mem_tracker();
 
@@ -1297,7 +1274,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneMostMatch) {
     }
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht<true>(build_data, probe_data);
+    join_hash_map->_probe_from_ht<true>(runtime_state.get(), build_data, probe_data);
 
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::MOST_MATCH_ONE);
     ASSERT_FALSE(probe_state.has_remain);
@@ -1324,7 +1301,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
     probe_state.next.resize(config::vector_chunk_size);
     table_items.next.resize(8193);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    JoinHashMapHelper::prepare_map_index(&probe_state);
+    JoinHashMapHelper::prepare_map_index(&probe_state, config::vector_chunk_size);
     auto runtime_state = create_runtime_state();
     runtime_state->init_instance_mem_tracker();
 
@@ -1345,7 +1322,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
     }
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht<true>(build_data, probe_data);
+    join_hash_map->_probe_from_ht<true>(runtime_state.get(), build_data, probe_data);
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_TRUE(probe_state.has_remain);
     ASSERT_EQ(probe_state.cur_probe_index, 2048);
@@ -1360,7 +1337,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
     }
 
     join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht<false>(build_data, probe_data);
+    join_hash_map->_probe_from_ht<false>(runtime_state.get(), build_data, probe_data);
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_FALSE(probe_state.has_remain);
     ASSERT_EQ(probe_state.cur_probe_index, 0);
@@ -1384,7 +1361,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinFoundEmpty) {
     probe_state.next.resize(config::vector_chunk_size);
     table_items.next.resize(8193);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    JoinHashMapHelper::prepare_map_index(&probe_state);
+    JoinHashMapHelper::prepare_map_index(&probe_state, config::vector_chunk_size);
     auto runtime_state = create_runtime_state();
     runtime_state->init_instance_mem_tracker();
 
@@ -1408,7 +1385,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinFoundEmpty) {
     }
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_left_outer_join<true>(build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_left_outer_join<true>(runtime_state.get(), build_data, probe_data);
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_TRUE(probe_state.has_remain);
     ASSERT_EQ(probe_state.cur_probe_index, 2048);
@@ -1424,7 +1401,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinFoundEmpty) {
     }
 
     join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_left_outer_join<false>(build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_left_outer_join<false>(runtime_state.get(), build_data, probe_data);
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_FALSE(probe_state.has_remain);
     ASSERT_EQ(probe_state.cur_probe_index, 0);
@@ -1456,7 +1433,8 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmpty) {
     this->prepare_probe_data(&probe_data, probe_row_count);
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_left_outer_join_with_other_conjunct<true>(build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_left_outer_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
+                                                                                probe_data);
 
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
     this->check_match_index(probe_state.probe_match_index, 0, config::vector_chunk_size, match_count);
@@ -1484,12 +1462,14 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightSemiJoinWithOtherConjunct) {
 
     // first probe
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_semi_join_with_other_conjunct<true>(build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_semi_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
+                                                                                probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
 
     // second probe
     join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_semi_join_with_other_conjunct<false>(build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_semi_join_with_other_conjunct<false>(_runtime_state.get(), build_data,
+                                                                                 probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count, false);
 }
 
@@ -1515,12 +1495,14 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightOuterJoinWithOtherConjunct) {
 
     // first probe
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_outer_join_with_other_conjunct<true>(build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_outer_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
+                                                                                 probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
 
     // second probe
     join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_outer_join_with_other_conjunct<false>(build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_outer_join_with_other_conjunct<false>(_runtime_state.get(), build_data,
+                                                                                  probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count, false);
 }
 
@@ -1546,12 +1528,14 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightAntiJoinWithOtherConjunct) {
 
     // first probe
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_anti_join_with_other_conjunct<true>(build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_anti_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
+                                                                                probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
 
     // second probe
     join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_right_anti_join_with_other_conjunct<false>(build_data, probe_data);
+    join_hash_map->_probe_from_ht_for_right_anti_join_with_other_conjunct<false>(_runtime_state.get(), build_data,
+                                                                                 probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count, false);
 }
 
@@ -1559,7 +1543,6 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightAntiJoinWithOtherConjunct) {
 TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     auto runtime_profile = create_runtime_profile();
     auto runtime_state = create_runtime_state();
-    auto mem_tracker = create_mem_tracker(runtime_profile);
     std::shared_ptr<ObjectPool> object_pool = std::make_shared<ObjectPool>();
     config::vector_chunk_size = 4096;
 
@@ -1575,7 +1558,6 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     param.with_other_conjunct = false;
     param.join_type = TJoinOp::INNER_JOIN;
     param.row_desc = row_desc.get();
-    param.mem_tracker = mem_tracker.get();
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -1599,7 +1581,7 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    ASSERT_TRUE(hash_table.probe(probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
+    ASSERT_TRUE(hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
@@ -1623,7 +1605,6 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
 TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     auto runtime_profile = create_runtime_profile();
     auto runtime_state = create_runtime_state();
-    auto mem_tracker = create_mem_tracker(runtime_profile);
     std::shared_ptr<ObjectPool> object_pool = std::make_shared<ObjectPool>();
     config::vector_chunk_size = 4096;
 
@@ -1639,7 +1620,6 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     param.with_other_conjunct = false;
     param.join_type = TJoinOp::INNER_JOIN;
     param.row_desc = row_desc.get();
-    param.mem_tracker = mem_tracker.get();
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -1663,7 +1643,7 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    ASSERT_TRUE(hash_table.probe(probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
+    ASSERT_TRUE(hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
@@ -1687,9 +1667,8 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
 TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     auto runtime_profile = create_runtime_profile();
     auto runtime_state = create_runtime_state();
-    auto mem_tracker = create_mem_tracker(runtime_profile);
     std::shared_ptr<ObjectPool> object_pool = std::make_shared<ObjectPool>();
-    std::shared_ptr<MemPool> mem_pool = std::make_shared<MemPool>(mem_tracker.get());
+    std::shared_ptr<MemPool> mem_pool = std::make_shared<MemPool>();
     config::vector_chunk_size = 4096;
 
     TDescriptorTableBuilder row_desc_builder;
@@ -1704,7 +1683,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     param.with_other_conjunct = false;
     param.join_type = TJoinOp::INNER_JOIN;
     param.row_desc = row_desc.get();
-    param.mem_tracker = mem_tracker.get();
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     param.probe_row_desc = probe_row_desc.get();
@@ -1731,7 +1709,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    ASSERT_TRUE(hash_table.probe(probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
+    ASSERT_TRUE(hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
@@ -1768,7 +1746,6 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     param.with_other_conjunct = false;
     param.join_type = TJoinOp::INNER_JOIN;
     param.row_desc = row_desc.get();
-    param.mem_tracker = _mem_tracker.get();
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_VARCHAR, false});
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_VARCHAR, false});
     param.probe_row_desc = probe_row_desc.get();
@@ -1795,7 +1772,7 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool eos = false;
 
-    ASSERT_TRUE(hash_table.probe(probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
+    ASSERT_TRUE(hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
 
     ASSERT_EQ(result_chunk->num_columns(), 6);
 
@@ -1842,13 +1819,11 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNotNullableColumn) {
     // Construct Hash Table
     Status status = FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(&table_items, &probe_state);
+    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
     check_build_column(table_items.build_key_column, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE
@@ -1880,13 +1855,11 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNullableColumn) {
     // Construct Hash Table
     Status status = FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(&table_items, &probe_state);
+    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
     check_build_column(table_items.build_key_column, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE
@@ -1918,14 +1891,12 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForPartialNullableColumn) {
     // Construct Hash Table
     Status status = FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(&table_items, &probe_state);
+    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
     auto nulls = create_bools(build_row_count, 4);
     check_build_index(nulls, table_items.first, table_items.next, build_row_count);
     check_build_column(nulls, table_items.build_key_column, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE
@@ -1955,13 +1926,11 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNotNullableColumn) {
     // Construct Hash Table
     Status status = SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
-    SerializedJoinBuildFunc::construct_hash_table(&table_items, &probe_state);
+    SerializedJoinBuildFunc::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
     check_build_slice(table_items.build_slice, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE
@@ -1993,13 +1962,11 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNullableColumn) {
     // Construct Hash Table
     Status status = SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
-    SerializedJoinBuildFunc::construct_hash_table(&table_items, &probe_state);
+    SerializedJoinBuildFunc::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
     check_build_slice(table_items.build_slice, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE
@@ -2031,14 +1998,12 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForPartialNullColumn) {
     // Construct Hash Table
     Status status = SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items, &probe_state);
     ASSERT_TRUE(status.ok());
-    SerializedJoinBuildFunc::construct_hash_table(&table_items, &probe_state);
+    SerializedJoinBuildFunc::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
     auto nulls = create_bools(build_row_count, 4);
     check_build_index(nulls, table_items.first, table_items.next, build_row_count);
     check_build_slice(nulls, table_items.build_slice, build_row_count);
-
-    _mem_tracker->release(table_items.last_memory_usage);
 }
 
 // NOLINTNEXTLINE

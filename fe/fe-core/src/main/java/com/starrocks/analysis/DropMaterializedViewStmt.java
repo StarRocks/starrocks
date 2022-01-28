@@ -47,7 +47,7 @@ import java.util.List;
  */
 public class DropMaterializedViewStmt extends DdlStmt {
 
-    private boolean ifExists;
+    private final boolean ifExists;
     private final TableName dbMvName;
     private final TableName dbTblName;
 
@@ -134,7 +134,7 @@ public class DropMaterializedViewStmt extends DdlStmt {
                     }
                 }
             }
-            if (!hasMv) {
+            if (!hasMv && !isSetIfExists()) {
                 throw new AnalysisException("The materialized " + dbMvName.getTbl() + " is not exist");
             }
         }

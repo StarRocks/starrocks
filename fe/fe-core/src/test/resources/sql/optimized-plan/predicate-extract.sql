@@ -20,9 +20,9 @@ where
             and l_shipinstruct = 'DELIVER IN PERSON'
         ) ;
 [result]
-AGGREGATE ([GLOBAL] aggregate [{29: sum(28: expr)=sum(29: sum(28: expr))}] group by [[]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(29: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{29: sum(28: expr)=sum(28: expr)}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{29: sum=sum(28: expr)}] group by [[]] having [null]
             INNER JOIN (join-predicate [18: P_PARTKEY = 2: L_PARTKEY] post-join-predicate [null])
                 SCAN (columns[18: P_PARTKEY] predicate[null])
                 EXCHANGE SHUFFLE[2]
@@ -53,9 +53,9 @@ where
             and p_container in ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK')
         ) ;
 [result]
-AGGREGATE ([GLOBAL] aggregate [{29: sum(28: expr)=sum(29: sum(28: expr))}] group by [[]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(29: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{29: sum(28: expr)=sum(28: expr)}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{29: sum=sum(28: expr)}] group by [[]] having [null]
             CROSS JOIN (join-predicate [null] post-join-predicate [18: P_PARTKEY = 2: L_PARTKEY AND 21: P_BRAND = Brand#45 AND 24: P_CONTAINER IN (SM CASE, SM BOX, SM PACK, SM PKG) AND 5: L_QUANTITY >= 5.0 AND 5: L_QUANTITY <= 15.0 AND 23: P_SIZE >= 1 AND 23: P_SIZE <= 5 AND 15: L_SHIPMODE IN (AIR, AIR REG) AND 14: L_SHIPINSTRUCT = DELIVER IN PERSON OR 21: P_BRAND = Brand#11 AND 24: P_CONTAINER IN (MED BAG, MED BOX, MED PKG, MED PACK)])
                 SCAN (columns[2: L_PARTKEY, 5: L_QUANTITY, 6: L_EXTENDEDPRICE, 7: L_DISCOUNT, 14: L_SHIPINSTRUCT, 15: L_SHIPMODE] predicate[null])
                 EXCHANGE BROADCAST
@@ -78,19 +78,19 @@ INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
 [sql]
 select v1 from t0 inner join t1 on v3 = v4 where (v2 = 2 or v2 = 3);
 [result]
-INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 2 OR 2: v2 = 3 AND 2: v2 IN (2, 3)])
-    EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[null])
+INNER JOIN (join-predicate [4: v4 = 3: v3] post-join-predicate [null])
+    SCAN (columns[4: v4] predicate[null])
+    EXCHANGE SHUFFLE[3]
+        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (2, 3)])
 [end]
 
 [sql]
 select v1 from t0 inner join t1 on v3 = v4 where (v2 = 2 or v2 = 3) and (v3 = 3 or v4 = 4);
 [result]
-INNER JOIN (join-predicate [3: v3 = 4: v4 AND 3: v3 = 3 OR 4: v4 = 4] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 2 OR 2: v2 = 3 AND 2: v2 IN (2, 3)])
-    EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[null])
+INNER JOIN (join-predicate [4: v4 = 3: v3 AND 3: v3 = 3 OR 4: v4 = 4] post-join-predicate [null])
+    SCAN (columns[4: v4] predicate[null])
+    EXCHANGE SHUFFLE[3]
+        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (2, 3)])
 [end]
 
 [sql]
@@ -114,10 +114,10 @@ INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
 [sql]
 select v1 from t0 inner join t1 on v3 = v4 where  v2 in (1,2) or (v2 = 3 and v3 = 3) or (v2 in (4,5) and v3=4) and v2 = 6;
 [result]
-INNER JOIN (join-predicate [4: v4 = 3: v3] post-join-predicate [null])
-    SCAN (columns[4: v4] predicate[null])
-    EXCHANGE SHUFFLE[3]
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (1, 2) OR 2: v2 = 3 AND 3: v3 = 3 OR 2: v2 IN (4, 5) AND 3: v3 = 4 AND 2: v2 = 6 AND 2: v2 IN (1, 2, 3)])
+INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (1, 2) OR 2: v2 = 3 AND 3: v3 = 3 OR 2: v2 IN (4, 5) AND 3: v3 = 4 AND 2: v2 = 6 AND 2: v2 IN (1, 2, 3)])
+    EXCHANGE BROADCAST
+        SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
@@ -161,5 +161,48 @@ select v1 from t0 inner join t1 on v3 = v4 where (v1 = 1 AND v2 = 2) OR (v2 = 4 
 [result]
 INNER JOIN (join-predicate [4: v4 = 3: v3] post-join-predicate [null])
     SCAN (columns[4: v4] predicate[null])
-    EXCHANGE SHUFFLE
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 1 AND 2: v2 = 2 OR 2: v2 = 4 AND 1: v1 NOT IN (1, 2) AND 2: v2 IN (2, 4)])[end]
+    EXCHANGE SHUFFLE[3]
+        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 1 AND 2: v2 = 2 OR 2: v2 = 4 AND 1: v1 NOT IN (1, 2) AND 2: v2 IN (2, 4)])
+[end]
+
+[sql]
+select v1 from t0 where (v1 = 1 or v1 = 2) and v2 = v3
+[result]
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 IN (1, 2) AND 2: v2 = 3: v3])
+[end]
+
+[sql]
+select v1 from t0 where v1 = 1 and v2 = 2 or v1 =3;
+[result]
+SCAN (columns[1: v1, 2: v2] predicate[1: v1 = 1 AND 2: v2 = 2 OR 1: v1 = 3 AND 1: v1 IN (1, 3)])
+[end]
+
+[sql]
+select v1 from t0 where (v1 = 1 or v1 = 2) and v2 = v1
+[result]
+SCAN (columns[1: v1, 2: v2] predicate[1: v1 IN (1, 2) AND 2: v2 = 1: v1])
+[end]
+
+[sql]
+select * from test.t0 where (v1 = 1 or v1 = 2) and (v2 = 3 or v2 = 4);
+[result]
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 IN (1, 2) AND 2: v2 IN (3, 4)])
+[end]
+
+[sql]
+select * from test.t0 where (v1 = 1 and v2 = 2) or (v1 = 3 and v2 = 4);
+[result]
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 1 AND 2: v2 = 2 OR 1: v1 = 3 AND 2: v2 = 4 AND 1: v1 IN (1, 3) AND 2: v2 IN (2, 4)])
+[end]
+
+[sql]
+select * from t0 where (v1 = 1 or v1 = 2 ) and v1 in (1,2)
+[result]
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 IN (1, 2)])
+[end]
+
+[sql]
+select * from t0 where v1 > 10 or v1 = 1 or v1 = 2
+[result]
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 > 10 OR 1: v1 = 1 OR 1: v1 = 2 AND 1: v1 >= 1])
+[end]

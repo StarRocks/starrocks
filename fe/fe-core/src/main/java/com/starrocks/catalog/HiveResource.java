@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.catalog;
 
@@ -11,6 +11,8 @@ import com.starrocks.common.proc.BaseProcResult;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Map;
+
+import static com.starrocks.common.util.Util.validateMetastoreUris;
 
 /**
  * Hive resource for external hive table
@@ -47,6 +49,7 @@ public class HiveResource extends Resource {
         if (StringUtils.isBlank(metastoreURIs)) {
             throw new DdlException(HIVE_METASTORE_URIS + " must be set in properties");
         }
+        validateMetastoreUris(metastoreURIs);
     }
 
     @Override

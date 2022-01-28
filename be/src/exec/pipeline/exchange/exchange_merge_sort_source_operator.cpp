@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 
+#include "exec/sort_exec_exprs.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/descriptors.h"
@@ -11,11 +12,13 @@
 
 namespace starrocks::pipeline {
 Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    SourceOperator::prepare(state);
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
-            config::exchg_node_buffer_size_bytes, _runtime_profile, true, nullptr, true);
-    _stream_recvr->create_merger_for_pipeline(_sort_exec_exprs, &_is_asc_order, &_nulls_first);
+            config::exchg_node_buffer_size_bytes, _runtime_profile, true, nullptr, true,
+            // ExchangeMergeSort will never perform pipeline level shuffle
+            DataStreamRecvr::INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE, true);
+    _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first);
     return Status::OK();
 }
 
@@ -36,10 +39,7 @@ bool ExchangeMergeSortSourceOperator::is_finished() const {
     }
 }
 
-void ExchangeMergeSortSourceOperator::finish(RuntimeState* state) {
-    if (_is_finished) {
-        return;
-    }
+void ExchangeMergeSortSourceOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     return _stream_recvr->close();
 }
@@ -47,6 +47,7 @@ void ExchangeMergeSortSourceOperator::finish(RuntimeState* state) {
 StatusOr<vectorized::ChunkPtr> ExchangeMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = std::make_shared<vectorized::Chunk>();
     get_next_merging(state, &chunk);
+    eval_runtime_bloom_filters(chunk.get());
     return std::move(chunk);
 }
 
@@ -77,7 +78,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             } else {
                 break;
             }
-        } while (!should_exit && _num_rows_input < _offset);
+        } while (!_is_finished && !should_exit && _num_rows_input < _offset);
 
         // tmp_chunk is the last chunk, no extra chunks needs to be read
         if (_num_rows_input > _offset) {
@@ -100,7 +101,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             _num_rows_input = _offset;
             _num_rows_returned += rewind_size;
 
-            // the first Chunk will have a size less than config::vector_chunk_size.
+            // the first Chunk will have a size less than state->chunk_size().
             return Status::OK();
         }
 
@@ -126,14 +127,16 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
     return Status::OK();
 }
 
-Status ExchangeMergeSortSourceOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
-    RETURN_IF_ERROR(_sort_exec_exprs->prepare(state, _row_desc, _row_desc, mem_tracker));
+Status ExchangeMergeSortSourceOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(_sort_exec_exprs->prepare(state, _row_desc, _row_desc));
     RETURN_IF_ERROR(_sort_exec_exprs->open(state));
     return Status::OK();
 }
 
 void ExchangeMergeSortSourceOperatorFactory::close(RuntimeState* state) {
     _sort_exec_exprs->close(state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

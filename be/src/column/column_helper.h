@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -23,8 +23,6 @@ namespace starrocks::vectorized {
 
 class ColumnHelper {
 public:
-    static void init_static_variable();
-
     // The input column is nullable or non-nullable uint8 column
     // The result column is not nullable uint8 column
     // For nullable uint8 column, we merge it's null column and data column
@@ -94,6 +92,70 @@ public:
         return column;
     }
 
+    static ColumnPtr copy_and_unfold_const_column(const TypeDescriptor& dst_type_desc, bool dst_nullable,
+                                                  const ColumnPtr& src_column, int num_rows) {
+        ColumnPtr dst_column = create_column(dst_type_desc, dst_nullable);
+        dst_column->reserve(num_rows);
+
+        if (src_column->only_null()) {
+            // 1. If src is constant and nullable, create an only null dest column.
+            DCHECK(dst_nullable);
+            [[maybe_unused]] bool ok = dst_column->append_nulls(num_rows);
+            DCHECK(ok);
+        } else {
+            // 2. If src is constant and non-nullable, copy and unfold the constant column.
+            auto* const_column = as_raw_column<vectorized::ConstColumn>(src_column);
+            // Note: we must create a new column every time here,
+            // because VectorizedLiteral always return a same shared_ptr and we will modify it later.
+            dst_column->append(*const_column->data_column(), 0, 1);
+            dst_column->assign(num_rows, 0);
+        }
+
+        return dst_column;
+    }
+
+    // Update column according to whether the dest column and source column are nullable or not.
+    static ColumnPtr update_column_nullable(const TypeDescriptor& dst_type_desc, bool dst_nullable,
+                                            const ColumnPtr& src_column, int num_rows) {
+        if (src_column->is_nullable()) {
+            if (dst_nullable) {
+                // 1. Src column and dest column are both nullable.
+                return src_column;
+            } else {
+                // 2. src column is nullable, and dest column is non-nullable.
+                auto* nullable_column = as_raw_column<NullableColumn>(src_column);
+                DCHECK(!nullable_column->has_null());
+                return nullable_column->data_column();
+            }
+        } else {
+            // 3. Src column and dest column are both non-nullable.
+            if (!dst_nullable) {
+                return src_column;
+            } else {
+                // 4. src column is non-nullable, and dest column is nullable.
+                ColumnPtr nullable_column = NullableColumn::create(src_column, NullColumn::create(num_rows, 0));
+                return nullable_column;
+            }
+        }
+    }
+
+    // Move the source column according to the specific dest type and nullable.
+    static ColumnPtr move_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
+                                 int num_rows) {
+        if (src_column->is_constant()) {
+            return copy_and_unfold_const_column(dst_type_desc, dst_nullable, src_column, num_rows);
+        }
+
+        return update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
+    }
+
+    // Copy the source column according to the specific dest type and nullable.
+    static ColumnPtr clone_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
+                                  int num_rows) {
+        auto dst_column = update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
+        return dst_column->clone_shared();
+    }
+
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
 
     // If is_const is true, you must pass the size arg
@@ -105,6 +167,7 @@ public:
      */
     template <PrimitiveType Type>
     static inline typename RunTimeColumnType<Type>::Ptr cast_to(const ColumnPtr& value) {
+        down_cast<RunTimeColumnType<Type>*>(value.get());
         return std::static_pointer_cast<RunTimeColumnType<Type>>(value);
     }
 
@@ -133,6 +196,11 @@ public:
     template <typename Type>
     static inline Type* as_raw_column(const ColumnPtr& value) {
         return down_cast<Type*>(value.get());
+    }
+
+    template <PrimitiveType Type>
+    static inline RunTimeCppType<Type>* get_cpp_data(const ColumnPtr& value) {
+        return cast_to_raw<Type>(value)->get_data().data();
     }
 
     template <PrimitiveType Type>
@@ -229,11 +297,11 @@ public:
 
     static ColumnPtr create_const_null_column(size_t chunk_size);
 
+    static ColumnPtr convert_time_column_from_double_to_str(const ColumnPtr& column);
+
     static NullColumnPtr one_size_not_null_column;
 
     static NullColumnPtr one_size_null_column;
-
-    static NullColumnPtr s_all_not_null_column;
 };
 
 } // namespace starrocks::vectorized

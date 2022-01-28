@@ -232,7 +232,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
         RETURN_IF_ERROR(_get_tablet_id_and_schema_hash_from_file_path(local_path, &local_tablet_id, &schema_hash));
         downloaded_tablet_ids->push_back(local_tablet_id);
 
-        int64_t remote_tablet_id;
+        int64_t remote_tablet_id = 0;
         RETURN_IF_ERROR(_get_tablet_id_from_remote_path(remote_path, &remote_tablet_id));
         VLOG(2) << "get local tablet id: " << local_tablet_id << ", schema hash: " << schema_hash
                 << ", remote tablet id: " << remote_tablet_id;
@@ -251,7 +251,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             return Status::InternalError(ss.str());
         }
 
-        TabletSharedPtr tablet = _env->storage_engine()->tablet_manager()->get_tablet(local_tablet_id, schema_hash);
+        TabletSharedPtr tablet = _env->storage_engine()->tablet_manager()->get_tablet(local_tablet_id);
         if (tablet == nullptr) {
             std::stringstream ss;
             ss << "failed to get local tablet: " << local_tablet_id;
@@ -386,20 +386,20 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 }
 
 // move the snapshot files in snapshot_path
-// to tablet_path
-// If overwrite, just replace the tablet_path with snapshot_path,
+// to schema_hash_path
+// If overwrite, just replace the schema_hash_path with snapshot_path,
 // else: (TODO)
 //
 // MUST hold tablet's header lock, push lock, cumulative lock and base compaction lock
 Status SnapshotLoader::move(const std::string& snapshot_path, const TabletSharedPtr& tablet, bool overwrite) {
-    std::string tablet_path = tablet->tablet_path();
+    std::string tablet_path = tablet->schema_hash_path();
     std::string store_path = tablet->data_dir()->path();
     LOG(INFO) << "begin to move snapshot files. from: " << snapshot_path << ", to: " << tablet_path
               << ", store: " << store_path << ", job: " << _job_id << ", task id: " << _task_id;
 
     Status status = Status::OK();
 
-    // validate snapshot_path and tablet_path
+    // validate snapshot_path and schema_hash_path
     int64_t snapshot_tablet_id = 0;
     int32_t snapshot_schema_hash = 0;
     RETURN_IF_ERROR(

@@ -232,7 +232,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_BACKEND, KW_BACKUP, KW_BETWEEN, KW_BEGIN, KW_BIGINT, KW_BITMAP, KW_BITMAP_UNION, KW_BOOLEAN, KW_BOTH, KW_BROKER, KW_BACKENDS, KW_BY, KW_BUILTIN,
     KW_CANCEL, KW_CASE, KW_CAST, KW_CHAIN, KW_CHAR, KW_CHARSET, KW_CHECK, KW_CLUSTER, KW_CLUSTERS,
     KW_COLLATE, KW_COLLATION, KW_COLUMN, KW_COLUMNS, KW_COMMENT, KW_COMMIT, KW_COMMITTED,
-    KW_CONFIG, KW_CONNECTION, KW_CONNECTION_ID, KW_CONSISTENT, KW_COSTS, KW_COUNT, KW_CREATE, KW_CROSS, KW_CUBE, KW_CURRENT, KW_CURRENT_USER,
+    KW_CONFIG, KW_CONNECTION, KW_CONNECTION_ID, KW_CONSISTENT, KW_COSTS, KW_COUNT, KW_CREATE, KW_CROSS, KW_CUBE, KW_CURRENT, KW_CURRENT_TIMESTAMP, KW_CURRENT_USER,
     KW_DATA, KW_DATABASE, KW_DATABASES, KW_DATE, KW_DATETIME, KW_DAY, KW_DECIMAL, KW_DECIMALV2, KW_DECIMAL32, KW_DECIMAL64, KW_DECIMAL128, KW_DECOMMISSION, KW_DEFAULT, KW_DESC, KW_DESCRIBE,
     KW_DELETE, KW_DISTINCT, KW_DISTINCTPC, KW_DISTINCTPCSA, KW_DISTRIBUTED, KW_DISTRIBUTION, KW_DYNAMIC, KW_BUCKETS, KW_DIV, KW_DOUBLE, KW_DROP, KW_DROPP, KW_DUAL, KW_DUPLICATE,
     KW_ELSE, KW_END, KW_ENGINE, KW_ENGINES, KW_ENTER, KW_ERRORS, KW_EVENTS, KW_EXCEPT, KW_EXISTS, KW_EXPORT,
@@ -245,7 +245,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_JOIN,
     KW_KEY, KW_KEYS, KW_KILL,
     KW_LABEL, KW_LARGEINT, KW_LAST, KW_LEFT, KW_LESS, KW_LEVEL, KW_LIKE, KW_LIMIT, KW_LINK, KW_LOAD,
-    KW_LOCAL, KW_LOCATION, KW_LATERAL,
+    KW_LOCAL, KW_LOCATION, KW_LATERAL, KW_LOGICAL,
     KW_MATERIALIZED, KW_MAX, KW_MAX_VALUE, KW_MERGE, KW_MIN, KW_MINUTE, KW_MINUS, KW_MIGRATE, KW_MIGRATIONS, KW_MODIFY, KW_MONTH,
     KW_NAME, KW_NAMES, KW_NEGATIVE, KW_NO, KW_NOT, KW_NULL, KW_NULLS,
     KW_OBSERVER, KW_OFFSET, KW_ON, KW_ONLY, KW_OPEN, KW_OR, KW_ORDER, KW_OUTER, KW_OUTFILE, KW_OVER,
@@ -288,7 +288,7 @@ nonterminal StatementBase stmt, add_stmt, add_param, show_stmt, show_param, help
     show_routine_load_stmt, show_routine_load_task_stmt,
     describe_stmt, alter_stmt,
     use_stmt, kill_stmt, drop_stmt, recover_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt, delete_param, 
-    link_stmt, migrate_stmt, enter_stmt, unsupported_stmt, export_stmt, admin_stmt, truncate_stmt, refresh_stmt,
+    enter_stmt, unsupported_stmt, export_stmt, admin_stmt, truncate_stmt, refresh_stmt,
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt, analyze_stmt, create_analyze_stmt;
 
 nonterminal ImportColumnDesc import_column_desc;
@@ -341,8 +341,6 @@ nonterminal String select_alias, opt_table_alias;
 nonterminal ArrayList<String> ident_list;
 nonterminal PartitionNames opt_partition_names, partition_names;
 nonterminal ArrayList<Long> opt_tablet_list, tablet_list;
-nonterminal ClusterName cluster_name;
-nonterminal ClusterName des_cluster_name;
 nonterminal TableName table_name, opt_table_name;
 nonterminal FunctionName function_name;
 nonterminal Expr where_clause;
@@ -384,7 +382,7 @@ nonterminal JoinOperator join_operator;
 nonterminal Boolean opt_lateral;
 nonterminal ArrayList<String> opt_plan_hints;
 nonterminal ArrayList<String> opt_sort_hints;
-nonterminal Map<String, String> opt_select_hints, hint_map;
+nonterminal Map<String, String> opt_select_hints, select_hint, select_hint_list, hint_map;
 nonterminal Expr sign_chain_expr;
 nonterminal Qualifier opt_set_qualifier;
 nonterminal Operation set_op;
@@ -470,7 +468,7 @@ nonterminal String keyword, ident, ident_or_text, variable_name, text_or_passwor
         collation_name_or_default, type_func_name_keyword, type_function_name, opt_file_format, time_unit;
 
 nonterminal String opt_db, procedure_or_function, opt_comment, opt_engine;
-nonterminal ColumnDef.DefaultValue opt_default_value;
+nonterminal ColumnDef.DefaultValueDef opt_default_value;
 nonterminal Boolean opt_if_exists, opt_if_not_exists;
 nonterminal Boolean opt_external;
 nonterminal Boolean opt_force;
@@ -478,8 +476,7 @@ nonterminal IndexDef.IndexType opt_index_type;
 
 nonterminal ShowAlterStmt.AlterType opt_alter_type;
 nonterminal Boolean opt_builtin;
-nonterminal Boolean opt_costs;
-nonterminal Boolean opt_verbose;
+nonterminal StatementBase.ExplainLevel opt_explain_level;
 
 nonterminal Boolean opt_tmp;
 
@@ -580,10 +577,6 @@ stmt ::=
      alter_stmt:stmt
     {: RESULT = stmt; :}
     | create_stmt:query
-    {: RESULT = query; :}
-    | link_stmt:query
-    {: RESULT = query; :}
-    | migrate_stmt:query
     {: RESULT = query; :}
     | enter_stmt:enter
     {: RESULT = enter; :}
@@ -696,22 +689,6 @@ uninstall_plugin_stmt ::=
     :}
     ;
 
-// link statement
-link_stmt ::=
-    KW_LINK KW_DATABASE cluster_name:src_name des_cluster_name:des_name
-    {:
-        RESULT = new LinkDbStmt(src_name, des_name);
-    :}
-    ;
-
-// migrate statement
-migrate_stmt ::=
-    KW_MIGRATE KW_DATABASE cluster_name:src_name des_cluster_name:des_name
-    {:
-        RESULT = new MigrateDbStmt(src_name, des_name);
-    :}
-    ;
-
 // analyze statment
 analyze_stmt ::=
     KW_ANALYZE KW_TABLE table_name:tbl opt_col_list:cols opt_properties:properties
@@ -795,10 +772,12 @@ alter_stmt ::=
     {:
         RESULT = new AlterUserStmt(user);
     :}
-    | KW_ALTER KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel opt_properties:jobProperties
+    | KW_ALTER KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel
+      opt_load_property_list:loadPropertyList
+      opt_properties:jobProperties
       opt_datasource_properties:datasourceProperties
     {:
-        RESULT = new AlterRoutineLoadStmt(jobLabel, jobProperties, datasourceProperties);
+        RESULT = new AlterRoutineLoadStmt(jobLabel, loadPropertyList, jobProperties, datasourceProperties);
     :}
     ;
 
@@ -965,7 +944,7 @@ alter_table_clause ::=
     {:
         RESULT = new AddPartitionClause(desc, distribution, properties, isTempPartition);
     :}
-    | KW_DROP opt_tmp:isTempPartition KW_PARTITION opt_force:force opt_if_exists:ifExists ident:partitionName
+    | KW_DROP opt_tmp:isTempPartition KW_PARTITION opt_if_exists:ifExists ident:partitionName opt_force:force
     {:
         RESULT = new DropPartitionClause(ifExists, partitionName, isTempPartition, force ? force : isTempPartition);
     :}
@@ -1030,13 +1009,13 @@ alter_system_clause ::=
     {:
         RESULT = new AddBackendClause(hostPorts, clusterName);
     :}
-    | KW_DROP KW_BACKEND string_list:hostPorts
+    | KW_DROP KW_BACKEND string_list:hostPorts opt_force:force
     {:
-        RESULT = new DropBackendClause(hostPorts, false);
+        RESULT = new DropBackendClause(hostPorts, force);
     :}
     | KW_DROPP KW_BACKEND string_list:hostPorts
     {:
-        RESULT = new DropBackendClause(hostPorts, true);
+        RESULT = new DropBackendClause(hostPorts, true, true);
     :}
     | KW_DECOMMISSION KW_BACKEND string_list:hostPorts
     {:
@@ -1156,6 +1135,18 @@ create_stmt ::=
         RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, indexes, engineName, keys, partition,
         distribution, tblProperties, extProperties, tableComment, index);
     :}
+    | KW_CREATE opt_external:isExternal KW_TABLE opt_if_not_exists:ifNotExists table_name:name
+        opt_col_list:columns
+        opt_comment:comment
+        opt_partition:partition
+        opt_distribution:distribution
+        opt_properties:tblProperties
+        KW_AS select_stmt:queryStmt
+     {:
+        CreateTableStmt create_stmt = new CreateTableStmt(ifNotExists, isExternal, name, null,
+        "olap", null, partition, distribution, tblProperties, null, comment);
+        RESULT = new CreateTableAsSelectStmt(create_stmt, columns, queryStmt);
+     :}
     /* User */
     | KW_CREATE KW_USER opt_if_not_exists:ifNotExists grant_user:user opt_user_role:userRole
     {:
@@ -1707,11 +1698,11 @@ revoke_stmt ::=
 // Drop statement
 drop_stmt ::=
     /* Database */
-    KW_DROP KW_DATABASE opt_force:force opt_if_exists:ifExists ident:db
+    KW_DROP KW_DATABASE opt_if_exists:ifExists ident:db opt_force:force
     {:
         RESULT = new DropDbStmt(ifExists, db, force);
     :}
-    | KW_DROP KW_SCHEMA opt_force:force opt_if_exists:ifExists ident:db
+    | KW_DROP KW_SCHEMA opt_if_exists:ifExists ident:db opt_force:force
     {:
         RESULT = new DropDbStmt(ifExists, db, !force);
     :}
@@ -1726,7 +1717,7 @@ drop_stmt ::=
         RESULT = new DropFunctionStmt(functionName, args);
     :}
     /* Table */
-    | KW_DROP KW_TABLE opt_force:force opt_if_exists:ifExists table_name:name
+    | KW_DROP KW_TABLE opt_if_exists:ifExists table_name:name opt_force:force
     {:
         RESULT = new DropTableStmt(ifExists, name, force);
     :}
@@ -2088,15 +2079,19 @@ index_definition_list ::=
 opt_default_value ::=
     /* Empty */
     {:
-        RESULT = ColumnDef.DefaultValue.NOT_SET;
+        RESULT = ColumnDef.DefaultValueDef.NOT_SET;
     :}
     | KW_DEFAULT STRING_LITERAL:value
     {:
-        RESULT = new ColumnDef.DefaultValue(true, value);
+        RESULT = new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
     :}
     | KW_DEFAULT KW_NULL
     {:
-        RESULT = ColumnDef.DefaultValue.NULL_DEFAULT_VALUE;
+        RESULT = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
+    :}
+    | KW_DEFAULT KW_CURRENT_TIMESTAMP
+    {:
+        RESULT = ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
     :}
     ;
 
@@ -2127,7 +2122,7 @@ index_definition ::=
 
 opt_is_allow_null ::=
     {:
-        RESULT = true;
+        RESULT = null;
     :}
     | KW_NULL
     {:
@@ -2657,25 +2652,23 @@ opt_builtin ::=
     :}
     ;
 
-opt_costs ::=
-    {:
-        RESULT = false;
-    :}
-    | KW_COSTS
-    {:
-        RESULT = true;
-    :}
-    ;
-
-opt_verbose ::=
-    {:
-        RESULT = false;
-    :}
-    | KW_VERBOSE
-    {:
-        RESULT = true;
-    :}
-    ;
+opt_explain_level ::=
+     {:
+         RESULT = StatementBase.ExplainLevel.NORMAL;
+     :}
+     | KW_VERBOSE
+     {:
+         RESULT = StatementBase.ExplainLevel.VERBOSE;
+     :}
+     | KW_COSTS
+     {:
+     RESULT = StatementBase.ExplainLevel.COST;
+     :}
+     | KW_LOGICAL
+     {:
+         RESULT = StatementBase.ExplainLevel.LOGICAL;
+     :}
+     ;
 
 // Describe statement
 describe_stmt ::=
@@ -2687,11 +2680,11 @@ describe_stmt ::=
     {:
         RESULT = new DescribeStmt(table, true);
     :}
-    | describe_command opt_verbose:isVerbose opt_costs:isCosts query_stmt:query
-    {:
-        query.setIsExplain(true, isVerbose, isCosts);
-        RESULT = query;
-    :}
+    | describe_command opt_explain_level:explain_level query_stmt:query
+     {:
+         query.setIsExplain(true, explain_level);
+         RESULT = query;
+     :}
     | describe_command insert_stmt:stmt
     {:
         stmt.getQueryStmt().setIsExplain(true);
@@ -3437,7 +3430,7 @@ select_clause ::=
     ;
 
 opt_select_hints ::=
-    COMMENTED_PLAN_HINT_START KW_SET_VAR LPAREN hint_map:map RPAREN COMMENTED_PLAN_HINT_END
+    select_hint_list:map
     {:
         RESULT = map;
     :}
@@ -3447,6 +3440,24 @@ opt_select_hints ::=
     :}
     ;
 
+select_hint_list ::=
+    select_hint:hint
+    {:
+        RESULT = hint;
+    :}
+    | select_hint_list:list select_hint:hint
+    {:
+        list.putAll(hint);
+        RESULT = list;
+    :}
+    ;
+
+select_hint ::=
+    COMMENTED_PLAN_HINT_START KW_SET_VAR LPAREN hint_map:map RPAREN COMMENTED_PLAN_HINT_END
+    {:
+        RESULT = map;
+    :}
+    ;
 
 hint_map ::=
     ident_or_text:k EQUAL literal:v
@@ -4049,7 +4060,7 @@ type ::=
   | KW_PERCENTILE
   {: RESULT = Type.PERCENTILE; :}
   | KW_STRING
-  {: ScalarType type = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+  {: ScalarType type = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
      type.setAssignedStrLenInColDefinition();
      RESULT = type;
   :}
@@ -4547,7 +4558,8 @@ literal ::=
   | DECIMAL_LITERAL:l
   {: RESULT = new DecimalLiteral(l); :}
   | STRING_LITERAL:l
-  {: RESULT = new StringLiteral(l); :}
+  // for support mysql embedded quotation e.g. SELECT "Pat O""Hanrahan & <Matthew Eldridge]""";
+  {: RESULT = new StringLiteral(l.replaceAll("\"\"", "\"")); :}
   | KW_TRUE
   {: RESULT = new BoolLiteral(true); :}
   | KW_FALSE
@@ -4974,6 +4986,8 @@ keyword ::=
     {: RESULT = id; :}
     | KW_LOCATION:id
     {: RESULT = id; :}
+    | KW_LOGICAL:id
+    {: RESULT = id; :}
     | KW_MATERIALIZED:id
     {: RESULT = id; :}
     | KW_MERGE:id
@@ -5143,6 +5157,8 @@ keyword ::=
     | KW_REPLACE:id
     {: RESULT = id; :}
     | KW_CHAR:id
+    {: RESULT = id; :}
+    | KW_CURRENT_TIMESTAMP:id
     {: RESULT = id; :}
     ;
 

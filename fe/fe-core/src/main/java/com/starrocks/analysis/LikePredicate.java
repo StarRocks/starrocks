@@ -22,13 +22,9 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -56,21 +52,6 @@ public class LikePredicate extends Predicate {
         public String toString() {
             return description;
         }
-    }
-
-    public static void initBuiltins(FunctionSet functionSet) {
-        functionSet.addBuiltin(ScalarFunction.createBuiltin(
-                Operator.LIKE.name(), Lists.<Type>newArrayList(Type.VARCHAR, Type.VARCHAR),
-                false, Type.BOOLEAN,
-                "_ZN9starrocks13LikePredicate4likeEPN13starrocks_udf15FunctionContextERKNS1_9StringValES6_",
-                "_ZN9starrocks13LikePredicate12like_prepareEPN13starrocks_udf15FunctionContextENS2_18FunctionStateScopeE",
-                "_ZN9starrocks13LikePredicate10like_closeEPN13starrocks_udf15FunctionContextENS2_18FunctionStateScopeE", true));
-        functionSet.addBuiltin(ScalarFunction.createBuiltin(
-                Operator.REGEXP.name(), Lists.<Type>newArrayList(Type.VARCHAR, Type.VARCHAR),
-                false, Type.BOOLEAN,
-                "_ZN9starrocks13LikePredicate5regexEPN13starrocks_udf15FunctionContextERKNS1_9StringValES6_",
-                "_ZN9starrocks13LikePredicate13regex_prepareEPN13starrocks_udf15FunctionContextENS2_18FunctionStateScopeE",
-                "_ZN9starrocks13LikePredicate11regex_closeEPN13starrocks_udf15FunctionContextENS2_18FunctionStateScopeE", true));
     }
 
     private final Operator op;
@@ -114,6 +95,12 @@ public class LikePredicate extends Predicate {
     }
 
     @Override
+    public String toDigestImpl() {
+        return getChild(0).toDigest() + " " + op.toString().toLowerCase() + " " + getChild(1).toDigest();
+    }
+
+
+    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.FUNCTION_CALL;
     }
@@ -150,17 +137,7 @@ public class LikePredicate extends Predicate {
     }
 
     @Override
-    public boolean isVectorized() {
-        return fn.isVectorized();
-    }
-
-    @Override
-    public boolean isStrictPredicate() {
-        return getChild(0).unwrapSlotRef() != null;
-    }
-
-    @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitLikePredicate(this, context);
     }
 }

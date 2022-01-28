@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
@@ -6,6 +6,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -18,12 +19,14 @@ public class PhysicalValuesOperator extends PhysicalOperator {
 
     public PhysicalValuesOperator(List<ColumnRefOperator> columnRefSet, List<List<ScalarOperator>> rows,
                                   long limit,
-                                  ScalarOperator predicate) {
+                                  ScalarOperator predicate,
+                                  Projection projection) {
         super(OperatorType.PHYSICAL_VALUES);
         this.columnRefSet = columnRefSet;
         this.rows = rows;
         this.limit = limit;
         this.predicate = predicate;
+        this.projection = projection;
     }
 
     public List<ColumnRefOperator> getColumnRefSet() {
@@ -52,13 +55,17 @@ public class PhysicalValuesOperator extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         PhysicalValuesOperator empty = (PhysicalValuesOperator) o;
-        return Objects.equals(columnRefSet, empty.columnRefSet);
+        return Objects.equals(columnRefSet, empty.columnRefSet) &&
+                Objects.equals(rows, empty.rows);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(columnRefSet);
+        return Objects.hash(super.hashCode(), columnRefSet, rows);
     }
 
     @Override

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -11,11 +11,10 @@
 
 namespace starrocks {
 
-class RowsetUpdateState;
 class Tablet;
-class TabletMeta;
-using TabletSharedPtr = std::shared_ptr<Tablet>;
 class HashIndex;
+
+const uint64_t ROWID_MASK = 0xffffffff;
 
 // An index to lookup a record's position(rowset->segment->rowid) by primary key.
 // It's only used to handle updates/deletes in the write pipeline for now.
@@ -45,8 +44,8 @@ public:
     // insert new primary keys into this index. caller need to make sure key doesn't exists
     // in index
     // [not thread-safe]
-    Status insert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks);
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks);
+    Status insert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks);
 
     // insert new primary keys into this index. if a key already exists in the index, assigns
     // the new record's position to the mapped value corresponding to the key, and save the
@@ -54,7 +53,6 @@ public:
     //
     // [not thread-safe]
     void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes);
-    void upsert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks, DeletesMap* deletes);
 
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
     // input rowsets' rowid doesn't exist, this indicates that the row of output rowset is
@@ -67,8 +65,6 @@ public:
     // [not thread-safe]
     void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                      const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
-    void try_replace(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
-                     const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
 
     // |key_col| contains the *encoded* primary keys to be deleted from this index.
     // The position of deleted keys will be appended into |new_deletes|.
@@ -76,17 +72,19 @@ public:
     // [not thread-safe]
     void erase(const vectorized::Column& pks, DeletesMap* deletes);
 
-    // [not thread-safe]
-    std::size_t memory_usage() const;
+    void get(const vectorized::Column& pks, std::vector<uint64_t>* rowids) const;
 
     // [not thread-safe]
-    std::string memory_info() const;
+    std::size_t memory_usage() const;
 
     // [not thread-safe]
     std::size_t size() const;
 
     // [not thread-safe]
     std::size_t capacity() const;
+
+    // [not thread-safe]
+    void reserve(size_t s);
 
     std::string to_string() const;
 

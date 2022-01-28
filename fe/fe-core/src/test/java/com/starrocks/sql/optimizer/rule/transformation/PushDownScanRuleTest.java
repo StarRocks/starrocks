@@ -1,8 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
@@ -38,7 +37,8 @@ public class PushDownScanRuleTest {
         ));
 
         OptExpression scan =
-                new OptExpression(new LogicalOlapScanOperator(table, Lists.newArrayList(), Maps.newHashMap(), Maps.newHashMap(), null, -1, null));
+                new OptExpression(
+                        new LogicalOlapScanOperator(table, Maps.newHashMap(), Maps.newHashMap(), null, -1, null));
         optExpression.getInputs().add(scan);
 
         assertNull(((LogicalOlapScanOperator) scan.getOp()).getPredicate());

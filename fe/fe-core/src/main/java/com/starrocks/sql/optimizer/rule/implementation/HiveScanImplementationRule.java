@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -35,7 +35,8 @@ public class HiveScanImplementationRule extends ImplementationRule {
                     scan.getMinMaxConjuncts(),
                     scan.getMinMaxColumnRefMap(),
                     scan.getLimit(),
-                    scan.getPredicate());
+                    scan.getPredicate(),
+                    scan.getProjection());
 
             result = new OptExpression(physicalHiveScan);
         }

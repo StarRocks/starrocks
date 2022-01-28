@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/orc_scanner_adapter.h"
 
@@ -15,6 +15,7 @@
 #include "column/array_column.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/literal.h"
+#include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
@@ -32,7 +33,7 @@ const static std::unordered_map<orc::TypeKind, PrimitiveType> g_orc_starrocks_ty
         {orc::DOUBLE, TYPE_DOUBLE},   {orc::DECIMAL, TYPE_DECIMALV2},
         {orc::DATE, TYPE_DATE},       {orc::TIMESTAMP, TYPE_DATETIME},
         {orc::STRING, TYPE_VARCHAR},  {orc::BINARY, TYPE_VARCHAR},
-        {orc::CHAR, TYPE_VARCHAR},    {orc::VARCHAR, TYPE_VARCHAR},
+        {orc::CHAR, TYPE_CHAR},       {orc::VARCHAR, TYPE_VARCHAR},
 };
 
 // NOLINTNEXTLINE
@@ -51,6 +52,13 @@ const static std::set<PrimitiveType> g_starrocks_decimal_type = {TYPE_DECIMAL32,
 
 const static cctz::time_point<cctz::sys_seconds> CCTZ_UNIX_EPOCH =
         std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
+
+// Hive ORC char type will pad trailing spaces.
+// https://docs.cloudera.com/documentation/enterprise/6/6.3/topics/impala_char.html
+static inline size_t remove_trailing_spaces(const char* s, size_t size) {
+    while (size > 0 && s[size - 1] == ' ') size--;
+    return size;
+}
 
 static void fill_boolean_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                 const TypeDescriptor& type_desc, void* ctx) {
@@ -126,7 +134,11 @@ static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col,
                     filter[i] = 0;
                     if (!reported) {
                         reported = true;
-                        adapter->report_error_message("integer overflows", std::to_string(value));
+                        auto slot = adapter->get_current_slot();
+                        std::string error_msg = strings::Substitute(
+                                "Value '$0' is out of range. The type of '$1' is $2'", std::to_string(value),
+                                slot->col_name(), slot->type().debug_string());
+                        adapter->report_error_message(error_msg);
                     }
                 }
             }
@@ -175,7 +187,11 @@ static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, Colum
                     filter[i] = 0;
                     if (!reported) {
                         reported = true;
-                        adapter->report_error_message("integer overflows", std::to_string(value));
+                        auto slot = adapter->get_current_slot();
+                        std::string error_msg = strings::Substitute(
+                                "Value '$0' is out of range. The type of '$1' is $2'", std::to_string(value),
+                                slot->col_name(), slot->type().debug_string());
+                        adapter->report_error_message(error_msg);
                     }
                 }
             }
@@ -541,9 +557,19 @@ static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int 
     auto& vb = values->get_bytes();
     auto& vo = values->get_offset();
     int pos = from;
-    for (int i = col_start; i < col_start + size; ++i, ++pos) {
-        vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-        vo.emplace_back(vb.size());
+
+    if (type_desc.type == TYPE_CHAR) {
+        // Possibly there are some zero padding characters in value, we have to strip them off.
+        for (int i = col_start; i < col_start + size; ++i, ++pos) {
+            size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+            vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+            vo.emplace_back(vb.size());
+        }
+    } else {
+        for (int i = col_start; i < col_start + size; ++i, ++pos) {
+            vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+            vo.emplace_back(vb.size());
+        }
     }
 
     // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
@@ -560,9 +586,11 @@ static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int 
                 if (!reported) {
                     reported = true;
                     std::string raw_data(data->data[i], data->length[i]);
-                    std::string reason = strings::Substitute("string length $0 exceeds max length $1", data->length[i],
-                                                             type_desc.len);
-                    adapter->report_error_message(reason, raw_data);
+                    auto slot = adapter->get_current_slot();
+                    std::string error_msg =
+                            strings::Substitute("String '$0' is too long. The type of '$1' is $2'", raw_data,
+                                                slot->col_name(), slot->type().debug_string());
+                    adapter->report_error_message(error_msg);
                 }
             }
         }
@@ -593,26 +621,50 @@ static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
 
     auto& vb = values->get_bytes();
     auto& vo = values->get_offset();
+
+    int pos = from;
     if (cvb->hasNulls) {
-        for (int i = col_start; i < col_start + size; ++i, ++from) {
-            nulls[i] = !cvb->notNull[from];
-            if (cvb->notNull[from]) {
-                vb.insert(vb.end(), data->data[from], data->data[from] + data->length[from]);
-                vo.emplace_back(vb.size());
-            } else {
-                vo.emplace_back(vb.size());
+        if (type_desc.type == TYPE_CHAR) {
+            // Possibly there are some zero padding characters in value, we have to strip them off.
+            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                nulls[i] = !cvb->notNull[pos];
+                if (cvb->notNull[pos]) {
+                    size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+                    vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+                    vo.emplace_back(vb.size());
+                } else {
+                    vo.emplace_back(vb.size());
+                }
+            }
+        } else {
+            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                nulls[i] = !cvb->notNull[pos];
+                if (cvb->notNull[pos]) {
+                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                    vo.emplace_back(vb.size());
+                } else {
+                    vo.emplace_back(vb.size());
+                }
             }
         }
     } else {
-        for (int i = col_start; i < col_start + size; ++i, ++from) {
-            vb.insert(vb.end(), data->data[from], data->data[from] + data->length[from]);
-            vo.emplace_back(vb.size());
+        if (type_desc.type == TYPE_CHAR) {
+            // Possibly there are some zero padding characters in value, we have to strip them off.
+            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+                vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+                vo.emplace_back(vb.size());
+            }
+        } else {
+            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                vo.emplace_back(vb.size());
+            }
         }
     }
 
     // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
     // otherwise `broker_load_filter` does not work.
-    from -= size; // move back
     if (adapter->get_broker_load_mode() && from == 0 && col_start == 0) {
         auto* filter = adapter->get_broker_load_fiter()->data();
         auto strict_mode = adapter->get_strict_mode();
@@ -626,9 +678,11 @@ static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
                     if (!reported) {
                         reported = true;
                         std::string raw_data(data->data[i], data->length[i]);
-                        std::string reason = strings::Substitute("string length $0 exceeds max length $1",
-                                                                 data->length[i], type_desc.len);
-                        adapter->report_error_message(reason, raw_data);
+                        auto slot = adapter->get_current_slot();
+                        std::string error_msg =
+                                strings::Substitute("String '$0' is too long. The type of '$1' is $2'", raw_data,
+                                                    slot->col_name(), slot->type().debug_string());
+                        adapter->report_error_message(error_msg);
                     }
                 }
             }
@@ -931,9 +985,9 @@ const FillColumnFunction& find_fill_func(PrimitiveType type, bool nullable) {
     return nullable ? FunctionsMap::instance()->get_nullable_func(type) : FunctionsMap::instance()->get_func(type);
 }
 
-OrcScannerAdapter::OrcScannerAdapter(const std::vector<SlotDescriptor*>& src_slot_descriptors)
+OrcScannerAdapter::OrcScannerAdapter(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors)
         : _src_slot_descriptors(src_slot_descriptors),
-          _read_chunk_size(config::vector_chunk_size),
+          _read_chunk_size(state->chunk_size()),
           _tzinfo(cctz::utc_time_zone()),
           _tzoffset_in_seconds(0),
           _drop_nanoseconds_in_datetime(false),
@@ -1059,7 +1113,7 @@ Status OrcScannerAdapter::init(std::unique_ptr<orc::Reader> reader) {
     try {
         _row_reader = _reader->createRowReader(_row_reader_options);
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcScannerAdpater::init failed. reason = $0", e.what());
+        auto s = strings::Substitute("OrcScannerAdapter::init failed. reason = $0", e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
@@ -1198,10 +1252,10 @@ Status OrcScannerAdapter::_init_cast_exprs() {
         }
         // we don't support implicit cast column in query external hive table case.
         // if we query external table, we heavily rely on type match to do optimization.
-        // For example, if we assume column A is a integer column, but it's stored as string in orc file
-        // then min/max of A is almost unusable. Think that there are values [10, 11, 10000, 100001]
+        // For example, if we assume column A is an integer column, but it's stored as string in orc file
+        // then min/max of A is almost unusable. Think that there are values ["10", "10000", "100001", "11"]
         // min/max will be "10" and "11", and we expect min/max is 10/100001
-        if (!_broker_load_mode) {
+        if (!_broker_load_mode && !starrocks_type.is_implicit_castable(orc_type)) {
             return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1",
                                                             orc_type.debug_string(), starrocks_type.debug_string()));
         }
@@ -1252,7 +1306,7 @@ Status OrcScannerAdapter::read_next() {
             return Status::EndOfFile("");
         }
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcScannerAdpater::read_next failed. reason = $0", e.what());
+        auto s = strings::Substitute("OrcScannerAdapter::read_next failed. reason = $0", e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
@@ -1283,7 +1337,9 @@ Status OrcScannerAdapter::fill_chunk(ChunkPtr* chunk) {
         orc::ColumnVectorBatch* cvb = batch_vec[_position_in_orc[column_pos]];
         if (!slot_desc->is_nullable() && cvb->hasNulls) {
             if (_broker_load_mode) {
-                report_error_message("not-null column has NULL values", "NULL");
+                std::string error_msg =
+                        strings::Substitute("NULL value in non-nullable column '$0'", _current_slot->col_name());
+                report_error_message(error_msg);
                 bool all_zero = false;
                 ColumnHelper::merge_two_filters(_broker_load_filter.get(),
                                                 reinterpret_cast<uint8_t*>(cvb->notNull.data()), &all_zero);
@@ -1442,7 +1498,13 @@ bool OrcScannerAdapter::_ok_to_add_conjunct(const Expr* conjunct) {
         ColumnRef* ref = down_cast<ColumnRef*>(c);
         SlotId slot_id = ref->slot_id();
         // slot can not be found.
-        if (_slot_id_to_desc.find(slot_id) == _slot_id_to_desc.end()) {
+        auto iter = _slot_id_to_desc.find(slot_id);
+        if (iter == _slot_id_to_desc.end()) {
+            return false;
+        }
+        SlotDescriptor* slot_desc = iter->second;
+        // It's unsafe to do eval on char type because of padding problems.
+        if (slot_desc->type().type == TYPE_CHAR) {
             return false;
         }
 
@@ -1546,6 +1608,24 @@ void OrcScannerAdapter::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc:
         return;
     }
 
+    // handle conjuncts
+    // where (NULL) or (slot == $val)
+    // where (true) or (slot == $val)
+    // If FE can simplify this predicate, then literal processing is no longer needed here
+    if (node_type == TExprNodeType::BOOL_LITERAL || node_type == TExprNodeType::NULL_LITERAL) {
+        orc::TruthValue val = orc::TruthValue::NO;
+        if (node_type == TExprNodeType::BOOL_LITERAL) {
+            Expr* literal = const_cast<Expr*>(conjunct);
+            ColumnPtr ptr = literal->evaluate(nullptr, nullptr);
+            const Datum& datum = ptr->get(0);
+            if (datum.get_int8()) {
+                val = orc::TruthValue::YES;
+            }
+        }
+        builder->literal(val);
+        return;
+    }
+
     Expr* slot = conjunct->get_child(0);
     DCHECK(slot->is_slotref());
     ColumnRef* ref = down_cast<ColumnRef*>(slot);
@@ -1633,6 +1713,15 @@ void OrcScannerAdapter::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc:
         return true;                                                 \
     }
 
+#define ADD_RF_BOOLEAN_TYPE(type)                                      \
+    case type: {                                                       \
+        auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
+        if (xrf == nullptr) return false;                              \
+        auto lower = orc::Literal(bool(xrf->min_value()));             \
+        auto upper = orc::Literal(bool(xrf->max_value()));             \
+        ADD_RF_TO_BUILDER                                              \
+    }
+
 #define ADD_RF_INT_TYPE(type)                                          \
     case type: {                                                       \
         auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
@@ -1696,7 +1785,7 @@ bool OrcScannerAdapter::_add_runtime_filter(const SlotDescriptor* slot, const Jo
     if (type_it == _supported_primitive_types.end()) return false;
     orc::PredicateDataType pred_type = type_it->second;
     switch (ptype) {
-        ADD_RF_INT_TYPE(PrimitiveType::TYPE_BOOLEAN);
+        ADD_RF_BOOLEAN_TYPE(PrimitiveType::TYPE_BOOLEAN);
         ADD_RF_INT_TYPE(PrimitiveType::TYPE_TINYINT);
         ADD_RF_INT_TYPE(PrimitiveType::TYPE_SMALLINT);
         ADD_RF_INT_TYPE(PrimitiveType::TYPE_INT);
@@ -1812,8 +1901,16 @@ static Status decode_string_min_max(PrimitiveType ptype, const orc::proto::Colum
     if (colStats.has_stringstatistics() && colStats.stringstatistics().has_minimum() &&
         colStats.stringstatistics().has_maximum()) {
         const auto& stats = colStats.stringstatistics();
-        const Slice& min = Slice(stats.minimum());
-        const Slice& max = Slice(stats.maximum());
+        const std::string& min_value = stats.minimum();
+        const std::string& max_value = stats.maximum();
+        size_t min_value_size = min_value.size();
+        size_t max_value_size = max_value.size();
+        if (ptype == TYPE_CHAR) {
+            min_value_size = remove_trailing_spaces(min_value.c_str(), min_value_size);
+            max_value_size = remove_trailing_spaces(max_value.c_str(), max_value_size);
+        }
+        const Slice min(min_value.c_str(), min_value_size);
+        const Slice max(max_value.c_str(), max_value_size);
         switch (ptype) {
         case PrimitiveType::TYPE_VARCHAR:
             DOWN_CAST_ASSIGN_MIN_MAX(PrimitiveType::TYPE_VARCHAR);
@@ -1968,17 +2065,14 @@ Status OrcScannerAdapter::set_timezone(const std::string& tz) {
 }
 
 static const int MAX_ERROR_MESSAGE_COUNTER = 100;
-void OrcScannerAdapter::report_error_message(const std::string& reason, const std::string& raw_data) {
+void OrcScannerAdapter::report_error_message(const std::string& error_msg) {
     if (_state == nullptr) return;
     if (_error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     _error_message_counter += 1;
-    std::string error_msg =
-            strings::Substitute("file = $0, column = $1, raw data = $2", _current_file_name,
-                                (_current_slot == nullptr) ? "null" : _current_slot->col_name(), raw_data);
-    _state->append_error_msg_to_file(error_msg, reason);
+    _state->append_error_msg_to_file("", error_msg);
 }
 
-int OrcScannerAdapter::get_column_id_by_name(const std::string& name) {
+int OrcScannerAdapter::get_column_id_by_name(const std::string& name) const {
     const auto& it = _name_to_column_id.find(name);
     if (it != _name_to_column_id.end()) {
         return it->second;

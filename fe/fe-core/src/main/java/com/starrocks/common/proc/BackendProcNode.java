@@ -39,7 +39,7 @@ public class BackendProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("RootPath").add("DataUsedCapacity").add("OtherUsedCapacity").add("AvailCapacity")
             .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash").add("StorageMedium")
-            .add("TabletNum").build();
+            .add("TabletNum").add("DataTotalCapacity").add("DataUsedPct").build();
 
     private Backend backend;
 
@@ -56,28 +56,30 @@ public class BackendProcNode implements ProcNodeInterface {
 
         for (Map.Entry<String, DiskInfo> entry : backend.getDisks().entrySet()) {
             DiskInfo diskInfo = entry.getValue();
+            long dataUsedB = diskInfo.getDataUsedCapacityB();
+            long availB = diskInfo.getAvailableCapacityB();
+            long totalB = diskInfo.getTotalCapacityB();
+            long dataTotalB = diskInfo.getDataTotalCapacityB();
+            long otherUsedB = totalB - availB - dataUsedB;
 
             List<String> info = Lists.newArrayList();
+            // path
             info.add(entry.getKey());
 
             // data used
-            long dataUsedB = diskInfo.getDataUsedCapacityB();
             Pair<Double, String> dataUsedUnitPair = DebugUtil.getByteUint(dataUsedB);
-            info.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(dataUsedUnitPair.first) + " "
-                    + dataUsedUnitPair.second);
+            info.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(dataUsedUnitPair.first) + " " + dataUsedUnitPair.second);
+
+            // other used
+            Pair<Double, String> otherUsedUnitPair = DebugUtil.getByteUint(otherUsedB);
+            info.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(otherUsedUnitPair.first) + " " + otherUsedUnitPair.second);
 
             // avail
-            long availB = diskInfo.getAvailableCapacityB();
             Pair<Double, String> availUnitPair = DebugUtil.getByteUint(availB);
-            // total
-            long totalB = diskInfo.getTotalCapacityB();
-            Pair<Double, String> totalUnitPair = DebugUtil.getByteUint(totalB);
-            // other
-            long otherB = totalB - availB;
-            Pair<Double, String> otherUnitPair = DebugUtil.getByteUint(otherB);
-
-            info.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(otherUnitPair.first) + " " + otherUnitPair.second);
             info.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(availUnitPair.first) + " " + availUnitPair.second);
+
+            // total
+            Pair<Double, String> totalUnitPair = DebugUtil.getByteUint(totalB);
             info.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(totalUnitPair.first) + " " + totalUnitPair.second);
 
             // total used percent
@@ -85,11 +87,14 @@ public class BackendProcNode implements ProcNodeInterface {
             if (totalB <= 0) {
                 used = 0.0;
             } else {
-                used = (double) otherB * 100 / totalB;
+                used = (double) (totalB - availB) * 100 / totalB;
             }
             info.add(String.format("%.2f", used) + " %");
 
+            // state
             info.add(diskInfo.getState().name());
+
+            // path hash
             info.add(String.valueOf(diskInfo.getPathHash()));
 
             // medium
@@ -103,6 +108,19 @@ public class BackendProcNode implements ProcNodeInterface {
             // tablet num
             info.add(String.valueOf(Catalog.getCurrentInvertedIndex().getTabletNumByBackendIdAndPathHash(
                     backend.getId(), diskInfo.getPathHash())));
+
+            // data total
+            Pair<Double, String> dataTotalUnitPair = DebugUtil.getByteUint(dataTotalB);
+            info.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(dataTotalUnitPair.first) + " " + dataTotalUnitPair.second);
+
+            // data used percent
+            double dataUsed = 0.0;
+            if (dataTotalB <= 0) {
+                dataUsed = 0.0;
+            } else {
+                dataUsed = (double) dataUsedB * 100 / dataTotalB;
+            }
+            info.add(String.format("%.2f", dataUsed) + " %");
 
             result.addRow(info);
         }

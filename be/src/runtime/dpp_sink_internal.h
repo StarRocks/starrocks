@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_DPP_SINK_INTERNAL_H
-#define STARROCKS_BE_RUNTIME_DPP_SINK_INTERNAL_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -191,9 +190,10 @@ class PartitionInfo {
 public:
     PartitionInfo() {}
 
-    static Status from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition);
+    static Status from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition,
+                              int32_t chunk_size);
 
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, MemTracker*);
+    Status prepare(RuntimeState* state, const RowDescriptor& row_desc);
 
     Status open(RuntimeState* state);
 
@@ -243,5 +243,3 @@ struct hash<starrocks::TabletDesc> {
 };
 
 } // namespace std
-
-#endif

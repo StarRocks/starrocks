@@ -35,9 +35,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
@@ -50,6 +52,8 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -71,7 +75,9 @@ public class LoadingTaskPlanner {
     private final List<BrokerFileGroup> fileGroups;
     private final boolean strictMode;
     private final long timeoutS;    // timeout of load job, in second
+    private final boolean partialUpdate;
     private final int parallelInstanceNum;
+    private final long startTime;
 
     // Something useful
     // ConnectContext here is just a dummy object to avoid some NPE problem, like ctx.getDatabase()
@@ -86,7 +92,8 @@ public class LoadingTaskPlanner {
 
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
                               BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
-                              boolean strictMode, String timezone, long timeoutS) {
+                              boolean strictMode, String timezone, long timeoutS,
+                              long startTime, boolean partialUpdate) {
         this.loadJobId = loadJobId;
         this.txnId = txnId;
         this.dbId = dbId;
@@ -96,14 +103,9 @@ public class LoadingTaskPlanner {
         this.strictMode = strictMode;
         this.analyzer.setTimezone(timezone);
         this.timeoutS = timeoutS;
+        this.partialUpdate = partialUpdate;
         this.parallelInstanceNum = Config.load_parallel_instance_num;
-
-        /*
-         * TODO(cmy): UDF currently belongs to a database. Therefore, before using UDF,
-         * we need to check whether the user has corresponding permissions on this database.
-         * But here we have lost user information and therefore cannot check permissions.
-         * So here we first prohibit users from using UDF in load. If necessary, improve it later.
-         */
+        this.startTime = startTime;
         this.analyzer.setUDFAllowed(false);
     }
 
@@ -111,14 +113,38 @@ public class LoadingTaskPlanner {
             throws UserException {
         // Generate tuple descriptor
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        // use full schema to fill the descriptor table
-        for (Column col : table.getFullSchema()) {
+        List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+        List<Column> destColumns = Lists.newArrayList();
+        boolean isPrimaryKey = table.getKeysType() == KeysType.PRIMARY_KEYS;
+        if (isPrimaryKey && partialUpdate) {
+            if (fileGroups.size() > 1) {
+                throw new DdlException("partial update only support single filegroup.");
+            } else if (fileGroups.size() == 1) {
+                if (fileGroups.get(0).isNegative()) {
+                    throw new DdlException("Primary key table does not support negative load");
+                }
+                destColumns = Load.getPartialUpateColumns(table, fileGroups.get(0).getColumnExprList());
+            } else {
+                throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
+            }
+        } else if (!isPrimaryKey && partialUpdate) {
+            throw new DdlException("Only primary key table support partial update");
+        } else {
+            destColumns = table.getFullSchema();
+        }
+        for (Column col : destColumns) {
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
             slotDesc.setColumn(col);
             slotDesc.setIsNullable(col.isAllowNull());
+
+            if (col.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(table.getId(),
+                    col.getName())) {
+                ColumnDict dict = IDictManager.getInstance().getGlobalDict(table.getId(), col.getName());
+                globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict));
+            }
         }
-        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+        if (isPrimaryKey) {
             // add op type column
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
@@ -134,7 +160,7 @@ public class LoadingTaskPlanner {
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
-        LOG.info("use vectorized load: {}, load job id: {}", scanNode.isUseVectorized(), loadJobId);
+        LOG.info("use vectorized load: {}, load job id: {}", true, loadJobId);
         scanNodes.add(scanNode);
         descTable.computeMemLayout();
 
@@ -148,6 +174,9 @@ public class LoadingTaskPlanner {
         PlanFragment sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
         sinkFragment.setSink(olapTableSink);
         sinkFragment.setParallelExecNum(parallelInstanceNum);
+        // After data loading, we need to check the global dict for low cardinality string column
+        // whether update.
+        sinkFragment.setLoadGlobalDicts(globalDicts);
 
         fragments.add(sinkFragment);
 
@@ -161,6 +190,10 @@ public class LoadingTaskPlanner {
             }
         }
         Collections.reverse(fragments);
+    }
+
+    public long getStartTime() {
+        return startTime;
     }
 
     public DescriptorTable getDescTable() {

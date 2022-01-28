@@ -30,8 +30,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -45,8 +43,6 @@ import static com.starrocks.common.io.IOUtils.writeOptionString;
  * Base class for all functions.
  */
 public class Function implements Writable {
-    private static final Logger LOG = LogManager.getLogger(Function.class);
-
     // Enum for how to compare function signatures.
     // For decimal types, the type in the function can be a wildcard, i.e. decimal(*,*).
     // The wildcard can *only* exist as function type, the caller will always be a
@@ -84,7 +80,6 @@ public class Function implements Writable {
         IS_MATCHABLE
     }
 
-    public static final long UNIQUE_FUNCTION_ID = 0;
     // Function id, every function has a unique id. Now all built-in functions' id is 0
     private long id = 0;
     // User specified function name e.g. "Add"
@@ -109,13 +104,16 @@ public class Function implements Writable {
     // library's checksum to make sure all backends use one library to serve user's request
     protected String checksum = "";
 
-    // for vectorized engine
-    private boolean isVectorized = false;
-
     // for vectorized engine, function-id
     private long functionId;
 
     private boolean isPolymorphic = false;
+
+    // If low cardinality string column with global dict, for some string functions,
+    // we could evaluate the function only with the dict content, not all string column data.
+    private boolean couldApplyDictOptimize = false;
+
+    private boolean isNullable = true;
 
     // Only used for serialization
     protected Function() {
@@ -140,7 +138,6 @@ public class Function implements Writable {
             this.argTypes = argTypes.toArray(new Type[argTypes.size()]);
         }
         this.retType = retType;
-        this.isVectorized = isVectorized;
         this.isPolymorphic = Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
     }
 
@@ -236,10 +233,6 @@ public class Function implements Writable {
         return isPolymorphic;
     }
 
-    public void setIsVectorized(boolean vectorized) {
-        isVectorized = vectorized;
-    }
-
     public long getFunctionId() {
         return functionId;
     }
@@ -285,6 +278,22 @@ public class Function implements Writable {
         }
         sb.append(")");
         return sb.toString();
+    }
+
+    public boolean isNullable() {
+        return isNullable;
+    }
+
+    public void setIsNullable(boolean isNullable) {
+        this.isNullable = isNullable;
+    }
+
+    public boolean isCouldApplyDictOptimize() {
+        return couldApplyDictOptimize;
+    }
+
+    public void setCouldApplyDictOptimize(boolean couldApplyDictOptimize) {
+        this.couldApplyDictOptimize = couldApplyDictOptimize;
     }
 
     // Compares this to 'other' for mode.
@@ -515,98 +524,13 @@ public class Function implements Writable {
         if (!checksum.isEmpty()) {
             fn.setChecksum(checksum);
         }
+        fn.setCould_apply_dict_optimize(couldApplyDictOptimize);
         return fn;
     }
 
     // Child classes must override this function.
     public String toSql(boolean ifNotExists) {
         return "";
-    }
-
-    public static String getUdfTypeName(PrimitiveType t) {
-        switch (t) {
-            case BOOLEAN:
-                return "boolean_val";
-            case TINYINT:
-                return "tiny_int_val";
-            case SMALLINT:
-                return "small_int_val";
-            case INT:
-                return "int_val";
-            case BIGINT:
-                return "big_int_val";
-            case LARGEINT:
-                return "large_int_val";
-            case FLOAT:
-                return "float_val";
-            case DOUBLE:
-            case TIME:
-                return "double_val";
-            case VARCHAR:
-            case CHAR:
-            case HLL:
-            case BITMAP:
-            case PERCENTILE:
-                return "string_val";
-            case DATE:
-            case DATETIME:
-                return "datetime_val";
-            case DECIMALV2:
-                return "decimalv2_val";
-            case DECIMAL32:
-                return "decimal32_val";
-            case DECIMAL64:
-                return "decimal64_val";
-            case DECIMAL128:
-                return "decimal128_val";
-            default:
-                Preconditions.checkState(false, t.toString());
-                return "";
-        }
-    }
-
-    public static String getUdfType(PrimitiveType t) {
-        switch (t) {
-            case NULL_TYPE:
-                return "AnyVal";
-            case BOOLEAN:
-                return "BooleanVal";
-            case TINYINT:
-                return "TinyIntVal";
-            case SMALLINT:
-                return "SmallIntVal";
-            case INT:
-                return "IntVal";
-            case BIGINT:
-                return "BigIntVal";
-            case LARGEINT:
-                return "LargeIntVal";
-            case FLOAT:
-                return "FloatVal";
-            case DOUBLE:
-            case TIME:
-                return "DoubleVal";
-            case VARCHAR:
-            case CHAR:
-            case HLL:
-            case BITMAP:
-            case PERCENTILE:
-                return "StringVal";
-            case DATE:
-            case DATETIME:
-                return "DateTimeVal";
-            case DECIMALV2:
-                return "DecimalV2Val";
-            case DECIMAL32:
-                return "Decimal32";
-            case DECIMAL64:
-                return "Decimal64";
-            case DECIMAL128:
-                return "Decimal128";
-            default:
-                Preconditions.checkState(false, t.toString());
-                return "";
-        }
     }
 
     public static Function getFunction(List<Function> fns, Function desc, CompareMode mode) {
@@ -686,8 +610,6 @@ public class Function implements Writable {
             return fromCode(input.readInt());
         }
     }
-
-    ;
 
     protected void writeFields(DataOutput output) throws IOException {
         output.writeLong(id);

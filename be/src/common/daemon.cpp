@@ -34,14 +34,18 @@
 #include "runtime/user_function_cache.h"
 #include "runtime/vectorized/time_types.h"
 #include "storage/options.h"
+#include "storage/storage_engine.h"
 #include "util/cpu_info.h"
 #include "util/debug_util.h"
 #include "util/disk_info.h"
+#include "util/gc_helper.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/system_metrics.h"
+#include "util/thread.h"
 #include "util/thrift_util.h"
 #include "util/time.h"
 
@@ -65,31 +69,20 @@ private:
     size_t _freed_bytes = 0;
 };
 
-void* tcmalloc_gc_thread(void* dummy) {
+void gc_tcmalloc_memory(void* arg_this) {
     using namespace starrocks::vectorized;
     const static float kFreeRatio = 0.5;
-    while (true) {
-        sleep(10);
+    GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
+
+    Daemon* daemon = static_cast<Daemon*>(arg_this);
+    while (!daemon->stopped()) {
+        sleep(config::memory_maintenance_sleep_time_s);
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         MallocExtension::instance()->MarkThreadBusy();
 #endif
         ReleaseColumnPool releaser(kFreeRatio);
         ForEach<ColumnPoolList>(releaser);
         LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
-        auto* local_column_pool_mem_tracker = ExecEnv::GetInstance()->local_column_pool_mem_tracker();
-        if (local_column_pool_mem_tracker != nullptr) {
-            // Frequent update MemTracker where allocate or release column may affect performance,
-            // so here update MemTracker regularly
-            local_column_pool_mem_tracker->consume(g_column_pool_total_local_bytes.get_value() -
-                                                   local_column_pool_mem_tracker->consumption());
-        }
-        auto* central_column_pool_mem_tracker = ExecEnv::GetInstance()->central_column_pool_mem_tracker();
-        if (central_column_pool_mem_tracker != nullptr) {
-            // Frequent update MemTracker where allocate or release column may affect performance,
-            // so here update MemTracker regularly
-            central_column_pool_mem_tracker->consume(g_column_pool_total_central_bytes.get_value() -
-                                                     central_column_pool_mem_tracker->consumption());
-        }
 
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         size_t used_size = 0;
@@ -97,17 +90,27 @@ void* tcmalloc_gc_thread(void* dummy) {
         MallocExtension::instance()->GetNumericProperty("generic.current_allocated_bytes", &used_size);
         MallocExtension::instance()->GetNumericProperty("tcmalloc.pageheap_free_bytes", &free_size);
         size_t phy_size = used_size + free_size; // physical memory usage
+        size_t total_bytes_to_gc = 0;
         if (phy_size > config::tc_use_memory_min) {
             size_t max_free_size = phy_size * config::tc_free_memory_rate / 100;
             if (free_size > max_free_size) {
-                MallocExtension::instance()->ReleaseToSystem(free_size - max_free_size);
+                total_bytes_to_gc = free_size - max_free_size;
+            }
+        }
+        size_t bytes_to_gc = gch.bytes_should_gc(MonoTime::Now(), total_bytes_to_gc);
+        if (bytes_to_gc > 0) {
+            size_t bytes = bytes_to_gc;
+            while (bytes >= GCBYTES_ONE_STEP) {
+                MallocExtension::instance()->ReleaseToSystem(GCBYTES_ONE_STEP);
+                bytes -= GCBYTES_ONE_STEP;
+            }
+            if (bytes > 0) {
+                MallocExtension::instance()->ReleaseToSystem(bytes);
             }
         }
         MallocExtension::instance()->MarkThreadIdle();
 #endif
     }
-
-    return nullptr;
 }
 
 /*
@@ -118,7 +121,7 @@ void* tcmalloc_gc_thread(void* dummy) {
  * 4. max network send bytes rate
  * 5. max network receive bytes rate
  */
-void* calculate_metrics(void* dummy) {
+void calculate_metrics(void* arg_this) {
     int64_t last_ts = -1L;
     int64_t lst_push_bytes = -1;
     int64_t lst_query_bytes = -1;
@@ -127,7 +130,8 @@ void* calculate_metrics(void* dummy) {
     std::map<std::string, int64_t> lst_net_send_bytes;
     std::map<std::string, int64_t> lst_net_receive_bytes;
 
-    while (true) {
+    Daemon* daemon = static_cast<Daemon*>(arg_this);
+    while (!daemon->stopped()) {
         StarRocksMetrics::instance()->metrics()->trigger_hook();
 
         if (last_ts == -1L) {
@@ -174,8 +178,6 @@ void* calculate_metrics(void* dummy) {
 
         sleep(15); // 15 seconds
     }
-
-    return nullptr;
 }
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
@@ -190,21 +192,16 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     if (init_system_metrics) {
         auto st = DiskInfo::get_disk_devices(paths, &disk_devices);
         if (!st.ok()) {
-            LOG(WARNING) << "get disk devices failed, stauts=" << st.get_error_msg();
+            LOG(WARNING) << "get disk devices failed, status=" << st.get_error_msg();
             return;
         }
         st = get_inet_interfaces(&network_interfaces);
         if (!st.ok()) {
-            LOG(WARNING) << "get inet interfaces failed, stauts=" << st.get_error_msg();
+            LOG(WARNING) << "get inet interfaces failed, status=" << st.get_error_msg();
             return;
         }
     }
     StarRocksMetrics::instance()->initialize(paths, init_system_metrics, disk_devices, network_interfaces);
-
-    if (config::enable_metric_calculator) {
-        pthread_t calculator_pid;
-        pthread_create(&calculator_pid, nullptr, calculate_metrics, nullptr);
-    }
 }
 
 void sigterm_handler(int signo) {
@@ -247,7 +244,7 @@ void init_minidump() {
 #endif
 }
 
-void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
+void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     // google::SetVersionString(get_build_version(false));
     // google::ParseCommandLineFlags(&argc, &argv, true);
     google::ParseCommandLineFlags(&argc, &argv, true);
@@ -259,22 +256,42 @@ void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
     CpuInfo::init();
     DiskInfo::init();
     MemInfo::init();
-    UserFunctionCache::instance()->init(config::user_function_dir);
-
-    vectorized::ColumnHelper::init_static_variable();
-    vectorized::date::init_date_cache();
-
-    pthread_t tc_malloc_pid;
-    pthread_create(&tc_malloc_pid, nullptr, tcmalloc_gc_thread, nullptr);
-
     LOG(INFO) << CpuInfo::debug_string();
     LOG(INFO) << DiskInfo::debug_string();
     LOG(INFO) << MemInfo::debug_string();
+
+    UserFunctionCache::instance()->init(config::user_function_dir);
+
+    vectorized::date::init_date_cache();
+
+    std::thread tcmalloc_gc_thread(gc_tcmalloc_memory, this);
+    Thread::set_thread_name(tcmalloc_gc_thread, "tcmalloc_daemon");
+    _daemon_threads.emplace_back(std::move(tcmalloc_gc_thread));
+
     init_starrocks_metrics(paths);
+
+    if (config::enable_metric_calculator) {
+        std::thread calculate_metrics_thread(calculate_metrics, this);
+        Thread::set_thread_name(calculate_metrics_thread, "metrics_daemon");
+        _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
+    }
+
     init_signals();
     init_minidump();
+}
 
-    ChunkAllocator::init_instance(config::chunk_reserved_bytes_limit);
+void Daemon::stop() {
+    _stopped.store(true, std::memory_order_release);
+    int thread_size = _daemon_threads.size();
+    for (int i = 0; i < thread_size; ++i) {
+        if (_daemon_threads[i].joinable()) {
+            _daemon_threads[i].join();
+        }
+    }
+}
+
+bool Daemon::stopped() {
+    return _stopped.load(std::memory_order_consume);
 }
 
 } // namespace starrocks

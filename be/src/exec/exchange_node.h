@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_EXCHANGE_NODE_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_EXCHANGE_NODE_H
+#pragma once
 
 #include "exec/exec_node.h"
 #include "exec/sort_exec_exprs.h"
@@ -41,10 +40,6 @@ class RuntimeProfile;
 // its SortExecExprs member that are used to compare rows.
 // If _is_merging is false, the exchange node directly retrieves batches from the row
 // batch queue of the DataStreamRecvr via calls to DataStreamRecvr::GetBatch().
-
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
 
 class ExchangeNode final : public ExecNode {
 public:
@@ -73,6 +68,8 @@ private:
     // Implements GetNext() for the case where _is_merging is true. Delegates the GetNext()
     // call to the underlying DataStreamRecvr.
     Status get_next_merging(RuntimeState* state, ChunkPtr* chunk, bool* eos);
+
+    const TExchangeNode& _texchange_node;
 
     int _num_senders; // needed for _stream_recvr construction
 
@@ -107,5 +104,3 @@ private:
 };
 
 }; // namespace starrocks
-
-#endif

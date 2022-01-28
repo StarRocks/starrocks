@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_EXPRS_BASE64_H
-#define STARROCKS_BE_EXPRS_BASE64_H
+#pragma once
 
 #include <cstdint>
 #include <cstdio>
@@ -32,4 +31,3 @@ int64_t base64_decode2(const char* data, size_t length, char* decoded_data);
 size_t base64_encode2(const unsigned char* data, size_t length, unsigned char* encoded_data);
 
 } // namespace starrocks
-#endif

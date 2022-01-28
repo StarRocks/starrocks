@@ -151,7 +151,7 @@ public class PartitionsProcDir implements ProcDirInterface {
             filterPartitionInfos = Lists.newArrayList();
             for (List<Comparable> partitionInfo : partitionInfos) {
                 if (partitionInfo.size() != TITLE_NAMES.size()) {
-                    throw new AnalysisException("ParttitionInfos.size() " + partitionInfos.size()
+                    throw new AnalysisException("PartitionInfos.size() " + partitionInfos.size()
                             + " not equal TITLE_NAMES.size() " + TITLE_NAMES.size());
                 }
                 boolean isNeed = true;
@@ -238,7 +238,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                 partitionInfo.add(partitionName);
                 partitionInfo.add(partition.getVisibleVersion());
                 partitionInfo.add(TimeUtils.longToTimeString(partition.getVisibleVersionTime()));
-                partitionInfo.add(partition.getVisibleVersionHash());
+                partitionInfo.add(0);
                 partitionInfo.add(partition.getState());
 
                 if (tblPartitionInfo.getType() == PartitionType.RANGE) {

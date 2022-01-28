@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_OLAP_KV_STORE_H
-#define STARROCKS_BE_SRC_OLAP_OLAP_KV_STORE_H
+#pragma once
 
 #include <rocksdb/write_batch.h>
 
@@ -65,6 +64,10 @@ public:
                          const std::string& upper_bound,
                          std::function<bool(std::string_view, std::string_view)> const& func);
 
+    Status compact(uint64_t* size_before, uint64_t* size_after);
+
+    std::string get_stats();
+
     std::string get_root_path();
 
     ColumnFamilyHandle* handle(ColumnFamilyIndex column_family_index) { return _handles[column_family_index]; }
@@ -76,5 +79,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_OLAP_KV_STORE_H

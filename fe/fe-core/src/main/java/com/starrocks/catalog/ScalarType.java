@@ -53,7 +53,8 @@ public class ScalarType extends Type implements Cloneable {
     public static final int DEFAULT_PRECISION = 9;
     public static final int DEFAULT_SCALE = 0; // SQL standard
     // Longest supported VARCHAR and CHAR, chosen to match Hive.
-    public static final int MAX_VARCHAR_LENGTH = 65533;
+    public static final int DEFAULT_STRING_LENGTH = 65533;
+    public static final int MAX_VARCHAR_LENGTH = 1048576;
     public static final int MAX_CHAR_LENGTH = 255;
     // HLL DEFAULT LENGTH  2^14(registers) + 1(type)
     public static final int MAX_HLL_LENGTH = 16385;
@@ -266,8 +267,11 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createDecimalV3Type(PrimitiveType type, int precision, int scale) {
-        Preconditions.checkArgument(0 < precision && precision <= PrimitiveType.getMaxPrecisionOfDecimal(type));
-        Preconditions.checkArgument(0 <= scale && scale <= precision);
+        Preconditions.checkArgument(0 < precision && precision <= PrimitiveType.getMaxPrecisionOfDecimal(type),
+                "DECIMAL's precision should range from 1 to 38");
+        Preconditions.checkArgument(0 <= scale && scale <= precision,
+                "DECIMAL(P[,S]) type P must be greater than or equal to the value of S");
+
         ScalarType scalarType = new ScalarType(type);
         scalarType.precision = precision;
         scalarType.scale = scale;
@@ -365,7 +369,16 @@ public class ScalarType extends Type implements Cloneable {
         if (precision > 38) {
             return ScalarType.DOUBLE;
         } else {
-            return ScalarType.createDecimalV3NarrowestType(precision, scale);
+            // the common type's PrimitiveType of two decimal types should wide enough, i.e
+            // the common type of (DECIMAL32, DECIMAL64) should be DECIMAL64
+            PrimitiveType primitiveType = PrimitiveType.getWiderDecimalV3Type(lhs.getPrimitiveType(), rhs.getPrimitiveType());
+            // the narrowestType for specified precision and scale is just wide properly to hold a decimal value, i.e
+            // DECIMAL128(7,4), DECIMAL64(7,4) and DECIMAL32(7,4) can all be held in a DECIMAL32(7,4) type without
+            // precision loss.
+            Type narrowestType = ScalarType.createDecimalV3NarrowestType(precision, scale);
+            primitiveType = PrimitiveType.getWiderDecimalV3Type(primitiveType, narrowestType.getPrimitiveType());
+            // create a commonType with wider primitive type.
+            return ScalarType.createDecimalV3Type(primitiveType, precision, scale);
         }
     }
 
@@ -427,8 +440,7 @@ public class ScalarType extends Type implements Cloneable {
      * Returns INVALID_TYPE if there is no such type or if any of t1 and t2
      * is INVALID_TYPE.
      */
-    public static ScalarType getAssignmentCompatibleType(
-            ScalarType t1, ScalarType t2, boolean strict) {
+    public static ScalarType getAssignmentCompatibleType(ScalarType t1, ScalarType t2, boolean strict) {
         if (!t1.isValid() || !t2.isValid()) {
             return INVALID;
         }
@@ -484,11 +496,11 @@ public class ScalarType extends Type implements Cloneable {
      * Returns true t1 can be implicitly cast to t2, false otherwise.
      * If strict is true, only consider casts that result in no loss of precision.
      */
-    public static boolean isImplicitlyCastable(
-            ScalarType t1, ScalarType t2, boolean strict) {
+    public static boolean isImplicitlyCastable(ScalarType t1, ScalarType t2, boolean strict) {
         return getAssignmentCompatibleType(t1, t2, strict).matchesType(t2);
     }
 
+    // TODO(mofei) Why call implicit cast in the explicit cast context
     public static boolean canCastTo(ScalarType type, ScalarType targetType) {
         return PrimitiveType.isImplicitCast(type.getPrimitiveType(), targetType.getPrimitiveType());
     }
@@ -676,6 +688,11 @@ public class ScalarType extends Type implements Cloneable {
     @Override
     public int getSlotSize() {
         return type.getSlotSize();
+    }
+
+    @Override
+    public int getTypeSize() {
+        return type.getTypeSize();
     }
 
     /**

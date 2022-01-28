@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.dump;
 
@@ -91,10 +91,7 @@ public class QueryDumpInfo implements DumpInfo {
 
     @Override
     public void addTableStatistics(Table table, String column, ColumnStatistic columnStatistic) {
-        if (!tableStatisticsMap.containsKey(getTableName(table.getId()))) {
-            tableStatisticsMap.put(getTableName(table.getId()), new HashMap<>());
-        }
-        tableStatisticsMap.get(getTableName(table.getId())).put(column, columnStatistic);
+        addTableStatistics(getTableName(table.getId()), column, columnStatistic);
     }
 
     public void addTableStatistics(String tableName, String column, ColumnStatistic columnStatistic) {

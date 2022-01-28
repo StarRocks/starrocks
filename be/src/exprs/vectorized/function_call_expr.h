@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -31,8 +31,7 @@ protected:
 private:
     const FunctionDescriptor* _fn_desc;
 
-    // is rand/random function.
-    bool _is_rand_function = false;
+    bool _is_returning_random_value;
 };
 
 } // namespace vectorized

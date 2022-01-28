@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Objects;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -16,12 +17,14 @@ public class PhysicalSetOperation extends PhysicalOperator {
     public PhysicalSetOperation(OperatorType type, List<ColumnRefOperator> outputColumnRefOp,
                                 List<List<ColumnRefOperator>> childOutputColumns,
                                 long limit,
-                                ScalarOperator predicate) {
+                                ScalarOperator predicate,
+                                Projection projection) {
         super(type);
         this.outputColumnRefOp = outputColumnRefOp;
         this.childOutputColumns = childOutputColumns;
         this.limit = limit;
         this.predicate = predicate;
+        this.projection = projection;
     }
 
     public List<ColumnRefOperator> getOutputColumnRefOp() {

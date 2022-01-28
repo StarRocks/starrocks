@@ -96,7 +96,33 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
 #undef CREATE_AND_START_POOL
 }
 
-AgentServer::~AgentServer() = default;
+AgentServer::~AgentServer() {
+#ifndef STOP_POOL
+#define STOP_POOL(type, pool_name) pool_name->stop();
+#endif
+
+    STOP_POOL(CREATE_TABLE, _create_tablet_workers);
+    STOP_POOL(DROP_TABLE, _drop_tablet_workers);
+    // Both PUSH and REALTIME_PUSH type use _push_workers
+    STOP_POOL(PUSH, _push_workers);
+    STOP_POOL(PUBLISH_VERSION, _publish_version_workers);
+    STOP_POOL(CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers);
+    STOP_POOL(DELETE, _delete_workers);
+    STOP_POOL(ALTER_TABLE, _alter_tablet_workers);
+    STOP_POOL(CLONE, _clone_workers);
+    STOP_POOL(STORAGE_MEDIUM_MIGRATE, _storage_medium_migrate_workers);
+    STOP_POOL(CHECK_CONSISTENCY, _check_consistency_workers);
+    STOP_POOL(REPORT_TASK, _report_task_workers);
+    STOP_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
+    STOP_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
+    STOP_POOL(UPLOAD, _upload_workers);
+    STOP_POOL(DOWNLOAD, _download_workers);
+    STOP_POOL(MAKE_SNAPSHOT, _make_snapshot_workers);
+    STOP_POOL(RELEASE_SNAPSHOT, _release_snapshot_workers);
+    STOP_POOL(MOVE, _move_dir_workers);
+    STOP_POOL(UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers);
+#undef STOP_POOL
+}
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
@@ -110,6 +136,9 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
         return;
     }
 
+    phmap::flat_hash_map<TTaskType::type, std::vector<TAgentTaskRequest>> task_divider;
+    phmap::flat_hash_map<TPushType::type, std::vector<TAgentTaskRequest>> push_divider;
+
     for (const auto& task : tasks) {
         VLOG_RPC << "submit one task: " << apache::thrift::ThriftDebugString(task).c_str();
         TTaskType::type task_type = task.task_type;
@@ -118,7 +147,7 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
 #define HANDLE_TYPE(t_task_type, work_pool, req_member)                                             \
     case t_task_type:                                                                               \
         if (task.__isset.req_member) {                                                              \
-            work_pool->submit_task(task);                                                           \
+            task_divider[t_task_type].push_back(task);                                              \
         } else {                                                                                    \
             ret_st = Status::InvalidArgument(                                                       \
                     strings::Substitute("task(signature=$0) has wrong request member", signature)); \
@@ -149,10 +178,9 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
                         strings::Substitute("task(signature=$0) has wrong request member", signature));
                 break;
             }
-            if (task.push_req.push_type == TPushType::LOAD_V2) {
-                _push_workers->submit_task(task);
-            } else if (task.push_req.push_type == TPushType::DELETE) {
-                _delete_workers->submit_task(task);
+            if (task.push_req.push_type == TPushType::LOAD_V2 || task.push_req.push_type == TPushType::DELETE ||
+                task.push_req.push_type == TPushType::CANCEL_DELETE) {
+                push_divider[task.push_req.push_type].push_back(task);
             } else {
                 ret_st = Status::InvalidArgument(
                         strings::Substitute("task(signature=$0, type=$1, push_type=$2) has wrong push_type", signature,
@@ -161,7 +189,7 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
             break;
         case TTaskType::ALTER:
             if (task.__isset.alter_tablet_req || task.__isset.alter_tablet_req_v2) {
-                _alter_tablet_workers->submit_task(task);
+                task_divider[TTaskType::ALTER].push_back(task);
             } else {
                 ret_st = Status::InvalidArgument(
                         strings::Substitute("task(signature=$0) has wrong request member", signature));
@@ -189,6 +217,89 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
         }
     }
 
+    // batch submit tasks
+    for (const auto& task_item : task_divider) {
+        const auto& task_type = task_item.first;
+        auto all_tasks = task_item.second;
+        switch (task_type) {
+        case TTaskType::CREATE:
+            _create_tablet_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::DROP:
+            _drop_tablet_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::PUBLISH_VERSION: {
+            for (const auto& task : all_tasks) {
+                _publish_version_workers->submit_task(task);
+            }
+            break;
+        }
+        case TTaskType::CLEAR_TRANSACTION_TASK:
+            _clear_transaction_task_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::CLONE:
+            _clone_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::STORAGE_MEDIUM_MIGRATE:
+            _storage_medium_migrate_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::CHECK_CONSISTENCY:
+            _check_consistency_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::UPLOAD:
+            _upload_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::DOWNLOAD:
+            _download_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::MAKE_SNAPSHOT:
+            _make_snapshot_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::RELEASE_SNAPSHOT:
+            _release_snapshot_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::MOVE:
+            _move_dir_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::UPDATE_TABLET_META_INFO:
+            _update_tablet_meta_info_workers->submit_tasks(&all_tasks);
+            break;
+        case TTaskType::REALTIME_PUSH:
+        case TTaskType::PUSH: {
+            // should not run here
+            break;
+        }
+        case TTaskType::ALTER:
+            _alter_tablet_workers->submit_tasks(&all_tasks);
+            break;
+        default:
+            ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0) has wrong task type", task_type));
+            LOG(WARNING) << "fail to batch submit task. reason: " << ret_st.get_error_msg();
+        }
+    }
+
+    // batch submit push tasks
+    if (!push_divider.empty()) {
+        LOG(INFO) << "begin batch submit task: " << tasks[0].task_type;
+        for (const auto& push_item : push_divider) {
+            const auto& push_type = push_item.first;
+            auto all_push_tasks = push_item.second;
+            switch (push_type) {
+            case TPushType::LOAD_V2:
+                _push_workers->submit_tasks(&all_push_tasks);
+                break;
+            case TPushType::DELETE:
+            case TPushType::CANCEL_DELETE:
+                _delete_workers->submit_tasks(&all_push_tasks);
+                break;
+            default:
+                ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0, push_type=$1) has wrong task type",
+                                                                     TTaskType::PUSH, push_type));
+                LOG(WARNING) << "fail to batch submit push task. reason: " << ret_st.get_error_msg();
+            }
+        }
+    }
+
     ret_st.to_thrift(&agent_result.status);
 }
 
@@ -210,13 +321,11 @@ void AgentServer::make_snapshot(TAgentResult& t_agent_result, const TSnapshotReq
 }
 
 void AgentServer::release_snapshot(TAgentResult& t_agent_result, const std::string& snapshot_path) {
-    Status ret_st;
-    OLAPStatus err_code = SnapshotManager::instance()->release_snapshot(snapshot_path);
-    if (err_code != OLAP_SUCCESS) {
-        LOG(WARNING) << "failt to release_snapshot. snapshot_path: " << snapshot_path << ", err_code: " << err_code;
-        ret_st = Status::RuntimeError(strings::Substitute("fail to release_snapshot. err_code=$0", err_code));
+    Status ret_st = SnapshotManager::instance()->release_snapshot(snapshot_path);
+    if (!ret_st.ok()) {
+        LOG(WARNING) << "Fail to release_snapshot. snapshot_path: " << snapshot_path;
     } else {
-        LOG(INFO) << "success to release_snapshot. snapshot_path=" << snapshot_path << ", err_code=" << err_code;
+        LOG(INFO) << "success to release_snapshot. snapshot_path=" << snapshot_path;
     }
     ret_st.to_thrift(&t_agent_result.status);
 }

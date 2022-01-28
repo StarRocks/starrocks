@@ -1,19 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
 #include "exec/pipeline/operator.h"
+#include "runtime/global_dicts.h"
 
 namespace starrocks {
 class ExprContext;
 namespace pipeline {
 class ProjectOperator final : public Operator {
 public:
-    ProjectOperator(int32_t id, int32_t plan_node_id, std::vector<int32_t>& column_ids,
+    ProjectOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, std::vector<int32_t>& column_ids,
                     const std::vector<ExprContext*>& expr_ctxs, const std::vector<bool>& type_is_nullable,
                     const std::vector<int32_t>& common_sub_column_ids,
                     const std::vector<ExprContext*>& common_sub_expr_ctxs)
-            : Operator(id, "project", plan_node_id),
+            : Operator(factory, id, "project", plan_node_id),
               _column_ids(column_ids),
               _expr_ctxs(expr_ctxs),
               _type_is_nullable(type_is_nullable),
@@ -32,7 +33,7 @@ public:
 
     bool is_finished() const override { return _is_finished && _cur_chunk == nullptr; }
 
-    void finish(RuntimeState* state) override { _is_finished = true; }
+    void set_finishing(RuntimeState* state) override { _is_finished = true; }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -66,12 +67,12 @@ public:
     ~ProjectOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<ProjectOperator>(_id, _plan_node_id, _column_ids, _expr_ctxs, _type_is_nullable,
+        return std::make_shared<ProjectOperator>(this, _id, _plan_node_id, _column_ids, _expr_ctxs, _type_is_nullable,
                                                  _common_sub_column_ids, _common_sub_expr_ctxs);
     }
 
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker);
-    void close(RuntimeState* state);
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     std::vector<int32_t> _column_ids;
@@ -80,6 +81,7 @@ private:
 
     std::vector<int32_t> _common_sub_column_ids;
     std::vector<ExprContext*> _common_sub_expr_ctxs;
+    vectorized::DictOptimizeParser _dict_optimize_parser;
 };
 
 } // namespace pipeline

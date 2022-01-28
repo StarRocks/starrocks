@@ -245,11 +245,11 @@ public class CurrentQueryInfoProvider {
             try {
                 final PTriggerProfileReportResult result
                         = pair.second.get(2, TimeUnit.SECONDS);
-                final TStatusCode code = TStatusCode.findByValue(result.status.status_code);
+                final TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                 if (code != TStatusCode.OK) {
                     String errMsg = "";
-                    if (result.status.error_msgs != null && !result.status.error_msgs.isEmpty()) {
-                        errMsg = result.status.error_msgs.get(0);
+                    if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
+                        errMsg = result.status.errorMsgs.get(0);
                     }
                     throw new AnalysisException(reasonPrefix + " backend:" + pair.first.getAddress()
                             + " reason:" + errMsg);

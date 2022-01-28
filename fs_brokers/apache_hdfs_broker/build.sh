@@ -44,7 +44,7 @@ install -d ${BROKER_OUTPUT}/bin ${BROKER_OUTPUT}/conf \
            ${BROKER_OUTPUT}lib/
 
 # download aliyun hadoop oss and tencent hadoop cos jar, this can not be found in maven repository, so we download it manually
-wget http://dorisdb-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/broker_thirdparty_jars.tar.gz
+wget http://cdn-thirdparty.starrocks.com/broker_thirdparty_jars.tar.gz
 tar xzf broker_thirdparty_jars.tar.gz
 mv broker_thirdparty_jars/*.jar ${BROKER_OUTPUT}/lib/
 rm -r broker_thirdparty_jars broker_thirdparty_jars.tar.gz

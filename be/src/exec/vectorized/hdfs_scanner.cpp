@@ -1,19 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/hdfs_scanner.h"
 
 #include <hdfs/hdfs.h>
+#include <unistd.h>
 
+#include <algorithm>
 #include <memory>
+#include <mutex>
+#include <thread>
 
 #include "env/env_hdfs.h"
-#include "exec/exec_node.h"
-#include "exec/parquet/file_reader.h"
 #include "exec/vectorized/hdfs_scan_node.h"
-#include "exprs/expr.h"
-#include "runtime/runtime_state.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
 
@@ -95,6 +93,7 @@ void HdfsScanner::_build_file_read_param() {
 }
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+    RETURN_IF_CANCELLED(_runtime_state);
 #ifndef BE_TEST
     SCOPED_TIMER(_scanner_params.parent->_scan_timer);
 #endif
@@ -116,29 +115,48 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_is_open) {
         return Status::OK();
     }
+#ifndef BE_TEST
+    RETURN_IF_ERROR(down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->open());
+#endif
     _build_file_read_param();
     auto status = do_open(runtime_state);
     if (status.ok()) {
         _is_open = true;
+#ifndef BE_TEST
+        (*_scanner_params.open_limit)++;
+#endif
         LOG(INFO) << "open file success: " << _scanner_params.fs->file_name();
     }
     return status;
 }
 
-Status HdfsScanner::close(RuntimeState* runtime_state) {
+void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
+    DCHECK(!has_pending_token());
     if (_is_closed) {
-        return Status::OK();
+        return;
     }
     Expr::close(_conjunct_ctxs, runtime_state);
     Expr::close(_min_max_conjunct_ctxs, runtime_state);
     for (auto& it : _conjunct_ctxs_by_slot) {
         Expr::close(it.second, runtime_state);
     }
-    auto status = do_close(runtime_state);
-    if (status.ok()) {
-        _is_closed = true;
+    do_close(runtime_state);
+#ifndef BE_TEST
+    down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->close();
+    if (_is_open) {
+        (*_scanner_params.open_limit)--;
     }
-    return status;
+#endif
+    _scanner_params.fs.reset();
+    _is_closed = true;
+}
+
+void HdfsScanner::enter_pending_queue() {
+    _pending_queue_sw.start();
+}
+
+uint64_t HdfsScanner::exit_pending_queue() {
+    return _pending_queue_sw.reset();
 }
 
 #ifndef BE_TEST
@@ -168,60 +186,24 @@ static void get_hdfs_statistics(hdfsFile file, HdfsReadStats* stats) {
 
 void HdfsScanner::update_counter() {
 #ifndef BE_TEST
+    // _scanner_params.fs is null means scanner open failed
+    if (_scanner_params.fs == nullptr) return;
+
     HdfsReadStats hdfs_stats;
     auto hdfs_file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->hdfs_file();
-    get_hdfs_statistics(hdfs_file, &hdfs_stats);
+    if (hdfs_file == nullptr) return;
+    // Hdfslib only supports obtaining statistics of hdfs file system.
+    // For other systems such as s3, calling this function will cause be crash.
+    if (_scanner_params.parent->_is_hdfs_fs) {
+        get_hdfs_statistics(hdfs_file, &hdfs_stats);
+    }
 
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_total_read, hdfs_stats.bytes_total_read);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_local, hdfs_stats.bytes_read_local);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_short_circuit, hdfs_stats.bytes_read_short_circuit);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_dn_cache, hdfs_stats.bytes_read_dn_cache);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_remote, hdfs_stats.bytes_read_remote);
-#endif
-}
-
-Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
-    return Status::OK();
-}
-
-Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
-    // create file reader
-    _reader = std::make_shared<parquet::FileReader>(_scanner_params.fs.get(),
-                                                    _scanner_params.scan_ranges[0]->file_length);
-#ifndef BE_TEST
-    SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
-#endif
-    RETURN_IF_ERROR(_reader->init(_file_read_param));
-    return Status::OK();
-}
-
-Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-#ifndef BE_TEST
-    SCOPED_TIMER(_scanner_params.parent->_scan_timer);
-#endif
-    Status status = _reader->get_next(chunk);
-    return status;
-}
-
-void HdfsParquetScanner::update_counter() {
-    HdfsScanner::update_counter();
-
-#ifndef BE_TEST
-    COUNTER_UPDATE(_scanner_params.parent->_raw_rows_counter, _stats.raw_rows_read);
-    COUNTER_UPDATE(_scanner_params.parent->_expr_filter_timer, _stats.expr_filter_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_io_timer, _stats.io_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_io_counter, _stats.io_count);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_from_disk_counter, _stats.bytes_read_from_disk);
-    COUNTER_UPDATE(_scanner_params.parent->_column_read_timer, _stats.column_read_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_column_convert_timer, _stats.column_convert_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_value_decode_timer, _stats.value_decode_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_level_decode_timer, _stats.level_decode_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_page_read_timer, _stats.page_read_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_footer_read_timer, _stats.footer_read_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_column_reader_init_timer, _stats.column_reader_init_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_group_chunk_read_timer, _stats.group_chunk_read_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_group_dict_filter_timer, _stats.group_dict_filter_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_group_dict_decode_timer, _stats.group_dict_decode_ns);
+    auto& root = _scanner_params.parent->_hdfs_io_profile;
+    COUNTER_UPDATE(root.bytes_total_read, hdfs_stats.bytes_total_read);
+    COUNTER_UPDATE(root.bytes_read_local, hdfs_stats.bytes_read_local);
+    COUNTER_UPDATE(root.bytes_read_short_circuit, hdfs_stats.bytes_read_short_circuit);
+    COUNTER_UPDATE(root.bytes_read_dn_cache, hdfs_stats.bytes_read_dn_cache);
+    COUNTER_UPDATE(root.bytes_read_remote, hdfs_stats.bytes_read_remote);
 #endif
 }
 
@@ -311,6 +293,19 @@ bool HdfsFileReaderParam::can_use_dict_filter_on_slot(SlotDescriptor* slot) cons
         }
     }
     return true;
+}
+
+static const std::string kHdfsIOProfileSectionPrefix = "HdfsIO";
+
+void HdfsIOProfile::init(RuntimeProfile* root) {
+    if (_toplev != nullptr) return;
+    _toplev = ADD_TIMER(root, kHdfsIOProfileSectionPrefix);
+    bytes_total_read = ADD_CHILD_COUNTER(root, "BytesTotalRead", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
+    bytes_read_local = ADD_CHILD_COUNTER(root, "BytesReadLocal", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
+    bytes_read_short_circuit =
+            ADD_CHILD_COUNTER(root, "BytesReadShortCircuit", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
+    bytes_read_dn_cache = ADD_CHILD_COUNTER(root, "BytesReadDataNodeCache", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
+    bytes_read_remote = ADD_CHILD_COUNTER(root, "BytesReadRemote", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
 }
 
 } // namespace starrocks::vectorized

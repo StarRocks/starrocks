@@ -76,6 +76,8 @@ public:
 
     Status open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) override;
 
+    void erase_block_cache(const std::string& path) override;
+
     Status get_all_block_ids(std::vector<BlockId>* block_ids) override {
         // TODO(lingbin): to be implemented after we assign each block an id
         return Status::OK();
@@ -111,12 +113,6 @@ private:
     // Metric container for the block manager.
     // May be null if instantiated without metrics.
     std::unique_ptr<internal::BlockManagerMetrics> _metrics;
-
-    // Tracks memory consumption of any allocations numerous enough to be
-    // interesting.
-    std::unique_ptr<MemTracker> _mem_tracker;
-
-    // DISALLOW_COPY_AND_ASSIGN(FileBlockManager);
 
     // Underlying cache instance. Caches opened files.
     std::unique_ptr<FileCache<RandomAccessFile>> _file_cache;

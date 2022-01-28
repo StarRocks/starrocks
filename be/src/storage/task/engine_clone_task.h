@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_TASK_ENGINE_CLONE_TASK_H
-#define STARROCKS_BE_SRC_OLAP_TASK_ENGINE_CLONE_TASK_H
+#pragma once
 
 #include "agent/utils.h"
 #include "gen_cpp/AgentService_types.h"
@@ -35,13 +34,13 @@ namespace starrocks {
 // add "Engine" as task prefix to prevent duplicate name with agent task
 class EngineCloneTask : public EngineTask {
 public:
-    EngineCloneTask(MemTracker* tablet_meta_mem_tracker, const TCloneReq& _clone_req, const TMasterInfo& _master_info,
+    EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& _clone_req, const TMasterInfo& _master_info,
                     int64_t _signature, vector<string>* error_msgs, vector<TTabletInfo>* tablet_infos,
                     AgentStatus* _res_status);
 
     ~EngineCloneTask() override = default;
 
-    OLAPStatus execute() override;
+    Status execute() override;
 
 private:
     Status _do_clone(Tablet* tablet);
@@ -67,11 +66,10 @@ private:
 
     Status _release_snapshot(const std::string& ip, int port, const std::string& snapshot_path);
 
-    Status _finish_clone_updatable(Tablet* tablet, const std::string& clone_dir, int64_t committed_version,
-                                   bool incremental_clone);
+    Status _finish_clone_primary(Tablet* tablet, const std::string& clone_dir);
 
 private:
-    MemTracker* _tablet_meta_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _mem_tracker;
     const TCloneReq& _clone_req;
     vector<string>* _error_msgs;
     vector<TTabletInfo>* _tablet_infos;
@@ -81,4 +79,3 @@ private:
 }; // EngineTask
 
 } // namespace starrocks
-#endif //STARROCKS_BE_SRC_OLAP_TASK_ENGINE_CLONE_TASK_H

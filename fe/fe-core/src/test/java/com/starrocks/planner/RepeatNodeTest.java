@@ -31,9 +31,11 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -50,6 +52,7 @@ public class RepeatNodeTest {
     private TupleDescriptor virtualTuple;
     private List<Set<SlotId>> groupingIdList = new ArrayList<>();
     private List<List<Long>> groupingList = new ArrayList<>();
+    private ConnectContext connectContext;
 
     @Before
     public void setUp() throws Exception {
@@ -79,6 +82,7 @@ public class RepeatNodeTest {
         groupingList.add(Arrays.asList(0L, 7L, 3L, 5L, 1L, 6L, 2L, 4L));
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");
+        connectContext = UtFrameUtils.createDefaultCtx();
         node = new RepeatNode(new PlanNodeId(1),
                 new OlapScanNode(new PlanNodeId(0), tuple, "null"), groupingIdList, virtualTuple, groupingList);
 

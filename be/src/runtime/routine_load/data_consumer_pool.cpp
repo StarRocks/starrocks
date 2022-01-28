@@ -23,6 +23,7 @@
 
 #include "common/config.h"
 #include "runtime/routine_load/data_consumer_group.h"
+#include "util/thread.h"
 
 namespace starrocks {
 
@@ -124,6 +125,7 @@ Status DataConsumerPool::start_bg_worker() {
             sleep(interval);
         }
     });
+    Thread::set_thread_name(_clean_idle_consumer_thread, "clean_idle_cm");
     _clean_idle_consumer_thread.detach();
     return Status::OK();
 }

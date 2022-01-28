@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Predicate;
@@ -20,11 +20,13 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryRelation;
 
 import java.util.List;
 import java.util.Objects;
@@ -96,9 +98,9 @@ public class AggregationAnalyzer {
      * visitor returns true if all expressions are constant with respect to the group.
      */
     private class VerifyExpressionVisitor
-            extends ExprVisitor<Boolean, Void> {
+            extends AstVisitor<Boolean, Void> {
         @Override
-        public Boolean visit(Expr expr) {
+        public Boolean visit(ParseNode expr) {
             if (groupingExpressions.stream().anyMatch(expr::equals)) {
                 return true;
             }

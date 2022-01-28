@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -12,10 +12,10 @@
 
 namespace starrocks {
 class ColumnVectorBatch;
-class RowCursor;
 class TabletSchema;
 class Schema;
-class RowBlockV2;
+class TabletColumn;
+class TypeInfo;
 } // namespace starrocks
 
 namespace starrocks::vectorized {
@@ -29,9 +29,23 @@ public:
     ~TypeConverter() = default;
 
     virtual Status convert(void* dest, const void* src, MemPool* memPool) const = 0;
+
+    virtual Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+                                 MemPool* mem_pool) const = 0;
 };
 
 const TypeConverter* get_type_converter(FieldType from_type, FieldType to_type);
+
+class MaterializeTypeConverter {
+public:
+    MaterializeTypeConverter() = default;
+    ~MaterializeTypeConverter() = default;
+
+    virtual Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
+                                        const TabletColumn& ref_column) const = 0;
+};
+
+const MaterializeTypeConverter* get_materialized_converter(FieldType from_type, MaterializeType to_type);
 
 class FieldConverter {
 public:
@@ -64,9 +78,6 @@ public:
     Status init(const ::starrocks::Schema& in_schema, const ::starrocks::Schema& out_schema);
     Status init(const Schema& in_schema, const Schema& out_schema);
 
-    template <typename RowType>
-    void convert(RowCursor* dst, const RowType& src) const;
-
     void convert(std::vector<Datum>* dst, const std::vector<Datum>& src) const;
 
 private:
@@ -86,19 +97,6 @@ public:
 
 private:
     std::shared_ptr<Schema> _out_schema;
-    std::vector<const FieldConverter*> _converters;
-};
-
-class BlockConverter {
-public:
-    BlockConverter() = default;
-
-    Status init(const ::starrocks::Schema& in_schema, const ::starrocks::Schema& out_schema);
-
-    Status convert(::starrocks::RowBlockV2* dst, ::starrocks::RowBlockV2* src) const;
-
-private:
-    std::vector<ColumnId> _cids;
     std::vector<const FieldConverter*> _converters;
 };
 

@@ -100,6 +100,7 @@ public class BuiltinAggregateFunction extends Function {
     // We should move this to something in the catalog instead of having it
     // here like this.
     public enum Operator {
+        ANY_VALUE("ANY_VALUE", TAggregationOp.ANY_VALUE, null),
         COUNT("COUNT", TAggregationOp.COUNT, Type.BIGINT),
         MIN("MIN", TAggregationOp.MIN, null),
         MAX("MAX", TAggregationOp.MAX, null),

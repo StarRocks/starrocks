@@ -22,18 +22,13 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.thrift.TExpr;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -42,9 +37,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Objects;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class CastExpr extends Expr {
     private static final Logger LOG = LogManager.getLogger(CastExpr.class);
 
@@ -102,50 +94,6 @@ public class CastExpr extends Expr {
         return "castTo" + targetType.getPrimitiveType().toString();
     }
 
-    public static void initBuiltins(FunctionSet functionSet) {
-        for (Type fromType : Type.getSupportedTypes()) {
-            if (fromType.isNull() || fromType.isPseudoType()) {
-                continue;
-            }
-            for (Type toType : Type.getSupportedTypes()) {
-                if (toType.isNull() || toType.isPseudoType()) {
-                    continue;
-                }
-                // Disable casting from boolean to decimal or datetime or date
-                if (fromType.isBoolean() &&
-                        (toType.isDecimalOfAnyVersion() || toType.isDate() || toType.isDatetime())) {
-                    continue;
-                }
-                // Disable no-op casts
-                // for decimalv3, wildcard type(precision=-1, scale=-1) is used here.
-                // so casting a decimalv3 type to another decimalv3 type that is as wide as the former
-                // is accepted.
-                if (fromType.equals(toType) && !fromType.isDecimalV3()) {
-                    continue;
-                }
-
-                // Disable object type(hll, bitmap, percentile) casts
-                if (fromType.isOnlyMetricType() || toType.isOnlyMetricType()) {
-                    continue;
-                }
-
-                String beClass =
-                        toType.isDecimalV2() || fromType.isDecimalV2() ? "DecimalV2Operators" : "CastFunctions";
-                if (fromType.isTime()) {
-                    beClass = "TimeOperators";
-                }
-                String typeName = Function.getUdfTypeName(toType.getPrimitiveType());
-                if (toType.getPrimitiveType() == PrimitiveType.DATE) {
-                    typeName = "date_val";
-                }
-                String beSymbol = "starrocks::" + beClass + "::cast_to_"
-                        + typeName;
-                functionSet.addBuiltin(ScalarFunction.createBuiltin(getFnName(toType),
-                        Lists.newArrayList(fromType), false, toType, beSymbol, null, null, true));
-            }
-        }
-    }
-
     @Override
     public Expr clone() {
         return new CastExpr(this);
@@ -164,6 +112,14 @@ public class CastExpr extends Expr {
     }
 
     @Override
+    public String toDigestImpl() {
+        if (isImplicit) {
+            return getChild(0).toDigest();
+        }
+        return "cast(" + getChild(0).toDigest() + " as " + targetTypeDef.toString() + ")";
+    }
+
+    @Override
     protected String explainImpl() {
         if (noOp) {
             return getChild(0).explain();
@@ -173,26 +129,14 @@ public class CastExpr extends Expr {
     }
 
     @Override
-    protected void treeToThriftHelper(TExpr container) {
-        if (getChild(0).getType().matchesType(this.type)) {
-            getChild(0).treeToThriftHelper(container);
-            return;
-        }
-        super.treeToThriftHelper(container);
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.CAST_EXPR;
         msg.setOpcode(opcode);
         msg.setOutput_column(outputColumn);
-        // vectorized engine all use cast-expression
-        if (this.useVectorized || (type.isNativeType() && getChild(0).getType().isNativeType())) {
-            if (getChild(0).getType().isComplexType()) {
-                msg.setChild_type_desc(getChild(0).getType().toThrift());
-            } else {
-                msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
-            }
+        if (getChild(0).getType().isComplexType()) {
+            msg.setChild_type_desc(getChild(0).getType().toThrift());
+        } else {
+            msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
         }
     }
 
@@ -326,21 +270,11 @@ public class CastExpr extends Expr {
         return true;
     }
 
-    @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /**
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitCastExpr(this, context);
     }
 
@@ -370,5 +304,14 @@ public class CastExpr extends Expr {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), targetTypeDef == null ? null : targetTypeDef.getType(), opcode);
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        // It's very tempting to think cast is monotonic, but that's not true.
+        // For example `cast(bigint to tinyint) < 10`
+        // maybe min/max value will overflow tinyint, and we will get NULL value, so `NULL is true` is false.
+        // but some values between min/max value like 5,6,7,8 can be evaluated to true.
+        return false;
     }
 }

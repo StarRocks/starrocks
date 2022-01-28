@@ -47,7 +47,7 @@ public class BDBJournalCursor implements JournalCursor {
 
     public static BDBJournalCursor getJournalCursor(BDBEnvironment env, long fromKey, long toKey) {
         if (toKey < fromKey || fromKey < 0) {
-            System.out.println("Invalid key range!");
+            LOG.error("Invalid key range!");
             return null;
         }
         BDBJournalCursor cursor = null;

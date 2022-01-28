@@ -60,7 +60,7 @@ public:
 
     bool from_string(const char* date_str, size_t len);
 
-    void to_date(int* year, int* month, int* day) const;
+    inline void to_date(int* year, int* month, int* day) const;
 
     bool get_weeks_of_year_with_cache(int* weeks) const;
 
@@ -97,7 +97,7 @@ public:
     template <TimeUnit UNIT>
     inline DateValue add(int count) const;
 
-    operator TimestampValue() const;
+    inline operator TimestampValue() const;
 
 public:
     static const DateValue MAX_DATE_VALUE;

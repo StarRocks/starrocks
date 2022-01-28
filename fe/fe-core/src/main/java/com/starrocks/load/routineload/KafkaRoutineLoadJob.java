@@ -28,7 +28,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Catalog;
@@ -52,7 +51,6 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
-import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -124,7 +122,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties);
     }
 
-    private void convertCustomProperties(boolean rebuild) throws DdlException {
+    public synchronized void convertCustomProperties(boolean rebuild) throws DdlException {
         if (customProperties.isEmpty()) {
             return;
         }
@@ -517,30 +515,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
-    public void modifyProperties(AlterRoutineLoadStmt stmt) throws DdlException {
-        Map<String, String> jobProperties = stmt.getAnalyzedJobProperties();
-        RoutineLoadDataSourceProperties dataSourceProperties = stmt.getDataSourceProperties();
-
-        writeLock();
-        try {
-            if (getState() != JobState.PAUSED) {
-                throw new DdlException("Only supports modification of PAUSED jobs");
-            }
-
-            modifyPropertiesInternal(jobProperties, dataSourceProperties);
-
-            AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(this.id,
-                    jobProperties, dataSourceProperties);
-            Catalog.getCurrentCatalog().getEditLog().logAlterRoutineLoadJob(log);
-        } finally {
-            writeUnlock();
-        }
-    }
-
-    private void modifyPropertiesInternal(Map<String, String> jobProperties,
-                                          RoutineLoadDataSourceProperties dataSourceProperties)
-            throws DdlException {
-
+    public void modifyDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties) throws DdlException {
         List<Pair<Integer, Long>> kafkaPartitionOffsets = Lists.newArrayList();
         Map<String, String> customKafkaProperties = Maps.newHashMap();
 
@@ -555,28 +530,12 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             ((KafkaProgress) progress).modifyOffset(kafkaPartitionOffsets);
         }
 
-        if (!jobProperties.isEmpty()) {
-            Map<String, String> copiedJobProperties = Maps.newHashMap(jobProperties);
-            modifyCommonJobProperties(copiedJobProperties);
-            this.jobProperties.putAll(copiedJobProperties);
-        }
-
         if (!customKafkaProperties.isEmpty()) {
             this.customProperties.putAll(customKafkaProperties);
             convertCustomProperties(true);
         }
 
-        LOG.info("modify the properties of kafka routine load job: {}, jobProperties: {}, datasource properties: {}",
-                this.id, jobProperties, dataSourceProperties);
-    }
-
-    @Override
-    public void replayModifyProperties(AlterRoutineLoadJobOperationLog log) {
-        try {
-            modifyPropertiesInternal(log.getJobProperties(), log.getDataSourceProperties());
-        } catch (DdlException e) {
-            // should not happen
-            LOG.error("failed to replay modify kafka routine load job: {}", id, e);
-        }
+        LOG.info("modify the data source properties of kafka routine load job: {}, datasource properties: {}",
+                this.id, dataSourceProperties);
     }
 }

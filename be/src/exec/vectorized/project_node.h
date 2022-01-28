@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
+#include "exprs/expr_context.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -20,12 +21,11 @@ public:
     Status reset(RuntimeState* state) override;
     Status close(RuntimeState* state) override;
 
-    // Only for compatibility
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
-
-    void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) override;
+    void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) override;
     void push_down_join_runtime_filter(RuntimeState* state,
                                        vectorized::RuntimeFilterProbeCollector* collector) override;
+    void push_down_tuple_slot_mappings(RuntimeState* state,
+                                       const std::vector<TupleSlotMapping>& parent_mappings) override;
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
@@ -40,6 +40,8 @@ private:
 
     RuntimeProfile::Counter* _expr_compute_timer = nullptr;
     RuntimeProfile::Counter* _common_sub_expr_compute_timer = nullptr;
+
+    DictOptimizeParser _dict_optimize_parser;
 };
 
 } // namespace starrocks::vectorized

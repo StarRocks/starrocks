@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/assert_num_rows_node.h"
 
+#include "exec/pipeline/assert_num_rows_operator.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -54,11 +55,27 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
         }
     }
 
-    return Status::OK();
-}
+    // assert num rows node only use for un-correlate scalar subquery, return empty chunk is error, least fill one rows
+    if (_assertion == TAssertion::LE && _num_rows_returned == 0) {
+        _input_chunks.clear();
 
-Status AssertNumRowsNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get_next for row_batch is not supported");
+        vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+        for (const auto& desc : row_desc().tuple_descriptors()) {
+            for (const auto& slot : desc->slots()) {
+                chunk->append_column(ColumnHelper::create_const_null_column(_desired_num_rows), slot->id());
+            }
+        }
+
+        _input_chunks.emplace_back(std::move(chunk));
+    }
+
+    int64_t usage = 0;
+    for (auto& item : _input_chunks) {
+        usage += item->memory_usage();
+    }
+    _mem_tracker->set(usage);
+
+    return Status::OK();
 }
 
 Status AssertNumRowsNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
@@ -126,6 +143,25 @@ Status AssertNumRowsNode::close(RuntimeState* state) {
         return Status::OK();
     }
     return ExecNode::close(state);
+}
+
+pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+
+    OpFactories operator_before_assert_num_rows_source = _children[0]->decompose_to_pipeline(context);
+    operator_before_assert_num_rows_source = context->maybe_interpolate_local_passthrough_exchange(
+            runtime_state(), operator_before_assert_num_rows_source);
+
+    auto source_factory = std::make_shared<AssertNumRowsOperatorFactory>(
+            context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion));
+    operator_before_assert_num_rows_source.emplace_back(std::move(source_factory));
+
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(operator_before_assert_num_rows_source.back().get(), context,
+                                           rc_rf_probe_collector);
+    return operator_before_assert_num_rows_source;
 }
 
 } // namespace starrocks::vectorized

@@ -30,9 +30,10 @@
 #include "runtime/decimalv2_value.h"
 #include "storage/hll.h"
 
-// Be careful what this includes since this needs to be linked into the UDF's
-// binary. For example, it would be unfortunate if they had a random dependency
-// on libhdfs.
+#ifdef STARROCKS_WITH_HDFS
+#include "exprs/agg/java_udaf_function.h"
+#endif
+
 #include "udf/udf_internal.h"
 #include "util/debug_util.h"
 
@@ -93,14 +94,12 @@ FunctionContextImpl::FunctionContextImpl(starrocks_udf::FunctionContext* parent)
           _external_bytes_tracked(0),
           _closed(false) {}
 
+FunctionContextImpl::~FunctionContextImpl() = default;
+
 void FunctionContextImpl::close() {
     if (_closed) {
         return;
     }
-
-    // Free local allocations first so we can detect leaks through any remaining allocations
-    // (local allocations cannot be leaked, at least not by the UDF)
-    free_local_allocations();
 
     if (_external_bytes_tracked > 0) {
         // This isn't ideal because the memory is still leaked, but don't track it so our
@@ -119,14 +118,6 @@ uint8_t* FunctionContextImpl::allocate_local(int64_t byte_size) {
     uint8_t* buffer = _pool->allocate(byte_size);
     _local_allocations.push_back(buffer);
     return buffer;
-}
-
-void FunctionContextImpl::free_local_allocations() {
-    for (auto& _local_allocation : _local_allocations) {
-        _pool->free(_local_allocation);
-    }
-
-    _local_allocations.clear();
 }
 
 void FunctionContextImpl::set_constant_args(const std::vector<starrocks_udf::AnyVal*>& constant_args) {
@@ -182,6 +173,9 @@ starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
     ctx->_impl->_varargs_buffer = reinterpret_cast<uint8_t*>(malloc(varargs_buffer_size));
     ctx->_impl->_varargs_buffer_size = varargs_buffer_size;
     ctx->_impl->_debug = debug;
+#ifdef STARROCKS_WITH_HDFS
+    ctx->_impl->_jvm_udaf_ctxs = std::make_unique<vectorized::JavaUDAFContext>();
+#endif
     VLOG_ROW << "Created FunctionContext: " << ctx << " with pool " << ctx->_impl->_pool;
     return ctx;
 }

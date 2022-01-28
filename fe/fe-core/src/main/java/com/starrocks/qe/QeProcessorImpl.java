@@ -106,8 +106,8 @@ public final class QeProcessorImpl implements QeProcessor {
 
     @Override
     public TReportExecStatusResult reportExecStatus(TReportExecStatusParams params, TNetworkAddress beAddr) {
-        if (params.isSetProfile()) {
-            LOG.info("ReportExecStatus(): fragment_instance_id={}, query id={}, backend num: {}, ip: {}",
+        if (LOG.isDebugEnabled() && params.isSetProfile()) {
+            LOG.debug("ReportExecStatus(): fragment_instance_id={}, query_id={}, backend num: {}, ip: {}",
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id),
                     params.backend_num, beAddr);
             LOG.debug("params: {}", params);
@@ -115,14 +115,16 @@ public final class QeProcessorImpl implements QeProcessor {
         final TReportExecStatusResult result = new TReportExecStatusResult();
         final QueryInfo info = coordinatorMap.get(params.query_id);
         if (info == null) {
-            result.setStatus(new TStatus(TStatusCode.RUNTIME_ERROR));
-            LOG.info("ReportExecStatus() runtime error, query {} does not exist", params.query_id);
+            result.setStatus(new TStatus(TStatusCode.NOT_FOUND));
+            LOG.info("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
+                    DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
             return result;
         }
         try {
             info.getCoord().updateFragmentExecStatus(params);
         } catch (Exception e) {
-            LOG.warn(e.getMessage());
+            LOG.warn("ReportExecStatus() failed, fragment_instance_id={}, query_id={}, error: {}",
+                    DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id), e.getMessage());
             return result;
         }
         result.setStatus(new TStatus(TStatusCode.OK));

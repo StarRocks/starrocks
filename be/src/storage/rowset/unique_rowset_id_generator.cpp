@@ -60,6 +60,12 @@ bool UniqueRowsetIdGenerator::id_in_use(const RowsetId& rowset_id) const {
 }
 
 void UniqueRowsetIdGenerator::release_id(const RowsetId& rowset_id) {
+    if (rowset_id.version < _version) {
+        return;
+    }
+    if ((rowset_id.mi != _backend_uid.hi) || (rowset_id.lo != _backend_uid.lo)) {
+        return;
+    }
     std::lock_guard<SpinLock> l(_lock);
     _valid_rowset_id_hi.erase(rowset_id.hi);
 }

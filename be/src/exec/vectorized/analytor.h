@@ -1,9 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
+#include <queue>
+
+#include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 #include "util/runtime_profile.h"
@@ -26,22 +30,24 @@ struct FrameRange {
 
 class Analytor;
 using AnalytorPtr = std::shared_ptr<Analytor>;
+using Analytors = std::vector<AnalytorPtr>;
 
 // Component used to do analytic processing
 // it contains common data struct and algorithm of analysis
-// TODO(hcf) this component is shared by multiply sink/source operators in pipeline engine
-// TODO(hcf) all the data should be protected by lightweight lock
-class Analytor {
+class Analytor final : public pipeline::ContextWithDependency {
     friend class ManagedFunctionStates;
 
 public:
-    ~Analytor() = default;
+    ~Analytor() {
+        if (_state != nullptr) {
+            close(_state);
+        }
+    }
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc);
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
-                   RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
-    Status close(RuntimeState* state);
+    Status close(RuntimeState* state) override;
 
     enum FrameType {
         Unbounded,               // BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
@@ -77,9 +83,6 @@ public:
     int64_t peer_group_start() { return _peer_group_start; }
     int64_t peer_group_end() { return _peer_group_end; }
 
-    int64_t last_memory_usage() { return _last_memory_usage; }
-    void set_last_memory_usage(int64_t last_memory_usage) { _last_memory_usage = last_memory_usage; }
-
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
     const std::vector<std::vector<vectorized::ColumnPtr>>& agg_intput_columns() { return _agg_intput_columns; }
@@ -98,7 +101,7 @@ public:
     void reset_window_state();
     void get_window_function_result(int32_t start, int32_t end);
 
-    bool is_partition_finished(int64_t found_partition_end);
+    bool is_partition_finished();
     Status output_result_chunk(vectorized::ChunkPtr* chunk);
     size_t compute_memory_usage();
     void create_agg_result_columns(int64_t chunk_size);
@@ -110,7 +113,7 @@ public:
     void find_peer_group_end();
     void reset_state_for_new_partition(int64_t found_partition_end);
 
-    void remove_unused_buffer_values();
+    void remove_unused_buffer_values(RuntimeState* state);
 
 #ifdef NDEBUG
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1000;
@@ -118,19 +121,17 @@ public:
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1;
 #endif
 
-#ifdef NDEBUG
-    static constexpr size_t memory_check_batch_size = 65535;
-#else
-    static constexpr size_t memory_check_batch_size = 1;
-#endif
-
 private:
+    RuntimeState* _state = nullptr;
+    bool _is_closed = false;
+    // TPlanNode is only valid in the PREPARE and INIT phase
     const TPlanNode& _tnode;
     const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     ObjectPool* _pool;
-    MemTracker* _mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
+    // The open phase still relies on the TFunction object for some initialization operations
+    std::vector<TFunction> _fns;
 
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
@@ -171,8 +172,6 @@ private:
     int64_t _rows_start_offset = 0;
     int64_t _rows_end_offset = 0;
 
-    int64_t _last_memory_usage = 0;
-
     // The offset of the n-th window function in a row of window functions.
     std::vector<size_t> _agg_states_offsets;
     // The total size of the row for the window function state.
@@ -210,16 +209,17 @@ private:
 // Helper class that properly invokes destructor when state goes out of scope.
 class ManagedFunctionStates {
 public:
-    ManagedFunctionStates(vectorized::AggDataPtr agg_states, Analytor* agg_node)
-            : _agg_states(agg_states), _agg_node(agg_node) {
+    ManagedFunctionStates(std::vector<starrocks_udf::FunctionContext*>* ctxs,
+                          vectorized::AggDataPtr __restrict agg_states, Analytor* agg_node)
+            : _ctxs(ctxs), _agg_states(agg_states), _agg_node(agg_node) {
         for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->create(_agg_states + _agg_node->_agg_states_offsets[i]);
+            _agg_node->_agg_functions[i]->create((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
         }
     }
 
     ~ManagedFunctionStates() {
         for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->destroy(_agg_states + _agg_node->_agg_states_offsets[i]);
+            _agg_node->_agg_functions[i]->destroy((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
         }
     }
 
@@ -227,8 +227,24 @@ public:
     const uint8_t* data() const { return _agg_states; }
 
 private:
+    std::vector<starrocks_udf::FunctionContext*>* _ctxs;
     vectorized::AggDataPtr _agg_states;
     Analytor* _agg_node;
 };
 
+class AnalytorFactory;
+using AnalytorFactoryPtr = std::shared_ptr<AnalytorFactory>;
+class AnalytorFactory {
+public:
+    AnalytorFactory(size_t dop, const TPlanNode& tnode, const RowDescriptor& child_row_desc,
+                    const TupleDescriptor* result_tuple_desc)
+            : _analytors(dop), _tnode(tnode), _child_row_desc(child_row_desc), _result_tuple_desc(result_tuple_desc) {}
+    AnalytorPtr create(int i);
+
+private:
+    Analytors _analytors;
+    const TPlanNode& _tnode;
+    const RowDescriptor& _child_row_desc;
+    const TupleDescriptor* _result_tuple_desc;
+};
 } // namespace starrocks

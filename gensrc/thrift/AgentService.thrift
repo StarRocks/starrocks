@@ -38,6 +38,7 @@ struct TTabletSchema {
     6: optional double bloom_filter_fpp
     7: optional list<Descriptors.TOlapTableIndex> indexes
     8: optional bool is_in_memory
+    9: optional i64 id;
 }
 
 // this enum stands for different storage format in src_backends
@@ -58,8 +59,7 @@ struct TCreateTabletReq {
     1: required Types.TTabletId tablet_id
     2: required TTabletSchema tablet_schema
     3: optional Types.TVersion version
-    // Deprecated
-    4: optional Types.TVersionHash version_hash 
+    4: optional Types.TVersionHash version_hash // Deprecated
     5: optional Types.TStorageMedium storage_medium
     6: optional bool in_restore_mode
     // this new tablet should be colocate with base tablet
@@ -79,6 +79,7 @@ struct TCreateTabletReq {
 struct TDropTabletReq {
     1: required Types.TTabletId tablet_id
     2: optional Types.TSchemaHash schema_hash
+    3: optional bool force
 }
 
 struct TAlterTabletReq {

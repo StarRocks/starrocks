@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_THREAD_RESOURCE_MGR_H
-#define STARROCKS_BE_RUNTIME_THREAD_RESOURCE_MGR_H
+#pragma once
 
 #include <boost/thread/thread.hpp>
 #include <cstdlib>
@@ -87,7 +86,6 @@ public:
     class ResourcePool {
     public:
         virtual ~ResourcePool() = default;
-        ;
         // Acquire a thread for the pool.  This will always succeed; the
         // pool will go over the quota.
         // Pools should use this API to reserve threads they need in order
@@ -283,5 +281,3 @@ inline void ThreadResourceMgr::ResourcePool::release_thread_token(bool required)
 }
 
 } // namespace starrocks
-
-#endif

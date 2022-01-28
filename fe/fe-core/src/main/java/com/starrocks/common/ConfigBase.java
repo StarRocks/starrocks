@@ -48,8 +48,6 @@ public class ConfigBase {
 
         boolean mutable() default false;
 
-        boolean masterOnly() default false;
-
         String comment() default "";
     }
 
@@ -268,26 +266,10 @@ public class ConfigBase {
             config.add(Strings.nullToEmpty(confVal));
             config.add(f.getType().getSimpleName());
             config.add(String.valueOf(anno.mutable()));
-            config.add(String.valueOf(anno.masterOnly()));
             config.add(anno.comment());
             configs.add(config);
         }
 
         return configs;
-    }
-
-    public static synchronized boolean checkIsMasterOnly(String key) {
-        Map<String, Field> mutableConfigs = getAllMutableConfigs();
-        Field f = mutableConfigs.get(key);
-        if (f == null) {
-            return false;
-        }
-
-        ConfField anno = f.getAnnotation(ConfField.class);
-        if (anno == null) {
-            return false;
-        }
-
-        return anno.masterOnly();
     }
 }

@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TExprNode;
 import org.apache.logging.log4j.LogManager;
@@ -81,11 +81,6 @@ public class BetweenPredicate extends Predicate {
     }
 
     @Override
-    public boolean isVectorized() {
-        return true;
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         throw new IllegalStateException(
                 "BetweenPredicate needs to be rewritten into a CompoundPredicate.");
@@ -99,6 +94,13 @@ public class BetweenPredicate extends Predicate {
     }
 
     @Override
+    public String toDigestImpl() {
+        String notStr = (isNotBetween) ? "not " : "";
+        return children.get(0).toDigest() + " " + notStr + "between " +
+                children.get(1).toDigest() + " and " + children.get(2).toDigest();
+    }
+
+    @Override
     public Expr clone(ExprSubstitutionMap sMap) {
         return new BetweenPredicate(this);
     }
@@ -109,7 +111,7 @@ public class BetweenPredicate extends Predicate {
     }
 
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitBetweenPredicate(this, context);
     }
 }

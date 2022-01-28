@@ -252,14 +252,15 @@ public class BackendLoadStatistic {
             TStorageMedium medium = diskInfo.getStorageMedium();
             if (diskInfo.getState() == DiskState.ONLINE) {
                 // we only collect online disk's capacity
-                totalCapacityMap.put(medium, totalCapacityMap.getOrDefault(medium, 0L) + diskInfo.getTotalCapacityB());
+                totalCapacityMap
+                        .put(medium, totalCapacityMap.getOrDefault(medium, 0L) + diskInfo.getDataTotalCapacityB());
                 totalUsedCapacityMap
                         .put(medium, totalUsedCapacityMap.getOrDefault(medium, 0L) + diskInfo.getDataUsedCapacityB());
             }
 
             RootPathLoadStatistic pathStatistic = new RootPathLoadStatistic(beId, diskInfo.getRootPath(),
                     diskInfo.getPathHash(), diskInfo.getStorageMedium(),
-                    diskInfo.getTotalCapacityB(), diskInfo.getDataUsedCapacityB(), diskInfo.getState());
+                    diskInfo.getDataTotalCapacityB(), diskInfo.getDataUsedCapacityB(), diskInfo.getState());
             pathStatistics.add(pathStatistic);
         }
 
@@ -317,8 +318,8 @@ public class BackendLoadStatistic {
             }
         }
 
-        LOG.debug("classify path by load. storage: {} avg used percent: {}. low/mid/high: {}/{}/{}",
-                avgUsedPercent, medium, lowCounter, midCounter, highCounter);
+        LOG.debug("classify path by load. backend: {}, medium: {}, avg used percent: {}. low/mid/high: {}/{}/{}",
+                beId, medium, avgUsedPercent, lowCounter, midCounter, highCounter);
     }
 
     public void calcScore(Map<TStorageMedium, Double> avgClusterUsedCapacityPercentMap,
@@ -417,8 +418,8 @@ public class BackendLoadStatistic {
             }
         }
 
-        LOG.debug("after adjust, backend {} path classification low/mid/high: {}/{}/{}",
-                beId, low.size(), mid.size(), high.size());
+        LOG.debug("after adjust, backend {}, medium: {}, path classification low/mid/high: {}/{}/{}",
+                beId, storageMedium, low.size(), mid.size(), high.size());
     }
 
     public Set<Long> getPathStatisticForMIDAndClazz(Classification clazz, TStorageMedium storageMedium) {

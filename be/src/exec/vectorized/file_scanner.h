@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -63,7 +63,6 @@ protected:
     ScannerCounter* _counter;
 
     std::unique_ptr<RowDescriptor> _row_desc;
-    std::unique_ptr<MemTracker> _mem_tracker;
 
     bool _strict_mode;
     int64_t _error_counter;

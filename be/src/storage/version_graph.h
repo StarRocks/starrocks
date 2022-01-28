@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_VERSION_GRAPH_H
-#define STARROCKS_BE_SRC_OLAP_VERSION_GRAPH_H
+#pragma once
 
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
@@ -43,14 +42,14 @@ public:
     void construct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version);
     /// Reconstruct the graph, begin construction the vertex vec and edges list will be cleared.
     void reconstruct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version);
-    /// Add a version to this graph, graph will add the vesion and edge in version.
+    /// Add a version to this graph, graph will add the version and edge in version.
     void add_version_to_graph(const Version& version);
     /// Delete a version from graph. Notice that this del operation only remove this edges and
     /// remain the vertex.
-    OLAPStatus delete_version_from_graph(const Version& version);
+    Status delete_version_from_graph(const Version& version);
     /// Given a spec_version, this method can find a version path which is the shortest path
     /// in the graph. The version paths are added to version_path as return info.
-    OLAPStatus capture_consistent_versions(const Version& spec_version, std::vector<Version>* version_path) const;
+    Status capture_consistent_versions(const Version& spec_version, std::vector<Version>* version_path) const;
 
 private:
     /// Private method add a version to graph.
@@ -104,7 +103,7 @@ using TimestampedVersionSharedPtr = std::shared_ptr<TimestampedVersion>;
 /// will compare with the version timestamp and be refreshed.
 class TimestampedVersionPathContainer {
 public:
-    /// TimestampedVersionPathContainer construction function, max_create_time is assgined to 0.
+    /// TimestampedVersionPathContainer construction function, max_create_time is assigned to 0.
     TimestampedVersionPathContainer() {}
 
     /// Return the max create time in a path version.
@@ -147,7 +146,7 @@ public:
     /// Given a spec_version, this method can find a version path which is the shortest path
     /// in the graph. The version paths are added to version_path as return info.
     /// If this version not in main version, version_path can be included expired rowset.
-    OLAPStatus capture_consistent_versions(const Version& spec_version, std::vector<Version>* version_path) const;
+    Status capture_consistent_versions(const Version& spec_version, std::vector<Version>* version_path) const;
 
     /// Capture all expired path version.
     /// When the last rowset createtime of a path greater than expired time  which can be expressed
@@ -186,5 +185,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif // STARROCKS_BE_SRC_OLAP_OLAP_VERSION_GRAPH_H

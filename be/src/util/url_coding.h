@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_URL_CODING_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_URL_CODING_H
+#pragma once
 
 #include <boost/cstdint.hpp>
 #include <string>
@@ -59,5 +58,3 @@ bool base64_decode(const std::string& in, std::string* out);
 void escape_for_html(const std::string& in, std::stringstream* out);
 
 } // namespace starrocks
-
-#endif

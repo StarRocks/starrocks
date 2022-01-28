@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/analytor.h"
 
@@ -14,12 +14,15 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
+namespace vectorized {
+Status window_init_jvm_context(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
+                               starrocks_udf::FunctionContext* context);
+} // namespace vectorized
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                    const TupleDescriptor* result_tuple_desc)
@@ -80,13 +83,14 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
              << " _rows_end_offset " << _rows_end_offset;
 }
 
-Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
-                         RuntimeProfile* runtime_profile) {
+Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
+    _state = state;
+
     _pool = pool;
-    _mem_tracker = mem_tracker;
     _runtime_profile = runtime_profile;
     _limit = _tnode.limit;
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
+    _mem_pool = std::make_unique<MemPool>();
 
     const TAnalyticNode& analytic_node = _tnode.analytic_node;
 
@@ -121,10 +125,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_
         bool is_input_nullable = false;
         if (fn.name.function_name == "count" || fn.name.function_name == "row_number" ||
             fn.name.function_name == "rank" || fn.name.function_name == "dense_rank") {
-            is_input_nullable = !fn.arg_types.empty() && desc.nodes[0].has_nullable_child;
-            is_input_nullable |= has_outer_join_child;
-            auto* func = vectorized::get_aggregate_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT,
-                                                            is_input_nullable);
+            is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
+            auto* func =
+                    vectorized::get_window_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
             _agg_functions[i] = func;
             _agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), false, false};
             // count(*) no input column, we manually resize it to 1 to process count(*)
@@ -150,8 +153,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_
             is_input_nullable = true;
             VLOG_ROW << "try get function " << fn.name.function_name << " arg_type.type " << arg_type.type
                      << " return_type.type " << return_type.type;
-            auto* func = vectorized::get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                            is_input_nullable);
+            auto* func = vectorized::get_window_function(fn.name.function_name, arg_type.type, return_type.type,
+                                                         is_input_nullable, fn.binary_type);
             if (func == nullptr) {
                 return Status::InternalError(
                         strings::Substitute("Invalid window function plan: $0", fn.name.function_name));
@@ -172,7 +175,6 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_
                         _agg_expr_ctxs[i][j]->root()->type(), _agg_expr_ctxs[i][j]->root()->is_nullable(),
                         _agg_expr_ctxs[i][j]->root()->is_constant(), 0);
             }
-            _agg_intput_columns[i][j]->reserve(config::vector_chunk_size * BUFFER_CHUNK_NUMBER);
         }
 
         DCHECK(_agg_functions[i] != nullptr);
@@ -204,7 +206,6 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_
         _partition_columns[i] = vectorized::ColumnHelper::create_column(
                 _partition_ctxs[i]->root()->type(), _partition_ctxs[i]->root()->is_nullable() | has_outer_join_child,
                 _partition_ctxs[i]->root()->is_constant(), 0);
-        _partition_columns[i]->reserve(config::vector_chunk_size * BUFFER_CHUNK_NUMBER);
     }
 
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs));
@@ -213,18 +214,16 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_
         _order_columns[i] = vectorized::ColumnHelper::create_column(
                 _order_ctxs[i]->root()->type(), _order_ctxs[i]->root()->is_nullable() | has_outer_join_child,
                 _order_ctxs[i]->root()->is_constant(), 0);
-        _order_columns[i]->reserve(config::vector_chunk_size * BUFFER_CHUNK_NUMBER);
     }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    _mem_pool.reset(new MemPool(_mem_tracker));
 
     _compute_timer = ADD_TIMER(_runtime_profile, "ComputeTime");
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
     SCOPED_TIMER(_compute_timer);
     for (const auto& ctx : _agg_expr_ctxs) {
-        Expr::prepare(ctx, state, _child_row_desc, expr_mem_tracker);
+        Expr::prepare(ctx, state, _child_row_desc);
     }
 
     if (!_partition_ctxs.empty() || !_order_ctxs.empty()) {
@@ -233,15 +232,18 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_
         tuple_ids.push_back(_buffered_tuple_id);
         RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids, vector<bool>(2, false));
         if (!_partition_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state, cmp_row_desc, expr_mem_tracker));
+            RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state, cmp_row_desc));
         }
         if (!_order_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state, cmp_row_desc, expr_mem_tracker));
+            RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state, cmp_row_desc));
         }
     }
 
-    vectorized::AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-    _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(agg_states, this));
+    // save TFunction object
+    _fns.reserve(_agg_fn_ctxs.size());
+    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+        _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
+    }
 
     return Status::OK();
 }
@@ -254,10 +256,30 @@ Status Analytor::open(RuntimeState* state) {
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
     }
+#ifdef STARROCKS_WITH_HDFS
+    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+        if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+            const auto& fn = _fns[i];
+            auto st = vectorized::window_init_jvm_context(fn.id, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                                          _agg_fn_ctxs[i]);
+            RETURN_IF_ERROR(st);
+        }
+    }
+#endif
+
+    vectorized::AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+    _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
+
     return Status::OK();
 }
 
 Status Analytor::close(RuntimeState* state) {
+    if (_is_closed) {
+        return Status::OK();
+    }
+
+    _is_closed = true;
+
     for (auto* ctx : _agg_fn_ctxs) {
         if (ctx != nullptr && ctx->impl()) {
             ctx->impl()->close();
@@ -271,8 +293,6 @@ Status Analytor::close(RuntimeState* state) {
     if (_mem_pool != nullptr) {
         _mem_pool->free_all();
     }
-
-    _mem_tracker->release(_last_memory_usage);
 
     Expr::close(_order_ctxs, state);
     Expr::close(_partition_ctxs, state);
@@ -300,7 +320,7 @@ vectorized::ChunkPtr Analytor::poll_chunk_buffer() {
 
 void Analytor::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
     std::lock_guard<std::mutex> l(_buffer_mutex);
-    _buffer.push(std::move(chunk));
+    _buffer.push(chunk);
 }
 
 FrameRange Analytor::get_sliding_frame_range() {
@@ -336,22 +356,17 @@ void Analytor::get_window_function_result(int32_t start, int32_t end) {
     }
 }
 
-bool Analytor::is_partition_finished(int64_t found_partition_end) {
-    // current partition data don't consume finished
-    if (_input_eos | (_current_row_position < _partition_end)) {
+bool Analytor::is_partition_finished() {
+    if (_input_eos) {
         return true;
     }
 
-    // no partition or hasn't fecth one chunk
-    if ((_partition_ctxs.empty() & !_input_eos) | (found_partition_end == 0)) {
+    // No partition or hasn't fecth one chunk
+    if (_partition_ctxs.empty() || _partition_end == 0) {
         return false;
     }
 
-    // partition end not found
-    if (!_partition_ctxs.empty() && found_partition_end == _partition_columns[0]->size() && !_input_eos) {
-        return false;
-    }
-    return true;
+    return _current_row_position >= _partition_end;
 }
 
 Status Analytor::output_result_chunk(vectorized::ChunkPtr* chunk) {
@@ -427,7 +442,7 @@ void Analytor::append_column(size_t chunk_size, vectorized::Column* dst_column, 
 }
 
 bool Analytor::is_new_partition(int64_t found_partition_end) {
-    // _current_row_position >= _partition_end : current partition data has consumed finished
+    // _current_row_position >= _partition_end : current partition data has been processed
     // _partition_end == 0 : the first partition
     return ((_current_row_position >= _partition_end) &
             ((_partition_end == 0) | (_partition_end != found_partition_end)));
@@ -443,7 +458,7 @@ int64_t Analytor::find_partition_end() {
         return _partition_end;
     }
 
-    if (_partition_columns.empty() | (_input_rows == 0)) {
+    if (_partition_columns.empty() || _input_rows == 0) {
         return _input_rows;
     }
 
@@ -479,10 +494,10 @@ void Analytor::reset_state_for_new_partition(int64_t found_partition_end) {
     DCHECK_GE(_current_row_position, 0);
 }
 
-void Analytor::remove_unused_buffer_values() {
+void Analytor::remove_unused_buffer_values(RuntimeState* state) {
     if (_input_chunks.size() <= _output_chunk_index ||
         _input_chunk_first_row_positions[_output_chunk_index] - _removed_from_buffer_rows <
-                config::vector_chunk_size * BUFFER_CHUNK_NUMBER) {
+                state->chunk_size() * BUFFER_CHUNK_NUMBER) {
         return;
     }
 
@@ -554,4 +569,10 @@ int64_t Analytor::_find_first_not_equal(vectorized::Column* column, int64_t star
     return end - 1;
 }
 
+AnalytorPtr AnalytorFactory::create(int i) {
+    if (!_analytors[i]) {
+        _analytors[i] = std::make_shared<Analytor>(_tnode, _child_row_desc, _result_tuple_desc);
+    }
+    return _analytors[i];
+}
 } // namespace starrocks

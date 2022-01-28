@@ -214,7 +214,7 @@ public class ExportExportingTask extends MasterTask {
             // remove timestamp suffix
             // data_f8d0f324-83b3-11eb-9e09-02425ee98b69_0_0_0.csv
             exportedFile = exportedFile.substring(0, exportedFile.lastIndexOf("."));
-            exportedFile = exportPath + "/" + exportedFile;
+            exportedFile = exportPath + exportedFile;
             boolean success = false;
             String failMsg = null;
 

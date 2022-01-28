@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
@@ -23,14 +23,15 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.sql.analyzer.ResolvedField;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -77,26 +78,34 @@ public final class SqlToScalarOperatorTranslator {
         ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expression, expressionMapping);
         if (expressionMapping.hasExpression(expression) || scalarOperator.isColumnRef()) {
             columnRef = (ColumnRefOperator) scalarOperator;
+        } else if (scalarOperator.isVariable() && projections.containsValue(scalarOperator)) {
+            columnRef = projections.entrySet().stream().filter(e -> scalarOperator.equals(e.getValue())).findAny().map(
+                    Map.Entry::getKey).orElse(null);
+            Preconditions.checkNotNull(columnRef);
         } else {
-            columnRef = columnRefFactory.create(expression, expression.getType(), expression.isNullable());
+            columnRef = columnRefFactory.create(expression, expression.getType(), scalarOperator.isNullable());
         }
         projections.put(columnRef, scalarOperator);
         return columnRef;
     }
 
     public static ScalarOperator translate(Expr expression, ExpressionMapping expressionMapping) {
-        return translate(expression, expressionMapping, null, null);
+        List<ColumnRefOperator> correlation = new ArrayList<>();
+        ScalarOperator rewriteScalarOp = translate(expression, expressionMapping, correlation);
+        if (!correlation.isEmpty()) {
+            throw unsupportedException("Only support use correlated columns in the where clause of subqueries");
+        }
+        return rewriteScalarOp;
     }
 
     public static ScalarOperator translate(Expr expression, ExpressionMapping expressionMapping,
-                                           ExpressionMapping outer,
                                            List<ColumnRefOperator> correlation) {
         ColumnRefOperator columnRefOperator = expressionMapping.get(expression);
         if (columnRefOperator != null) {
             return columnRefOperator;
         }
 
-        Visitor visitor = new Visitor(expressionMapping, outer, correlation);
+        Visitor visitor = new Visitor(expressionMapping, correlation);
         ScalarOperator result = visitor.visit(expression, null);
 
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
@@ -106,15 +115,13 @@ public final class SqlToScalarOperatorTranslator {
         return result;
     }
 
-    public static ScalarOperator translateWithoutRewrite(Expr expression, ExpressionMapping expressionMapping,
-                                                         ExpressionMapping outer,
-                                                         List<ColumnRefOperator> correlation) {
+    public static ScalarOperator translateWithoutRewrite(Expr expression, ExpressionMapping expressionMapping) {
         ColumnRefOperator columnRefOperator = expressionMapping.get(expression);
         if (columnRefOperator != null) {
             return columnRefOperator;
         }
 
-        Visitor visitor = new Visitor(expressionMapping, outer, correlation);
+        Visitor visitor = new Visitor(expressionMapping, new ArrayList<>());
         ScalarOperator result = visitor.visit(expression, null);
 
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
@@ -124,15 +131,12 @@ public final class SqlToScalarOperatorTranslator {
         return result;
     }
 
-    private static class Visitor extends ExprVisitor<ScalarOperator, Void> {
+    private static class Visitor extends AstVisitor<ScalarOperator, Void> {
         private final ExpressionMapping expressionMapping;
-        private final ExpressionMapping outer;
         private final List<ColumnRefOperator> correlation;
 
-        private Visitor(ExpressionMapping expressionMapping, ExpressionMapping outer,
-                        List<ColumnRefOperator> correlation) {
+        private Visitor(ExpressionMapping expressionMapping, List<ColumnRefOperator> correlation) {
             this.expressionMapping = expressionMapping;
-            this.outer = outer;
             this.correlation = correlation;
         }
 
@@ -143,9 +147,10 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visit(Expr node) {
-            if (expressionMapping.get(node) != null && !(node.isConstant())) {
-                return expressionMapping.get(node);
+        public ScalarOperator visit(ParseNode node) {
+            Expr expr = (Expr) node;
+            if (expressionMapping.get(expr) != null && !(expr.isConstant())) {
+                return expressionMapping.get(expr);
             }
             return super.visit(node);
         }
@@ -154,15 +159,16 @@ public final class SqlToScalarOperatorTranslator {
         public ScalarOperator visitSlot(SlotRef node, Void context) {
             Optional<ResolvedField> resolvedField = expressionMapping.getScope().tryResolveFeild(node);
             if (resolvedField.isPresent()) {
-                return expressionMapping.getColumnRefWithIndex(resolvedField.get().getRelationFieldIndex());
-            } else {
-                if (outer == null) {
-                    throw new SemanticException("Column '%s' cannot be resolved", node.toSql());
+                ColumnRefOperator correlatedColumnRef =
+                        expressionMapping.getColumnRefWithIndex(resolvedField.get().getRelationFieldIndex());
+
+                if (resolvedField.get().getScope().getRelationId()
+                        .equals(expressionMapping.getOuterScopeRelationId())) {
+                    correlation.add(correlatedColumnRef);
                 }
-                ColumnRefOperator correlatedColumnRef = outer.getColumnRefWithIndex(
-                        outer.getScope().resolveField(node).getRelationFieldIndex());
-                correlation.add(correlatedColumnRef);
                 return correlatedColumnRef;
+            } else {
+                throw new SemanticException("Column '%s' cannot be resolved", node.toSql());
             }
         }
 

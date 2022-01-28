@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -22,6 +22,11 @@ public:
     DEFINE_VECTORIZED_FN(sleep);
 
     DEFINE_VECTORIZED_FN(last_query_id);
+
+    /**
+     * returns uuid.
+     */
+    DEFINE_VECTORIZED_FN(uuid);
 };
 
 } // namespace vectorized

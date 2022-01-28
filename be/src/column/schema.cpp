@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/schema.h"
 
@@ -57,7 +57,7 @@ std::vector<std::string> Schema::field_names() const {
     std::vector<std::string> names;
     names.reserve(_fields.size());
     for (const auto& field : _fields) {
-        names.push_back(field->name());
+        names.emplace_back(field->name());
     }
     return names;
 }

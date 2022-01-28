@@ -1,12 +1,19 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/case_expr.h"
+
+#include <cstdint>
 
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/vectorized/function_helper.h"
+#include "gutil/casts.h"
+#include "simd/mulselector.h"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 
@@ -129,9 +136,8 @@ private:
         ColumnViewer<WhenType> case_viewer(case_column);
         then_viewers.emplace_back(else_column);
 
-        ColumnBuilder<ResultType> builder(this->type().precision, this->type().scale);
         size_t size = when_columns[0]->size();
-        builder.reserve(size);
+        ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
 
         bool columns_has_null = false;
         for (ColumnPtr& column : when_columns) {
@@ -240,17 +246,72 @@ private:
         then_columns.emplace_back(else_column);
         then_viewers.emplace_back(else_column);
 
-        ColumnBuilder<ResultType> builder(this->type().precision, this->type().scale);
         size_t size = when_columns[0]->size();
-        builder.reserve(size);
+        ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
 
-        bool columns_has_null = false;
+        bool when_columns_has_null = false;
         for (ColumnPtr& column : when_columns) {
-            columns_has_null |= column->has_null();
+            when_columns_has_null |= column->has_null();
+        }
+
+        // max case size in use SIMD CASE WHEN implements
+        constexpr int max_simd_case_when_size = 8;
+
+        // optimization for no-nullable Arithmetic Type
+        if constexpr (isArithmeticPT<ResultType>) {
+            bool then_columns_has_null = false;
+            for (const auto& column : then_columns) {
+                then_columns_has_null |= column->has_null();
+            }
+
+            bool check_could_use_multi_simd_selector =
+                    !when_columns_has_null && when_columns.size() <= max_simd_case_when_size && !then_columns_has_null;
+
+            if (check_could_use_multi_simd_selector) {
+                int then_column_size = then_columns.size();
+                int when_column_size = when_columns.size();
+                // TODO: avoid unpack const column
+                for (int i = 0; i < then_column_size; ++i) {
+                    then_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, then_columns[i]);
+                }
+                for (int i = 0; i < when_column_size; ++i) {
+                    when_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, when_columns[i]);
+                }
+                for (int i = 0; i < when_column_size; ++i) {
+                    ColumnHelper::merge_nullable_filter(when_columns[i].get());
+                }
+
+                using ResultContainer = typename RunTimeColumnType<ResultType>::Container;
+
+                ResultContainer* select_list[then_column_size];
+                for (int i = 0; i < then_column_size; ++i) {
+                    auto* data_column = ColumnHelper::get_data_column(then_columns[i].get());
+                    select_list[i] = &down_cast<RunTimeColumnType<ResultType>*>(data_column)->get_data();
+                }
+
+                uint8_t* select_vec[when_column_size];
+                for (int i = 0; i < when_column_size; ++i) {
+                    auto* data_column = ColumnHelper::get_data_column(when_columns[i].get());
+                    select_vec[i] = down_cast<BooleanColumn*>(data_column)->get_data().data();
+                }
+
+                auto res = RunTimeColumnType<ResultType>::create();
+
+                if constexpr (pt_is_decimal<ResultType>) {
+                    res->set_scale(this->type().scale);
+                    res->set_precision(this->type().precision);
+                }
+
+                auto& container = res->get_data();
+                container.resize(size);
+                SIMD_muti_selector<ResultType>::multi_select_if(select_vec, when_column_size, container, select_list,
+                                                                then_column_size);
+                return res;
+            }
         }
 
         size_t view_size = when_viewers.size();
-        if (!columns_has_null) {
+        if (!when_columns_has_null) {
             for (int row = 0; row < size; ++row) {
                 int i = 0;
                 while (i < view_size && !(when_viewers[i].value(row))) {

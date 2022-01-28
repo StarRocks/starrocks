@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -29,7 +29,8 @@ public class HashAggImplementationRule extends ImplementationRule {
                 logical.getSingleDistinctFunctionPos(),
                 logical.isSplit(),
                 logical.getLimit(),
-                logical.getPredicate());
+                logical.getPredicate(),
+                logical.getProjection());
         OptExpression result = OptExpression.create(physical, input.getInputs());
         return Lists.newArrayList(result);
     }

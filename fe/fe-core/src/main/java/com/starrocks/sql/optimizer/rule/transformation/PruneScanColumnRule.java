@@ -1,12 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import avro.shaded.com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -14,6 +12,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -53,26 +52,8 @@ public class PruneScanColumnRule extends TransformationRule {
         outputColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
 
         if (outputColumns.size() == 0) {
-            List<ColumnRefOperator> columnRefOperatorList =
-                    new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
-
-            int smallestIndex = -1;
-            int smallestColumnLength = Integer.MAX_VALUE;
-            for (int index = 0; index < columnRefOperatorList.size(); ++index) {
-                if (smallestIndex == -1) {
-                    smallestIndex = index;
-                }
-                Type columnType = columnRefOperatorList.get(index).getType();
-                if (columnType.isScalarType()) {
-                    int columnLength = columnType.getSlotSize();
-                    if (columnLength < smallestColumnLength) {
-                        smallestIndex = index;
-                        smallestColumnLength = columnLength;
-                    }
-                }
-            }
-            Preconditions.checkArgument(smallestIndex != -1);
-            outputColumns.add(columnRefOperatorList.get(smallestIndex));
+            outputColumns.add(Utils.findSmallestColumnRef(
+                    new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet())));
         }
 
         if (scanOperator.getColRefToColumnMetaMap().keySet().equals(outputColumns)) {
@@ -84,7 +65,6 @@ public class PruneScanColumnRule extends TransformationRule {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
                 LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
                         olapScanOperator.getTable(),
-                        new ArrayList<>(outputColumns),
                         newColumnRefMap,
                         olapScanOperator.getColumnMetaToColRefMap(),
                         olapScanOperator.getDistributionSpec(),
@@ -101,13 +81,14 @@ public class PruneScanColumnRule extends TransformationRule {
                 try {
                     Class<? extends LogicalScanOperator> classType = scanOperator.getClass();
                     LogicalScanOperator newScanOperator =
-                            classType.getConstructor(Table.class, List.class, Map.class, Map.class, long.class,
-                                    ScalarOperator.class).newInstance(
-                                    scanOperator.getTable(), new ArrayList<>(outputColumns),
+                            classType.getConstructor(Table.class, Map.class, Map.class, long.class,
+                                    ScalarOperator.class, Projection.class).newInstance(
+                                    scanOperator.getTable(),
                                     newColumnRefMap,
                                     scanOperator.getColumnMetaToColRefMap(),
                                     scanOperator.getLimit(),
-                                    scanOperator.getPredicate());
+                                    scanOperator.getPredicate(),
+                                    scanOperator.getProjection());
 
                     return Lists.newArrayList(new OptExpression(newScanOperator));
                 } catch (Exception e) {

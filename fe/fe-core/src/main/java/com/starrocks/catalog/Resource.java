@@ -39,6 +39,7 @@ public abstract class Resource implements Writable {
         UNKNOWN,
         SPARK,
         HIVE,
+        ICEBERG,
         ODBC_CATALOG;
 
         public static ResourceType fromString(String resourceType) {
@@ -71,11 +72,14 @@ public abstract class Resource implements Writable {
             case HIVE:
                 resource = new HiveResource(stmt.getResourceName());
                 break;
+            case ICEBERG:
+                resource = new IcebergResource(stmt.getResourceName());
+                break;
             case ODBC_CATALOG:
                 resource = new OdbcCatalogResource(stmt.getResourceName());
                 break;
             default:
-                throw new DdlException("Only support spark and hive resource.");
+                throw new DdlException("Unsupported resource type: " + type);
         }
 
         resource.setProperties(stmt.getProperties());

@@ -29,6 +29,7 @@
 #include "runtime/message_body_sink.h"
 #include "util/bit_util.h"
 #include "util/byte_buffer.h"
+#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -85,7 +86,7 @@ public:
     // If _total_length == -1, this should be a Kafka routine load task,
     // just get the next buffer directly from the buffer queue, because one buffer contains a complete piece of data.
     // Otherwise, this should be a stream load task that needs to read the specified amount of data.
-    Status read_one_message(std::unique_ptr<uint8_t[]>* data, size_t* length) override {
+    Status read_one_message(std::unique_ptr<uint8_t[]>* data, size_t* length, size_t padding) override {
         if (_total_length < -1) {
             std::stringstream ss;
             ss << "invalid, _total_length is: " << _total_length;
@@ -101,7 +102,7 @@ public:
         }
 
         // _total_length > 0, read the entire data
-        data->reset(new uint8_t[_total_length]);
+        data->reset(new uint8_t[_total_length + padding]);
         *length = _total_length;
         bool eof = false;
         Status st = read(data->get(), length, &eof);
@@ -120,7 +121,7 @@ public:
             }
             // cancelled
             if (_cancelled) {
-                return Status::InternalError("cancelled");
+                return _err_st;
             }
             // finished
             if (_buf_queue.empty()) {
@@ -155,7 +156,7 @@ public:
     Status tell(int64_t* position) override { return Status::InternalError("Not implemented"); }
 
     // called when comsumer finished
-    void close() override { cancel(); }
+    void close() override { cancel(Status::OK()); }
 
     bool closed() override { return _cancelled; }
 
@@ -175,10 +176,13 @@ public:
     }
 
     // called when producer/comsumer failed
-    void cancel() override {
+    void cancel(const Status& status) override {
         {
             std::lock_guard<std::mutex> l(_lock);
             _cancelled = true;
+            if (_err_st.ok()) {
+                _err_st = status;
+            }
         }
         _get_cond.notify_all();
         _put_cond.notify_all();
@@ -193,7 +197,7 @@ private:
         }
         // cancelled
         if (_cancelled) {
-            return Status::InternalError("cancelled");
+            return _err_st;
         }
         // finished
         if (_buf_queue.empty()) {
@@ -221,7 +225,7 @@ private:
                 _put_cond.wait(l);
             }
             if (_cancelled) {
-                return Status::InternalError("cancelled");
+                return _err_st;
             }
             _buf_queue.push_back(buf);
             _buffered_bytes += buf->remaining();
@@ -251,6 +255,7 @@ private:
     bool _cancelled{false};
 
     ByteBufferPtr _write_buf;
+    Status _err_st = Status::OK();
 };
 
 } // namespace starrocks

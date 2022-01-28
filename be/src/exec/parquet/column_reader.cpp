@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/parquet/column_reader.h"
 
 #include <memory>
 #include <utility>
 
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -322,8 +323,8 @@ public:
     ScalarColumnReader(ColumnReaderOptions opts) : _opts(std::move(opts)) {}
     ~ScalarColumnReader() override = default;
 
-    Status init(RandomAccessFile* file, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
-                const TypeDescriptor& col_type) {
+    Status init(int chunk_size, RandomAccessFile* file, const ParquetField* field,
+                const tparquet::ColumnChunk* chunk_metadata, const TypeDescriptor& col_type) {
         StoredColumnReaderOptions opts;
         opts.stats = _opts.stats;
         _field = field;
@@ -331,7 +332,7 @@ public:
 
         RETURN_IF_ERROR(_init_convert_info());
 
-        return StoredColumnReader::create(file, field, chunk_metadata, opts, &_reader);
+        return StoredColumnReader::create(file, field, chunk_metadata, opts, chunk_size, &_reader);
     }
 
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
@@ -399,6 +400,12 @@ Status ScalarColumnReader::_init_convert_info() {
     // but when we insert value into `col0`, the physical type in parquet file is actually `INT32`
     // so when we read `col0` from parquet file, we have to do a type conversion from int32_t to int8_t.
     switch (parquet_type) {
+    case tparquet::Type::type::BOOLEAN: {
+        if (col_type != PrimitiveType::TYPE_BOOLEAN) {
+            _need_convert = true;
+        }
+        break;
+    }
     case tparquet::Type::type::INT32: {
         if (col_type != PrimitiveType::TYPE_INT) {
             _need_convert = true;
@@ -568,7 +575,7 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
                               size_t num_levels, int32_t* offsets, int8_t* is_nulls, size_t* num_offsets) {
     size_t offset_pos = 0;
     for (int i = 0; i < num_levels; ++i) {
-        // when dev_level is less than immediate_repeated_ancestor_def_level, it means that level
+        // when def_level is less than immediate_repeated_ancestor_def_level, it means that level
         // will affect its ancestor.
         // when rep_level is greater than max_rep_level, this means that level affects its
         // descendants.
@@ -588,9 +595,9 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
             offsets[offset_pos]++;
         }
 
-        // when del_level equals with max_def_level, this is a null element or a required element
-        // when del_level equals with (max_def_level - 1), this indicates a empty array
-        // when del_level less than (max_def_level - 1) it means this array is null
+        // when def_level equals with max_def_level, this is a non null element or a required element
+        // when def_level equals with (max_def_level - 1), this indicates an empty array
+        // when def_level less than (max_def_level - 1) it means this array is null
         if (def_levels[i] >= level_info.max_def_level - 1) {
             is_nulls[offset_pos - 1] = 0;
         } else {
@@ -612,24 +619,45 @@ public:
     }
 
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
-        return _element_reader->prepare_batch(num_records, content_type, dst);
-    }
+        vectorized::NullableColumn* nullable_column = nullptr;
+        vectorized::ArrayColumn* array_column = nullptr;
+        if (_field->is_nullable) {
+            DCHECK(dst->is_nullable());
+            nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+            DCHECK(nullable_column->mutable_data_column()->is_array());
+            array_column = down_cast<vectorized::ArrayColumn*>(nullable_column->mutable_data_column());
+        } else {
+            DCHECK(dst->is_array());
+            array_column = down_cast<vectorized::ArrayColumn*>(dst);
+        }
+        auto* child_column = array_column->elements_column().get();
+        auto st = _element_reader->prepare_batch(num_records, content_type, child_column);
 
-    Status finish_batch() override {
         level_t* def_levels = nullptr;
         level_t* rep_levels = nullptr;
         size_t num_levels = 0;
-
         _element_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+
         std::vector<int32_t> offsets(num_levels + 1);
         std::vector<int8_t> is_nulls(num_levels);
         size_t num_offsets = 0;
-
         offsets[0] = 0;
         def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
                           &num_offsets);
-        return Status::OK();
+        if (num_offsets > 0) {
+            array_column->offsets_column()->append_numbers(&offsets[1], num_offsets);
+        }
+
+        if (_field->is_nullable) {
+            DCHECK(dst->is_nullable());
+            DCHECK_NOTNULL(nullable_column);
+            nullable_column->mutable_null_column()->append_numbers(&is_nulls[0], num_offsets);
+        }
+
+        return st;
     }
+
+    Status finish_batch() override { return Status::OK(); }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
@@ -643,20 +671,22 @@ private:
 };
 
 Status ColumnReader::create(RandomAccessFile* file, const ParquetField* field, const tparquet::RowGroup& row_group,
-                            const TypeDescriptor& col_type, const ColumnReaderOptions& opts,
+                            const TypeDescriptor& col_type, const ColumnReaderOptions& opts, int chunk_size,
                             std::unique_ptr<ColumnReader>* output) {
     if (field->type.type == TYPE_MAP || field->type.type == TYPE_STRUCT) {
         return Status::InternalError("not supported type");
     }
     if (field->type.type == TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
-        RETURN_IF_ERROR(ColumnReader::create(file, &field->children[0], row_group, col_type, opts, &child_reader));
+        RETURN_IF_ERROR(ColumnReader::create(file, &field->children[0], row_group, col_type.children[0], opts,
+                                             chunk_size, &child_reader));
         std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
         *output = std::move(reader);
     } else {
         std::unique_ptr<ScalarColumnReader> reader(new ScalarColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(file, field, &row_group.columns[field->physical_column_index], col_type));
+        RETURN_IF_ERROR(
+                reader->init(chunk_size, file, field, &row_group.columns[field->physical_column_index], col_type));
         *output = std::move(reader);
     }
     return Status::OK();

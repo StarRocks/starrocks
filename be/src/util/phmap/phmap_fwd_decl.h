@@ -2,8 +2,7 @@
 // This file is based on code available under the Apache license here:
 //   https://github.com/greg7mdp/parallel-hashmap/blob/master/parallel_hashmap/phmap_fwd_decl.h
 
-#if !defined(phmap_fwd_decl_h_guard_)
-#define phmap_fwd_decl_h_guard_
+#pragma once
 
 // ---------------------------------------------------------------------------
 // Copyright (c) 2019, Gregory Popovitch - greg7mdp@gmail.com
@@ -143,5 +142,3 @@ class btree_multimap;
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-
-#endif // phmap_fwd_decl_h_guard_

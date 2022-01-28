@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_RAW_VALUE_H
-#define STARROCKS_BE_RUNTIME_RAW_VALUE_H
+#pragma once
 
 #include <string>
 
@@ -28,13 +27,12 @@
 #include "runtime/string_value.h"
 #include "runtime/types.h"
 #include "util/hash_util.hpp"
-#include "util/types.h"
+#include "util/unaligned_access.h"
 
 namespace starrocks {
 
 class MemPool;
 class SlotDescriptor;
-class Tuple;
 
 // Useful utility functions for runtime values (which are passed around as void*).
 class RawValue {
@@ -90,11 +88,6 @@ public:
     // Compares both values.
     // Return value is < 0  if v1 < v2, 0 if v1 == v2, > 0 if v1 > v2.
     static int compare(const void* v1, const void* v2, const TypeDescriptor& type);
-
-    // Writes the bytes of a given value into the slot of a tuple.
-    // For string values, the string data is copied into memory allocated from 'pool'
-    // only if pool is non-NULL.
-    static void write(const void* value, Tuple* tuple, const SlotDescriptor* slot_desc, MemPool* pool);
 
     // Writes 'src' into 'dst' for type.
     // For string values, the string data is copied into 'pool' if pool is non-NULL.
@@ -154,11 +147,17 @@ inline bool RawValue::lt(const void* v1, const void* v2, const TypeDescriptor& t
     case TYPE_DECIMAL:
         return *reinterpret_cast<const DecimalValue*>(v1) < *reinterpret_cast<const DecimalValue*>(v2);
 
-    case TYPE_DECIMALV2:
-        return reinterpret_cast<const PackedInt128*>(v1)->value < reinterpret_cast<const PackedInt128*>(v2)->value;
+    case TYPE_DECIMALV2: {
+        int128_t r = unaligned_load<int128_t>(v2);
+        int128_t l = unaligned_load<int128_t>(v1);
+        return l < r;
+    }
 
-    case TYPE_LARGEINT:
-        return reinterpret_cast<const PackedInt128*>(v1)->value < reinterpret_cast<const PackedInt128*>(v2)->value;
+    case TYPE_LARGEINT: {
+        int128_t r = unaligned_load<int128_t>(v2);
+        int128_t l = unaligned_load<int128_t>(v1);
+        return l < r;
+    }
 
     default:
         DCHECK(false) << "invalid type: " << type;
@@ -205,11 +204,17 @@ inline bool RawValue::eq(const void* v1, const void* v2, const TypeDescriptor& t
     case TYPE_DECIMAL:
         return *reinterpret_cast<const DecimalValue*>(v1) == *reinterpret_cast<const DecimalValue*>(v2);
 
-    case TYPE_DECIMALV2:
-        return reinterpret_cast<const PackedInt128*>(v1)->value == reinterpret_cast<const PackedInt128*>(v2)->value;
+    case TYPE_DECIMALV2: {
+        int128_t r = unaligned_load<int128_t>(v2);
+        int128_t l = unaligned_load<int128_t>(v1);
+        return r == l;
+    }
 
-    case TYPE_LARGEINT:
-        return reinterpret_cast<const PackedInt128*>(v1)->value == reinterpret_cast<const PackedInt128*>(v2)->value;
+    case TYPE_LARGEINT: {
+        int128_t r = unaligned_load<int128_t>(v2);
+        int128_t l = unaligned_load<int128_t>(v1);
+        return r == l;
+    }
 
     default:
         DCHECK(false) << "invalid type: " << type;
@@ -407,5 +412,3 @@ inline uint32_t RawValue::zlib_crc32(const void* v, const TypeDescriptor& type, 
 }
 
 } // namespace starrocks
-
-#endif

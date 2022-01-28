@@ -22,22 +22,16 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Reference;
-import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TInPredicate;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,55 +42,12 @@ import java.util.List;
  * of values (remaining children).
  */
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class InPredicate extends Predicate {
-    private static final Logger LOG = LogManager.getLogger(InPredicate.class);
-
-    private static final String IN_SET_LOOKUP = "in_set_lookup";
-    private static final String NOT_IN_SET_LOOKUP = "not_in_set_lookup";
     private static final String IN_ITERATE = "in_iterate";
     private static final String NOT_IN_ITERATE = "not_in_iterate";
     private final boolean isNotIn;
-    private static final String IN = "in";
-    private static final String NOT_IN = "not_in";
 
     private static final NullLiteral NULL_LITERAL = new NullLiteral();
-
-    public static void initBuiltins(FunctionSet functionSet) {
-        for (Type t : Type.getSupportedTypes()) {
-            if (t.isNull() || t.isPseudoType()) {
-                continue;
-            }
-            // TODO we do not support codegen for CHAR and the In predicate must be codegened
-            // because it has variable number of arguments. This will force CHARs to be
-            // cast up to strings; meaning that "in" comparisons will not have CHAR comparison
-            // semantics.
-            if (t.getPrimitiveType() == PrimitiveType.CHAR) {
-                continue;
-            }
-
-            String typeString = Function.getUdfTypeName(t.getPrimitiveType());
-
-            functionSet.addBuiltin(ScalarFunction.createBuiltin(IN_ITERATE,
-                    Lists.newArrayList(t, t), true, Type.BOOLEAN,
-                    "starrocks::InPredicate::in_iterate", null, null, false));
-            functionSet.addBuiltin(ScalarFunction.createBuiltin(NOT_IN_ITERATE,
-                    Lists.newArrayList(t, t), true, Type.BOOLEAN,
-                    "starrocks::InPredicate::not_in_iterate", null, null, false));
-
-            String prepareFn = "starrocks::InPredicate::set_lookup_prepare_" + typeString;
-            String closeFn = "starrocks::InPredicate::set_lookup_close_" + typeString;
-            functionSet.addBuiltin(ScalarFunction.createBuiltin(IN_SET_LOOKUP,
-                    Lists.newArrayList(t, t), true, Type.BOOLEAN,
-                    "starrocks::InPredicate::in_set_lookup", prepareFn, closeFn, false));
-            functionSet.addBuiltin(ScalarFunction.createBuiltin(NOT_IN_SET_LOOKUP,
-                    Lists.newArrayList(t, t), true, Type.BOOLEAN,
-                    "starrocks::InPredicate::not_in_set_lookup", prepareFn, closeFn, false));
-
-        }
-    }
 
     // First child is the comparison expr for which we
     // should check membership in the inList (the remaining children).
@@ -206,8 +157,6 @@ public class InPredicate extends Predicate {
         // function and will fail analysis.
         Type[] argTypes = {getChild(0).type, getChild(1).type};
         if (useSetLookup) {
-            // fn = getBuiltinFunction(analyzer, isNotIn ? NOT_IN_SET_LOOKUP : IN_SET_LOOKUP,
-            // argTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             opcode = isNotIn ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN;
         } else {
             fn = getBuiltinFunction(analyzer, isNotIn ? NOT_IN_ITERATE : IN_ITERATE,
@@ -215,17 +164,7 @@ public class InPredicate extends Predicate {
             opcode = isNotIn ? TExprOpcode.FILTER_NEW_NOT_IN : TExprOpcode.FILTER_NEW_IN;
         }
 
-        Reference<SlotRef> slotRefRef = new Reference<SlotRef>();
-        Reference<Integer> idxRef = new Reference<Integer>();
-        if (isSingleColumnPredicate(slotRefRef,
-                idxRef) && idxRef.getRef() == 0 && slotRefRef.getRef().getNumDistinctValues() > 0) {
-            selectivity =
-                    (double) (getChildren().size() - 1) / (double) slotRefRef.getRef()
-                            .getNumDistinctValues();
-            selectivity = Math.max(0.0, Math.min(1.0, selectivity));
-        } else {
-            selectivity = Expr.DEFAULT_SELECTIVITY;
-        }
+        selectivity = Expr.DEFAULT_SELECTIVITY;
     }
 
     @Override
@@ -243,9 +182,22 @@ public class InPredicate extends Predicate {
     public String toSqlImpl() {
         StringBuilder strBuilder = new StringBuilder();
         String notStr = (isNotIn) ? "NOT " : "";
-        strBuilder.append(getChild(0).toSql() + " " + notStr + "IN (");
+        strBuilder.append(getChild(0).toSql()).append(" ").append(notStr).append("IN (");
         for (int i = 1; i < children.size(); ++i) {
             strBuilder.append(getChild(i).toSql());
+            strBuilder.append((i + 1 != children.size()) ? ", " : "");
+        }
+        strBuilder.append(")");
+        return strBuilder.toString();
+    }
+
+    @Override
+    public String toDigestImpl() {
+        StringBuilder strBuilder = new StringBuilder();
+        String notStr = (isNotIn) ? "not " : "";
+        strBuilder.append(getChild(0).toDigest()).append(" ").append(notStr).append("in (");
+        for (int i = 1; i < children.size(); ++i) {
+            strBuilder.append(getChild(i).toDigest());
             strBuilder.append((i + 1 != children.size()) ? ", " : "");
         }
         strBuilder.append(")");
@@ -287,27 +239,9 @@ public class InPredicate extends Predicate {
     public boolean equals(Object obj) {
         if (super.equals(obj)) {
             InPredicate expr = (InPredicate) obj;
-            if (isNotIn == expr.isNotIn) {
-                return true;
-            }
+            return isNotIn == expr.isNotIn;
         }
         return false;
-    }
-
-    @Override
-    public boolean isVectorized() {
-        for (Expr child : children) {
-            if (!child.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    @Override
-    public boolean isStrictPredicate() {
-        return getChild(0).unwrapSlotRef() != null;
     }
 
     public void setOpcode(TExprOpcode opcode) {
@@ -315,7 +249,7 @@ public class InPredicate extends Predicate {
     }
 
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitInPredicate(this, context);
     }
 }

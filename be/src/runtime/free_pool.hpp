@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_BE_RUNTIME_FREE_POOL_H
-#define STARROCKS_BE_SRC_QUERY_BE_RUNTIME_FREE_POOL_H
+#pragma once
 
 #include <cstdio>
 #include <cstring>
@@ -71,6 +70,7 @@ public:
             size = static_cast<int64_t>(1) << free_list_idx;
             allocation = reinterpret_cast<FreeListNode*>(
                     _mem_pool->allocate(size + sizeof(FreeListNode)));
+            assert(allocation != nullptr);
         } else {
             // Remove this allocation from the list.
             _lists[free_list_idx].next = allocation->next;
@@ -162,5 +162,3 @@ private:
 };
 
 } // namespace starrocks
-
-#endif

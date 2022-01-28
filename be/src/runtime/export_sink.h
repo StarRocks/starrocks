@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_RUNTIME_EXPORT_SINK_H
-#define STARROCKS_BE_SRC_RUNTIME_EXPORT_SINK_H
+#pragma once
 
 #include <vector>
 
@@ -40,7 +39,7 @@ class ExprContext;
 class MemTracker;
 class FileWriter;
 class Status;
-class TupleRow;
+class FileBuilder;
 
 // This class is a sinker, which put export data to external storage by broker.
 class ExportSink : public DataSink {
@@ -55,8 +54,6 @@ public:
 
     Status open(RuntimeState* state) override;
 
-    Status send(RuntimeState* state, RowBatch* batch) override;
-
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
     Status close(RuntimeState* state, Status exec_status) override;
@@ -64,10 +61,7 @@ public:
     RuntimeProfile* profile() override { return _profile; }
 
 private:
-    using ConverterPtr = std::unique_ptr<vectorized::csv::Converter>;
-
     Status open_file_writer(int timeout_ms);
-    Status gen_row_buffer(TupleRow* row, std::stringstream* ss);
     Status gen_file_name(std::string* file_name);
 
     RuntimeState* _state;
@@ -83,16 +77,11 @@ private:
 
     RuntimeProfile* _profile;
 
-    std::unique_ptr<MemTracker> _mem_tracker;
-
     RuntimeProfile::Counter* _bytes_written_counter;
     RuntimeProfile::Counter* _rows_written_counter;
     RuntimeProfile::Counter* _write_timer;
 
-    std::unique_ptr<vectorized::csv::OutputStreamFile> _output_stream;
-    std::vector<ConverterPtr> _converters;
+    std::unique_ptr<FileBuilder> _file_builder;
 };
 
 } // end namespace starrocks
-
-#endif // STARROCKS_BE_SRC_RUNTIME_EXPORT_SINK_H

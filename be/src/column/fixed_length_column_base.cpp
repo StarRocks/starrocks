@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <gutil/strings/fastmem.h>
 
@@ -11,7 +11,6 @@
 #include "util/coding.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
-#include "util/types.h"
 
 namespace starrocks::vectorized {
 
@@ -40,6 +39,17 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
     for (size_t i = 0; i < size; ++i) {
         _data[orig_size + i] = src_data[index];
     }
+}
+
+template <typename T>
+Status FixedLengthColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
+    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    size_t replace_num = src.size();
+    for (uint32_t i = 0; i < replace_num; ++i) {
+        DCHECK_LT(indexes[i], _data.size());
+        _data[indexes[i]] = src_data[i];
+    }
+    return Status::OK();
 }
 
 template <typename T>
@@ -158,34 +168,12 @@ const uint8_t* FixedLengthColumnBase<T>::deserialize_and_append(const uint8_t* p
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) {
-    raw::make_room(&_data, batch_size);
-    for (size_t i = 0; i < batch_size; ++i) {
+void FixedLengthColumnBase<T>::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+    raw::make_room(&_data, chunk_size);
+    for (size_t i = 0; i < chunk_size; ++i) {
         memcpy(&_data[i], srcs[i].data, sizeof(T));
         srcs[i].data = srcs[i].data + sizeof(T);
     }
-}
-
-template <typename T>
-uint8_t* FixedLengthColumnBase<T>::serialize_column(uint8_t* dst) {
-    uint32_t size = byte_size();
-    encode_fixed32_le(dst, size);
-    dst += sizeof(uint32_t);
-
-    strings::memcpy_inlined(dst, _data.data(), size);
-    dst += size;
-    return dst;
-}
-
-template <typename T>
-const uint8_t* FixedLengthColumnBase<T>::deserialize_column(const uint8_t* src) {
-    uint32_t size = decode_fixed32_le(src);
-    src += sizeof(uint32_t);
-
-    raw::make_room(&_data, size / sizeof(ValueType));
-    strings::memcpy_inlined(_data.data(), src, size);
-    src += size;
-    return src;
 }
 
 template <typename T>
@@ -256,10 +244,14 @@ template <typename T>
 std::string FixedLengthColumnBase<T>::debug_string() const {
     std::stringstream ss;
     ss << "[";
-    for (int i = 0; i < _data.size() - 1; ++i) {
+    size_t size = this->size();
+    for (int i = 0; i < size - 1; ++i) {
         ss << debug_item(i) << ", ";
     }
-    ss << debug_item(_data.size() - 1) << "]";
+    if (size > 0) {
+        ss << debug_item(size - 1);
+    }
+    ss << "]";
     return ss.str();
 }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -29,6 +29,8 @@ public class PruneWindowColumnsRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalWindowOperator windowOperator = (LogicalWindowOperator) input.getOp();
         ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
+        ColumnRefSet requiredInputColumns = new ColumnRefSet();
+        requiredInputColumns.union(requiredOutputColumns);
 
         Map<ColumnRefOperator, CallOperator> newWindowCall = new HashMap<>();
         windowOperator.getWindowCall().forEach((columnRefOperator, callOperator) -> {
@@ -42,15 +44,22 @@ public class PruneWindowColumnsRule extends TransformationRule {
         windowOperator.getOrderByElements().stream().map(Ordering::getColumnRef).forEach(
                 e -> requiredOutputColumns.union(e.getUsedColumns()));
 
+        windowOperator.getEnforceSortColumns().stream().map(Ordering::getColumnRef).forEach(
+                e -> requiredOutputColumns.union(e.getUsedColumns()));
+
         if (newWindowCall.keySet().equals(windowOperator.getWindowCall().keySet())) {
             return Collections.emptyList();
         }
 
-        return Lists.newArrayList(OptExpression.create(new LogicalWindowOperator(
-                newWindowCall,
-                windowOperator.getPartitionExpressions(),
-                windowOperator.getOrderByElements(),
-                windowOperator.getAnalyticWindow()
-        ), input.getInputs()));
+        //If newWindowCall is empty, it will be clipped in PruneEmptyWindowRule,
+        // so it is directly transmitted requiredOutputColumns here
+        if (newWindowCall.isEmpty()) {
+            requiredOutputColumns.clear();
+            requiredOutputColumns.union(requiredInputColumns);
+        }
+
+        return Lists.newArrayList(OptExpression.create(
+                new LogicalWindowOperator.Builder().withOperator(windowOperator).setWindowCall(newWindowCall).build(),
+                input.getInputs()));
     }
 }

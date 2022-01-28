@@ -37,6 +37,7 @@ template <typename T>
 class BlockingPriorityQueue {
 public:
     explicit BlockingPriorityQueue(size_t max_elements) : _max_element(max_elements) {}
+    ~BlockingPriorityQueue() { shutdown(); }
 
     // Return false iff has been shutdown.
     bool blocking_get(T* out) {
@@ -139,6 +140,7 @@ public:
     void shutdown() {
         {
             std::lock_guard<std::mutex> guard(_lock);
+            if (_shutdown) return;
             _shutdown = true;
         }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -18,9 +18,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -56,8 +56,17 @@ public class SplitAggregateRule extends TransformationRule {
         return agg.getType().isGlobal() && !agg.isSplit();
     }
 
-    // Note: This method logic must consistent with CostEstimator::canGenerateOneStageAggNode
-    private boolean needGenerateTwoStageAggregate(OptExpression input, long distinctCount) {
+    private boolean canGenerateMultiStageAggregate(OptExpression input) {
+        // Must do one stage aggregate If the child contains limit,
+        // the aggregation must be a single node to ensure correctness.
+        // eg. select count(*) from (select * table limit 2) t
+        if (input.inputAt(0).getOp().hasLimit()) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean mustGenerateMultiStageAggregate(OptExpression input, List<CallOperator> distinctAggCallOperator) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         // 1 Must do two stage aggregate if child operator is LogicalRepeatOperator
         //   If the repeat node is used as the input node of the Exchange node.
@@ -68,32 +77,36 @@ public class SplitAggregateRule extends TransformationRule {
         if (input.inputAt(0).getOp() instanceof LogicalRepeatOperator) {
             return true;
         }
-
         // 2 Must do two stage aggregate is aggregate function has array type
         if (aggregationOperator.getAggregations().values().stream().anyMatch(callOperator
                 -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()))) {
             return true;
         }
+        // 3. Must generate three, four phase aggregate for distinct aggregate with multi columns
+        boolean hasMultiColumns =
+                distinctAggCallOperator.stream().anyMatch(callOperator -> callOperator.getChildren().size() > 1);
+        if (distinctAggCallOperator.size() > 0 && hasMultiColumns) {
+            return true;
+        }
+        return false;
+    }
 
-        // 3 Must do one stage aggregate If the child contains limit,
-        // the aggregation must be a single node to ensure correctness.
-        // eg. select count(*) from (select * table limit 2) t
-        if (((LogicalOperator) input.inputAt(0).getOp()).getLimit() != -1) {
+    // Note: This method logic must consistent with CostEstimator::needGenerateOneStageAggNode
+    private boolean needGenerateMultiStageAggregate(OptExpression input, List<CallOperator> distinctAggCallOperator) {
+        // 1. check if can generate multi stage aggregate.
+        if (!canGenerateMultiStageAggregate(input)) {
             return false;
         }
-
-        // 4 Respect user hint
+        // 2. check if must generate multi stage aggregate.
+        if (mustGenerateMultiStageAggregate(input, distinctAggCallOperator)) {
+            return true;
+        }
+        // 3. Respect user hint
         int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
         if (aggStage == 1) {
             return false;
         }
-
-        // 5 generate two, three, four phase aggregate for distinct aggregate
-        if (distinctCount > 0) {
-            return true;
-        }
-
-        // 6 If scan tablet sum leas than 1, do one phase aggregate is enough
+        // 4. If scan tablet sum leas than 1, do one phase aggregate is enough
         if (aggStage == 0 && input.getLogicalProperty().isExecuteInOneTablet()) {
             return false;
         }
@@ -137,7 +150,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .collect(Collectors.toList());
         long distinctCount = distinctAggCallOperator.size();
 
-        if (!needGenerateTwoStageAggregate(input, distinctCount)) {
+        if (!needGenerateMultiStageAggregate(input, distinctAggCallOperator)) {
             return Lists.newArrayList();
         }
 
@@ -165,17 +178,13 @@ public class SplitAggregateRule extends TransformationRule {
                     newExpressions.addAll(implementOneDistinctWithGroupByAgg(
                             context.getColumnRefFactory(), input, operator,
                             singleDistinctFunctionPos));
-                    // Array type not support two stage distinct
-                    // Count Distinct with multi columns not support two stage aggregate
-                    if (distinctColumns.stream().anyMatch(column -> column.getType().isArrayType()) ||
-                            operator.getAggregations().values().stream().
-                                    anyMatch(callOperator -> callOperator.isDistinct() &&
-                                            callOperator.getChildren().size() > 1)) {
+                    if (!canGenerateTwoStageAggregate(operator, distinctColumns)) {
                         return newExpressions;
                     }
                     newExpressions.addAll(implementTwoStageAgg(input, operator));
                     return newExpressions;
-                } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2) {
+                } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2 &&
+                        canGenerateTwoStageAggregate(operator, distinctColumns)) {
                     return implementTwoStageAgg(input, operator);
                 } else {
                     return implementOneDistinctWithGroupByAgg(
@@ -186,17 +195,13 @@ public class SplitAggregateRule extends TransformationRule {
                 if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0) {
                     newExpressions.addAll(implementOneDistinctWithOutGroupByAgg(context.getColumnRefFactory(),
                             input, operator, distinctColumns, singleDistinctFunctionPos));
-                    // Array type not support two stage distinct
-                    // Count Distinct with multi columns not support two stage aggregate
-                    if (distinctColumns.stream().anyMatch(column -> column.getType().isArrayType()) ||
-                            operator.getAggregations().values().stream().
-                                    anyMatch(callOperator -> callOperator.isDistinct() &&
-                                            callOperator.getChildren().size() > 1)) {
+                    if (!canGenerateTwoStageAggregate(operator, distinctColumns)) {
                         return newExpressions;
                     }
                     newExpressions.addAll(implementTwoStageAgg(input, operator));
                     return newExpressions;
-                } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2) {
+                } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2 &&
+                        canGenerateTwoStageAggregate(operator, distinctColumns)) {
                     return implementTwoStageAgg(input, operator);
                 } else {
                     return implementOneDistinctWithOutGroupByAgg(context.getColumnRefFactory(),
@@ -208,15 +213,28 @@ public class SplitAggregateRule extends TransformationRule {
         return implementTwoStageAgg(input, operator);
     }
 
+    private boolean canGenerateTwoStageAggregate(LogicalAggregationOperator operator,
+                                                 List<ColumnRefOperator> distinctColumns) {
+        // Array type not support two stage distinct
+        // Count Distinct with multi columns not support two stage aggregate
+        if (distinctColumns.stream().anyMatch(column -> column.getType().isArrayType()) ||
+                operator.getAggregations().values().stream().
+                        anyMatch(callOperator -> callOperator.isDistinct() &&
+                                callOperator.getChildren().size() > 1)) {
+            return false;
+        }
+        return true;
+    }
+
     private CallOperator rewriteDistinctAggFn(CallOperator fnCall) {
         final String functionName = fnCall.getFnName();
         if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
-            return new CallOperator("MULTI_DISTINCT_COUNT", fnCall.getType(), fnCall.getChildren(),
-                    Expr.getBuiltinFunction("MULTI_DISTINCT_COUNT", new Type[] {fnCall.getChild(0).getType()},
+            return new CallOperator(FunctionSet.MULTI_DISTINCT_COUNT, fnCall.getType(), fnCall.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
         } else if (functionName.equalsIgnoreCase("SUM")) {
-            return new CallOperator("MULTI_DISTINCT_SUM", fnCall.getType(), fnCall.getChildren(),
-                    Expr.getBuiltinFunction("MULTI_DISTINCT_SUM", new Type[] {fnCall.getChild(0).getType()},
+            return new CallOperator(FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
         }
         return null;
@@ -243,7 +261,8 @@ public class SplitAggregateRule extends TransformationRule {
                 .setType(AggType.LOCAL)
                 .setAggregations(createNormalAgg(AggType.LOCAL, newAggMap))
                 .setPredicate(null)
-                .setLimit(-1)
+                .setLimit(Operator.DEFAULT_LIMIT)
+                .setProjection(null)
                 .build();
         OptExpression localOptExpression = OptExpression.create(local, input.getInputs());
 
@@ -317,6 +336,8 @@ public class SplitAggregateRule extends TransformationRule {
                 .setPartitionByColumns(partitionColumns)
                 .setSingleDistinctFunctionPos(singleDistinctFunctionPos)
                 .setPredicate(null)
+                .setLimit(Operator.DEFAULT_LIMIT)
+                .setProjection(null)
                 .build();
         OptExpression distinctLocalExpression = OptExpression.create(distinctLocal, distinctGlobalExpression);
 
@@ -383,8 +404,7 @@ public class SplitAggregateRule extends TransformationRule {
 
     // The phase concept please refer to AggregateInfo::AggPhase
     private Map<ColumnRefOperator, CallOperator> createDistinctAggForSecondPhase(
-            AggType aggType,
-            Map<ColumnRefOperator, CallOperator> aggregationMap) {
+            AggType aggType, Map<ColumnRefOperator, CallOperator> aggregationMap) {
         Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
             ColumnRefOperator column = entry.getKey();

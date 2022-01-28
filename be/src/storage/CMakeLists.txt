@@ -20,33 +20,24 @@
 # under the License.
 
 # where to put generated libraries
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/olap")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 # where to put generated binaries
-set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/olap")
+set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 add_subdirectory(rowset)
 add_subdirectory(fs)
 
-add_library(Olap STATIC
-    aggregate_func.cpp
+add_library(Storage STATIC
     base_tablet.cpp
-    comparison_predicate.cpp
     decimal12.cpp
     delete_handler.cpp
-    delta_writer.cpp
     del_vector.cpp
-    generic_iterators.cpp
     hll.cpp
-    in_list_predicate.cpp
-    iterators.cpp
     key_coder.cpp
     lru_cache.cpp
-    memtable.cpp
     memtable_flush_executor.cpp
-    merger.cpp
     null_predicate.cpp
-    olap_cond.cpp
     kv_store.cpp
     olap_server.cpp
     options.cpp
@@ -54,16 +45,10 @@ add_library(Olap STATIC
     primary_index.cpp
     primary_key_encoder.cpp
     protobuf_file.cpp
-    push_handler.cpp
-    reader.cpp
     rowset_update_state.cpp
     update_compaction_state.cpp
-    row_block.cpp
-    row_block2.cpp
-    row_cursor.cpp
     version_graph.cpp
     schema.cpp
-    schema_change.cpp
     storage_engine.cpp
     data_dir.cpp
     short_key_index.cpp
@@ -74,42 +59,48 @@ add_library(Olap STATIC
     tablet_meta.cpp
     tablet_meta_manager.cpp
     tablet_schema.cpp
+    tablet_schema_map.cpp
     tablet_updates.cpp
     txn_manager.cpp
     types.cpp
     update_manager.cpp
     utils.cpp
     wrapper_field.cpp
-    rowset/segment_v2/binary_plain_page.cpp
-    rowset/segment_v2/bitmap_index_reader.cpp
-    rowset/segment_v2/bitmap_index_writer.cpp
-    rowset/segment_v2/bitshuffle_page.cpp
-    rowset/segment_v2/bitshuffle_wrapper.cpp
-    rowset/segment_v2/column_reader.cpp
-    rowset/segment_v2/column_writer.cpp
-    rowset/segment_v2/encoding_info.cpp
-    rowset/segment_v2/index_page.cpp
-    rowset/segment_v2/indexed_column_reader.cpp
-    rowset/segment_v2/indexed_column_writer.cpp
-    rowset/segment_v2/ordinal_page_index.cpp
-    rowset/segment_v2/page_io.cpp
-    rowset/segment_v2/binary_dict_page.cpp
-    rowset/segment_v2/binary_prefix_page.cpp
-    rowset/segment_v2/segment.cpp
-    rowset/segment_v2/segment_iterator.cpp
-    rowset/segment_v2/empty_segment_iterator.cpp
-    rowset/segment_v2/segment_writer.cpp
-    rowset/segment_v2/block_split_bloom_filter.cpp
-    rowset/segment_v2/bloom_filter_index_reader.cpp
-    rowset/segment_v2/bloom_filter_index_writer.cpp
-    rowset/segment_v2/bloom_filter.cpp
-    rowset/segment_v2/parsed_page.cpp
-    rowset/segment_v2/zone_map_index.cpp
+    rowset/array_column_iterator.cpp
+    rowset/binary_plain_page.cpp
+    rowset/bitmap_index_reader.cpp
+    rowset/bitmap_index_writer.cpp
+    rowset/bitshuffle_page.cpp
+    rowset/bitshuffle_wrapper.cpp
+    rowset/column_iterator.cpp
+    rowset/column_reader.cpp
+    rowset/column_writer.cpp
+    rowset/column_decoder.cpp
+    rowset/default_value_column_iterator.cpp
+    rowset/dictcode_column_iterator.cpp
+    rowset/encoding_info.cpp
+    rowset/scalar_column_iterator.cpp
+    rowset/index_page.cpp
+    rowset/indexed_column_reader.cpp
+    rowset/indexed_column_writer.cpp
+    rowset/ordinal_page_index.cpp
+    rowset/page_io.cpp
+    rowset/binary_dict_page.cpp
+    rowset/binary_prefix_page.cpp
+    rowset/segment.cpp
+    rowset/segment_writer.cpp
+    rowset/segment_rewriter.cpp
+    rowset/storage_page_decoder.cpp
+    rowset/block_split_bloom_filter.cpp
+    rowset/bloom_filter_index_reader.cpp
+    rowset/bloom_filter_index_writer.cpp
+    rowset/bloom_filter.cpp
+    rowset/parsed_page.cpp
+    rowset/zone_map_index.cpp
     rowset/vectorized/rowset_writer_adapter.cpp
     rowset/vectorized/segment_chunk_iterator_adapter.cpp
     rowset/vectorized/segment_iterator.cpp
     rowset/vectorized/segment_options.cpp
-    rowset/vectorized/segment_v2_iterator_adapter.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
@@ -118,6 +109,7 @@ add_library(Olap STATIC
     task/engine_alter_tablet_task.cpp
     column_vector.cpp
     vectorized/aggregate_iterator.cpp
+    vectorized/async_delta_writer.cpp
     vectorized/chunk_helper.cpp
     vectorized/column_eq_predicate.cpp
     vectorized/column_ge_predicate.cpp
@@ -129,6 +121,7 @@ add_library(Olap STATIC
     vectorized/column_not_in_predicate.cpp
     vectorized/column_null_predicate.cpp
     vectorized/column_or_predicate.cpp
+    vectorized/column_expr_predicate.cpp
     vectorized/conjunctive_predicates.cpp
     vectorized/convert_helper.cpp
     vectorized/delete_predicates.cpp
@@ -138,6 +131,8 @@ add_library(Olap STATIC
     vectorized/predicate_parser.cpp
     vectorized/projection_iterator.cpp
     vectorized/push_handler.cpp
+    vectorized/row_source_mask.cpp
+    vectorized/schema_change.cpp
     vectorized/tablet_reader.cpp
     vectorized/tablet_reader_params.cpp
     vectorized/meta_reader.cpp
@@ -152,4 +147,6 @@ add_library(Olap STATIC
     vectorized/cumulative_compaction.cpp
     vectorized/compaction.cpp
     vectorized/rowset_merger.cpp
+    vectorized/column_predicate_rewriter.cpp
+    vectorized/column_predicate_dict_conjuct.cpp
 )

@@ -71,10 +71,6 @@ public class StarRocksAssert {
         return this;
     }
 
-    public StarRocksAssert enableNewPlanner() {
-        return this;
-    }
-
     public StarRocksAssert withDatabase(String dbName) throws Exception {
         CreateDbStmt createDbStmt =
                 (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt("create database " + dbName + ";", ctx);
@@ -199,7 +195,7 @@ public class StarRocksAssert {
         }
 
         public String explainQuery() throws Exception {
-            return UtFrameUtils.getNewFragmentPlan(connectContext, sql);
+            return UtFrameUtils.getFragmentPlan(connectContext, sql);
         }
 
         public void analysisError(String keywords) {

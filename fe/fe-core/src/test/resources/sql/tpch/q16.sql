@@ -30,9 +30,9 @@ order by
     p_type,
     p_size ;
 [result]
-TOP-N (order by [[26: count(distinct 2: PS_SUPPKEY) DESC NULLS LAST, 10: P_BRAND ASC NULLS FIRST, 11: P_TYPE ASC NULLS FIRST, 12: P_SIZE ASC NULLS FIRST]])
-    TOP-N (order by [[26: count(distinct 2: PS_SUPPKEY) DESC NULLS LAST, 10: P_BRAND ASC NULLS FIRST, 11: P_TYPE ASC NULLS FIRST, 12: P_SIZE ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{26: count(distinct 2: PS_SUPPKEY)=count(2: PS_SUPPKEY)}] group by [[10: P_BRAND, 11: P_TYPE, 12: P_SIZE]] having [null]
+TOP-N (order by [[26: count DESC NULLS LAST, 10: P_BRAND ASC NULLS FIRST, 11: P_TYPE ASC NULLS FIRST, 12: P_SIZE ASC NULLS FIRST]])
+    TOP-N (order by [[26: count DESC NULLS LAST, 10: P_BRAND ASC NULLS FIRST, 11: P_TYPE ASC NULLS FIRST, 12: P_SIZE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{26: count=count(2: PS_SUPPKEY)}] group by [[10: P_BRAND, 11: P_TYPE, 12: P_SIZE]] having [null]
             AGGREGATE ([DISTINCT_GLOBAL] aggregate [{}] group by [[2: PS_SUPPKEY, 10: P_BRAND, 11: P_TYPE, 12: P_SIZE]] having [null]
                 EXCHANGE SHUFFLE[10, 11, 12]
                     AGGREGATE ([LOCAL] aggregate [{}] group by [[2: PS_SUPPKEY, 10: P_BRAND, 11: P_TYPE, 12: P_SIZE]] having [null]

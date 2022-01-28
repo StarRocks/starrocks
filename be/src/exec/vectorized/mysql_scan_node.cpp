@@ -1,6 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "mysql_scan_node.h"
+
+#include <fmt/format.h>
 
 #include <sstream>
 
@@ -9,16 +11,14 @@
 #include "column/fixed_length_column_base.h"
 #include "column/nullable_column.h"
 #include "common/config.h"
-#include "exec/text_converter.hpp"
 #include "exprs/slot_ref.h"
+#include "exprs/vectorized/in_const_predicate.hpp"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/decimalv3.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "runtime/tuple_row.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -30,7 +30,12 @@ MysqlScanNode::MysqlScanNode(ObjectPool* pool, const TPlanNode& tnode, const Des
           _tuple_id(tnode.mysql_scan_node.tuple_id),
           _columns(tnode.mysql_scan_node.columns),
           _filters(tnode.mysql_scan_node.filters),
-          _tuple_desc(nullptr) {}
+          _tuple_desc(nullptr) {
+    _limit = -1;
+    if (tnode.mysql_scan_node.__isset.limit) {
+        _limit = tnode.mysql_scan_node.limit;
+    }
+}
 
 Status MysqlScanNode::prepare(RuntimeState* state) {
     VLOG(1) << "MysqlScanNode::Prepare";
@@ -58,10 +63,10 @@ Status MysqlScanNode::prepare(RuntimeState* state) {
     _my_param.passwd = mysql_table->passwd();
     _my_param.db = mysql_table->mysql_db();
     // new one scanner
-    _mysql_scanner.reset(new (std::nothrow) MysqlScanner(_my_param));
+    _mysql_scanner = std::make_unique<MysqlScanner>(_my_param);
     DCHECK(_mysql_scanner != nullptr);
 
-    _tuple_pool.reset(new (std::nothrow) MemPool(mem_tracker()));
+    _tuple_pool = std::make_unique<MemPool>();
     DCHECK(_tuple_pool != nullptr);
 
     _is_init = true;
@@ -80,7 +85,100 @@ Status MysqlScanNode::open(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(_mysql_scanner->open());
-    RETURN_IF_ERROR(_mysql_scanner->query(_table_name, _columns, _filters));
+
+    // Get [slot_id, slot] map
+    std::unordered_map<SlotId, SlotDescriptor*> slot_by_id;
+    for (SlotDescriptor* slot : _tuple_desc->slots()) {
+        slot_by_id[slot->id()] = slot;
+    }
+
+    std::unordered_map<std::string, std::vector<std::string>> filters_in;
+    std::unordered_map<std::string, bool> filters_null_in_set;
+
+    // In Filter have been put into _conjunct_ctxs,
+    // so we iterate all ExprContext to use it.
+    for (int i = 0; i < _conjunct_ctxs.size(); ++i) {
+        ExprContext* ctx = _conjunct_ctxs[i];
+        const Expr* root_expr = ctx->root();
+        if (root_expr != nullptr) {
+            std::vector<SlotId> slot_ids;
+
+            // In Filter must has only one slot_id.
+            if (root_expr->get_slot_ids(&slot_ids) != 1) {
+                continue;
+            }
+
+            SlotId slot_id = slot_ids[0];
+            auto iter = slot_by_id.find(slot_id);
+            if (iter != slot_by_id.end()) {
+                PrimitiveType type = iter->second->type().type;
+                // dipatch to process,
+                // we support numerical type, char type and date type.
+                switch (type) {
+                    // In Filter is must handle by VectorizedInConstPredicate type.
+#define READ_CONST_PREDICATE(TYPE, APPEND_TO_SQL)                                             \
+    case TYPE: {                                                                              \
+        if (typeid(*root_expr) == typeid(VectorizedInConstPredicate<TYPE>)) {                 \
+            const auto* pred = down_cast<const VectorizedInConstPredicate<TYPE>*>(root_expr); \
+            const auto& hash_set = pred->hash_set();                                          \
+            if (pred->is_not_in()) {                                                          \
+                continue;                                                                     \
+            }                                                                                 \
+            auto& field_name = iter->second->col_name();                                      \
+            filters_null_in_set[field_name] = pred->null_in_set();                            \
+            std::vector<std::string> vector_values;                                           \
+            vector_values.reserve(1024);                                                      \
+            for (const auto& value : hash_set) {                                              \
+                APPEND_TO_SQL                                                                 \
+            }                                                                                 \
+            filters_in.emplace(field_name, vector_values);                                    \
+        }                                                                                     \
+        break;                                                                                \
+    }
+
+#define DIRECT_APPEND_TO_SQL vector_values.emplace_back(std::to_string(value));
+                    APPLY_FOR_NUMERICAL_TYPE(READ_CONST_PREDICATE, DIRECT_APPEND_TO_SQL)
+#undef APPLY_FOR_NUMERICAL_TYPE
+#undef DIRECT_APPEND_TO_SQL
+
+#define CONVERT_APPEND_TO_SQL          \
+    std::stringstream ss;              \
+    for (char c : value.to_string()) { \
+        if (c == '"') {                \
+            ss << '\\';                \
+        }                              \
+        ss << c;                       \
+    }                                  \
+    vector_values.emplace_back(fmt::format("'{}'", ss.str()));
+                    APPLY_FOR_VARCHAR_DATE_TYPE(READ_CONST_PREDICATE, CONVERT_APPEND_TO_SQL)
+#undef APPLY_FOR_VARCHAR_DATE_TYPE
+#undef CONVERT_APPEND_TO_SQL
+
+                case INVALID_TYPE:
+                case TYPE_NULL:
+                case TYPE_BINARY:
+                case TYPE_DECIMAL:
+                case TYPE_STRUCT:
+                case TYPE_ARRAY:
+                case TYPE_MAP:
+                case TYPE_HLL:
+                case TYPE_TIME:
+                case TYPE_OBJECT:
+                case TYPE_PERCENTILE:
+                case TYPE_LARGEINT:
+                case TYPE_DECIMAL128:
+                case TYPE_DECIMALV2:
+                case TYPE_DECIMAL32:
+                case TYPE_DECIMAL64:
+                case TYPE_DOUBLE:
+                case TYPE_FLOAT:
+                    break;
+                }
+            }
+        }
+    }
+
+    RETURN_IF_ERROR(_mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _limit));
     // check materialize slot num
     int materialize_num = 0;
 
@@ -325,7 +423,7 @@ Status MysqlScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
             return Status::OK();
         }
 
-        if (row_num >= config::vector_chunk_size) {
+        if (row_num >= runtime_state()->chunk_size()) {
             return Status::OK();
         }
 
@@ -374,10 +472,6 @@ Status MysqlScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
         ++_num_rows_returned;
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
-}
-
-Status MysqlScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::InternalError("Not support");
 }
 
 Status MysqlScanNode::close(RuntimeState* state) {

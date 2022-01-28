@@ -1,5 +1,5 @@
 #!/bin/bash
-# This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #####################################################
 # Download url, filename and unpaced filename
@@ -13,7 +13,7 @@
 HADOOP_DOWNLOAD="https://cdn-thirdparty.starrocks.com/hadoop-3.3.0.tar.gz"
 HADOOP_NAME="hadoop-3.3.0.tar.gz"
 HADOOP_SOURCE="hadoop-3.3.0"
-HADOOP_MD5SUM="c4ba5155ec44abcb63d183d2dbe38df9"
+HADOOP_MD5SUM="46c5004739df0c452610d5946eb8ce28"
 
 # OPEN JDK
 JDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/java-se-8u41-ri.tar.gz"

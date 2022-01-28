@@ -1,7 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -14,10 +16,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.SqlParserUtils;
-import com.starrocks.planner.PlannerContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.OriginStatement;
@@ -27,7 +29,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -54,7 +56,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
-import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -64,6 +66,7 @@ public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
     private static final int STATISTIC_DATA_VERSION = 1;
+    private static final int STATISTIC_DICT_VERSION = 101;
 
     private static final String QUERY_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), update_time, db_id, table_id, column_name,"
@@ -101,9 +104,6 @@ public class StatisticExecutor {
 
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
 
-    private static final DateTimeFormatter DEFAULT_UPDATE_TIME_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
     static {
         DEFAULT_VELOCITY_ENGINE = new VelocityEngine();
         // close velocity log
@@ -137,7 +137,61 @@ public class StatisticExecutor {
         }
     }
 
-    private List<TStatisticData> deserializerStatisticData(List<TResultBatch> sqlResult) throws TException {
+    public static List<TStatisticData> queryDictSync(Long dbId, Long tableId, String column) throws Exception {
+        return queryDictSync(dbId, tableId, ImmutableList.of(column));
+    }
+
+    public static List<TStatisticData> queryDictSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
+        if (dbId == -1) {
+            return Collections.emptyList();
+        }
+
+        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Table table = db.getTable(tableId);
+
+        OlapTable olapTable = (OlapTable) table;
+        long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
+                .max(Long::compareTo).orElse(0L);
+        String dbName = ClusterNamespace.getNameFromFullName(db.getFullName());
+        String tableName = db.getTable(tableId).getName();
+
+        StringBuilder sqlBuilder = new StringBuilder("select cast(").append(STATISTIC_DICT_VERSION).append(" as Int), ").
+                append("cast(").append(version).append(" as bigint), ");
+        for (int i = 0; i < columnNames.size(); ++i) {
+            sqlBuilder.append("dict_merge(").append("`").append(columnNames.get(i))
+                    .append("`) as _dict_merge_")
+                    .append(columnNames.get(i));
+            if (i != columnNames.size() - 1) {
+                sqlBuilder.append(", ");
+            }
+        }
+        sqlBuilder.append(" from ").append(dbName).append(".").append(tableName).append(" [_META_]");
+        String sql = sqlBuilder.toString();
+        Map<String, Database> dbs = Maps.newHashMap();
+
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = parseSQL(sql, context);
+            ((QueryStmt) parsedStmt).getDbs(context, dbs);
+            Preconditions.checkState(dbs.size() == 1);
+        } catch (Exception e) {
+            LOG.warn("Parse statistic dict query {} fail.", sql, e);
+            throw e;
+        }
+
+        try {
+            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true);
+            List<TResultBatch> sqlResult = executeStmt(context, execPlan);
+            LOG.warn("Parse success {}", sql);
+            return deserializerStatisticData(sqlResult);
+        } catch (Exception e) {
+            LOG.warn("Execute statistic dict query {} fail.", sql, e);
+            throw e;
+        }
+    }
+
+    private static List<TStatisticData> deserializerStatisticData(List<TResultBatch> sqlResult) throws TException {
         List<TStatisticData> statistics = Lists.newArrayList();
 
         if (sqlResult.size() < 1) {
@@ -149,7 +203,7 @@ public class StatisticExecutor {
             return statistics;
         }
 
-        if (version == STATISTIC_DATA_VERSION) {
+        if (version == STATISTIC_DATA_VERSION || version == STATISTIC_DICT_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -250,8 +304,8 @@ public class StatisticExecutor {
         }
     }
 
-    private ExecPlan getExecutePlan(Map<String, Database> dbs, ConnectContext context,
-                                    StatementBase parsedStmt, boolean isStatistic) {
+    private static ExecPlan getExecutePlan(Map<String, Database> dbs, ConnectContext context,
+                                           StatementBase parsedStmt, boolean isStatistic) {
         SessionVariable sessionVariable = VariableMgr.newSessionVariable();
         ExecPlan execPlan;
         try {
@@ -261,7 +315,7 @@ public class StatisticExecutor {
             QueryRelation query = (QueryRelation) analyzer.analyze(parsedStmt);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory).transform(query);
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, context).transform(query);
 
             Optimizer optimizer = new Optimizer();
             OptExpression optimizedPlan = optimizer.optimize(
@@ -271,9 +325,8 @@ public class StatisticExecutor {
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
 
-            PlannerContext plannerContext = new PlannerContext(null, null, sessionVariable.toThrift(), null);
             execPlan = new PlanFragmentBuilder()
-                    .createStatisticPhysicalPlan(optimizedPlan, plannerContext, context, logicalPlan.getOutputColumn(),
+                    .createStatisticPhysicalPlan(optimizedPlan, context, logicalPlan.getOutputColumn(),
                             columnRefFactory, isStatistic);
         } finally {
             unLock(dbs);
@@ -314,7 +367,7 @@ public class StatisticExecutor {
         return parsedStmt;
     }
 
-    private List<TResultBatch> executeStmt(ConnectContext context, ExecPlan plan) throws Exception {
+    private static List<TResultBatch> executeStmt(ConnectContext context, ExecPlan plan) throws Exception {
         Coordinator coord =
                 new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
         coord.exec();
@@ -494,44 +547,7 @@ public class StatisticExecutor {
             return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`)), 0)";
         }
 
-        long typeSize = 0;
-        switch (column.getPrimitiveType()) {
-            case NULL_TYPE:
-            case BOOLEAN:
-            case TINYINT:
-                typeSize = 1;
-                break;
-            case SMALLINT:
-                typeSize = 2;
-                break;
-            case INT:
-            case DECIMAL32:
-            case DATE:
-                typeSize = 4;
-                break;
-            case BIGINT:
-            case DECIMAL64:
-            case DOUBLE:
-            case FLOAT:
-            case TIME:
-            case DATETIME:
-                typeSize = 8;
-                break;
-            case LARGEINT:
-            case DECIMALV2:
-            case DECIMAL128:
-                typeSize = 16;
-                break;
-            case HLL:
-                // 16KB
-                typeSize = 16 * 1024;
-                break;
-            case BITMAP:
-            case PERCENTILE:
-                // 1MB
-                typeSize = 1024 * 1024;
-                break;
-        }
+        long typeSize = column.getType().getTypeSize();
 
         if (isSample && !column.getType().isOnlyMetricType()) {
             return "IFNULL(SUM(t1.count), 0) * " + typeSize;
@@ -540,7 +556,7 @@ public class StatisticExecutor {
     }
 
     // Lock all database before analyze
-    private void lock(Map<String, Database> dbs) {
+    private static void lock(Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
@@ -550,7 +566,7 @@ public class StatisticExecutor {
     }
 
     // unLock all database after analyze
-    private void unLock(Map<String, Database> dbs) {
+    private static void unLock(Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }

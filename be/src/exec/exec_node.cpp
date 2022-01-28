@@ -31,8 +31,9 @@
 #include "common/status.h"
 #include "exec/empty_set_node.h"
 #include "exec/exchange_node.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "exec/select_node.h"
-#include "exec/vectorized/adapter_node.h"
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 #include "exec/vectorized/aggregate/aggregate_streaming_node.h"
 #include "exec/vectorized/aggregate/distinct_blocking_node.h"
@@ -61,67 +62,15 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/row_batch.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "simd/simd.h"
 #include "util/debug_util.h"
 #include "util/runtime_profile.h"
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 namespace starrocks {
 
 const std::string ExecNode::ROW_THROUGHPUT_COUNTER = "RowsReturnedRate";
-
-int ExecNode::get_node_id_from_profile(RuntimeProfile* p) {
-    return p->metadata();
-}
-
-ExecNode::RowBatchQueue::RowBatchQueue(int max_batches) : TimedBlockingQueue<RowBatch*>(max_batches) {}
-
-ExecNode::RowBatchQueue::~RowBatchQueue() {
-    DCHECK(cleanup_queue_.empty());
-}
-
-void ExecNode::RowBatchQueue::AddBatch(RowBatch* batch) {
-    if (!blocking_put(batch)) {
-        std::lock_guard<std::mutex> lock(lock_);
-        cleanup_queue_.push_back(batch);
-    }
-}
-
-bool ExecNode::RowBatchQueue::AddBatchWithTimeout(RowBatch* batch, int64_t timeout_micros) {
-    // return blocking_put_with_timeout(batch, timeout_micros);
-    return blocking_put(batch);
-}
-
-RowBatch* ExecNode::RowBatchQueue::GetBatch() {
-    RowBatch* result = nullptr;
-    if (blocking_get(&result)) return result;
-    return nullptr;
-}
-
-int ExecNode::RowBatchQueue::Cleanup() {
-    int num_io_buffers = 0;
-
-    // RowBatch* batch = NULL;
-    // while ((batch = GetBatch()) != NULL) {
-    //   num_io_buffers += batch->num_io_buffers();
-    //   delete batch;
-    // }
-
-    std::lock_guard<std::mutex> l(lock_);
-    for (auto& it : cleanup_queue_) {
-        // num_io_buffers += (*it)->num_io_buffers();
-        delete it;
-    }
-    cleanup_queue_.clear();
-    return num_io_buffers;
-}
 
 ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : _id(tnode.node_id),
@@ -138,16 +87,21 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _rows_returned_rate(nullptr),
           _memory_used_counter(nullptr),
           _use_vectorized(tnode.use_vectorized),
+          _runtime_state(nullptr),
           _is_closed(false) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
 
-ExecNode::~ExecNode() = default;
+ExecNode::~ExecNode() {
+    if (runtime_state() != nullptr) {
+        ExecNode::close(_runtime_state);
+    }
+}
 
-void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
+void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
         for (auto& i : _children) {
-            i->push_down_predicate(state, expr_ctxs, is_vectorized);
+            i->push_down_predicate(state, expr_ctxs);
             if (expr_ctxs->size() == 0) {
                 return;
             }
@@ -159,7 +113,7 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
         if ((*iter)->root()->is_bound(_tuple_ids)) {
             // LOG(INFO) << "push down success expr is " << (*iter)->debug_string()
             //          << " and node is " << debug_string();
-            (*iter)->prepare(state, row_desc(), _expr_mem_tracker.get());
+            (*iter)->prepare(state, row_desc());
             (*iter)->open(state);
             _conjunct_ctxs.push_back(*iter);
             iter = expr_ctxs->erase(iter);
@@ -169,11 +123,20 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
     }
 }
 
+void ExecNode::push_down_tuple_slot_mappings(RuntimeState* state,
+                                             const std::vector<TupleSlotMapping>& parent_mappings) {
+    _tuple_slot_mappings = parent_mappings;
+    for (auto& child : _children) {
+        child->push_down_tuple_slot_mappings(state, _tuple_slot_mappings);
+    }
+}
+
 void ExecNode::push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector) {
+    if (collector->empty()) return;
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
         push_down_join_runtime_filter_to_children(state, collector);
     }
-    _runtime_filter_collector.push_down(collector, _tuple_ids);
+    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
 }
 
 void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state,
@@ -204,12 +167,27 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
     if (state != nullptr && state->query_options().__isset.runtime_filter_wait_timeout_ms) {
         _runtime_filter_collector.set_wait_timeout_ms(state->query_options().runtime_filter_wait_timeout_ms);
     }
+    if (tnode.__isset.filter_null_value_columns) {
+        _filter_null_value_columns = tnode.filter_null_value_columns;
+    }
     return Status::OK();
 }
 
+void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::PipelineBuilderContext* context,
+                                                const RcRfProbeCollectorPtr& rc_rf_probe_collector) {
+    op->init_runtime_filter(context->fragment_context()->runtime_filter_hub(), this->get_tuple_ids(),
+                            this->local_rf_waiting_set(), this->row_desc(), rc_rf_probe_collector,
+                            std::move(_filter_null_value_columns), std::move(_tuple_slot_mappings));
+}
+
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    VLOG(2) << "ExecNode init:\n" << apache::thrift::ThriftDebugString(tnode);
+    _runtime_state = state;
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs));
     RETURN_IF_ERROR(init_join_runtime_filters(tnode, state));
+    if (tnode.__isset.local_rf_waiting_set) {
+        _local_rf_waiting_set = tnode.local_rf_waiting_set;
+    }
     return Status::OK();
 }
 
@@ -223,12 +201,9 @@ Status ExecNode::prepare(RuntimeState* state) {
                 return RuntimeProfile::units_per_second(capture0, capture1);
             },
             "");
-    _mem_tracker.reset(
-            new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), state->instance_mem_tracker()));
-    _expr_mem_tracker.reset(new MemTracker(-1, "Exprs", _mem_tracker.get()));
-    _expr_mem_pool.reset(new MemPool(_expr_mem_tracker.get()));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc(), expr_mem_tracker()));
-    RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), expr_mem_tracker(), _runtime_profile.get()));
+    _mem_tracker.reset(new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc()));
+    RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), _runtime_profile.get()));
 
     // TODO(zc):
     // AddExprCtxsToFree(_conjunct_ctxs);
@@ -259,12 +234,12 @@ pipeline::OpFactories ExecNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 }
 
 // specific_get_next to get chunks, It's implemented in subclass.
-// if pre chunk is nullptr current chunk size >= batch_size / 2, direct return the current chunk
+// if pre chunk is nullptr current chunk size >= chunk_size / 2, direct return the current chunk
 // if pre chunk is not nullptr and pre chunk size + cur chunk size <= 4096, merge the two chunk
 // if pre chunk is not nullptr and pre chunk size + cur chunk size > 4096, return pre chunk
 Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* eos, ChunkPtr& pre_output_chunk,
                                     const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next) {
-    size_t batch_size = state->batch_size();
+    size_t chunk_size = state->chunk_size();
 
     while (true) {
         bool cur_eos = false;
@@ -285,8 +260,8 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
             if (cur_size <= 0) {
                 continue;
             } else if (pre_output_chunk == nullptr) {
-                if (cur_size >= batch_size / 2) {
-                    // the probe chunk size of read from right child >= batch_size, direct return
+                if (cur_size >= chunk_size / 2) {
+                    // the probe chunk size of read from right child >= chunk_size, direct return
                     *eos = false;
                     *chunk = std::move(cur_chunk);
                     return Status::OK();
@@ -295,8 +270,8 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
                     continue;
                 }
             } else {
-                if (cur_size + pre_output_chunk->num_rows() > batch_size) {
-                    // the two chunk size > batch_size, return the first reserved chunk
+                if (cur_size + pre_output_chunk->num_rows() > chunk_size) {
+                    // the two chunk size > chunk_size, return the first reserved chunk
                     *eos = false;
                     *chunk = std::move(pre_output_chunk);
                     pre_output_chunk = std::move(cur_chunk);
@@ -355,18 +330,6 @@ Status ExecNode::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
     _runtime_filter_collector.close(state);
 
-    if (expr_mem_pool() != nullptr) {
-        _expr_mem_pool->free_all();
-    }
-
-    if (_expr_mem_tracker != nullptr) {
-        _expr_mem_tracker->close();
-    }
-
-    if (_mem_tracker != nullptr) {
-        _mem_tracker->close();
-    }
-
     return result;
 }
 
@@ -381,7 +344,6 @@ Status ExecNode::create_tree(RuntimeState* state, ObjectPool* pool, const TPlan&
     RETURN_IF_ERROR(create_tree_helper(state, pool, plan.nodes, descs, nullptr, &node_idx, root));
 
     if (node_idx + 1 != plan.nodes.size()) {
-        // TODO: print thrift msg for diagnostic purposes.
         return Status::InternalError("Plan tree only partially reconstructed. Not all thrift nodes were used.");
     }
 
@@ -392,7 +354,6 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
                                     const DescriptorTbl& descs, ExecNode* parent, int* node_idx, ExecNode** root) {
     // propagate error case
     if (*node_idx >= tnodes.size()) {
-        // TODO: print thrift msg
         return Status::InternalError("Failed to reconstruct plan tree from thrift.");
     }
     const TPlanNode& tnode = tnodes[*node_idx];
@@ -529,18 +490,6 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     }
 }
 
-void ExecNode::set_debug_options(int node_id, TExecNodePhase::type phase, TDebugAction::type action, ExecNode* root) {
-    if (root->_id == node_id) {
-        root->_debug_phase = phase;
-        root->_debug_action = action;
-        return;
-    }
-
-    for (auto& i : root->_children) {
-        set_debug_options(node_id, phase, action, i);
-    }
-}
-
 std::string ExecNode::debug_string() const {
     std::stringstream out;
     this->debug_string(0, &out);
@@ -561,16 +510,6 @@ void ExecNode::debug_string(int indentation_level, std::stringstream* out) const
         *out << "\n";
         i->debug_string(indentation_level + 1, out);
     }
-}
-
-bool ExecNode::eval_conjuncts(ExprContext* const* ctxs, int num_ctxs, TupleRow* row) {
-    for (int i = 0; i < num_ctxs; ++i) {
-        BooleanVal v = ctxs[i]->get_boolean_val(row);
-        if (v.is_null || !v.val) {
-            return false;
-        }
-    }
-    return true;
 }
 
 static void eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk) {
@@ -626,6 +565,7 @@ static void eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, ve
 void ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
                               vectorized::FilterPtr* filter_ptr) {
     // No need to do expression if none rows
+    DCHECK(chunk != nullptr);
     if (chunk->num_rows() == 0) {
         return;
     }
@@ -680,11 +620,55 @@ void ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized:
 void ExecNode::eval_join_runtime_filters(vectorized::Chunk* chunk) {
     if (chunk == nullptr) return;
     _runtime_filter_collector.evaluate(chunk);
+    eval_filter_null_values(chunk);
 }
 
 void ExecNode::eval_join_runtime_filters(vectorized::ChunkPtr* chunk) {
     if (chunk == nullptr) return;
     eval_join_runtime_filters(chunk->get());
+}
+
+void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns) {
+    if (filter_null_value_columns.size() == 0) return;
+    size_t before_size = chunk->num_rows();
+    if (before_size == 0) return;
+
+    // lazy allocation.
+    vectorized::Buffer<uint8_t> selection(0);
+
+    for (SlotId slot_id : filter_null_value_columns) {
+        const ColumnPtr& c = chunk->get_column_by_slot_id(slot_id);
+        if (!c->is_nullable()) continue;
+        const vectorized::NullableColumn* nullable_column =
+                vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(c);
+        if (!nullable_column->has_null()) continue;
+        if (selection.size() == 0) {
+            selection.assign(before_size, 1);
+        }
+        // how many data() should we call? I really don't know.
+        // let compiler tells me.
+        // let compiler does vectorization.
+        // let compiler does everything.
+        // let's pray for compiler,
+        // till the end of the world.
+        const uint8_t* nulls = nullable_column->null_column()->raw_data();
+        uint8_t* sel = selection.data();
+        for (size_t i = 0; i < before_size; i++) {
+            sel[i] &= !nulls[i];
+        }
+    }
+    if (selection.size() == 0) return;
+
+    size_t after_size = SIMD::count_nonzero(selection);
+    // Those rows will be filtered out anyway, better to be filtered out here.
+    if (after_size != before_size) {
+        VLOG_FILE << "filter null values. before_size = " << before_size << ", after_size = " << after_size;
+        chunk->filter(selection);
+    }
+}
+
+void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk) {
+    eval_filter_null_values(chunk, _filter_null_value_columns);
 }
 
 void ExecNode::collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode*>* nodes) {
@@ -703,20 +687,6 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::ES_HTTP_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::HDFS_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::META_SCAN_NODE, nodes);
-}
-
-bool ExecNode::_check_has_vectorized_scan_child() {
-    if (_use_vectorized) {
-        return true;
-    }
-
-    for (auto& i : _children) {
-        if (i->_check_has_vectorized_scan_child()) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 void ExecNode::init_runtime_profile(const std::string& name) {

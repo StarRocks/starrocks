@@ -21,36 +21,47 @@
 
 #include "storage/task/engine_alter_tablet_task.h"
 
-#include "storage/schema_change.h"
+#include "runtime/current_thread.h"
+#include "storage/vectorized/schema_change.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
 using std::to_string;
 
-EngineAlterTabletTask::EngineAlterTabletTask(const TAlterTabletReqV2& request, int64_t signature,
-                                             const TTaskType::type task_type, std::vector<string>* error_msgs,
-                                             const string& process_name)
+EngineAlterTabletTask::EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& request,
+                                             int64_t signature, const TTaskType::type task_type,
+                                             std::vector<string>* error_msgs, const string& process_name)
         : _alter_tablet_req(request),
           _signature(signature),
           _task_type(task_type),
           _error_msgs(error_msgs),
-          _process_name(process_name) {}
+          _process_name(process_name) {
+    size_t mem_limit = static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
+    _mem_tracker =
+            std::make_unique<MemTracker>(MemTracker::SCHEMA_CHANGE_TASK, mem_limit, "schema change task", mem_tracker);
+}
 
-OLAPStatus EngineAlterTabletTask::execute() {
+Status EngineAlterTabletTask::execute() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     StarRocksMetrics::instance()->create_rollup_requests_total.increment(1);
 
-    SchemaChangeHandler handler;
-    OLAPStatus res = handler.process_alter_tablet_v2(_alter_tablet_req);
-
-    if (res != OLAP_SUCCESS) {
-        LOG(WARNING) << "failed to do alter task. res=" << res << " base_tablet_id=" << _alter_tablet_req.base_tablet_id
+    vectorized::SchemaChangeHandler handler;
+    Status res = handler.process_alter_tablet_v2(_alter_tablet_req);
+    if (!res.ok()) {
+        LOG(WARNING) << "failed to do alter task. status=" << res.to_string()
+                     << " base_tablet_id=" << _alter_tablet_req.base_tablet_id
                      << ", base_schema_hash=" << _alter_tablet_req.base_schema_hash
                      << ", new_tablet_id=" << _alter_tablet_req.new_tablet_id
                      << ", new_schema_hash=" << _alter_tablet_req.new_schema_hash;
         StarRocksMetrics::instance()->create_rollup_requests_failed.increment(1);
         return res;
     }
-    return res;
+
+    LOG(INFO) << "success to do alter task. base_tablet_id=" << _alter_tablet_req.base_tablet_id;
+    return Status::OK();
 } // execute
 
 } // namespace starrocks

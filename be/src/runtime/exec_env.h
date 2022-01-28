@@ -19,15 +19,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_EXEC_ENV_H
-#define STARROCKS_BE_RUNTIME_EXEC_ENV_H
+#pragma once
 
 #include <atomic>
 #include <memory>
 
 #include "common/status.h"
-#include "exec/pipeline/pipeline_driver_dispatcher.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "storage/options.h"
 
 namespace starrocks {
@@ -65,6 +62,10 @@ class TFileBrokerServiceClient;
 template <class T>
 class ClientCache;
 class HeartbeatFlags;
+
+namespace pipeline {
+class DriverDispatcher;
+}
 
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
@@ -113,16 +114,16 @@ public:
     MemTracker* tablet_meta_mem_tracker() { return _tablet_meta_mem_tracker; }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker; }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker; }
-    MemTracker* snapshot_mem_tracker() { return _snapshot_mem_tracker; }
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker; }
-    MemTracker* local_column_pool_mem_tracker() { return _local_column_pool_mem_tracker; }
-    MemTracker* central_column_pool_mem_tracker() { return _central_column_pool_mem_tracker; }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker; }
     MemTracker* update_mem_tracker() { return _update_mem_tracker; }
+    MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker; }
+    MemTracker* clone_mem_tracker() { return _clone_mem_tracker; }
+    MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker; }
 
     ThreadResourceMgr* thread_mgr() { return _thread_mgr; }
     PriorityThreadPool* thread_pool() { return _thread_pool; }
-    PriorityThreadPool* pipeline_io_thread_pool() { return _pipeline_io_thread_pool; }
+    PriorityThreadPool* pipeline_scan_io_thread_pool() { return _pipeline_scan_io_thread_pool; }
     size_t increment_num_scan_operators(size_t n) { return _num_scan_operators.fetch_add(n); }
     size_t decrement_num_scan_operators(size_t n) { return _num_scan_operators.fetch_sub(n); }
     PriorityThreadPool* etl_thread_pool() { return _etl_thread_pool; }
@@ -130,7 +131,6 @@ public:
     starrocks::pipeline::DriverDispatcher* driver_dispatcher() { return _driver_dispatcher; }
     TMasterInfo* master_info() { return _master_info; }
     LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
-    DiskIoMgr* disk_io_mgr() { return _disk_io_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
     BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
@@ -153,7 +153,7 @@ public:
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
-    void _destory();
+    void _destroy();
 
     Status _init_mem_tracker();
 
@@ -184,17 +184,8 @@ private:
     // The memory used for schema change
     MemTracker* _schema_change_mem_tracker = nullptr;
 
-    // The memory used for snapshot
-    MemTracker* _snapshot_mem_tracker = nullptr;
-
     // The memory used for column pool
     MemTracker* _column_pool_mem_tracker = nullptr;
-
-    // The memory used for central column pool
-    MemTracker* _central_column_pool_mem_tracker = nullptr;
-
-    // The memory used for local column pool
-    MemTracker* _local_column_pool_mem_tracker = nullptr;
 
     // The memory used for page cache
     MemTracker* _page_cache_mem_tracker = nullptr;
@@ -202,16 +193,21 @@ private:
     // The memory tracker for update manager
     MemTracker* _update_mem_tracker = nullptr;
 
+    MemTracker* _chunk_allocator_mem_tracker = nullptr;
+
+    MemTracker* _clone_mem_tracker = nullptr;
+
+    MemTracker* _consistency_mem_tracker = nullptr;
+
     ThreadResourceMgr* _thread_mgr = nullptr;
     PriorityThreadPool* _thread_pool = nullptr;
-    PriorityThreadPool* _pipeline_io_thread_pool = nullptr;
+    PriorityThreadPool* _pipeline_scan_io_thread_pool = nullptr;
     std::atomic<size_t> _num_scan_operators;
     PriorityThreadPool* _etl_thread_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     starrocks::pipeline::DriverDispatcher* _driver_dispatcher = nullptr;
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
-    DiskIoMgr* _disk_io_mgr = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;
@@ -245,5 +241,3 @@ inline ClientCache<TFileBrokerServiceClient>* ExecEnv::get_client_cache<TFileBro
 }
 
 } // namespace starrocks
-
-#endif

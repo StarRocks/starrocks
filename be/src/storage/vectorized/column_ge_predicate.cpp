@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <cstdint>
 
@@ -7,7 +7,7 @@
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"
-#include "storage/rowset/segment_v2/bitmap_index_reader.h"
+#include "storage/rowset/bitmap_index_reader.h"
 #include "storage/types.h"
 #include "storage/vectorized/column_predicate.h"
 
@@ -23,65 +23,47 @@ public:
 
     ~ColumnGePredicate() override = default;
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    template <typename Op>
+    inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
         auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
         auto* sel = selection;
         if (!column->has_null()) {
             for (size_t i = from; i < to; i++) {
-                sel[i] = v[i] >= _value;
+                sel[i] = Op::apply(sel[i], (uint8_t)(v[i] >= _value));
             }
         } else {
             /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
             for (size_t i = from; i < to; i++) {
-                sel[i] = (!is_null[i]) & (v[i] >= _value);
+                sel[i] = Op::apply(sel[i], (uint8_t)((!is_null[i]) & (v[i] >= _value)));
             }
         }
+    }
+
+    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
     }
 
     void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
-        auto* sel = selection;
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] &= (v[i] >= _value);
-            }
-        } else {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
-            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] &= (uint8_t)(!is_null[i] & (v[i] >= _value));
-            }
-        }
+        t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
     }
 
     void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
-        auto* sel = selection;
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] |= (v[i] >= _value);
-            }
-        } else {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
-            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] |= (uint8_t)(!is_null[i] & (v[i] >= _value));
-            }
-        }
+        t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
     }
 
-    bool zone_map_filter(const Datum& min, const Datum& max) const override {
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        const auto& max = detail.max_value();
         return this->type_info()->cmp(Datum(_value), max) <= 0;
     }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         range->clear();
         bool exact_match;
         Status s = iter->seek_dictionary(&_value, &exact_match);
         if (s.ok()) {
-            segment_v2::rowid_t seeked_ordinal = iter->current_ordinal();
-            segment_v2::rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
+            rowid_t seeked_ordinal = iter->current_ordinal();
+            rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
             range->add(Range(seeked_ordinal, ordinal_limit));
         } else if (!s.is_not_found()) {
             return s;
@@ -124,36 +106,33 @@ public:
 
     ~BinaryColumnGePredicate() override = default;
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    template <typename Op>
+    inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
         auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
         auto* sel = selection;
         if (!column->has_null()) {
             for (size_t i = from; i < to; i++) {
-                sel[i] = v[i] >= _value;
+                sel[i] = Op::apply(sel[i], (uint8_t)(v[i] >= _value));
             }
         } else {
             /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
             for (size_t i = from; i < to; i++) {
-                sel[i] = (!is_null[i]) && (v[i] >= _value);
+                sel[i] = Op::apply(sel[i], (uint8_t)((!is_null[i]) && (v[i] >= _value)));
             }
         }
     }
 
+    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
+    }
+
     void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
-        auto* sel = selection;
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] &= (v[i] >= _value);
-            }
-        } else {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
-            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] = sel[i] && (!is_null[i] & (v[i] >= _value));
-            }
-        }
+        t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
+    }
+
+    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
     }
 
     uint16_t evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
@@ -186,27 +165,12 @@ public:
         return new_size;
     }
 
-    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
-        auto* sel = selection;
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] = sel[i] || (v[i] >= _value);
-            }
-        } else {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
-            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] = sel[i] || (!is_null[i] & (v[i] >= _value));
-            }
-        }
-    }
-
-    bool zone_map_filter(const Datum& min, const Datum& max) const override {
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        const auto& max = detail.max_value();
         return this->type_info()->cmp(Datum(_value), max) <= 0;
     }
 
-    Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
         // Can NOT use `_value` here, see the comment in `predicate_parser.cpp`.
         Slice padded_value(_zero_padded_str);
 
@@ -214,8 +178,8 @@ public:
         bool exact_match;
         Status s = iter->seek_dictionary(&padded_value, &exact_match);
         if (s.ok()) {
-            segment_v2::rowid_t seeked_ordinal = iter->current_ordinal();
-            segment_v2::rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
+            rowid_t seeked_ordinal = iter->current_ordinal();
+            rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
             range->add(Range(seeked_ordinal, ordinal_limit));
         } else if (!s.is_not_found()) {
             return s;

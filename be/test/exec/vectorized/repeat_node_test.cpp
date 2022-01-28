@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/repeat_node.h"
 
@@ -19,7 +19,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "runtime/tuple.h"
 #include "runtime/user_function_cache.h"
 
 namespace starrocks {
@@ -54,10 +53,6 @@ public:
         }
 
         return Status::OK();
-    }
-
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-        return Status::NotSupported("get_next for row_batch is not supported");
     }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) { return Status::OK(); }
@@ -123,7 +118,7 @@ protected:
             }
         }
 
-        DescriptorTbl::create(&_obj_pool, t_desc_table, &_desc_tbl);
+        DescriptorTbl::create(&_obj_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size);
 
         _runtime_state.set_desc_tbl(_desc_tbl);
 

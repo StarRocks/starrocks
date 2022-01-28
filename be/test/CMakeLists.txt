@@ -1,4 +1,4 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 set(EXEC_FILES
         ./test_main.cpp
@@ -17,7 +17,6 @@ set(EXEC_FILES
         ./column/timestamp_value_test.cpp
         ./column/vectorized_schema_test.cpp
         ./common/config_test.cpp
-        ./common/resource_tls_test.cpp
         ./common/status_test.cpp
         ./env/compressed_file_test.cpp
         ./env/env_broker_test.cpp
@@ -26,16 +25,17 @@ set(EXEC_FILES
         ./env/output_stream_wrapper_test.cpp
         ./exec/buffered_reader_test.cpp
         ./exec/es_query_builder_test.cpp
+        ./exec/column_value_range_test.cpp
         ./exec/plain_text_line_reader_bzip_test.cpp
         ./exec/plain_text_line_reader_gzip_test.cpp
         ./exec/plain_text_line_reader_lz4frame_test.cpp
         ./exec/plain_text_line_reader_uncompressed_test.cpp
-        #./exec/tablet_sink_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
         #./exec/vectorized/csv_scanner_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp
+        ./exec/vectorized/chunks_sorter_heapsorter_test.cpp
         ./exec/vectorized/join_hash_map_test.cpp
-        #./exec/vectorized/json_scanner_test.cpp
+        ./exec/vectorized/json_scanner_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
         ./exec/vectorized/orc_scanner_adapter_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
@@ -46,7 +46,6 @@ set(EXEC_FILES
         ./exec/parquet/metadata_test.cpp
         ./exec/parquet/group_reader_test.cpp
         ./exec/parquet/file_reader_test.cpp
-        ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
         ./exprs/vectorized/arithmetic_operation_test.cpp
         ./exprs/vectorized/array_element_expr_test.cpp
@@ -71,6 +70,7 @@ set(EXEC_FILES
         ./exprs/vectorized/hash_functions_test.cpp
         ./exprs/vectorized/hyperloglog_functions_test.cpp
         ./exprs/vectorized/if_expr_test.cpp
+        ./exprs/vectorized/function_helper_test.cpp
         ./exprs/vectorized/in_iterator_predicate_test.cpp
         ./exprs/vectorized/in_predicate_test.cpp
         ./exprs/vectorized/is_null_predicate_test.cpp
@@ -103,54 +103,52 @@ set(EXEC_FILES
         ./formats/csv/float_converter_test.cpp
         ./formats/csv/nullable_converter_test.cpp
         ./formats/csv/numeric_converter_test.cpp
+        ./formats/json/binary_column_test.cpp
+        ./formats/json/numeric_column_test.cpp
+        ./formats/json/nullable_column_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
-        ./storage/aggregate_func_test.cpp
-        ./storage/comparison_predicate_test.cpp
+        ./io/array_random_access_file_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
         ./storage/file_utils_test.cpp
         ./storage/fs/file_block_manager_test.cpp
-        ./storage/generic_iterators_test.cpp
+        ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
-        ./storage/in_list_predicate_test.cpp
         ./storage/key_coder_test.cpp
         ./storage/lru_cache_test.cpp
-        ./storage/null_predicate_test.cpp
         ./storage/kv_store_test.cpp
         ./storage/protobuf_file_test.cpp
         ./storage/page_cache_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
-        ./storage/row_block_test.cpp
-        ./storage/row_block_v2_test.cpp
-        ./storage/row_cursor_test.cpp
+        ./storage/rowset_update_state_test.cpp
         ./storage/rowset/beta_rowset_test.cpp
-        ./storage/rowset/segment_v2/binary_dict_page_test.cpp
-        ./storage/rowset/segment_v2/binary_plain_page_test.cpp
-        ./storage/rowset/segment_v2/binary_prefix_page_test.cpp
-        ./storage/rowset/segment_v2/bitmap_index_test.cpp
-        ./storage/rowset/segment_v2/bitshuffle_page_test.cpp
-        ./storage/rowset/segment_v2/block_bloom_filter_test.cpp
-        ./storage/rowset/segment_v2/bloom_filter_index_reader_writer_test.cpp
-        ./storage/rowset/segment_v2/column_reader_writer_test.cpp
-        ./storage/rowset/segment_v2/encoding_info_test.cpp
-        ./storage/rowset/segment_v2/frame_of_reference_page_test.cpp
-        ./storage/rowset/segment_v2/ordinal_page_index_test.cpp
-        ./storage/rowset/segment_v2/plain_page_test.cpp
-        ./storage/rowset/segment_v2/rle_page_test.cpp
-        ./storage/rowset/segment_v2/row_ranges_test.cpp
-        ./storage/rowset/segment_v2/segment_test.cpp
-        ./storage/rowset/segment_v2/zone_map_index_test.cpp
+        ./storage/rowset/binary_dict_page_test.cpp
+        ./storage/rowset/binary_plain_page_test.cpp
+        ./storage/rowset/binary_prefix_page_test.cpp
+        ./storage/rowset/bitmap_index_test.cpp
+        ./storage/rowset/bitshuffle_page_test.cpp
+        ./storage/rowset/block_bloom_filter_test.cpp
+        ./storage/rowset/bloom_filter_index_reader_writer_test.cpp
+        ./storage/rowset/column_reader_writer_test.cpp
+        ./storage/rowset/encoding_info_test.cpp
+        ./storage/rowset/frame_of_reference_page_test.cpp
+        ./storage/rowset/ordinal_page_index_test.cpp
+        ./storage/rowset/plain_page_test.cpp
+        ./storage/rowset/rle_page_test.cpp
+        ./storage/rowset/segment_rewriter_test.cpp
+        ./storage/rowset/segment_test.cpp
+        ./storage/rowset/segment_iterator_test.cpp
+        ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
         ./storage/selection_vector_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
-        ./storage/skiplist_test.cpp
         ./storage/storage_types_test.cpp
         ./storage/tablet_meta_test.cpp
         ./storage/tablet_meta_manager_test.cpp
@@ -168,11 +166,13 @@ set(EXEC_FILES
         ./storage/vectorized/projection_iterator_test.cpp
         ./storage/vectorized/push_handler_test.cpp
         ./storage/vectorized/range_test.cpp
+        ./storage/vectorized/row_source_mask_test.cpp
         ./storage/vectorized/union_iterator_test.cpp
         ./storage/vectorized/unique_iterator_test.cpp
         ./storage/vectorized/cumulative_compaction_test.cpp
         ./storage/vectorized/base_compaction_test.cpp
         ./storage/vectorized/rowset_merger_test.cpp
+        ./storage/vectorized/schema_change_test.cpp
         ./plugin/plugin_mgr_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
@@ -185,7 +185,6 @@ set(EXEC_FILES
         ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/large_int_value_test.cpp
-        ./runtime/load_channel_mgr_test.cpp
         ./runtime/memory/chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/mem_pool_test.cpp
@@ -193,16 +192,17 @@ set(EXEC_FILES
         ./runtime/result_queue_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
-        ./runtime/string_buffer_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/thread_resource_mgr_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
+        ./serde/column_array_serde_test.cpp
+        ./serde/protobuf_serde_test.cpp
         ./simd/simd_test.cpp
+        ./simd/simd_selector_test.cpp
+        ./simd/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
-        ./util/arrow/arrow_row_batch_test.cpp
-        ./util/arrow/arrow_row_block_test.cpp
         ./util/bitmap_test.cpp
         ./util/bitmap_value_test.cpp
         ./util/bit_stream_utils_test.cpp
@@ -221,7 +221,6 @@ set(EXEC_FILES
         ./util/file_cache_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
-        ./util/internal_queue_test.cpp
         ./util/json_util_test.cpp
         ./util/lru_cache_util_test.cpp
         ./util/md5_test.cpp
@@ -239,13 +238,27 @@ set(EXEC_FILES
         ./util/tdigest_test.cpp
         ./util/thread_test.cpp
         ./util/trace_test.cpp
-        ./util/types_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
         ./util/buffered_stream_test.cpp
         ./util/int96_test.cpp
         ./util/bit_packing_test.cpp
+        ./util/gc_helper_test.cpp
+        ./gutil/sysinfo-test.cc
         )
+
+# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
+
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+        set_source_files_properties(./formats/json/binary_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+        set_source_files_properties(./formats/json/numeric_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+        set_source_files_properties(./formats/json/nullable_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+endif()
 
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
@@ -265,6 +278,7 @@ SET_TARGET_PROPERTIES(${PLUGIN_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$
 # Thus we need a standalone binary without sanitizer to test it.
 add_executable(bytes_test
         ./column/bytes_test.cpp
+        ../src/service/mem_hook.cpp
         )
 
 set_target_properties(bytes_test PROPERTIES

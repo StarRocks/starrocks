@@ -1,7 +1,6 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#ifndef STARROCKS_BE_UTIL_RAW_CONTAINER_H
-#define STARROCKS_BE_UTIL_RAW_CONTAINER_H
+#pragma once
 
 #include <memory>
 #include <string>
@@ -119,5 +118,3 @@ inline void stl_string_resize_uninitialized(std::string* str, size_t new_size) {
 
 } // namespace raw
 } //namespace starrocks
-
-#endif //STARROCKS_BE_UTIL_RAW_CONTAINER_H

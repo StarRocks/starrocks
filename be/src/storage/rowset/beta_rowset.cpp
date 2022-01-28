@@ -29,7 +29,6 @@
 #include <set>
 
 #include "gutil/strings/substitute.h"
-#include "storage/rowset/beta_rowset_reader.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
@@ -61,26 +60,24 @@ std::string BetaRowset::segment_srcrssid_file_path(const std::string& dir, const
     return strings::Substitute("$0/$1_$2.rssid", dir, rowset_id.to_string(), segment_id);
 }
 
-BetaRowset::BetaRowset(MemTracker* mem_tracker, const TabletSchema* schema, string rowset_path,
-                       RowsetMetaSharedPtr rowset_meta)
-        : Rowset(mem_tracker, schema, std::move(rowset_path), std::move(rowset_meta)) {
-    _mem_tracker->consume(sizeof(BetaRowset));
+BetaRowset::BetaRowset(const TabletSchema* schema, string rowset_path, RowsetMetaSharedPtr rowset_meta)
+        : Rowset(schema, std::move(rowset_path), std::move(rowset_meta)) {}
+
+Status BetaRowset::init() {
+    return Status::OK();
 }
 
-OLAPStatus BetaRowset::init() {
-    return OLAP_SUCCESS; // no op
-}
-
+// use partial_rowset_footer to indicate the segment footer position and size
+// if partial_rowset_footer is nullptr, the segment_footer is at the end of the segment_file
 Status BetaRowset::do_load() {
-    // TODO: `BlockManager` should be passed in as an argument.
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-    MemTracker* mem_tracker = _mem_tracker.get();
 
     _segments.clear();
-    size_t footer_size_hint = 4096;
+    size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = segment_v2::Segment::open(mem_tracker, block_mgr, seg_path, seg_id, _schema, &footer_size_hint);
+        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path, seg_id,
+                                 _schema, &footer_size_hint, rowset_meta()->partial_rowset_footer(seg_id));
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();
@@ -91,22 +88,8 @@ Status BetaRowset::do_load() {
     return Status::OK();
 }
 
-OLAPStatus BetaRowset::create_reader(RowsetReaderSharedPtr* result) {
-    // NOTE: We use std::static_pointer_cast for performance
-    *result = std::make_shared<BetaRowsetReader>(std::static_pointer_cast<BetaRowset>(shared_from_this()));
-    return OLAP_SUCCESS;
-}
-
-OLAPStatus BetaRowset::split_range(const RowCursor& start_key, const RowCursor& end_key,
-                                   uint64_t request_block_row_count, std::vector<OlapTuple>* ranges) {
-    ranges->emplace_back(start_key.to_tuple());
-    ranges->emplace_back(end_key.to_tuple());
-    return OLAP_SUCCESS;
-}
-
-OLAPStatus BetaRowset::remove() {
-    // TODO should we close and remove all segment reader first?
-    VLOG(1) << "Removing files in rowsset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
+Status BetaRowset::remove() {
+    VLOG(1) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
             << " tablet_id=" << _rowset_meta->tablet_id();
     bool success = true;
     for (int i = 0; i < num_segments(); ++i) {
@@ -138,9 +121,9 @@ OLAPStatus BetaRowset::remove() {
     }
     if (!success) {
         LOG(WARNING) << "Fail to remove files in rowset id=" << unique_id();
-        return OLAP_ERR_ROWSET_DELETE_FILE_FAILED;
+        return Status::IOError(fmt::format("Fail to remove files. rowset_id: {}", unique_id()));
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 void BetaRowset::do_close() {
@@ -167,35 +150,37 @@ Status BetaRowset::link_files_to(const std::string& dir, RowsetId new_rowset_id)
     return Status::OK();
 }
 
-OLAPStatus BetaRowset::copy_files_to(const std::string& dir) {
+Status BetaRowset::copy_files_to(const std::string& dir) {
     for (int i = 0; i < num_segments(); ++i) {
         std::string dst_path = segment_file_path(dir, rowset_id(), i);
         if (FileUtils::check_exist(dst_path)) {
-            LOG(WARNING) << "Fail to copy file, dest path=" << dst_path << " already exist";
-            return OLAP_ERR_FILE_ALREADY_EXIST;
+            LOG(WARNING) << "Path already exist: " << dst_path;
+            return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
         }
         std::string src_path = segment_file_path(_rowset_path, rowset_id(), i);
-        if (copy_file(src_path, dst_path) != OLAP_SUCCESS) {
-            LOG(WARNING) << "Fail to copy source " << src_path << " to " << dst_path << ", errno=" << Errno::no();
-            return OLAP_ERR_OS_ERROR;
+        if (!copy_file(src_path, dst_path).ok()) {
+            LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path << ", errno=" << Errno::no();
+            return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path, dst_path,
+                                               std::strerror(Errno::no())));
         }
     }
     for (int i = 0; i < num_delete_files(); ++i) {
         std::string src_path = segment_del_file_path(_rowset_path, rowset_id(), i);
         if (FileUtils::check_exist(src_path)) {
-            // TODO(cbl): deleted file may be GCed already
             std::string dst_path = segment_del_file_path(dir, rowset_id(), i);
             if (FileUtils::check_exist(dst_path)) {
-                LOG(WARNING) << "Fail to copy file, dest path=" << dst_path << " already exist";
-                return OLAP_ERR_FILE_ALREADY_EXIST;
+                LOG(WARNING) << "Path already exist: " << dst_path;
+                return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
             }
-            if (copy_file(src_path, dst_path) != OLAP_SUCCESS) {
-                LOG(WARNING) << "Fail to copy source " << src_path << " to " << dst_path << ", errno=" << Errno::no();
-                return OLAP_ERR_OS_ERROR;
+            if (!copy_file(src_path, dst_path).ok()) {
+                LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
+                             << ", errno=" << Errno::no();
+                return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path,
+                                                   dst_path, std::strerror(Errno::no())));
             }
         }
     }
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 bool BetaRowset::check_path(const std::string& path) {
@@ -216,6 +201,16 @@ public:
         _iter.reset();
     }
 
+    virtual Status init_encoded_schema(vectorized::ColumnIdToGlobalDictMap& dict_maps) override {
+        RETURN_IF_ERROR(vectorized::ChunkIterator::init_encoded_schema(dict_maps));
+        return _iter->init_encoded_schema(dict_maps);
+    }
+
+    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        ChunkIterator::init_output_schema(unused_output_column_ids);
+        return _iter->init_output_schema(unused_output_column_ids);
+    }
+
 protected:
     Status do_get_next(vectorized::Chunk* chunk) override { return _iter->get_next(chunk); }
     Status do_get_next(vectorized::Chunk* chunk, vector<uint32_t>* rowid) override {
@@ -234,7 +229,7 @@ StatusOr<vectorized::ChunkIteratorPtr> BetaRowset::new_iterator(const vectorized
     if (seg_iters.empty()) {
         return vectorized::new_empty_iterator(schema, options.chunk_size);
     } else if (options.sorted) {
-        return vectorized::new_merge_iterator(seg_iters);
+        return vectorized::new_heap_merge_iterator(seg_iters);
     } else {
         return vectorized::new_union_iterator(std::move(seg_iters));
     }
@@ -255,6 +250,8 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     seg_options.profile = options.profile;
     seg_options.reader_type = options.reader_type;
     seg_options.chunk_size = options.chunk_size;
+    seg_options.global_dictmaps = options.global_dictmaps;
+    seg_options.unused_output_column_ids = options.unused_output_column_ids;
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }
@@ -280,6 +277,9 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
 
     std::vector<vectorized::ChunkIteratorPtr> tmp_seg_iters;
     tmp_seg_iters.reserve(num_segments());
+    if (options.stats) {
+        options.stats->segments_read_count += num_segments();
+    }
     for (auto& seg_ptr : segments()) {
         if (seg_ptr->num_rows() == 0) {
             continue;
@@ -346,6 +346,27 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
         seg_iterators[i] = std::move(res).value();
     }
     return seg_iterators;
+}
+
+// this function is only used for partial update so far
+// make sure segment_footer is in the end of segment_file before call this function
+Status BetaRowset::reload() {
+    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    _segments.clear();
+    size_t footer_size_hint = 16 * 1024;
+    for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
+        std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
+        block_mgr->erase_block_cache(seg_path);
+        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path, seg_id,
+                                 _schema, &footer_size_hint);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+            _segments.clear();
+            return res.status();
+        }
+        _segments.push_back(std::move(res).value());
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

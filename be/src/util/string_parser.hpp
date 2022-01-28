@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_COMMON_UTIL_STRING_PARSER_H
-#define STARROCKS_BE_SRC_COMMON_UTIL_STRING_PARSER_H
+#pragma once
 
 #include <cmath>
 #include <cstdint>
@@ -213,6 +212,7 @@ private:
         return true;
     }
 
+public:
     // Returns the position of the first non-whitespace character in s.
     static inline int skip_leading_whitespace(const char* s, int len) {
         int i = 0;
@@ -698,7 +698,7 @@ inline T StringParser::string_to_decimal(const char* s, int len, int type_precis
         precision += exponent - scale;
         int shift = exponent - scale;
         if (shift <= decimal_precision_limit<T>) {
-            value *= starrocks::get_scale_factor<T>(exponent - scale);
+            value *= get_scale_factor<T>(exponent - scale);
             scale = 0;
         } else {
             *result = ParseResult::PARSE_FAILURE;
@@ -752,6 +752,4 @@ inline T StringParser::string_to_decimal(const char* s, int len, int type_precis
     return is_negative ? -value : value;
 }
 
-} // end namespace starrocks
-
-#endif // end of STARROCKS_BE_SRC_COMMON_UTIL_STRING_PARSER_HPP
+} // namespace starrocks

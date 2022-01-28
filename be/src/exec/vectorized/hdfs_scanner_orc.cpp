@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/hdfs_scanner_orc.h"
 
@@ -34,7 +34,7 @@ public:
             auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
             throw orc::ParseError(msg);
         }
-        _stats->bytes_read_from_disk += length;
+        _stats->bytes_read += length;
     }
 
     const std::string& getName() const override { return _file->file_name(); }
@@ -106,7 +106,7 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
         }
     }
     for (const auto& r : _scanner_params.scan_ranges) {
-        _scan_ranges.insert(make_pair(r->offset + r->length, r->offset));
+        _scan_ranges.insert(std::make_pair(r->offset + r->length, r->offset));
     }
 }
 
@@ -192,6 +192,13 @@ bool OrcRowReaderFilter::filterOnPickRowGroup(size_t rowGroupIdx,
     return false;
 }
 
+// Hive ORC char type will pad trailing spaces.
+// https://docs.cloudera.com/documentation/enterprise/6/6.3/topics/impala_char.html
+static inline size_t remove_trailing_spaces(const char* s, size_t size) {
+    while (size > 0 && s[size - 1] == ' ') size--;
+    return size;
+}
+
 bool OrcRowReaderFilter::filterOnPickStringDictionary(
         const std::unordered_map<uint64_t, orc::StringDictionary*>& sdicts) {
     if (sdicts.empty()) return false;
@@ -223,6 +230,9 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
         // create chunk
         orc::StringDictionary* dict = it->second;
+        if (dict->dictionaryOffset.size() > _adapter->runtime_state()->chunk_size()) {
+            continue;
+        }
         vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
         // always assume there is a possibility of null value in ORC column.
         // and we evaluate with null always.
@@ -241,15 +251,34 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         bytes.reserve(content_size);
         const uint8_t* start = reinterpret_cast<const uint8_t*>(content_data);
         const uint8_t* end = reinterpret_cast<const uint8_t*>(content_data + content_size);
-        bytes.insert(bytes.end(), start, end);
 
         size_t offset_size = dict->dictionaryOffset.size();
         size_t dict_size = offset_size - 1;
         const int64_t* offset_data = dict->dictionaryOffset.data();
         offsets.resize(offset_size);
-        // type mismatche, have to use loop to assign.
-        for (size_t i = 0; i < offset_size; i++) {
-            offsets[i] = offset_data[i];
+
+        if (slot_desc->type().type == TYPE_CHAR) {
+            // for char type, dict strings are also padded with spaces.
+            // we also have to strip space off. For example
+            // | hello      |  world      | yes     |, we have to compact to
+            // | hello | world | yes |
+            size_t total_size = 0;
+            const char* p_start = reinterpret_cast<const char*>(start);
+            for (size_t i = 0; i < dict_size; i++) {
+                const char* s = p_start + offset_data[i];
+                size_t old_size = offset_data[i + 1] - offset_data[i];
+                size_t new_size = remove_trailing_spaces(s, old_size);
+                bytes.insert(bytes.end(), s, s + new_size);
+                offsets[i] = total_size;
+                total_size += new_size;
+            }
+            offsets[dict_size] = total_size;
+        } else {
+            bytes.insert(bytes.end(), start, end);
+            // type mismatch, have to use loop to assign.
+            for (size_t i = 0; i < offset_size; i++) {
+                offsets[i] = offset_data[i];
+            }
         }
 
         // first (dict_size) th items are all not-null
@@ -289,26 +318,22 @@ void HdfsOrcScanner::update_counter() {
     HdfsScanner::update_counter();
 
 #ifndef BE_TEST
-    COUNTER_UPDATE(_scanner_params.parent->_raw_rows_counter, _stats.raw_rows_read);
+    COUNTER_UPDATE(_scanner_params.parent->_rows_read_counter, _stats.raw_rows_read);
     COUNTER_UPDATE(_scanner_params.parent->_expr_filter_timer, _stats.expr_filter_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_timer, _stats.io_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_counter, _stats.io_count);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_from_disk_counter, _stats.bytes_read_from_disk);
+    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_counter, _stats.bytes_read);
     COUNTER_UPDATE(_scanner_params.parent->_column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(_scanner_params.parent->_column_convert_timer, _stats.column_convert_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_value_decode_timer, _stats.value_decode_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_level_decode_timer, _stats.level_decode_ns);
 #endif
-}
-
-Status HdfsParquetScanner::do_close(RuntimeState* runtime_state) {
-    update_counter();
-    return Status::OK();
 }
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_scanner_params.fs,
                                                             _scanner_params.scan_ranges[0]->file_length, &_stats);
+#ifndef BE_TEST
+    SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
+#endif
     std::unique_ptr<orc::Reader> reader;
     try {
         orc::ReaderOptions options;
@@ -337,12 +362,12 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         }
     }
 
-    _orc_adapter = std::make_unique<OrcScannerAdapter>(_src_slot_descriptors);
+    _orc_adapter = std::make_unique<OrcScannerAdapter>(runtime_state, _src_slot_descriptors);
     _orc_row_reader_filter =
             std::make_shared<OrcRowReaderFilter>(_scanner_params, _file_read_param, _orc_adapter.get());
     _orc_adapter->disable_broker_load_mode();
     _orc_adapter->set_row_reader_filter(_orc_row_reader_filter);
-    _orc_adapter->set_read_chunk_size(config::vector_chunk_size);
+    _orc_adapter->set_read_chunk_size(runtime_state->chunk_size());
     _orc_adapter->set_runtime_state(runtime_state);
     _orc_adapter->set_current_file_name(_scanner_params.scan_ranges[0]->relative_path);
     RETURN_IF_ERROR(_orc_adapter->set_timezone(_file_read_param.timezone));
@@ -360,10 +385,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-Status HdfsOrcScanner::do_close(RuntimeState* runtime_state) {
+void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
     _orc_adapter.reset(nullptr);
     update_counter();
-    return Status::OK();
 }
 
 Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
@@ -385,16 +409,9 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     {
         SCOPED_RAW_TIMER(&_stats.column_convert_ns);
         ChunkPtr ptr = _orc_adapter->create_chunk();
-        // reuse these counter.
-        {
-            SCOPED_RAW_TIMER(&_stats.value_decode_ns);
-            RETURN_IF_ERROR(_orc_adapter->fill_chunk(&ptr));
-        }
-        {
-            SCOPED_RAW_TIMER(&_stats.level_decode_ns);
-            ChunkPtr result = _orc_adapter->cast_chunk(&ptr);
-            *chunk = std::move(result);
-        }
+        RETURN_IF_ERROR(_orc_adapter->fill_chunk(&ptr));
+        ChunkPtr result = _orc_adapter->cast_chunk(&ptr);
+        *chunk = std::move(result);
     }
     ChunkPtr ck = *chunk;
     // important to add columns before evaluation

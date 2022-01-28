@@ -22,13 +22,11 @@
 #include "runtime/mem_tracker.h"
 
 #include <boost/algorithm/string/join.hpp>
-#include <cstdint>
 #include <memory>
 #include <utility>
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/debug_util.h"
@@ -96,14 +94,10 @@ void MemTracker::Init() {
     DCHECK_EQ(_all_trackers[0], this);
 }
 
-// TODO chenhao , set MemTracker close state
-void MemTracker::close() {}
-
 MemTracker::~MemTracker() {
-    DCHECK_EQ(0, consumption()) << CurrentThread::query_id_string();
-    if (UNLIKELY(consumption() > 0)) {
-        release(consumption());
-    }
+    // return memory to root mem_tracker
+    release_without_root();
+
     if (_auto_unregister && parent()) {
         unregister_from_parent();
     }
@@ -207,6 +201,47 @@ Status MemTracker::MemLimitExceeded(RuntimeState* state, const std::string& deta
     // ss << tracker_to_log->LogUsage();
     // Status status = Status::MemLimitExceeded(ss.str());
     LIMIT_EXCEEDED(this, state, ss.str());
+}
+
+Status MemTracker::check_mem_limit(const std::string& msg) const {
+    MemTracker* tracker = find_limit_exceeded_tracker();
+    if (LIKELY(tracker == nullptr)) {
+        return Status::OK();
+    }
+
+    return Status::MemoryLimitExceeded(tracker->err_msg(msg));
+}
+
+std::string MemTracker::err_msg(const std::string& msg) const {
+    std::stringstream str;
+    str << "Memory of " << label() << " exceed limit. " << msg << " ";
+    str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
+    switch (type()) {
+    case MemTracker::NO_SET:
+        break;
+    case MemTracker::QUERY:
+        str << "Mem usage has exceed the limit of single query, You can change the limit by "
+               "set session variable exec_mem_limit.";
+        break;
+    case MemTracker::PROCESS:
+        str << "Mem usage has exceed the limit of BE";
+        break;
+    case MemTracker::QUERY_POOL:
+        str << "Mem usage has exceed the limit of query pool";
+        break;
+    case MemTracker::LOAD:
+        str << "Mem usage has exceed the limit of load";
+        break;
+    case MemTracker::CONSISTENCY:
+        str << "Mem usage has exceed the limit of consistency";
+        break;
+    case MemTracker::SCHEMA_CHANGE_TASK:
+        str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]";
+        break;
+    default:
+        break;
+    }
+    return str.str();
 }
 
 } // end namespace starrocks

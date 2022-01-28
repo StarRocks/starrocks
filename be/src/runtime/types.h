@@ -34,13 +34,15 @@
 
 namespace starrocks {
 
+class TypeInfo;
+
 // Describes a type. Includes the enum, children types, and any type-specific metadata
 // (e.g. precision and scale for decimals).
 struct TypeDescriptor {
     PrimitiveType type{INVALID_TYPE};
     /// Only meaningful for type TYPE_CHAR/TYPE_VARCHAR/TYPE_HLL
     int len{-1};
-    static constexpr int MAX_VARCHAR_LENGTH = 65533;
+    static constexpr int MAX_VARCHAR_LENGTH = 1048576;
     static constexpr int MAX_CHAR_LENGTH = 255;
     static constexpr int MAX_CHAR_INLINE_LENGTH = 128;
 
@@ -160,6 +162,8 @@ struct TypeDescriptor {
         return result;
     }
 
+    static TypeDescriptor from_storage_type_info(TypeInfo* type_info);
+
     static TypeDescriptor from_protobuf(const PTypeDesc& ptype) {
         int idx = 0;
         TypeDescriptor result(ptype.types(), &idx);
@@ -184,6 +188,13 @@ struct TypeDescriptor {
         } else {
             return type == o.type;
         }
+    }
+
+    bool is_implicit_castable(const TypeDescriptor& from) const {
+        if (is_decimal_type()) {
+            return precision == from.precision && scale == from.scale;
+        }
+        return false;
     }
 
     bool operator==(const TypeDescriptor& o) const {

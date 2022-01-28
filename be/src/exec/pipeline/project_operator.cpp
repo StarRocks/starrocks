@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/project_operator.h"
 
@@ -11,14 +11,11 @@
 
 namespace starrocks::pipeline {
 Status ProjectOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
-
-    return Status::OK();
+    return Operator::prepare(state);
 }
 
 Status ProjectOperator::close(RuntimeState* state) {
-    Operator::close(state);
-    return Status::OK();
+    return Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) {
@@ -61,22 +58,35 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
     for (size_t i = 0; i < result_columns.size(); ++i) {
         _cur_chunk->append_column(result_columns[i], _column_ids[i]);
     }
+    eval_runtime_bloom_filters(_cur_chunk.get());
     DCHECK_CHUNK(_cur_chunk);
     return Status::OK();
 }
 
-Status ProjectOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
-    RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc, mem_tracker));
-    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, row_desc, mem_tracker));
+Status ProjectOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, _row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, _row_desc));
 
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
+
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
+
+    auto init_dict_optimize = [&](std::vector<ExprContext*>& expr_ctxs, std::vector<SlotId>& target_slots) {
+        _dict_optimize_parser.rewrite_exprs(&expr_ctxs, state, target_slots);
+    };
+
+    init_dict_optimize(_common_sub_expr_ctxs, _common_sub_column_ids);
+    init_dict_optimize(_expr_ctxs, _column_ids);
+
     return Status::OK();
 }
 
 void ProjectOperatorFactory::close(RuntimeState* state) {
     Expr::close(_expr_ctxs, state);
     Expr::close(_common_sub_expr_ctxs, state);
+    _dict_optimize_parser.close(state);
+    OperatorFactory::close(state);
 }
 } // namespace starrocks::pipeline

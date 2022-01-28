@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -10,8 +10,13 @@
 namespace starrocks::pipeline {
 class LocalExchangeSinkOperator final : public Operator {
 public:
-    LocalExchangeSinkOperator(int32_t id, const std::shared_ptr<LocalExchanger>& exchanger)
-            : Operator(id, "local_exchange_sink", -1), _exchanger(exchanger) {}
+    LocalExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                              const std::shared_ptr<LocalExchanger>& exchanger, const int32_t driver_sequence)
+            : Operator(factory, id, "local_exchange_sink", plan_node_id),
+              _exchanger(exchanger),
+              _driver_sequence(driver_sequence) {
+        _runtime_profile->add_info_string("Type", exchanger->name());
+    }
 
     ~LocalExchangeSinkOperator() override = default;
 
@@ -21,9 +26,13 @@ public:
 
     bool need_input() const override;
 
-    bool is_finished() const override { return _is_finished; }
+    // _is_finished is true indicates that LocalExchangeSinkOperator is finished by its preceding operator.
+    // _is_all_source_finished() returning true indicates that all its corresponding LocalExchangeSourceOperators
+    // has finished.
+    // In either case,  LocalExchangeSinkOperator is finished.
+    bool is_finished() const override { return _is_finished || _exchanger->is_all_sources_finished(); }
 
-    void finish(RuntimeState* state) override;
+    void set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -32,17 +41,18 @@ public:
 private:
     bool _is_finished = false;
     const std::shared_ptr<LocalExchanger>& _exchanger;
+    const int32_t _driver_sequence;
 };
 
 class LocalExchangeSinkOperatorFactory final : public OperatorFactory {
 public:
-    LocalExchangeSinkOperatorFactory(int32_t id, std::shared_ptr<LocalExchanger> exchanger)
-            : OperatorFactory(id, "local_exchange_sink", -1), _exchanger(std::move(exchanger)) {}
+    LocalExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<LocalExchanger> exchanger)
+            : OperatorFactory(id, "local_exchange_sink", plan_node_id), _exchanger(std::move(exchanger)) {}
 
     ~LocalExchangeSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<LocalExchangeSinkOperator>(_id, _exchanger);
+        return std::make_shared<LocalExchangeSinkOperator>(this, _id, _plan_node_id, _exchanger, driver_sequence);
     }
 
 private:

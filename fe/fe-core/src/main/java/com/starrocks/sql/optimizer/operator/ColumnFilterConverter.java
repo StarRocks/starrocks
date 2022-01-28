@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.operator;
 
@@ -80,7 +80,7 @@ public class ColumnFilterConverter {
                 return type == columnType || (type != Type.LARGEINT && columnType != Type.LARGEINT);
             }
 
-            return type.isDateType() && columnType.isDateType();
+            return type.equals(columnType);
         }
 
         return false;
@@ -171,7 +171,16 @@ public class ColumnFilterConverter {
                 return predicate;
             }
 
-            ColumnRefOperator column = Utils.extractColumnRef(predicate.getChild(0)).get(0);
+            // Consider that case "fn(x) is null", we can not deduce that bound is [NULL, NULL]
+            // It's not safe because some values of x can be converted to null and some can not be
+            // It's only safe when we are sure that iff. x is null -> fn(x) is null.
+            // The simplest way to fix it is only apply this rule when "x is null"
+            ScalarOperator root = predicate.getChild(0);
+            if (!OperatorType.VARIABLE.equals(root.getOpType())) {
+                return predicate;
+            }
+
+            ColumnRefOperator column = (ColumnRefOperator) root;
 
             PartitionColumnFilter filter = new PartitionColumnFilter();
             NullLiteral nullLiteral = new NullLiteral();

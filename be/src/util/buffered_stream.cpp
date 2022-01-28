@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "util/buffered_stream.h"
 
+#include "common/config.h"
 #include "env/env.h"
 #include "util/bit_util.h"
 
@@ -9,7 +10,7 @@ namespace starrocks {
 
 BufferedInputStream::BufferedInputStream(RandomAccessFile* file, uint64_t offset, uint64_t length)
         : _file(file), _offset(offset), _end_offset(offset + length) {
-    _reserve(8 * 1024 * 1024);
+    _reserve(config::buffer_stream_reserve_size);
 }
 
 Status BufferedInputStream::get_bytes(const uint8_t** buffer, size_t* nbytes, bool peek) {

@@ -24,7 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -80,7 +80,7 @@ public class CompoundPredicate extends Predicate {
     public String toSqlImpl() {
         if (children.size() == 1) {
             Preconditions.checkState(op == Operator.NOT);
-            return "NOT " + getChild(0).toSql();
+            return "NOT (" + getChild(0).toSql() + ")";
         } else {
             return "(" + getChild(0).toSql() + ")" + " " + op.toString() + " " + "(" + getChild(
                     1).toSql() + ")";
@@ -88,20 +88,19 @@ public class CompoundPredicate extends Predicate {
     }
 
     @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.COMPOUND_PRED;
-        msg.setOpcode(op.toThrift());
+    public String toDigestImpl() {
+        if (children.size() == 1) {
+            return "not " + getChild(0).toDigest();
+        } else {
+            return "(" + getChild(0).toDigest() + ")" + " " + op.toString().toLowerCase() + " " + "(" + getChild(
+                    1).toDigest() + ")";
+        }
     }
 
     @Override
-    public boolean isVectorized() {
-        for (Expr expr : children) {
-            if (!expr.isVectorized()) {
-                return false;
-            }
-        }
-
-        return true;
+    protected void toThrift(TExprNode msg) {
+        msg.node_type = TExprNodeType.COMPOUND_PRED;
+        msg.setOpcode(op.toThrift());
     }
 
     @Override
@@ -247,21 +246,11 @@ public class CompoundPredicate extends Predicate {
         return 31 * super.hashCode() + Objects.hashCode(op);
     }
 
-    @Override
-    public boolean isStrictPredicate() {
-        if (op == Operator.NOT) {
-            return false; // Always return false for NOT
-        }
-        Expr left = getChild(0);
-        Expr right = getChild(1);
-        return left.isStrictPredicate() && right.isStrictPredicate();
-    }
-
     /**
      * Below function ia added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitCompoundPredicate(this, context);
     }
 }

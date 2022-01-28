@@ -47,7 +47,6 @@ class ExecEnv;
 class TBrokerRangeDesc;
 class TNetworkAddress;
 class RuntimeState;
-class Tuple;
 class SlotDescriptor;
 class MemPool;
 class FileReader;
@@ -77,8 +76,6 @@ public:
     ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile>&& parquet_file, int32_t num_of_columns_from_file);
     virtual ~ParquetReaderWrap();
 
-    // Read
-    Status read(Tuple* tuple, const std::vector<SlotDescriptor*>& tuple_slot_descs, MemPool* mem_pool, bool* eof);
     void close();
     Status size(int64_t* size);
     Status init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs, const std::string& timezone);
@@ -87,12 +84,9 @@ public:
     const std::vector<std::shared_ptr<arrow::DataType>>& get_column_types();
 
 private:
-    void fill_slot(Tuple* tuple, SlotDescriptor* slot_desc, MemPool* mem_pool, const uint8_t* value, int32_t len);
     Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
-    Status set_field_null(Tuple* tuple, const SlotDescriptor* slot_desc);
     Status handle_timestamp(const std::shared_ptr<arrow::TimestampArray>& ts_array, uint8_t* buf, int32_t* wbtyes);
 
-private:
     const int32_t _num_of_columns_from_file;
     parquet::ReaderProperties _properties;
     std::shared_ptr<arrow::io::RandomAccessFile> _parquet;

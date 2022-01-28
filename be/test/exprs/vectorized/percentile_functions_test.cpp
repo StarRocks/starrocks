@@ -1,9 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exprs/vectorized/percentile_functions.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+
+#include "util/percentile_value.h"
 
 namespace starrocks {
 namespace vectorized {

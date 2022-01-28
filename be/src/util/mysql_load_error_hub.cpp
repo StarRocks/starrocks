@@ -29,7 +29,9 @@ namespace starrocks {
 
 MysqlLoadErrorHub::MysqlLoadErrorHub(const TMysqlErrorHubInfo& info) : _info(info) {}
 
-MysqlLoadErrorHub::~MysqlLoadErrorHub() = default;
+MysqlLoadErrorHub::~MysqlLoadErrorHub() {
+    close();
+}
 
 Status MysqlLoadErrorHub::prepare() {
     _is_valid = true;
@@ -58,6 +60,8 @@ Status MysqlLoadErrorHub::close() {
     if (!_is_valid) {
         return Status::OK();
     }
+
+    _is_valid = false;
 
     if (!_error_msgs.empty()) {
         RETURN_IF_ERROR(write_mysql());
@@ -125,7 +129,7 @@ Status MysqlLoadErrorHub::open_mysql_conn(MYSQL** my_conn) {
         LOG(WARNING) << "fail to connect Mysql: "
                      << "Host: " << _info.host << " port: " << _info.port << " user: " << _info.user
                      << " passwd: " << _info.passwd << " db: " << _info.db;
-        return error_status("loal error mysql real connect failed.", *my_conn);
+        return error_status("load error mysql real connect failed.", *my_conn);
     }
 
     return Status::OK();
@@ -140,7 +144,7 @@ Status MysqlLoadErrorHub::error_status(const std::string& prefix, MYSQL* my_conn
 
 std::string MysqlLoadErrorHub::debug_string() const {
     std::stringstream out;
-    out << "(tatal_error_num=" << _total_error_num << ")";
+    out << "(total_error_num=" << _total_error_num << ")";
     return out.str();
 }
 

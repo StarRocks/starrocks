@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -29,7 +29,7 @@ public class HashJoinImplementationRule extends ImplementationRule {
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
-                joinOperator.getPruneOutputColumns());
+                joinOperator.getProjection());
         OptExpression result = OptExpression.create(physicalHashJoin, input.getInputs());
         return Lists.newArrayList(result);
     }

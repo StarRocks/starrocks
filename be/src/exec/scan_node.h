@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_QUERY_EXEC_SCAN_NODE_H
-#define STARROCKS_BE_SRC_QUERY_EXEC_SCAN_NODE_H
+#pragma once
 
 #include <string>
 
@@ -30,10 +29,6 @@
 
 namespace starrocks {
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 class TScanRange;
 
 // Abstract base class of all scan nodes; introduces set_scan_range().
@@ -41,46 +36,16 @@ class TScanRange;
 // Includes ScanNode common counters:
 //   BytesRead - total bytes read by this scan node
 //
-//   TotalRawHdfsReadTime - it measures the total time spent in the disk-io-mgr's reading
-//     threads for this node. For example, if we have 3 reading threads and each spent
-//     1 sec, this counter will report 3 sec.
-//
-//   TotalReadThroughput - BytesRead divided by the total time spent in this node
-//     (from Open to Close). For IO bounded queries, this should be very close to the
-//     total throughput of all the disks.
-//
-//   PerDiskRawHdfsThroughput - the read throughput for each disk. If all the data reside
-//     on disk, this should be the read throughput the disk, regardless of whether the
-//     query is IO bounded or not.
-//
 //   NumDisksAccessed - number of disks accessed.
-//
-//   AverageIoMgrQueueCapcity - the average queue capacity in the io mgr for this node.
-//   AverageIoMgrQueueSize - the average queue size (for ready buffers) in the io mgr
-//     for this node.
-//
+
 //   AverageScannerThreadConcurrency - the average number of active scanner threads. A
 //     scanner thread is considered active if it is not blocked by IO. This number would
 //     be low (less than 1) for IO bounded queries. For cpu bounded queries, this number
 //     would be close to the max scanner threads allowed.
 //
-//   AverageHdfsReadThreadConcurrency - the average number of active hdfs reading threads
-//     reading for this scan node. For IO bound queries, this should be close to the
-//     number of disk.
-//
-//     HdfsReadThreadConcurrencyCount=<i> - the number of samples taken when the hdfs read
-//       thread concurrency is <i>.
-//
 //   ScanRangesComplete - number of scan ranges completed
 //
-//   MaterializeTupleTime - time spent in creating in-memory tuple format
-//
 //   ScannerThreadsTotalWallClockTime - total time spent in all scanner threads.
-//
-//   ScannerThreadsUserTime, ScannerThreadsSysTime,
-//   ScannerThreadsVoluntaryContextSwitches, ScannerThreadsInvoluntaryContextSwitches -
-//     these are aggregated counters across all scanner threads of this scan node. They
-//     are taken from getrusage. See RuntimeProfile::ThreadCounters for details.
 //
 class ScanNode : public ExecNode {
 public:
@@ -100,7 +65,6 @@ public:
     RuntimeProfile::Counter* rows_read_counter() const { return _rows_read_counter; }
     RuntimeProfile::Counter* read_timer() const { return _read_timer; }
     RuntimeProfile::Counter* total_throughput_counter() const { return _total_throughput_counter; }
-    RuntimeProfile::Counter* per_read_thread_throughput_counter() const { return _per_read_thread_throughput_counter; }
     RuntimeProfile::Counter* materialize_tuple_timer() const { return _materialize_tuple_timer; }
     RuntimeProfile::ThreadCounters* scanner_thread_counters() const { return _scanner_thread_counters; }
 
@@ -109,7 +73,6 @@ public:
     static const std::string _s_rows_read_counter;
     static const std::string _s_total_read_timer;
     static const std::string _s_total_throughput_counter;
-    static const std::string _s_per_read_thread_throughput_counter;
     static const std::string _s_num_disks_accessed_counter;
     static const std::string _s_materialize_tuple_timer;
     static const std::string _s_scanner_thread_counters_prefix;
@@ -125,7 +88,6 @@ protected:
     // Wall based aggregate read throughput [bytes/sec]
     RuntimeProfile::Counter* _total_throughput_counter;
     // Per thread read throughput [bytes/sec]
-    RuntimeProfile::Counter* _per_read_thread_throughput_counter;
     RuntimeProfile::Counter* _num_disks_accessed_counter;
     RuntimeProfile::Counter* _materialize_tuple_timer; // time writing tuple slots
     // Aggregated scanner thread counters
@@ -134,5 +96,3 @@ protected:
 };
 
 } // namespace starrocks
-
-#endif

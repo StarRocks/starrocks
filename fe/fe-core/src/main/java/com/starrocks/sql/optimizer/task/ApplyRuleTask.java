@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.task;
 
@@ -82,8 +82,7 @@ public class ApplyRuleTask extends OptimizerTask {
             if (newGroupExpression.getOp().isLogical()) {
                 // For logic newGroupExpression, optimize it
                 pushTask(new OptimizeExpressionTask(context, newGroupExpression, exploreOnly));
-                pushTask(new DeriveStatsTask(context, newGroupExpression,
-                        newGroupExpression.getGroup().getLogicalProperty().getOutputColumns()));
+                pushTask(new DeriveStatsTask(context, newGroupExpression));
             } else {
                 // For physical newGroupExpression, enforce and cost it,
                 // Optimize its inputs if needed

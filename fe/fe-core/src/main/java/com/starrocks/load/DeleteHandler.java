@@ -22,9 +22,9 @@
 package com.starrocks.load;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DateLiteral;
@@ -92,34 +92,51 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 public class DeleteHandler implements Writable {
     private static final Logger LOG = LogManager.getLogger(DeleteHandler.class);
+    public static final int CHECK_INTERVAL = 1000;
 
     // TransactionId -> DeleteJob
-    private Map<Long, DeleteJob> idToDeleteJob;
+    private final Map<Long, DeleteJob> idToDeleteJob;
 
     // Db -> DeleteInfo list
     @SerializedName(value = "dbToDeleteInfos")
-    private Map<Long, List<MultiDeleteInfo>> dbToDeleteInfos;
+    private final Map<Long, List<MultiDeleteInfo>> dbToDeleteInfos;
+
+    // this lock is protect List<MultiDeleteInfo> add / remove dbToDeleteInfos is use newConcurrentMap
+    // so it does not need to protect, although removeOldDeleteInfo only be called in one thread
+    // but other thread may call deleteInfoList.add(deleteInfo) so deleteInfoList is not thread safe.
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final Set<Long> killJobSet;
 
     public DeleteHandler() {
         idToDeleteJob = Maps.newConcurrentMap();
         dbToDeleteInfos = Maps.newConcurrentMap();
+        killJobSet = Sets.newConcurrentHashSet();
+    }
+
+    public void killJob(long jobId) {
+        killJobSet.add(jobId);
     }
 
     private enum CancelType {
         METADATA_MISSING,
         TIMEOUT,
         COMMIT_FAIL,
-        UNKNOWN
+        UNKNOWN,
+        USER
     }
 
     public void process(DeleteStmt stmt) throws DdlException, QueryStateException {
@@ -184,12 +201,13 @@ public class DeleteHandler implements Writable {
 
                 // generate label
                 String label = "delete_" + UUID.randomUUID();
-                //generate jobId
-                long jobId = Catalog.getCurrentCatalog().getNextId();
+                long jobId = stmt.getJobId();
                 // begin txn here and generate txn id
                 transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                         Lists.newArrayList(table.getId()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                        // For version compatibility, keep this set to FRONTEND,
+                        // and set it to DELETE in the next release
                         TransactionState.LoadJobSourceType.FRONTEND, jobId, Config.stream_load_default_timeout_second);
 
                 MultiDeleteInfo deleteInfo =
@@ -235,7 +253,7 @@ public class DeleteHandler implements Writable {
                                         replica.getBackendId(), db.getId(), olapTable.getId(),
                                         partition.getId(), indexId,
                                         tabletId, replicaId, schemaHash,
-                                        -1, 0, 0,
+                                        -1, 0,
                                         -1, type, conditions,
                                         TPriority.NORMAL,
                                         TTaskType.REALTIME_PUSH,
@@ -275,10 +293,25 @@ public class DeleteHandler implements Writable {
             LOG.info("waiting delete Job finish, signature: {}, timeout: {}", transactionId, timeoutMs);
             boolean ok = false;
             try {
-                ok = countDownLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+                long countDownTime = timeoutMs;
+                while (countDownTime > 0) {
+                    if (countDownTime > CHECK_INTERVAL) {
+                        countDownTime -= CHECK_INTERVAL;
+                        if (killJobSet.remove(deleteJob.getId())) {
+                            cancelJob(deleteJob, CancelType.USER, "user cancelled");
+                            throw new DdlException("Cancelled");
+                        }
+                        ok = countDownLatch.await(CHECK_INTERVAL, TimeUnit.MILLISECONDS);
+                        if (ok) {
+                            break;
+                        }
+                    } else {
+                        ok = countDownLatch.await(countDownTime, TimeUnit.MILLISECONDS);
+                        break;
+                    }
+                }
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
-                ok = false;
             }
 
             if (!ok) {
@@ -316,7 +349,7 @@ public class DeleteHandler implements Writable {
                                 deleteJob.checkAndUpdateQuorum();
                                 Thread.sleep(1000);
                                 nowQuorumTimeMs = System.currentTimeMillis();
-                                LOG.debug("wait for quorum finished delete job: {}, txn id: {}" + deleteJob.getId(),
+                                LOG.debug("wait for quorum finished delete job: {}, txn id: {}", deleteJob.getId(),
                                         transactionId);
                             }
                         } catch (MetaNotFoundException e) {
@@ -329,8 +362,7 @@ public class DeleteHandler implements Writable {
                         commitJob(deleteJob, db, timeoutMs);
                         break;
                     default:
-                        Preconditions.checkState(false, "wrong delete job state: " + state.name());
-                        break;
+                        throw new IllegalStateException("wrong delete job state: " + state.name());
                 }
             } else {
                 commitJob(deleteJob, db, timeoutMs);
@@ -345,7 +377,9 @@ public class DeleteHandler implements Writable {
     private void commitJob(DeleteJob job, Database db, long timeoutMs) throws DdlException, QueryStateException {
         TransactionStatus status = null;
         try {
-            unprotectedCommitJob(job, db, timeoutMs);
+            if (unprotectedCommitJob(job, db, timeoutMs)) {
+                updateTableDeleteInfo(Catalog.getCurrentCatalog(), db.getId(), job.getDeleteInfo().getTableId());
+            }
             status = Catalog.getCurrentGlobalTransactionMgr().
                     getTransactionState(db.getId(), job.getTransactionId()).getTransactionStatus();
         } catch (UserException e) {
@@ -371,8 +405,7 @@ public class DeleteHandler implements Writable {
                 throw new QueryStateException(MysqlStateType.OK, sb.toString());
             }
             default:
-                Preconditions.checkState(false, "wrong transaction status: " + status.name());
-                break;
+                throw new IllegalStateException("wrong transaction status: " + status.name());
         }
     }
 
@@ -416,12 +449,10 @@ public class DeleteHandler implements Writable {
     private void clearJob(DeleteJob job) {
         if (job != null) {
             long signature = job.getTransactionId();
-            if (idToDeleteJob.containsKey(signature)) {
-                idToDeleteJob.remove(signature);
-            }
+            idToDeleteJob.remove(signature);
             for (PushTask pushTask : job.getPushTasks()) {
                 AgentTaskQueue.removePushTask(pushTask.getBackendId(), pushTask.getSignature(),
-                        pushTask.getVersion(), pushTask.getVersionHash(),
+                        pushTask.getVersion(),
                         pushTask.getPushType(), pushTask.getTaskType());
             }
 
@@ -437,8 +468,11 @@ public class DeleteHandler implements Writable {
                     job.getTransactionId(), dbId);
             dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
             List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
-            synchronized (deleteInfoList) {
+            lock.writeLock().lock();
+            try {
                 deleteInfoList.add(job.getDeleteInfo());
+            } finally {
+                lock.writeLock().unlock();
             }
         }
     }
@@ -455,13 +489,27 @@ public class DeleteHandler implements Writable {
      * @return
      */
     public boolean cancelJob(DeleteJob job, CancelType cancelType, String reason) {
+        if (job == null) {
+            LOG.warn("cancel a null job, cancelType: {}, reason: {}", cancelType.name(), reason);
+            return true;
+        }
         LOG.info("start to cancel delete job, transactionId: {}, cancelType: {}", job.getTransactionId(),
                 cancelType.name());
+
+        // create push task for each backends
+        List<Long> backendIds = Catalog.getCurrentSystemInfo().getBackendIds(true);
+        for (Long backendId : backendIds) {
+            PushTask cancelDeleteTask = new PushTask(backendId, TPushType.CANCEL_DELETE, TPriority.HIGH,
+                    TTaskType.REALTIME_PUSH, job.getTransactionId(),
+                    Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId());
+            AgentTaskQueue.removePushTaskByTransactionId(backendId, job.getTransactionId(),
+                    TPushType.DELETE, TTaskType.REALTIME_PUSH);
+            AgentTaskExecutor.submit(new AgentBatchTask(cancelDeleteTask));
+        }
+
         GlobalTransactionMgr globalTransactionMgr = Catalog.getCurrentGlobalTransactionMgr();
         try {
-            if (job != null) {
-                globalTransactionMgr.abortTransaction(job.getDeleteInfo().getDbId(), job.getTransactionId(), reason);
-            }
+            globalTransactionMgr.abortTransaction(job.getDeleteInfo().getDbId(), job.getTransactionId(), reason);
         } catch (Exception e) {
             TransactionState state =
                     globalTransactionMgr.getTransactionState(job.getDeleteInfo().getDbId(), job.getTransactionId());
@@ -470,7 +518,7 @@ public class DeleteHandler implements Writable {
             } else if (state.getTransactionStatus() == TransactionStatus.COMMITTED ||
                     state.getTransactionStatus() == TransactionStatus.VISIBLE) {
                 LOG.warn("cancel delete job {} failed because it has been committed, transactionId: {}",
-                        job.getTransactionId());
+                        job.getId(), job.getTransactionId());
                 return false;
             } else {
                 LOG.warn("errors while abort transaction", e);
@@ -665,7 +713,7 @@ public class DeleteHandler implements Writable {
                 predicate.setChild(childNo, LiteralExpr.create("0", Type.TINYINT));
             }
         }
-        LiteralExpr result = LiteralExpr.create(value, Type.fromPrimitiveType(column.getPrimitiveType()));
+        LiteralExpr result = LiteralExpr.create(value, Objects.requireNonNull(Type.fromPrimitiveType(column.getPrimitiveType())));
         if (result instanceof DecimalLiteral) {
             ((DecimalLiteral) result).checkPrecisionAndScale(column.getPrecision(), column.getScale());
         } else if (result instanceof DateLiteral) {
@@ -683,40 +731,45 @@ public class DeleteHandler implements Writable {
 
         String dbName = db.getFullName();
         List<MultiDeleteInfo> deleteInfos = dbToDeleteInfos.get(dbId);
-        if (deleteInfos == null) {
-            return infos;
-        }
 
-        for (MultiDeleteInfo deleteInfo : deleteInfos) {
-
-            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbName,
-                    deleteInfo.getTableName(),
-                    PrivPredicate.LOAD)) {
-                continue;
+        lock.readLock().lock();
+        try {
+            if (deleteInfos == null) {
+                return infos;
             }
 
-            List<Comparable> info = Lists.newArrayList();
-            info.add(deleteInfo.getTableName());
-            if (deleteInfo.isNoPartitionSpecified()) {
-                info.add("*");
-            } else {
-                if (deleteInfo.getPartitionNames() == null) {
-                    info.add("");
-                } else {
-                    info.add(Joiner.on(", ").join(deleteInfo.getPartitionNames()));
+            for (MultiDeleteInfo deleteInfo : deleteInfos) {
+
+                if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbName,
+                        deleteInfo.getTableName(),
+                        PrivPredicate.LOAD)) {
+                    continue;
                 }
+
+                List<Comparable> info = Lists.newArrayList();
+                info.add(deleteInfo.getTableName());
+                if (deleteInfo.isNoPartitionSpecified()) {
+                    info.add("*");
+                } else {
+                    if (deleteInfo.getPartitionNames() == null) {
+                        info.add("");
+                    } else {
+                        info.add(Joiner.on(", ").join(deleteInfo.getPartitionNames()));
+                    }
+                }
+
+                info.add(TimeUtils.longToTimeString(deleteInfo.getCreateTimeMs()));
+                String conds = Joiner.on(", ").join(deleteInfo.getDeleteConditions());
+                info.add(conds);
+
+                info.add("FINISHED");
+                infos.add(info);
             }
-
-            info.add(TimeUtils.longToTimeString(deleteInfo.getCreateTimeMs()));
-            String conds = Joiner.on(", ").join(deleteInfo.getDeleteConditions());
-            info.add(conds);
-
-            info.add("FINISHED");
-            infos.add(info);
+        } finally {
+            lock.readLock().unlock();
         }
         // sort by createTimeMs
-        int sortIndex;
-        ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(2);
+        ListComparator<List<Comparable>> comparator = new ListComparator<>(2);
         infos.sort(comparator);
         return infos;
     }
@@ -728,10 +781,14 @@ public class DeleteHandler implements Writable {
         }
         long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
+        updateTableDeleteInfo(catalog, dbId, deleteInfo.getTableId());
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
-        synchronized (deleteInfoList) {
+        lock.writeLock().lock();
+        try {
             deleteInfoList.add(MultiDeleteInfo.upgrade(deleteInfo));
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 
@@ -742,11 +799,28 @@ public class DeleteHandler implements Writable {
         }
         long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
+        updateTableDeleteInfo(catalog, dbId, deleteInfo.getTableId());
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
-        synchronized (deleteInfoList) {
+        lock.writeLock().lock();
+        try {
             deleteInfoList.add(deleteInfo);
+        } finally {
+            lock.writeLock().unlock();
         }
+    }
+
+    private void updateTableDeleteInfo(Catalog catalog, long dbId, long tableId) {
+        Database db = catalog.getDb(dbId);
+        if (db == null) {
+            return;
+        }
+        Table table = db.getTable(tableId);
+        if (table == null) {
+            return;
+        }
+        OlapTable olapTable = (OlapTable) table;
+        olapTable.setHasDelete();
     }
 
     // for delete handler, we only persist those delete already finished.
@@ -756,7 +830,49 @@ public class DeleteHandler implements Writable {
     }
 
     public static DeleteHandler read(DataInput in) throws IOException {
-        String json = Text.readString(in);
+        String json;
+        try {
+            json = Text.readString(in);
+
+            // In older versions of fe, the information in the deleteHandler is not cleaned up,
+            // and if there are many delete statements, it will cause an int overflow
+            // and report an IllegalArgumentException.
+            //
+            // dbToDeleteInfos is only used to record history delete info,
+            // discarding it doesn't make much of a difference
+        } catch (IllegalArgumentException e) {
+            LOG.warn("read delete handler json string failed, ignore", e);
+            return new DeleteHandler();
+        }
         return GsonUtils.GSON.fromJson(json, DeleteHandler.class);
+    }
+
+    public void removeOldDeleteInfo() {
+        long currentTimeMs = System.currentTimeMillis();
+        Iterator<Entry<Long, List<MultiDeleteInfo>>> logIterator = dbToDeleteInfos.entrySet().iterator();
+        while (logIterator.hasNext()) {
+            List<MultiDeleteInfo> deleteInfos = logIterator.next().getValue();
+            lock.writeLock().lock();
+            try {
+                deleteInfos.sort((o1, o2) -> Long.signum(o1.getCreateTimeMs() - o2.getCreateTimeMs()));
+                int labelKeepMaxSecond = Config.label_keep_max_second;
+                int numJobsToRemove = deleteInfos.size() - Config.label_keep_max_num;
+
+                Iterator<MultiDeleteInfo> iterator = deleteInfos.iterator();
+                while (iterator.hasNext()) {
+                    MultiDeleteInfo deleteInfo = iterator.next();
+                    if ((currentTimeMs - deleteInfo.getCreateTimeMs()) / 1000 > labelKeepMaxSecond ||
+                            numJobsToRemove > 0) {
+                        iterator.remove();
+                        --numJobsToRemove;
+                    }
+                }
+                if (deleteInfos.isEmpty()) {
+                    logIterator.remove();
+                }
+            } finally {
+                lock.writeLock().unlock();
+            }
+        }
     }
 }

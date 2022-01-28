@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -12,7 +12,7 @@
 
 #include "common/status.h"
 #include "formats/csv/output_stream.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
 #include "runtime/vectorized/time_types.h"

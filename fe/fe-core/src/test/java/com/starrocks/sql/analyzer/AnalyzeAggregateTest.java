@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.utframe.UtFrameUtils;
@@ -125,5 +125,13 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select distinct v1 from t0 where v2 = 1");
         analyzeFail("select distinct v1,v2 from t0 order by v3");
         analyzeSuccess("select distinct v1 from t0 order by sum(v2)");
+    }
+
+    @Test
+    public void TestGroupByUseOutput() {
+        analyzeSuccess("select v1 + 1 as v from t0 group by v");
+        analyzeSuccess("select v1 + 1 as v from t0 group by grouping sets((v))");
+        analyzeSuccess("select v1 + 1 as v from t0 group by cube(v)");
+        analyzeSuccess("select v1 + 1 as v from t0 group by rollup(v)");
     }
 }

@@ -71,10 +71,10 @@ LIBEVENT_SOURCE=libevent-24236aed01798303745470e6c498bf606e88724a
 LIBEVENT_MD5SUM="c6c4e7614f03754b8c67a17f68177649"
 
 # openssl
-OPENSSL_DOWNLOAD="https://www.openssl.org/source/old/1.0.2/openssl-1.0.2k.tar.gz"
-OPENSSL_NAME=openssl-1.0.2k.tar.gz
-OPENSSL_SOURCE=openssl-1.0.2k
-OPENSSL_MD5SUM="f965fc0bf01bf882b31314b61391ae65"
+OPENSSL_DOWNLOAD="https://github.com/openssl/openssl/archive/OpenSSL_1_1_1m.tar.gz"
+OPENSSL_NAME=openssl-OpenSSL_1_1_1m.tar.gz
+OPENSSL_SOURCE=openssl-OpenSSL_1_1_1m
+OPENSSL_MD5SUM="710c2368d28f1a25ab92e25b5b9b11ec"
 
 # thrift
 THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz"
@@ -119,10 +119,10 @@ GPERFTOOLS_SOURCE=gperftools-gperftools-2.7
 GPERFTOOLS_MD5SUM="797e7b7f6663288e2b90ab664861c61a"
 
 # zlib
-ZLIB_DOWNLOAD="https://zlib.net/zlib-1.2.11.tar.gz"
+ZLIB_DOWNLOAD="https://github.com/madler/zlib/archive/refs/tags/v1.2.11.tar.gz"
 ZLIB_NAME=zlib-1.2.11.tar.gz
 ZLIB_SOURCE=zlib-1.2.11
-ZLIB_MD5SUM="1c9f62f0778697a09d36121ead88e08e"
+ZLIB_MD5SUM="0095d2d2d1f3442ce1318336637b695f"
 
 # lz4
 LZ4_DOWNLOAD="https://github.com/lz4/lz4/archive/v1.9.3.tar.gz"
@@ -142,11 +142,17 @@ RAPIDJSON_NAME=rapidjson-1.1.0.tar.gz
 RAPIDJSON_SOURCE=rapidjson-1.1.0
 RAPIDJSON_MD5SUM="badd12c511e081fec6c89c43a7027bce"
 
+# simdjson
+SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v1.0.2.tar.gz"
+SIMDJSON_NAME=simdjson-v1.0.2.tar.gz
+SIMDJSON_SOURCE=simdjson-1.0.2
+SIMDJSON_MD5SUM="5bb34cca7087a99c450dbdfe406bdc7d"
+
 # curl
-CURL_DOWNLOAD="https://curl.haxx.se/download/curl-7.54.1.tar.gz"
-CURL_NAME=curl-7.54.1.tar.gz
-CURL_SOURCE=curl-7.54.1
-CURL_MD5SUM="21a6e5658fd55103a90b11de7b2a8a8c"
+CURL_DOWNLOAD="https://curl.se/download/curl-7.79.0.tar.gz"
+CURL_NAME=curl-7.79.0.tar.gz
+CURL_SOURCE=curl-7.79.0
+CURL_MD5SUM="b40e4dc4bbc9e109c330556cd58c8ec8"
 
 # RE2
 RE2_DOWNLOAD="https://github.com/google/re2/archive/2017-05-01.tar.gz"
@@ -264,10 +270,29 @@ RAGEL_SOURCE="ragel-6.10"
 RAGEL_MD5SUM="748cae8b50cffe9efcaa5acebc6abf0d"
 
 # mariadb-connector-c
-MARIADB_DOWNLOAD="https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.1.14.tar.gz"
-MARIADB_NAME="mariadb-connector-c-3.1.14.tar.gz"
-MARIADB_SOURCE="mariadb-connector-c-3.1.14"
-MARIADB_MD5SUM="86c4052adeb8447900bf33b4e2ddd1f9"
+MARIADB_DOWNLOAD="https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.2.5.tar.gz"
+MARIADB_NAME="mariadb-connector-c-3.2.5.tar.gz"
+MARIADB_SOURCE="mariadb-connector-c-3.2.5"
+MARIADB_MD5SUM="9ab9205418a933b0a7920e7cf424cc36"
+
+# aliyun_oss_jars
+ALIYUN_OSS_JARS_DOWNLOAD="http://cdn-thirdparty.starrocks.com/aliyun-oss-sdk-3.7.2.tar.gz"
+ALIYUN_OSS_JARS_NAME="aliyun-oss-sdk-3.7.2.tar.gz"
+ALIYUN_OSS_JARS_SOURCE="aliyun-oss-sdk-3.7.2"
+ALIYUN_OSS_JARS_MD5SUM="1e37382831598f4ed049eb276b8e8b29"
+
+AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.9.179.tar.gz"
+AWS_SDK_CPP_NAME="aws-sdk-cpp-1.9.179.tar.gz"
+AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.9.179"
+AWS_SDK_CPP_MD5SUM="3a4e2703eaeeded588814ee9e61a3342"
+
+# velocypack: A fast and compact format for serialization and storage
+VPACK_DOWNLOAD="https://github.com/arangodb/velocypack/archive/refs/tags/XYZ1.0.tar.gz"
+VPACK_NAME="velocypack-XYZ1.0.tar.gz"
+VPACK_SOURCE="velocypack-XYZ1.0"
+VPACK_MD5SUM="161cbf4c347f6daadacfb749c31842f8"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
-TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB"
+TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
+            RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP JEMALLOC \
+            CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB ALIYUN_OSS_JARS AWS_SDK_CPP VPACK"

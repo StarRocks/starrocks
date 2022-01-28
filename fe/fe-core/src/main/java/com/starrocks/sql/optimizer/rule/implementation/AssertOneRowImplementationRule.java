@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -25,7 +25,7 @@ public class AssertOneRowImplementationRule extends ImplementationRule {
 
         PhysicalAssertOneRowOperator physical = new PhysicalAssertOneRowOperator(
                 logical.getAssertion(), logical.getCheckRows(), logical.getTips(),
-                logical.getLimit(), logical.getPredicate());
+                logical.getLimit(), logical.getPredicate(), logical.getProjection());
 
         return Lists.newArrayList(OptExpression.create(physical, input.getInputs()));
     }
