@@ -237,7 +237,11 @@ public:
             }
         }
 
-        return builder.build(lhs->is_constant());
+        auto result = builder.build(lhs->is_constant());
+        if (result->is_constant()) {
+            result->resize(lhs->size());
+        }
+        return result;
     }
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
