@@ -15,6 +15,10 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class CTEUtils {
+    /*
+     * The score refers to the complexity of the operator and the probability of CTE reuse.
+     * The higher the score, the greater the probability of CTE reuse
+     */
     private static final Map<OperatorType, Integer> OPERATOR_SCORES = ImmutableMap.<OperatorType, Integer>builder()
             .put(OperatorType.LOGICAL_JOIN, 4)
             .put(OperatorType.LOGICAL_AGGR, 6)
@@ -74,7 +78,8 @@ public class CTEUtils {
             AtomicInteger scores = new AtomicInteger(0);
             cteProduceEstimate(entry.getValue().getGroupExpression().getGroup(), scores);
 
-            // score 15 = 1 join + 2 scan + 3 project = 1 agg + 1 scan + 2 project = (1 scan + 1 project) * 3
+            // score 15 meanings (1 join + 2 scan + 3 project), (1 agg + 1 scan + 2 project)
+            // A lower score will make a higher penalty factor
             cteContext.addCTEProduceComplexityScores(entry.getKey(), 15.0 / scores.intValue());
         }
     }
