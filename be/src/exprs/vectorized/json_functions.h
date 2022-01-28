@@ -11,6 +11,7 @@ DIAGNOSTIC_POP
 
 #include "column/column_builder.h"
 #include "exprs/vectorized/function_helper.h"
+#include "exprs/vectorized/jsonpath.h"
 #include "simdjson.h"
 #include "velocypack/vpack.h"
 
@@ -122,14 +123,14 @@ public:
      * @paramType: [JsonColumn, BinaryColumn]
      * @return: BinaryColumn
      */
-    DEFINE_VECTORIZED_FN(json_query);
+    DEFINE_VECTORIZED_FN_WITH_PREPARE(json_query);
 
     /**
      * @param: [json_object, json_path]
      * @paramType: [JsonColumn, BinaryColumn]
      * @return: BooleanColumn
      */
-    DEFINE_VECTORIZED_FN(json_exists);
+    DEFINE_VECTORIZED_FN_WITH_PREPARE(json_exists);
 
     /**
      * Build json object from json values

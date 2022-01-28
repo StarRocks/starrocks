@@ -71,25 +71,42 @@ struct ArraySelectorSlice final : public ArraySelector {
 };
 
 // JsonPath implement that suuport array building
-struct JsonPath {
+struct JsonPathPiece {
     std::string key;
-    std::unique_ptr<ArraySelector> array_selector;
+    std::shared_ptr<ArraySelector> array_selector;
 
-    JsonPath(const std::string& key, std::unique_ptr<ArraySelector>&& selector)
-            : key(key), array_selector(std::move(selector)) {}
+    JsonPathPiece(const std::string& key, std::shared_ptr<ArraySelector> selector)
+            : key(key), array_selector(selector) {}
 
-    JsonPath(const std::string& key, ArraySelector* selector) : key(key), array_selector(selector) {}
+    JsonPathPiece(const std::string& key, ArraySelector* selector) : key(key), array_selector(selector) {}
 
+    JsonPathPiece() = default;
+    JsonPathPiece(const JsonPathPiece&) = default;
+    JsonPathPiece(JsonPathPiece&&) = default;
+
+    ~JsonPathPiece() = default;
+
+    static Status parse(const std::string& path_string, std::vector<JsonPathPiece>* parsed_path);
+
+    static vpack::Slice extract(const JsonValue* json, const std::vector<JsonPathPiece>& jsonpath, vpack::Builder* b);
+    static vpack::Slice extract(vpack::Slice root, const std::vector<JsonPathPiece>& jsonpath, int path_index,
+                                vpack::Builder* b);
+};
+
+struct JsonPath {
+    std::vector<JsonPathPiece> paths;
+
+    explicit JsonPath(const std::vector<JsonPathPiece>& value) : paths(value) {}
     JsonPath() = default;
-    JsonPath(JsonPath&& rhs) = default;
-
+    JsonPath(JsonPath&&) = default;
+    JsonPath(const JsonPath& rhs) = default;
     ~JsonPath() = default;
 
-    static Status parse(const std::string& path_string, std::vector<JsonPath>* parsed_path);
+    void reset(const JsonPath& rhs);
+    void reset(JsonPath&& rhs);
 
-    static vpack::Slice extract(const JsonValue* json, const std::vector<JsonPath>& jsonpath, vpack::Builder* b);
-    static vpack::Slice extract(vpack::Slice root, const std::vector<JsonPath>& jsonpath, int path_index,
-                                vpack::Builder* b);
+    static StatusOr<JsonPath> parse(Slice path_string);
+    static vpack::Slice extract(const JsonValue* json, const JsonPath& jsonpath, vpack::Builder* b);
 };
 
 } // namespace starrocks::vectorized

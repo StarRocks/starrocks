@@ -105,7 +105,7 @@ Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelec
     return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
 }
 
-Status JsonPath::parse(const std::string& path_string, std::vector<JsonPath>* parsed_paths) {
+Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPathPiece>* parsed_paths) {
     // split path by ".", and escape quota by "\"
     // eg:
     //    '$.text#abc.xyz'  ->  [$, text#abc, xyz]
@@ -121,11 +121,11 @@ Status JsonPath::parse(const std::string& path_string, std::vector<JsonPath>* pa
         auto& current = path_exprs[i];
 
         if (i == 0) {
-            std::unique_ptr<ArraySelector> selector(new ArraySelectorNone());
+            std::shared_ptr<ArraySelector> selector(new ArraySelectorNone());
             if (current != "$") {
-                parsed_paths->emplace_back(JsonPath("", std::move(selector)));
+                parsed_paths->emplace_back(JsonPathPiece("", std::move(selector)));
             } else {
-                parsed_paths->emplace_back(JsonPath("$", std::move(selector)));
+                parsed_paths->emplace_back(JsonPathPiece("$", std::move(selector)));
                 continue;
             }
         }
@@ -136,19 +136,20 @@ Status JsonPath::parse(const std::string& path_string, std::vector<JsonPath>* pa
         } else {
             std::unique_ptr<ArraySelector> selector;
             RETURN_IF_ERROR(ArraySelector::parse(index, &selector));
-            parsed_paths->emplace_back(JsonPath(col, std::move(selector)));
+            parsed_paths->emplace_back(JsonPathPiece(col, std::move(selector)));
         }
     }
 
     return Status::OK();
 }
 
-vpack::Slice JsonPath::extract(const JsonValue* json, const std::vector<JsonPath>& jsonpath, vpack::Builder* b) {
+vpack::Slice JsonPathPiece::extract(const JsonValue* json, const std::vector<JsonPathPiece>& jsonpath,
+                                    vpack::Builder* b) {
     return extract(json->to_vslice(), jsonpath, 1, b);
 }
 
-vpack::Slice JsonPath::extract(vpack::Slice root, const std::vector<JsonPath>& jsonpath, int path_index,
-                               vpack::Builder* builder) {
+vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPathPiece>& jsonpath, int path_index,
+                                    vpack::Builder* builder) {
     vpack::Slice current_value = root;
 
     for (int i = path_index; i < jsonpath.size(); i++) {
@@ -199,6 +200,24 @@ vpack::Slice JsonPath::extract(vpack::Slice root, const std::vector<JsonPath>& j
     }
 
     return current_value;
+}
+
+void JsonPath::reset(const JsonPath& rhs) {
+    paths = rhs.paths;
+}
+
+void JsonPath::reset(JsonPath&& rhs) {
+    paths = std::move(rhs.paths);
+}
+
+StatusOr<JsonPath> JsonPath::parse(Slice path_string) {
+    std::vector<JsonPathPiece> pieces;
+    RETURN_IF_ERROR(JsonPathPiece::parse(path_string.to_string(), &pieces));
+    return JsonPath(pieces);
+}
+
+vpack::Slice JsonPath::extract(const JsonValue* json, const JsonPath& jsonpath, vpack::Builder* b) {
+    return JsonPathPiece::extract(json, jsonpath.paths, b);
 }
 
 } // namespace starrocks::vectorized

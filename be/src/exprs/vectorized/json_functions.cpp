@@ -17,6 +17,7 @@
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
+#include "udf/udf.h"
 #include "util/json.h"
 #include "velocypack/vpack.h"
 
@@ -399,27 +400,63 @@ ColumnPtr JsonFunctions::json_string(FunctionContext* context, const Columns& co
 
 //////////////////////////// User visiable functions /////////////////////////////////
 
+static StatusOr<JsonPath*> get_prepared_or_parse(FunctionContext* context, Slice slice, JsonPath* out) {
+    JsonPath* prepared = reinterpret_cast<JsonPath*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (prepared != nullptr) {
+        return prepared;
+    }
+    auto res = JsonPath::parse(slice);
+    RETURN_IF(!res.ok(), res.status());
+    out->reset(std::move(res.value()));
+    return out;
+}
+
+Status JsonFunctions::json_query_prepare(starrocks_udf::FunctionContext* context,
+                                         starrocks_udf::FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || context->get_constant_column(1)->only_null() ||
+        !context->is_constant_column(1)) {
+        return Status::OK();
+    }
+
+    auto path_column = context->get_constant_column(1);
+    Slice path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path_column);
+    auto json_path = JsonPath::parse(path_value);
+    RETURN_IF(json_path.ok(), json_path.status());
+    JsonPath* state = new JsonPath(std::move(json_path.value()));
+    context->set_function_state(scope, state);
+
+    return Status::OK();
+}
+
+Status JsonFunctions::json_query_close(starrocks_udf::FunctionContext* context,
+                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        JsonPath* state = reinterpret_cast<JsonPath*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+
 ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {
     auto num_rows = columns[0]->size();
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
     auto path_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     ColumnBuilder<TYPE_JSON> result(num_rows);
 
+    JsonPath stored_path;
     for (int row = 0; row < num_rows; ++row) {
         JsonValue* json_value = json_viewer.value(row);
         auto path_value = path_viewer.value(row);
-        std::string path_str(path_value.get_data(), path_value.get_size());
 
-        std::vector<JsonPath> jsonpath;
-        if (!JsonPath::parse(path_str, &jsonpath).ok()) {
-            VLOG(2) << "parse json path failed: " << path_str;
+        auto jsonpath = get_prepared_or_parse(context, path_value, &stored_path);
+        if (!jsonpath.ok()) {
+            VLOG(2) << "parse json path failed: " << path_value;
             result.append_null();
             continue;
         }
-        VLOG(2) << "parsed json path for " << path_str;
 
         vpack::Builder builder;
-        vpack::Slice slice = JsonPath::extract(json_value, jsonpath, &builder);
+        vpack::Slice slice = JsonPath::extract(json_value, *jsonpath.value(), &builder);
         if (slice.isNone()) {
             result.append_null();
         } else {
@@ -436,6 +473,7 @@ ColumnPtr JsonFunctions::json_exists(FunctionContext* context, const Columns& co
     auto path_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
 
+    JsonPath stored_path;
     for (int row = 0; row < num_rows; row++) {
         if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
             result.append_null();
@@ -443,17 +481,17 @@ ColumnPtr JsonFunctions::json_exists(FunctionContext* context, const Columns& co
         }
 
         JsonValue* json_value = json_viewer.value(row);
-        std::string path_str = path_viewer.value(row).to_string();
+        Slice path_str = path_viewer.value(row);
+        auto jsonpath = get_prepared_or_parse(context, path_str, &stored_path);
 
-        std::vector<JsonPath> paths;
-        if (!JsonPath::parse(path_str, &paths).ok()) {
+        if (!jsonpath.ok()) {
             result.append_null();
             VLOG(2) << "parse json path failed: " << path_str;
             continue;
         }
         VLOG(2) << "json_exists for  " << path_str << " of " << json_value->to_string().value();
         vpack::Builder builder;
-        vpack::Slice slice = JsonPath::extract(json_value, paths, &builder);
+        vpack::Slice slice = JsonPath::extract(json_value, *jsonpath.value(), &builder);
         result.append(!slice.isNone());
     }
 
