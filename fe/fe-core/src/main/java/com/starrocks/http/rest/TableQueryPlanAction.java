@@ -22,9 +22,13 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.starrocks.analysis.InlineViewRef;
+import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -113,7 +117,8 @@ public class TableQueryPlanAction extends RestBaseAction {
             try {
                 jsonObject = new JSONObject(postContent);
             } catch (JSONException e) {
-                throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "malformed json [ " + postContent + " ]");
+                throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
+                        "malformed json [ " + postContent + " ]");
             }
             sql = jsonObject.optString("sql");
             if (Strings.isNullOrEmpty(sql)) {
@@ -182,6 +187,7 @@ public class TableQueryPlanAction extends RestBaseAction {
      */
     private void handleQuery(ConnectContext context, String requestDb, String requestTable, String sql,
                              Map<String, Object> result) {
+        StatementBase statementBase;
         ExecPlan execPlan;
         SqlScanner input =
                 new SqlScanner(new StringReader(sql), context.getSessionVariable().getSqlMode());
@@ -192,12 +198,44 @@ public class TableQueryPlanAction extends RestBaseAction {
              * currently only used in Spark/Flink Connector
              */
             context.getSessionVariable().setSingleNodeExecPlan(true);
-            StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
+            statementBase = SqlParserUtils.getFirstStmt(parser);
             execPlan = new StatementPlanner().plan(statementBase, context);
             context.getSessionVariable().setSingleNodeExecPlan(false);
         } catch (Exception e) {
             throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "The Sql is invalid");
+        }
+
+        // only process select semantic
+        if (!(statementBase instanceof SelectStmt)) {
+            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
+                    "Select statement needed, but found [" + sql + " ]");
+        }
+        SelectStmt stmt = (SelectStmt) statementBase;
+        // only process sql like `select * from table where <predicate>`, only support executing scan semantic
+        if (stmt.hasAggInfo() || stmt.hasAnalyticInfo()
+                || stmt.hasOrderByClause() || stmt.hasOffset() || stmt.hasLimit() || stmt.isExplain()) {
+            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
+                    "only support single table filter-prune-scan, but found [ " + sql + "]");
+        }
+        // only process one table by one http query
+        List<TableRef> fromTables = stmt.getTableRefs();
+        if (fromTables.size() != 1) {
+            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
+                    "Select statement must have only one table");
+        }
+        TableRef fromTable = fromTables.get(0);
+        if (fromTable instanceof InlineViewRef) {
+            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
+                    "Select statement must not embed another statement");
+        }
+        // check consistent http requested resource with sql referenced
+        // if consistent in this way, can avoid check privilege
+        TableName tableAndDb = fromTables.get(0).getName();
+        if (!(tableAndDb.getDb().equals(requestDb) && tableAndDb.getTbl().equals(requestTable))) {
+            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
+                    "requested database and table must consistent with sql: request [ "
+                            + requestDb + "." + requestTable + "]" + "and sql [" + tableAndDb.toString() + "]");
         }
 
         if (execPlan == null) {
