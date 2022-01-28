@@ -471,7 +471,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
 
-    _dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state);
+    _dict_optimize_parser.rewrite_conjuncts<true>(&conjunct_ctxs, state);
 
     int scanners_per_tablet = std::max(1, 64 / (int)_scan_ranges.size());
     for (auto& scan_range : _scan_ranges) {
