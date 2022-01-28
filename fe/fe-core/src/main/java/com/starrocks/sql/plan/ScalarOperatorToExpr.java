@@ -18,6 +18,7 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
@@ -47,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.thrift.TExprOpcode;
+import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -273,17 +275,25 @@ public class ScalarOperatorToExpr {
             return expr;
         }
 
+
+        static Function isNullFN = new Function(new FunctionName("is_null_pred"),
+                new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+        static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
+                new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+        {
+            isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
+            isNotNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
+        }
+
         @Override
         public Expr visitIsNullPredicate(IsNullPredicateOperator predicate, FormatterContext context) {
             Expr expr = new IsNullPredicate(buildExecExpression(predicate.getChild(0), context), predicate.isNotNull());
 
             // for set function name
             if (predicate.isNotNull()) {
-                expr.setFn(Expr.getBuiltinFunction("is_not_null_pred", new Type[] {expr.getChild(0).getType()},
-                        Function.CompareMode.IS_INDISTINGUISHABLE));
+                expr.setFn(isNotNullFN);
             } else {
-                expr.setFn(Expr.getBuiltinFunction("is_null_pred", new Type[] {expr.getChild(0).getType()},
-                        Function.CompareMode.IS_INDISTINGUISHABLE));
+                expr.setFn(isNullFN);
             }
 
             expr.setType(Type.BOOLEAN);
