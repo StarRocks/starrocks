@@ -5578,4 +5578,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     numNodes=0"));
         connectContext.getSessionVariable().setSingleNodeExecPlan(false);
     }
+
+    @Test
+    public void testIsNullPredicateFunctionThrift() throws Exception {
+        String sql = "select v1 from t0 where v1 is null";
+        String thrift = getThriftPlan(sql);
+        Assert.assertTrue(thrift.contains("fn:TFunction(name:TFunctionName(function_name:is_null_pred)"));
+    }
 }
