@@ -39,8 +39,8 @@
 #include "util/unaligned_access.h"
 
 namespace starrocks {
-class TabletColumn;
 
+class TabletColumn;
 class TypeInfo;
 class ScalarTypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
@@ -370,6 +370,7 @@ TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb);
 TypeInfoPtr get_type_info(const TabletColumn& col);
 
 TypeInfoPtr get_type_info(FieldType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale);
+
 TypeInfoPtr get_type_info(const TypeInfo* type_info);
 
 // CppTypeTraits:
@@ -518,15 +519,14 @@ struct CppTypeTraits<OLAP_FIELD_TYPE_ARRAY> {
     using CppType = Collection;
 };
 
-// CppColumnTraits:
-// Infer in-memory type from field type
+// CppColumnTraits
+// Infer ColumnType from FieldType
 template <FieldType ftype>
 struct CppColumnTraits {
     using CppType = typename CppTypeTraits<ftype>::CppType;
     using ColumnType = typename vectorized::ColumnTraits<CppType>::ColumnType;
 };
 
-// Special types: In-memory type(ColumnType) is different from on-disk type(CppType)
 template <>
 struct CppColumnTraits<OLAP_FIELD_TYPE_BOOL> {
     using ColumnType = vectorized::UInt8Column;
@@ -574,19 +574,14 @@ struct CppColumnTraits<OLAP_FIELD_TYPE_UNSIGNED_INT> {
     using ColumnType = vectorized::UInt32Column;
 };
 
-// FieldTypeTraits
-// Specialized at .cpp
-// Default template do nothing but inherit the BaseFieldTypeTraits
+// Instantiate this template to get static access to the type traits.
 template <FieldType field_type>
-struct FieldTypeTraits {
+struct TypeTraits {
     using CppType = typename CppTypeTraits<field_type>::CppType;
+    using ColumnType = typename CppColumnTraits<field_type>::ColumnType;
 
     static const FieldType type = field_type;
     static const int32_t size = sizeof(CppType);
 };
-
-// Instantiate this template to get static access to the type traits.
-template <FieldType field_type>
-using TypeTraits = FieldTypeTraits<field_type>;
 
 } // namespace starrocks

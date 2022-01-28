@@ -78,8 +78,10 @@ static Status convert_float_from_varchar(void* dest, const void* src) {
     return Status::OK();
 }
 
+// ScalarTypeInfoImplBase
+// Base implementation for ScalarTypeInfo, use as default
 template <FieldType field_type>
-struct BaseFieldTypeImpl {
+struct ScalarTypeInfoImplBase {
     using CppType = typename CppTypeTraits<field_type>::CppType;
 
     static const FieldType type = field_type;
@@ -153,21 +155,35 @@ struct BaseFieldTypeImpl {
     }
 };
 
-// Default template does nothing but inherit from BaseFieldTypeImpl
+// Default template does nothing but inherit from ScalarTypeInfoImplBase
 template <FieldType field_type>
-struct FieldTypeImpl : public BaseFieldTypeImpl<field_type> {};
+struct ScalarTypeInfoImpl : public ScalarTypeInfoImplBase<field_type> {};
 
+// ScalarTypeInfoResolver
+// Manage all type-info instances, prodivding getter
 class ScalarTypeInfoResolver {
     DECLARE_SINGLETON(ScalarTypeInfoResolver);
 
 public:
-    const TypeInfoPtr get_type_info(const FieldType t);
+    const TypeInfoPtr get_type_info(const FieldType t) {
+        if (this->_mapping.find(t) == this->_mapping.end()) {
+            return std::make_shared<ScalarTypeInfo>(*this->_mapping[OLAP_FIELD_TYPE_NONE].get());
+        }
+        return std::make_shared<ScalarTypeInfo>(*this->_mapping[t].get());
+    }
 
-    const ScalarTypeInfo* get_scalar_type_info(const FieldType t);
+    const ScalarTypeInfo* get_scalar_type_info(const FieldType t) {
+        DCHECK(is_scalar_field_type(t));
+        return this->_mapping[t].get();
+    }
 
 private:
     template <FieldType field_type>
-    void add_mapping();
+    void add_mapping() {
+        ScalarTypeInfoImpl<field_type> traits;
+        std::unique_ptr<ScalarTypeInfo> scalar_type_info(new ScalarTypeInfo(traits));
+        _mapping[field_type] = std::move(scalar_type_info);
+    }
 
     // item_type_info -> list_type_info
     std::unordered_map<FieldType, std::unique_ptr<ScalarTypeInfo>, std::hash<size_t>> _mapping;
@@ -176,42 +192,23 @@ private:
     const ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
 };
 
-template <typename TypeTraitsClass>
-ScalarTypeInfo::ScalarTypeInfo([[maybe_unused]] TypeTraitsClass t)
-        : _equal(TypeTraitsClass::equal),
-          _cmp(TypeTraitsClass::cmp),
-          _shallow_copy(TypeTraitsClass::shallow_copy),
-          _deep_copy(TypeTraitsClass::deep_copy),
-          _copy_object(TypeTraitsClass::copy_object),
-          _direct_copy(TypeTraitsClass::direct_copy),
-          _convert_from(TypeTraitsClass::convert_from),
-          _from_string(TypeTraitsClass::from_string),
-          _to_string(TypeTraitsClass::to_string),
-          _set_to_max(TypeTraitsClass::set_to_max),
-          _set_to_min(TypeTraitsClass::set_to_min),
-          _hash_code(TypeTraitsClass::hash_code),
-          _datum_cmp(TypeTraitsClass::datum_cmp),
-          _size(TypeTraitsClass::size),
-          _field_type(TypeTraitsClass::type) {}
-
-const TypeInfoPtr ScalarTypeInfoResolver::get_type_info(FieldType t) {
-    if (this->_mapping.find(t) == this->_mapping.end()) {
-        return std::make_shared<ScalarTypeInfo>(*this->_mapping[OLAP_FIELD_TYPE_NONE].get());
-    }
-    return std::make_shared<ScalarTypeInfo>(*this->_mapping[t].get());
-}
-
-const ScalarTypeInfo* ScalarTypeInfoResolver::get_scalar_type_info(FieldType t) {
-    DCHECK(is_scalar_field_type(t));
-    return this->_mapping[t].get();
-}
-
-template <FieldType field_type>
-void ScalarTypeInfoResolver::add_mapping() {
-    FieldTypeImpl<field_type> traits;
-    std::unique_ptr<ScalarTypeInfo> scalar_type_info(new ScalarTypeInfo(traits));
-    _mapping[field_type] = std::move(scalar_type_info);
-}
+template <typename TypeInfoImpl>
+ScalarTypeInfo::ScalarTypeInfo([[maybe_unused]] TypeInfoImpl t)
+        : _equal(TypeInfoImpl::equal),
+          _cmp(TypeInfoImpl::cmp),
+          _shallow_copy(TypeInfoImpl::shallow_copy),
+          _deep_copy(TypeInfoImpl::deep_copy),
+          _copy_object(TypeInfoImpl::copy_object),
+          _direct_copy(TypeInfoImpl::direct_copy),
+          _convert_from(TypeInfoImpl::convert_from),
+          _from_string(TypeInfoImpl::from_string),
+          _to_string(TypeInfoImpl::to_string),
+          _set_to_max(TypeInfoImpl::set_to_max),
+          _set_to_min(TypeInfoImpl::set_to_min),
+          _hash_code(TypeInfoImpl::hash_code),
+          _datum_cmp(TypeInfoImpl::datum_cmp),
+          _size(TypeInfoImpl::size),
+          _field_type(TypeInfoImpl::type) {}
 
 ScalarTypeInfoResolver::ScalarTypeInfoResolver() {
 #define M(ftype) add_mapping<ftype>();
@@ -300,7 +297,7 @@ const ScalarTypeInfo* get_scalar_type_info(FieldType type) {
 }
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_BOOL> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_BOOL> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_BOOL> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_BOOL> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const bool*>(src));
@@ -318,10 +315,10 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_BOOL> : public BaseFieldTypeImpl<OLAP_FIELD
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_NONE> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_NONE> {};
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_NONE> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_NONE> {};
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_TINYINT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_TINYINT> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_TINYINT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_TINYINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const int8_t*>(src));
@@ -338,7 +335,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_TINYINT> : public BaseFieldTypeImpl<OLAP_FI
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_SMALLINT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_SMALLINT> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_SMALLINT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_SMALLINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int16_t>(src));
@@ -354,7 +351,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_SMALLINT> : public BaseFieldTypeImpl<OLAP_F
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_INT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_INT> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_INT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_INT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int32_t>(src));
@@ -370,7 +367,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_INT> : public BaseFieldTypeImpl<OLAP_FIELD_
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_BIGINT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_BIGINT> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_BIGINT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_BIGINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%" PRId64, unaligned_load<int64_t>(src));
@@ -386,7 +383,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_BIGINT> : public BaseFieldTypeImpl<OLAP_FIE
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_LARGEINT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_LARGEINT> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_LARGEINT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_LARGEINT> {
     static Status from_string(void* buf, const std::string& scan_key) {
         int128_t value;
 
@@ -496,7 +493,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_LARGEINT> : public BaseFieldTypeImpl<OLAP_F
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_FLOAT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_FLOAT> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_FLOAT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_FLOAT> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType value = 0.0f;
         if (scan_key.length() > 0) {
@@ -521,7 +518,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_FLOAT> : public BaseFieldTypeImpl<OLAP_FIEL
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_DOUBLE> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DOUBLE> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DOUBLE> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DOUBLE> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType value = 0.0;
         if (scan_key.length() > 0) {
@@ -565,7 +562,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_DOUBLE> : public BaseFieldTypeImpl<OLAP_FIE
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_DECIMAL> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DECIMAL> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DECIMAL> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DECIMAL> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType t;
         RETURN_IF_ERROR(t.from_string(scan_key));
@@ -591,7 +588,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_DECIMAL> : public BaseFieldTypeImpl<OLAP_FI
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_DECIMAL_V2> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DECIMAL_V2> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DECIMAL_V2> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DECIMAL_V2> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType val;
         if (val.parse_from_str(scan_key.c_str(), scan_key.size()) != E_DEC_OK) {
@@ -635,7 +632,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_DECIMAL_V2> : public BaseFieldTypeImpl<OLAP
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_DATE> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DATE> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DATE> {
     static Status from_string(void* buf, const std::string& scan_key) {
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d", &time_tm);
@@ -718,7 +715,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_DATE> : public BaseFieldTypeImpl<OLAP_FIELD
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_DATE_V2> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DATE_V2> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE_V2> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DATE_V2> {
     static Status from_string(void* buf, const std::string& scan_key) {
         vectorized::DateValue date;
         if (!date.from_string(scan_key.data(), scan_key.size())) {
@@ -751,7 +748,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_DATE_V2> : public BaseFieldTypeImpl<OLAP_FI
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_DATETIME> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DATETIME> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATETIME> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DATETIME> {
     static Status from_string(void* buf, const std::string& scan_key) {
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d %H:%M:%S", &time_tm);
@@ -816,7 +813,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_DATETIME> : public BaseFieldTypeImpl<OLAP_F
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_TIMESTAMP> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_TIMESTAMP> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_TIMESTAMP> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_TIMESTAMP> {
     static Status from_string(void* buf, const std::string& scan_key) {
         auto timestamp = unaligned_load<vectorized::TimestampValue>(buf);
         if (!timestamp.from_string(scan_key.data(), scan_key.size())) {
@@ -845,7 +842,7 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_TIMESTAMP> : public BaseFieldTypeImpl<OLAP_
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_CHAR> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_CHAR> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_CHAR> {
     static bool equal(const void* left, const void* right) {
         auto l_slice = unaligned_load<Slice>(left);
         auto r_slice = unaligned_load<Slice>(right);
@@ -923,7 +920,10 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_CHAR> : public BaseFieldTypeImpl<OLAP_FIELD
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_VARCHAR> : public FieldTypeImpl<OLAP_FIELD_TYPE_CHAR> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> {
+    static const FieldType type = OLAP_FIELD_TYPE_VARCHAR;
+    static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_VARCHAR>::size;
+
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
         if (value_len > OLAP_STRING_MAX_LENGTH) {
@@ -973,7 +973,9 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_VARCHAR> : public FieldTypeImpl<OLAP_FIELD_
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_HLL> : public FieldTypeImpl<OLAP_FIELD_TYPE_VARCHAR> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_HLL> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
+    static const FieldType type = OLAP_FIELD_TYPE_HLL;
+    static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_HLL>::size;
     /*
      * Hyperloglog type only used as value, so
      * cmp/from_string/set_to_max/set_to_min function
@@ -992,7 +994,9 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_HLL> : public FieldTypeImpl<OLAP_FIELD_TYPE
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_OBJECT> : public FieldTypeImpl<OLAP_FIELD_TYPE_VARCHAR> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_OBJECT> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
+    static const FieldType type = OLAP_FIELD_TYPE_OBJECT;
+    static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_OBJECT>::size;
     /*
      * Object type only used as value, so
      * cmp/from_string/set_to_max/set_to_min function
@@ -1011,7 +1015,9 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_OBJECT> : public FieldTypeImpl<OLAP_FIELD_T
 };
 
 template <>
-struct FieldTypeImpl<OLAP_FIELD_TYPE_PERCENTILE> : public FieldTypeImpl<OLAP_FIELD_TYPE_VARCHAR> {
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_PERCENTILE> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
+    static const FieldType type = OLAP_FIELD_TYPE_PERCENTILE;
+    static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_PERCENTILE>::size;
     // See copy_row_in_memtable() in olap/row.h, will be removed in future.
     static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
         auto dst_slice = reinterpret_cast<Slice*>(dest);
@@ -1022,6 +1028,6 @@ struct FieldTypeImpl<OLAP_FIELD_TYPE_PERCENTILE> : public FieldTypeImpl<OLAP_FIE
     }
 };
 
-void (*FieldTypeImpl<OLAP_FIELD_TYPE_CHAR>::set_to_max)(void*) = nullptr;
+void (*ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR>::set_to_max)(void*) = nullptr;
 
 } // namespace starrocks
