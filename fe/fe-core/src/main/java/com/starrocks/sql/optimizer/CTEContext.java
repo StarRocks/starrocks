@@ -203,7 +203,12 @@ public class CTEContext {
         double p = produceCosts.get(cteId);
         double c = consumeInlineCosts.get(cteId).stream().reduce(Double::sum).orElse(Double.MAX_VALUE);
 
-        // 3. CTE produce cost > sum of all consume inline costs
+        // 3. Statistic is unknown, must inline
+        if (p <= 0 || c <= 0) {
+            return true;
+        }
+
+        // 4. CTE produce cost > sum of all consume inline costs
         // Consume output rows less produce rows * rate choose inline
         return p * (inlineCTERatio + produceComplexityScores.getOrDefault(cteId, 0D)) > c;
     }

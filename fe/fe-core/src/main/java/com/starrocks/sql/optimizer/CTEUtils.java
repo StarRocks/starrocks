@@ -7,6 +7,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
@@ -69,7 +70,6 @@ public class CTEUtils {
     private static void collectCteProduceEstimate(OptimizerContext context) {
         CTEContext cteContext = context.getCteContext();
         for (Map.Entry<Integer, OptExpression> entry : cteContext.getAllCTEProduce().entrySet()) {
-            //            AtomicInteger totalNodes = new AtomicInteger(0);
             AtomicInteger scores = new AtomicInteger(0);
             cteProduceEstimate(entry.getValue().getGroupExpression().getGroup(), scores);
 
@@ -171,6 +171,13 @@ public class CTEUtils {
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
                 expressionContext, context.getColumnRefFactory(), context);
         statisticsCalculator.estimatorStats();
-        expr.setStatistics(expressionContext.getStatistics());
+
+        if (expressionContext.getStatistics().getColumnStatistics().values().stream()
+                .anyMatch(ColumnStatistic::isUnknown)) {
+            // Mark output rows is zero, inline CTE
+            expr.setStatistics(Statistics.buildFrom(expressionContext.getStatistics()).setOutputRowCount(0).build());
+        } else {
+            expr.setStatistics(expressionContext.getStatistics());
+        }
     }
 }
