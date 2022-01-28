@@ -102,6 +102,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule.DecodeVisitor;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TPartitionType;
@@ -245,6 +246,48 @@ public class PlanFragmentBuilder {
                 return fragment;
             } else {
                 return buildProjectNode(optExpression, projection, fragment, context);
+            }
+        }
+
+        private void setUnUsedOutputColumns(PhysicalOlapScanOperator node, OlapScanNode scanNode, 
+                                            List<ScalarOperator> predicates) {
+            if (ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
+                List<ColumnRefOperator> outputColumns = node.getOutputColumns();
+                Set<Integer> outputColumnIds = new HashSet<Integer>();
+                for (ColumnRefOperator colref : outputColumns) {
+                    outputColumnIds.add(colref.getId());
+                }
+
+                // we only support single pred like: a = xx, single pre can push down to scan node
+                // complex pred like: a + b = xx, can push down to scan node yet
+                // so the columns in complex pred, it useful for the stage after scan
+                Set<Integer> singlePredColumnIds = new HashSet<Integer>();
+                Set<Integer> complexPredColumnIds = new HashSet<Integer>();
+                for (ScalarOperator predicate : predicates) {
+                    ColumnRefSet usedColumns = predicate.getUsedColumns();
+                    if (DecodeVisitor.isSimpleStrictPredicate(predicate)) {
+                        for (int cid : usedColumns.getColumnIds()) {
+                            singlePredColumnIds.add(cid);
+                        }
+                    } else {
+                        for (int cid : usedColumns.getColumnIds()) {
+                            complexPredColumnIds.add(cid);
+                        }
+                    }
+                }
+
+                Set<Integer> unUsedOutputColumnIds = new HashSet<Integer>();
+                Map<Integer, Integer> dictStringIdToIntIds = node.getDictStringIdToIntIds();
+                for (Integer cid : singlePredColumnIds) {
+                    Integer newCid = cid;
+                    if (dictStringIdToIntIds.containsKey(cid)) {
+                        newCid = dictStringIdToIntIds.get(cid);
+                    }
+                    if (!complexPredColumnIds.contains(newCid) && !outputColumnIds.contains(newCid)) {
+                        unUsedOutputColumnIds.add(newCid);
+                    }
+                }
+                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
             }
         }
 
@@ -520,44 +563,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.computeMemLayout();
 
             // set unused output columns
-            if (ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
-                List<ColumnRefOperator> outputColumns = node.getOutputColumns();
-                Set<Integer> outputColumnIds = new HashSet<Integer>();
-                for (ColumnRefOperator colref : outputColumns) {
-                    outputColumnIds.add(colref.getId());
-                }
-
-                // we only support single pred like: a = xx, single pre can push down to scan node
-                // complex pred like: a + b = xx, can push down to scan node yet
-                // so the columns in complex pred, it useful for the stage after scan
-                Set<Integer> singlePredColumnIds = new HashSet<Integer>();
-                Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-                for (ScalarOperator predicate : predicates) {
-                    ColumnRefSet usedColumns = predicate.getUsedColumns();
-                    if (usedColumns.cardinality() > 1) {
-                        for (int cid : usedColumns.getColumnIds()) {
-                            complexPredColumnIds.add(cid);
-                        }
-                    } else if (usedColumns.cardinality() == 1) {
-                        for (int cid : usedColumns.getColumnIds()) {
-                            singlePredColumnIds.add(cid);
-                        }
-                    }
-                }
-
-                Set<Integer> unUsedOutputColumnIds = new HashSet<Integer>();
-                Map<Integer, Integer> dictStringIdToIntIds = node.getDictStringIdToIntIds();
-                for (Integer cid : singlePredColumnIds) {
-                    Integer newCid = cid;
-                    if (dictStringIdToIntIds.containsKey(cid)) {
-                        newCid = dictStringIdToIntIds.get(cid);
-                    }
-                    if (!complexPredColumnIds.contains(newCid) && !outputColumnIds.contains(newCid)) {
-                        unUsedOutputColumnIds.add(newCid);
-                    }
-                }
-                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
-            }
+            setUnUsedOutputColumns(node, scanNode, predicates);
 
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());

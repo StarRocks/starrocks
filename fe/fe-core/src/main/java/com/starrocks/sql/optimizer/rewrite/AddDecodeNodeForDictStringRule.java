@@ -139,7 +139,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         }
     }
 
-    private static class DecodeVisitor extends OptExpressionVisitor<OptExpression, DecodeContext> {
+    public static class DecodeVisitor extends OptExpressionVisitor<OptExpression, DecodeContext> {
 
         public static boolean couldApplyDictOptimize(ScalarOperator operator) {
             return operator.accept(new CouldApplyDictOptimizeVisitor(), null);
