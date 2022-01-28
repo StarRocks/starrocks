@@ -7,9 +7,11 @@
 
 #include "column/chunk.h"
 #include "env/env.h"
+#include "env/env_hdfs.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
+
 namespace starrocks::parquet {
 class FileReader;
 }
@@ -70,7 +72,7 @@ struct HdfsScannerParams {
 
     // file fd (local file or hdfs file)
     std::shared_ptr<RandomAccessFile> fs = nullptr;
-    bool is_hdfs_fs = false;
+    HdfsFsHandle::Type fs_handle_type;
 
     const TupleDescriptor* tuple_desc;
 

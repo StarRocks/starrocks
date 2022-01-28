@@ -124,7 +124,7 @@ Status S3RandomAccessFile::read(uint64_t offset, Slice* res) const {
 
 Status S3RandomAccessFile::read_at(uint64_t offset, const Slice& res) const {
     size_t read = 0;
-    return _client->get_object_range(_bucket, _object, res.data, offset, res.size, &read);
+    return _client->get_object_range(_bucket, _object, offset, res.size, res.data, &read);
     if (read != res.size) {
         return Status::InternalError(
                 strings::Substitute("fail to read enough data, file=$0, offset=$1, size=$2, expect=$3", _file_name,

@@ -29,7 +29,7 @@ std::string get_hdfs_err_msg() {
 
 Status get_namenode_from_path(const std::string& path, std::string* namenode) {
     const std::string local_fs("file:/");
-    ssize_t n = path.find("://");
+    auto n = path.find("://");
 
     if (n == std::string::npos) {
         if (path.compare(0, local_fs.length(), local_fs) == 0) {
@@ -56,10 +56,11 @@ Status get_namenode_from_path(const std::string& path, std::string* namenode) {
 }
 
 std::string get_bucket_from_namenode(const std::string& namenode) {
-    ssize_t n = namenode.find("://");
+    auto n = namenode.find("://");
     if (n == std::string::npos) return "";
     n += 3;
-    size_t n2 = namenode.find('/', n);
+    auto n2 = namenode.find('/', n);
+    if (n2 == std::string::npos) return "";
     return namenode.substr(n, n2 - n);
 }
 

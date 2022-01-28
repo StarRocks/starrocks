@@ -18,6 +18,7 @@
 #include <fstream>
 
 #include "common/logging.h"
+#include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -26,33 +27,13 @@ static inline Aws::String to_aws_string(const std::string& s) {
     return Aws::String(s.data(), s.size());
 }
 
-static inline Aws::String to_string(const Aws::String& s) {
-    return std::string(s.data(), s.size());
-}
-
-// If the first char of the string is the specified character, then return a
-// // string that has the first character removed.
-static inline std::string ltrim_if(const std::string& s, char c) {
-    if (s.length() > 0 && s[0] == c) {
-        return s.substr(1);
-    }
-    return s;
-}
-
-// If s doesn't end with '/', it appends it.
-// Special case: if s is empty, we don't append '/'
-static inline std::string ensure_ends_with_pathsep(std::string s) {
-    if (!s.empty() && s.back() != '/') {
-        s += '/';
-    }
-    return s;
-}
-
-S3Client::S3Client(const Aws::Client::ClientConfiguration& config, const S3Credential& cred, bool use_transfer_manager)
+S3Client::S3Client(const Aws::Client::ClientConfiguration& config, const S3Credential* cred, bool use_transfer_manager)
         : _config(config) {
-    const char* access_key_id = cred.access_key_id.empty() ? getenv("AWS_ACCESS_KEY_ID") : cred.access_key_id.c_str();
-    const char* secret_access_key =
-            cred.secret_access_key.empty() ? getenv("AWS_SECRET_ACCESS_KEY") : cred.secret_access_key.c_str();
+    const char* access_key_id = (cred == nullptr || cred->access_key_id.empty()) ? getenv("AWS_ACCESS_KEY_ID")
+                                                                                 : cred->access_key_id.c_str();
+    const char* secret_access_key = (cred == nullptr || cred->secret_access_key.empty())
+                                            ? getenv("AWS_SECRET_ACCESS_KEY")
+                                            : cred->secret_access_key.c_str();
     std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credentials =
             std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
 
@@ -60,15 +41,13 @@ S3Client::S3Client(const Aws::Client::ClientConfiguration& config, const S3Crede
     if (use_transfer_manager) {
         Aws::Transfer::TransferManagerConfiguration transfer_config(_get_transfer_manager_executor());
         transfer_config.s3Client = _client;
-        transfer_config.transferBufferMaxHeapSize = _transfer_manager_max_buffer_size;
-        transfer_config.bufferSize = _transfer_manager_single_buffer_size;
+        transfer_config.transferBufferMaxHeapSize = kTransferManagerMaxBufferSize;
+        transfer_config.bufferSize = kTransferManagerSingleBufferSize;
         _transfer_manager = Aws::Transfer::TransferManager::Create(transfer_config);
     } else {
         _transfer_manager = nullptr;
     }
 }
-
-S3Client::~S3Client() {}
 
 Status S3Client::create_bucket(const std::string& bucket_name) {
     Aws::S3::Model::BucketLocationConstraint constraint =
@@ -168,14 +147,14 @@ Status S3Client::put_string_object(const std::string& bucket_name, const std::st
     }
 }
 
-Status S3Client::get_object_range(const std::string& bucket_name, const std::string& object_key,
-                                  std::string* object_value, size_t offset, size_t length, size_t* read_bytes) {
+Status S3Client::get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
+                                  size_t length, std::string* object_value, size_t* read_bytes) {
     object_value->resize(length);
-    return get_object_range(bucket_name, object_key, (char*)object_value->data(), offset, length, read_bytes);
+    return get_object_range(bucket_name, object_key, offset, length, (char*)object_value->data(), read_bytes);
 }
 
-Status S3Client::get_object_range(const std::string& bucket_name, const std::string& object_key, char* object_value,
-                                  size_t offset, size_t length, size_t* read_bytes) {
+Status S3Client::get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
+                                  size_t length, char* object_value, size_t* read_bytes) {
     *read_bytes = 0;
     length = (length ? length : 1);
     char buffer[128];
@@ -316,12 +295,13 @@ Status S3Client::delete_object(const std::string& bucket_name, const std::string
 Status S3Client::list_objects(const std::string& bucket_name, const std::string& object_prefix,
                               std::vector<std::string>* result) {
     result->clear();
-
     // S3 paths don't start with '/'
-    std::string prefix = ltrim_if(object_prefix, '/');
+    std::string prefix = StripPrefixString(object_prefix, "/");
     // S3 paths better end with '/', otherwise we might also get a list of files
     // in a directory for which our path is a prefix
-    prefix = ensure_ends_with_pathsep(std::move(prefix));
+    if (prefix.size() > 0 && prefix.back() != '/') {
+        prefix.push_back('/');
+    }
     // the starting object marker
     Aws::String marker;
 
@@ -329,7 +309,7 @@ Status S3Client::list_objects(const std::string& bucket_name, const std::string&
     while (1) {
         Aws::S3::Model::ListObjectsRequest request;
         request.SetBucket(to_aws_string(bucket_name));
-        request.SetMaxKeys(1000); // TODO: make it configurable
+        request.SetMaxKeys(kListObjectMaxKeys);
         request.SetPrefix(to_aws_string(prefix));
         request.SetMarker(marker);
 

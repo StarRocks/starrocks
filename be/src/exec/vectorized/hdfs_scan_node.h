@@ -17,7 +17,7 @@ namespace starrocks::vectorized {
 
 struct HdfsFileDesc {
     THdfsFileFormat::type hdfs_file_format;
-    bool is_hdfs_fs;
+    HdfsFsHandle::Type fs_handle_type;
     std::shared_ptr<RandomAccessFile> fs;
 
     int partition_id = 0;

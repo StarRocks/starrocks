@@ -208,7 +208,7 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     scanner_params.runtime_filter_collector = &_runtime_filter_collector;
     scanner_params.scan_ranges = hdfs_file_desc.splits;
     scanner_params.fs = hdfs_file_desc.fs;
-    scanner_params.is_hdfs_fs = hdfs_file_desc.is_hdfs_fs;
+    scanner_params.fs_handle_type = hdfs_file_desc.fs_handle_type;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -651,7 +651,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         env->new_random_access_file(native_file_path, &file);
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
         hdfs_file_desc->fs = std::move(file);
-        hdfs_file_desc->is_hdfs_fs = false;
+        hdfs_file_desc->fs_handle_type = HdfsFsHandle::Type::LOCAL ;
         hdfs_file_desc->partition_id = scan_range.partition_id;
         hdfs_file_desc->scan_range_path = scan_range_path;
         hdfs_file_desc->file_length = scan_range.file_length;
@@ -665,10 +665,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, &open_limit));
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
         size_t file_size = scan_range.file_length;
-        hdfs_file_desc->is_hdfs_fs = false;
-        if (handle.type == HdfsFsHandle::Type::HDFS) {
-            hdfs_file_desc->is_hdfs_fs = true;
-        }
+        hdfs_file_desc->fs_handle_type = handle.type;
         hdfs_file_desc->fs = create_random_access_hdfs_file(handle, native_file_path, file_size, usePread);
         hdfs_file_desc->partition_id = scan_range.partition_id;
         hdfs_file_desc->scan_range_path = scan_range_path;

@@ -17,58 +17,58 @@ public:
     std::string secret_access_key;
 };
 
-class S3Client : public CloudStorageClient {
+class S3Client final : public CloudStorageClient {
 public:
-    S3Client(const Aws::Client::ClientConfiguration& config, const S3Credential& cred = S3Credential(),
+    S3Client(const Aws::Client::ClientConfiguration& config, const S3Credential* cred = nullptr,
              bool use_transfer_manager = false);
-    ~S3Client();
+    ~S3Client() = default;
 
     /*
      *  Bucket Operation
      */
-    virtual Status create_bucket(const std::string& bucket_name) override;
+    Status create_bucket(const std::string& bucket_name) override;
 
-    virtual Status delete_bucket(const std::string& bucket_name) override;
+    Status delete_bucket(const std::string& bucket_name) override;
 
     /*
      *  Object Operation
      */
-    virtual Status put_object(const std::string& bucket_name, const std::string& object_key,
-                              const std::string& object_path) override;
+    Status put_object(const std::string& bucket_name, const std::string& object_key,
+                      const std::string& object_path) override;
 
-    virtual Status put_string_object(const std::string& bucket_name, const std::string& object_key,
-                                     const std::string& object_value) override;
+    Status put_string_object(const std::string& bucket_name, const std::string& object_key,
+                             const std::string& object_value) override;
 
-    virtual Status get_object(const std::string& bucket_name, const std::string& object_key,
-                              const std::string& object_path) override;
+    Status get_object(const std::string& bucket_name, const std::string& object_key,
+                      const std::string& object_path) override;
 
-    virtual Status get_object_range(const std::string& bucket_name, const std::string& object_key,
-                                    std::string* object_value, size_t offset, size_t length,
-                                    size_t* read_bytes) override;
+    Status get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset, size_t length,
+                            std::string* object_value, size_t* read_bytes) override;
 
-    virtual Status get_object_range(const std::string& bucket_name, const std::string& object_key, char* object_value,
-                                    size_t offset, size_t length, size_t* read_bytes) override;
+    Status get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset, size_t length,
+                            char* object_value, size_t* read_bytes) override;
 
-    virtual Status exist_object(const std::string& bucket_name, const std::string& object_key) override;
+    Status exist_object(const std::string& bucket_name, const std::string& object_key) override;
 
-    virtual Status get_object_size(const std::string& bucket_name, const std::string& object_key,
-                                   size_t* size) override;
+    Status get_object_size(const std::string& bucket_name, const std::string& object_key, size_t* size) override;
 
-    virtual Status delete_object(const std::string& bucket_name, const std::string& object_key) override;
+    Status delete_object(const std::string& bucket_name, const std::string& object_key) override;
 
-    virtual Status list_objects(const std::string& bucket_name, const std::string& object_prefix,
-                                std::vector<std::string>* result) override;
+    Status list_objects(const std::string& bucket_name, const std::string& object_prefix,
+                        std::vector<std::string>* result) override;
 
 private:
     // transfer manager's thread pool.
-    static const int _thread_pool_thread_number = 16;
+    static const int kThreadPoolNumber = 16;
     // maximum size of the transfer manager's working buffer to use.
-    static const int _transfer_manager_max_buffer_size = 512 * 1024 * 1024; // 256MB
+    static const int kTransferManagerMaxBufferSize = 512 * 1024 * 1024; // 256MB
     // maximum size that transfer manager will process in a single request.
-    static const int _transfer_manager_single_buffer_size = 32 * 1024 * 1024; // 32MB
+    static const int kTransferManagerSingleBufferSize = 32 * 1024 * 1024; // 32MB
+    // return how many keys each time call list_object.
+    static const int kListObjectMaxKeys = 1000;
 
     static Aws::Utils::Threading::Executor* _get_transfer_manager_executor() {
-        static Aws::Utils::Threading::PooledThreadExecutor executor(_thread_pool_thread_number);
+        static Aws::Utils::Threading::PooledThreadExecutor executor(kThreadPoolNumber);
         return &executor;
     }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2022-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -33,12 +33,12 @@ public:
     virtual Status get_object(const std::string& bucket_name, const std::string& object_key,
                               const std::string& object_path) = 0;
 
-    virtual Status get_object_range(const std::string& bucket_name, const std::string& object_key,
-                                    std::string* object_value, size_t offset, size_t length, size_t* read_bytes) = 0;
+    virtual Status get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
+                                    size_t length, std::string* object_value, size_t* read_bytes) = 0;
 
     // `object_value` should already be allocated at least `length` bytes
-    virtual Status get_object_range(const std::string& bucket_name, const std::string& object_key, char* object_value,
-                                    size_t offset, size_t length, size_t* read_bytes) = 0;
+    virtual Status get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
+                                    size_t length, char* object_value, size_t* read_bytes) = 0;
 
     virtual Status exist_object(const std::string& bucket_name, const std::string& object_key) = 0;
 

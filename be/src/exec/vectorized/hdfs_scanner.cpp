@@ -191,7 +191,7 @@ void HdfsScanner::update_counter() {
 
     HdfsReadStats hdfs_stats;
 
-    if (_scanner_params.is_hdfs_fs) {
+    if (_scanner_params.fs_handle_type == HdfsFsHandle::Type::HDFS) {
         auto hdfs_file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->hdfs_file();
         if (hdfs_file == nullptr) return;
         // Hdfslib only supports obtaining statistics of hdfs file system.

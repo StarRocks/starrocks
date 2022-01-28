@@ -10,7 +10,7 @@
 namespace starrocks {
 
 struct HdfsFsHandle {
-    enum class Type { HDFS, S3 };
+    enum class Type { LOCAL, HDFS, S3 };
     Type type;
     std::string namenode;
     hdfsFS hdfs_fs;

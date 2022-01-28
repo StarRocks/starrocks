@@ -16,14 +16,14 @@ public class ObejctStorageUtils {
 
     public static String formatObjectStoragePath(String path) {
         if (path.startsWith(SCHEME_S3)) {
-            return SCHEME_S3A + path.substring(5);
+            return SCHEME_S3A + path.substring(SCHEME_S3.length());
         }
         if (path.startsWith(SCHEME_S3N)) {
-            return SCHEME_S3A + path.substring(6);
+            return SCHEME_S3A + path.substring(SCHEME_S3N.length());
         }
         // use s3a to access oss.
-        if (path.startsWith(SCHEME_OSS_PREFIX)) {
-            return SCHEME_S3A + path.substring(6);
+        if (path.startsWith(SCHEME_OSS)) {
+            return SCHEME_S3A + path.substring(SCHEME_OSS.length());
         }
         return path;
     }
