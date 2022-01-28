@@ -190,9 +190,6 @@ public:
             }
         }
 
-<<<<<<< HEAD
-        return builder.build(lhs->is_constant());
-=======
         if (_is_not_in) {
             for (int i = 0; i < size; i++) {
                 output[i] = 1 - output[i];
@@ -204,7 +201,6 @@ public:
             result->resize(lhs->size());
         }
         return result;
->>>>>>> dd076a1f (Bug_fix: Incorrect const column size in the predicate calculation (#3152))
     }
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
