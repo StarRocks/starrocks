@@ -367,6 +367,12 @@ build_zlib() {
 
 # lz4
 build_lz4() {
+    # installation will try to create symbolic file,
+    # and fails if file already exists.
+    for x in lz4 lz4c lz4cat unlz4
+    do
+        rm -f $TP_INSTALL_DIR/bin/$x
+    done
     check_if_source_exist $LZ4_SOURCE
     cd $TP_SOURCE_DIR/$LZ4_SOURCE
 
