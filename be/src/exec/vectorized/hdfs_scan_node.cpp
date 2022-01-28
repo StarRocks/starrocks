@@ -651,7 +651,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         env->new_random_access_file(native_file_path, &file);
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
         hdfs_file_desc->fs = std::move(file);
-        hdfs_file_desc->fs_handle_type = HdfsFsHandle::Type::LOCAL ;
+        hdfs_file_desc->fs_handle_type = HdfsFsHandle::Type::LOCAL;
         hdfs_file_desc->partition_id = scan_range.partition_id;
         hdfs_file_desc->scan_range_path = scan_range_path;
         hdfs_file_desc->file_length = scan_range.file_length;
