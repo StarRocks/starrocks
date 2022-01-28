@@ -12,9 +12,9 @@
 
 namespace starrocks {
 
-static const char* FILESYS_PREFIX_HDFS = "hdfs://";
-static const char* FILESYS_PREFIX_S3 = "s3a://";
-static const char* FILESYS_PREFIX_OSS = "oss://";
+static const char* kFileSysPrefixHdfs = "hdfs://";
+static const char* kFileSysPrefixS3 = "s3a://";
+static const char* KFileSysPrefixOSS = "oss://";
 
 std::string get_hdfs_err_msg() {
     std::string error_msg = get_str_err_msg();
@@ -70,15 +70,15 @@ static bool is_specific_path(const char* path, const char* specific_prefix) {
 }
 
 bool is_hdfs_path(const char* path) {
-    return is_specific_path(path, FILESYS_PREFIX_HDFS);
+    return is_specific_path(path, kFileSysPrefixHdfs);
 }
 
 bool is_s3a_path(const char* path) {
-    return is_specific_path(path, FILESYS_PREFIX_S3);
+    return is_specific_path(path, kFileSysPrefixS3);
 }
 
 bool is_oss_path(const char* path) {
-    return is_specific_path(path, FILESYS_PREFIX_OSS);
+    return is_specific_path(path, KFileSysPrefixOSS);
 }
 
 bool is_object_storage_path(const char* path) {
