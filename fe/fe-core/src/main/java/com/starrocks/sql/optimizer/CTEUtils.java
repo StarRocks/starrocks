@@ -19,6 +19,7 @@ public class CTEUtils {
             .put(OperatorType.LOGICAL_JOIN, 4)
             .put(OperatorType.LOGICAL_AGGR, 6)
             .put(OperatorType.LOGICAL_OLAP_SCAN, 4)
+            .put(OperatorType.LOGICAL_UNION, 4)
             .put(OperatorType.LOGICAL_CTE_PRODUCE, 0)
             .build();
 

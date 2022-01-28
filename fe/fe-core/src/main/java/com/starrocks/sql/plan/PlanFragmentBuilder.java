@@ -2117,7 +2117,7 @@ public class PlanFragmentBuilder {
                     cteFragment.getPlanRoot(), false, DistributionSpec.DistributionType.SHUFFLE);
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
 
-            PlanFragment consumeFragment = new PlanFragment(context.getPlanCtx().getNextFragmentId(), exchangeNode,
+            PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
 
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
