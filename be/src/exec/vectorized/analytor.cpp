@@ -240,9 +240,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     }
 
     // save TFunction object
-    _fns.resize(_agg_fn_ctxs.size());
+    _fns.reserve(_agg_fn_ctxs.size());
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _fns.push_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
+        _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
     }
 
     return Status::OK();
