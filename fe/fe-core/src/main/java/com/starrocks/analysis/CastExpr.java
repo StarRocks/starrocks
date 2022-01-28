@@ -22,17 +22,13 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -41,9 +37,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Objects;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class CastExpr extends Expr {
     private static final Logger LOG = LogManager.getLogger(CastExpr.class);
 
@@ -99,50 +92,6 @@ public class CastExpr extends Expr {
 
     private static String getFnName(Type targetType) {
         return "castTo" + targetType.getPrimitiveType().toString();
-    }
-
-    public static void initBuiltins(FunctionSet functionSet) {
-        for (Type fromType : Type.getSupportedTypes()) {
-            if (fromType.isNull() || fromType.isPseudoType()) {
-                continue;
-            }
-            for (Type toType : Type.getSupportedTypes()) {
-                if (toType.isNull() || toType.isPseudoType()) {
-                    continue;
-                }
-                // Disable casting from boolean to decimal or datetime or date
-                if (fromType.isBoolean() &&
-                        (toType.isDecimalOfAnyVersion() || toType.isDate() || toType.isDatetime())) {
-                    continue;
-                }
-                // Disable no-op casts
-                // for decimalv3, wildcard type(precision=-1, scale=-1) is used here.
-                // so casting a decimalv3 type to another decimalv3 type that is as wide as the former
-                // is accepted.
-                if (fromType.equals(toType) && !fromType.isDecimalV3()) {
-                    continue;
-                }
-
-                // Disable object type(hll, bitmap, percentile) casts
-                if (fromType.isOnlyMetricType() || toType.isOnlyMetricType()) {
-                    continue;
-                }
-
-                String beClass =
-                        toType.isDecimalV2() || fromType.isDecimalV2() ? "DecimalV2Operators" : "CastFunctions";
-                if (fromType.isTime()) {
-                    beClass = "TimeOperators";
-                }
-                String typeName = Function.getUdfTypeName(toType.getPrimitiveType());
-                if (toType.getPrimitiveType() == PrimitiveType.DATE) {
-                    typeName = "date_val";
-                }
-                String beSymbol = "starrocks::" + beClass + "::cast_to_"
-                        + typeName;
-                functionSet.addBuiltin(ScalarFunction.createBuiltin(getFnName(toType),
-                        Lists.newArrayList(fromType), false, toType, beSymbol, null, null, true));
-            }
-        }
     }
 
     @Override
