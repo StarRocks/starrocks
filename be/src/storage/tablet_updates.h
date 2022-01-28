@@ -135,6 +135,8 @@ public:
     // perform compaction, should only be called by compaction thread
     Status compaction(MemTracker* mem_tracker);
 
+    void get_compaction_status(std::string* json_result);
+
     // Remove version whose creation time is less than |expire_time|.
     // [thread-safe]
     void remove_expired_versions(int64_t expire_time);
@@ -365,6 +367,8 @@ private:
 
     std::atomic<bool> _compaction_running{false};
     int64_t _last_compaction_time_ms = 0;
+    std::atomic<int64_t> _last_compaction_success_millis{0};
+    std::atomic<int64_t> _last_compaction_failure_millis{0};
     int64_t _compaction_cost_seek = 32 * 1024 * 1024; // 32MB
 
     mutable std::mutex _rowset_stats_lock;
