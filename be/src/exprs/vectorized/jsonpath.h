@@ -80,12 +80,6 @@ struct JsonPathPiece {
 
     JsonPathPiece(const std::string& key, ArraySelector* selector) : key(key), array_selector(selector) {}
 
-    JsonPathPiece() = default;
-    JsonPathPiece(const JsonPathPiece&) = default;
-    JsonPathPiece(JsonPathPiece&&) = default;
-
-    ~JsonPathPiece() = default;
-
     static Status parse(const std::string& path_string, std::vector<JsonPathPiece>* parsed_path);
 
     static vpack::Slice extract(const JsonValue* json, const std::vector<JsonPathPiece>& jsonpath, vpack::Builder* b);

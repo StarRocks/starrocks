@@ -9,7 +9,6 @@
 
 #include <string>
 
-#include "benchmark/benchmark.h"
 #include "butil/time.h"
 #include "common/statusor.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
@@ -298,7 +297,7 @@ class JsonQueryTestFixture : public ::testing::TestWithParam<std::tuple<std::str
 TEST_P(JsonQueryTestFixture, json_query) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto ints = JsonColumn::create();
-    auto ints2 = BinaryColumn::create();
+    ColumnBuilder<TYPE_VARCHAR> builder(1);
 
     std::string param_json = std::get<0>(GetParam());
     std::string param_path = std::get<1>(GetParam());
@@ -307,12 +306,12 @@ TEST_P(JsonQueryTestFixture, json_query) {
     JsonValue json;
     ASSERT_TRUE(JsonValue::parse(param_json, &json).ok());
     ints->append(&json);
-    ints2->append(param_path);
+    builder.append(param_path);
 
-    Columns columns{ints, ints2};
+    Columns columns{ints, builder.build(true)};
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
 
     ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns);
     ASSERT_TRUE(!!result);
@@ -328,13 +327,17 @@ TEST_P(JsonQueryTestFixture, json_query) {
         ASSERT_EQ(param_result, json_result);
     }
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
 INSTANTIATE_TEST_SUITE_P(JsonQueryTest, JsonQueryTestFixture,
                          ::testing::Values(
+                                // empty
+                                 std::make_tuple(R"( {"k1":1} )", "$", R"( {"k1": 1} )"),
+                                 std::make_tuple(R"( {"k1":1} )", "", R"( {"k1": 1} )"),
+
                                  // various types
                                  std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", "$.k2", R"( "hehe" )"),
                                  std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", "$.k3", R"( [1] )"),
@@ -384,7 +387,7 @@ class JsonExistTestFixture : public ::testing::TestWithParam<std::tuple<std::str
 TEST_P(JsonExistTestFixture, json_exists) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto ints = JsonColumn::create();
-    auto ints2 = BinaryColumn::create();
+    ColumnBuilder<TYPE_VARCHAR> builder(1);
 
     std::string param_json = std::get<0>(GetParam());
     std::string param_result = std::get<1>(GetParam());
@@ -393,20 +396,24 @@ TEST_P(JsonExistTestFixture, json_exists) {
     auto json = JsonValue::parse(param_json);
     ASSERT_TRUE(json.ok());
     ints->append(&*json);
-    ints2->append(param_result);
+    builder.append(param_result);
 
-    Columns columns{ints, ints2};
+    Columns columns{ints, builder.build(true)};
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
 
     ColumnPtr result = JsonFunctions::json_exists(ctx.get(), columns);
     ASSERT_TRUE(!!result);
 
-    ASSERT_EQ(param_exist, (bool)result->get(0).get_uint8());
+    if (param_exist) {
+        ASSERT_TRUE((bool)result->get(0).get_uint8());
+    } else {
+        ASSERT_TRUE(result->get(0).is_null() || !(bool)result->get(0).get_uint8());
+    }
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -431,7 +438,12 @@ INSTANTIATE_TEST_SUITE_P(JsonExistTest, JsonExistTestFixture,
 
                                            // TODO(mofei) nested array not supported
                                            std::make_tuple(R"({"k1": [[1]]})", "$.k1[0][1]", false),
-                                           std::make_tuple(R"({"k1": [[1]]})", "$.k1[0][0]", false)));
+                                           std::make_tuple(R"({"k1": [[1]]})", "$.k1[0][0]", false),
+
+                                           // special case
+                                           std::make_tuple(R"({ "k1": {}})", "$", true),
+                                           std::make_tuple(R"({ "k1": {}})", "", true)
+                                           ));
 
 class JsonParseTestFixture : public ::testing::TestWithParam<std::tuple<std::string, bool>> {};
 
@@ -445,7 +457,8 @@ TEST_P(JsonParseTestFixture, json_parse) {
 
     Columns columns{ints};
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
     ColumnPtr result = JsonFunctions::parse_json(ctx.get(), columns);
     ASSERT_TRUE(!!result);
@@ -461,8 +474,8 @@ TEST_P(JsonParseTestFixture, json_parse) {
         ASSERT_TRUE(datum.is_null());
     }
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -494,7 +507,8 @@ TEST_P(JsonArrayTestFixture, json_array) {
     }
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
     ColumnPtr result = JsonFunctions::json_array(ctx.get(), columns);
     ASSERT_TRUE(!!result);
@@ -506,8 +520,8 @@ TEST_P(JsonArrayTestFixture, json_array) {
     StripWhiteSpace(&param_result);
     ASSERT_EQ(param_result, json_str);
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -539,7 +553,8 @@ TEST_P(JsonObjectTestFixture, json_object) {
     }
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
     ColumnPtr result = JsonFunctions::json_object(ctx.get(), columns);
     ASSERT_TRUE(!!result);
@@ -555,8 +570,8 @@ TEST_P(JsonObjectTestFixture, json_object) {
     StripWhiteSpace(&param_result);
     ASSERT_EQ(param_result, json_str);
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 

@@ -123,14 +123,14 @@ public:
      * @paramType: [JsonColumn, BinaryColumn]
      * @return: BinaryColumn
      */
-    DEFINE_VECTORIZED_FN_WITH_PREPARE(json_query);
+    DEFINE_VECTORIZED_FN(json_query);
 
     /**
      * @param: [json_object, json_path]
      * @paramType: [JsonColumn, BinaryColumn]
      * @return: BooleanColumn
      */
-    DEFINE_VECTORIZED_FN_WITH_PREPARE(json_exists);
+    DEFINE_VECTORIZED_FN(json_exists);
 
     /**
      * Build json object from json values
@@ -147,6 +147,11 @@ public:
      * @return: JsonColumn
      */
     DEFINE_VECTORIZED_FN(json_array);
+
+    static Status native_json_path_prepare(starrocks_udf::FunctionContext* context,
+                                           starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status native_json_path_close(starrocks_udf::FunctionContext* context,
+                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
 
     // extract_from_object extracts value from object according to the json path.
     // Now, we do not support complete functions of json path.

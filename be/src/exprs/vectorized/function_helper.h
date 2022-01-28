@@ -45,13 +45,6 @@ public:
 
 #define DEFINE_VECTORIZED_FN(NAME) static ColumnPtr NAME(FunctionContext* context, const Columns& columns)
 
-#define DEFINE_VECTORIZED_FN_WITH_PREPARE(NAME)                                             \
-    static ColumnPtr NAME(FunctionContext* context, const Columns& columns);                \
-    static Status NAME##_prepare(starrocks_udf::FunctionContext* context,                   \
-                                 starrocks_udf::FunctionContext::FunctionStateScope scope); \
-    static Status NAME##_close(starrocks_udf::FunctionContext* context,                     \
-                               starrocks_udf::FunctionContext::FunctionStateScope scope)
-
 #define DEFINE_VECTORIZED_FN_TEMPLATE(NAME) \
     template <PrimitiveType Type>           \
     static ColumnPtr NAME(FunctionContext* context, const Columns& columns)

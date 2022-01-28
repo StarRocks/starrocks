@@ -411,8 +411,8 @@ static StatusOr<JsonPath*> get_prepared_or_parse(FunctionContext* context, Slice
     return out;
 }
 
-Status JsonFunctions::json_query_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status JsonFunctions::native_json_path_prepare(starrocks_udf::FunctionContext* context,
+                                               starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || context->get_constant_column(1)->only_null() ||
         !context->is_constant_column(1)) {
         return Status::OK();
@@ -421,15 +421,16 @@ Status JsonFunctions::json_query_prepare(starrocks_udf::FunctionContext* context
     auto path_column = context->get_constant_column(1);
     Slice path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path_column);
     auto json_path = JsonPath::parse(path_value);
-    RETURN_IF(json_path.ok(), json_path.status());
+    RETURN_IF(!json_path.ok(), json_path.status());
     JsonPath* state = new JsonPath(std::move(json_path.value()));
     context->set_function_state(scope, state);
 
+    VLOG(10) << "prepare json path: " << path_value;
     return Status::OK();
 }
 
-Status JsonFunctions::json_query_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status JsonFunctions::native_json_path_close(starrocks_udf::FunctionContext* context,
+                                             starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         JsonPath* state = reinterpret_cast<JsonPath*>(context->get_function_state(scope));
         delete state;
