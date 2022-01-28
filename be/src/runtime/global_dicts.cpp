@@ -300,7 +300,7 @@ void DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeConte
     }
 }
 
-template <bool is_predicate, typename ExprType>
+template <bool close_original_expr, bool is_predicate, typename ExprType>
 void DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
                                             const std::vector<SlotId>& slot_ids) {
     auto& expr_ctxs = *pexpr_ctxs;
@@ -319,7 +319,9 @@ void DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctx
             // Because the ExprContext is close safe,
             // Add both pre- and post-rewritten expressions to
             // the free_list to ensure they are closed correctly
-            _expr_close_list.emplace_back(expr_ctx);
+            if constexpr (close_original_expr) {
+                _expr_close_list.emplace_back(expr_ctx);
+            }
             expr_ctx = _free_pool.add(new ExprContext(replaced_expr));
             expr_ctx->prepare(state, RowDescriptor{});
             expr_ctx->open(state);
@@ -328,13 +330,19 @@ void DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctx
     }
 }
 
+template <bool close_original_expr>
 void DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs, RuntimeState* state) {
-    _rewrite_expr_ctxs<true, DictConjunctExpr>(pconjuncts_ctxs, state, std::vector<SlotId>{});
+    _rewrite_expr_ctxs<close_original_expr, true, DictConjunctExpr>(pconjuncts_ctxs, state, std::vector<SlotId>{});
 }
+
+template void DictOptimizeParser::rewrite_conjuncts<true>(std::vector<ExprContext*>* conjuncts_ctxs,
+                                                          RuntimeState* state);
+template void DictOptimizeParser::rewrite_conjuncts<false>(std::vector<ExprContext*>* conjuncts_ctxs,
+                                                           RuntimeState* state);
 
 void DictOptimizeParser::rewrite_exprs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
                                        const std::vector<SlotId>& target_slotids) {
-    _rewrite_expr_ctxs<false, DictStringFuncExpr>(pexpr_ctxs, state, target_slotids);
+    _rewrite_expr_ctxs<true, false, DictStringFuncExpr>(pexpr_ctxs, state, target_slotids);
 }
 
 void DictOptimizeParser::close(RuntimeState* state) noexcept {
