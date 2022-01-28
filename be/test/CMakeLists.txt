@@ -221,7 +221,6 @@ set(EXEC_FILES
         ./util/file_cache_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
-        ./util/internal_queue_test.cpp
         ./util/json_util_test.cpp
         ./util/lru_cache_util_test.cpp
         ./util/md5_test.cpp
