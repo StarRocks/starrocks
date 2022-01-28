@@ -367,16 +367,10 @@ build_zlib() {
 
 # lz4
 build_lz4() {
-    # installation will try to create symbolic file,
-    # and fails if file already exists.
-    for x in lz4 lz4c lz4cat unlz4
-    do
-        rm -f $TP_INSTALL_DIR/bin/$x
-    done
     check_if_source_exist $LZ4_SOURCE
     cd $TP_SOURCE_DIR/$LZ4_SOURCE
 
-    make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR \
+    make -C lib -j$PARALLEL install PREFIX=$TP_INSTALL_DIR \
     INCLUDEDIR=$TP_INCLUDE_DIR/lz4/ BUILD_SHARED=no
 }
 
@@ -757,8 +751,8 @@ build_vpack() {
     $CMAKE_CMD .. \
         -DCMAKE_CXX_STANDARD="17" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
-        -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc 
-    
+        -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc
+
     make -j$PARALLEL && make install
 }
 
