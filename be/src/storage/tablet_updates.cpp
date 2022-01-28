@@ -1533,9 +1533,76 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
 
     Status st = _do_compaction(&info, true);
     if (!st.ok()) {
+        _last_compaction_failure_millis = UnixMillis();
         _compaction_running = false;
+    } else {
+        _last_compaction_success_millis = UnixMillis();
     }
     return st;
+}
+
+void TabletUpdates::get_compaction_status(std::string* json_result) {
+    rapidjson::Document root;
+    root.SetObject();
+
+    EditVersion last_version;
+    std::vector<RowsetSharedPtr> rowsets;
+    std::vector<uint32_t> rowset_ids;
+    {
+        std::lock_guard l1(_lock);
+        std::lock_guard l2(_rowsets_lock);
+        last_version = _edit_version_infos.back()->version;
+        rowset_ids = _edit_version_infos.back()->rowsets;
+        std::sort(rowset_ids.begin(), rowset_ids.end());
+        rowsets.reserve(rowset_ids.size());
+        for (uint32_t i = 0; i < rowset_ids.size(); ++i) {
+            auto it = _rowsets.find(rowset_ids[i]);
+            if (it != _rowsets.end()) {
+                rowsets.push_back(it->second);
+            } else {
+                // should not happen
+                rowsets.push_back(nullptr);
+            }
+        }
+    }
+
+    rapidjson::Value last_compaction_success_time;
+    std::string format_str = ToStringFromUnixMillis(_last_compaction_success_millis.load());
+    last_compaction_success_time.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
+    root.AddMember("last compaction success time", last_compaction_success_time, root.GetAllocator());
+
+    rapidjson::Value last_compaction_failure_time;
+    format_str = ToStringFromUnixMillis(_last_compaction_failure_millis.load());
+    last_compaction_failure_time.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
+    root.AddMember("last compaction failure time", last_compaction_failure_time, root.GetAllocator());
+
+    std::string version_str = Substitute("tablet:$0 #version:[$1_$2] rowsets:$3", _tablet.tablet_id(),
+                                         last_version.major(), last_version.minor(), rowsets.size());
+
+    rapidjson::Value rowset_version;
+    rowset_version.SetString(version_str.c_str(), version_str.length(), root.GetAllocator());
+    root.AddMember("rowset_version", rowset_version, root.GetAllocator());
+
+    rapidjson::Document rowsets_arr;
+    rowsets_arr.SetArray();
+    for (int i = 0; i < rowset_ids.size(); ++i) {
+        rapidjson::Value value;
+        std::string rowset_str;
+        if (rowsets[i] != nullptr) {
+            rowset_str = strings::Substitute("id:$0 #seg:$1", rowset_ids[i], rowsets[i]->num_segments());
+        } else {
+            rowset_str = strings::Substitute("id:$0/NA", rowset_ids[i]);
+        }
+        value.SetString(rowset_str.c_str(), rowset_str.length(), rowsets_arr.GetAllocator());
+        rowsets_arr.PushBack(value, rowsets_arr.GetAllocator());
+    }
+    root.AddMember("rowsets", rowsets_arr, root.GetAllocator());
+
+    // to json string
+    rapidjson::StringBuffer strbuf;
+    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
+    root.Accept(writer);
+    *json_result = std::string(strbuf.GetString());
 }
 
 void TabletUpdates::_calc_compaction_score(RowsetStats* stats) {
