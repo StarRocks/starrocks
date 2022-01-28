@@ -290,7 +290,7 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
 struct ColumnBuilder {
     template <FieldType ftype>
     ColumnPtr operator()(bool nullable) {
-        auto NullableIfNeed = [&](ColumnPtr col) -> ColumnPtr {
+        [[maybe_unused]] auto NullableIfNeed = [&](ColumnPtr col) -> ColumnPtr {
             return nullable ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
         };
 
