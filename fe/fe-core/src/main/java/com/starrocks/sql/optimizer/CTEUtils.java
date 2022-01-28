@@ -134,7 +134,7 @@ public class CTEUtils {
             context.getCteContext().getRequiredColumns().put(consume.getCteId(), requiredColumnRef);
 
             // inline costs
-            if (collectCosts) {
+            if (collectCosts && !expression.getInputs().isEmpty()) {
                 context.getCteContext().addCTEConsumeInlineCost(consume.getCteId(),
                         calculateStatistics(expression.getInputs().get(0), context).getComputeSize());
             }
@@ -173,8 +173,9 @@ public class CTEUtils {
                 expressionContext, context.getColumnRefFactory(), context);
         statisticsCalculator.estimatorStats();
 
-        if (expressionContext.getStatistics().getColumnStatistics().values().stream()
-                .anyMatch(ColumnStatistic::isUnknown)) {
+        if (OperatorType.LOGICAL_OLAP_SCAN.equals(expr.getOp().getOpType()) &&
+                expressionContext.getStatistics().getColumnStatistics().values().stream()
+                        .anyMatch(ColumnStatistic::isUnknown)) {
             // Mark output rows is zero, inline CTE
             expr.setStatistics(Statistics.buildFrom(expressionContext.getStatistics()).setOutputRowCount(0).build());
         } else {
