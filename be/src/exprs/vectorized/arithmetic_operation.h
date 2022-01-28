@@ -132,7 +132,11 @@ template <PrimitiveType Type>
 struct ArithmeticBinaryOperator<ModOp, Type, guard::Guard, FloatPTGuard<Type>> {
     template <typename LType, typename RType, typename ResultType>
     static inline ReturnType<Type, ResultType> apply(const LType& l, const RType& r) {
-        return fmod(l, (r + (r == 0)));
+        auto result = fmod(l, (r + (r == 0)));
+        if (UNLIKELY(result == -0)) {
+            return 0;
+        }
+        return result;
     }
 };
 
