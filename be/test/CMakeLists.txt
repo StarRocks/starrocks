@@ -245,6 +245,7 @@ set(EXEC_FILES
         ./util/int96_test.cpp
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
+        ./gutil/sysinfo-test.cc
         )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
