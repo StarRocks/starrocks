@@ -158,7 +158,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_opts.stats = &stats;
 
     auto* con = pool.add(new vectorized::ConjunctivePredicates());
-    auto type_varchar = ScalarTypeInfoResolver::instance()->get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    auto type_varchar = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
     con->add(pool.add(vectorized::new_column_ge_predicate(type_varchar, 1, Slice(values[8]))));
     seg_opts.delete_predicates.add(*con);
 

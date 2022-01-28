@@ -169,7 +169,7 @@ public:
         while (left < right) {
             size_t mid = left + (right - left) / 2;
             mid_value = &_data[PLAIN_PAGE_HEADER_SIZE + mid * SIZE_OF_TYPE];
-            if (TypeTraits<Type>::cmp(mid_value, value) < 0) {
+            if (get_type_info(Type)->cmp(mid_value, value) < 0) {
                 left = mid + 1;
             } else {
                 right = mid;
@@ -179,7 +179,7 @@ public:
             return Status::NotFound("all value small than the value");
         }
         const void* find_value = &_data[PLAIN_PAGE_HEADER_SIZE + left * SIZE_OF_TYPE];
-        if (TypeTraits<Type>::cmp(find_value, value) == 0) {
+        if (get_type_info(Type)->cmp(find_value, value) == 0) {
             *exact_match = true;
         } else {
             *exact_match = false;

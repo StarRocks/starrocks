@@ -322,7 +322,7 @@ public:
         while (left < right) {
             size_t mid = left + (right - left) / 2;
             const void* mid_value = get_data(mid * SIZE_OF_TYPE);
-            if (TypeTraits<Type>::cmp(mid_value, value) < 0) {
+            if (get_type_info(Type)->cmp(mid_value, value) < 0) {
                 left = mid + 1;
             } else {
                 right = mid;
@@ -332,7 +332,7 @@ public:
             return Status::NotFound("all value small than the value");
         }
         const void* find_value = get_data(left * SIZE_OF_TYPE);
-        *exact_match = TypeTraits<Type>::cmp(find_value, value) == 0;
+        *exact_match = get_type_info(Type)->cmp(find_value, value) == 0;
 
         _cur_index = left;
         return Status::OK();

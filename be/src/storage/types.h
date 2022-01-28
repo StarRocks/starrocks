@@ -33,23 +33,9 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/segment.pb.h" // for ColumnMetaPB
-#include "gutil/strings/numbers.h"
-#include "runtime/date_value.hpp"
-#include "runtime/datetime_value.h"
-#include "runtime/decimalv2_value.h"
 #include "runtime/mem_pool.h"
-#include "runtime/vectorized/time_types.h"
 #include "storage/collection.h"
-#include "storage/decimal12.h"
-#include "storage/olap_common.h"
-#include "storage/olap_define.h"
-#include "storage/tablet_schema.h" // for TabletColumn
-#include "storage/uint24.h"
-#include "storage/vectorized/convert_helper.h"
-#include "util/hash_util.hpp"
 #include "util/mem_util.hpp"
-#include "util/slice.h"
-#include "util/string_parser.hpp"
 #include "util/unaligned_access.h"
 
 namespace starrocks {
@@ -58,25 +44,6 @@ class TabletColumn;
 class TypeInfo;
 class ScalarTypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
-
-class ScalarTypeInfoResolver {
-    DECLARE_SINGLETON(ScalarTypeInfoResolver);
-
-public:
-    const TypeInfoPtr get_type_info(const FieldType t);
-
-    const ScalarTypeInfo* get_scalar_type_info(const FieldType t);
-
-private:
-    template <FieldType field_type>
-    void add_mapping();
-
-    // item_type_info -> list_type_info
-    std::unordered_map<FieldType, std::unique_ptr<ScalarTypeInfo>, std::hash<size_t>> _mapping;
-
-    ScalarTypeInfoResolver(const ScalarTypeInfoResolver&) = delete;
-    const ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
-};
 
 class TypeInfo {
 public:
@@ -404,10 +371,6 @@ TypeInfoPtr get_type_info(const TabletColumn& col);
 
 TypeInfoPtr get_type_info(FieldType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale);
 TypeInfoPtr get_type_info(const TypeInfo* type_info);
-// NOLINTNEXTLINE
-static const std::vector<std::string> DATE_FORMATS{
-        "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d", "%y/%m/%d",
-};
 
 // CppTypeTraits:
 // Infer on-disk type(CppType) from FieldType
@@ -611,118 +574,19 @@ struct CppColumnTraits<OLAP_FIELD_TYPE_UNSIGNED_INT> {
     using ColumnType = vectorized::UInt32Column;
 };
 
-template <FieldType field_type>
-struct BaseFieldtypeTraits : public CppTypeTraits<field_type> {
-    using CppType = typename CppTypeTraits<field_type>::CppType;
-
-    static bool equal(const void* left, const void* right) {
-        CppType l_value = unaligned_load<CppType>(left);
-        CppType r_value = unaligned_load<CppType>(right);
-        return l_value == r_value;
-    }
-
-    static int cmp(const void* left, const void* right) {
-        CppType left_int = unaligned_load<CppType>(left);
-        CppType right_int = unaligned_load<CppType>(right);
-        if (left_int < right_int) {
-            return -1;
-        } else if (left_int > right_int) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
-
-    static void shallow_copy(void* dest, const void* src) {
-        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
-    }
-
-    static void deep_copy(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
-    }
-
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
-    }
-
-    static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
-        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
-    }
-
-    static Status convert_from(void* dest __attribute__((unused)), const void* src __attribute__((unused)),
-                               const TypeInfoPtr& src_type __attribute__((unused)),
-                               MemPool* mem_pool __attribute__((unused))) {
-        return Status::NotSupported("Not supported function");
-    }
-
-    static void set_to_max(void* buf) { unaligned_store<CppType>(buf, std::numeric_limits<CppType>::max()); }
-
-    static void set_to_min(void* buf) { unaligned_store<CppType>(buf, std::numeric_limits<CppType>::lowest()); }
-
-    static uint32_t hash_code(const void* data, uint32_t seed) { return HashUtil::hash(data, sizeof(CppType), seed); }
-
-    static std::string to_string(const void* src) {
-        std::stringstream stream;
-        stream << unaligned_load<CppType>(src);
-        return stream.str();
-    }
-
-    static Status from_string(void* buf, const std::string& scan_key) {
-        CppType value = 0;
-        if (scan_key.length() > 0) {
-            value = static_cast<CppType>(strtol(scan_key.c_str(), nullptr, 10));
-        }
-        unaligned_store<CppType>(buf, value);
-        return Status::OK();
-    }
-
-    static int datum_cmp(const vectorized::Datum& left, const vectorized::Datum& right) {
-        CppType v1 = left.get<CppType>();
-        CppType v2 = right.get<CppType>();
-        return (v1 < v2) ? -1 : (v2 < v1) ? 1 : 0;
-    }
-};
-
-template <typename T>
-Status convert_int_from_varchar(void* dest, const void* src) {
-    using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_VARCHAR>::CppType;
-    auto src_value = unaligned_load<SrcType>(src);
-    StringParser::ParseResult parse_res;
-    T result = StringParser::string_to_int<T>(src_value.get_data(), src_value.get_size(), &parse_res);
-    if (UNLIKELY(parse_res != StringParser::PARSE_SUCCESS)) {
-        return Status::InternalError(fmt::format("Fail to cast to int from string: {}",
-                                                 std::string(src_value.get_data(), src_value.get_size())));
-    }
-    memcpy(dest, &result, sizeof(T));
-    return Status::OK();
-}
-
-template <typename T>
-Status convert_float_from_varchar(void* dest, const void* src) {
-    using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_VARCHAR>::CppType;
-    auto src_value = unaligned_load<SrcType>(src);
-    StringParser::ParseResult parse_res;
-    T result = StringParser::string_to_float<T>(src_value.get_data(), src_value.get_size(), &parse_res);
-    if (UNLIKELY(parse_res != StringParser::PARSE_SUCCESS)) {
-        return Status::InternalError(fmt::format("Fail to cast to float from string: {}",
-                                                 std::string(src_value.get_data(), src_value.get_size())));
-    }
-    unaligned_store<T>(dest, result);
-    return Status::OK();
-}
-
 // FieldTypeTraits
 // Specialized at .cpp
+// Default template do nothing but inherit the BaseFieldTypeTraits
 template <FieldType field_type>
-struct FieldTypeTraits : public BaseFieldtypeTraits<field_type> {};
-
-// Instantiate this template to get static access to the type traits.
-template <FieldType field_type>
-struct TypeTraits : public FieldTypeTraits<field_type> {
+struct FieldTypeTraits {
     using CppType = typename CppTypeTraits<field_type>::CppType;
 
     static const FieldType type = field_type;
     static const int32_t size = sizeof(CppType);
 };
+
+// Instantiate this template to get static access to the type traits.
+template <FieldType field_type>
+using TypeTraits = FieldTypeTraits<field_type>;
 
 } // namespace starrocks

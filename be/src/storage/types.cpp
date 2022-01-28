@@ -21,10 +21,160 @@
 
 #include "storage/types.h"
 
+#include "exec/vectorized/join_hash_map.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/date_value.hpp"
+#include "runtime/datetime_value.h"
+#include "runtime/decimalv2_value.h"
+#include "runtime/mem_pool.h"
+#include "runtime/vectorized/time_types.h"
+#include "storage/collection.h"
+#include "storage/decimal12.h"
 #include "storage/decimal_type_info.h"
+#include "storage/olap_common.h"
+#include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
+#include "storage/tablet_schema.h" // for TabletColumn
+#include "storage/uint24.h"
+#include "storage/vectorized/convert_helper.h"
+#include "util/hash_util.hpp"
+#include "util/mem_util.hpp"
+#include "util/slice.h"
+#include "util/string_parser.hpp"
+#include "util/unaligned_access.h"
 
 namespace starrocks {
+
+// NOLINTNEXTLINE
+static const std::vector<std::string> DATE_FORMATS{
+        "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d", "%y/%m/%d",
+};
+
+template <typename T>
+static Status convert_int_from_varchar(void* dest, const void* src) {
+    using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_VARCHAR>::CppType;
+    auto src_value = unaligned_load<SrcType>(src);
+    StringParser::ParseResult parse_res;
+    T result = StringParser::string_to_int<T>(src_value.get_data(), src_value.get_size(), &parse_res);
+    if (UNLIKELY(parse_res != StringParser::PARSE_SUCCESS)) {
+        return Status::InternalError(fmt::format("Fail to cast to int from string: {}",
+                                                 std::string(src_value.get_data(), src_value.get_size())));
+    }
+    memcpy(dest, &result, sizeof(T));
+    return Status::OK();
+}
+
+template <typename T>
+static Status convert_float_from_varchar(void* dest, const void* src) {
+    using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_VARCHAR>::CppType;
+    auto src_value = unaligned_load<SrcType>(src);
+    StringParser::ParseResult parse_res;
+    T result = StringParser::string_to_float<T>(src_value.get_data(), src_value.get_size(), &parse_res);
+    if (UNLIKELY(parse_res != StringParser::PARSE_SUCCESS)) {
+        return Status::InternalError(fmt::format("Fail to cast to float from string: {}",
+                                                 std::string(src_value.get_data(), src_value.get_size())));
+    }
+    unaligned_store<T>(dest, result);
+    return Status::OK();
+}
+
+template <FieldType field_type>
+struct BaseFieldTypeImpl {
+    using CppType = typename CppTypeTraits<field_type>::CppType;
+
+    static const FieldType type = field_type;
+    static const int32_t size = sizeof(CppType);
+
+    static bool equal(const void* left, const void* right) {
+        CppType l_value = unaligned_load<CppType>(left);
+        CppType r_value = unaligned_load<CppType>(right);
+        return l_value == r_value;
+    }
+
+    static int cmp(const void* left, const void* right) {
+        CppType left_int = unaligned_load<CppType>(left);
+        CppType right_int = unaligned_load<CppType>(right);
+        if (left_int < right_int) {
+            return -1;
+        } else if (left_int > right_int) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+    static void shallow_copy(void* dest, const void* src) {
+        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
+    }
+
+    static void deep_copy(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
+        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
+    }
+
+    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
+        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
+    }
+
+    static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
+        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
+    }
+
+    static Status convert_from(void* dest __attribute__((unused)), const void* src __attribute__((unused)),
+                               const TypeInfoPtr& src_type __attribute__((unused)),
+                               MemPool* mem_pool __attribute__((unused))) {
+        return Status::NotSupported("Not supported function");
+    }
+
+    static void set_to_max(void* buf) { unaligned_store<CppType>(buf, std::numeric_limits<CppType>::max()); }
+
+    static void set_to_min(void* buf) { unaligned_store<CppType>(buf, std::numeric_limits<CppType>::lowest()); }
+
+    static uint32_t hash_code(const void* data, uint32_t seed) { return HashUtil::hash(data, sizeof(CppType), seed); }
+
+    static std::string to_string(const void* src) {
+        std::stringstream stream;
+        stream << unaligned_load<CppType>(src);
+        return stream.str();
+    }
+
+    static Status from_string(void* buf, const std::string& scan_key) {
+        CppType value = 0;
+        if (scan_key.length() > 0) {
+            value = static_cast<CppType>(strtol(scan_key.c_str(), nullptr, 10));
+        }
+        unaligned_store<CppType>(buf, value);
+        return Status::OK();
+    }
+
+    static int datum_cmp(const vectorized::Datum& left, const vectorized::Datum& right) {
+        CppType v1 = left.get<CppType>();
+        CppType v2 = right.get<CppType>();
+        return (v1 < v2) ? -1 : (v2 < v1) ? 1 : 0;
+    }
+};
+
+// Default template does nothing but inherit from BaseFieldTypeImpl
+template <FieldType field_type>
+struct FieldTypeImpl : public BaseFieldTypeImpl<field_type> {};
+
+class ScalarTypeInfoResolver {
+    DECLARE_SINGLETON(ScalarTypeInfoResolver);
+
+public:
+    const TypeInfoPtr get_type_info(const FieldType t);
+
+    const ScalarTypeInfo* get_scalar_type_info(const FieldType t);
+
+private:
+    template <FieldType field_type>
+    void add_mapping();
+
+    // item_type_info -> list_type_info
+    std::unordered_map<FieldType, std::unique_ptr<ScalarTypeInfo>, std::hash<size_t>> _mapping;
+
+    ScalarTypeInfoResolver(const ScalarTypeInfoResolver&) = delete;
+    const ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
+};
 
 template <typename TypeTraitsClass>
 ScalarTypeInfo::ScalarTypeInfo([[maybe_unused]] TypeTraitsClass t)
@@ -58,7 +208,7 @@ const ScalarTypeInfo* ScalarTypeInfoResolver::get_scalar_type_info(FieldType t) 
 
 template <FieldType field_type>
 void ScalarTypeInfoResolver::add_mapping() {
-    TypeTraits<field_type> traits;
+    FieldTypeImpl<field_type> traits;
     std::unique_ptr<ScalarTypeInfo> scalar_type_info(new ScalarTypeInfo(traits));
     _mapping[field_type] = std::move(scalar_type_info);
 }
@@ -150,7 +300,7 @@ const ScalarTypeInfo* get_scalar_type_info(FieldType type) {
 }
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_BOOL> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_BOOL> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_BOOL> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_BOOL> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const bool*>(src));
@@ -168,10 +318,10 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_BOOL> : public BaseFieldtypeTraits<OLAP_F
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_NONE> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_NONE> {};
+struct FieldTypeImpl<OLAP_FIELD_TYPE_NONE> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_NONE> {};
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_TINYINT> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_TINYINT> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_TINYINT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_TINYINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const int8_t*>(src));
@@ -188,7 +338,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_TINYINT> : public BaseFieldtypeTraits<OLA
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_SMALLINT> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_SMALLINT> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_SMALLINT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_SMALLINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int16_t>(src));
@@ -204,7 +354,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_SMALLINT> : public BaseFieldtypeTraits<OL
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_INT> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_INT> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_INT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_INT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int32_t>(src));
@@ -220,7 +370,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_INT> : public BaseFieldtypeTraits<OLAP_FI
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_BIGINT> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_BIGINT> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_BIGINT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_BIGINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%" PRId64, unaligned_load<int64_t>(src));
@@ -236,7 +386,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_BIGINT> : public BaseFieldtypeTraits<OLAP
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_LARGEINT> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_LARGEINT> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_LARGEINT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_LARGEINT> {
     static Status from_string(void* buf, const std::string& scan_key) {
         int128_t value;
 
@@ -346,7 +496,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_LARGEINT> : public BaseFieldtypeTraits<OL
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_FLOAT> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_FLOAT> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_FLOAT> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_FLOAT> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType value = 0.0f;
         if (scan_key.length() > 0) {
@@ -371,7 +521,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_FLOAT> : public BaseFieldtypeTraits<OLAP_
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_DOUBLE> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_DOUBLE> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_DOUBLE> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DOUBLE> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType value = 0.0;
         if (scan_key.length() > 0) {
@@ -415,7 +565,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_DOUBLE> : public BaseFieldtypeTraits<OLAP
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_DECIMAL> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_DECIMAL> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_DECIMAL> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DECIMAL> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType t;
         RETURN_IF_ERROR(t.from_string(scan_key));
@@ -441,7 +591,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_DECIMAL> : public BaseFieldtypeTraits<OLA
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_DECIMAL_V2> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_DECIMAL_V2> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_DECIMAL_V2> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DECIMAL_V2> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType val;
         if (val.parse_from_str(scan_key.c_str(), scan_key.size()) != E_DEC_OK) {
@@ -485,7 +635,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_DECIMAL_V2> : public BaseFieldtypeTraits<
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_DATE> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_DATE> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_DATE> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DATE> {
     static Status from_string(void* buf, const std::string& scan_key) {
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d", &time_tm);
@@ -568,7 +718,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_DATE> : public BaseFieldtypeTraits<OLAP_F
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_DATE_V2> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_DATE_V2> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_DATE_V2> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DATE_V2> {
     static Status from_string(void* buf, const std::string& scan_key) {
         vectorized::DateValue date;
         if (!date.from_string(scan_key.data(), scan_key.size())) {
@@ -601,7 +751,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_DATE_V2> : public BaseFieldtypeTraits<OLA
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_DATETIME> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_DATETIME> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_DATETIME> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_DATETIME> {
     static Status from_string(void* buf, const std::string& scan_key) {
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d %H:%M:%S", &time_tm);
@@ -666,7 +816,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_DATETIME> : public BaseFieldtypeTraits<OL
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_TIMESTAMP> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_TIMESTAMP> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_TIMESTAMP> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_TIMESTAMP> {
     static Status from_string(void* buf, const std::string& scan_key) {
         auto timestamp = unaligned_load<vectorized::TimestampValue>(buf);
         if (!timestamp.from_string(scan_key.data(), scan_key.size())) {
@@ -695,7 +845,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_TIMESTAMP> : public BaseFieldtypeTraits<O
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_CHAR> : public BaseFieldtypeTraits<OLAP_FIELD_TYPE_CHAR> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_CHAR> : public BaseFieldTypeImpl<OLAP_FIELD_TYPE_CHAR> {
     static bool equal(const void* left, const void* right) {
         auto l_slice = unaligned_load<Slice>(left);
         auto r_slice = unaligned_load<Slice>(right);
@@ -773,7 +923,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_CHAR> : public BaseFieldtypeTraits<OLAP_F
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_VARCHAR> : public FieldTypeTraits<OLAP_FIELD_TYPE_CHAR> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_VARCHAR> : public FieldTypeImpl<OLAP_FIELD_TYPE_CHAR> {
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
         if (value_len > OLAP_STRING_MAX_LENGTH) {
@@ -823,7 +973,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_VARCHAR> : public FieldTypeTraits<OLAP_FI
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_HLL> : public FieldTypeTraits<OLAP_FIELD_TYPE_VARCHAR> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_HLL> : public FieldTypeImpl<OLAP_FIELD_TYPE_VARCHAR> {
     /*
      * Hyperloglog type only used as value, so
      * cmp/from_string/set_to_max/set_to_min function
@@ -842,7 +992,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_HLL> : public FieldTypeTraits<OLAP_FIELD_
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_OBJECT> : public FieldTypeTraits<OLAP_FIELD_TYPE_VARCHAR> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_OBJECT> : public FieldTypeImpl<OLAP_FIELD_TYPE_VARCHAR> {
     /*
      * Object type only used as value, so
      * cmp/from_string/set_to_max/set_to_min function
@@ -861,7 +1011,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_OBJECT> : public FieldTypeTraits<OLAP_FIE
 };
 
 template <>
-struct FieldTypeTraits<OLAP_FIELD_TYPE_PERCENTILE> : public FieldTypeTraits<OLAP_FIELD_TYPE_VARCHAR> {
+struct FieldTypeImpl<OLAP_FIELD_TYPE_PERCENTILE> : public FieldTypeImpl<OLAP_FIELD_TYPE_VARCHAR> {
     // See copy_row_in_memtable() in olap/row.h, will be removed in future.
     static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
         auto dst_slice = reinterpret_cast<Slice*>(dest);
@@ -872,6 +1022,6 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_PERCENTILE> : public FieldTypeTraits<OLAP
     }
 };
 
-void (*FieldTypeTraits<OLAP_FIELD_TYPE_CHAR>::set_to_max)(void*) = nullptr;
+void (*FieldTypeImpl<OLAP_FIELD_TYPE_CHAR>::set_to_max)(void*) = nullptr;
 
 } // namespace starrocks
