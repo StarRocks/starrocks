@@ -629,11 +629,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void disableTrimOnlyFilteredColumnsInScanStage() {
-        this.enableFilterUnusedColumnsInScanStage = true;
+        this.enableFilterUnusedColumnsInScanStage = false;
     }
 
     public void enableTrimOnlyFilteredColumnsInScanStage() {
-        this.enableFilterUnusedColumnsInScanStage = false;
+        this.enableFilterUnusedColumnsInScanStage = true;
     }
 
     public boolean isCboEnableDPJoinReorder() {
