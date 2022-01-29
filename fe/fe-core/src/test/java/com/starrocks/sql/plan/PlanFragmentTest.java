@@ -3293,8 +3293,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "CASE WHEN CAST(substr(9: k7, 2, 1) AS BOOLEAN) THEN 3 WHEN TRUE THEN 1 ELSE 2 END"));
 
         // 1.9 test remove when clause when is false/null
-        String sql19 = "select case when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql19), "if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), 3, 2)"));
+        String sql19 =
+                "select case when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
+        Assert.assertTrue(StringUtils
+                .containsIgnoreCase(getFragmentPlan(sql19), "if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), 3, 2)"));
 
         // test 2: case xxx when then
         // 2.1 test equal
@@ -3344,13 +3346,16 @@ public class PlanFragmentTest extends PlanTestBase {
                 "constant exprs: \n         'a'"));
 
         // 2.6 when expr equals case expr in middle
-        String sql26 = "select case 'a' when substr(k7,2,1) then 2 when 'a' then 'b' else 'other' end as col2 from test.baseall;";
+        String sql26 =
+                "select case 'a' when substr(k7,2,1) then 2 when 'a' then 'b' else 'other' end as col2 from test.baseall;";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql26),
                 "CASE 'a' WHEN substr(9: k7, 2, 1) THEN '2' WHEN 'a' THEN 'b' ELSE 'other' END"));
 
         // 2.7 test remove when clause not equals case expr
-        String sql27 = "select case 'a' when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql27), "if(substr(9: k7, 2, 1) = 'a', 3, 2)"));
+        String sql27 =
+                "select case 'a' when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
+        Assert.assertTrue(
+                StringUtils.containsIgnoreCase(getFragmentPlan(sql27), "if(substr(9: k7, 2, 1) = 'a', 3, 2)"));
 
         // 3.1 test float,float in case expr
         String sql31 = "select case cast(100 as float) when 1 then 'a' when 2 then 'b' else 'other' end as col31;";
@@ -3378,7 +3383,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql423 = "select case 'a' when null then 'a' when false then 'b' end as col421";
         Assert.assertTrue(
                 StringUtils.containsIgnoreCase(getFragmentPlan(sql423), "constant exprs: \n         NULL"));
-     }
+    }
 
     @Test
     public void testJoinPredicateTransitivityWithSubqueryInWhereClause() throws Exception {
@@ -5044,7 +5049,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  6:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (PARTITIONED)"));
     }
-    
+
     @Test
     public void testDeriveOutputColumns() throws Exception {
         String sql = "select \n" +
