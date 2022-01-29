@@ -111,7 +111,7 @@ public class HashDistributionDesc extends DistributionDesc {
                         throw new DdlException("Distribution column[" + colName + "] is not key column");
                     }
 
-                    if (column.getType().isComplexType() || column.getType().isFloatingPointType()) {
+                    if (!column.getType().canDistributedBy()) {
                         throw new DdlException(column.getType() + " column can not be distribution column");
                     }
 

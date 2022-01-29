@@ -24,7 +24,7 @@ public class AnalyticAnalyzer {
                 throw new SemanticException("Expressions in the PARTITION BY clause must not be constant: "
                         + e.toSql() + " (in " + analyticExpr.toSql() + ")");
             }
-            if (e.getType().isOnlyMetricType()) {
+            if (!e.getType().canPartitionBy()) {
                 throw new SemanticException("HLL, BITMAP and PERCENTILE type can't as partition by column");
             }
         }
@@ -34,7 +34,7 @@ public class AnalyticAnalyzer {
                 throw new SemanticException("Expressions in the ORDER BY clause must not be constant: "
                         + e.getExpr().toSql() + " (in " + analyticExpr.toSql() + ")");
             }
-            if (e.getExpr().getType().isOnlyMetricType()) {
+            if (!e.getExpr().getType().canOrderBy()) {
                 throw new SemanticException("HLL, BITMAP and PERCENTILE type can't as order by column");
             }
         }

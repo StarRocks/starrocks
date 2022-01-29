@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
@@ -28,6 +29,9 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.ResolvedField;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -193,6 +197,23 @@ public final class SqlToScalarOperatorTranslator {
             ScalarOperator arrayOperator = visit(node.getChild(0));
             ScalarOperator subscriptOperator = visit(node.getChild(1));
             return new ArrayElementOperator(node.getType(), arrayOperator, subscriptOperator);
+        }
+
+        @Override
+        public ScalarOperator visitArrowExpr(ArrowExpr node, Void context) {
+            Preconditions.checkArgument(node.getChildren().size() == 2);
+
+            // TODO(mofei) make it more elegant
+            Function func = Catalog.getCurrentCatalog().getFunction(FunctionSet.JSON_QUERY_FUNC,
+                    Function.CompareMode.IS_IDENTICAL);
+            Preconditions.checkNotNull(func, "json_query function not exists");
+
+            List<ScalarOperator> arguments = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
+            return new CallOperator(
+                    FunctionSet.JSON_QUERY,
+                    Type.JSON,
+                    arguments,
+                    func);
         }
 
         @Override

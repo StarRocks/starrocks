@@ -242,7 +242,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_HASH, KW_HAVING, KW_HELP,KW_HLL, KW_HLL_UNION, KW_HOUR, KW_HUB,
     KW_IDENTIFIED, KW_IF, KW_IN, KW_INDEX, KW_INDEXES, KW_INFILE, KW_INSTALL,
     KW_INNER, KW_INSERT, KW_INT, KW_SIGNED, KW_INTERMEDIATE, KW_INTERSECT, KW_INTERVAL, KW_INTO, KW_IGNORE, KW_IS, KW_ISNULL, KW_ISOLATION,
-    KW_JOIN,
+    KW_JOIN, KW_JSON,
     KW_KEY, KW_KEYS, KW_KILL,
     KW_LABEL, KW_LARGEINT, KW_LAST, KW_LEFT, KW_LESS, KW_LEVEL, KW_LIKE, KW_LIMIT, KW_LINK, KW_LOAD,
     KW_LOCAL, KW_LOCATION, KW_LATERAL, KW_LOGICAL,
@@ -271,6 +271,7 @@ terminal COMMA, DOT, DOTDOTDOT, AT, STAR, LPAREN, RPAREN, COLON, SEMICOLON, LBRA
 terminal BITAND, BITOR, BITXOR, BITNOT;
 terminal EQUAL, NOT, LESSTHAN, GREATERTHAN, SET_VAR;
 terminal COMMENTED_PLAN_HINT_START, COMMENTED_PLAN_HINT_END;
+terminal ARROW;
 terminal String IDENT;
 terminal String NUMERIC_OVERFLOW;
 terminal Long INTEGER_LITERAL;
@@ -334,6 +335,7 @@ nonterminal SelectListItem select_list_item, star_expr;
 nonterminal Expr expr, non_pred_expr, arithmetic_expr, timestamp_arithmetic_expr, expr_or_default;
 nonterminal Expr array_expr, array_subscript, array_slice;
 nonterminal Expr set_expr_or_default;
+nonterminal Expr arrow_expr;
 nonterminal ArrayList<Expr> expr_list, values, row_value, opt_values;
 nonterminal ArrayList<Expr> func_arg_list;
 nonterminal ArrayList<Expr> expr_pipe_list;
@@ -503,6 +505,7 @@ precedence left BITAND, BITOR, BITXOR;
 precedence left KW_PIPE;
 precedence left BITNOT;
 precedence left KW_ORDER, KW_BY, KW_LIMIT;
+precedence left ARROW;
 precedence right KW_PROPERTIES;
 precedence left LPAREN, RPAREN;
 // Support chaining of timestamp arithmetic exprs.
@@ -4059,6 +4062,8 @@ type ::=
   {: RESULT = Type.BITMAP; :}
   | KW_PERCENTILE
   {: RESULT = Type.PERCENTILE; :}
+  | KW_JSON
+  {: RESULT = Type.JSON; :}
   | KW_STRING
   {: ScalarType type = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
      type.setAssignedStrLenInColDefinition();
@@ -4290,6 +4295,11 @@ array_slice ::=
   {: RESULT = new ArraySliceExpr(e, new IntLiteral(0), new IntLiteral(-1)); :}
   ;
 
+arrow_expr ::=
+   expr:l ARROW expr:r
+   {: RESULT = new ArrowExpr(l, r); :}
+   ;
+
 function_call_expr ::=
   function_name:fn_name LPAREN RPAREN
   {: RESULT = new FunctionCallExpr(fn_name, new ArrayList<Expr>()); :}
@@ -4391,6 +4401,8 @@ non_pred_expr ::=
   | array_subscript:e
   {: RESULT = e; :}
   | array_slice:e
+  {: RESULT = e; :}
+  | arrow_expr:e
   {: RESULT = e; :}
   ;
 
@@ -4887,6 +4899,8 @@ keyword ::=
     | KW_BEGIN:id
     {: RESULT = id; :}
     | KW_BITMAP:id
+    {: RESULT = id; :}
+    | KW_JSON:id
     {: RESULT = id; :}
     | KW_BITMAP_UNION:id
     {: RESULT = id; :}

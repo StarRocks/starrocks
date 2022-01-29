@@ -208,13 +208,13 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equalsIgnoreCase("avg"))
                 && ((!arg.getType().isNumericType() && !arg.getType().isBoolean() && !arg.getType().isNull() &&
                 !(arg instanceof NullLiteral)) ||
-                arg.getType().isOnlyMetricType())) {
+                !arg.getType().canApplyToNumeric())) {
             throw new SemanticException(
                     fnName.getFunction() + " requires a numeric parameter: " + functionCallExpr.toSql());
         }
         if (fnName.getFunction().equalsIgnoreCase("sum_distinct")
                 && ((!arg.getType().isNumericType() && !arg.getType().isNull() && !(arg instanceof NullLiteral)) ||
-                arg.getType().isOnlyMetricType())) {
+                !arg.getType().canApplyToNumeric())) {
             throw new SemanticException(
                     "SUM_DISTINCT requires a numeric parameter: " + functionCallExpr.toSql());
         }
@@ -223,7 +223,7 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.MAX)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.NDV)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.APPROX_COUNT_DISTINCT))
-                && arg.getType().isOnlyMetricType()) {
+                && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
         }
 
