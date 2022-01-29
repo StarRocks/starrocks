@@ -165,7 +165,7 @@ public:
     int32_t source_node_id() { return _source_node_id; }
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
-    void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
+    void set_morsel_queue(MorselQueuePtr morsel_queue) { _morsel_queue = std::move(morsel_queue); }
     Status prepare(RuntimeState* runtime_state);
     StatusOr<DriverState> process(RuntimeState* runtime_state);
     void finalize(RuntimeState* runtime_state, DriverState state);
@@ -376,7 +376,7 @@ private:
     const bool _is_root;
     DriverAcct _driver_acct;
     // The first one is source operator
-    MorselQueue* _morsel_queue = nullptr;
+    MorselQueuePtr _morsel_queue = nullptr;
     // _state must be set by set_driver_state() to record state timer.
     DriverState _state;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;

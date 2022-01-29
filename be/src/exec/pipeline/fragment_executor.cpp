@@ -219,6 +219,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             if (morsel_queue->num_morsels() > 0) {
                 DCHECK(degree_of_parallelism <= morsel_queue->num_morsels());
             }
+            std::vector<MorselQueuePtr> morsel_queue_per_driver = morsel_queue->splitByNum(degree_of_parallelism);
+            DCHECK(morsel_queue_per_driver.size() == degree_of_parallelism);
+
             if (is_root) {
                 num_root_drivers += degree_of_parallelism;
             }
@@ -226,7 +229,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx,
                                                                     driver_id++, is_root);
-                driver->set_morsel_queue(morsel_queue.get());
+                driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
                 setup_profile_hierarchy(pipeline, driver);

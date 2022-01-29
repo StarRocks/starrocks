@@ -59,6 +59,22 @@ public:
 
     bool empty() const { return _pop_index >= _num_morsels; }
 
+    std::vector<MorselQueuePtr> splitByNum(size_t num_dest_morsel_queues) {
+        const size_t num_morsels_per_queue = (_num_morsels + num_dest_morsel_queues - 1) / num_dest_morsel_queues;
+        std::vector<MorselQueuePtr> dest_morsel_queues;
+        for (int i = 0; i < num_dest_morsel_queues; ++i) {
+            Morsels morsels;
+            while (morsels.size() < num_morsels_per_queue && !empty()) {
+                auto maybe_morsel = try_get();
+                DCHECK(maybe_morsel.has_value());
+                morsels.emplace_back(std::move(maybe_morsel.value()));
+            }
+            dest_morsel_queues.emplace_back(std::make_unique<MorselQueue>(std::move(morsels)));
+        }
+
+        return dest_morsel_queues;
+    }
+
 private:
     Morsels _morsels;
     const size_t _num_morsels;
