@@ -198,6 +198,7 @@ public:
 
     ColumnPtr& data_column() { return _data_column; }
 
+    const NullColumn& null_column_ref() const { return *_null_column; }
     const NullColumnPtr& null_column() const { return _null_column; }
 
     Datum get(size_t n) const override {
