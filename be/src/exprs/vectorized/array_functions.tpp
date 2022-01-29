@@ -3,6 +3,7 @@
 #include "column/array_column.h"
 #include "column/column_hash.h"
 #include "exprs/vectorized/function_helper.h"
+#include "util/orlp/pdqsort.h"
 
 namespace starrocks::vectorized {
 template <PrimitiveType PT>
@@ -99,6 +100,134 @@ private:
             ++iter;
         }
         dest_offsets.emplace_back(dest_offsets.back() + hash_set->size() + has_null);
+    }
+};
+
+template <PrimitiveType PT>
+class ArraySort {
+public:
+    using ColumnType = RunTimeColumnType<PT>;
+
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        DCHECK_EQ(columns.size(), 1);
+
+        size_t chunk_size = columns[0]->size();
+
+        if (columns[0]->only_null()) {
+            return ColumnHelper::create_const_null_column(chunk_size);
+        }
+
+        // TODO: For fixed-length types, you can operate directly on the original column without using sort index,
+        //  which will be optimized later
+        std::vector<uint32_t> sort_index;
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+        ColumnPtr dest_column = src_column->clone_empty();
+
+        if (src_column->is_nullable()) {
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
+            const auto& src_data_column = src_nullable_column->data_column_ref();
+            const auto& src_null_column = src_nullable_column->null_column_ref();
+
+            auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
+            auto* dest_data_column = dest_nullable_column->mutable_data_column();
+            auto* dest_null_column = dest_nullable_column->mutable_null_column();
+
+            if (src_column->has_null()) {
+                dest_null_column->get_data() = src_null_column.get_data();
+            } else {
+                dest_null_column->get_data().resize(chunk_size, 0);
+            }
+            dest_nullable_column->set_has_null(src_nullable_column->has_null());
+
+            _sort_array_column(dest_data_column, &sort_index, src_data_column);
+        } else {
+            _sort_array_column(dest_column.get(), &sort_index, *src_column);
+        }
+        return dest_column;
+    }
+
+private:
+    static void _sort_column(std::vector<uint32_t>* sort_index, const Column& src_column, size_t offset, size_t count) {
+        const auto& data = down_cast<const ColumnType&>(src_column).get_data();
+
+        auto less_fn = [&data](uint32_t l, uint32_t r) -> bool { return data[l] < data[r]; };
+        pdqsort(false, sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
+    }
+
+    static void _sort_item(std::vector<uint32_t>* sort_index, const Column& src_column,
+                                      const UInt32Column& offset_column, size_t index) {
+        const auto& offsets = offset_column.get_data();
+
+        size_t start = offsets[index];
+        size_t count = offsets[index + 1] - offsets[index];
+        if (count <= 0) {
+            return;
+        }
+
+        _sort_column(sort_index, src_column, start, count);
+
+    }
+
+    static void _sort_nullable_item(std::vector<uint32_t>* sort_index, const Column& src_data_column,
+                                               const NullColumn& src_null_column, const UInt32Column& offset_column,
+                                               size_t index) {
+        const auto& offsets = offset_column.get_data();
+        size_t start = offsets[index];
+        size_t count = offsets[index + 1] - offsets[index];
+
+        if (count <= 0) {
+            return;
+        }
+
+        auto null_first_fn = [src_null_column](size_t i) -> bool { return src_null_column.get_data()[i] == 1; };
+
+        auto begin_of_not_null =
+                std::partition(sort_index->begin() + start, sort_index->begin() + start + count, null_first_fn);
+        size_t data_offset = begin_of_not_null - sort_index->begin();
+        size_t null_count = data_offset - start;
+        _sort_column(sort_index, src_data_column, start + null_count, count - null_count);
+    }
+
+    static void _sort_array_column(Column* dest_array_column, std::vector<uint32_t>* sort_index,
+                                   const Column& src_array_column) {
+        const auto& src_elements_column = down_cast<const ArrayColumn&>(src_array_column).elements();
+        const auto& offsets_column = down_cast<const ArrayColumn&>(src_array_column).offsets();
+
+        auto* dest_elements_column = down_cast<ArrayColumn*>(dest_array_column)->elements_column().get();
+        auto* dest_offsets_column = down_cast<ArrayColumn*>(dest_array_column)->offsets_column().get();
+        dest_offsets_column->get_data() = offsets_column.get_data();
+
+        size_t chunk_size = src_array_column.size();
+        _init_sort_index(sort_index, src_elements_column.size());
+
+        if (src_elements_column.is_nullable()) {
+            if (src_elements_column.has_null()) {
+                const auto& src_data_column = down_cast<const NullableColumn&>(src_elements_column).data_column_ref();
+                const auto& null_column = down_cast<const NullableColumn&>(src_elements_column).null_column_ref();
+
+                for (size_t i = 0; i < chunk_size; i++) {
+                    _sort_nullable_item(sort_index, src_data_column, null_column, offsets_column, i);
+                }
+            } else {
+                const auto& src_data_column = down_cast<const NullableColumn&>(src_elements_column).data_column_ref();
+
+                for (size_t i = 0; i < chunk_size; i++) {
+                    _sort_item(sort_index, src_data_column, offsets_column, i);
+                }
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; i++) {
+                _sort_item(sort_index, src_elements_column, offsets_column, i);
+            }
+        }
+        dest_elements_column->append_selective(src_elements_column, *sort_index);
+    }
+
+    static void _init_sort_index(std::vector<uint32_t>* sort_index, size_t count) {
+        sort_index->resize(count);
+        for (size_t i = 0; i < count; i++) {
+            (*sort_index)[i] = i;
+        }
     }
 };
 } // namespace starrocks::vectorized

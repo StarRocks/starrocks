@@ -597,4 +597,17 @@ vectorized_functions = [
     [150099, 'array_distinct', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_distinct_decimalv2'],
     [150100, 'array_distinct', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_distinct_datetime'],
     [150101, 'array_distinct', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_distinct_date'],
+
+    [150110, 'array_sort', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::array_sort_boolean'],
+    [150111, 'array_sort', 'ARRAY_TINYINT',   ['ARRAY_TINYINT'],   'ArrayFunctions::array_sort_tinyint'],
+    [150112, 'array_sort', 'ARRAY_SMALLINT',  ['ARRAY_SMALLINT'],  'ArrayFunctions::array_sort_smallint'],
+    [150113, 'array_sort', 'ARRAY_INT',       ['ARRAY_INT'],       'ArrayFunctions::array_sort_int'],
+    [150114, 'array_sort', 'ARRAY_BIGINT',    ['ARRAY_BIGINT'],    'ArrayFunctions::array_sort_bigint'],
+    [150115, 'array_sort', 'ARRAY_LARGEINT',  ['ARRAY_LARGEINT'],  'ArrayFunctions::array_sort_largeint'],
+    [150116, 'array_sort', 'ARRAY_FLOAT',     ['ARRAY_FLOAT'],     'ArrayFunctions::array_sort_float'],
+    [150117, 'array_sort', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE'],    'ArrayFunctions::array_sort_double'],
+    [150118, 'array_sort', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR'],   'ArrayFunctions::array_sort_varchar'],
+    [150119, 'array_sort', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_sort_decimalv2'],
+    [150120, 'array_sort', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_sort_datetime'],
+    [150121, 'array_sort', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_sort_date'],
 ]
