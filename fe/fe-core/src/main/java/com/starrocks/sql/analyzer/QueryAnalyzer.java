@@ -528,7 +528,7 @@ public class QueryAnalyzer {
 
             if (stmt.getSelectList().isDistinct()) {
                 outputExpressionBuilder.build().forEach(expr -> {
-                    if (expr.getType().isOnlyMetricType()) {
+                    if (!expr.getType().canDistinct()) {
                         throw new SemanticException("DISTINCT can only be applied to comparable types : %s",
                                 expr.getType());
                     }
@@ -964,7 +964,7 @@ public class QueryAnalyzer {
                         analyzeExpression(groupingExpr, analyzeState, sourceScope);
                     }
 
-                    if (groupingExpr.getType().isOnlyMetricType()) {
+                    if (!groupingExpr.getType().canGroupBy()) {
                         throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
                     }
 
@@ -1148,7 +1148,7 @@ public class QueryAnalyzer {
 
             analyzeExpression(expression, analyzeState, orderByScope);
 
-            if (expression.getType().isOnlyMetricType()) {
+            if (!expression.getType().canOrderBy()) {
                 throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
             }
 

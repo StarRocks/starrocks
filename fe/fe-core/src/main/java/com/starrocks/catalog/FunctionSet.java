@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -125,6 +126,11 @@ public class FunctionSet {
     // geo functions
     public static final String ST_ASTEXT = "st_astext";
     public static final String GEO_FUNCTION_PREFIX = "st_";
+    // JSON functions
+    public static final String JSON_QUERY = "json_query";
+    public static final String PARSE_JSON = "parse_json";
+    public static final Function JSON_QUERY_FUNC = new Function(
+            new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
