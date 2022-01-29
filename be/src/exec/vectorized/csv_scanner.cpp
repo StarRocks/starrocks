@@ -190,7 +190,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
             if (_counter->num_rows_filtered++ < 50) {
                 std::stringstream error_msg;
                 error_msg << "Value count does not match column count. "
-                          << "Expect " << fields.size() << ", but got " << _num_fields_in_csv;
+                          << "Expect " << _num_fields_in_csv << ", but got " << fields.size();
                 _report_error(record.to_string(), error_msg.str());
             }
             continue;
