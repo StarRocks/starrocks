@@ -116,7 +116,10 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         return Status::OK();
     }
 #ifndef BE_TEST
-    RETURN_IF_ERROR(_scanner_params.fs->open());
+    if (_scanner_params.fs_handle_type == HdfsFsHandle::Type::HDFS) {
+        auto* file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get());
+        RETURN_IF_ERROR(file->open());
+    }
 #endif
     _build_file_read_param();
     auto status = do_open(runtime_state);
@@ -142,7 +145,10 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     }
     do_close(runtime_state);
 #ifndef BE_TEST
-    _scanner_params.fs->close();
+    if (_scanner_params.fs_handle_type == HdfsFsHandle::Type::HDFS) {
+        auto* file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get());
+        file->close();
+    }
     if (_is_open) {
         (*_scanner_params.open_limit)--;
     }

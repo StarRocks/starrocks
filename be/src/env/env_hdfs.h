@@ -23,9 +23,8 @@ class HdfsRandomAccessFile : public RandomAccessFile {
 public:
     HdfsRandomAccessFile(hdfsFS fs, const std::string& file_name, size_t file_size, bool usePread);
     virtual ~HdfsRandomAccessFile() noexcept;
-
-    Status open() override;
-    void close() override;
+    void close();
+    Status open();
     Status read(uint64_t offset, Slice* res) const override;
     Status read_at(uint64_t offset, const Slice& res) const override;
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
@@ -51,10 +50,8 @@ private:
 class S3RandomAccessFile : public RandomAccessFile {
 public:
     S3RandomAccessFile(S3Client* client, const std::string& bucket, const std::string& object, size_t object_size = 0);
-    virtual ~S3RandomAccessFile() noexcept;
+    virtual ~S3RandomAccessFile() noexcept = default;
 
-    Status open() override;
-    void close() override;
     Status read(uint64_t offset, Slice* res) const override;
     Status read_at(uint64_t offset, const Slice& res) const override;
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;

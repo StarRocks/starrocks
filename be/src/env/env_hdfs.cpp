@@ -83,7 +83,6 @@ Status HdfsRandomAccessFile::read(uint64_t offset, Slice* res) const {
 }
 
 Status HdfsRandomAccessFile::read_at(uint64_t offset, const Slice& res) const {
-    DCHECK(_opened);
     size_t read_size = 0;
     RETURN_IF_ERROR(_read_at(offset, res.data, res.size, &read_size));
     if (read_size != res.size) {
@@ -106,16 +105,6 @@ S3RandomAccessFile::S3RandomAccessFile(S3Client* client, const std::string& buck
         : _client(client), _bucket(bucket), _object(object), _object_size(object_size) {
     _file_name = "s3://" + _bucket + "/" + _object;
 }
-
-S3RandomAccessFile::~S3RandomAccessFile() noexcept {
-    close();
-}
-
-Status S3RandomAccessFile::open() {
-    return Status::OK();
-}
-
-void S3RandomAccessFile::close() {}
 
 Status S3RandomAccessFile::read(uint64_t offset, Slice* res) const {
     // TODO: implement
