@@ -63,7 +63,14 @@ bool ScanOperator::has_output() const {
         return false;
     }
 
-    // Because commit i/o task is trigger in pull_chunk, return true if more i/o tasks can be committed.
+    // Because committing i/o task is trigger ONLY in pull_chunk,
+    // return true if more i/o tasks can be committed.
+
+    // Can pick up more morsels.
+    if (!_morsel_queue->empty()) {
+        return true;
+    }
+
     // Can trigger_next_scan for the picked-up morsel.
     for (int i = 0; i < _max_io_tasks_per_op; ++i) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
@@ -71,8 +78,7 @@ bool ScanOperator::has_output() const {
         }
     }
 
-    // Can pick up more morsels.
-    return !_morsel_queue->empty();
+    return false;
 }
 
 bool ScanOperator::pending_finish() const {
