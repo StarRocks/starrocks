@@ -164,7 +164,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
 
 Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
     if (_probe_expr_ctx != nullptr) {
-        RETURN_IF_ERROR(_probe_expr_ctx->prepare(state, row_desc));
+        RETURN_IF_ERROR(_probe_expr_ctx->prepare(state));
     }
     _open_timestamp = UnixMillis();
     _latency_timer = ADD_COUNTER(p, strings::Substitute("JoinRuntimeFilter/$0/latency", _filter_id), TUnit::TIME_NS);
@@ -192,7 +192,7 @@ void RuntimeFilterProbeDescriptor::replace_probe_expr_ctx(RuntimeState* state, c
     _probe_expr_ctx->close(state);
     // create new probe expr and open it.
     _probe_expr_ctx = state->obj_pool()->add(new ExprContext(new_probe_expr_ctx->root()));
-    _probe_expr_ctx->prepare(state, row_desc);
+    _probe_expr_ctx->prepare(state);
     _probe_expr_ctx->open(state);
 }
 

@@ -644,7 +644,7 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc));
+        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
         RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
     }
     return Status::OK();

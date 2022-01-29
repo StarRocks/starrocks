@@ -54,7 +54,7 @@ public:
 
     Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(OperatorFactory::prepare(state));
-        RETURN_IF_ERROR(Expr::prepare(_partition_by_exprs, state, _row_desc));
+        RETURN_IF_ERROR(Expr::prepare(_partition_by_exprs, state));
         RETURN_IF_ERROR(Expr::open(_partition_by_exprs, state));
         return Status::OK();
     }

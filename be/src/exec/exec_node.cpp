@@ -111,9 +111,7 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
     std::list<ExprContext*>::iterator iter = expr_ctxs->begin();
     while (iter != expr_ctxs->end()) {
         if ((*iter)->root()->is_bound(_tuple_ids)) {
-            // LOG(INFO) << "push down success expr is " << (*iter)->debug_string()
-            //          << " and node is " << debug_string();
-            (*iter)->prepare(state, row_desc());
+            (*iter)->prepare(state);
             (*iter)->open(state);
             _conjunct_ctxs.push_back(*iter);
             iter = expr_ctxs->erase(iter);
@@ -202,7 +200,7 @@ Status ExecNode::prepare(RuntimeState* state) {
             },
             "");
     _mem_tracker.reset(new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc()));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), _runtime_profile.get()));
 
     // TODO(zc):

@@ -46,14 +46,14 @@ ExprContext::~ExprContext() {
     }
 }
 
-Status ExprContext::prepare(RuntimeState* state, const RowDescriptor& row_desc) {
+Status ExprContext::prepare(RuntimeState* state) {
     if (_prepared) {
         return Status::OK();
     }
     DCHECK(_pool.get() == nullptr);
     _prepared = true;
     _pool = std::make_unique<MemPool>();
-    return _root->prepare(state, row_desc, this);
+    return _root->prepare(state, this);
 }
 
 Status ExprContext::open(RuntimeState* state) {
