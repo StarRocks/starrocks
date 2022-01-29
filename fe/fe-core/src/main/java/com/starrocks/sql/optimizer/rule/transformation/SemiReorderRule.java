@@ -104,7 +104,7 @@ public class SemiReorderRule extends TransformationRule {
                 } else if (!isProjectToColumnRef &&
                         newSemiOutputColumns.contains(entry.getValue().getUsedColumns())) {
                     semiExpression.put(entry.getKey(), entry.getValue());
-                } else if (!isProjectToColumnRef && leftChildInputColumns.containsAll(entry.getValue().getUsedColumns())) {
+                } else if (!isProjectToColumnRef && leftChildInputColumns.contains(entry.getValue().getUsedColumns())) {
                     // left child projection produce
                     semiExpression.put(entry.getKey(), entry.getValue());
                 }
