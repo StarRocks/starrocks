@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "env/cloud_storage_client.h"
+#include "object_store/object_store_client.h"
 
 namespace starrocks {
 
@@ -17,7 +17,7 @@ public:
     std::string secret_access_key;
 };
 
-class S3Client final : public CloudStorageClient {
+class S3Client final : public ObjectStoreClient {
 public:
     S3Client(const Aws::Client::ClientConfiguration& config, const S3Credential* cred = nullptr,
              bool use_transfer_manager = false);

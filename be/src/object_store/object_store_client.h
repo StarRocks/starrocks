@@ -8,11 +8,11 @@
 
 namespace starrocks {
 
-// base class for cloud storage client
-class CloudStorageClient {
+// base class for object store client
+class ObjectStoreClient {
 public:
-    CloudStorageClient() = default;
-    virtual ~CloudStorageClient() = default;
+    ObjectStoreClient() = default;
+    virtual ~ObjectStoreClient() = default;
 
     /*
      *  Bucket Operation

@@ -5,7 +5,7 @@
 #include <hdfs/hdfs.h>
 
 #include "env/env.h"
-#include "env/s3_client.h"
+#include "object_store/s3_client.h"
 
 namespace starrocks {
 
