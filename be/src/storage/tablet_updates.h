@@ -10,6 +10,7 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/edit_version.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_writer.h"
 #include "util/blocking_queue.hpp"
@@ -35,21 +36,6 @@ class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
 } // namespace vectorized
-
-struct EditVersion {
-    uint128_t value = 0;
-    EditVersion() = default;
-    EditVersion(int64_t major, int64_t minor) { value = (((uint128_t)major) << 64) | minor; }
-    int64_t major() const { return value >> 64; }
-    int64_t minor() const { return (int64_t)(value & 0xffffffffUL); }
-    std::string to_string() const;
-    bool operator<(const EditVersion& rhs) const { return value < rhs.value; }
-    bool operator==(const EditVersion& rhs) const { return value == rhs.value; }
-};
-
-inline std::ostream& operator<<(std::ostream& os, const EditVersion& v) {
-    return os << v.to_string();
-}
 
 struct CompactionInfo {
     EditVersion start_version;
