@@ -14,6 +14,12 @@
         ASSERT_TRUE(st.ok()) << st; \
     } while (0)
 
+#define ASSERT_ERROR(stmt)     \
+    do {                       \
+        auto&& st = (stmt);    \
+        ASSERT_FALSE(st.ok()); \
+    } while (0)
+
 #define EXPECT_OK(stmt)             \
     do {                            \
         Status st = (stmt);         \
