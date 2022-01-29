@@ -323,7 +323,7 @@ void DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctx
                 _expr_close_list.emplace_back(expr_ctx);
             }
             expr_ctx = _free_pool.add(new ExprContext(replaced_expr));
-            expr_ctx->prepare(state, RowDescriptor{});
+            expr_ctx->prepare(state);
             expr_ctx->open(state);
             _expr_close_list.emplace_back(expr_ctx);
         }

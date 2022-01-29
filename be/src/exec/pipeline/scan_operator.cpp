@@ -182,7 +182,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state) {
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, _row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);

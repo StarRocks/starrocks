@@ -18,7 +18,7 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedFunctionCallExpr(*this)); }
 
 protected:
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) override;
+    Status prepare(RuntimeState* state, ExprContext* context) override;
 
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
