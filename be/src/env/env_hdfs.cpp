@@ -77,9 +77,12 @@ Status HdfsRandomAccessFile::_read_at(int64_t offset, char* data, size_t size, s
 }
 
 Status HdfsRandomAccessFile::read(uint64_t offset, Slice* res) const {
-    // TODO: implement
-    // We don't need to maintain the `read` API.
-    return Status::InternalError("HdfsRandomAccessFile::read not implement");
+    DCHECK(_opened);
+    size_t read_size = 0;
+    Status st = _read_at(offset, res->data, res->size, &read_size);
+    if (!st.ok()) return st;
+    res->size = read_size;
+    return Status::OK();
 }
 
 Status HdfsRandomAccessFile::read_at(uint64_t offset, const Slice& res) const {
@@ -107,17 +110,20 @@ S3RandomAccessFile::S3RandomAccessFile(S3Client* client, const std::string& buck
 }
 
 Status S3RandomAccessFile::read(uint64_t offset, Slice* res) const {
-    // TODO: implement
-    return Status::InternalError("S3RandomAccessFile::read not implement");
+    size_t read_size = 0;
+    Status st = _client->get_object_range(_bucket, _object, offset, res->size, res->data, &read_size);
+    if (!st.ok()) return st;
+    res->size = read_size;
+    return st;
 }
 
 Status S3RandomAccessFile::read_at(uint64_t offset, const Slice& res) const {
-    size_t read = 0;
-    return _client->get_object_range(_bucket, _object, offset, res.size, res.data, &read);
-    if (read != res.size) {
+    size_t read_size = 0;
+    RETURN_IF_ERROR(_client->get_object_range(_bucket, _object, offset, res.size, res.data, &read_size));
+    if (read_size != res.size) {
         return Status::InternalError(
                 strings::Substitute("fail to read enough data, file=$0, offset=$1, size=$2, expect=$3", _file_name,
-                                    offset, read, res.size));
+                                    offset, read_size, res.size));
     }
     return Status::OK();
 }
