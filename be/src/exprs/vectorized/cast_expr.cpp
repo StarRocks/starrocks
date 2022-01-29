@@ -8,6 +8,7 @@
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/json_column.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/vectorized/binary_function.h"
@@ -83,30 +84,8 @@ DEFINE_UNARY_FN_WITH_IMPL(TimeToNumber, value) {
     return timestamp::time_to_literal(value);
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType, typename Fn>
-static ColumnPtr cast_from_json_fn(ColumnPtr& column, Fn get_value) {
-    ColumnViewer<TYPE_JSON> viewer(column);
-    ColumnBuilder<ToType> builder(viewer.size());
-
-    for (int row = 0; row < viewer.size(); ++row) {
-        if (viewer.is_null(row)) {
-            builder.append_null();
-            continue;
-        }
-
-        auto real_value = get_value(viewer.value(row));
-        if (real_value.ok()) {
-            builder.append(real_value.value());
-        } else {
-            builder.append_null();
-        }
-    }
-
-    return builder.build(column->is_constant());
-}
-
 template <PrimitiveType FromType, PrimitiveType ToType>
-static ColumnPtr cast_to_json_fn(ColumnPtr& column, std::function<JsonValue(const Datum&)> get_value) {
+static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
     ColumnBuilder<TYPE_JSON> builder(viewer.size());
 
@@ -116,9 +95,20 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column, std::function<JsonValue(cons
             continue;
         }
 
-        auto real_value = get_value(viewer.value(row));
-        if (!real_value.is_null()) {
-            builder.append(&real_value);
+        JsonValue value;
+        if constexpr (pt_is_integer<FromType>) {
+            value = JsonValue::from_int(viewer.value(row));
+        } else if constexpr (pt_is_float<FromType>) {
+            value = JsonValue::from_double(viewer.value(row));
+        } else if constexpr (pt_is_boolean<FromType>) {
+            value = JsonValue::from_bool(viewer.value(row));
+        } else if constexpr (pt_is_binary<FromType>) {
+            value = JsonValue::from_string(viewer.value(row));
+        } else {
+            CHECK(false) << "not supported type " << FromType;
+        }
+        if (!value.is_null()) {
+            builder.append(&value);
         } else {
             builder.append_null();
         }
@@ -128,51 +118,51 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column, std::function<JsonValue(cons
 }
 
 template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_json_from_bool_fn(ColumnPtr& column) {
-    return cast_to_json_fn<TYPE_BOOLEAN, TYPE_JSON>(
-            column, [](const Datum& value) { return JsonValue::from_bool((bool)value.get_int8()); });
-}
+static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
+    ColumnViewer<TYPE_JSON> viewer(column);
+    ColumnBuilder<ToType> builder(viewer.size());
 
-template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_json_from_int_fn(ColumnPtr& column) {
-    return cast_to_json_fn<FromType, TYPE_JSON>(column, [](const Datum& value) {
-        using cpp_type = RunTimeCppType<FromType>;
-        return JsonValue::from_int((int64_t)value.get<cpp_type>());
-    });
-}
+    for (int row = 0; row < viewer.size(); ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
 
-template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_json_from_float_fn(ColumnPtr& column) {
-    return cast_to_json_fn<FromType, TYPE_JSON>(column, [](const Datum& value) {
-        using cpp_type = RunTimeCppType<FromType>;
-        return JsonValue::from_double((double)value.get<cpp_type>());
-    });
-}
+        JsonValue* json = viewer.value(row);
+        if constexpr (pt_is_integer<ToType>) {
+            auto res = json->get_int();
+            if (res.ok()) {
+                builder.append(res.value());
+            } else {
+                builder.append_null();
+            }
+        } else if constexpr (pt_is_float<ToType>) {
+            auto res = json->get_double();
+            if (res.ok()) {
+                builder.append(res.value());
+            } else {
+                builder.append_null();
+            }
+        } else if constexpr (pt_is_boolean<ToType>) {
+            auto res = json->get_bool();
+            if (res.ok()) {
+                builder.append(res.value());
+            } else {
+                builder.append_null();
+            }
+        } else if constexpr (pt_is_binary<ToType>) {
+            auto res = json->get_string();
+            if (res.ok()) {
+                builder.append(res.value());
+            } else {
+                builder.append_null();
+            }
+        } else {
+            CHECK(false) << "not supported type " << ToType;
+        }
+    }
 
-template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_json_from_string_fn(ColumnPtr& column) {
-    return cast_to_json_fn<FromType, TYPE_JSON>(
-            column, [](const Datum& value) { return JsonValue::from_string(value.get_slice()); });
-}
-
-template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_bool_from_json_fn(ColumnPtr& column) {
-    return cast_from_json_fn<FromType, ToType>(column, [](auto json) { return json->get_bool(); });
-}
-
-template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_int_from_json_fn(ColumnPtr& column) {
-    return cast_from_json_fn<FromType, ToType>(column, [](auto json) { return json->get_int(); });
-}
-
-template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_float_from_json_fn(ColumnPtr& column) {
-    return cast_from_json_fn<FromType, ToType>(column, [](auto json) { return json->get_double(); });
-}
-
-template <PrimitiveType FromType, PrimitiveType ToType>
-ColumnPtr cast_string_from_json_fn(ColumnPtr& column) {
-    return cast_from_json_fn<FromType, ToType>(column, [](auto json) { return json->get_string(); });
+    return builder.build(column->is_constant());
 }
 
 SELF_CAST(TYPE_BOOLEAN);
@@ -187,7 +177,7 @@ UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_BOOLEAN, DecimalToBoolean);
 UNARY_FN_CAST(TYPE_DATE, TYPE_BOOLEAN, DateToBoolean);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_BOOLEAN, TimestampToBoolean);
 UNARY_FN_CAST(TYPE_TIME, TYPE_BOOLEAN, ImplicitToBoolean);
-CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_BOOLEAN, cast_bool_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_BOOLEAN, cast_from_json_fn);
 
 template <>
 ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
@@ -336,7 +326,7 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_TINYINT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_TINYINT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_TINYINT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TINYINT, cast_int_from_string_fn);
-CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_TINYINT, cast_int_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_TINYINT, cast_from_json_fn);
 
 // smallint
 SELF_CAST(TYPE_SMALLINT);
@@ -352,7 +342,7 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_SMALLINT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_SMALLINT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_SMALLINT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_SMALLINT, cast_int_from_string_fn);
-CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_SMALLINT, cast_int_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_SMALLINT, cast_from_json_fn);
 
 // int
 SELF_CAST(TYPE_INT);
@@ -368,7 +358,7 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_INT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_INT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_INT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_INT, cast_int_from_string_fn);
-CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_INT, cast_int_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_INT, cast_from_json_fn);
 
 // bigint
 SELF_CAST(TYPE_BIGINT);
@@ -384,7 +374,7 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_BIGINT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_BIGINT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_BIGINT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_BIGINT, cast_int_from_string_fn);
-CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_BIGINT, cast_int_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_BIGINT, cast_from_json_fn);
 
 // largeint
 SELF_CAST(TYPE_LARGEINT);
@@ -400,7 +390,7 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_LARGEINT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_LARGEINT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_LARGEINT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_LARGEINT, cast_int_from_string_fn);
-CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_LARGEINT, cast_int_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_LARGEINT, cast_from_json_fn);
 
 // float
 SELF_CAST(TYPE_FLOAT);
@@ -416,7 +406,7 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_FLOAT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_FLOAT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_FLOAT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_FLOAT, cast_float_from_string_fn);
-CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_FLOAT, cast_float_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_FLOAT, cast_from_json_fn);
 
 // double
 SELF_CAST(TYPE_DOUBLE);
@@ -432,7 +422,7 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_DOUBLE, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_DOUBLE, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_DOUBLE, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DOUBLE, cast_float_from_string_fn);
-CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_DOUBLE, cast_float_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_DOUBLE, cast_from_json_fn);
 
 // decimal
 DEFINE_UNARY_FN_WITH_IMPL(NumberToDecimal, value) {
@@ -930,17 +920,17 @@ DEFINE_INT_CAST_TO_STRING(TYPE_INT, TYPE_VARCHAR);
 DEFINE_INT_CAST_TO_STRING(TYPE_BIGINT, TYPE_VARCHAR);
 
 // Cast SQL type to JSON
-CUSTOMIZE_FN_CAST(TYPE_NULL, TYPE_JSON, cast_json_from_int_fn);
-CUSTOMIZE_FN_CAST(TYPE_INT, TYPE_JSON, cast_json_from_int_fn);
-CUSTOMIZE_FN_CAST(TYPE_TINYINT, TYPE_JSON, cast_json_from_int_fn);
-CUSTOMIZE_FN_CAST(TYPE_SMALLINT, TYPE_JSON, cast_json_from_int_fn);
-CUSTOMIZE_FN_CAST(TYPE_BIGINT, TYPE_JSON, cast_json_from_int_fn);
-CUSTOMIZE_FN_CAST(TYPE_LARGEINT, TYPE_JSON, cast_json_from_int_fn);
-CUSTOMIZE_FN_CAST(TYPE_BOOLEAN, TYPE_JSON, cast_json_from_bool_fn);
-CUSTOMIZE_FN_CAST(TYPE_FLOAT, TYPE_JSON, cast_json_from_float_fn);
-CUSTOMIZE_FN_CAST(TYPE_DOUBLE, TYPE_JSON, cast_json_from_float_fn);
-CUSTOMIZE_FN_CAST(TYPE_CHAR, TYPE_JSON, cast_json_from_string_fn);
-CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_JSON, cast_json_from_string_fn);
+CUSTOMIZE_FN_CAST(TYPE_NULL, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_INT, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_TINYINT, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_SMALLINT, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_BIGINT, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_LARGEINT, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_BOOLEAN, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_FLOAT, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_DOUBLE, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_CHAR, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_JSON, cast_to_json_fn);
 
 /**
  * Resolve cast to string
@@ -979,7 +969,7 @@ public:
         }
 
         if constexpr (Type == TYPE_JSON) {
-            return cast_string_from_json_fn<TYPE_JSON, TYPE_VARCHAR>(column);
+            return cast_from_json_fn<TYPE_JSON, TYPE_VARCHAR>(column);
         }
 
         return _evaluate_string(context, column);

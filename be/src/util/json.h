@@ -111,7 +111,7 @@ private:
 };
 
 inline Status fromVPackException(const vpack::Exception& e) {
-    return Status::JsonFormat(Slice(e.what()));
+    return Status::JsonFormatError(Slice(e.what()));
 }
 
 inline JsonType fromVPackType(vpack::ValueType type) {

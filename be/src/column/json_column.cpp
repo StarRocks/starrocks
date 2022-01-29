@@ -7,10 +7,10 @@
 
 namespace starrocks::vectorized {
 
-int JsonColumn::compare_at(size_t left, size_t right, const starrocks::vectorized::Column& rhs,
+int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::vectorized::Column& rhs,
                            int nan_direction_hint) const {
-    JsonValue* x = get_object(left);
-    const JsonValue* y = rhs.get(right).get_json();
+    JsonValue* x = get_object(left_idx);
+    const JsonValue* y = rhs.get(right_idx).get_json();
     return x->compare(*y);
 }
 
