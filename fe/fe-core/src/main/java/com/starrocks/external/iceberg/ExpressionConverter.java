@@ -94,9 +94,6 @@ public class ExpressionConverter {
             default:
                 break;
         }
-        if (unboundPredicate == null) {
-            return null;
-        }
 
         return unboundPredicate;
     }
