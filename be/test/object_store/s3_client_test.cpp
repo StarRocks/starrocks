@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "env/s3_client.h"
+#include "object_store/s3_client.h"
 
 #include <aws/core/Aws.h>
 #include <gtest/gtest.h>
@@ -73,7 +73,7 @@ TEST_F(S3Test, object_operation) {
     // get object range
     std::string object_value_range;
     size_t read_bytes;
-    ASSERT_TRUE(client.get_object_range(bucket_name, object_key, &object_value_range, 1 /* offset */, 2 /* length */,
+    ASSERT_TRUE(client.get_object_range(bucket_name, object_key, 1 /* offset */, 2 /* length */, &object_value_range,
                                         &read_bytes)
                         .ok());
     ASSERT_EQ(read_bytes, 2);

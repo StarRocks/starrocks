@@ -269,7 +269,7 @@ if (WITH_HDFS)
 endif ()
 
 if (WITH_AWS)
-    set(EXEC_FILES ${EXEC_FILES} ./env/s3_client_test.cpp)
+    set(EXEC_FILES ${EXEC_FILES} ./object_store/s3_client_test.cpp)
 endif ()
 
 add_executable(starrocks_test ${EXEC_FILES})
