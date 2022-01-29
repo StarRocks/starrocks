@@ -2,12 +2,14 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <random>
 
 #include "column/array_column.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
+#include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks {
@@ -1766,6 +1768,24 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceConstPattern) {
     ASSERT_TRUE(
             StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
+
+    // Test Binary input data
+    {
+        FunctionContext::FunctionStateScope scope =
+                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL;
+        std::unique_ptr<FunctionContext> ctx0(FunctionContext::create_test_context());
+        int binary_size = 10;
+        std::unique_ptr<char[]> binary_datas = std::make_unique<char[]>(binary_size);
+        memset(binary_datas.get(), 0xff, binary_size);
+
+        auto par0 = BinaryColumn::create();
+        auto par1 = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(binary_datas.get(), binary_size), 1);
+
+        ctx0->impl()->set_constant_columns({par0, par1});
+
+        ASSERT_ERROR(StringFunctions::regexp_prepare(ctx0.get(), scope));
+        ASSERT_OK(StringFunctions::regexp_close(ctx0.get(), scope));
+    }
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, regexpReplace) {

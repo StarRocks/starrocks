@@ -2535,7 +2535,7 @@ Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
 
     if (!state->regex->ok()) {
         std::stringstream error;
-        error << "Invalid regex expression: " << pattern.data;
+        error << "Invalid regex expression: " << pattern.to_string();
         context->set_error(error.str().c_str());
         return Status::InvalidArgument(error.str());
     }
