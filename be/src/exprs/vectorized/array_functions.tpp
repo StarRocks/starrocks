@@ -112,6 +112,11 @@ public:
         DCHECK_EQ(columns.size(), 1);
 
         size_t chunk_size = columns[0]->size();
+
+        if (columns[0]->only_null()) {
+            return ColumnHelper::create_const_null_column(chunk_size);
+        }
+
         // TODO: For fixed-length types, you can operate directly on the original column without using sort index,
         //  which will be optimized later
         std::vector<uint32_t> sort_index;
@@ -119,9 +124,9 @@ public:
         ColumnPtr dest_column = src_column->clone_empty();
 
         if (src_column->is_nullable()) {
-            const auto& src_nullable_column = *down_cast<const NullableColumn*>(src_column.get());
-            const auto& src_data_column = src_nullable_column.data_column_ref();
-            const auto& src_null_column = src_nullable_column.null_column_ref();
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
+            const auto& src_data_column = src_nullable_column->data_column_ref();
+            const auto& src_null_column = src_nullable_column->null_column_ref();
 
             auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
             auto* dest_data_column = dest_nullable_column->mutable_data_column();
@@ -132,7 +137,7 @@ public:
             } else {
                 dest_null_column->get_data().resize(chunk_size, 0);
             }
-            dest_nullable_column->set_has_null(src_nullable_column.has_null());
+            dest_nullable_column->set_has_null(src_nullable_column->has_null());
 
             _sort_array_column(dest_data_column, &sort_index, src_data_column);
         } else {

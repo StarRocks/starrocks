@@ -123,9 +123,6 @@ private:
                                                        const NullColumn::Container* null_elements,
                                                        std::vector<uint8_t>* null_ptr);
 
-    template <PrimitiveType PT>
-    static ColumnPtr array_sort(const Columns& columns);
-
     template <PrimitiveType type>
     static ColumnPtr array_sum(const Columns& columns);
 
