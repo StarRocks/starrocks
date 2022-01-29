@@ -472,13 +472,22 @@ vectorized_functions = [
     [100014, 'last_query_id', 'VARCHAR', [], "UtilityFunctions::last_query_id"],
     [100015, 'uuid', 'VARCHAR', [], "UtilityFunctions::uuid"],
 
-    # json function
+    # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",
      "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close"],
     [110001, "get_json_double", "DOUBLE", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_double",
      "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close"],
     [110002, "get_json_string", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
      "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close"],
+     
+    # json type function
+    [110003, "parse_json", "JSON", ["VARCHAR"], "JsonFunctions::parse_json"],
+    # [110004, "json_string", "VARCHAR", ["JSON"], "JsonFunctions::json_string"],
+    [110005, "json_query", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query"],
+    # [110006, "json_value", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query"],
+    # [110007, "json_exists", "BOOLEAN", ["JSON", "VARCHAR"], "JsonFunctions::json_exists"],
+    # [110008, "json_object", "JSON", ["JSON", "..."], "JsonFunctions::json_object"],
+    [110009, "json_array", "JSON", ["JSON", "..."], "JsonFunctions::json_array"],
 
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt"],

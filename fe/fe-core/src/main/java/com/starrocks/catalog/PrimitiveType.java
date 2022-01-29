@@ -62,6 +62,9 @@ public enum PrimitiveType {
     DECIMAL32("DECIMAL32", 4, TPrimitiveType.DECIMAL32),
     DECIMAL64("DECIMAL64", 8, TPrimitiveType.DECIMAL64),
     DECIMAL128("DECIMAL128", 16, TPrimitiveType.DECIMAL128),
+
+    JSON("JSON", 16, TPrimitiveType.JSON),
+
     // Unsupported scalar types.
     BINARY("BINARY", -1, TPrimitiveType.BINARY);
 
@@ -87,6 +90,16 @@ public enum PrimitiveType {
     public static final ImmutableList<PrimitiveType> STRING_TYPE_LIST =
             ImmutableList.of(CHAR, VARCHAR);
 
+    public static final ImmutableList<PrimitiveType> JSON_COMPATIBLE_TYPE =
+            new ImmutableList.Builder<PrimitiveType>()
+                    .add(BOOLEAN)
+                    .addAll(NUMBER_TYPE_LIST)
+                    .addAll(STRING_TYPE_LIST)
+                    .build();
+    // TODO(mofei) support them
+    public static final ImmutableList<PrimitiveType> JSON_UNCOMPATIBLE_TYPE =
+            ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE);
+
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
             ImmutableList.of(TIME, DATE, DATETIME);
 
@@ -102,7 +115,7 @@ public enum PrimitiveType {
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
         builder.putAll(NULL_TYPE, BASIC_TYPE_LIST);
-        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE));
+        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON));
 
         builder.putAll(BOOLEAN, BASIC_TYPE_LIST);
         builder.putAll(TINYINT, BASIC_TYPE_LIST);
@@ -131,6 +144,15 @@ public enum PrimitiveType {
         builder.put(HLL, HLL);
         builder.put(BITMAP, BITMAP);
         builder.put(PERCENTILE, PERCENTILE);
+
+        // JSON
+        builder.putAll(JSON, JSON);
+        builder.putAll(JSON, NULL_TYPE);
+
+        for (PrimitiveType type : JSON_COMPATIBLE_TYPE) {
+            builder.put(type, JSON);
+            builder.put(JSON, type);
+        }
 
         implicitCastMap = builder.build();
     }
@@ -202,6 +224,8 @@ public enum PrimitiveType {
                 return TIME;
             case BINARY:
                 return BINARY;
+            case JSON:
+                return JSON;
             default:
                 return INVALID_TYPE;
         }
