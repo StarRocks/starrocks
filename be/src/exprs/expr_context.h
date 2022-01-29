@@ -45,7 +45,6 @@ class Expr;
 class MemPool;
 class MemTracker;
 class RuntimeState;
-class RowDescriptor;
 class TColumnValue;
 
 using vectorized::ColumnPtr;
@@ -62,7 +61,7 @@ public:
 
     /// Prepare expr tree for evaluation.
     /// Allocations from this context will be counted against 'tracker'.
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc);
+    Status prepare(RuntimeState* state);
 
     /// Must be called after calling Prepare(). Does not need to be called on clones.
     /// Idempotent (this allows exprs to be opened multiple times in subplans without

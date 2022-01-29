@@ -240,7 +240,7 @@ protected:
 
             auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
             for (auto* filter : in_filters) {
-                filter->prepare(state, _row_desc);
+                filter->prepare(state);
                 filter->open(state);
                 _runtime_in_filters.push_back(filter);
             }

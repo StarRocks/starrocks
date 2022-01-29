@@ -54,7 +54,7 @@ Status PartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _parent_node_row_desc, _parent_node_child_row_desc));
     RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-    RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, state, _row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, state));
     RETURN_IF_ERROR(Expr::open(_analytic_partition_exprs, state));
     return Status::OK();
 }

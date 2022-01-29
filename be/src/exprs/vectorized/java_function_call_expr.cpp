@@ -406,9 +406,9 @@ ColumnPtr JavaFunctionCallExpr::evaluate(ExprContext* context, vectorized::Chunk
 JavaFunctionCallExpr::~JavaFunctionCallExpr() = default;
 
 // TODO support prepare
-Status JavaFunctionCallExpr::prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) {
+Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) {
     // init Expr::prepare
-    RETURN_IF_ERROR(Expr::prepare(state, row_desc, context));
+    RETURN_IF_ERROR(Expr::prepare(state, context));
 
     if (!_fn.__isset.fid) {
         return Status::InternalError("Not Found function id for " + _fn.name.function_name);

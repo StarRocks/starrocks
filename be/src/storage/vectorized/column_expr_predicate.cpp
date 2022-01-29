@@ -152,8 +152,7 @@ Status ColumnExprPredicate::convert_to(const ColumnPredicate** output, const Typ
     cast_expr->set_monotonic(true);
     ExprContext* cast_expr_ctx = obj_pool->add(new ExprContext(cast_expr));
 
-    RowDescriptor row_desc; // I think we don't need to use it at all.
-    RETURN_IF_ERROR(cast_expr_ctx->prepare(_state, row_desc));
+    RETURN_IF_ERROR(cast_expr_ctx->prepare(_state));
     RETURN_IF_ERROR(cast_expr_ctx->open(_state));
 
     ColumnExprPredicate* pred =

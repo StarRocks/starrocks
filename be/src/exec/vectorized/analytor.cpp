@@ -223,7 +223,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
     SCOPED_TIMER(_compute_timer);
     for (const auto& ctx : _agg_expr_ctxs) {
-        Expr::prepare(ctx, state, _child_row_desc);
+        Expr::prepare(ctx, state);
     }
 
     if (!_partition_ctxs.empty() || !_order_ctxs.empty()) {
@@ -232,10 +232,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         tuple_ids.push_back(_buffered_tuple_id);
         RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids, vector<bool>(2, false));
         if (!_partition_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state, cmp_row_desc));
+            RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state));
         }
         if (!_order_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state, cmp_row_desc));
+            RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state));
         }
     }
 

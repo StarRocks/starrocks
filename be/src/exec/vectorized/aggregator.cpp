@@ -216,14 +216,12 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
     DCHECK_EQ(_intermediate_tuple_desc->slots().size(), _output_tuple_desc->slots().size());
 
-    // create an empty RowDescriptor, and it will be removed sooner or later
-    RowDescriptor child_row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state, child_row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state));
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state, child_row_desc));
+        RETURN_IF_ERROR(Expr::prepare(ctx, state));
     }
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, child_row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
 
     _mem_pool = std::make_unique<MemPool>();
 

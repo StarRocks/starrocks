@@ -330,7 +330,7 @@ Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorWithDependencyFactory::prepare(state));
 
     _init_row_desc();
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, _row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
     return Status::OK();

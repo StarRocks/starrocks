@@ -44,9 +44,9 @@ public:
     // Used for testing.  get_value will return tuple + offset interpreted as 'type'
     SlotRef(const TypeDescriptor& type, int offset, SlotId slot = -1);
 
-    Status prepare(const SlotDescriptor* slot_desc, const RowDescriptor& row_desc);
+    Status prepare(const SlotDescriptor* slot_desc);
 
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* ctx) override;
+    Status prepare(RuntimeState* state, ExprContext* ctx) override;
     static bool is_nullable(Expr* expr);
     std::string debug_string() const override;
     bool is_constant() const override { return false; }
