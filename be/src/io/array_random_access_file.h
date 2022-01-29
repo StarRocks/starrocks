@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "common/ownership.h"
 #include "io/random_access_file.h"
 
 namespace starrocks::io {
