@@ -1028,6 +1028,17 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_PERCENTILE> : public ScalarTypeInfoImp
     }
 };
 
+template <>
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_JSON> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_OBJECT> {
+    static const FieldType type = OLAP_FIELD_TYPE_JSON;
+    static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_JSON>::size;
+
+    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
+        // TODO(mofei)
+        return Status::InternalError("Not supported");
+    }
+};
+
 void (*ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR>::set_to_max)(void*) = nullptr;
 
 } // namespace starrocks

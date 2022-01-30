@@ -262,6 +262,7 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<OLAP_FIELD_TYPE_OBJECT, PLAIN_ENCODING>();
 
     _add_map<OLAP_FIELD_TYPE_PERCENTILE, PLAIN_ENCODING>();
+    _add_map<OLAP_FIELD_TYPE_JSON, PLAIN_ENCODING>();
 }
 
 EncodingInfoResolver::~EncodingInfoResolver() {

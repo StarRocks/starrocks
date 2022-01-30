@@ -172,6 +172,7 @@ Status MysqlScanNode::open(RuntimeState* state) {
                 case TYPE_DECIMAL64:
                 case TYPE_DOUBLE:
                 case TYPE_FLOAT:
+                case TYPE_JSON:
                     break;
                 }
             }

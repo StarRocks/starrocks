@@ -639,6 +639,7 @@ Status OlapScanConjunctsManager::normalize_conjuncts() {
         case TYPE_TIME:
         case TYPE_OBJECT:
         case TYPE_PERCENTILE:
+        case TYPE_JSON:
             break;
         }
     }

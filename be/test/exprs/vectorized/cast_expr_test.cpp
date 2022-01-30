@@ -7,8 +7,13 @@
 
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
+#include "column/type_traits.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Types_types.h"
+#include "runtime/primitive_type.h"
 #include "runtime/vectorized/time_types.h"
+#include "util/json.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -1336,5 +1341,177 @@ TEST_F(VectorizedCastExprTest, timeToVarchar) {
         ASSERT_EQ("02:22:01", d->get_data()[1]);
     }
 }
+
+template <PrimitiveType toType>
+static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, std::string json_str) {
+    TPrimitiveType::type t_type = to_thrift(toType);
+    cast_expr.type = gen_type_desc(t_type);
+
+    std::cerr << "evaluate cast from json: " << json_str << std::endl;
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(cast_expr));
+    auto json = JsonValue::parse(json_str);
+    if (!json.ok()) {
+        return nullptr;
+    }
+    MockVectorizedExpr<TYPE_JSON> col1(cast_expr, 2, &json.value());
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    if (!ptr) {
+        return nullptr;
+    }
+    return ColumnHelper::cast_to<toType>(ptr);
+}
+
+template <PrimitiveType toType>
+static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, std::string json_str) {
+    std::cerr << "evaluate castCast: " << json_str << std::endl;
+    TPrimitiveType::type t_type = to_thrift(toType);
+    cast_expr.type = gen_type_desc(t_type);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(cast_expr));
+    if (!expr) {
+        return nullptr;
+    }
+    auto json = JsonValue::parse(json_str);
+    if (!json.ok()) {
+        return nullptr;
+    }
+    MockVectorizedExpr<TYPE_JSON> col1(cast_expr, 2, &json.value());
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    return ptr;
+}
+
+// Test cast json value to SQL type
+TEST_F(VectorizedCastExprTest, jsonToValue) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.child_type = TPrimitiveType::JSON;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+
+    // cast self
+    auto jsonCol = evaluateCastFromJson<TYPE_JSON>(cast_expr, "{\"a\": 1}");
+    ASSERT_EQ("{\"a\": 1}", jsonCol->get_data()[0]->to_string().value());
+
+    // cast success
+    ASSERT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, "1")->get_data()[0]);
+    ASSERT_EQ(1.1, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "1.1")->get_data()[0]);
+    ASSERT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "true")->get_data()[0]);
+    ASSERT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "false")->get_data()[0]);
+    ASSERT_EQ("a", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"a\"")->get_data()[0]);
+    ASSERT_EQ("1", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"1\"")->get_data()[0]);
+
+    // implicit json type case
+    ASSERT_EQ(1.0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "1")->get_data()[0]);
+    ASSERT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, "1.1")->get_data()[0]);
+
+    // cast failed
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "\"a\"")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "false")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "null")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "[1,2]")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "1")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "\"a\"")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "1.0")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "null")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "[]")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "{}")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_VARCHAR>(cast_expr, "1.0")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_VARCHAR>(cast_expr, "null")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_VARCHAR>(cast_expr, "true")));
+    ASSERT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_VARCHAR>(cast_expr, "[1,2]")));
+
+    // Not supported
+    ASSERT_EQ(nullptr, evaluateCastJsonNullable<TYPE_DECIMALV2>(cast_expr, "1"));
+    ASSERT_EQ(nullptr, evaluateCastJsonNullable<TYPE_DECIMAL32>(cast_expr, "1"));
+    ASSERT_EQ(nullptr, evaluateCastJsonNullable<TYPE_DECIMAL64>(cast_expr, "1"));
+    ASSERT_EQ(nullptr, evaluateCastJsonNullable<TYPE_DECIMAL128>(cast_expr, "1"));
+    ASSERT_EQ(nullptr, evaluateCastJsonNullable<TYPE_TIME>(cast_expr, "1"));
+    ASSERT_EQ(nullptr, evaluateCastJsonNullable<TYPE_DATE>(cast_expr, "1"));
+    ASSERT_EQ(nullptr, evaluateCastJsonNullable<TYPE_DATETIME>(cast_expr, "1"));
+    ASSERT_EQ(nullptr, evaluateCastJsonNullable<TYPE_HLL>(cast_expr, "1"));
+}
+
+template <PrimitiveType fromType>
+static std::string evaluateCastToJson(TExprNode& cast_expr, RunTimeCppType<fromType> value) {
+    cast_expr.child_type = to_thrift(fromType);
+    cast_expr.type = gen_type_desc(to_thrift(TYPE_JSON));
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(cast_expr));
+    if (!expr.get()) {
+        return "";
+    }
+    MockVectorizedExpr<fromType> col1(cast_expr, 2, value);
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    if (!ptr) {
+        return nullptr;
+    }
+    ColumnPtr result_column = ColumnHelper::cast_to<TYPE_JSON>(ptr);
+    const JsonValue* json = result_column->get(0).get_json();
+    auto json_str = json->to_string();
+    if (!json_str.ok()) {
+        return "";
+    }
+    return json_str.value();
+}
+
+// Test cast json value to SQL type
+TEST_F(VectorizedCastExprTest, sqlToJson) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+
+    // boolean
+    {
+        ASSERT_EQ("true", evaluateCastToJson<TYPE_BOOLEAN>(cast_expr, true));
+        ASSERT_EQ("false", evaluateCastToJson<TYPE_BOOLEAN>(cast_expr, false));
+    }
+    // int
+    {
+        ASSERT_EQ("123", evaluateCastToJson<TYPE_INT>(cast_expr, 123));
+        ASSERT_EQ("-123", evaluateCastToJson<TYPE_INT>(cast_expr, -123));
+        ASSERT_EQ("-1", evaluateCastToJson<TYPE_TINYINT>(cast_expr, -1));
+        ASSERT_EQ("-1", evaluateCastToJson<TYPE_SMALLINT>(cast_expr, -1));
+        ASSERT_EQ("10000000000", evaluateCastToJson<TYPE_BIGINT>(cast_expr, 1E10));
+        ASSERT_EQ("10000000000", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, 1E10));
+    }
+
+    // double/float
+    {
+        ASSERT_EQ("1.23", evaluateCastToJson<TYPE_DOUBLE>(cast_expr, 1.23));
+        ASSERT_EQ("-1.23", evaluateCastToJson<TYPE_DOUBLE>(cast_expr, -1.23));
+
+        ASSERT_EQ("1.23", evaluateCastToJson<TYPE_FLOAT>(cast_expr, 1.23).substr(0, 4));
+        ASSERT_EQ("-1.23", evaluateCastToJson<TYPE_FLOAT>(cast_expr, -1.23).substr(0, 5));
+    }
+
+    // string
+    {
+        std::string str = "star";
+        ASSERT_EQ(R"("star")", evaluateCastToJson<TYPE_CHAR>(cast_expr, str));
+        ASSERT_EQ(R"("star")", evaluateCastToJson<TYPE_VARCHAR>(cast_expr, str));
+
+        str = "上海";
+        ASSERT_EQ(R"("上海")", evaluateCastToJson<TYPE_CHAR>(cast_expr, str));
+        ASSERT_EQ(R"("上海")", evaluateCastToJson<TYPE_VARCHAR>(cast_expr, str));
+    }
+    // json
+    {
+        JsonValue json = JsonValue::from_int(1);
+        ASSERT_EQ(R"(1)", evaluateCastToJson<TYPE_JSON>(cast_expr, &json));
+    }
+}
+
 } // namespace vectorized
 } // namespace starrocks

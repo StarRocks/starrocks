@@ -3,7 +3,10 @@
 #include "binary_column.h"
 
 #include "column/binary_column.h"
+#include "column/json_column.h"
+#include "common/status.h"
 #include "gutil/strings/substitute.h"
+#include "util/json.h"
 
 namespace starrocks::vectorized {
 
@@ -107,6 +110,16 @@ Status add_binary_column(Column* column, const TypeDescriptor& type_desc, const 
                                            simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
     }
+}
+
+Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                              simdjson::ondemand::value* value) {
+    auto json_column = down_cast<JsonColumn*>(column);
+
+    auto json_value = JsonValue::from_simdjson(value);
+    RETURN_IF(!json_value.ok(), json_value.status());
+    json_column->append(&json_value.value());
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized

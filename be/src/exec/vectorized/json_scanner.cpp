@@ -24,6 +24,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -159,6 +160,11 @@ Status JsonScanner::_construct_json_types() {
         case TYPE_VARCHAR: {
             auto varchar_type = TypeDescriptor::create_varchar_type(slot_desc->type().len);
             _json_types[column_pos] = std::move(varchar_type);
+            break;
+        }
+
+        case TYPE_JSON: {
+            _json_types[column_pos] = TypeDescriptor::create_json_type();
             break;
         }
 
