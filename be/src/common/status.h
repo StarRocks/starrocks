@@ -108,6 +108,10 @@ public:
     static Status DuplicateRpcInvocation(const Slice& msg) {
         return Status(TStatusCode::DUPLICATE_RPC_INVOCATION, msg);
     }
+    static Status JsonFormatError(const Slice& msg) {
+        // TODO(mofei) define json format error
+        return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
+    }
 
     bool ok() const { return _state == nullptr; }
 

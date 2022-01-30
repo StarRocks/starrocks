@@ -45,6 +45,7 @@
 #include "storage/vectorized/column_predicate.h"
 #include "storage/wrapper_field.h"
 #include "util/block_compression.h"
+#include "util/json.h"
 #include "util/rle_encoding.h" // for RleDecoder
 
 namespace starrocks {
@@ -114,6 +115,12 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     _flags.set(kHasAllDictEncodedPos, meta->has_all_dict_encoded());
     _flags.set(kAllDictEncodedPos, meta->all_dict_encoded());
     _flags.set(kIsNullablePos, meta->is_nullable());
+
+    if (_column_type == OLAP_FIELD_TYPE_JSON && meta->has_json_meta()) {
+        // TODO(mofei) store format_version in ColumnReader
+        const JsonMetaPB& json_meta = meta->json_meta();
+        CHECK_EQ(kJsonMetaDefaultFormatVersion, json_meta.format_version()) << "Only format_version=1 is supported";
+    }
 
     if (is_scalar_field_type(delegate_type(_column_type))) {
         RETURN_IF_ERROR(EncodingInfo::get(delegate_type(_column_type), meta->encoding(), &_encoding_info));

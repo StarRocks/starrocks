@@ -10,11 +10,13 @@
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "util/coding.h"
+#include "util/json.h"
 
 namespace starrocks::serde {
 namespace {
@@ -146,6 +148,58 @@ public:
     }
 };
 
+// TODO(mofei) embed the version into JsonColumn
+// JsonColumnSerde: serialization of JSON column for network transimission
+// The header include a format_version field, indicting the layout of column encoding
+class JsonColumnSerde {
+public:
+    static int64_t max_serialized_size(const vectorized::JsonColumn& column) {
+        const std::vector<JsonValue>& pool = column.get_pool();
+        int64_t size = 0;
+        size += sizeof(uint32_t); // format_version
+        size += sizeof(uint32_t); // num_objects
+        for (const auto& obj : pool) {
+            size += sizeof(uint64_t);
+            size += obj.serialize_size();
+        }
+        return size;
+    }
+
+    // Layout
+    // uint32: format_version (currently is hard-coded)
+    // uint32: number of datums
+    // datums: [size1[payload1][size2][payload2]
+    static uint8_t* serialize(const vectorized::JsonColumn& column, uint8_t* buff) {
+        buff = write_little_endian_32(kJsonMetaDefaultFormatVersion, buff);
+        buff = write_little_endian_32(column.get_pool().size(), buff);
+        for (const auto& obj : column.get_pool()) {
+            constexpr uint64_t size_field_length = sizeof(uint64_t);
+            uint64_t actual = obj.serialize(buff + size_field_length);
+            buff = write_little_endian_64(actual, buff);
+            buff += actual;
+        }
+        return buff;
+    }
+
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::JsonColumn* column) {
+        uint32_t actual_version = 0;
+        uint32_t num_objects = 0;
+        buff = read_little_endian_32(buff, &actual_version);
+        buff = read_little_endian_32(buff, &num_objects);
+        CHECK_EQ(actual_version, kJsonMetaDefaultFormatVersion) << "Only format_version=1 is supported";
+
+        std::vector<JsonValue>& pool = column->get_pool();
+        pool.reserve(num_objects);
+        for (int i = 0; i < num_objects; i++) {
+            uint64_t serialized_size = 0;
+            buff = read_little_endian_64(buff, &serialized_size);
+            pool.emplace_back(Slice(buff, serialized_size));
+            buff += serialized_size;
+        }
+        return buff;
+    }
+};
+
 class NullableColumnSerde {
 public:
     static int64_t max_serialized_size(const vectorized::NullableColumn& column) {
@@ -244,6 +298,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const vectorized::JsonColumn& column) {
+        _size += JsonColumnSerde::max_serialized_size(column);
+        return Status::OK();
+    }
+
     int64_t size() const { return _size; }
 
 private:
@@ -283,6 +342,11 @@ public:
     template <typename T>
     Status do_visit(const vectorized::ObjectColumn<T>& column) {
         _cur = ObjectColumnSerde<T>::serialize(column, _cur);
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::JsonColumn& column) {
+        _cur = JsonColumnSerde::serialize(column, _cur);
         return Status::OK();
     }
 
@@ -329,6 +393,11 @@ public:
     template <typename T>
     Status do_visit(vectorized::ObjectColumn<T>* column) {
         _cur = ObjectColumnSerde<T>::deserialize(_cur, column);
+        return Status::OK();
+    }
+
+    Status do_visit(vectorized::JsonColumn* column) {
+        _cur = JsonColumnSerde::deserialize(_cur, column);
         return Status::OK();
     }
 

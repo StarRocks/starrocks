@@ -28,6 +28,7 @@
 #include "column/nullable_column.h"
 #include "common/logging.h" // LOG
 #include "env/env.h"        // Env
+#include "gen_cpp/segment.pb.h"
 #include "storage/fs/block_manager.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/page_io.h"
@@ -36,6 +37,7 @@
 #include "storage/vectorized/seek_tuple.h"
 #include "util/crc32c.h"
 #include "util/faststring.h"
+#include "util/json.h"
 
 namespace starrocks {
 
@@ -58,6 +60,13 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     meta->set_encoding(DEFAULT_ENCODING);
     meta->set_compression(LZ4_FRAME);
     meta->set_is_nullable(column.is_nullable());
+
+    // TODO(mofei) set the format_version from column
+    if (column.type() == OLAP_FIELD_TYPE_JSON) {
+        JsonMetaPB* json_meta = meta->mutable_json_meta();
+        json_meta->set_format_version(kJsonMetaDefaultFormatVersion);
+    }
+
     for (uint32_t i = 0; i < column.subcolumn_count(); ++i) {
         _init_column_meta(meta->add_children_columns(), column_id, column.subcolumn(i));
     }

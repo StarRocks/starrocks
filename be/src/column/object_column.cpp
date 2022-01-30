@@ -5,6 +5,7 @@
 #include "gutil/casts.h"
 #include "storage/hll.h"
 #include "util/bitmap_value.h"
+#include "util/json.h"
 #include "util/mysql_row_buffer.h"
 #include "util/percentile_value.h"
 
@@ -271,5 +272,6 @@ std::string ObjectColumn<BitmapValue>::debug_item(uint32_t idx) const {
 template class ObjectColumn<HyperLogLog>;
 template class ObjectColumn<BitmapValue>;
 template class ObjectColumn<PercentileValue>;
+template class ObjectColumn<JsonValue>;
 
 } // namespace starrocks::vectorized

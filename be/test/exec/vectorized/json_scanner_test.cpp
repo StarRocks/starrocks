@@ -486,4 +486,83 @@ TEST_F(JsonScannerTest, test_cast_type) {
     EXPECT_EQ("['3.14', '1', '123', 3.14, 123]", chunk->debug_row(0));
 }
 
+TEST_F(JsonScannerTest, test_load_native_json) {
+    std::vector<TypeDescriptor> types;
+    constexpr int kNumColumns = 16;
+    for (int i = 0; i < kNumColumns; i++) {
+        types.emplace_back(TypeDescriptor::create_json_type());
+    }
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_json_load.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(
+            types, ranges,
+            {"f_bool", "f_tinyint", "f_smallint", "f_int", "f_bigint", "f_float", "f_double", "f_varchar", "f_date",
+             "f_datetime", "f_array", "f_decimal", "f_char", "f_time", "f_nestarray", "f_object"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(kNumColumns, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+
+    auto expected =
+            "[true, 127, 32767, 2147483647, 9223372036854775807, 3.14, 3.14, \"starrocks\", "
+            "\"2021-12-09\", \"2021-12-09 10:00:00\", [1, 3, 5], "
+            "\"1234565789012345678901234567.123456789\", \"starrocks\", \"10:00:00\", "
+            "[[{\"k1\": 1, \"k2\": 2}, {\"k3\": 3}], [{\"k1\": 4, \"k2\": 5}, {\"k3\": 6}]], "
+            "{\"n1\": {\"n2\": {\"n3\": 1.1}}}]";
+
+    EXPECT_EQ(expected, chunk->debug_row(0));
+}
+
+TEST_F(JsonScannerTest, test_native_json_ndjson_with_jsonpath) {
+    std::vector<TypeDescriptor> types;
+    constexpr int kColumns = 4;
+    for (int i = 0; i < kColumns; i++) {
+        types.emplace_back(TypeDescriptor::create_json_type());
+    }
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = "[\"$.k1\", \"$.kind\", \"$.keyname.ip\", \"$.keyname.value\"]";
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "kind", "ip", "value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ(R"(["v1", "server", "10.10.0.1", "10"])", chunk->debug_row(0));
+    EXPECT_EQ(R"(["v2", "server", "10.10.0.2", "20"])", chunk->debug_row(1));
+    EXPECT_EQ(R"(["v3", "server", "10.10.0.3", "30"])", chunk->debug_row(2));
+    EXPECT_EQ(R"(["v4", "server", "10.10.0.4", "40"])", chunk->debug_row(3));
+    EXPECT_EQ(R"(["v5", "server", "10.10.0.5", "50"])", chunk->debug_row(4));
+}
+
+TEST_F(JsonScannerTest, test_native_json_single_column) {
+    // TODO(mofei)
+}
+
 } // namespace starrocks::vectorized
