@@ -551,6 +551,27 @@ TEST_F(VecMathFunctionsTest, LnTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, squareTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        tc1->append(0);
+        tc1->append(2.0);
+        tc1->append(-1);
+        tc1->append(std::nan("not a double number"));
+        columns.emplace_back(tc1);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result_square = MathFunctions::square(ctx.get(), columns);
+
+        ASSERT_EQ(0, result_square->get(0).get_double());
+        ASSERT_EQ(4, result_square->get(1).get_double());
+        ASSERT_EQ(1, result_square->get(2).get_double());
+        ASSERT_EQ(true, result_square->is_null(3));
+    }
+}
+
 TEST_F(VecMathFunctionsTest, AbsTest) {
     {
         Columns columns;
@@ -856,17 +877,6 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
         std::vector<bool> null_expect = {true, false, true};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::log2(ctx.get(), columns);
-        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
-        ASSERT_EQ(nullable->size(), null_expect.size());
-        for (size_t i = 0; i < nullable->size(); i++) {
-            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
-        }
-    }
-
-    {
-        std::vector<bool> null_expect = {false, false, true};
-        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = MathFunctions::square(ctx.get(), columns);
         auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
         ASSERT_EQ(nullable->size(), null_expect.size());
         for (size_t i = 0; i < nullable->size(); i++) {
