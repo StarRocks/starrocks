@@ -5558,6 +5558,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  8 <-> [2: v2, BIGINT, true] + [6: v6, BIGINT, true]\n" +
                 "  |  cardinality: 1"));
         Assert.assertTrue(plan.contains("output columns: 2, 6"));
+
+        sql = "select * from t0,t1 where v1 = v4";
+        plan = getVerboseExplain(sql);
+        Assert.assertFalse(plan.contains("output columns"));
     }
 
     @Test

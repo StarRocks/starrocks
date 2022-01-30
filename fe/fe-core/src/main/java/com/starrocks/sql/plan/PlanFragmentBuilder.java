@@ -1397,9 +1397,6 @@ public class PlanFragmentBuilder {
 
             ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
             ColumnRefSet rightChildColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
-            ColumnRefSet inputColumns = new ColumnRefSet();
-            inputColumns.union(leftChildColumns);
-            inputColumns.union(rightChildColumns);
 
             // 2. Get eqJoinConjuncts
             List<BinaryPredicateOperator> eqOnPredicates = getEqConj(
@@ -1558,9 +1555,6 @@ public class PlanFragmentBuilder {
                     outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
                     hashJoinNode.setOutputSlots(
                             outputColumns.getStream().boxed().collect(Collectors.toList()));
-                } else {
-                    hashJoinNode.setOutputSlots(
-                            inputColumns.getStream().boxed().collect(Collectors.toList()));
                 }
 
                 hashJoinNode.setDistributionMode(distributionMode);
