@@ -34,6 +34,7 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/convert_helper.h"
 #include "storage/vectorized/tablet_reader.h"
 #include "storage/vectorized/tablet_reader_params.h"
 

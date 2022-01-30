@@ -166,10 +166,11 @@ public:
         // find the first value >= target. after loop,
         // - left == index of first value >= target when found
         // - left == _num_elems when not found (all values < target)
+        auto type_info = get_type_info(Type);
         while (left < right) {
             size_t mid = left + (right - left) / 2;
             mid_value = &_data[PLAIN_PAGE_HEADER_SIZE + mid * SIZE_OF_TYPE];
-            if (TypeTraits<Type>::cmp(mid_value, value) < 0) {
+            if (type_info->cmp(mid_value, value) < 0) {
                 left = mid + 1;
             } else {
                 right = mid;
@@ -179,7 +180,7 @@ public:
             return Status::NotFound("all value small than the value");
         }
         const void* find_value = &_data[PLAIN_PAGE_HEADER_SIZE + left * SIZE_OF_TYPE];
-        if (TypeTraits<Type>::cmp(find_value, value) == 0) {
+        if (type_info->cmp(find_value, value) == 0) {
             *exact_match = true;
         } else {
             *exact_match = false;
