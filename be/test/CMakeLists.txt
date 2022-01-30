@@ -132,6 +132,7 @@ set(EXEC_FILES
         ./storage/row_block_v2_test.cpp
         ./storage/row_cursor_test.cpp
         ./storage/rowset/beta_rowset_test.cpp
+        ./storage/rowset/segment_iterator_test.cpp
         ./storage/rowset/segment_v2/binary_dict_page_test.cpp
         ./storage/rowset/segment_v2/binary_plain_page_test.cpp
         ./storage/rowset/segment_v2/binary_prefix_page_test.cpp

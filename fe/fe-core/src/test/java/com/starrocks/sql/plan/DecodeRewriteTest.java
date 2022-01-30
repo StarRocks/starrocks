@@ -604,6 +604,23 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
+    public void testNestedExpressions() throws Exception {
+        String sql;
+        String plan;
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select upper(lower(S_ADDRESS)) from supplier group by lower(S_ADDRESS);";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 13> : <string id 10>"));
+        Assert.assertTrue(plan.contains("  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  13 <-> upper[([12: lower, INT, true]); args: VARCHAR; result: INT; args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains("  4:AGGREGATE (merge finalize)\n" +
+                "  |  group by: [12: lower, INT, true]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
     public void testSubqueryWithLimit() throws Exception {
         String sql = "select t0.S_ADDRESS from (select S_ADDRESS, S_NATIONKEY from supplier_nullable limit 10) t0" +
                 " inner join supplier on t0.S_NATIONKEY = supplier.S_NATIONKEY;";
