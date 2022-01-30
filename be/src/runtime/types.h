@@ -31,6 +31,7 @@
 #include "runtime/primitive_type.h"
 #include "storage/hll.h"
 #include "thrift/protocol/TDebugProtocol.h"
+#include "util/json.h"
 
 namespace starrocks {
 
@@ -85,6 +86,13 @@ struct TypeDescriptor {
         ret.type = TYPE_VARCHAR;
         ret.len = len;
         return ret;
+    }
+
+    static TypeDescriptor create_json_type() {
+        TypeDescriptor res;
+        res.type = TYPE_JSON;
+        res.len = kJsonDefaultSize;
+        return res;
     }
 
     static TypeDescriptor create_hll_type() {
@@ -151,6 +159,8 @@ struct TypeDescriptor {
             return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, precision, scale);
         case TYPE_DECIMAL128:
             return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, precision, scale);
+        case TYPE_JSON:
+            return TypeDescriptor::create_json_type();
         default:
             return TypeDescriptor(type);
         }
@@ -260,6 +270,7 @@ struct TypeDescriptor {
         case TYPE_HLL:
         case TYPE_OBJECT:
         case TYPE_PERCENTILE:
+        case TYPE_JSON:
             return 0;
 
         case TYPE_NULL:
@@ -308,6 +319,7 @@ struct TypeDescriptor {
         case TYPE_HLL:
         case TYPE_OBJECT:
         case TYPE_PERCENTILE:
+        case TYPE_JSON:
             return sizeof(StringValue);
 
         case TYPE_NULL:

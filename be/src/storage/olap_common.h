@@ -161,9 +161,11 @@ enum FieldType {
     OLAP_FIELD_TYPE_DECIMAL_V2 = 52,
     OLAP_FIELD_TYPE_PERCENTILE = 53,
 
+    OLAP_FIELD_TYPE_JSON = 54,
+
     // max value of FieldType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
-    OLAP_FIELD_TYPE_MAX_VALUE = 54
+    OLAP_FIELD_TYPE_MAX_VALUE = 55
 };
 
 inline const char* field_type_to_string(FieldType type) {
@@ -232,6 +234,8 @@ inline const char* field_type_to_string(FieldType type) {
         return "DECIMAL V2";
     case OLAP_FIELD_TYPE_PERCENTILE:
         return "PERCENTILE";
+    case OLAP_FIELD_TYPE_JSON:
+        return "JSON";
     case OLAP_FIELD_TYPE_MAX_VALUE:
         return "MAX VALUE";
     }

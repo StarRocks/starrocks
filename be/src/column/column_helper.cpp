@@ -5,6 +5,7 @@
 #include <runtime/types.h>
 
 #include "column/array_column.h"
+#include "column/json_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "gutil/casts.h"
@@ -13,6 +14,7 @@
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "util/date_func.h"
+#include "util/json.h"
 
 namespace starrocks::vectorized {
 

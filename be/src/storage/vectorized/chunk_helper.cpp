@@ -179,6 +179,8 @@ size_t ChunkHelper::approximate_sizeof_type(FieldType type) {
     switch (type) {
     case OLAP_FIELD_TYPE_HLL:
         return sizeof(HyperLogLog);
+    case OLAP_FIELD_TYPE_JSON:
+        return sizeof(JsonValue);
     case OLAP_FIELD_TYPE_OBJECT:
         return sizeof(BitmapValue);
     case OLAP_FIELD_TYPE_PERCENTILE:

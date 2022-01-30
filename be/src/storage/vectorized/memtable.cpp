@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "column/json_column.h"
 #include "column/type_traits.h"
 #include "common/logging.h"
 #include "runtime/current_thread.h"

@@ -94,6 +94,7 @@ public:
         TYPE_DECIMAL32,
         TYPE_DECIMAL64,
         TYPE_DECIMAL128,
+        TYPE_JSON,
     };
 
     struct TypeDesc {
