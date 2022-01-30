@@ -157,6 +157,8 @@ ColumnPtr TimeFunctions::convert_tz_general(FunctionContext* context, const Colu
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
+    TimezoneHsScan timezone_hsscan;
+    timezone_hsscan.compile();
     for (int row = 0; row < size; ++row) {
         if (time_viewer.is_null(row) || from_str.is_null(row) || to_str.is_null(row)) {
             result.append_null();
@@ -171,15 +173,18 @@ ColumnPtr TimeFunctions::convert_tz_general(FunctionContext* context, const Colu
         datetime_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
         DateTimeValue ts_value(TIME_DATETIME, year, month, day, hour, minute, second, usec);
 
+        cctz::time_zone ctz;
         int64_t timestamp;
         // TODO find a better approach to replace datetime_value.unix_timestamp
-        if (!ts_value.unix_timestamp(&timestamp, std::string(from_format.data, from_format.size))) {
+        if (!ts_value.from_cctz_timezone(timezone_hsscan, std::string(from_format.data, from_format.size), ctz) ||
+            !ts_value.unix_timestamp(&timestamp, ctz)) {
             result.append_null();
             continue;
         }
         DateTimeValue ts_value2;
         // TODO find a better approach to replace datetime_value.from_unixtime
-        if (!ts_value2.from_unixtime(timestamp, std::string(to_format.data, to_format.size))) {
+        if (!ts_value2.from_cctz_timezone(timezone_hsscan, std::string(to_format.data, to_format.size), ctz) ||
+            !ts_value2.from_unixtime(timestamp, ctz)) {
             result.append_null();
             continue;
         }
