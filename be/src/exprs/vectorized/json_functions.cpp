@@ -53,7 +53,6 @@ Status JsonFunctions::_get_parsed_paths(const std::vector<std::string>& path_exp
         } else {
             int idx = -1;
             if (!index.empty()) {
-                // TODO(mofei) support wildcard
                 if (index == "*") {
                     idx = -2;
                 } else {

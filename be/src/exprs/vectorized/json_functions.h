@@ -121,7 +121,7 @@ public:
     /**
      * @param: [json_object, json_path]
      * @paramType: [JsonColumn, BinaryColumn]
-     * @return: BinaryColumn
+     * @return: JsonColumn
      */
     DEFINE_VECTORIZED_FN(json_query);
 
