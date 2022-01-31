@@ -155,7 +155,7 @@ DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN(log2, TYPE_DOUBLE, TYPE_DOUBLE);
 
 // square
 DEFINE_UNARY_FN_WITH_IMPL(squareImpl, v) {
-    return (double)std::pow(v, 2.0);
+    return v * v;
 }
 
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN(square, TYPE_DOUBLE, TYPE_DOUBLE);
