@@ -60,7 +60,7 @@ For detailed instructions, please refer to [deploy](https://github.com/StarRocks
 
 ## LICENSE
 
-Code in this repository is provided under the [Elastic License 2.0](https://www.elastic.co/cn/licensing/elastic-license). Some portions are available under open source licenses. Please see our [FAQ](https://www.starrocks.com/en-US/product/license-FAQ).
+Code in this repository is provided under the [Elastic License 2.0](https://www.elastic.co/cn/licensing/elastic-license). Some portions are available under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). Please see our [FAQ](https://www.starrocks.com/en-US/product/license-FAQ).
 
 ## Contributing to StarRocks
 
