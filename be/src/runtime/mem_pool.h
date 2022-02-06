@@ -110,7 +110,8 @@ public:
     uint8_t* allocate_aligned(int64_t size, int alignment) {
         DCHECK_GE(alignment, 1);
         DCHECK_LE(alignment, config::memory_max_alignment);
-        DCHECK_EQ(BitUtil::RoundUpToPowerOfTwo(alignment), alignment);
+        // alignment should be a power of 2
+        DCHECK((alignment & (alignment - 1)) == 0);
         return allocate<false>(size, alignment);
     }
 
