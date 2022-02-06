@@ -25,7 +25,6 @@
 #include <cstdio>
 #include <sstream>
 
-#include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
 #include "util/bit_util.h"
 #include "util/starrocks_metrics.h"
