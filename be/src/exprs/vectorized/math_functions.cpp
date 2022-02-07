@@ -153,6 +153,13 @@ DEFINE_UNARY_FN_WITH_IMPL(log2Impl, v) {
 
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN(log2, TYPE_DOUBLE, TYPE_DOUBLE);
 
+// square
+DEFINE_UNARY_FN_WITH_IMPL(squareImpl, v) {
+    return v * v;
+}
+
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN(square, TYPE_DOUBLE, TYPE_DOUBLE);
+
 // radians
 DEFINE_UNARY_FN_WITH_IMPL(radiansImpl, v) {
     return (double)(v * M_PI / 180.0);
