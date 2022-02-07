@@ -188,21 +188,32 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 
         bool has_error = false;
         int num_materialize_columns = _scanner_params.materialize_slots.size();
-        if (_scanner_params.hive_column_names->size() > fields.size()) {
-            return Status::InvalidArgument(
-                    strings::Substitute("Size mismatch between hive column $0 names and fields $1!",
-                                        _scanner_params.hive_column_names->size(), fields.size()));
+        int field_size = fields.size();
+        if (_scanner_params.hive_column_names->size() != field_size) {
+            LOG(WARNING) << strings::Substitute("Size mismatch between hive column $0 names and fields $1!",
+                                        _scanner_params.hive_column_names->size(), fields.size());
         }
         for (int j = 0; j < num_materialize_columns; j++) {
             int index = _scanner_params.materialize_index_in_chunk[j];
-            const Slice& field = fields[_columns_index[_scanner_params.materialize_slots[j]->col_name()]];
-            options.type_desc = &(_scanner_params.materialize_slots[j]->type());
-            if (!_converters[j]->read_string(_column_raw_ptrs[index], field, options)) {
-                LOG(WARNING) << "Converter encountered an error for field " << field.to_string() << ", index " << index
-                             << ", column " << _scanner_params.materialize_slots[j]->debug_string();
-                chunk->get()->set_num_rows(num_rows);
-                has_error = true;
-                break;
+            int column_field_index = _columns_index[_scanner_params.materialize_slots[j]->col_name()];
+            Column* column = _column_raw_ptrs[index];
+            if (column_field_index < field_size) {
+                const Slice& field = fields[column_field_index];
+                options.type_desc = &(_scanner_params.materialize_slots[j]->type());
+                if (!_converters[j]->read_string(column, field, options)) {
+                    LOG(WARNING) << "Converter encountered an error for field " << field.to_string() << ", index " << index
+                                 << ", column " << _scanner_params.materialize_slots[j]->debug_string();
+                    chunk->get()->set_num_rows(num_rows);
+                    has_error = true;
+                    break;
+                }
+            } else {
+                // The size of hive_column_names may be larger than fields when new columns are added.
+                // The default value should be filled when querying the extra columns that
+                // do not exist in the text file.
+                // hive only support null column
+                // TODO: support not null
+                column->append_nulls(1);
             }
         }
         num_rows += !has_error;
