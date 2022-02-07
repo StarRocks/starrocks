@@ -155,7 +155,7 @@ private:
     }
 
     static void _sort_item(std::vector<uint32_t>* sort_index, const Column& src_column,
-                                      const UInt32Column& offset_column, size_t index) {
+                           const UInt32Column& offset_column, size_t index) {
         const auto& offsets = offset_column.get_data();
 
         size_t start = offsets[index];
@@ -165,12 +165,11 @@ private:
         }
 
         _sort_column(sort_index, src_column, start, count);
-
     }
 
     static void _sort_nullable_item(std::vector<uint32_t>* sort_index, const Column& src_data_column,
-                                               const NullColumn& src_null_column, const UInt32Column& offset_column,
-                                               size_t index) {
+                                    const NullColumn& src_null_column, const UInt32Column& offset_column,
+                                    size_t index) {
         const auto& offsets = offset_column.get_data();
         size_t start = offsets[index];
         size_t count = offsets[index + 1] - offsets[index];
@@ -227,6 +226,105 @@ private:
         sort_index->resize(count);
         for (size_t i = 0; i < count; i++) {
             (*sort_index)[i] = i;
+        }
+    }
+};
+
+template <PrimitiveType PT>
+class ArrayReverse {
+public:
+    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<PT>;
+
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        DCHECK_EQ(columns.size(), 1);
+
+        size_t chunk_size = columns[0]->size();
+
+        if (columns[0]->only_null()) {
+            return ColumnHelper::create_const_null_column(chunk_size);
+        }
+
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+        ColumnPtr dest_column = src_column->clone();
+
+        if (dest_column->is_nullable()) {
+            _reverse_array_column(down_cast<NullableColumn*>(dest_column.get())->mutable_data_column(), chunk_size);
+        } else {
+            _reverse_array_column(dest_column.get(), chunk_size);
+        }
+        return dest_column;
+    }
+
+private:
+    static void _reverse_fixed_column(Column* column, size_t begin, size_t end) {
+        auto& data = down_cast<ColumnType*>(column)->get_data();
+        std::reverse(data.begin() + begin, data.begin() + end);
+    }
+
+    static void _reverse_binary_column(Column* column, size_t begin, size_t end) {
+        auto& offsets = down_cast<BinaryColumn*>(column)->get_offset();
+        // revert size
+        std::reverse(offsets.begin() + begin + 1, offsets.begin() + end + 1);
+        // convert size to offset
+        for (size_t i = begin; i < end; i++) {
+            offsets[i + 1] = offsets[i] + offsets[i + 1];
+        }
+
+        // revert all byte of one array
+        auto& bytes = down_cast<BinaryColumn*>(column)->get_bytes();
+        std::reverse(bytes.begin() + offsets[begin], bytes.begin() + offsets[end]);
+
+        // revert string one by one
+        for (size_t i = begin; i < end; i++) {
+            std::reverse(bytes.begin() + offsets[i], bytes.begin() + offsets[i + 1]);
+        }
+    }
+
+    static void _reverse_data_column(Column* column, const Buffer<uint32_t>& offsets, size_t chunk_size) {
+        if constexpr (pt_is_fixedlength<PT>) {
+            for (size_t i = 0; i < chunk_size; i++) {
+                _reverse_fixed_column(column, offsets[i], offsets[i + 1]);
+            }
+        } else if constexpr (pt_is_binary<PT>) {
+            auto& data = down_cast<BinaryColumn*>(column)->get_offset();
+            // convert offset ot size
+            for (size_t i = data.size() - 1; i > 0; i--) {
+                data[i] = data[i] - data[i - 1];
+            }
+
+            for (size_t i = 0; i < chunk_size; i++) {
+                _reverse_binary_column(column, offsets[i], offsets[i + 1]);
+            }
+        } else {
+            assert(false);
+        }
+    }
+
+    static void _reverse_null_column(Column* column, const Buffer<uint32_t>& offsets, size_t chunk_size) {
+        auto& data = down_cast<UInt8Column*>(column)->get_data();
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            std::reverse(data.begin() + offsets[i], data.begin() + offsets[i + 1]);
+        }
+    }
+
+    static void _reverse_array_column(Column* column, size_t chunk_size) {
+        auto* array_column = down_cast<ArrayColumn*>(column);
+        auto& elements_column = array_column->elements_column();
+        auto& offsets = array_column->offsets_column()->get_data();
+
+        if (elements_column->is_nullable()) {
+            auto* nullable_column = down_cast<NullableColumn*>(elements_column.get());
+            auto* null_column = nullable_column->mutable_null_column();
+            auto* data_column = nullable_column->data_column().get();
+
+            if (nullable_column->has_null()) {
+                _reverse_null_column(null_column, offsets, chunk_size);
+            }
+            _reverse_data_column(data_column, offsets, chunk_size);
+        } else {
+            _reverse_data_column(column, offsets, chunk_size);
         }
     }
 };
