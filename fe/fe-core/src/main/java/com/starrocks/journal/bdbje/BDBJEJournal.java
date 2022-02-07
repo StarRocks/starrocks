@@ -113,7 +113,7 @@ public class BDBJEJournal implements Journal {
             LOG.info("roll edit log. new db name is {}", newName);
             currentJournalDB = bdbEnvironment.openDatabase(Long.toString(newName));
         } else {
-            String msg = String.format("roll journal error! nestJournalId and db max journal id is not match. "
+            String msg = String.format("roll journal error! nextJournalId and db max journal id is not match. "
                             + "journal id: %d, current db's max journal id : %s",
                     newName, newNameVerify);
             LOG.error(msg);
