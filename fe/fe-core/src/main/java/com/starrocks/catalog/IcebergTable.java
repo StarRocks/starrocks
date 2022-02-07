@@ -166,6 +166,10 @@ public class IcebergTable extends Table {
                 throw new DdlException("can not convert iceberg column type [" + icebergColumn.type() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName());
             }
+            if (!column.isAllowNull()) {
+                throw new DdlException(
+                        "iceberg extern table not support no-nullable column: [" + icebergColumn.name() + "]");
+            }
         }
 
         if (!copiedProps.isEmpty()) {
