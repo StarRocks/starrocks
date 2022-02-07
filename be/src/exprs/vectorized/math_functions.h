@@ -225,6 +225,12 @@ public:
     * @return: DoubleColumn
     */
     DEFINE_VECTORIZED_FN(cot);
+    /**
+    * @param: [DoubleColumn]
+    * @return: DoubleColumn
+    *
+    */
+    DEFINE_VECTORIZED_FN(square);
 
     // @todo: these functions belong to math function?
     // =====================================
