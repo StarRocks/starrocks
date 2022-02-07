@@ -106,34 +106,13 @@ public:
     /// with enough capacity.
     uint8_t* allocate(int64_t size) { return allocate<false>(size, DEFAULT_ALIGNMENT); }
 
-    /// Same as Allocate() except the mem limit is checked before the allocation and
-    /// this call will fail (returns NULL) if it does.
-    /// The caller must handle the NULL case. This should be used for allocations
-    /// where the size can be very big to bound the amount by which we exceed mem limits.
-    uint8_t* try_allocate(int64_t size) { return allocate<true>(size, DEFAULT_ALIGNMENT); }
-
-    /// Same as TryAllocate() except a non-default alignment can be specified. It
-    /// should be a power-of-two in [1, alignof(std::max_align_t)].
-    uint8_t* try_allocate_aligned(int64_t size, int alignment) {
-        DCHECK_GE(alignment, 1);
-        DCHECK_LE(alignment, config::memory_max_alignment);
-        DCHECK_EQ(BitUtil::RoundUpToPowerOfTwo(alignment), alignment);
-        return allocate<true>(size, alignment);
-    }
-
     // Don't check memory limit
     uint8_t* allocate_aligned(int64_t size, int alignment) {
         DCHECK_GE(alignment, 1);
         DCHECK_LE(alignment, config::memory_max_alignment);
-        DCHECK_EQ(BitUtil::RoundUpToPowerOfTwo(alignment), alignment);
+        // alignment should be a power of 2
+        DCHECK((alignment & (alignment - 1)) == 0);
         return allocate<false>(size, alignment);
-    }
-
-    /// Same as TryAllocate() except returned memory is not aligned at all.
-    uint8_t* try_allocate_unaligned(int64_t size) {
-        // Call templated implementation directly so that it is inlined here and the
-        // alignment logic can be optimised out.
-        return allocate<true>(size, 1);
     }
 
     /// Makes all allocated chunks available for re-use, but doesn't delete any chunks.
