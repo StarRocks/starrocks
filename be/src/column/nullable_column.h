@@ -201,6 +201,8 @@ public:
     const NullColumn& null_column_ref() const { return *_null_column; }
     const NullColumnPtr& null_column() const { return _null_column; }
 
+    size_t null_count() const;
+
     Datum get(size_t n) const override {
         if (_has_null && _null_column->get_data()[n]) {
             return Datum();
