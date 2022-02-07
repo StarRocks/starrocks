@@ -39,12 +39,6 @@ failed to query wartermark offset, err: Local: Bad message format
 
 kafka通信会用到hostname，需要在starrocks集群节点配置kafka主机名解析/etc/hosts
 
-## StarRocks可以将表结构创建语句批量导出来吗？
-
-**解决方案：**
-
-可以使用Doris Tools导出
-
 ## 没有查询时 BE 内存处于打满状态，且cpu也是打满状态
 
 **问题描述:**
