@@ -191,7 +191,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         int field_size = fields.size();
         if (_scanner_params.hive_column_names->size() != field_size) {
             LOG(WARNING) << strings::Substitute("Size mismatch between hive column $0 names and fields $1!",
-                                        _scanner_params.hive_column_names->size(), fields.size());
+                                                _scanner_params.hive_column_names->size(), fields.size());
         }
         for (int j = 0; j < num_materialize_columns; j++) {
             int index = _scanner_params.materialize_index_in_chunk[j];
@@ -201,8 +201,8 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 const Slice& field = fields[column_field_index];
                 options.type_desc = &(_scanner_params.materialize_slots[j]->type());
                 if (!_converters[j]->read_string(column, field, options)) {
-                    LOG(WARNING) << "Converter encountered an error for field " << field.to_string() << ", index " << index
-                                 << ", column " << _scanner_params.materialize_slots[j]->debug_string();
+                    LOG(WARNING) << "Converter encountered an error for field " << field.to_string() << ", index "
+                                 << index << ", column " << _scanner_params.materialize_slots[j]->debug_string();
                     chunk->get()->set_num_rows(num_rows);
                     has_error = true;
                     break;
