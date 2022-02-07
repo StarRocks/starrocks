@@ -108,4 +108,14 @@ public class IcebergTableTest {
         new IcebergTable(1000, "iceberg_table", columns, properties);
         Assert.fail("No exception throws.");
     }
+
+    @Test(expected = DdlException.class)
+    public void testNonNullAbleColumn() throws DdlException {
+        List<Column> columns1 = Lists.newArrayList();
+        Column column = new Column("col1", Type.BIGINT, false);
+        columns1.add(column);
+        properties.remove("table");
+        new IcebergTable(1000, "iceberg_table", columns1, properties);
+        Assert.fail("No exception throws.");
+    }
 }
