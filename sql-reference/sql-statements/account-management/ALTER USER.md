@@ -20,7 +20,7 @@ IDENTIFIED WITH auth_plugin AS 'auth_string'
 ```
 
 ```plain text
-CREATE USER 命令用于更改用户信息
+ALTER USER 命令用于更改用户信息
 
 auth_option指定用户的认证方式，目前支持mysql_native_password和authentication_ldap_simple
 ```
