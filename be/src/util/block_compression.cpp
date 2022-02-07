@@ -29,6 +29,7 @@
 #include <zstd/zstd.h>
 #include <zstd/zstd_errors.h>
 
+#include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
 #include "util/faststring.h"
 
@@ -50,14 +51,14 @@ Status BlockCompressionCodec::compress(const std::vector<Slice>& inputs, Slice* 
     return compress(buf, output);
 }
 
-class Lz4BlockCompression : public BlockCompressionCodec {
+class Lz4Compression : public BlockCompressionCodec {
 public:
-    static const Lz4BlockCompression* instance() {
-        static Lz4BlockCompression s_instance;
+    static const Lz4Compression* instance() {
+        static Lz4Compression s_instance;
         return &s_instance;
     }
 
-    ~Lz4BlockCompression() override = default;
+    ~Lz4Compression() override = default;
 
     Status compress(const Slice& input, Slice* output) const override {
         auto compressed_len = LZ4_compress_default(input.data, output->data, input.size, output->size);
@@ -84,6 +85,78 @@ public:
     bool exceed_max_input_size(size_t len) const override { return len > LZ4_MAX_INPUT_SIZE; }
 
     size_t max_input_size() const override { return LZ4_MAX_INPUT_SIZE; }
+};
+
+class Lz4BlockCompression : public BlockCompressionCodec {
+public:
+    static const Lz4BlockCompression* instance() {
+        static Lz4BlockCompression s_instance;
+        return &s_instance;
+    }
+
+    ~Lz4BlockCompression() override = default;
+
+    Status compress(const Slice& input, Slice* output) const override {
+        return Status::NotSupported("Lz4BlockCompression::compress not supported yet");
+    }
+
+    Status decompress(const Slice& input, Slice* output) const override {
+        if (output->size == 0) return Status::OK();
+        int64_t uncompressed_total_len = 0;
+        const int64_t buffer_size = output->size;
+        auto* input_ptr = input.data;
+        auto* out_ptr = output->data;
+        std::size_t input_len = input.size;
+
+        while (input_len > 0) {
+            uint32_t uncompressed_block_len = BigEndian::ToHost32(*reinterpret_cast<uint32_t*>(input_ptr));
+            input_ptr += sizeof(uint32_t);
+            input_len -= sizeof(uint32_t);
+            int64_t remaining_output_size = buffer_size - uncompressed_total_len;
+            if (remaining_output_size < uncompressed_block_len) {
+                return Status::InvalidArgument(
+                        strings::Substitute("fail to do LZ4 decompress, remaining_output_size=$0, uncompressed_block_len=$1", remaining_output_size, uncompressed_block_len));
+            }
+
+            while (uncompressed_block_len > 0) {
+                // Check that input length should not be negative.
+                if (input_len < 0) {
+                    return Status::InvalidArgument(
+                            strings::Substitute("fail to do LZ4 decompress, uncompressed_total_len=$0, input_len=$1", uncompressed_total_len, input_len));
+                }
+                // Read the length of the next lz4 compressed block.
+                size_t compressed_len = BigEndian::ToHost32(*reinterpret_cast<uint32_t*>(input_ptr));
+                input_ptr += sizeof(uint32_t);
+                input_len -= sizeof(uint32_t);
+
+                if (compressed_len == 0 || compressed_len > input_len) {
+                    return Status::InvalidArgument(
+                            strings::Substitute("fail to do LZ4 decompress, uncompressed_total_len=$0, compressed_len=$1", uncompressed_total_len, compressed_len));
+                }
+
+                // Decompress this block.
+                int64_t remaining_output_size = buffer_size - uncompressed_total_len;
+                int uncompressed_len =
+                        LZ4_decompress_safe(input_ptr, reinterpret_cast<char*>(out_ptr),
+                                            compressed_len, remaining_output_size);
+                if (uncompressed_len < 0) {
+                    return Status::InvalidArgument(
+                            strings::Substitute("fail to do LZ4 decompress, error=$0", uncompressed_len));
+                }
+
+                out_ptr += uncompressed_len;
+                input_ptr += compressed_len;
+                input_len -= compressed_len;
+                uncompressed_block_len -= uncompressed_len;
+                uncompressed_total_len += uncompressed_len;
+            }
+        }
+        return Status::OK();
+    }
+
+    size_t max_compressed_len(size_t len) const override {
+        return UINT64_MAX;
+    }
 };
 
 class Lz4fBlockCompression : public BlockCompressionCodec {
@@ -553,10 +626,10 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         *codec = SnappyBlockCompression::instance();
         break;
     case CompressionTypePB::LZ4:
-        *codec = Lz4BlockCompression::instance();
+        *codec = Lz4Compression::instance();
         break;
     case CompressionTypePB::LZ4_FRAME:
-        *codec = Lz4fBlockCompression::instance();
+        *codec = Lz4BlockCompression::instance();
         break;
     case CompressionTypePB::ZLIB:
         *codec = ZlibBlockCompression::instance();

@@ -11,7 +11,7 @@ CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type cod
     case tparquet::CompressionCodec::SNAPPY:
         return SNAPPY;
     case tparquet::CompressionCodec::LZ4:
-        return LZ4;
+        return LZ4_BLOCK;
     case tparquet::CompressionCodec::ZSTD:
         return ZSTD;
     case tparquet::CompressionCodec::GZIP:
