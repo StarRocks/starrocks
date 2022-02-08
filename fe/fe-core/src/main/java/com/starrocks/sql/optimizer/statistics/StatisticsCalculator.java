@@ -845,13 +845,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
         List<ColumnStatistic> estimateColumnStatistics = childOutputColumns.get(0).stream().map(columnRefOperator ->
                 context.getChildStatistics(0).getColumnStatistic(columnRefOperator)).collect(Collectors.toList());
-        childOutputColumns.get(0).stream().map(columnRefOperator -> {
-            LOG.debug("Test left node " + columnRefOperator.getName());
-            return null;
-        });
 
         for (int outputIdx = 0; outputIdx < outputColumnRef.size(); ++outputIdx) {
-            LOG.debug("Test Output column " + outputColumnRef.get(outputIdx).getName());
             double estimateRowCount = context.getChildrenStatistics().get(0).getOutputRowCount();
             for (int childIdx = 1; childIdx < context.arity(); ++childIdx) {
                 ColumnRefOperator childOutputColumn = childOutputColumns.get(childIdx).get(outputIdx);

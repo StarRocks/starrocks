@@ -21,7 +21,10 @@ import java.util.function.Predicate;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toSet;
 
-public class Summary {
+/**
+ * Aggregated statistics for a collection of files.
+ */
+public class IcebergFileStats {
     private final Map<Integer, Type.PrimitiveType> idToTypeMapping;
     private final List<Types.NestedField> nonPartitionPrimitiveColumns;
     private final StructLike values;
@@ -35,7 +38,7 @@ public class Summary {
     private final Set<Integer> corruptedStats;
     private boolean hasValidColumnMetrics;
 
-    public Summary(
+    public IcebergFileStats(
             Map<Integer, Type.PrimitiveType> idToTypeMapping,
             List<Types.NestedField> nonPartitionPrimitiveColumns,
             StructLike values,

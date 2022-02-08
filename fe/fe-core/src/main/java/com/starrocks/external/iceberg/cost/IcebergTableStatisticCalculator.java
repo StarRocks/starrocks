@@ -75,58 +75,58 @@ public class IcebergTableStatisticCalculator {
         TableScan tableScan = IcebergUtil.getTableScan(icebergTable,
                 snapshot.get(), icebergPredicates, true);
 
-        Summary summary = null;
+        IcebergFileStats icebergFileStats = null;
         try (CloseableIterable<FileScanTask> fileScanTasks = tableScan.planFiles()) {
             for (FileScanTask fileScanTask : fileScanTasks) {
                 DataFile dataFile = fileScanTask.file();
-                if (summary == null) {
-                    summary = new Summary(
+                if (icebergFileStats == null) {
+                    icebergFileStats = new IcebergFileStats(
                             idToTypeMapping,
                             nonPartitionPrimitiveColumns,
                             dataFile.partition(),
                             dataFile.recordCount(),
                             dataFile.fileSizeInBytes(),
-                            Summary.toMap(idToTypeMapping, dataFile.lowerBounds()),
-                            Summary.toMap(idToTypeMapping, dataFile.upperBounds()),
+                            IcebergFileStats.toMap(idToTypeMapping, dataFile.lowerBounds()),
+                            IcebergFileStats.toMap(idToTypeMapping, dataFile.upperBounds()),
                             dataFile.nullValueCounts(),
                             dataFile.columnSizes());
                 } else {
-                    summary.incrementFileCount();
-                    summary.incrementRecordCount(dataFile.recordCount());
-                    summary.incrementSize(dataFile.fileSizeInBytes());
-                    updateSummaryMin(summary, partitionFields, Summary.toMap(idToTypeMapping,
+                    icebergFileStats.incrementFileCount();
+                    icebergFileStats.incrementRecordCount(dataFile.recordCount());
+                    icebergFileStats.incrementSize(dataFile.fileSizeInBytes());
+                    updateSummaryMin(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
                             dataFile.lowerBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
-                    updateSummaryMax(summary, partitionFields, Summary.toMap(idToTypeMapping,
+                    updateSummaryMax(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
                             dataFile.upperBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
-                    summary.updateNullCount(dataFile.nullValueCounts());
-                    updateColumnSizes(summary, dataFile.columnSizes());
+                    icebergFileStats.updateNullCount(dataFile.nullValueCounts());
+                    updateColumnSizes(icebergFileStats, dataFile.columnSizes());
                 }
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
 
-        if (summary == null) {
+        if (icebergFileStats == null) {
             return IcebergTableStats.empty();
         }
 
         ImmutableMap.Builder<String, IcebergColumnStats> columnStatsBuilder = ImmutableMap.builder();
-        double recordCount = summary.getRecordCount();
+        double recordCount = icebergFileStats.getRecordCount();
         for (Map.Entry<Integer, String> idColumn : idToColumnNames.entrySet()) {
             int fieldId = idColumn.getKey();
             IcebergColumnStats columnStats = new IcebergColumnStats();
-            Long nullCount = summary.getNullCounts().get(fieldId);
+            Long nullCount = icebergFileStats.getNullCounts().get(fieldId);
             if (nullCount != null) {
                 columnStats.setNumNulls(nullCount);
             }
-            if (summary.getColumnSizes() != null) {
-                Long columnSize = summary.getColumnSizes().get(fieldId);
+            if (icebergFileStats.getColumnSizes() != null) {
+                Long columnSize = icebergFileStats.getColumnSizes().get(fieldId);
                 if (columnSize != null) {
                     columnStats.setAvgSize(columnSize / recordCount);
                 }
             }
-            Object min = summary.getMinValues().get(fieldId);
-            Object max = summary.getMaxValues().get(fieldId);
+            Object min = icebergFileStats.getMinValues().get(fieldId);
+            Object max = icebergFileStats.getMaxValues().get(fieldId);
             if (min instanceof Number && max instanceof Number) {
                 columnStats.setMinValue(((Number) min).doubleValue());
                 columnStats.setMaxValue(((Number) max).doubleValue());
@@ -148,12 +148,12 @@ public class IcebergTableStatisticCalculator {
         return partitionTypeBuilder.build();
     }
 
-    public void updateColumnSizes(Summary summary, Map<Integer, Long> addedColumnSizes) {
-        Map<Integer, Long> columnSizes = summary.getColumnSizes();
-        if (!summary.hasValidColumnMetrics() || columnSizes == null || addedColumnSizes == null) {
+    public void updateColumnSizes(IcebergFileStats icebergFileStats, Map<Integer, Long> addedColumnSizes) {
+        Map<Integer, Long> columnSizes = icebergFileStats.getColumnSizes();
+        if (!icebergFileStats.hasValidColumnMetrics() || columnSizes == null || addedColumnSizes == null) {
             return;
         }
-        for (Types.NestedField column : summary.getNonPartitionPrimitiveColumns()) {
+        for (Types.NestedField column : icebergFileStats.getNonPartitionPrimitiveColumns()) {
             int id = column.fieldId();
 
             Long addedSize = addedColumnSizes.get(id);
@@ -163,33 +163,33 @@ public class IcebergTableStatisticCalculator {
         }
     }
 
-    private void updateSummaryMin(Summary summary,
+    private void updateSummaryMin(IcebergFileStats icebergFileStats,
                                   List<PartitionField> partitionFields,
                                   Map<Integer, Object> lowerBounds,
                                   Map<Integer, Long> nullCounts,
                                   long recordCount) {
-        summary.updateStats(summary.getMinValues(), lowerBounds, nullCounts, recordCount, i -> (i > 0));
-        updatePartitionedStats(summary, partitionFields, summary.getMinValues(), lowerBounds, i -> (i > 0));
+        icebergFileStats.updateStats(icebergFileStats.getMinValues(), lowerBounds, nullCounts, recordCount, i -> (i > 0));
+        updatePartitionedStats(icebergFileStats, partitionFields, icebergFileStats.getMinValues(), lowerBounds, i -> (i > 0));
     }
 
-    private void updateSummaryMax(Summary summary,
+    private void updateSummaryMax(IcebergFileStats icebergFileStats,
                                   List<PartitionField> partitionFields,
                                   Map<Integer, Object> upperBounds,
                                   Map<Integer, Long> nullCounts,
                                   long recordCount) {
-        summary.updateStats(summary.getMaxValues(), upperBounds, nullCounts, recordCount, i -> (i < 0));
-        updatePartitionedStats(summary, partitionFields, summary.getMaxValues(), upperBounds, i -> (i < 0));
+        icebergFileStats.updateStats(icebergFileStats.getMaxValues(), upperBounds, nullCounts, recordCount, i -> (i < 0));
+        updatePartitionedStats(icebergFileStats, partitionFields, icebergFileStats.getMaxValues(), upperBounds, i -> (i < 0));
     }
 
     private void updatePartitionedStats(
-            Summary summary,
+            IcebergFileStats icebergFileStats,
             List<PartitionField> partitionFields,
             Map<Integer, Object> current,
             Map<Integer, Object> newStats,
             Predicate<Integer> predicate) {
         for (PartitionField field : partitionFields) {
             int id = field.sourceId();
-            if (summary.getCorruptedStats().contains(id)) {
+            if (icebergFileStats.getCorruptedStats().contains(id)) {
                 continue;
             }
 
@@ -200,7 +200,7 @@ public class IcebergTableStatisticCalculator {
 
             Object oldValue = current.putIfAbsent(id, newValue);
             if (oldValue != null) {
-                Comparator<Object> comparator = Comparators.forType(summary.getIdToTypeMapping().get(id));
+                Comparator<Object> comparator = Comparators.forType(icebergFileStats.getIdToTypeMapping().get(id));
                 if (predicate.test(comparator.compare(oldValue, newValue))) {
                     current.put(id, newValue);
                 }
