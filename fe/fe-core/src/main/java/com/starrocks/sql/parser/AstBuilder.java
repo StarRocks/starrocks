@@ -59,8 +59,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QueryRelation queryRelation = (QueryRelation) visit(context.queryNoWith());
 
         List<CTERelation> withQuery = new ArrayList<>();
-        if (context.with() != null) {
-            withQuery = visit(context.with().namedQuery(), CTERelation.class);
+        if (context.withClause() != null) {
+            withQuery = visit(context.withClause().commonTableExpression(), CTERelation.class);
         }
         withQuery.forEach(queryRelation::addCTERelation);
 
@@ -68,7 +68,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitNamedQuery(StarRocksParser.NamedQueryContext context) {
+    public ParseNode visitCommonTableExpression(StarRocksParser.CommonTableExpressionContext context) {
         Optional<List<Identifier>> columns = Optional.empty();
         if (context.columnAliases() != null) {
             columns = Optional.of(visit(context.columnAliases().identifier(), Identifier.class));

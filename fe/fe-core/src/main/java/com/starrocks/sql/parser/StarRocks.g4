@@ -25,11 +25,11 @@ queryStatement
     : query;
 
 query
-    :  with? queryNoWith
+    :  withClause? queryNoWith
     ;
 
-with
-    : WITH namedQuery (',' namedQuery)*
+withClause
+    : WITH commonTableExpression (',' commonTableExpression)*
     ;
 
 queryNoWith
@@ -89,7 +89,7 @@ groupingSet
     : expression (',' expression)*
     ;
 
-namedQuery
+commonTableExpression
     : name=identifier (columnAliases)? AS '(' query ')'
     ;
 
@@ -107,7 +107,7 @@ selectItem
 relation
     : left=relation(
         CROSS JOIN hint? LATERAL? right=aliasedRelation
-        | joinType hint? LATERAL? rightRelation=relation joinCriteria?)              #joinRelation
+        | joinType hint? LATERAL? rightRelation=relation joinCriteria?)                  #joinRelation
     | aliasedRelation                                                                    #relationDefault
     ;
 
@@ -138,7 +138,7 @@ columnAliases
     ;
 
 relationPrimary
-    : qualifiedName hint?                                                              #tableName
+    : qualifiedName hint?                                                                 #tableName
     | subquery                                                                            #subqueryRelation
     | UNNEST '(' expression (',' expression)* ')'                                         #unnest
     | '(' relation ')'                                                                    #parenthesizedRelation
