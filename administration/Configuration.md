@@ -53,7 +53,7 @@
 |publish_version_timeout_second|30|版本生效的超时时间|
 |publish_version_interval_ms|10|发送版本生效任务的时间间隔|
 |load_straggler_wait_second|300|控制BE副本最大容忍的导入落后时长，超过这个时长就进行克隆|
-|max_layout_length_per_row|100000|单行最大的长度，100KB|
+|max_layout_length_per_row|2147483647|单行最大的长度，Integer.MAX_VALUE|
 |load_checker_interval_second|5|导入轮询的间隔|
 |broker_load_default_timeout_second|14400|Broker Load的超时时间，默认4个小时|
 |mini_load_default_timeout_second|3600|小批量导入的超时时间，默认1小时|
@@ -205,7 +205,7 @@
 |tablet_meta_checkpoint_min_new_rowsets_num|10|TabletMeta Checkpoint的最小Rowset数目|
 |tablet_meta_checkpoint_min_interval_secs|600|TabletMeta Checkpoint线程轮询的时间间隔|
 |default_rowset_type|ALPHA|存储引擎的格式，默认新ALPHA，后面会替换成BETA|
-|brpc_max_body_size|209715200|BRPC最大的包容量，200MB|
+|brpc_max_body_size|2147483648|BRPC最大的包容量，2GB|
 |max_runnings_transactions|2000|存储引擎支持的最大事务数|
 |tablet_map_shard_size|1|Tablet分组数|
 |enable_bitmap_union_disk_format_with_set | False |Bitmap新存储格式，可以优化bitmap_union性能|
