@@ -498,20 +498,18 @@ ColumnPtr JsonFunctions::json_exists(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+ColumnPtr JsonFunctions::json_array_empty(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(0, columns.size());
+    ColumnBuilder<TYPE_JSON> result(1);
+    JsonValue json(vpack::Slice::emptyArraySlice());
+    result.append(&json);
+    return result.build(true);
+}
+
 ColumnPtr JsonFunctions::json_array(FunctionContext* context, const Columns& columns) {
     namespace vpack = arangodb::velocypack;
 
-    // empty arguments create an empty json array
-    if (columns.size() == 0) {
-        ColumnBuilder<TYPE_JSON> result(1);
-        vpack::Builder builder;
-        builder.openArray();
-        builder.close();
-        vpack::Slice json_slice = builder.slice();
-        JsonValue json(json_slice);
-        result.append(&json);
-        return result.build(ColumnHelper::is_all_const(columns));
-    }
+    DCHECK_GT(columns.size(), 0);
 
     size_t rows = columns[0]->size();
     ColumnBuilder<TYPE_JSON> result(rows);
@@ -540,20 +538,18 @@ ColumnPtr JsonFunctions::json_array(FunctionContext* context, const Columns& col
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+ColumnPtr JsonFunctions::json_object_empty(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(0, columns.size());
+    ColumnBuilder<TYPE_JSON> result(1);
+    JsonValue json(vpack::Slice::emptyObjectSlice());
+    result.append(&json);
+    return result.build(true);
+}
+
 ColumnPtr JsonFunctions::json_object(FunctionContext* context, const Columns& columns) {
     namespace vpack = arangodb::velocypack;
 
-    // empty arguments create an empty object
-    if (columns.size() == 0) {
-        ColumnBuilder<TYPE_JSON> result(1);
-        vpack::Builder builder;
-        builder.openObject();
-        builder.close();
-        vpack::Slice json_slice = builder.slice();
-        JsonValue json(json_slice);
-        result.append(&json);
-        return result.build(ColumnHelper::is_all_const(columns));
-    }
+    DCHECK_GT(columns.size(), 0);
 
     size_t rows = columns[0]->size();
     ColumnBuilder<TYPE_JSON> result(rows);

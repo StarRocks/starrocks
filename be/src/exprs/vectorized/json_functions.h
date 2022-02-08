@@ -141,12 +141,28 @@ public:
     DEFINE_VECTORIZED_FN(json_object);
 
     /**
+     * Build empty json object 
+     * @param: 
+     * @paramType: 
+     * @return: JsonColumn
+     */
+    DEFINE_VECTORIZED_FN(json_object_empty);
+
+    /**
      * Build json array from json values
      * @param: [json_object, ...]
      * @paramType: [JsonColumn, ...]
      * @return: JsonColumn
      */
     DEFINE_VECTORIZED_FN(json_array);
+
+    /**
+     * Build empty json array 
+     * @param: 
+     * @paramType: 
+     * @return: JsonColumn
+     */
+    DEFINE_VECTORIZED_FN(json_array_empty);
 
     static Status native_json_path_prepare(starrocks_udf::FunctionContext* context,
                                            starrocks_udf::FunctionContext::FunctionStateScope scope);
