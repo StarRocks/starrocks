@@ -43,7 +43,58 @@ protected:
     TypeDescriptor TYPE_ARRAY_LARGEINT = array_type(TYPE_LARGEINT);
     TypeDescriptor TYPE_ARRAY_DATE = array_type(TYPE_DATE);
     TypeDescriptor TYPE_ARRAY_DATETIME = array_type(TYPE_DATETIME);
+
+private:
+    template <typename CppType>
+    void _check_array(const Buffer<CppType>& check_values, const DatumArray& value);
+
+    template <typename CppType>
+    void _check_array_nullable(const Buffer<CppType>& check_values, const Buffer<uint8_t>& nulls,
+                               const DatumArray& value);
 };
+
+template <typename CppType>
+void ArrayFunctionsTest::_check_array(const Buffer<CppType>& check_values, const DatumArray& value) {
+    ASSERT_EQ(check_values.size(), value.size());
+    if constexpr (std::is_same_v<CppType, int32_t>) {
+        for (size_t i = 0; i < value.size(); i++) {
+            ASSERT_EQ(check_values[i], value[i].get_int32());
+        }
+    } else if constexpr (std::is_same_v<CppType, Slice>) {
+        for (size_t i = 0; i < value.size(); i++) {
+            ASSERT_EQ(check_values[i], value[i].get_slice());
+        }
+    } else {
+        ASSERT_TRUE(false);
+    }
+}
+
+template <typename CppType>
+void ArrayFunctionsTest::_check_array_nullable(const Buffer<CppType>& check_values, const Buffer<uint8_t>& nulls,
+                                               const DatumArray& value) {
+    ASSERT_EQ(check_values.size(), value.size());
+    if constexpr (std::is_same_v<CppType, int32_t>) {
+        for (size_t i = 0; i < value.size(); i++) {
+            if (nulls[i]) {
+                ASSERT_TRUE(value[i].is_null());
+            } else {
+                ASSERT_FALSE(value[i].is_null());
+                ASSERT_EQ(check_values[i], value[i].get_int32());
+            }
+        }
+    } else if constexpr (std::is_same_v<CppType, Slice>) {
+        for (size_t i = 0; i < value.size(); i++) {
+            if (nulls[i]) {
+                ASSERT_TRUE(value[i].is_null());
+            } else {
+                ASSERT_FALSE(value[i].is_null());
+                ASSERT_EQ(check_values[i], value[i].get_slice());
+            }
+        }
+    } else {
+        ASSERT_TRUE(false);
+    }
+}
 
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_length) {
@@ -2781,6 +2832,78 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
         EXPECT_TRUE(result->is_null(2));
         EXPECT_TRUE(result->is_null(3));
     }
+}
+
+TEST_F(ArrayFunctionsTest, array_reverse_int) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_column->append_datum(DatumArray{5, 3, 6});
+    src_column->append_datum(DatumArray{2, 3, 7, 8});
+    src_column->append_datum(DatumArray{4, 3, 2, 1});
+
+    ArrayReverse<PrimitiveType::TYPE_INT> reverse;
+    auto dest_column = reverse.process(nullptr, {src_column});
+
+    ASSERT_EQ(dest_column->size(), 3);
+    _check_array<int32_t>({6, 3, 5}, dest_column->get(0).get_array());
+    _check_array<int32_t>({8, 7, 3, 2}, dest_column->get(1).get_array());
+    _check_array<int32_t>({1, 2, 3, 4}, dest_column->get(2).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_reverse_string) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    src_column->append_datum(DatumArray{"352", "66", "4325"});
+    src_column->append_datum(DatumArray{"235", "99", "8", "43251"});
+    src_column->append_datum(DatumArray{"44", "33", "22", "112"});
+
+    ArrayReverse<PrimitiveType::TYPE_VARCHAR> reverse;
+    auto dest_column = reverse.process(nullptr, {src_column});
+
+    ASSERT_EQ(dest_column->size(), 3);
+    _check_array<Slice>({"4325", "66", "352"}, dest_column->get(0).get_array());
+    _check_array<Slice>({"43251", "8", "99", "235"}, dest_column->get(1).get_array());
+    _check_array<Slice>({"112", "22", "33", "44"}, dest_column->get(2).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_reverse_nullable_elements) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_column->append_datum(DatumArray{5, Datum(), 3, 6});
+    src_column->append_datum(DatumArray{2, 3, Datum(), Datum()});
+    src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
+
+    ArrayReverse<PrimitiveType::TYPE_INT> reverse;
+    auto dest_column = reverse.process(nullptr, {src_column});
+
+    ASSERT_EQ(dest_column->size(), 3);
+    _check_array_nullable<int32_t>({6, 3, 0, 5}, {0, 0, 1, 0}, dest_column->get(0).get_array());
+    _check_array_nullable<int32_t>({0, 0, 3, 2}, {1, 1, 0, 0}, dest_column->get(1).get_array());
+    _check_array_nullable<int32_t>({0, 0, 0, 0}, {1, 1, 1, 1}, dest_column->get(2).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_reverse_nullable_array) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_column->append_datum(DatumArray{5, Datum(), 3, 6});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
+
+    ArrayReverse<PrimitiveType::TYPE_INT> reverse;
+    auto dest_column = reverse.process(nullptr, {src_column});
+
+    ASSERT_EQ(dest_column->size(), 3);
+    _check_array_nullable<int32_t>({6, 3, 0, 5}, {0, 0, 1, 0}, dest_column->get(0).get_array());
+    ASSERT_TRUE(dest_column->get(1).is_null());
+    _check_array_nullable<int32_t>({0, 0, 0, 0}, {1, 1, 1, 1}, dest_column->get(2).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_reverse_only_null) {
+    auto src_column = ColumnHelper::create_const_null_column(3);
+
+    ArrayReverse<PrimitiveType::TYPE_INT> reverse;
+    auto dest_column = reverse.process(nullptr, {src_column});
+
+    ASSERT_EQ(dest_column->size(), 3);
+    ASSERT_TRUE(dest_column->get(0).is_null());
+    ASSERT_TRUE(dest_column->get(1).is_null());
+    ASSERT_TRUE(dest_column->get(2).is_null());
 }
 
 } // namespace starrocks::vectorized
