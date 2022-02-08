@@ -7,6 +7,9 @@
 #include <gtest/gtest.h>
 #include <util/guard.h>
 
+#include "arrow/array/builder_base.h"
+#include "arrow/type_fwd.h"
+#include "arrow/type_traits.h"
 #include "exec/vectorized/arrow_to_starrocks_converter.h"
 
 #define ASSERT_STATUS_OK(stmt)    \
@@ -42,6 +45,56 @@ static inline std::shared_ptr<arrow::Array> create_constant_array(int64_t num_el
     EXPECT_OK_AND_ASSIGN(auto array, arrow::ArrayFromBuilderVisitor(type, num_elements, builder_fn));
     counter += num_elements;
     return array;
+}
+
+static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, const std::map<std::string, int>& value,
+                                                      size_t& counter) {
+    auto key_builder = std::make_shared<arrow::StringBuilder>();
+    auto item_builder = std::make_shared<arrow::Int32Builder>();
+    arrow::TypeTraits<arrow::MapType>::BuilderType builder(arrow::default_memory_pool(), key_builder, item_builder);
+
+    for (auto& entry : value) {
+        builder.Append();
+        key_builder->Append(entry.first);
+        item_builder->Append(entry.second);
+    }
+    counter += value.size();
+    return builder.Finish().ValueOrDie();
+}
+
+static std::string map_to_json(const std::map<std::string, int>& m) {
+    std::ostringstream oss;
+    oss << "{";
+    bool first = true;
+    for (auto& entry : m) {
+        oss << entry.first << ": " << entry.second;
+        if (!first) {
+            oss << ",";
+        }
+        first = false;
+    }
+    oss << "}";
+    return oss.str();
+}
+
+void add_arrow_map_to_json_column(Column* column, size_t num_elements, const std::map<std::string, int>& value,
+                                  size_t& counter) {
+    ASSERT_EQ(column->size(), counter);
+    auto array = create_map_array(num_elements, value, counter);
+    auto conv_func = get_arrow_converter(ArrowTypeId::MAP, TYPE_JSON, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+
+    Column::Filter filter;
+    filter.resize(array->length(), 1);
+    auto* filter_data = &filter.front();
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr));
+    ASSERT_EQ(column->size(), counter);
+    for (auto i = 0; i < num_elements; ++i) {
+        const JsonValue* json = column->get(i).get_json();
+        std::string json_str = json->to_string_uncheck();
+
+        ASSERT_EQ(json_str, map_to_json(value));
+    }
 }
 
 template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType,
@@ -95,6 +148,17 @@ void add_arrow_to_nullable_column(Column* column, size_t num_elements, ArrowCppT
             ASSERT_EQ(data[idx], CppType(value));
         }
     }
+}
+
+TEST_F(ArrowConverterTest, test_map_to_json) {
+    auto json_column = JsonColumn::create();
+    json_column->reserve(4096);
+    size_t counter = 0;
+    std::map<std::string, int> map_value = {
+            {"hehe", 1},
+            {"haha", 2},
+    };
+    add_arrow_map_to_json_column(json_column.get(), 10, map_value, counter);
 }
 
 TEST_F(ArrowConverterTest, test_copyable_converter_int8) {
@@ -696,6 +760,32 @@ void add_arrow_to_datetime_column(std::shared_ptr<ArrowType> type, Column* colum
 
 template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType,
           typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType, typename CppType = RunTimeCppType<PT>>
+void add_arrow_to_json_column(std::shared_ptr<ArrowType> type, Column* column, size_t num_elements,
+                              ArrowCppType arrow_datetime, CppType datetime, size_t& counter, bool fail) {
+    ASSERT_EQ(column->size(), counter);
+    using ColumnType = RunTimeColumnType<PT>;
+    auto array = create_constant_datetime_array<ArrowType, false>(num_elements, arrow_datetime, type, counter);
+    auto conv_func = get_arrow_converter(AT, PT, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    Column::Filter filter;
+    filter.resize(array->length(), 1);
+    auto* filter_data = &filter.front();
+    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr);
+    if (fail) {
+        ASSERT_FALSE(status.ok());
+        return;
+    }
+    ASSERT_EQ(column->size(), counter);
+    auto* datetime_column = down_cast<ColumnType*>(column);
+    auto* datetime_data = &datetime_column->get_data().front();
+    for (auto i = 0; i < num_elements; ++i) {
+        auto idx = counter - num_elements + i;
+        ASSERT_EQ(datetime_data[idx], datetime);
+    }
+}
+
+template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType,
+          typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType, typename CppType = RunTimeCppType<PT>>
 void add_arrow_to_nullable_datetime_column(std::shared_ptr<ArrowType> type, Column* column, size_t num_elements,
                                            ArrowCppType arrow_datetime, CppType datetime, size_t& counter, bool fail) {
     ASSERT_EQ(column->size(), counter);
@@ -1162,6 +1252,8 @@ TEST_F(ArrowConverterTest, test_decimal128) {
         test_nullable_decimal<TYPE_DECIMAL128>(type_p38s25, test_cases, 38, 27);
     }
 }
+
+TEST_F(ArrowConverterTest, test_json) {}
 
 } // namespace starrocks::vectorized
 

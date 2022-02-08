@@ -4,6 +4,8 @@
 
 #include <arrow/array.h>
 
+#include "arrow/array/array_nested.h"
+#include "arrow/scalar.h"
 #include "column/array_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -620,6 +622,41 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     }
 };
 
+template <bool is_nullable, bool is_strict>
+struct ArrowConverter<ArrowTypeId::MAP, TYPE_JSON, is_nullable, is_strict> {
+    static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
+                        [[maybe_unused]] uint8_t* filter_data, ArrowConvertContext* ctx) {
+        auto* json_column = down_cast<JsonColumn*>(column);
+        json_column->resize(column->size() + num_elements);
+
+        // FIXME(mofei) fix it
+        auto* map_array = down_cast<const arrow::MapArray*>(array);
+        auto map_key = std::static_pointer_cast<arrow::StringArray>(map_array->keys());
+        auto map_item = std::static_pointer_cast<arrow::Int32Array>(map_array->items());
+        auto map_offset = std::static_pointer_cast<arrow::Int32Array>(map_array->offsets());
+
+        for (int i = 0; i < num_elements; i++) {
+            int array_start = map_offset->Value(i);
+            int array_end = (i == num_elements - 1) ? map_key->length() : map_offset->Value(i + 1);
+
+            vpack::Builder b;
+            b.openObject();
+            for (int j = array_start; j < array_end; j++) {
+                auto key = map_key->Value(j);
+                int value = map_item->Value(j);
+                b.add(key.data(), vpack::Value(value));
+            }
+            b.close();
+
+            vpack::Slice slice = b.slice();
+            JsonValue json(slice);
+            json_column->get(i).set_json(&json);
+        }
+        return Status::OK();
+    }
+};
+
 constexpr int32_t convert_idx(ArrowTypeId at, PrimitiveType pt, bool is_nullable, bool is_strict) {
     return (at << 17) | (pt << 2) | (is_nullable ? 2 : 0) | (is_strict ? 1 : 0);
 }
@@ -680,6 +717,7 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         ARROW_CONV_ENTRY(ArrowTypeId::DATE64, TYPE_DATE, TYPE_DATETIME),
         ARROW_CONV_ENTRY(ArrowTypeId::TIMESTAMP, TYPE_DATE, TYPE_DATETIME),
         ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128),
+        ARROW_CONV_ENTRY(ArrowTypeId::MAP, TYPE_JSON),
 };
 
 ConvertFunc get_arrow_converter(ArrowTypeId at, PrimitiveType pt, bool is_nullable, bool is_strict) {
