@@ -457,8 +457,6 @@ TEST_P(JsonParseTestFixture, json_parse) {
 
     Columns columns{ints};
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
 
     ColumnPtr result = JsonFunctions::parse_json(ctx.get(), columns);
     ASSERT_TRUE(!!result);
@@ -473,10 +471,6 @@ TEST_P(JsonParseTestFixture, json_parse) {
     } else {
         ASSERT_TRUE(datum.is_null());
     }
-
-    ASSERT_TRUE(JsonFunctions::native_json_path_close(
-                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
 }
 
 INSTANTIATE_TEST_SUITE_P(JsonParseTest, JsonParseTestFixture,
@@ -507,10 +501,13 @@ TEST_P(JsonArrayTestFixture, json_array) {
     }
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
 
-    ColumnPtr result = JsonFunctions::json_array(ctx.get(), columns);
+    ColumnPtr result;
+    if (param_json.empty()) {
+        result = JsonFunctions::json_array_empty(ctx.get(), columns);
+    } else {
+        result = JsonFunctions::json_array(ctx.get(), columns);
+    }
     ASSERT_TRUE(!!result);
 
     Datum datum = result->get(0);
@@ -519,10 +516,6 @@ TEST_P(JsonArrayTestFixture, json_array) {
     StripWhiteSpace(&json_str);
     StripWhiteSpace(&param_result);
     ASSERT_EQ(param_result, json_str);
-
-    ASSERT_TRUE(JsonFunctions::native_json_path_close(
-                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -553,10 +546,13 @@ TEST_P(JsonObjectTestFixture, json_object) {
     }
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
 
-    ColumnPtr result = JsonFunctions::json_object(ctx.get(), columns);
+    ColumnPtr result;
+    if (param_json.empty()) {
+        result = JsonFunctions::json_object_empty(ctx.get(), columns);
+    } else {
+        result = JsonFunctions::json_object(ctx.get(), columns);
+    }
     ASSERT_TRUE(!!result);
 
     Datum datum = result->get(0);
@@ -569,10 +565,6 @@ TEST_P(JsonObjectTestFixture, json_object) {
     StripWhiteSpace(&json_str);
     StripWhiteSpace(&param_result);
     ASSERT_EQ(param_result, json_str);
-
-    ASSERT_TRUE(JsonFunctions::native_json_path_close(
-                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
 }
 
 INSTANTIATE_TEST_SUITE_P(
