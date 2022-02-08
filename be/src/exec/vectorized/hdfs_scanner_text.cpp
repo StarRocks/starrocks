@@ -190,7 +190,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         int num_materialize_columns = _scanner_params.materialize_slots.size();
         int field_size = fields.size();
         if (_scanner_params.hive_column_names->size() != field_size) {
-            LOG(WARNING) << strings::Substitute("Size mismatch between hive column $0 names and fields $1!",
+            VLOG(7) << strings::Substitute("Size mismatch between hive column $0 names and fields $1!",
                                                 _scanner_params.hive_column_names->size(), fields.size());
         }
         for (int j = 0; j < num_materialize_columns; j++) {
