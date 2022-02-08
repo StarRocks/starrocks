@@ -36,7 +36,7 @@
 |bdbje_lock_timeout_second|1|BDBJE锁超时的间隔|
 |txn_rollback_limit|100|事务回滚的上限|
 |frontend_address|0.0.0.0|FE IP地址|
-|priority_networks|空字符串|以CIDR形式10.10.10.0/24指定BE IP地址，适用于机器有多个IP，需要特殊指定的形式|
+|priority_networks|空字符串|以CIDR形式10.10.10.0/24指定FE IP地址，适用于机器有多个IP，需要特殊指定的形式|
 |metadata_failure_recovery|false|强制重置FE的元数据，慎用|
 |ignore_meta_check|false|忽略元数据落后的情形|
 |max_bdbje_clock_delta_ms|5000|Master与Non-master最大容忍的时钟偏移|
