@@ -9,4 +9,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/io")
 add_library(IO STATIC
         array_random_access_file.cpp
         fd_random_access_file.cpp
+        random_access_file.cpp
+        readable.cpp
         )
