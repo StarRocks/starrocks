@@ -17,7 +17,7 @@ MySQL > select strright("Hello starrocks",5);
 +--------------------------+
 |strright('Hello starrocks', 5)|
 +--------------------------+
-| starrocks                    |
+| rocks                    |
 +--------------------------+
 ```
 
