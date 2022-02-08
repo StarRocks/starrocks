@@ -314,19 +314,19 @@ HASH JOIN 节点会显示对应原因：`colocate: false, reason: group is not s
 
 ### FE 配置项
 
-* **disable_colocate_relocate**
-
-    是否关闭 StarRocks 的自动 Colocation 副本修复。默认为 false，即不关闭。该参数只影响 Colocation 表的副本修复，不影响普通表。
-
 * **disable_colocate_balance**
 
     是否关闭 StarRocks 的自动 Colocation 副本均衡。默认为 false，即不关闭。该参数只影响 Colocation 表的副本均衡，不影响普通表。
 
+以上参数可以动态修改，设置方式请参阅 `HELP ADMIN SHOW CONFIG;` 和 `HELP ADMIN SET CONFIG;`。
+
+### Session 变量
+
 * **disable_colocate_join**
 
-    可以通过改该变量在 session 粒度关闭 colocate join功能。
+    可以通过设置该变量在 session 粒度关闭 colocate join 功能。
 
-以上参数可以动态修改，设置方式请参阅 `HELP ADMIN SHOW CONFIG;` 和 `HELP ADMIN SET CONFIG;`。
+以上参数可以动态修改，设置方式请参阅《[系统变量](../reference/System_variable.md)》章节。
 
 <br/>
 
@@ -408,7 +408,7 @@ StarRocks 提供了几个和 Colocation Join 有关的 HTTP Restful API，用于
 
     * 标记为 Unstable
 
-        `DELETE /api/colocate/group_stable?db_id=10005&group_id=10008`
+        `POST /api/colocate/group_unstable?db_id=10005&group_id=10008`
 
         `返回：200`
 
@@ -426,4 +426,4 @@ StarRocks 提供了几个和 Colocation Join 有关的 HTTP Restful API，用于
 
     其中 Body 是以嵌套数组表示的 BucketsSequence 以及每个 Bucket 中分片所在 BE 的 id。
 
-    > 注意，使用该命令，可能需要将 FE 的配置 disable_colocate_relocate 和 disable_colocate_balance 设为 true。即关闭系统自动的 Colocation 副本修复和均衡。否则可能在修改后，会被系统自动重置。
+    > 注意，使用该命令，可能需要将 FE 的配置 disable_colocate_balance 设为 true。即关闭系统自动的 Colocation 副本修复和均衡。否则可能在修改后，会被系统自动重置。
