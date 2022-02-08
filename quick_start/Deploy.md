@@ -284,7 +284,7 @@ mkdir -p storage
 mysql> ALTER SYSTEM ADD BACKEND "host:port";
 ```
 
-这里IP地址为和priority\_networks设置匹配的IP，portheartbeat\_service\_port，默认为9050
+这里host为与priority_networks设置相匹配的IP，port为BE配置文件中的heartbeat_service_port，默认为9050。
 <br/>
 
 如出现错误，需要删除BE节点，应用下列命令：
