@@ -621,4 +621,17 @@ vectorized_functions = [
     [150119, 'array_sort', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_sort_decimalv2'],
     [150120, 'array_sort', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_sort_datetime'],
     [150121, 'array_sort', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_sort_date'],
+
+    [150130, 'reverse', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::array_reverse_boolean'],
+    [150131, 'reverse', 'ARRAY_TINYINT',   ['ARRAY_TINYINT'],   'ArrayFunctions::array_reverse_tinyint'],
+    [150132, 'reverse', 'ARRAY_SMALLINT',  ['ARRAY_SMALLINT'],  'ArrayFunctions::array_reverse_smallint'],
+    [150133, 'reverse', 'ARRAY_INT',       ['ARRAY_INT'],       'ArrayFunctions::array_reverse_int'],
+    [150134, 'reverse', 'ARRAY_BIGINT',    ['ARRAY_BIGINT'],    'ArrayFunctions::array_reverse_bigint'],
+    [150135, 'reverse', 'ARRAY_LARGEINT',  ['ARRAY_LARGEINT'],  'ArrayFunctions::array_reverse_largeint'],
+    [150136, 'reverse', 'ARRAY_FLOAT',     ['ARRAY_FLOAT'],     'ArrayFunctions::array_reverse_float'],
+    [150137, 'reverse', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE'],    'ArrayFunctions::array_reverse_double'],
+    [150138, 'reverse', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR'],   'ArrayFunctions::array_reverse_varchar'],
+    [150139, 'reverse', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_reverse_decimalv2'],
+    [150140, 'reverse', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_reverse_datetime'],
+    [150141, 'reverse', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_reverse_date'],
 ]
