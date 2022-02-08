@@ -18,7 +18,7 @@ namespace starrocks::parquet {
 // Used to parse page header of column chunk. This class don't parse page's type.
 class PageReader {
 public:
-    PageReader(RandomAccessFile* file, size_t start, size_t length);
+    PageReader(io::RandomAccessFile* file, size_t start, size_t length);
     ~PageReader() = default;
 
     // Try to parse header starts from current _offset. Caller should assure that

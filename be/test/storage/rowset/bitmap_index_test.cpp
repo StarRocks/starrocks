@@ -101,7 +101,6 @@ TEST_F(BitmapIndexTest, test_invert) {
     ColumnIndexMetaPB meta;
     write_index_file<OLAP_FIELD_TYPE_INT>(file_name, val, num_uint8_rows, 0, &meta);
     {
-        std::unique_ptr<RandomAccessFile> rfile;
         BitmapIndexReader* reader = nullptr;
         BitmapIndexIterator* iter = nullptr;
         get_bitmap_reader_iter(file_name, meta, &reader, &iter);

@@ -56,7 +56,7 @@ using starrocks::TabletMetaManager;
 using starrocks::MetaStoreStats;
 using starrocks::FileUtils;
 using starrocks::Slice;
-using starrocks::RandomAccessFile;
+using starrocks::io::RandomAccessFile;
 using starrocks::MemTracker;
 using strings::Substitute;
 using starrocks::SegmentFooterPB;
@@ -362,62 +362,59 @@ void batch_delete_meta(const std::string& tablet_file) {
 
 Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
-    const std::string& file_name = input_file->file_name();
-    uint64_t file_size;
-    RETURN_IF_ERROR(input_file->size(&file_size));
+    ASSIGN_OR_RETURN(int64_t file_size, input_file->get_size());
 
     if (file_size < 12) {
-        return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < 12", file_name, file_size));
+        return Status::Corruption(strings::Substitute("Bad segment file: file size $0 < 12", file_size));
     }
 
     uint8_t fixed_buf[12];
-    RETURN_IF_ERROR(input_file->read_at(file_size - 12, Slice(fixed_buf, 12)));
+    RETURN_IF_ERROR(input_file->read_at_fully(file_size - 12, fixed_buf, 12));
 
     // validate magic number
     const char* k_segment_magic = "D0R1";
     const uint32_t k_segment_magic_length = 4;
     if (memcmp(fixed_buf + 8, k_segment_magic, k_segment_magic_length) != 0) {
-        return Status::Corruption(strings::Substitute("Bad segment file $0: magic number not match", file_name));
+        return Status::Corruption("Bad segment file: magic number not match");
     }
 
     // read footer PB
     uint32_t footer_length = starrocks::decode_fixed32_le(fixed_buf);
     if (file_size < 12 + footer_length) {
-        return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < $2", file_name, file_size,
-                                                      12 + footer_length));
+        return Status::Corruption(
+                strings::Substitute("Bad segment file: file size $0 < $1", file_size, 12 + footer_length));
     }
     std::string footer_buf;
     footer_buf.resize(footer_length);
-    RETURN_IF_ERROR(input_file->read_at(file_size - 12 - footer_length, footer_buf));
+    RETURN_IF_ERROR(input_file->read_at_fully(file_size - 12 - footer_length, footer_buf.data(), footer_buf.size()));
 
     // validate footer PB's checksum
     uint32_t expect_checksum = starrocks::decode_fixed32_le(fixed_buf + 4);
     uint32_t actual_checksum = starrocks::crc32c::Value(footer_buf.data(), footer_buf.size());
     if (actual_checksum != expect_checksum) {
         return Status::Corruption(
-                strings::Substitute("Bad segment file $0: footer checksum not match, actual=$1 vs expect=$2", file_name,
+                strings::Substitute("Bad segment file: footer checksum not match, actual=$0 vs expect=$1",
                                     actual_checksum, expect_checksum));
     }
 
     // deserialize footer PB
     if (!footer->ParseFromString(footer_buf)) {
-        return Status::Corruption(
-                strings::Substitute("Bad segment file $0: failed to parse SegmentFooterPB", file_name));
+        return Status::Corruption("Bad segment file: failed to parse SegmentFooterPB");
     }
     return Status::OK();
 }
 
 void show_segment_footer(const std::string& file_name) {
-    std::unique_ptr<RandomAccessFile> input_file;
-    Status status = starrocks::Env::Default()->new_random_access_file(file_name, &input_file);
-    if (!status.ok()) {
-        std::cout << "open file failed: " << status.to_string() << std::endl;
+    auto res = starrocks::Env::Default()->new_random_access_file(file_name);
+    if (!res.ok()) {
+        std::cout << "open file failed: " << res.status() << std::endl;
         return;
     }
+    std::unique_ptr<RandomAccessFile> input_file = std::move(res).value();
     SegmentFooterPB footer;
-    status = get_segment_footer(input_file.get(), &footer);
+    auto status = get_segment_footer(input_file.get(), &footer);
     if (!status.ok()) {
-        std::cout << "get footer failed: " << status.to_string() << std::endl;
+        std::cout << "get footer failed: " << status << " filename:" << file_name << std::endl;
         return;
     }
     std::string json_footer;

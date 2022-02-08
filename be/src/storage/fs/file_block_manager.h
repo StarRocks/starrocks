@@ -115,7 +115,7 @@ private:
     std::unique_ptr<internal::BlockManagerMetrics> _metrics;
 
     // Underlying cache instance. Caches opened files.
-    std::unique_ptr<FileCache<RandomAccessFile>> _file_cache;
+    std::unique_ptr<FileCache<io::RandomAccessFile>> _file_cache;
 };
 
 } // namespace fs

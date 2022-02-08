@@ -73,17 +73,16 @@ public:
 
     void openReader(TBrokerOpenReaderResponse& response, const TBrokerOpenReaderRequest& request) {
         std::string path = url_path(request.path);
-        std::unique_ptr<RandomAccessFile> f;
-        Status st = _env->new_random_access_file(path, &f);
-        if (st.ok()) {
+        auto res = _env->new_random_access_file(path);
+        if (res.ok()) {
             TBrokerFD fd;
             fd.__set_high(0);
             fd.__set_low(++_next_fd);
             response.__set_fd(fd);
             response.__set_size(0);
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::OK);
-            _readers[fd.low] = std::move(f);
-        } else if (st.is_not_found()) {
+            _readers[fd.low] = std::move(res).value();
+        } else if (res.status().is_not_found()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::FILE_NOT_FOUND);
         } else {
             // I don't know how real broker handle this case, just return an non-OK status here.
@@ -100,9 +99,12 @@ public:
         response.data.resize(request.length);
         Slice buff(response.data);
         auto& f = iter->second;
-        Status st = f->read(request.offset, &buff);
+        auto res = f->read_at(request.offset, buff.data, buff.size);
+        if (res.ok()) {
+            buff.size = *res;
+        }
         response.data.resize(buff.size);
-        if (!st.ok()) {
+        if (!res.ok()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::INVALID_INPUT_OFFSET);
         } else if (buff.size == 0) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::END_OF_FILE);
@@ -185,7 +187,7 @@ private:
 
     EnvMemory* _env;
     int64_t _next_fd = 0;
-    std::map<int64_t, std::unique_ptr<RandomAccessFile>> _readers;
+    std::map<int64_t, std::unique_ptr<io::RandomAccessFile>> _readers;
     std::map<int64_t, std::unique_ptr<RandomRWFile>> _writers;
 };
 
@@ -297,24 +299,23 @@ std::string read(std::unique_ptr<SequentialFile>& f, int len) {
     return s;
 }
 
-std::string read(std::unique_ptr<RandomAccessFile>& f, size_t off, size_t len) {
+std::string read(std::unique_ptr<io::RandomAccessFile>& f, size_t off, size_t len) {
     std::string s(len, '\0');
     Slice buff(s.data(), s.size());
-    Status st = f->read(off, &buff);
-    CHECK(st.ok()) << st.to_string();
+    ASSIGN_OR_ABORT(buff.size, f->read_at(off, buff.data, buff.size));
     s.resize(buff.size);
     return s;
 }
 
-std::string read_full(std::unique_ptr<RandomAccessFile>& f, size_t off, size_t len) {
+std::string read_full(std::unique_ptr<io::RandomAccessFile>& f, size_t off, size_t len) {
     std::string s = read(f, off, len);
     CHECK_EQ(len, s.size());
     return s;
 }
 
-uint64_t filesize(std::unique_ptr<RandomAccessFile>& f) {
-    uint64_t len = 0;
-    CHECK(f->size(&len).ok());
+uint64_t filesize(std::unique_ptr<io::RandomAccessFile>& f) {
+    int64_t len = 0;
+    ASSIGN_OR_ABORT(len, f->get_size());
     return len;
 }
 
@@ -323,11 +324,10 @@ TEST_F(EnvBrokerTest, test_open_non_exist_file) {
     const std::string url = "/xyz/xxx.txt";
 
     std::unique_ptr<SequentialFile> f0;
-    std::unique_ptr<RandomAccessFile> f1;
     // Check the specific (mocked) error code is meaningless, because
     // I don't know what it is.
     ASSERT_FALSE(_env.new_sequential_file(url, &f0).ok());
-    ASSERT_FALSE(_env.new_random_access_file(url, &f1).ok());
+    ASSERT_FALSE(_env.new_random_access_file(url).ok());
 }
 
 // NOLINTNEXTLINE
@@ -367,8 +367,7 @@ TEST_F(EnvBrokerTest, test_random_read) {
     ASSERT_OK(_env_mem->create_file(path));
     ASSERT_OK(_env_mem->append_file(path, content));
 
-    std::unique_ptr<RandomAccessFile> f;
-    ASSERT_OK(_env.new_random_access_file(path, &f));
+    ASSIGN_OR_ABORT(auto f, _env.new_random_access_file(path));
     ASSERT_EQ(content.size(), filesize(f));
     ASSERT_EQ("", read(f, 0, 0));
     ASSERT_EQ("", read(f, 10, 0));
@@ -377,8 +376,7 @@ TEST_F(EnvBrokerTest, test_random_read) {
     ASSERT_EQ(content.substr(1), read(f, 1, 100));
     ASSERT_EQ("a", read(f, 0, 1));
 
-    Slice s(_buff.data(), 1);
-    ASSERT_FALSE(f->read_at(content.size(), s).ok());
+    ASSERT_FALSE(f->read_at_fully(content.size(), _buff.data(), 1).ok());
 
     f.reset();
 }

@@ -8,8 +8,11 @@
 
 namespace starrocks {
 class SequentialFile;
-class RandomAccessFile;
 } // namespace starrocks
+
+namespace starrocks::io {
+class RandomAccessFile;
+} // namespace starrocks::io
 
 namespace starrocks::vectorized {
 
@@ -44,7 +47,7 @@ public:
 
     Status create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                      const TBrokerScanRangeParams& params, CompressionTypePB compression,
-                                     std::shared_ptr<RandomAccessFile>* file);
+                                     std::shared_ptr<io::RandomAccessFile>* file);
 
     Status create_sequential_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                   const TBrokerScanRangeParams& params, std::shared_ptr<SequentialFile>* file);

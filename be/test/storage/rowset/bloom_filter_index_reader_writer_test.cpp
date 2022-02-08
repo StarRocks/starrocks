@@ -88,7 +88,7 @@ protected:
     }
 
     void get_bloom_filter_reader_iter(const std::string& file_name, const ColumnIndexMetaPB& meta,
-                                      std::unique_ptr<RandomAccessFile>* rfile, BloomFilterIndexReader** reader,
+                                      BloomFilterIndexReader** reader,
                                       std::unique_ptr<BloomFilterIndexIterator>* iter) {
         std::string fname = kTestDir + "/" + file_name;
 
@@ -110,10 +110,9 @@ protected:
         ColumnIndexMetaPB meta;
         write_bloom_filter_index_file<Type>(file_name, val, num, null_num, &meta);
         {
-            std::unique_ptr<RandomAccessFile> rfile;
             BloomFilterIndexReader* reader = nullptr;
             std::unique_ptr<BloomFilterIndexIterator> iter;
-            get_bloom_filter_reader_iter(file_name, meta, &rfile, &reader, &iter);
+            get_bloom_filter_reader_iter(file_name, meta, &reader, &iter);
 
             // page 0
             std::unique_ptr<BloomFilter> bf;

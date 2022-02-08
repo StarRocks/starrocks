@@ -18,20 +18,6 @@ namespace starrocks::vectorized {
 class HdfsScanNode;
 class RuntimeFilterProbeCollector;
 
-class HdfsIOProfile {
-public:
-    RuntimeProfile::Counter* bytes_total_read = nullptr;
-    RuntimeProfile::Counter* bytes_read_local = nullptr;
-    RuntimeProfile::Counter* bytes_read_short_circuit = nullptr;
-    RuntimeProfile::Counter* bytes_read_dn_cache = nullptr;
-    RuntimeProfile::Counter* bytes_read_remote = nullptr;
-
-    void init(RuntimeProfile* root);
-
-private:
-    RuntimeProfile::Counter* _toplev = nullptr;
-};
-
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t expr_filter_ns = 0;
@@ -68,8 +54,8 @@ struct HdfsScannerParams {
     // excluded from conjunct_ctxs.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
-    // file fd (local file or hdfs file)
-    std::shared_ptr<RandomAccessFile> fs = nullptr;
+    Env* fs;
+    std::string file_path;
 
     const TupleDescriptor* tuple_desc;
 
@@ -228,6 +214,7 @@ protected:
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
     // predicate which havs min/max
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
+    std::unique_ptr<io::RandomAccessFile> _file;
 };
 
 } // namespace starrocks::vectorized

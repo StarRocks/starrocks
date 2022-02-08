@@ -12,13 +12,14 @@
 #include "exec/parquet/types.h"
 #include "gen_cpp/parquet_types.h"
 
-namespace starrocks {
-class RandomAccessFile;
-namespace vectorized {
+namespace starrocks::vectorized {
 class Column;
 class HdfsScanStats;
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
+
+namespace starrocks::io {
+class RandomAccessFile;
+}
 
 namespace starrocks::parquet {
 
@@ -30,7 +31,7 @@ struct StoredColumnReaderOptions {
 
 class StoredColumnReader {
 public:
-    static Status create(RandomAccessFile* file, const ParquetField* field,
+    static Status create(io::RandomAccessFile* file, const ParquetField* field,
                          const tparquet::ColumnChunk* _chunk_metadata, const StoredColumnReaderOptions& opts,
                          int chunk_size, std::unique_ptr<StoredColumnReader>* out);
 

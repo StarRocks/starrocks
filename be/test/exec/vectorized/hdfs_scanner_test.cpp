@@ -33,12 +33,10 @@ public:
 protected:
     void _create_runtime_state();
     void _create_runtime_profile();
-    HdfsScannerParams* _create_param(std::shared_ptr<RandomAccessFile> file, THdfsScanRange* range,
-                                     TupleDescriptor* tuple_desc);
+    HdfsScannerParams* _create_param(const std::string& file_name, THdfsScanRange* range, TupleDescriptor* tuple_desc);
 
-    std::shared_ptr<RandomAccessFile> _create_file_handler(const std::string& name);
-    THdfsScanRange* _create_scan_range(std::shared_ptr<RandomAccessFile> file_handler, uint64_t offset,
-                                       uint64_t length);
+    std::shared_ptr<io::RandomAccessFile> _create_file_handler(const std::string& name);
+    THdfsScanRange* _create_scan_range(const std::string& file_name, uint64_t offset, uint64_t length);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
 
     ObjectPool _pool;
@@ -60,32 +58,29 @@ void HdfsScannerTest::_create_runtime_state() {
     _runtime_state->init_instance_mem_tracker();
 }
 
-std::shared_ptr<RandomAccessFile> HdfsScannerTest::_create_file_handler(const std::string& name) {
+std::shared_ptr<io::RandomAccessFile> HdfsScannerTest::_create_file_handler(const std::string& name) {
     auto* env = Env::Default();
-    std::unique_ptr<RandomAccessFile> file;
-    env->new_random_access_file(name, &file);
-    std::shared_ptr<RandomAccessFile> file2 = std::move(file);
+    std::unique_ptr<io::RandomAccessFile> file = *env->new_random_access_file(name);
+    std::shared_ptr<io::RandomAccessFile> file2 = std::move(file);
     return file2;
 }
 
-THdfsScanRange* HdfsScannerTest::_create_scan_range(std::shared_ptr<RandomAccessFile> file_handler, uint64_t offset,
-                                                    uint64_t length) {
+THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file_name, uint64_t offset, uint64_t length) {
     auto* scan_range = _pool.add(new THdfsScanRange());
-    uint64_t file_size = 0;
-    Status status = file_handler->size(&file_size);
-    DCHECK(status.ok()) << status.get_error_msg();
-    scan_range->relative_path = file_handler->file_name();
+    auto f = *Env::Default()->new_random_access_file(file_name);
+    scan_range->relative_path = file_name;
     scan_range->offset = offset;
-    scan_range->length = length == 0 ? file_size : length;
-    scan_range->file_length = file_size;
+    scan_range->length = length == 0 ? *f->get_size() : length;
+    scan_range->file_length = *f->get_size();
 
     return scan_range;
 }
 
-HdfsScannerParams* HdfsScannerTest::_create_param(std::shared_ptr<RandomAccessFile> file, THdfsScanRange* range,
+HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file_name, THdfsScanRange* range,
                                                   TupleDescriptor* tuple_desc) {
     auto* param = _pool.add(new HdfsScannerParams());
-    param->fs = file;
+    param->fs = Env::Default();
+    param->file_path = file_name;
     param->scan_ranges.emplace_back(range);
     param->tuple_desc = tuple_desc;
     std::vector<int> materialize_index_in_chunk;
@@ -171,10 +166,9 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
 TEST_F(HdfsScannerTest, TestParquetInit) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
 
-    auto access_file = _create_file_handler(parquet_file);
-    auto* range = _create_scan_range(access_file, 4, 1024);
+    auto* range = _create_scan_range(parquet_file, 4, 1024);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(access_file, range, tuple_desc);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
 
     Status status = scanner->init(_runtime_state, *param);
     ASSERT_TRUE(status.ok());
@@ -183,10 +177,9 @@ TEST_F(HdfsScannerTest, TestParquetInit) {
 TEST_F(HdfsScannerTest, TestParquetOpen) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
 
-    auto access_file = _create_file_handler(parquet_file);
-    auto* range = _create_scan_range(access_file, 4, 1024);
+    auto* range = _create_scan_range(parquet_file, 4, 1024);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(access_file, range, tuple_desc);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
 
     Status status = scanner->init(_runtime_state, *param);
     ASSERT_TRUE(status.ok());
@@ -198,10 +191,9 @@ TEST_F(HdfsScannerTest, TestParquetOpen) {
 TEST_F(HdfsScannerTest, TestParquetGetNext) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
 
-    auto access_file = _create_file_handler(parquet_file);
-    auto* range = _create_scan_range(access_file, 4, 1024);
+    auto* range = _create_scan_range(parquet_file, 4, 1024);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(access_file, range, tuple_desc);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
 
     Status status = scanner->init(_runtime_state, *param);
     ASSERT_TRUE(status.ok());
@@ -343,10 +335,9 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
 TEST_F(HdfsScannerTest, TestOrcGetNext) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
-    auto access_file = _create_file_handler(orc_file);
-    auto* range = _create_scan_range(access_file, 0, 0);
+    auto* range = _create_scan_range(orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(orc_descs);
-    auto* param = _create_param(access_file, range, tuple_desc);
+    auto* param = _create_param(orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
@@ -413,10 +404,9 @@ static void extend_orc_min_max_conjuncts(ObjectPool* pool, HdfsScannerParams* pa
 TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
-    auto access_file = _create_file_handler(orc_file);
-    auto* range = _create_scan_range(access_file, 0, 0);
+    auto* range = _create_scan_range(orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(orc_descs);
-    auto* param = _create_param(access_file, range, tuple_desc);
+    auto* param = _create_param(orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
@@ -447,10 +437,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
 TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
-    auto access_file = _create_file_handler(orc_file);
-    auto* range = _create_scan_range(access_file, 0, 0);
+    auto* range = _create_scan_range(orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(orc_descs);
-    auto* param = _create_param(access_file, range, tuple_desc);
+    auto* param = _create_param(orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
@@ -481,10 +470,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
 TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
-    auto access_file = _create_file_handler(orc_file);
-    auto* range = _create_scan_range(access_file, 0, 0);
+    auto* range = _create_scan_range(orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(orc_descs);
-    auto* param = _create_param(access_file, range, tuple_desc);
+    auto* param = _create_param(orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
@@ -550,10 +538,9 @@ Total length: 48800
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
-    auto access_file = _create_file_handler(string_key_value_orc_file);
-    auto* range = _create_scan_range(access_file, 0, 0);
+    auto* range = _create_scan_range(string_key_value_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(string_key_value_orc_desc);
-    auto* param = _create_param(access_file, range, tuple_desc);
+    auto* param = _create_param(string_key_value_orc_file, range, tuple_desc);
 
     // all in stripe1
     // and there are 1000 occurrences.
@@ -674,10 +661,9 @@ static void extend_datetime_orc_min_max_conjuncts(ObjectPool* pool, HdfsScannerP
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
-    auto access_file = _create_file_handler(datetime_orc_file);
-    auto* range = _create_scan_range(access_file, 0, 0);
+    auto* range = _create_scan_range(datetime_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(datetime_orc_descs);
-    auto* param = _create_param(access_file, range, tuple_desc);
+    auto* param = _create_param(datetime_orc_file, range, tuple_desc);
 
     param->min_max_tuple_desc = tuple_desc;
     extend_datetime_orc_min_max_conjuncts(&_pool, param);
@@ -765,10 +751,9 @@ Padding ratio: 0%
 TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
-    auto access_file = _create_file_handler(padding_char_varchar_orc_file);
-    auto* range = _create_scan_range(access_file, 0, 0);
+    auto* range = _create_scan_range(padding_char_varchar_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(padding_char_varchar_desc);
-    auto* param = _create_param(access_file, range, tuple_desc);
+    auto* param = _create_param(padding_char_varchar_orc_file, range, tuple_desc);
 
     // c0 <= "hello"
     // and we expect we can strip of ' ' in dictionary data.

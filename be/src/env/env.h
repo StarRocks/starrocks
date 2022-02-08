@@ -12,12 +12,12 @@
 #include <memory>
 #include <string>
 
-#include "common/status.h"
+#include "common/statusor.h"
+#include "io/random_access_file.h"
 #include "util/slice.h"
 
 namespace starrocks {
 
-class RandomAccessFile;
 class RandomRWFile;
 class WritableFile;
 class SequentialFile;
@@ -60,10 +60,10 @@ public:
     // status.
     //
     // The returned file may be concurrently accessed by multiple threads.
-    virtual Status new_random_access_file(const std::string& fname, std::unique_ptr<RandomAccessFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<io::RandomAccessFile>> new_random_access_file(const std::string& fname) = 0;
 
-    virtual Status new_random_access_file(const RandomAccessFileOptions& opts, const std::string& fname,
-                                          std::unique_ptr<RandomAccessFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<io::RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                                   const std::string& fname) = 0;
 
     // Create an object that writes to a new file with the specified
     // name.  Deletes any existing file with the same name and creates a
@@ -210,49 +210,6 @@ public:
 
     // Returns the filename provided when the SequentialFile was constructed.
     virtual const std::string& filename() const = 0;
-};
-
-class RandomAccessFile {
-public:
-    RandomAccessFile() = default;
-    virtual ~RandomAccessFile() = default;
-
-    // Read up to "result.size" bytes from the file.
-    // Copies the resulting data into "result.data".
-    //
-    // Return OK if reached the end of file.
-    virtual Status read(uint64_t offset, Slice* res) const = 0;
-
-    // Read "result.size" bytes from the file starting at "offset".
-    // Copies the resulting data into "result.data".
-    //
-    // If an error was encountered, returns a non-OK status.
-    //
-    // This method will internally retry on EINTR and "short reads" in order to
-    // fully read the requested number of bytes. In the event that it is not
-    // possible to read exactly 'length' bytes, an IOError is returned.
-    //
-    // Safe for concurrent use by multiple threads.
-    virtual Status read_at(uint64_t offset, const Slice& result) const = 0;
-
-    // Reads up to the "results" aggregate size, based on each Slice's "size",
-    // from the file starting at 'offset'. The Slices must point to already-allocated
-    // buffers for the data to be written to.
-    //
-    // If an error was encountered, returns a non-OK status.
-    //
-    // This method will internally retry on EINTR and "short reads" in order to
-    // fully read the requested number of bytes. In the event that it is not
-    // possible to read exactly 'length' bytes, an IOError is returned.
-    //
-    // Safe for concurrent use by multiple threads.
-    virtual Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const = 0;
-
-    // Return the size of this file
-    virtual Status size(uint64_t* size) const = 0;
-
-    // Return name of this file
-    virtual const std::string& file_name() const = 0;
 };
 
 // A file abstraction for sequential writing.  The implementation

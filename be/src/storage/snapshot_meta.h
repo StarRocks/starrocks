@@ -12,16 +12,17 @@
 #include "storage/del_vector.h"
 
 namespace starrocks {
-
-class RandomAccessFile;
 class WritableFile;
+namespace io {
+class RandomAccessFile;
+}
 
 class SnapshotMeta {
 public:
     Status serialize_to_file(const std::string& file_path);
     Status serialize_to_file(WritableFile* file);
 
-    Status parse_from_file(RandomAccessFile* file);
+    Status parse_from_file(io::RandomAccessFile* file);
 
     SnapshotTypePB snapshot_type() const { return _snapshot_type; }
 

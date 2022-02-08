@@ -15,7 +15,7 @@ namespace starrocks::parquet {
 constexpr static const PrimitiveType kDictCodePrimitiveType = TYPE_INT;
 constexpr static const FieldType kDictCodeFieldType = OLAP_FIELD_TYPE_INT;
 
-GroupReader::GroupReader(int chunk_size, RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number)
+GroupReader::GroupReader(int chunk_size, io::RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number)
         : _chunk_size(chunk_size), _file(file), _file_metadata(file_metadata), _row_group_number(row_group_number) {
     _row_group_metadata =
             std::make_shared<tparquet::RowGroup>(_file_metadata->t_metadata().row_groups[row_group_number]);

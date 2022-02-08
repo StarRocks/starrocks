@@ -8,10 +8,41 @@
 
 #include "env/env_memory.h"
 #include "exec/decompressor.h"
+#include "io/array_random_access_file.h"
 #include "util/block_compression.h"
 #include "util/random.h"
 
 namespace starrocks {
+
+namespace {
+class StringSequentialFile final : public SequentialFile {
+public:
+    explicit StringSequentialFile(std::string str)
+            : _backup_store(std::move(str)), _random_file(_backup_store.data(), _backup_store.size()) {}
+    ~StringSequentialFile() override = default;
+
+    Status read(Slice* res) override {
+        ASSIGN_OR_RETURN(res->size, _random_file.read(res->data, res->size));
+        return Status::OK();
+    }
+
+    const std::string& filename() const override {
+        static std::string s_name = "StringSequentialFile";
+        return s_name;
+    }
+
+    Status skip(uint64_t n) override { return _random_file.skip(static_cast<int64_t>(n)); }
+
+    uint64_t size() {
+        auto res = _random_file.get_size();
+        return static_cast<uint64_t>(*res);
+    }
+
+private:
+    std::string _backup_store;
+    io::ArrayRandomAccessFile _random_file;
+};
+} // namespace
 
 class CompressedSequentialFileTest : public ::testing::Test {
 protected:

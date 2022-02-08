@@ -11,7 +11,7 @@ namespace starrocks::parquet {
 static constexpr size_t kHeaderBufSize = 1024;
 static constexpr size_t kHeaderBufMaxSize = 16 * 1024;
 
-PageReader::PageReader(RandomAccessFile* file, uint64_t start_offset, uint64_t length)
+PageReader::PageReader(io::RandomAccessFile* file, uint64_t start_offset, uint64_t length)
         : _stream(file, start_offset, length), _start_offset(start_offset), _finish_offset(start_offset + length) {}
 
 Status PageReader::next_header() {

@@ -28,7 +28,7 @@ class FileMetaData;
 
 class FileReader {
 public:
-    FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size);
+    FileReader(int chunk_size, io::RandomAccessFile* file, uint64_t file_size);
     ~FileReader();
 
     Status init(const starrocks::vectorized::HdfsFileReaderParam& param);
@@ -112,7 +112,7 @@ private:
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
 
-    RandomAccessFile* _file;
+    io::RandomAccessFile* _file;
     uint64_t _file_size;
 
     starrocks::vectorized::HdfsFileReaderParam _param;

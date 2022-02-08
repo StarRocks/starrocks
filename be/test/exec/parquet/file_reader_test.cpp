@@ -28,7 +28,7 @@ public:
     void TearDown() override {}
 
 private:
-    std::unique_ptr<RandomAccessFile> _create_file(const std::string& file_path);
+    std::unique_ptr<io::RandomAccessFile> _create_file(const std::string& file_path);
 
     HdfsFileReaderParam* _create_param();
     HdfsFileReaderParam* _create_param_for_partition();
@@ -215,11 +215,8 @@ void FileReaderTest::_create_conjunct_ctxs_for_dict_filter(std::vector<ExprConte
     Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
 }
 
-std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string& file_path) {
-    auto* env = Env::Default();
-    std::unique_ptr<RandomAccessFile> file;
-    env->new_random_access_file(file_path, &file);
-    return file;
+std::unique_ptr<io::RandomAccessFile> FileReaderTest::_create_file(const std::string& file_path) {
+    return *Env::Default()->new_random_access_file(file_path);
 }
 
 HdfsFileReaderParam* FileReaderTest::_create_param() {

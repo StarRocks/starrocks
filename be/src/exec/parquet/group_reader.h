@@ -13,13 +13,12 @@
 #include "storage/vectorized/column_predicate.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks {
+namespace starrocks::io {
 class RandomAccessFile;
-
-namespace vectorized {
+} // namespace starrocks::io
+namespace starrocks::vectorized {
 struct HdfsScanStats;
-}
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 namespace starrocks::parquet {
 
@@ -54,7 +53,7 @@ struct GroupReaderParam {
 
 class GroupReader {
 public:
-    GroupReader(int chunk_size, RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number);
+    GroupReader(int chunk_size, io::RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number);
     ~GroupReader() = default;
 
     Status init(const GroupReaderParam& _param);
@@ -80,7 +79,7 @@ private:
 
     int _chunk_size;
 
-    RandomAccessFile* _file;
+    io::RandomAccessFile* _file;
 
     // parquet file meta
     FileMetaData* _file_metadata;

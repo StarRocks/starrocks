@@ -87,7 +87,7 @@ static inline ArrowStatus convert_status(const StarRocksStatus& status) {
     }
 }
 
-ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos)
+ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::io::RandomAccessFile> file, uint64_t pos)
         : _file(std::move(file)), _pos(pos) {}
 
 ParquetChunkFile::~ParquetChunkFile() {
@@ -109,17 +109,15 @@ arrow::Result<int64_t> ParquetChunkFile::Read(int64_t nbytes, void* buffer) {
 
 arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes, void* out) {
     _pos += nbytes;
-    Slice s;
-    s.data = (char*)out;
-    s.size = nbytes;
-    auto status = _file->read_at(position, s);
-    return status.ok() ? nbytes : -1;
+    auto res = _file->read_at(position, out, nbytes);
+    if (res.ok()) return res.value();
+    return arrow::Status(convert_status_code(res.status().code()), res.status().detailed_message().to_string());
 }
 
 arrow::Result<int64_t> ParquetChunkFile::GetSize() {
-    int64_t size = 0;
-    _file->size((uint64_t*)&size);
-    return size;
+    auto res = _file->get_size();
+    if (res.ok()) return res.value();
+    return arrow::Status(convert_status_code(res.status().code()), res.status().detailed_message().to_string());
 }
 
 arrow::Status ParquetChunkFile::Seek(int64_t position) {

@@ -425,28 +425,25 @@ TEST_F(EnvMemoryTest, test_random_access_file) {
     const std::string content = "stay hungry stay foolish";
     EXPECT_STATUS(Status::OK(), _env->append_file("/a.txt", content));
 
-    std::unique_ptr<RandomAccessFile> f;
-    EXPECT_STATUS(Status::OK(), _env->new_random_access_file("/a.txt", &f));
+    auto f = *_env->new_random_access_file("/a.txt");
 
-    uint64_t size = 0;
-    EXPECT_STATUS(Status::OK(), f->size(&size));
+    int64_t size = *f->get_size();
     EXPECT_EQ(content.size(), size);
 
     std::string buff(4, '\0');
-    Slice slice(buff);
-    EXPECT_STATUS(Status::OK(), f->read_at(0, slice));
-    EXPECT_EQ("stay", slice);
+    EXPECT_STATUS(Status::OK(), f->read_at_fully(0, buff.data(), buff.size()));
+    EXPECT_EQ("stay", buff);
 
-    EXPECT_STATUS(Status::OK(), f->read_at(5, slice));
-    EXPECT_EQ("hung", slice);
+    EXPECT_STATUS(Status::OK(), f->read_at_fully(5, buff.data(), buff.size()));
+    EXPECT_EQ("hung", buff);
 
-    EXPECT_STATUS(Status::OK(), f->read(17, &slice));
-    EXPECT_EQ("fool", slice);
+    EXPECT_EQ(4, *f->read_at(17, buff.data(), buff.size()));
+    EXPECT_EQ("fool", std::string_view(buff.data(), 4));
 
-    EXPECT_STATUS(Status::OK(), f->read(21, &slice));
-    EXPECT_EQ("ish", slice);
+    EXPECT_EQ(3, *f->read_at(21, buff.data(), buff.size()));
+    EXPECT_EQ("ish", std::string_view(buff.data(), 3));
 
-    EXPECT_STATUS(Status::IOError(""), f->read_at(22, slice));
+    EXPECT_FALSE(f->read_at_fully(22, buff.data(), buff.size()).ok());
 }
 
 } // namespace starrocks

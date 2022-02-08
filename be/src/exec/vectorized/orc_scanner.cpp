@@ -20,8 +20,9 @@ namespace starrocks::vectorized {
 
 class ORCFileStream : public orc::InputStream {
 public:
-    ORCFileStream(std::shared_ptr<RandomAccessFile> file, starrocks::vectorized::ScannerCounter* counter)
-            : _file(std::move(file)), _counter(counter) {}
+    ORCFileStream(std::string filename, std::shared_ptr<io::RandomAccessFile> file,
+                  starrocks::vectorized::ScannerCounter* counter)
+            : _filename(std::move(filename)), _file(std::move(file)), _counter(counter) {}
 
     ~ORCFileStream() override { _file.reset(); }
 
@@ -29,8 +30,8 @@ public:
      * Get the total length of the file in bytes.
      */
     uint64_t getLength() const override {
-        uint64_t len = 0;
-        return _file->size(&len).ok() ? len : 0;
+        auto res = _file->get_size();
+        return res.ok() ? *res : 0;
     }
 
     /**
@@ -52,9 +53,9 @@ public:
             throw orc::ParseError("Buffer is null");
         }
 
-        Status status = _file->read_at(offset, Slice((char*)buf, length));
+        Status status = _file->read_at_fully(offset, buf, length);
         if (!status.ok()) {
-            auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
+            auto msg = strings::Substitute("Failed to read ORC file: $0", status.to_string());
             throw orc::ParseError(msg);
         }
     }
@@ -62,10 +63,11 @@ public:
     /**
      * Get the name of the stream for error messages.
      */
-    const std::string& getName() const override { return _file->file_name(); }
+    const std::string& getName() const override { return _filename; }
 
 private:
-    std::shared_ptr<RandomAccessFile> _file;
+    std::string _filename;
+    std::shared_ptr<io::RandomAccessFile> _file;
     ScannerCounter* _counter;
 };
 
@@ -209,7 +211,7 @@ Status ORCScanner::_open_next_orc_reader() {
         if (_next_range >= _scan_range.ranges.size()) {
             return Status::EndOfFile("no more file to be read");
         }
-        std::shared_ptr<RandomAccessFile> file;
+        std::shared_ptr<io::RandomAccessFile> file;
         const TBrokerRangeDesc& range_desc = _scan_range.ranges[_next_range];
         Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
                                               CompressionTypePB::NO_COMPRESSION, &file);
@@ -217,14 +219,14 @@ Status ORCScanner::_open_next_orc_reader() {
             LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
             return st;
         }
-        const std::string& file_name = file->file_name();
-        auto inStream = std::make_unique<ORCFileStream>(file, _counter);
+        auto inStream = std::make_unique<ORCFileStream>(range_desc.path, file, _counter);
         _next_range++;
         _orc_adapter->set_read_chunk_size(_max_chunk_size);
-        _orc_adapter->set_current_file_name(file_name);
+        _orc_adapter->set_current_file_name(range_desc.path);
         st = _orc_adapter->init(std::move(inStream));
         if (st.is_end_of_file()) {
-            LOG(WARNING) << "Failed to init orc adapter. file_name: " << file_name << ", status: " << st.to_string();
+            LOG(WARNING) << "Failed to init orc adapter. file_name: " << range_desc.path
+                         << ", status: " << st.to_string();
             continue;
         }
         return st;

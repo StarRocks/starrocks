@@ -31,7 +31,7 @@ using RecordBatch = ::arrow::RecordBatch;
 using RecordBatchPtr = std::shared_ptr<RecordBatch>;
 class ParquetChunkFile : public arrow::io::RandomAccessFile {
 public:
-    ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos);
+    ParquetChunkFile(std::shared_ptr<starrocks::io::RandomAccessFile> file, uint64_t pos);
     ~ParquetChunkFile() override;
     arrow::Result<int64_t> Read(int64_t nbytes, void* buffer) override;
     arrow::Result<int64_t> ReadAt(int64_t position, int64_t nbytes, void* out) override;
@@ -43,7 +43,7 @@ public:
     bool closed() const override;
 
 private:
-    std::shared_ptr<starrocks::RandomAccessFile> _file;
+    std::shared_ptr<starrocks::io::RandomAccessFile> _file;
     uint64_t _pos = 0;
 };
 

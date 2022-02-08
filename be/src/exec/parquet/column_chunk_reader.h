@@ -16,10 +16,12 @@
 #include "util/block_compression.h"
 
 namespace starrocks {
-class RandomAccessFile;
 class BlockCompressionCodec;
-
 } // namespace starrocks
+
+namespace starrocks::io {
+class RandomAccessFile;
+}
 
 namespace starrocks::parquet {
 
@@ -32,7 +34,7 @@ class PageReader;
 class ColumnChunkReader {
 public:
     ColumnChunkReader(level_t max_def_level, level_t max_rep_level, int32_t type_length,
-                      const tparquet::ColumnChunk* column_chunk, RandomAccessFile* file,
+                      const tparquet::ColumnChunk* column_chunk, io::RandomAccessFile* file,
                       const ColumnChunkReaderOptions& opts);
     ~ColumnChunkReader();
 
@@ -119,7 +121,7 @@ private:
     int32_t _type_length = 0;
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     ColumnChunkReaderOptions _opts;
-    std::unique_ptr<RandomAccessFile> _file;
+    std::unique_ptr<io::RandomAccessFile> _file;
 
     std::unique_ptr<PageReader> _page_reader;
 

@@ -342,7 +342,7 @@ Status ParquetScanner::open_next_reader() {
             _scanner_eof = true;
             return Status::OK();
         }
-        std::shared_ptr<RandomAccessFile> file;
+        std::shared_ptr<io::RandomAccessFile> file;
         const TBrokerRangeDesc& range_desc = _scan_range.ranges[_next_file];
         Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
                                               CompressionTypePB::NO_COMPRESSION, &file);
@@ -350,7 +350,7 @@ Status ParquetScanner::open_next_reader() {
             LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
             return st;
         }
-        _conv_ctx.current_file = file->file_name();
+        _conv_ctx.current_file = range_desc.path;
         auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0);
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file);
         _next_file++;

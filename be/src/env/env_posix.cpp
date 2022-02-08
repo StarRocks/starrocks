@@ -24,6 +24,7 @@
 #include "gutil/macros.h"
 #include "gutil/port.h"
 #include "gutil/strings/substitute.h"
+#include "io/fd_random_access_file.h"
 #include "util/errno.h"
 #include "util/file_cache.h"
 #include "util/slice.h"
@@ -249,51 +250,6 @@ private:
     FILE* const _file;
 };
 
-class PosixRandomAccessFile : public RandomAccessFile {
-public:
-    PosixRandomAccessFile(std::string filename, int fd) : _filename(std::move(filename)), _fd(fd) {}
-    ~PosixRandomAccessFile() override {
-        int res;
-        RETRY_ON_EINTR(res, close(_fd));
-        if (res != 0) {
-            LOG(WARNING) << "close file failed, name=" << _filename << ", msg=" << errno_to_string(errno);
-        }
-    }
-
-    Status read(uint64_t offset, Slice* res) const override {
-        uint64_t read_bytes = 0;
-        auto st = do_readv_at(_fd, _filename, offset, res, 1, &read_bytes);
-        if (!st.ok() && st.is_end_of_file()) {
-            res->size = read_bytes;
-            return Status::OK();
-        }
-        return st;
-    }
-
-    Status read_at(uint64_t offset, const Slice& result) const override {
-        return do_readv_at(_fd, _filename, offset, &result, 1, nullptr);
-    }
-
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
-        return do_readv_at(_fd, _filename, offset, res, res_cnt, nullptr);
-    }
-    Status size(uint64_t* size) const override {
-        struct stat st;
-        auto res = fstat(_fd, &st);
-        if (res != 0) {
-            return io_error(_filename, errno);
-        }
-        *size = st.st_size;
-        return Status::OK();
-    }
-
-    const std::string& file_name() const override { return _filename; }
-
-private:
-    std::string _filename;
-    int _fd;
-};
-
 class PosixWritableFile : public WritableFile {
 public:
     PosixWritableFile(std::string filename, int fd, uint64_t filesize, bool sync_on_close)
@@ -503,19 +459,20 @@ public:
     }
 
     // get a RandomAccessFile pointer without file cache
-    Status new_random_access_file(const std::string& fname, std::unique_ptr<RandomAccessFile>* result) override {
-        return new_random_access_file(RandomAccessFileOptions(), fname, result);
+    StatusOr<std::unique_ptr<io::RandomAccessFile>> new_random_access_file(const std::string& fname) override {
+        return new_random_access_file(RandomAccessFileOptions(), fname);
     }
 
-    Status new_random_access_file(const RandomAccessFileOptions& opts, const std::string& fname,
-                                  std::unique_ptr<RandomAccessFile>* result) override {
+    StatusOr<std::unique_ptr<io::RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                           const std::string& fname) override {
         int fd;
         RETRY_ON_EINTR(fd, open(fname.c_str(), O_RDONLY));
         if (fd < 0) {
             return io_error(fname, errno);
         }
-        *result = std::make_unique<PosixRandomAccessFile>(fname, fd);
-        return Status::OK();
+        auto f = std::make_unique<io::FdRandomAccessFile>(fd);
+        f->set_close_on_delete(true);
+        return std::move(f);
     }
 
     Status new_writable_file(const string& fname, std::unique_ptr<WritableFile>* result) override {

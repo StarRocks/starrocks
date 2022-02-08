@@ -12,16 +12,19 @@
 
 namespace starrocks::parquet {
 
-class MockFile : public RandomAccessFile {
+class MockFile : public io::RandomAccessFile {
 public:
     MockFile() = default;
     ~MockFile() override = default;
 
-    Status read(uint64_t offset, Slice* res) const override { return Status::OK(); }
-    Status read_at(uint64_t offset, const Slice& result) const override { return Status::OK(); }
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override { return Status::OK(); }
-    Status size(uint64_t* size) const override { return Status::OK(); }
-    const std::string& file_name() const override { return _file; }
+    StatusOr<int64_t> read(void* out, int64_t count) override { return count; }
+    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override { return count; }
+    StatusOr<int64_t> get_size() override { return 0; }
+    StatusOr<int64_t> seek(int64_t offset, int whence) override { return offset; }
+    StatusOr<int64_t> position() override { return 0; }
+    Status skip(int64_t nbytes) override { return Status::OK(); }
+    bool allows_peak() const override { return false; }
+    StatusOr<std::string_view> peak(int64_t nbytes) override { return std::string_view(); }
 
 private:
     std::string _file;
@@ -122,7 +125,7 @@ protected:
     void TearDown() override {}
 
 private:
-    RandomAccessFile* _create_file();
+    io::RandomAccessFile* _create_file();
     tparquet::ColumnChunk* _create_t_column_chunk(const std::string& file_path);
     tparquet::RowGroup* _create_t_row_group(GroupReaderParam* param);
     tparquet::FileMetaData* _create_t_filemeta(GroupReaderParam* param);
@@ -226,7 +229,7 @@ void GroupReaderTest::_check_chunk(GroupReaderParam* param, const vectorized::Ch
     }
 }
 
-RandomAccessFile* GroupReaderTest::_create_file() {
+io::RandomAccessFile* GroupReaderTest::_create_file() {
     return _pool.add(new MockFile());
 }
 

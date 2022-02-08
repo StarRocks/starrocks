@@ -17,60 +17,49 @@
 
 namespace starrocks::parquet {
 
-class RandomAccessFileWrapper : public RandomAccessFile {
+class RandomAccessFileWrapper : public io::RandomAccessFile {
 public:
-    RandomAccessFileWrapper(RandomAccessFile* file, vectorized::HdfsScanStats* stats) : _file(file), _stats(stats) {}
+    RandomAccessFileWrapper(io::RandomAccessFile* file, vectorized::HdfsScanStats* stats)
+            : _file(file), _stats(stats) {}
 
     ~RandomAccessFileWrapper() override = default;
 
-    Status read(uint64_t offset, Slice* res) const override {
-        Status st;
-        {
-            SCOPED_RAW_TIMER(&_stats->io_ns);
-            _stats->io_count += 1;
-            st = _file->read(offset, res);
-            _stats->bytes_read += res->size;
-        }
-        return st;
+    StatusOr<int64_t> read(void* out, int64_t count) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto n, _file->read(out, count));
+        _stats->bytes_read += n;
+        return n;
     }
 
-    Status read_at(uint64_t offset, const Slice& result) const override {
-        Status st;
-        {
-            SCOPED_RAW_TIMER(&_stats->io_ns);
-            _stats->io_count += 1;
-            st = _file->read_at(offset, result);
-            _stats->bytes_read += result.size;
-        }
-        return st;
-    }
-
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
-        Status st;
-        {
-            SCOPED_RAW_TIMER(&_stats->io_ns);
-            _stats->io_count += 1;
-            st = _file->readv_at(offset, res, res_cnt);
-            for (int i = 0; i < res_cnt; ++i) {
-                _stats->bytes_read += res[i].size;
-            }
-        }
-        return st;
+    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto n, _file->read_at(offset, out, count));
+        _stats->bytes_read += n;
+        return n;
     }
 
     // Return the size of this file
-    Status size(uint64_t* size) const override { return _file->size(size); }
+    StatusOr<int64_t> get_size() override { return _file->get_size(); }
 
-    // Return name of this file
-    const std::string& file_name() const override { return _file->file_name(); }
+    StatusOr<int64_t> seek(int64_t offset, int whence) override { return _file->seek(offset, whence); }
+
+    StatusOr<int64_t> position() override { return _file->position(); }
+
+    Status skip(int64_t count) override { return _file->skip(count); }
+
+    bool allows_peak() const override { return _file->allows_peak(); }
+
+    StatusOr<std::string_view> peak(int64_t count) override { return _file->peak(count); }
 
 private:
-    RandomAccessFile* _file;
+    io::RandomAccessFile* _file;
     vectorized::HdfsScanStats* _stats;
 };
 
 ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_level, int32_t type_length,
-                                     const tparquet::ColumnChunk* column_chunk, RandomAccessFile* file,
+                                     const tparquet::ColumnChunk* column_chunk, io::RandomAccessFile* file,
                                      const ColumnChunkReaderOptions& opts)
         : _max_def_level(max_def_level),
           _max_rep_level(max_rep_level),

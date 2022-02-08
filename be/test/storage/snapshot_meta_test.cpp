@@ -98,8 +98,7 @@ TEST_F(SnapshotMetaTest, test_serialize_and_parse) {
     wf->close();
     DeferOp defer([&]() { std::filesystem::remove("test_serialize_and_parse.meta"); });
 
-    std::unique_ptr<RandomAccessFile> rf;
-    ASSERT_TRUE(Env::Default()->new_random_access_file("test_serialize_and_parse.meta", &rf).ok());
+    auto rf = *Env::Default()->new_random_access_file("test_serialize_and_parse.meta");
     SnapshotMeta meta;
     auto st = meta.parse_from_file(rf.get());
     ASSERT_TRUE(st.ok()) << st;

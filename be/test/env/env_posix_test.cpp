@@ -25,6 +25,7 @@
 
 #include "common/logging.h"
 #include "env/env.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 
 namespace starrocks {
@@ -76,57 +77,50 @@ TEST_F(EnvPosixTest, random_access) {
     ASSERT_EQ(115, size);
     {
         char mem[1024];
-        std::unique_ptr<RandomAccessFile> rfile;
-        st = env->new_random_access_file(fname, &rfile);
-        ASSERT_TRUE(st.ok());
+        auto rfile = *env->new_random_access_file(fname);
 
         Slice slice1(mem, 9);
         Slice slice2(mem + 9, 100);
         Slice slice3(mem + 9 + 100, 3);
 
-        Slice read_slices[3]{slice1, slice2, slice3};
-        st = rfile->readv_at(0, read_slices, 3);
-        ASSERT_TRUE(st.ok());
+        ASSERT_OK(rfile->read_fully(slice1.data, slice1.size));
+        ASSERT_OK(rfile->read_fully(slice2.data, slice2.size));
+        ASSERT_OK(rfile->read_fully(slice3.data, slice3.size));
         ASSERT_STREQ("123456789", std::string(slice1.data, slice1.size).c_str());
         ASSERT_STREQ("abc", std::string(slice3.data, slice3.size).c_str());
 
         Slice slice4(mem, 3);
-        st = rfile->read_at(112, slice4);
+        st = rfile->read_at_fully(112, slice4.data, slice4.size);
         ASSERT_TRUE(st.ok());
         ASSERT_STREQ("bcd", std::string(slice4.data, slice4.size).c_str());
 
         // end of file
-        st = rfile->read_at(114, slice4);
+        st = rfile->read_at_fully(114, slice4.data, slice4.size);
         ASSERT_EQ(TStatusCode::END_OF_FILE, st.code());
         LOG(INFO) << "st=" << st.to_string();
     }
     // test try read
     {
         char mem[1024];
-        std::unique_ptr<RandomAccessFile> rfile;
-        st = env->new_random_access_file(fname, &rfile);
-        ASSERT_TRUE(st.ok());
+        auto rfile = *env->new_random_access_file(fname);
 
         // normal read
         {
             Slice slice(mem, 9);
-            st = rfile->read(0, &slice);
-            ASSERT_TRUE(st.ok());
+            ASSIGN_OR_ABORT(slice.size, rfile->read_at(0, slice.data, slice.size));
             ASSERT_EQ(9, slice.size);
             ASSERT_STREQ("123456789", slice.to_string().c_str());
         }
         // read too many
         {
             Slice slice(mem, 100);
-            st = rfile->read(16, &slice);
-            ASSERT_TRUE(st.ok());
+            ASSIGN_OR_ABORT(slice.size, rfile->read_at(16, slice.data, slice.size));
             ASSERT_EQ(99, slice.size);
         }
         // read empty
         {
             Slice slice(mem, 100);
-            st = rfile->read(115, &slice);
-            ASSERT_TRUE(st.ok());
+            ASSIGN_OR_ABORT(slice.size, rfile->read_at(115, slice.data, slice.size));
             ASSERT_EQ(0, slice.size);
         }
     }

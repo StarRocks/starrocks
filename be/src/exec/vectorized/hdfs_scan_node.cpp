@@ -95,7 +95,6 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     _scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
-    _hdfs_io_profile.init(_runtime_profile.get());
 
     _mem_pool = std::make_unique<MemPool>();
 
@@ -205,6 +204,7 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     scanner_params.runtime_filter_collector = &_runtime_filter_collector;
     scanner_params.scan_ranges = hdfs_file_desc.splits;
     scanner_params.fs = hdfs_file_desc.fs;
+    scanner_params.file_path = hdfs_file_desc.file_path;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -531,9 +531,6 @@ Status HdfsScanNode::close(RuntimeState* state) {
     }
 
     _close_pending_scanners();
-    for (auto* hdfsFile : _hdfs_files) {
-        hdfsFile->fs.reset();
-    }
 
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
@@ -639,17 +636,12 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
     std::string namenode;
     RETURN_IF_ERROR(get_name_node_from_path(native_file_path, &namenode));
     _is_hdfs_fs = is_hdfs_path(namenode.c_str());
-    bool usePread = starrocks::config::use_hdfs_pread || is_object_storage_path(namenode.c_str());
 
     if (namenode.compare("default") == 0) {
         // local file, current only for test
-        auto* env = Env::Default();
-        std::unique_ptr<RandomAccessFile> file;
-        env->new_random_access_file(native_file_path, &file);
-
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
-        hdfs_file_desc->hdfs_fs = nullptr;
-        hdfs_file_desc->fs = std::move(file);
+        hdfs_file_desc->fs = Env::Default();
+        hdfs_file_desc->file_path = native_file_path;
         hdfs_file_desc->partition_id = scan_range.partition_id;
         hdfs_file_desc->path = scan_range_path;
         hdfs_file_desc->file_length = scan_range.file_length;
@@ -662,8 +654,8 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         std::atomic<int32_t>* open_limit = nullptr;
         RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &hdfs, &open_limit));
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
-        hdfs_file_desc->hdfs_fs = hdfs;
-        hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(hdfs, native_file_path, usePread);
+        hdfs_file_desc->fs = _pool->add(new EnvHdfs(hdfs));
+        hdfs_file_desc->file_path = native_file_path;
         hdfs_file_desc->partition_id = scan_range.partition_id;
         hdfs_file_desc->path = scan_range_path;
         hdfs_file_desc->file_length = scan_range.file_length;

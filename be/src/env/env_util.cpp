@@ -25,10 +25,6 @@
 
 namespace starrocks::env_util {
 
-Status open_file_for_write(Env* env, const std::string& path, std::shared_ptr<WritableFile>* file) {
-    return open_file_for_write(WritableFileOptions(), env, path, file);
-}
-
 Status open_file_for_write(const WritableFileOptions& opts, Env* env, const std::string& path,
                            std::shared_ptr<WritableFile>* file) {
     std::unique_ptr<WritableFile> w;
@@ -40,13 +36,6 @@ Status open_file_for_write(const WritableFileOptions& opts, Env* env, const std:
 Status open_file_for_sequential(Env* env, const std::string& path, std::shared_ptr<SequentialFile>* file) {
     std::unique_ptr<SequentialFile> r;
     RETURN_IF_ERROR(env->new_sequential_file(path, &r));
-    file->reset(r.release());
-    return Status::OK();
-}
-
-Status open_file_for_random(Env* env, const std::string& path, std::shared_ptr<RandomAccessFile>* file) {
-    std::unique_ptr<RandomAccessFile> r;
-    RETURN_IF_ERROR(env->new_random_access_file(path, &r));
     file->reset(r.release());
     return Status::OK();
 }

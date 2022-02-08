@@ -16,7 +16,7 @@ public:
     ~RepeatedStoredColumnReader() override = default;
 
     Status init(int chunk_size, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
-                RandomAccessFile* file) {
+                io::RandomAccessFile* file) {
         _field = field;
 
         ColumnChunkReaderOptions opts;
@@ -72,7 +72,7 @@ public:
     ~OptionalStoredColumnReader() override = default;
 
     Status init(int chunk_size, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
-                RandomAccessFile* file) {
+                io::RandomAccessFile* file) {
         _field = field;
 
         ColumnChunkReaderOptions opts;
@@ -138,7 +138,7 @@ public:
     ~RequiredStoredColumnReader() override = default;
 
     Status init(int chunk_size, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
-                RandomAccessFile* file) {
+                io::RandomAccessFile* file) {
         _field = field;
 
         ColumnChunkReaderOptions opts;
@@ -163,7 +163,7 @@ public:
 private:
     Status _next_page();
 
-    RandomAccessFile* _file = nullptr;
+    io::RandomAccessFile* _file = nullptr;
     // TODO(zc): No need copy
     const tparquet::ColumnChunk _chunk_metadata;
     const ParquetField* _field = nullptr;
@@ -497,7 +497,7 @@ Status RequiredStoredColumnReader::_next_page() {
     return Status::OK();
 }
 
-Status StoredColumnReader::create(RandomAccessFile* file, const ParquetField* field,
+Status StoredColumnReader::create(io::RandomAccessFile* file, const ParquetField* field,
                                   const tparquet::ColumnChunk* chunk_metadata, const StoredColumnReaderOptions& opts,
                                   int chunk_size, std::unique_ptr<StoredColumnReader>* out) {
     if (field->max_rep_level() > 0) {

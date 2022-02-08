@@ -277,32 +277,29 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
 
 Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                               const TBrokerScanRangeParams& params, CompressionTypePB compression,
-                                              std::shared_ptr<RandomAccessFile>* file) {
-    std::shared_ptr<RandomAccessFile> src_file;
+                                              std::shared_ptr<io::RandomAccessFile>* file) {
+    if (compression != CompressionTypePB::NO_COMPRESSION) {
+        return Status::NotSupported("Does not support compressed random-access file");
+    }
+    std::unique_ptr<io::RandomAccessFile> src_file;
     switch (range_desc.file_type) {
     case TFileType::FILE_LOCAL: {
-        RETURN_IF_ERROR(env_util::open_file_for_random(Env::Default(), range_desc.path, &src_file));
+        ASSIGN_OR_RETURN(src_file, Env::Default()->new_random_access_file(range_desc.path));
         break;
     }
     case TFileType::FILE_BROKER: {
-        EnvBroker env_broker(address, params.properties);
-        std::unique_ptr<RandomAccessFile> broker_file;
-        RETURN_IF_ERROR(env_broker.new_random_access_file(range_desc.path, &broker_file));
         if (range_desc.start_offset != 0) {
             return Status::NotSupported("non-zero start offset");
         }
-        src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
+        EnvBroker env_broker(address, params.properties);
+        ASSIGN_OR_RETURN(src_file, env_broker.new_random_access_file(range_desc.path));
         break;
     }
     case TFileType::FILE_STREAM:
         return Status::NotSupported("Does not support create random-access file from file stream");
     }
-    if (compression == CompressionTypePB::NO_COMPRESSION) {
-        *file = src_file;
-        return Status::OK();
-    } else {
-        return Status::NotSupported("Does not support compressed random-access file");
-    }
+    *file = std::shared_ptr<io::RandomAccessFile>(src_file.release());
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized

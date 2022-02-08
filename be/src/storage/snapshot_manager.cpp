@@ -514,8 +514,7 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
 // See `SnapshotManager::make_snapshot_on_tablet_meta` for the file format.
 StatusOr<SnapshotMeta> SnapshotManager::parse_snapshot_meta(const std::string& filename) {
     SnapshotMeta snapshot_meta;
-    std::unique_ptr<RandomAccessFile> file;
-    RETURN_IF_ERROR(Env::Default()->new_random_access_file(filename, &file));
+    ASSIGN_OR_RETURN(auto file, Env::Default()->new_random_access_file(filename));
     RETURN_IF_ERROR(snapshot_meta.parse_from_file(file.get()));
     return std::move(snapshot_meta);
 }

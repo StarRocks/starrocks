@@ -22,7 +22,7 @@
 #include "util/debug_util.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks {
+namespace starrocks::io {
 class RandomAccessFile;
 }
 
@@ -323,7 +323,7 @@ public:
     ScalarColumnReader(ColumnReaderOptions opts) : _opts(std::move(opts)) {}
     ~ScalarColumnReader() override = default;
 
-    Status init(int chunk_size, RandomAccessFile* file, const ParquetField* field,
+    Status init(int chunk_size, io::RandomAccessFile* file, const ParquetField* field,
                 const tparquet::ColumnChunk* chunk_metadata, const TypeDescriptor& col_type) {
         StoredColumnReaderOptions opts;
         opts.stats = _opts.stats;
@@ -670,7 +670,7 @@ private:
     std::unique_ptr<ColumnReader> _element_reader;
 };
 
-Status ColumnReader::create(RandomAccessFile* file, const ParquetField* field, const tparquet::RowGroup& row_group,
+Status ColumnReader::create(io::RandomAccessFile* file, const ParquetField* field, const tparquet::RowGroup& row_group,
                             const TypeDescriptor& col_type, const ColumnReaderOptions& opts, int chunk_size,
                             std::unique_ptr<ColumnReader>* output) {
     if (field->type.type == TYPE_MAP || field->type.type == TYPE_STRUCT) {

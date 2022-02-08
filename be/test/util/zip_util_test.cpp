@@ -30,6 +30,7 @@
 
 #include <iostream>
 #include <string>
+#include <string_view>
 
 #include "env/env.h"
 #include "gutil/strings/util.h"
@@ -54,14 +55,13 @@ TEST(ZipUtilTest, basic) {
     ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_normal_data"));
     ASSERT_FALSE(FileUtils::is_dir(path + "/test_data/target/zip_normal_data"));
 
-    std::unique_ptr<RandomAccessFile> file;
-    Env::Default()->new_random_access_file(path + "/test_data/target/zip_normal_data", &file);
+    std::unique_ptr<io::RandomAccessFile> file =
+            *Env::Default()->new_random_access_file(path + "/test_data/target/zip_normal_data");
 
     char f[11];
-    Slice slice(f, 11);
-    file->read_at(0, slice);
+    file->read_at_fully(0, f, 11);
 
-    ASSERT_EQ("hello world", slice.to_string());
+    ASSERT_EQ("hello world", std::string_view(f, 11));
 
     FileUtils::remove_all(path + "/test_data/target");
 }
@@ -86,14 +86,13 @@ TEST(ZipUtilTest, dir) {
     ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_test/two"));
     ASSERT_TRUE(FileUtils::is_dir(path + "/test_data/target/zip_test/two"));
 
-    std::unique_ptr<RandomAccessFile> file;
-    Env::Default()->new_random_access_file(path + "/test_data/target/zip_test/one/data", &file);
+    std::unique_ptr<io::RandomAccessFile> file =
+            *Env::Default()->new_random_access_file(path + "/test_data/target/zip_test/one/data");
 
     char f[4];
-    Slice slice(f, 4);
-    file->read_at(0, slice);
+    file->read_at_fully(0, f, 4);
 
-    ASSERT_EQ("test", slice.to_string());
+    ASSERT_EQ("test", std::string_view(f, 4));
 
     FileUtils::remove_all(path + "/test_data/target");
 }

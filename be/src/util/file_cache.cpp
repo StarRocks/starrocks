@@ -23,8 +23,7 @@
 
 #include <utility>
 
-#include "env/env.h"
-#include "gutil/strings/substitute.h"
+#include "io/random_access_file.h"
 
 namespace starrocks {
 
@@ -66,6 +65,6 @@ void FileCache<FileType>::erase(const std::string& file_name) {
 }
 
 // Explicit specialization for callers outside this compilation unit.
-template class FileCache<RandomAccessFile>;
+template class FileCache<io::RandomAccessFile>;
 
 } // namespace starrocks

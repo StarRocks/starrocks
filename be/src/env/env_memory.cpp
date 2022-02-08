@@ -4,6 +4,7 @@
 
 #include <butil/files/file_path.h>
 
+#include "io/array_random_access_file.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -22,87 +23,35 @@ struct Inode {
 
 using InodePtr = std::shared_ptr<Inode>;
 
-class MemoryRandomAccessFile final : public RandomAccessFile {
+class MemoryRandomAccessFile final : public io::ArrayRandomAccessFile {
 public:
-    MemoryRandomAccessFile(std::string path, InodePtr inode) : _path(std::move(path)), _inode(std::move(inode)) {}
+    explicit MemoryRandomAccessFile(InodePtr inode)
+            : io::ArrayRandomAccessFile(inode->data.data(), static_cast<int64_t>(inode->data.size())),
+              _inode(std::move(inode)) {}
 
     ~MemoryRandomAccessFile() override = default;
 
-    Status read(uint64_t offset, Slice* res) const override {
-        const std::string& data = _inode->data;
-        if (offset >= data.size()) {
-            res->size = 0;
-            return Status::OK();
-        }
-        size_t to_read = std::min<size_t>(res->size, data.size() - offset);
-        memcpy(res->data, data.data() + offset, to_read);
-        res->size = to_read;
-        return Status::OK();
-    }
-
-    Status read_at(uint64_t offset, const Slice& result) const override {
-        const std::string& data = _inode->data;
-        if (offset + result.size > data.size()) {
-            return Status::IOError("Cannot read required bytes");
-        }
-        memcpy(result.data, data.data() + offset, result.size);
-        return Status::OK();
-    }
-
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
-        const std::string& data = _inode->data;
-        size_t total_size = 0;
-        for (int i = 0; i < res_cnt; ++i) {
-            total_size += res[i].size;
-        }
-        if (offset + total_size > data.size()) {
-            return Status::IOError("Cannot read required bytes");
-        }
-        for (int i = 0; i < res_cnt; ++i) {
-            memcpy(res[i].data, data.data() + offset, res[i].size);
-            offset += res[i].size;
-        }
-        return Status::OK();
-    }
-
-    Status size(uint64_t* size) const override {
-        const std::string& data = _inode->data;
-        *size = data.size();
-        return Status::OK();
-    }
-
-    const std::string& file_name() const override { return _path; }
-
 private:
-    std::string _path;
     InodePtr _inode;
 };
 
 class MemorySequentialFile final : public SequentialFile {
 public:
-    MemorySequentialFile(std::string path, InodePtr inode) : _random_file(std::move(path), std::move(inode)) {}
+    MemorySequentialFile(std::string path, InodePtr inode) : _path(std::move(path)), _random_file(std::move(inode)) {}
 
     ~MemorySequentialFile() override = default;
 
     Status read(Slice* res) override {
-        Status st = _random_file.read(_offset, res);
-        if (st.ok()) {
-            _offset += res->size;
-        }
-        return st;
-    }
-
-    const std::string& filename() const override { return _random_file.file_name(); }
-
-    Status skip(uint64_t n) override {
-        uint64_t size = 0;
-        CHECK(_random_file.size(&size).ok());
-        _offset = std::min(_offset + n, size);
+        ASSIGN_OR_RETURN(res->size, _random_file.read(res->data, res->size));
         return Status::OK();
     }
 
+    const std::string& filename() const override { return _path; }
+
+    Status skip(uint64_t n) override { return _random_file.skip(static_cast<int64_t>(n)); }
+
 private:
-    uint64_t _offset = 0;
+    std::string _path;
     MemoryRandomAccessFile _random_file;
 };
 
@@ -221,18 +170,17 @@ public:
         }
     }
 
-    Status new_random_access_file(const butil::FilePath& path, std::unique_ptr<RandomAccessFile>* file) {
-        return new_random_access_file(RandomAccessFileOptions(), path, file);
+    StatusOr<std::unique_ptr<io::RandomAccessFile>> new_random_access_file(const butil::FilePath& path) {
+        return new_random_access_file(RandomAccessFileOptions(), path);
     }
 
-    Status new_random_access_file(const RandomAccessFileOptions& opts, const butil::FilePath& path,
-                                  std::unique_ptr<RandomAccessFile>* file) {
+    StatusOr<std::unique_ptr<io::RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                           const butil::FilePath& path) {
         auto iter = _namespace.find(path.value());
         if (iter == _namespace.end()) {
             return Status::NotFound(path.value());
         } else {
-            *file = std::make_unique<MemoryRandomAccessFile>(path.value(), iter->second);
-            return Status::OK();
+            return std::make_unique<MemoryRandomAccessFile>(iter->second);
         }
     }
 
@@ -466,17 +414,17 @@ Status EnvMemory::new_sequential_file(const std::string& path, std::unique_ptr<S
     return _impl->new_sequential_file(butil::FilePath(new_path), file);
 }
 
-Status EnvMemory::new_random_access_file(const std::string& path, std::unique_ptr<RandomAccessFile>* file) {
+StatusOr<std::unique_ptr<io::RandomAccessFile>> EnvMemory::new_random_access_file(const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_random_access_file(butil::FilePath(new_path), file);
+    return _impl->new_random_access_file(butil::FilePath(new_path));
 }
 
-Status EnvMemory::new_random_access_file(const RandomAccessFileOptions& opts, const std::string& path,
-                                         std::unique_ptr<RandomAccessFile>* file) {
+StatusOr<std::unique_ptr<io::RandomAccessFile>> EnvMemory::new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                                  const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_random_access_file(opts, butil::FilePath(new_path), file);
+    return _impl->new_random_access_file(opts, butil::FilePath(new_path));
 }
 
 Status EnvMemory::new_writable_file(const std::string& path, std::unique_ptr<WritableFile>* file) {
@@ -631,13 +579,10 @@ Status EnvMemory::append_file(const std::string& path, const Slice& content) {
 }
 
 Status EnvMemory::read_file(const std::string& path, std::string* content) {
-    std::unique_ptr<RandomAccessFile> f;
-    RETURN_IF_ERROR(new_random_access_file(path, &f));
-    uint64_t size = 0;
-    RETURN_IF_ERROR(f->size(&size));
+    ASSIGN_OR_RETURN(auto file, new_random_access_file(path));
+    ASSIGN_OR_RETURN(auto size, file->get_size());
     raw::make_room(content, size);
-    Slice buff(*content);
-    return f->read_at(0, buff);
+    return file->read(content->data(), static_cast<int64_t>(content->size())).status();
 }
 
 } // namespace starrocks

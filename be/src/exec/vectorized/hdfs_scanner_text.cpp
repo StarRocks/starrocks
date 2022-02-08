@@ -11,8 +11,8 @@ namespace starrocks::vectorized {
 
 class HdfsScannerCSVReader : public CSVReader {
 public:
-    HdfsScannerCSVReader(std::shared_ptr<RandomAccessFile> file, char record_delimiter, string field_delimiter,
-                         size_t offset, size_t remain_length, size_t file_length)
+    HdfsScannerCSVReader(io::RandomAccessFile* file, char record_delimiter, string field_delimiter, size_t offset,
+                         size_t remain_length, size_t file_length)
             : CSVReader(record_delimiter, field_delimiter) {
         _file = file;
         _offset = offset;
@@ -28,7 +28,7 @@ protected:
     Status _fill_buffer() override;
 
 private:
-    std::shared_ptr<RandomAccessFile> _file;
+    io::RandomAccessFile* _file;
     size_t _offset = 0;
     int32_t _remain_length = 0;
     size_t _file_length = 0;
@@ -62,25 +62,17 @@ Status HdfsScannerCSVReader::_fill_buffer() {
         size_t slice_len = _remain_length;
         s = Slice(_buff.limit(), std::min(_buff.free_space(), slice_len));
     }
-    Status st = _file->read(_offset, &s);
-    _offset += s.size;
-    _remain_length -= s.size;
-    // According to the specification of `Env::read`, when reached the end of
-    // a file, the returned status will be OK instead of EOF, but here we check
-    // EOF also for safety.
-    if (st.is_end_of_file()) {
-        s.size = 0;
-    } else if (!st.ok()) {
-        LOG(WARNING) << "Status is not ok " << st.get_error_msg();
-        return st;
-    }
+    ASSIGN_OR_RETURN(auto r, _file->read_at(_offset, s.data, s.size));
+    s.size = r;
+    _offset += r;
+    _remain_length -= r;
     _buff.add_limit(s.size);
     auto n = _buff.available();
     if (s.size == 0 && n == 0) {
         // Has reached the end of file and the buffer is empty.
         _should_stop_scan = true;
         LOG(INFO) << "Reach end of file!";
-        return Status::EndOfFile(_file->file_name());
+        return Status::EndOfFile("reached EOF");
     } else if (s.size == 0 && _buff.position()[n - 1] != _record_delimiter) {
         // Has reached the end of file but still no record delimiter found, which
         // is valid, according the RFC, add the record delimiter ourself.
@@ -243,7 +235,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     const THdfsScanRange* scan_range = _scanner_params.scan_ranges[_current_range_index];
     if (_current_range_index == 0) {
         _reader =
-                std::make_unique<HdfsScannerCSVReader>(_scanner_params.fs, _record_delimiter, _field_delimiter,
+                std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter,
                                                        scan_range->offset, scan_range->length, scan_range->file_length);
     } else {
         down_cast<HdfsScannerCSVReader*>(_reader.get())->reset(scan_range->offset, scan_range->length);

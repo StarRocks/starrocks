@@ -10,13 +10,14 @@
 #include "runtime/types.h"
 #include "utils.h"
 
-namespace starrocks {
-class RandomAccessFile;
-namespace vectorized {
+namespace starrocks::vectorized {
 class Column;
 struct HdfsScanStats;
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
+
+namespace starrocks::io {
+class RandomAccessFile;
+}
 
 namespace starrocks::parquet {
 
@@ -31,7 +32,7 @@ class ColumnReader {
 public:
     // TODO(zc): review this,
     // create a column reader
-    static Status create(RandomAccessFile* file, const ParquetField* field, const tparquet::RowGroup& row_group,
+    static Status create(io::RandomAccessFile* file, const ParquetField* field, const tparquet::RowGroup& row_group,
                          const TypeDescriptor& col_type, const ColumnReaderOptions& opts, int chunk_size,
                          std::unique_ptr<ColumnReader>* reader);
 

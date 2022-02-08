@@ -22,10 +22,10 @@ public:
 
     Status new_sequential_file(const std::string& path, std::unique_ptr<SequentialFile>* file) override;
 
-    Status new_random_access_file(const std::string& path, std::unique_ptr<RandomAccessFile>* file) override;
+    StatusOr<std::unique_ptr<io::RandomAccessFile>> new_random_access_file(const std::string& path) override;
 
-    Status new_random_access_file(const RandomAccessFileOptions& opts, const std::string& path,
-                                  std::unique_ptr<RandomAccessFile>* file) override;
+    StatusOr<std::unique_ptr<io::RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                           const std::string& path) override;
 
     Status new_writable_file(const std::string& path, std::unique_ptr<WritableFile>* file) override;
 

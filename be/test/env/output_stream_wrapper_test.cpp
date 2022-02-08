@@ -54,17 +54,12 @@ TEST_F(OutputStreamWrapperTest, test_write) {
     ASSERT_TRUE(stream.good());
     ASSERT_EQ(21, stream.size());
 
-    std::unique_ptr<RandomAccessFile> rf;
-    auto st = Env::Default()->new_random_access_file(_file->filename(), &rf);
-    ASSERT_TRUE(st.ok()) << st;
+    auto rf = *Env::Default()->new_random_access_file(_file->filename());
     std::string buff(21, 0);
-    Slice slice(buff);
-    uint64_t size = 0;
-    st = rf->size(&size);
-    ASSERT_TRUE(st.ok()) << st;
+    int64_t size = *rf->get_size();
     ASSERT_EQ(21, size);
 
-    st = rf->read_at(0, slice);
+    auto st = rf->read_at_fully(0, buff.data(), buff.size());
     ASSERT_TRUE(st.ok()) << st;
     ASSERT_EQ("10 hello world! apple", buff);
 }

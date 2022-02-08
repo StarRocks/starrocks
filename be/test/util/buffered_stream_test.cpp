@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "env/env.h"
-#include "env/env_memory.h"
+#include "io/array_random_access_file.h"
 
 namespace starrocks {
 
@@ -21,7 +21,7 @@ TEST_F(BufferedStreamTest, Normal) {
     for (int i = 0; i < 10; ++i) {
         test_str[i] = i;
     }
-    StringRandomAccessFile file(std::move(test_str));
+    io::ArrayRandomAccessFile file(test_str.data(), test_str.size());
 
     BufferedInputStream stream(&file, 0, 10);
 
@@ -57,7 +57,7 @@ TEST_F(BufferedStreamTest, Normal) {
 TEST_F(BufferedStreamTest, Large) {
     std::string test_str;
     test_str.resize(66 * 1024);
-    StringRandomAccessFile file(std::move(test_str));
+    io::ArrayRandomAccessFile file(test_str.data(), test_str.size());
 
     BufferedInputStream stream(&file, 0, 66 * 1024);
 
@@ -89,7 +89,7 @@ TEST_F(BufferedStreamTest, Large) {
 TEST_F(BufferedStreamTest, Large2) {
     std::string test_str;
     test_str.resize(65 * 1024);
-    StringRandomAccessFile file(std::move(test_str));
+    io::ArrayRandomAccessFile file(test_str.data(), test_str.size());
 
     BufferedInputStream stream(&file, 0, 65 * 1024);
 

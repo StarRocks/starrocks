@@ -10,11 +10,13 @@
 
 namespace starrocks {
 
+namespace io {
 class RandomAccessFile;
+}
 
 class BufferedInputStream {
 public:
-    BufferedInputStream(RandomAccessFile* file, uint64_t offset, uint64_t length);
+    BufferedInputStream(io::RandomAccessFile* file, uint64_t offset, uint64_t length);
     ~BufferedInputStream() = default;
 
     void seek_to(uint64_t offset) {
@@ -51,7 +53,7 @@ private:
 
 private:
     std::unique_ptr<uint8_t[]> _buf;
-    RandomAccessFile* _file;
+    io::RandomAccessFile* _file;
     uint64_t _offset = 0;
     uint64_t _end_offset = 0;
 
