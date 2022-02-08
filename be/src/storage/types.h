@@ -357,6 +357,13 @@ private:
     const size_t _item_size;
 };
 
+// TypeComparator
+// static compare functions for performance-critical scenario
+template <FieldType ftype>
+struct TypeComparator {
+    static int cmp(const void* lhs, const void* rhs);
+};
+
 bool is_scalar_field_type(FieldType field_type);
 
 bool is_complex_metric_type(FieldType field_type);

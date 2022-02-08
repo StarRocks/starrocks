@@ -1041,4 +1041,15 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_JSON> : public ScalarTypeInfoImpl<OLAP
 
 void (*ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR>::set_to_max)(void*) = nullptr;
 
+// NOTE
+// These code could not be moved proceeding ScalarTypeInfoImpl speciliazation, otherwise
+// will encounter `specialization after instantiation` error
+template <FieldType ftype>
+int TypeComparator<ftype>::cmp(const void* lhs, const void* rhs) {
+    return ScalarTypeInfoImpl<ftype>::cmp(lhs, rhs);
+}
+#define M(ftype) template struct TypeComparator<ftype>;
+APPLY_FOR_SUPPORTED_FIELD_TYPE(M)
+#undef M
+
 } // namespace starrocks
