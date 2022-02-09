@@ -539,7 +539,15 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             }
 
             simdjson::ondemand::value val;
-            if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], val)) {
+            // NOTE
+            // Why not process this syntax in extract_from_object?
+            // simdjson's api is limited, which coult not convert ondemand::object to ondemand::value.
+            // As a workaround, extract procedure is duplicated, for both ondemand::object and ondemand::value
+            // TODO(mofei) make it more elegant
+            if (_scanner->_json_paths[i].size() == 1 && _scanner->_json_paths[i][0].key == "$") {
+                RETURN_IF_ERROR(add_nullable_column(column, slot_descs[i]->type(), slot_descs[i]->col_name(), row,
+                                                    !_strict_mode));
+            } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], val)) {
                 column->append_nulls(1);
             } else {
                 RETURN_IF_ERROR(_construct_column(val, column, slot_descs[i]->type(), slot_descs[i]->col_name()));

@@ -122,4 +122,14 @@ Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, c
     return Status::OK();
 }
 
+Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                              simdjson::ondemand::object* value) {
+    auto json_column = down_cast<JsonColumn*>(column);
+
+    auto json_value = JsonValue::from_simdjson(value);
+    RETURN_IF(!json_value.ok(), json_value.status());
+    json_column->append(&json_value.value());
+    return Status::OK();
+}
+
 } // namespace starrocks::vectorized

@@ -158,6 +158,25 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
 }
 
 Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                           simdjson::ondemand::object* value, bool invalid_as_null) {
+    DCHECK_EQ(TYPE_JSON, type_desc.type);
+    try {
+        auto nullable_column = down_cast<NullableColumn*>(column);
+        auto& null_column = nullable_column->null_column();
+        auto& data_column = nullable_column->data_column();
+
+        RETURN_IF_ERROR(add_native_json_column(data_column.get(), type_desc, name, value));
+        null_column->append(0);
+
+        return Status::OK();
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = strings::Substitute("Failed to parse value, column=$0, error=$1", name,
+                                           simdjson::error_message(e.error()));
+        return Status::DataQualityError(err_msg);
+    }
+}
+
+Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                            simdjson::ondemand::value* value, bool invalid_as_null) {
     try {
         if (value->is_null()) {
