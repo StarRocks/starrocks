@@ -46,7 +46,6 @@ private:
 
     OlapMetaScanNode* _parent;
     RuntimeState* _runtime_state;
-    OlapMetaScannerParams _params;
     TabletSharedPtr _tablet;
 
     MetaReaderParams _reader_params;
