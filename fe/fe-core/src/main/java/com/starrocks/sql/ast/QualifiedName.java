@@ -11,6 +11,10 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.Iterables.isEmpty;
 import static java.util.Objects.requireNonNull;
 
+/**
+ * QualifiedName is used to represent a string connected by "."
+ * Often used to represent an unresolved Table Name such as db.table
+ */
 public class QualifiedName {
     private final List<String> parts;
 

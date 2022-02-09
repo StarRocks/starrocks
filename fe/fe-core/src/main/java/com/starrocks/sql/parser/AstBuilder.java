@@ -14,6 +14,7 @@ import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.ValueList;
+import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.Identifier;
@@ -69,20 +70,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCommonTableExpression(StarRocksParser.CommonTableExpressionContext context) {
-        Optional<List<Identifier>> columns = Optional.empty();
+        List<Identifier> columns = null;
         if (context.columnAliases() != null) {
-            columns = Optional.of(visit(context.columnAliases().identifier(), Identifier.class));
+            columns = visit(context.columnAliases().identifier(), Identifier.class);
         }
 
         List<String> columnNames = null;
-        if (columns.isPresent()) {
-            columnNames = columns.get().stream().map(Identifier::getValue).collect(toList());
+        if (columns != null) {
+            columnNames = columns.stream().map(Identifier::getValue).collect(toList());
         }
 
+        QueryRelation queryRelation = (QueryRelation) visit(context.query());
         return new CTERelation(
+                RelationId.of(queryRelation).hashCode(),
                 ((Identifier) visit(context.name)).getValue(),
                 columnNames,
-                (QueryRelation) visit(context.query()));
+                queryRelation);
     }
 
     @Override

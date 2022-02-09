@@ -17,13 +17,6 @@ public class CTERelation extends Relation {
         this.cteQuery = cteQuery;
     }
 
-    public CTERelation(String name, List<String> columnOutputNames, QueryRelation cteQuery) {
-        this.cteId = -1;
-        this.name = name;
-        this.columnOutputNames = columnOutputNames;
-        this.cteQuery = cteQuery;
-    }
-
     public QueryRelation getCteQuery() {
         return cteQuery;
     }
