@@ -25,7 +25,7 @@ namespace starrocks::vectorized {
 
 // static const re2::RE2 JSON_PATTERN("^([a-zA-Z0-9_\\-\\:\\s#\\|\\.]*)(?:\\[([0-9]+)\\])?");
 // json path cannot contains: ", [, ]
-const re2::RE2 JSON_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9\:\*]+)\])?)");
+const re2::RE2 SIMPLE_JSONPATH_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9]+|\*)\])?)");
 
 Status JsonFunctions::_get_parsed_paths(const std::vector<std::string>& path_exprs,
                                         std::vector<SimpleJsonPath>* parsed_paths) {
@@ -47,7 +47,7 @@ Status JsonFunctions::_get_parsed_paths(const std::vector<std::string>& path_exp
             }
         }
 
-        if (UNLIKELY(!RE2::FullMatch(path_exprs[i], JSON_PATTERN, &col, &index))) {
+        if (UNLIKELY(!RE2::FullMatch(path_exprs[i], SIMPLE_JSONPATH_PATTERN, &col, &index))) {
             parsed_paths->emplace_back("", -1, false);
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", path_exprs[i]));
         } else {

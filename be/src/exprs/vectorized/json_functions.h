@@ -44,7 +44,7 @@ struct JsonTypeTraits<TYPE_VARCHAR> {
     static JsonFunctionType JsonType;
 };
 
-extern const re2::RE2 JSON_PATTERN;
+extern const re2::RE2 SIMPLE_JSONPATH_PATTERN;
 
 struct SimpleJsonPath {
     std::string key; // key of a json object
