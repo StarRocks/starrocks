@@ -5555,4 +5555,26 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(
                 "other predicates: NOT (CAST(bitmap_count(if(4: v4 = 10000, bitmap_hash('abc'), NULL)) AS BOOLEAN))"));
     }
+
+    @Test
+    public void testWindowWithAgg() throws Exception {
+        String sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY v1) AS rank  FROM t0 group BY v1, v2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
+
+        sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank  FROM t0 group BY v1, v2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
+    }
+
+    @Test
+    public void testWindowWithChildProjectAgg() throws Exception {
+        String sql = "SELECT v1, sum(v2) as x1, row_number() over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank " +
+                "FROM t0 group BY v1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : 4: sum\n" +
+                "  |  <slot 8> : if(CAST(1: v1 AS BOOLEAN), 1, NULL)"));
+    }
 }

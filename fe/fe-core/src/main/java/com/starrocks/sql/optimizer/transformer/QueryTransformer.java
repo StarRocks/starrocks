@@ -258,8 +258,7 @@ class QueryTransformer {
         for (AnalyticExpr analyticExpr : window) {
             WindowTransformer.WindowOperator rewriteOperator = WindowTransformer.standardize(analyticExpr);
             if (windowOperators.contains(rewriteOperator)) {
-                windowOperators.get(windowOperators.indexOf(rewriteOperator))
-                        .addFunction(analyticExpr.getFnCall(), analyticExpr);
+                windowOperators.get(windowOperators.indexOf(rewriteOperator)).addFunction(analyticExpr);
             } else {
                 windowOperators.add(rewriteOperator);
             }
