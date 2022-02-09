@@ -23,6 +23,11 @@ jvalue cast_to_jvalue(MethodTypeDescriptor method_type_desc, const Column* col, 
 void release_jvalue(MethodTypeDescriptor method_type_desc, jvalue val);
 void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
 
+const TableFunction* getJavaUDTFFunction() {
+    static JavaUDTFFunction java_table_function;
+    return &java_table_function;
+}
+
 class JavaUDTFState : public TableFunctionState {
 public:
     JavaUDTFState(std::string libpath, std::string symbol, const TTypeDesc& desc)

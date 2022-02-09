@@ -114,6 +114,7 @@ public:
         delete s_server;
         system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
         system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
+        system("rm -rf ./be/test/runtime/test_data/user_function_cache/download/");
     }
     void SetUp() override { k_is_downloaded = false; }
 };
