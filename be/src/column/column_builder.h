@@ -76,9 +76,7 @@ public:
         }
     }
 
-    ColumnPtr build_nullable_column() {
-        return NullableColumn::create(_column, _null_column);
-    }
+    ColumnPtr build_nullable_column() { return NullableColumn::create(_column, _null_column); }
 
     void reserve(int size) {
         _column->reserve(size);
