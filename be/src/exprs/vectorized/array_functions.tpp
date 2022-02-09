@@ -1,7 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/array_column.h"
+#include "column/column_builder.h"
 #include "column/column_hash.h"
+#include "column/column_viewer.h"
 #include "exprs/vectorized/function_helper.h"
 #include "util/orlp/pdqsort.h"
 
@@ -329,6 +331,101 @@ private:
         } else {
             _reverse_data_column(column, offsets, chunk_size);
         }
+    }
+};
+
+class ArrayJoin {
+public:
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        // TODO: optimize the performace of const sep or const null replace str
+        DCHECK_GE(columns.size(), 2);
+        size_t chunk_size = columns[0]->size();
+
+        if (std::any_of(columns.begin(), columns.end(), [](const auto& col) { return col->only_null(); })) {
+            return ColumnHelper::create_const_null_column(chunk_size);
+        }
+
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+        if (columns.size() <= 2) {
+            return _join_column_ignore_null(src_column, columns[1], chunk_size);
+        } else {
+            return _join_column_replace_null(src_column, columns[1], columns[2], chunk_size);
+        }
+    }
+
+private:
+    static ColumnPtr _join_column_replace_null(const ColumnPtr& src_column, const ColumnPtr& sep_column,
+                                               const ColumnPtr& null_replace_column, size_t chunk_size) {
+        NullableBinaryColumnBuilder res;
+        // byte_size may be smaller or larger then actual used size
+        // byte_size is only one reserve size
+        size_t byte_size = ColumnHelper::get_data_column(src_column.get())->byte_size() +
+                           ColumnHelper::get_data_column(sep_column.get())->byte_size(0) * src_column->size() +
+                           ColumnHelper::get_data_column(null_replace_column.get())->byte_size(0) *
+                                   ColumnHelper::count_nulls(src_column);
+        res.resize(chunk_size, byte_size);
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (src_column->is_null(i) || sep_column->is_null(i) || null_replace_column->is_null(i)) {
+                res.set_null(i);
+                continue;
+            }
+            auto datum = src_column->get(i);
+            const auto& datum_array = datum.get_array();
+            bool append = false;
+            Slice sep_slice = sep_column->get(i).get_slice();
+            Slice null_slice = null_replace_column->get(i).get_slice();
+            for (size_t j = 0; j < datum_array.size(); j++) {
+                if (append) {
+                    res.append_partial(sep_slice);
+                }
+                if (datum_array[j].is_null()) {
+                    res.append_partial(null_slice);
+                } else {
+                    Slice value_slice = datum_array[j].get_slice();
+                    res.append_partial(value_slice);
+                }
+                append = true;
+            }
+            res.append_complete(i);
+        }
+        return res.build_nullable_column();
+    }
+
+    static ColumnPtr _join_column_ignore_null(const ColumnPtr& src_column, const ColumnPtr& sep_column,
+                                              size_t chunk_size) {
+        NullableBinaryColumnBuilder res;
+        // bytes_size may be smaller or larger then actual used size
+        // byte_size is only one reserve size
+        size_t byte_size = ColumnHelper::get_data_column(src_column.get())->byte_size() +
+                           ColumnHelper::get_data_column(sep_column.get())->byte_size(0) * src_column->size();
+        res.resize(chunk_size, byte_size);
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (src_column->is_null(i) || sep_column->is_null(i)) {
+                res.set_null(i);
+                continue;
+            }
+
+            auto datum = src_column->get(i);
+            const auto& datum_array = datum.get_array();
+            bool append = false;
+            Slice sep_slice = sep_column->get(i).get_slice();
+            for (size_t j = 0; j < datum_array.size(); j++) {
+                if (datum_array[j].is_null()) {
+                    continue;
+                }
+                if (append) {
+                    res.append_partial(sep_slice);
+                }
+                Slice value_slice = datum_array[j].get_slice();
+                res.append_partial(value_slice);
+                append = true;
+            }
+            res.append_complete(i);
+        }
+
+        return res.build_nullable_column();
     }
 };
 } // namespace starrocks::vectorized

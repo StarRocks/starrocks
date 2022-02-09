@@ -82,6 +82,15 @@ public:
 
 #undef DEFINE_ARRAY_REVERSE_FN
 
+#define DEFINE_ARRAY_JOIN_FN(NAME)                                                         \
+    static ColumnPtr array_join_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayJoin::process(context, columns);                                       \
+    }
+
+    DEFINE_ARRAY_JOIN_FN(varchar);
+
+#undef DEFINE_ARRAY_JOIN_FN
+
     DEFINE_VECTORIZED_FN(array_sum_boolean);
     DEFINE_VECTORIZED_FN(array_sum_tinyint);
     DEFINE_VECTORIZED_FN(array_sum_smallint);
