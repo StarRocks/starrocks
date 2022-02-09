@@ -568,7 +568,6 @@ public class Coordinator {
 
     private void setGlobalRuntimeFilterParams(FragmentExecParams topParams, TNetworkAddress mergeHost)
             throws Exception {
-        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         for (PlanFragment fragment : fragments) {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
             fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
@@ -601,7 +600,12 @@ public class Coordinator {
             }
             fragment.setRuntimeFilterMergeNodeAddresses(fragment.getPlanRoot(), mergeHost);
         }
-        topParams.runtimeFilterParams.setRuntime_filter_max_size(sessionVariable.getGlobalRuntimeFilterBuildMaxSize());
+
+        if (ConnectContext.get() != null) {
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+            topParams.runtimeFilterParams.setRuntime_filter_max_size(
+                    sessionVariable.getGlobalRuntimeFilterBuildMaxSize());
+        }
     }
 
     public List<String> getExportFiles() {
