@@ -5610,6 +5610,17 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testWindowWithAgg() throws Exception {
+        String sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY v1) AS rank  FROM t0 group BY v1, v2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
+
+        sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank  FROM t0 group BY v1, v2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
+    }
+
+    @Test
     public void testWindowWithChildProjectAgg() throws Exception {
         String sql = "SELECT v1, sum(v2) as x1, row_number() over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank " +
                 "FROM t0 group BY v1";
