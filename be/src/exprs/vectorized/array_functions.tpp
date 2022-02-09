@@ -367,7 +367,7 @@ private:
 
         for (size_t i = 0; i < chunk_size; i++) {
             if (src_column->is_null(i) || sep_column->is_null(i) || null_replace_column->is_null(i)) {
-                res.append_null();
+                res.set_null(i);
                 continue;
             }
             auto datum = src_column->get(i);
@@ -403,7 +403,7 @@ private:
 
         for (size_t i = 0; i < chunk_size; i++) {
             if (src_column->is_null(i) || sep_column->is_null(i)) {
-                res.append_null();
+                res.set_null(i);
                 continue;
             }
 
