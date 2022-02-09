@@ -170,6 +170,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
+    public static final String GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE = "global_runtime_filter_build_max_size";
+    public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
+    public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
+            "global_runtime_filter_probe_min_selectivity";
+
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
 
@@ -414,6 +419,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_GLOBAL_RUNTIME_FILTER)
     private boolean enableGlobalRuntimeFilter = true;
+
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterBuildMaxSize = 64 * 1024 * 1024;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterProbeMinSize = 100 * 1024;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
+    private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
 
     //In order to be compatible with the logic of the old planner,
     //When the column name is the same as the alias name,
@@ -723,6 +735,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableGlobalRuntimeFilter(boolean value) {
         enableGlobalRuntimeFilter = value;
+    }
+
+    public long getGlobalRuntimeFilterBuildMaxSize() {
+        return globalRuntimeFilterBuildMaxSize;
+    }
+
+    public long getGlobalRuntimeFilterProbeMinSize() {
+        return globalRuntimeFilterProbeMinSize;
+    }
+
+    public float getGlobalRuntimeFilterProbeMinSelectivity() {
+        return globalRuntimeFilterProbeMinSelectivity;
     }
 
     public boolean isEnablePipelineEngine() {

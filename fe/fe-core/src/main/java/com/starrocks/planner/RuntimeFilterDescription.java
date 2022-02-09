@@ -3,6 +3,7 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
 import com.starrocks.thrift.TRuntimeFilterDescription;
@@ -31,12 +32,10 @@ public class RuntimeFilterDescription {
     private int crossExchangeNodeTimes;
     private boolean equalForNull;
 
-    private static final int ProbeMinSize = 100 * 1024;
-    private static final float ProbeMinSelectivity = 0.5f;
-    public static final int BuildMaxSize = 64 * 1024 * 1024;
     private long buildCardinality;
+    private SessionVariable sessionVariable;
 
-    public RuntimeFilterDescription() {
+    public RuntimeFilterDescription(SessionVariable sv) {
         nodeIdToProbeExpr = new HashMap<>();
         mergeNodes = new ArrayList<>();
         filterId = 0;
@@ -48,6 +47,7 @@ public class RuntimeFilterDescription {
         crossExchangeNodeTimes = 0;
         buildCardinality = 0;
         equalForNull = false;
+        sessionVariable = sv;
     }
 
     public boolean getEqualForNull() {
@@ -82,11 +82,11 @@ public class RuntimeFilterDescription {
         }
 
         long card = node.getCardinality();
-        if (card < ProbeMinSize) {
+        if (card < sessionVariable.getGlobalRuntimeFilterProbeMinSize()) {
             return false;
         }
         float sel = (1.0f - buildCardinality * 1.0f / card);
-        return !(sel < ProbeMinSelectivity);
+        return !(sel < sessionVariable.getGlobalRuntimeFilterProbeMinSelectivity());
     }
 
     public void enterExchangeNode() {

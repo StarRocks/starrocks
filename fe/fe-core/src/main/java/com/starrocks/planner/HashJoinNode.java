@@ -38,6 +38,7 @@ import com.starrocks.catalog.ColumnStats;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THashJoinNode;
@@ -155,6 +156,7 @@ public class HashJoinNode extends PlanNode {
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator,
                                     PlanNode inner, List<BinaryPredicate> eqJoinConjuncts,
                                     JoinOperator joinOp) {
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin()) {
             return;
         }
@@ -164,7 +166,7 @@ public class HashJoinNode extends PlanNode {
             // then it's hard to estimate right bloom filter size, or it's too big.
             // so we'd better to skip this global runtime filter.
             long card = inner.getCardinality();
-            if (card <= 0 || card > RuntimeFilterDescription.BuildMaxSize) {
+            if (card <= 0 || card > sessionVariable.getGlobalRuntimeFilterBuildMaxSize()) {
                 return;
             }
         }
@@ -173,7 +175,7 @@ public class HashJoinNode extends PlanNode {
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
                     BinaryPredicate.IS_EQ_PREDICATE.apply(joinConjunct));
-            RuntimeFilterDescription rf = new RuntimeFilterDescription();
+            RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
             rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
             rf.setBuildPlanNodeId(this.id.asInt());
             rf.setExprOrder(i);
