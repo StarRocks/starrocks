@@ -48,6 +48,10 @@ public abstract class AstVisitor<R, C> {
         return visitNode(node, context);
     }
 
+    public R visitQueryStatement(QueryStatement node, C context) {
+        return visitStatement(node, context);
+    }
+
     // ----------------- Relation ---------------
 
     public R visitRelation(Relation node, C context) {
