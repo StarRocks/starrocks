@@ -8,6 +8,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.SlotRef;
@@ -538,10 +539,15 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     true));
         }
 
+        FunctionCallExpr expr = new FunctionCallExpr(tableFunction.getFunctionName(), node.getChildExpressions());
+        expr.setFn(tableFunction);
+        ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context);
+
         Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
-        for (Expr e : node.getChildExpressions()) {
-            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(e, context);
-            if (e instanceof SlotRef) {
+        for (int i = 0; i < node.getChildExpressions().size(); i++) {
+            Expr e = node.getChildExpressions().get(i);
+            final ScalarOperator scalarOperator = operator.getChild(i);
+            if (scalarOperator instanceof ColumnRefOperator) {
                 projectMap.put((ColumnRefOperator) scalarOperator, scalarOperator);
             } else {
                 ColumnRefOperator columnRefOperator = columnRefFactory.create(e, e.getType(), e.isNullable());
