@@ -16,7 +16,6 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -144,7 +143,7 @@ public class WindowTransformer {
         }
 
         // Reverse the ordering and window for windows ending with UNBOUNDED FOLLOWING,
-        // and and not starting with UNBOUNDED PRECEDING.
+        // and not starting with UNBOUNDED PRECEDING.
         if (windowFrame != null
                 && windowFrame.getRightBoundary().getType() == AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING
                 && windowFrame.getLeftBoundary().getType() != AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING) {
@@ -221,7 +220,7 @@ public class WindowTransformer {
 
         analyticExpr.getOrderByElements().clear();
         analyticExpr.getOrderByElements().addAll(orderings);
-        return new WindowOperator(analyticExpr.getFnCall(), analyticExpr, analyticExpr.getPartitionExprs(),
+        return new WindowOperator(analyticExpr, analyticExpr.getPartitionExprs(),
                 orderByElements, windowFrame);
     }
 
@@ -241,14 +240,17 @@ public class WindowTransformer {
         for (WindowTransformer.WindowOperator windowOperator : windowOperators) {
             Map<ColumnRefOperator, CallOperator> analyticCall = new HashMap<>();
 
-            for (Pair<FunctionCallExpr, AnalyticExpr> functionCallExpr : windowOperator.getWindowFunctions()) {
+            for (AnalyticExpr analyticExpr : windowOperator.getWindowFunctions()) {
+                // The conversion here cannot only convert functionCall,
+                // because it may conflict with the function of the same name
+                // in the aggregation and be converted into the expression generated on agg
+                // eg. select sum(v1), sum(v1) over(order by v2) from foo
                 ScalarOperator agg =
-                        SqlToScalarOperatorTranslator
-                                .translate(functionCallExpr.first, subOpt.getExpressionMapping());
+                        SqlToScalarOperatorTranslator.translate(analyticExpr, subOpt.getExpressionMapping());
                 ColumnRefOperator columnRefOperator =
                         columnRefFactory.create(agg.toString(), agg.getType(), agg.isNullable());
                 analyticCall.put(columnRefOperator, (CallOperator) agg);
-                subOpt.getExpressionMapping().put(functionCallExpr.second, columnRefOperator);
+                subOpt.getExpressionMapping().put(analyticExpr, columnRefOperator);
             }
 
             List<ScalarOperator> partitions = new ArrayList<>();
@@ -450,24 +452,24 @@ public class WindowTransformer {
     }
 
     public static class WindowOperator {
-        private final List<Pair<FunctionCallExpr, AnalyticExpr>> windowFunctions = Lists.newArrayList();
+        private final List<AnalyticExpr> windowFunctions = Lists.newArrayList();
         private final List<Expr> partitionExprs;
         private List<OrderByElement> orderByElements;
         private final AnalyticWindow window;
 
-        public WindowOperator(FunctionCallExpr windowFunctions, AnalyticExpr analyticExpr, List<Expr> partitionExprs,
+        public WindowOperator(AnalyticExpr analyticExpr, List<Expr> partitionExprs,
                               List<OrderByElement> orderByElements, AnalyticWindow window) {
-            this.windowFunctions.add(new Pair<>(windowFunctions, analyticExpr));
+            this.windowFunctions.add(analyticExpr);
             this.partitionExprs = partitionExprs;
             this.orderByElements = orderByElements;
             this.window = window;
         }
 
-        public void addFunction(FunctionCallExpr fnCall, AnalyticExpr analyticExpr) {
-            windowFunctions.add(new Pair<>(fnCall, analyticExpr));
+        public void addFunction(AnalyticExpr analyticExpr) {
+            windowFunctions.add(analyticExpr);
         }
 
-        public List<Pair<FunctionCallExpr, AnalyticExpr>> getWindowFunctions() {
+        public List<AnalyticExpr> getWindowFunctions() {
             return windowFunctions;
         }
 
