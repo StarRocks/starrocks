@@ -600,7 +600,12 @@ public class Coordinator {
             }
             fragment.setRuntimeFilterMergeNodeAddresses(fragment.getPlanRoot(), mergeHost);
         }
-        topParams.runtimeFilterParams.setRuntime_filter_max_size(RuntimeFilterDescription.BuildMaxSize);
+
+        if (ConnectContext.get() != null) {
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+            topParams.runtimeFilterParams.setRuntime_filter_max_size(
+                    sessionVariable.getGlobalRuntimeFilterBuildMaxSize());
+        }
     }
 
     public List<String> getExportFiles() {
