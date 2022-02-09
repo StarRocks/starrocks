@@ -341,7 +341,7 @@ public:
         DCHECK_GE(columns.size(), 2);
         size_t chunk_size = columns[0]->size();
 
-        if (std::any_of(columns.begin(),columns.end(),[](auto col) { return col->only_null();})) {
+        if (std::any_of(columns.begin(), columns.end(), [](const auto& col) { return col->only_null(); })) {
             return ColumnHelper::create_const_null_column(chunk_size);
         }
 
