@@ -14,11 +14,10 @@ singleStatement
 statement
     : queryStatement                                                    #statementDefault
     | USE schema=identifier                                             #use
-    | USE catalog=identifier '.' schema=identifier                      #use
-    | SHOW TABLES ((FROM | IN) qualifiedName)?
-        (LIKE pattern=string)?                                          #showTables
-    | SHOW DATABASES ((FROM | IN) identifier)?
-        (LIKE pattern=string)?                                          #showDatabases
+    | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
+        ((LIKE pattern=string) | (WHERE expression))?                   #showTables
+    | SHOW DATABASES
+        ((LIKE pattern=string) | (WHERE expression))?                   #showDatabases
     ;
 
 queryStatement
@@ -66,7 +65,7 @@ limitElement
     ;
 
 querySpecification
-    : SELECT setQuantifier? selectItem (',' selectItem)*
+    : SELECT hint? setQuantifier? selectItem (',' selectItem)*
       fromClause
       (WHERE where=expression)?
       (GROUP BY groupingElement)?
@@ -81,12 +80,12 @@ fromClause
 groupingElement
     : ROLLUP '(' (expression (',' expression)*)? ')'                                    #rollup
     | CUBE '(' (expression (',' expression)*)? ')'                                      #cube
-    | GROUPING SETS '(' '(' groupingSet ')' (',' '(' groupingSet? ')' )* ')'            #multipleGroupingSets
-    | groupingSet                                                                       #singleGroupingSet
+    | GROUPING SETS '(' groupingSet (',' groupingSet)* ')'                              #multipleGroupingSets
+    | expression (',' expression)*                                                      #singleGroupingSet
     ;
 
 groupingSet
-    : expression (',' expression)*
+    : '(' expression? (',' expression)* ')'
     ;
 
 commonTableExpression
@@ -122,6 +121,11 @@ joinType
 
 hint
     : '[' IDENTIFIER (',' IDENTIFIER)* ']'
+    | '/*+' SET_VAR '(' hintMap (',' hintMap)* ')' '*/'
+    ;
+
+hintMap
+    : k=IDENTIFIER '=' v=primaryExpression
     ;
 
 joinCriteria
@@ -203,14 +207,25 @@ primaryExpression
     | IF '(' (expression (',' expression)*)? ')'                                          #functionCall
     | qualifiedName '(' ASTERISK ')' over?                                                #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
+    | windowFunction over                                                                 #windowFunctionCall
     ;
 
 informationFunctionExpression
-    : name=DATABASE '(' ')'
-    | name=SCHEMA '(' ')'
-    | name=USER '(' ')'
-    | name=CONNECTION_ID '(' ')'
-    | name=CURRENT_USER '(' ')'
+    : name = DATABASE '(' ')'
+    | name = SCHEMA '(' ')'
+    | name = USER '(' ')'
+    | name = CONNECTION_ID '(' ')'
+    | name = CURRENT_USER '(' ')'
+    ;
+
+windowFunction
+    : name = ROW_NUMBER '(' ')'
+    | name = RANK '(' ')'
+    | name = DENSE_RANK '(' ')'
+    | name = LEAD  '(' (expression (',' expression)*)? ')'
+    | name = LAG '(' (expression (',' expression)*)? ')'
+    | name = FIRST_VALUE '(' (expression (',' expression)*)? ')'
+    | name = LAST_VALUE '(' (expression (',' expression)*)? ')'
     ;
 
 string

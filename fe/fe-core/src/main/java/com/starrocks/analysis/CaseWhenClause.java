@@ -24,7 +24,7 @@ package com.starrocks.analysis;
 /**
  * captures info of a single WHEN expr THEN expr clause.
  */
-public class CaseWhenClause {
+public class CaseWhenClause implements ParseNode {
     private final Expr whenExpr;
     private final Expr thenExpr;
 
