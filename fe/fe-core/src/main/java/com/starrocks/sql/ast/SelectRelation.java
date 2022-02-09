@@ -4,8 +4,10 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.SelectList;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.Scope;
 
@@ -14,24 +16,11 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class SelectRelation extends QueryRelation {
-    private final Expr predicate;
-
-    private final List<Expr> groupBy;
-    private final List<FunctionCallExpr> aggregate;
-    private final List<List<Expr>> groupingSetsList;
-    private final Expr having;
-    private final List<Expr> groupingFunctionCallExprs;
-
-    private final List<OrderByElement> sortClause;
-    private LimitElement limit;
-
-    private final boolean isDistinct;
-
-    private final List<AnalyticExpr> outputAnalytic;
-    private final List<AnalyticExpr> orderByAnalytic;
-
-    private final Scope orderScope;
-
+    /**
+     * selectList is created by parser
+     * and will be converted to outputExpr in Analyzer
+     */
+    private SelectList selectList;
     /**
      * out fields is different with output expr
      * output fields is represent externally visible resolved names
@@ -39,11 +28,31 @@ public class SelectRelation extends QueryRelation {
      */
     private List<Expr> outputExpr;
 
+    private final Expr predicate;
+
+    /**
+     * groupByClause is created by parser
+     * and will be converted to groupBy and groupingSetsList in Analyzer
+     */
+    private GroupByClause groupByClause;
+    private List<Expr> groupBy;
+    private List<FunctionCallExpr> aggregate;
+    private List<List<Expr>> groupingSetsList;
+    private Expr having;
+    private List<Expr> groupingFunctionCallExprs;
+
+    private boolean isDistinct;
+
+    private List<AnalyticExpr> outputAnalytic;
+    private List<AnalyticExpr> orderByAnalytic;
+
+    private Scope orderScope;
+
     /**
      * order by expression resolve source expression,
      * column ref map will build in project operator when aggregation present
      */
-    private final List<Expr> orderSourceExpressions;
+    private List<Expr> orderSourceExpressions;
 
     /**
      * Relations referenced in From clause. The Relation can be a CTE/table
@@ -52,6 +61,21 @@ public class SelectRelation extends QueryRelation {
     private final Relation relation;
 
     private Map<Expr, FieldId> columnReferences;
+
+    public SelectRelation(
+            SelectList selectList,
+            Relation fromRelation,
+            Expr predicate,
+            GroupByClause groupByClause,
+            Expr having) {
+        super(null);
+        this.selectList = selectList;
+        this.relation = fromRelation;
+        this.predicate = predicate;
+        this.groupByClause = groupByClause;
+        this.having = having;
+    }
+
 
     public SelectRelation(List<Expr> outputExpr, List<String> columnOutputNames, boolean isDistinct,
                           Scope orderScope, List<Expr> orderSourceExpressions,

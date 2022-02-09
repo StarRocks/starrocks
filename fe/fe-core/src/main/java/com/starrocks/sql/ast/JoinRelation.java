@@ -4,6 +4,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 
+import java.util.List;
+
 public class JoinRelation extends Relation {
     private final JoinOperator type;
     private final Relation left;
@@ -11,6 +13,12 @@ public class JoinRelation extends Relation {
     private final Expr onPredicate;
     private String joinHint = "";
     private final boolean lateral;
+
+    /**
+     * usingColNames is created by parser
+     * and will be converted to onPredicate in Analyzer
+     */
+    private List<String> usingColNames;
 
     public JoinRelation(JoinOperator type, Relation left, Relation right, Expr onPredicate, boolean isLateral) {
         this.type = type;
@@ -46,6 +54,14 @@ public class JoinRelation extends Relation {
 
     public boolean isLateral() {
         return lateral;
+    }
+
+    public List<String> getUsingColNames() {
+        return usingColNames;
+    }
+
+    public void setUsingColNames(List<String> usingColNames) {
+        this.usingColNames = usingColNames;
     }
 
     @Override
