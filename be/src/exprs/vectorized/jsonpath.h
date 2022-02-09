@@ -70,7 +70,7 @@ struct ArraySelectorSlice final : public ArraySelector {
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
 };
 
-// JsonPath implement that suuport array building
+// JsonPath implement that support array building
 struct JsonPathPiece {
     std::string key;
     std::shared_ptr<ArraySelector> array_selector;
