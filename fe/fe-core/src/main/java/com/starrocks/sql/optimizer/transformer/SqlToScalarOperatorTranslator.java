@@ -3,6 +3,7 @@ package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
@@ -357,6 +358,20 @@ public final class SqlToScalarOperatorTranslator {
                     arguments,
                     expr.getFn(),
                     expr.getParams().isDistinct());
+        }
+
+        @Override
+        public ScalarOperator visitAnalyticExpr(AnalyticExpr expr, Void context) {
+            FunctionCallExpr functionCallExpr = expr.getFnCall();
+
+            List<ScalarOperator> arguments =
+                    functionCallExpr.getChildren().stream().map(this::visit).collect(Collectors.toList());
+            return new CallOperator(
+                    functionCallExpr.getFnName().getFunction(),
+                    functionCallExpr.getType(),
+                    arguments,
+                    functionCallExpr.getFn(),
+                    functionCallExpr.getParams().isDistinct());
         }
 
         @Override
