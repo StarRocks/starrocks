@@ -1046,7 +1046,7 @@ void OrcScannerAdapter::build_column_name_set(std::unordered_set<std::string>* n
                                               const std::vector<std::string>* hive_column_names,
                                               const orc::Type& root_type) {
     name_set->clear();
-    if (hive_column_names != nullptr) {
+    if (hive_column_names != nullptr && hive_column_names->size() > 0) {
         // build hive column names index.
         int size = std::min(hive_column_names->size(), root_type.getSubtypeCount());
         for (int i = 0; i < size; i++) {
