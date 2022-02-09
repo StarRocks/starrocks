@@ -76,6 +76,10 @@ public:
         }
     }
 
+    ColumnPtr build_nullable_column() {
+        return NullableColumn::create(_column, _null_column);
+    }
+
     void reserve(int size) {
         _column->reserve(size);
         _null_column->reserve(size);
@@ -142,9 +146,16 @@ public:
     // as the number of evolving columns; however, the offset is updated
     // only once, so we split the append into append_partial and append_complete
     // as follows
-    void append_partial(uint8_t* begin, uint8_t* end) {
+    void append_partial(const uint8_t* begin, const uint8_t* end) {
         Bytes& bytes = _column->get_bytes();
         bytes.insert(bytes.end(), begin, end);
+    }
+
+    void append_partial(const Slice& slice) {
+        const auto* begin = reinterpret_cast<const uint8_t*>(slice.data);
+        const auto* end = begin + slice.size;
+
+        append_partial(begin, end);
     }
 
     void append_complete(size_t i) {

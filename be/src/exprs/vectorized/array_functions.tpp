@@ -1,7 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/array_column.h"
+#include "column/column_builder.h"
 #include "column/column_hash.h"
+#include "column/column_viewer.h"
 #include "exprs/vectorized/function_helper.h"
 #include "util/orlp/pdqsort.h"
 
@@ -335,8 +337,8 @@ private:
 class ArrayJoin {
 public:
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        // TODO: optimize the performace of const sep or const null replace str
         DCHECK_GE(columns.size(), 2);
-
         size_t chunk_size = columns[0]->size();
 
         if (columns[0]->only_null()) {
@@ -344,154 +346,86 @@ public:
         }
 
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
-        Slice sep = columns[1]->get(0).get_slice();
-        Slice null_replace_str;
-        bool ignore_null = true;
-
-        if (columns.size() > 2) {
-            null_replace_str = columns[2]->get(0).get_slice();
-            ignore_null = false;
-        }
-
-        if (src_column->is_nullable()) {
-            auto dest_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-            auto* dest_binary_column = down_cast<NullableColumn*>(dest_column.get())->data_column().get();
-            dest_column->null_column_data() =
-                    down_cast<const NullableColumn*>(src_column.get())->immutable_null_column_data();
-            dest_column->set_has_null(down_cast<const NullableColumn*>(src_column.get())->has_null());
-
-            if (ignore_null) {
-                _join_array_column<true>(dest_binary_column,
-                                         *down_cast<NullableColumn*>(src_column.get())->data_column(), sep,
-                                         null_replace_str, chunk_size);
-            } else {
-                _join_array_column<false>(dest_binary_column,
-                                          *down_cast<NullableColumn*>(src_column.get())->data_column(), sep,
-                                          null_replace_str, chunk_size);
-            }
-            return dest_column;
+        if (columns.size() <= 2) {
+            return _join_column_ignore_null(src_column, columns[1], chunk_size);
         } else {
-            auto dest_column = BinaryColumn::create();
-            if (ignore_null) {
-                _join_array_column<true>(dest_column.get(), *src_column, sep, null_replace_str, chunk_size);
-            } else {
-                _join_array_column<false>(dest_column.get(), *src_column, sep, null_replace_str, chunk_size);
-            }
-            return dest_column;
+            return _join_column_replace_null(src_column, columns[1], columns[2], chunk_size);
         }
     }
 
 private:
-    static void _join_binary_column(Column* dest_column, const Column& src_column, const Slice& sep,
-                                    const Buffer<uint32_t>& offsets, size_t chunk_size) {
-        const auto& src_binary_column = down_cast<const BinaryColumn&>(src_column);
+    static ColumnPtr _join_column_replace_null(const ColumnPtr& src_column, const ColumnPtr& sep_column,
+                                               const ColumnPtr& null_replace_column, size_t chunk_size) {
+        NullableBinaryColumnBuilder res;
+        // byte_size may be smaller or larger then actual used size
+        // byte_size is only one reserve size
+        size_t byte_size = ColumnHelper::get_data_column(src_column.get())->byte_size() +
+                           ColumnHelper::get_data_column(sep_column.get())->byte_size(0) * src_column->size() +
+                           ColumnHelper::get_data_column(null_replace_column.get())->byte_size(0) *
+                                   ColumnHelper::count_nulls(src_column);
+        res.resize(chunk_size, byte_size);
 
-        auto* dest_binary_column = down_cast<BinaryColumn*>(dest_column);
-        auto& dest_offsets = dest_binary_column->get_offset();
-        auto& dest_bytes = dest_binary_column->get_bytes();
-
-        dest_offsets.resize(chunk_size + 1);
-        dest_bytes.resize(src_column.byte_size() + sep.size * src_binary_column.size());
-        uint8_t* dest_ptr = dest_bytes.data();
-
-        size_t start = 0;
         for (size_t i = 0; i < chunk_size; i++) {
-            size_t start_offset = offsets[i];
-            size_t end_offset = offsets[i + 1];
+            if (src_column->is_null(i) || sep_column->is_null(i) || null_replace_column->is_null(i)) {
+                res.append_null();
+                continue;
+            }
+            auto datum = src_column->get(i);
+            const auto& datum_array = datum.get_array();
             bool append = false;
-            for (size_t j = start_offset; j < end_offset; j++) {
-                Slice slice = src_binary_column.get_slice(j);
-                memcpy(dest_ptr + start, slice.data, slice.size);
-                start += slice.size;
-
-                memcpy(dest_ptr + start, sep.data, sep.size);
-                start += sep.size;
-
+            Slice sep_slice = sep_column->get(i).get_slice();
+            Slice null_slice = null_replace_column->get(i).get_slice();
+            for (size_t j = 0; j < datum_array.size(); j++) {
+                if (append) {
+                    res.append_partial(sep_slice);
+                }
+                if (datum_array[j].is_null()) {
+                    res.append_partial(null_slice);
+                } else {
+                    Slice value_slice = datum_array[j].get_slice();
+                    res.append_partial(value_slice);
+                }
                 append = true;
             }
-            // remove the trailing separator
-            if (append) {
-                start -= sep.size;
-            }
-            dest_offsets[i + 1] = start;
+            res.append_complete(i);
         }
-        // size of dest_bytes may be larger then actual used
-        dest_bytes.resize(start);
+        return res.build_nullable_column();
     }
 
-    template <bool ignore_null>
-    static void _join_binary_column_nullable(Column* dest_column, const Column& src_column, const Slice& sep,
-                                             const Slice& null_replace_str, const Buffer<uint32_t>& offsets,
-                                             size_t chunk_size) {
-        const auto& src_nullable_column = down_cast<const NullableColumn&>(src_column);
-        const auto& src_binary_column = down_cast<const BinaryColumn&>(src_nullable_column.data_column_ref());
-
-        auto* dest_binary_column = down_cast<BinaryColumn*>(dest_column);
-        auto& dest_offsets = dest_binary_column->get_offset();
-        auto& dest_bytes = dest_binary_column->get_bytes();
-
-        dest_offsets.resize(chunk_size + 1);
-        if constexpr (ignore_null) {
-            dest_bytes.resize(src_binary_column.byte_size() + sep.size * src_binary_column.size());
-        } else {
-            dest_bytes.resize(src_binary_column.byte_size() + sep.size * src_binary_column.size() +
-                              null_replace_str.size * src_nullable_column.null_count());
-        }
-        uint8_t* dest_ptr = dest_bytes.data();
-
-        size_t start = 0;
+    static ColumnPtr _join_column_ignore_null(const ColumnPtr& src_column, const ColumnPtr& sep_column,
+                                              size_t chunk_size) {
+        NullableBinaryColumnBuilder res;
+        // bytes_size may be smaller or larger then actual used size
+        // byte_size is only one reserve size
+        size_t byte_size = ColumnHelper::get_data_column(src_column.get())->byte_size() +
+                           ColumnHelper::get_data_column(sep_column.get())->byte_size(0) * src_column->size();
+        res.resize(chunk_size, byte_size);
 
         for (size_t i = 0; i < chunk_size; i++) {
-            size_t start_offset = offsets[i];
-            size_t end_offset = offsets[i + 1];
+            if (src_column->is_null(i) || sep_column->is_null(i)) {
+                res.append_null();
+                continue;
+            }
+
+            auto datum = src_column->get(i);
+            const auto& datum_array = datum.get_array();
             bool append = false;
-            for (size_t j = start_offset; j < end_offset; j++) {
-                if (!src_nullable_column.is_null(j)) {
-                    Slice slice = src_binary_column.get_slice(j);
-                    memcpy(dest_ptr + start, slice.data, slice.size);
-                    start += slice.size;
-
-                    memcpy(dest_ptr + start, sep.data, sep.size);
-                    start += sep.size;
-                    append = true;
-                } else if constexpr (!ignore_null) {
-                    memcpy(dest_ptr + start, null_replace_str.data, null_replace_str.size);
-                    start += null_replace_str.size;
-
-                    memcpy(dest_ptr + start, sep.data, sep.size);
-                    start += sep.size;
-                    append = true;
+            Slice sep_slice = sep_column->get(i).get_slice();
+            for (size_t j = 0; j < datum_array.size(); j++) {
+                if (datum_array[j].is_null()) {
+                    continue;
                 }
+                if (append) {
+                    res.append_partial(sep_slice);
+                }
+                Slice value_slice = datum_array[j].get_slice();
+                res.append_partial(value_slice);
+                append = true;
             }
-
-            // remove the trailing separator
-            if (append) {
-                start -= sep.size;
-            }
-            dest_offsets[i + 1] = start;
+            res.append_complete(i);
         }
-        // size of dest_bytes may be larger then actual used
-        dest_bytes.resize(start);
-    }
 
-    template <bool ignore_null>
-    static void _join_array_column(Column* dest_column, const Column& src_column, const Slice& sep,
-                                   const Slice& null_replace_str, size_t chunk_size) {
-        const auto& src_array_column = down_cast<const ArrayColumn&>(src_column);
-        const auto& src_offsets = src_array_column.offsets().get_data();
-        const auto& src_element_column = src_array_column.elements();
-
-        if (src_element_column.is_nullable()) {
-            if (src_element_column.has_null()) {
-                _join_binary_column_nullable<ignore_null>(dest_column, src_element_column, sep, null_replace_str,
-                                                          src_offsets, chunk_size);
-            } else {
-                const auto& src_data_column = down_cast<const NullableColumn&>(src_element_column).data_column();
-                _join_binary_column(dest_column, *src_data_column, sep, src_offsets, chunk_size);
-            }
-        } else {
-            _join_binary_column(dest_column, src_element_column, sep, src_offsets, chunk_size);
-        }
+        return res.build_nullable_column();
     }
 };
 } // namespace starrocks::vectorized
