@@ -319,11 +319,10 @@ public:
         // find the first value >= target. after loop,
         // - left == index of first value >= target when found
         // - left == _num_elements when not found (all values < target)
-        auto type_info = get_type_info(Type);
         while (left < right) {
             size_t mid = left + (right - left) / 2;
             const void* mid_value = get_data(mid * SIZE_OF_TYPE);
-            if (type_info->cmp(mid_value, value) < 0) {
+            if (TypeComparator<Type>::cmp(mid_value, value) < 0) {
                 left = mid + 1;
             } else {
                 right = mid;
@@ -333,7 +332,7 @@ public:
             return Status::NotFound("all value small than the value");
         }
         const void* find_value = get_data(left * SIZE_OF_TYPE);
-        *exact_match = type_info->cmp(find_value, value) == 0;
+        *exact_match = TypeComparator<Type>::cmp(find_value, value) == 0;
 
         _cur_index = left;
         return Status::OK();
