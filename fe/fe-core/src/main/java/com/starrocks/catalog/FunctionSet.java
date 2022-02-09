@@ -597,7 +597,7 @@ public class FunctionSet {
                 false, false, false));
 
         addBuiltin(AggregateFunction.createBuiltin(RETENTION, Lists.newArrayList(Type.ARRAY_BOOLEAN),
-                Type.ARRAY_BOOLEAN, Type.ARRAY_BOOLEAN, false, false, false));
+                Type.ARRAY_BOOLEAN, Type.BIGINT, false, false, false));
 
         // Avg
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available

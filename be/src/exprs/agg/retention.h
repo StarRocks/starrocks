@@ -24,74 +24,93 @@
 
 namespace starrocks::vectorized {
 struct RetentionState {
-    void merge_array_element(const ArrayColumn* input_column, size_t num_row) {
-        const auto& ele_col = input_column->elements();
-        auto offsets = input_column->offsets().get_data();
+    static void udpate(uint64_t* value_ptr, const ArrayColumn* column, size_t row_num) {
+        const auto& ele_col = column->elements();
+        const auto& offsets = column->offsets().get_data();
 
+        size_t array_size = 0;
         if (ele_col.is_nullable()) {
             const auto& null_column = down_cast<const NullableColumn&>(ele_col);
-
             auto data_column = down_cast<BooleanColumn*>(null_column.data_column().get());
-            size_t offset = offsets[num_row];
-            size_t array_size = offsets[num_row + 1] - offset;
+            size_t offset = offsets[row_num];
+            array_size = offsets[row_num + 1] - offset;
 
-            if (array_size > boolean_vector.size()) {
-                boolean_vector.resize(array_size);
+            // We allow 31 conditions at most, so limit it
+            if (array_size > MAX_CONDITION_SIZE) {
+                array_size = MAX_CONDITION_SIZE;
             }
 
             for (size_t i = 0; i < array_size; ++i) {
-                uint32_t ele_offset = offset + i;
-                boolean_vector[i] |= null_column.is_null(i) ? 0 : data_column->get_data()[ele_offset];
+                auto ele_offset = offset + i;
+                if (!null_column.is_null(ele_offset) && data_column->get_data()[ele_offset]) {
+                    // Set right bit for condition.
+                    (*value_ptr) |= RetentionState::bool_values[i];
+                }
             }
         } else {
             const auto& data_column = down_cast<const BooleanColumn&>(ele_col);
-            size_t offset = offsets[num_row];
-            size_t array_size = offsets[num_row + 1] - offset;
+            size_t offset = offsets[row_num];
+            array_size = offsets[row_num + 1] - offset;
 
-            if (array_size > boolean_vector.size()) {
-                boolean_vector.resize(array_size);
+            if (array_size > MAX_CONDITION_SIZE) {
+                array_size = MAX_CONDITION_SIZE;
             }
 
             for (size_t i = 0; i < array_size; ++i) {
-                uint32_t ele_offset = offset + i;
-                boolean_vector[i] |= data_column.get_data()[ele_offset];
-            }
-        }
-    }
-
-    template <bool finalize>
-    void serialize_to_array_column(ArrayColumn* array_column) const {
-        if (!boolean_vector.empty()) {
-            size_t size = boolean_vector.size();
-            DatumArray array;
-            array.reserve(size);
-            for (int i = 0; i < size; i++) {
-                if constexpr (finalize) {
-                    // Get final result through remove values that first condition is not satisfied.
-                    array.emplace_back((uint8_t)(boolean_vector[0] & boolean_vector[i]));
-                } else {
-                    array.emplace_back(boolean_vector[i]);
+                if (data_column.get_data()[offset + i]) {
+                    (*value_ptr) |= RetentionState::bool_values[i];
                 }
             }
-            array_column->append_datum(array);
         }
+
+        (*value_ptr) |= array_size;
     }
 
-    /*
-     * The nth element of boolean_vector is the partial result of 
-     * nth condition in retention definition:
-     * 
-     * ARRAY retention(Array[cond1, cond2, cond3, cond4...]);
-     * 
-     */
-    std::vector<uint8_t> boolean_vector;
+    void udpate(const ArrayColumn* column, size_t row_num) {
+        uint64_t* value_ptr = &boolean_value;
+        RetentionState::udpate(value_ptr, column, row_num);
+    }
+
+    void finalize_to_array_column(ArrayColumn* array_column) const {
+        auto size = (boolean_value & MAX_CONDITION_SIZE);
+        DatumArray array;
+        if (size > 0) {
+            array.reserve(size);
+            auto first_condition = ((boolean_value & bool_values[0]) > 0);
+            array.emplace_back((uint8_t)first_condition);
+            if (first_condition) {
+                for (int i = 1; i < size; ++i) {
+                    array.emplace_back((uint8_t)((boolean_value & bool_values[i]) > 0));
+                }
+            } else {
+                for (int i = 1; i < size; ++i) {
+                    array.emplace_back((uint8_t)0);
+                }
+            }
+        }
+        array_column->append_datum(array);
+    }
+
+    // We use top 31 bits of boolean_value to indicate which condition is true;
+    // We use the last 5 bits of boolean_value to indicate size of conditions(so 31 conditions at most).
+    uint64_t boolean_value;
+
+    // Mask is used to identify top 31 bits.
+    static inline uint64_t bool_values[] = {1UL << 63, 1UL << 62, 1UL << 61, 1UL << 60, 1UL << 59, 1UL << 58, 1UL << 57,
+                                            1UL << 56, 1UL << 55, 1UL << 54, 1UL << 53, 1UL << 52, 1UL << 51, 1UL << 50,
+                                            1UL << 49, 1UL << 48, 1UL << 47, 1UL << 46, 1UL << 45, 1UL << 44, 1UL << 43,
+                                            1UL << 42, 1UL << 41, 1UL << 40, 1UL << 39, 1UL << 38, 1UL << 37, 1UL << 36,
+                                            1UL << 35, 1UL << 34, 1UL << 33};
+    static constexpr int MAX_CONDITION_SIZE_BIT = 5;
+    // Mask is used to identify the last 5 bits.
+    static constexpr int MAX_CONDITION_SIZE = (1 << MAX_CONDITION_SIZE_BIT) - 1;
 };
 
 /*
  * retention is a aggregate function to compute from input(array) to output(array), result is consist of (0|1) value, 
  * It's definition is follows:
  * 
- *  ARRAY retention(Array[cond1, cond2, cond3, cond4...])
+ *  ARRAY retention(Array[cond1, cond2, cond3, cond4...]) (at most 31 conditions)
  * 
  *  cond is predicates, and 
  *  The 1th element of output ARRAY is compute with cond1.
@@ -108,33 +127,33 @@ class RetentionAggregateFunction final
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        const auto* column = down_cast<const ArrayColumn*>(columns[0]);
-        this->data(state).merge_array_element(column, row_num);
+        auto column = down_cast<const ArrayColumn*>(columns[0]);
+        this->data(state).udpate(column, row_num);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        const auto* input_column = down_cast<const ArrayColumn*>(column);
-        this->data(state).merge_array_element(input_column, row_num);
+        const auto* input_column = down_cast<const Int64Column*>(column);
+        this->data(state).boolean_value |= input_column->get_data()[row_num];
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        auto* column = down_cast<ArrayColumn*>(to);
-        this->data(state).serialize_to_array_column<false>(column);
+        down_cast<Int64Column*>(to)->append(this->data(state).boolean_value);
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* array_column = down_cast<ArrayColumn*>(to);
-        this->data(state).serialize_to_array_column<true>(array_column);
+        this->data(state).finalize_to_array_column(array_column);
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
-        auto* dst_column = down_cast<ArrayColumn*>((*dst).get());
+        auto* dst_column = down_cast<Int64Column*>((*dst).get());
         dst_column->reserve(chunk_size);
 
         const auto* src_column = down_cast<const ArrayColumn*>(src[0].get());
         for (size_t i = 0; i < chunk_size; ++i) {
-            auto ele_vector = src_column->get(i).get_array();
-            dst_column->append_datum(ele_vector);
+            uint64_t boolean_value = 0;
+            RetentionState::udpate(&boolean_value, src_column, i);
+            dst_column->append(boolean_value);
         }
     }
 
