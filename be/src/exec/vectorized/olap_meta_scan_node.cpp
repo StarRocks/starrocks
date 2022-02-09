@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #include "exec/vectorized/olap_meta_scan_node.h"
 
+#include "glog/logging.h"
+
 namespace starrocks {
 namespace vectorized {
 
@@ -58,8 +60,9 @@ Status OlapMetaScanNode::prepare(RuntimeState* state) {
 
 Status OlapMetaScanNode::open(RuntimeState* state) {
     if (!_is_init) {
-        return Status::InternalError("Open before Init.");
+        return Status::InternalError("MetaScan open called repeatedly.");
     }
+
     for (auto& scan_range : _scan_ranges) {
         OlapMetaScannerParams scanner_params;
         scanner_params.scan_range = scan_range.get();
@@ -73,6 +76,8 @@ Status OlapMetaScanNode::open(RuntimeState* state) {
     }
 
     _cursor_idx = 0;
+    DCHECK_GT(_scanners.size(), 0);
+    RETURN_IF_ERROR(_scanners[_cursor_idx]->open(state));
 
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(ExecNode::open(state));
@@ -83,13 +88,14 @@ Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
     RETURN_IF_CANCELLED(state);
     if (!_scanners[_cursor_idx]->has_more()) {
+        _scanners[_cursor_idx]->close(state);
         _cursor_idx++;
     }
     if (_cursor_idx >= _scanners.size()) {
         *eos = true;
         return Status::OK();
     }
-
+    RETURN_IF_ERROR(_scanners[_cursor_idx]->open(state));
     RETURN_IF_ERROR(_scanners[_cursor_idx]->get_chunk(state, chunk));
     return Status::OK();
 }
@@ -97,6 +103,10 @@ Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
 Status OlapMetaScanNode::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
+    }
+
+    for (auto scanner : _scanners) {
+        scanner->close(state);
     }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
