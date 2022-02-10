@@ -214,7 +214,7 @@ public:
         }
         // we put std::numeric_limits<>::max/lowest in parenthesis
         // to avoid a clash with the Windows.h header under Windows
-        return (std::numeric_limits<uint64_t>::max)();
+        return (std::numeric_limits<uint64_t>::min)();
     }
 
     /**
@@ -1497,6 +1497,49 @@ public:
             return _set.size();
         }
         return 0;
+    }
+
+    uint64_t max() const{
+        switch (_type) {
+            case EMPTY:
+                return std::numeric_limits<uint64_t>::lowest();
+            case SINGLE:
+                return _sv;
+            case BITMAP:
+                return _bitmap->maximum();
+            case SET:
+                uint64_t max = std::numeric_limits<uint64_t>::lowest();
+                for (const auto value : _set) {
+                    if(value > max) {
+                        max = value;
+                    }
+                }
+                return max;
+        }
+        return std::numeric_limits<uint64_t>::lowest();
+    }
+
+    uint64_t min() const{
+        switch (_type) {
+            case EMPTY:
+                return std::numeric_limits<uint64_t>::lowest();
+            case SINGLE:
+                return _sv;
+            case BITMAP:
+                return _bitmap->minimum();
+            case SET:
+                if(_set.size() == 0) {
+                    return std::numeric_limits<uint64_t>::lowest();
+                }
+                uint64_t min = std::numeric_limits<uint64_t>::max();
+                for (const auto value : _set) {
+                    if(value < min) {
+                        min = value;
+                    }
+                }
+                return min;
+        }
+        return std::numeric_limits<uint64_t>::lowest();
     }
 
     // Return how many bytes are required to serialize this bitmap.
