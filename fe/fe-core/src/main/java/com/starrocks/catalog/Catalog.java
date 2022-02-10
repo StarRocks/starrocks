@@ -6147,8 +6147,8 @@ public class Catalog {
         return functionSet.getBuiltinFunctions();
     }
 
-    public boolean isNonNullResultWithNullParamFunction(String funcName) {
-        return functionSet.isNonNullResultWithNullParamFunctions(funcName);
+    public boolean isNotAlwaysNullResultWithNullParamFunction(String funcName) {
+        return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
     }
 
     /**

@@ -89,6 +89,7 @@ public class FunctionSet {
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String IF = "if";
     public static final String IF_NULL = "ifnull";
+    public static final String MD5_SUM = "md5sum";
 
     // Arithmetic functions:
     public static final String ADD = "add";
@@ -165,9 +166,10 @@ public class FunctionSet {
      * to row function when init.
      */
     private final Map<String, List<Function>> vectorizedFunctions;
+    // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
-    private final ImmutableSet<String> nonNullResultWithNullParamFunctions = ImmutableSet.of("if", "hll_hash",
-            "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce", "md5sum");
+    private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions = ImmutableSet.of("if",
+            "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce");
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -211,6 +213,7 @@ public class FunctionSet {
                     .add(FunctionSet.CURRENT_TIME)
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
+                    .add(FunctionSet.MD5_SUM)
                     .build();
 
     public FunctionSet() {
@@ -286,8 +289,9 @@ public class FunctionSet {
         initAggregateBuiltins();
     }
 
-    public boolean isNonNullResultWithNullParamFunctions(String funcName) {
-        return nonNullResultWithNullParamFunctions.contains(funcName);
+    public boolean isNotAlwaysNullResultWithNullParamFunctions(String funcName) {
+        return notAlwaysNullResultWithNullParamFunctions.contains(funcName)
+                || alwaysReturnNonNullableFunctions.contains(funcName);
     }
 
     public Function getFunction(Function desc, Function.CompareMode mode) {
