@@ -23,6 +23,7 @@
 
 #include <pthread.h>
 
+#include <future>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -40,7 +41,7 @@ class LoadPathMgr {
 public:
     LoadPathMgr(ExecEnv* env);
 
-    ~LoadPathMgr() = default;
+    ~LoadPathMgr();
 
     Status init();
 
@@ -58,12 +59,14 @@ private:
     void clean_error_log();
     void clean();
     void process_path(time_t now, const std::string& path, int64_t reserve_hours);
-
+    std::future<bool>& stop_future() { return _stop_future; }
     static void* cleaner(void* param);
 
     ExecEnv* _exec_env;
     std::mutex _lock;
     std::vector<std::string> _path_vec;
+    std::promise<bool> _stop;
+    std::future<bool> _stop_future;
     int _idx;
     pthread_t _cleaner_id = 0;
     std::string _error_log_dir;
