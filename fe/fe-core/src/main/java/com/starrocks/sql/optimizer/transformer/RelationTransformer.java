@@ -7,7 +7,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
@@ -547,7 +546,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             if (scalarOperator instanceof ColumnRefOperator) {
                 projectMap.put((ColumnRefOperator) scalarOperator, scalarOperator);
             } else {
-                ColumnRefOperator columnRefOperator = columnRefFactory.create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+                ColumnRefOperator columnRefOperator =
+                        columnRefFactory.create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
                 projectMap.put(columnRefOperator, scalarOperator);
             }
         }
