@@ -214,7 +214,7 @@ public:
         }
         // we put std::numeric_limits<>::max/lowest in parenthesis
         // to avoid a clash with the Windows.h header under Windows
-        return (std::numeric_limits<uint64_t>::min)();
+        return (std::numeric_limits<uint64_t>::lowest)();
     }
 
     /**
