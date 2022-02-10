@@ -105,7 +105,6 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregate
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
 
@@ -287,7 +286,6 @@ public class RuleSet {
     }
 
     public void addJoinTransformationRules() {
-        transformRules.add(new SemiReorderRule());
         transformRules.add(JoinCommutativityRule.getInstance());
         transformRules.add(JoinAssociativityRule.getInstance());
     }
