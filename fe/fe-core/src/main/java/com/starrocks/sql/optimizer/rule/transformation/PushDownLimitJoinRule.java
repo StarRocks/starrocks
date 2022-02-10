@@ -44,6 +44,14 @@ public class PushDownLimitJoinRule extends TransformationRule {
             return Lists.newArrayList(child);
         }
 
+        if (joinType.isSemiAntiJoin()) {
+            return Lists.newArrayList(child);
+        } else if (joinType.isInnerJoin() && join.getOnPredicate() != null) {
+            return Lists.newArrayList(child);
+        } else if (joinType.isCrossJoin() && join.getOnPredicate() != null) {
+            return Lists.newArrayList(child);
+        }
+
         // Cross-Join || Full-Outer-Join
         int[] pushDownChildIdx = {0, 1};
 
