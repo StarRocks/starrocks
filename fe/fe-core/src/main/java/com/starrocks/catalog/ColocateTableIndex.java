@@ -278,6 +278,15 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    public boolean isGroupExist(String fullGroupName) {
+        readLock();
+        try {
+            return groupName2Id.containsKey(fullGroupName);
+        } finally {
+            readUnlock();
+        }
+    }
+
     public boolean isSameGroup(long table1, long table2) {
         readLock();
         try {
@@ -374,6 +383,23 @@ public class ColocateTableIndex implements Writable {
                 sets.add(Sets.newHashSet(backends));
             }
             return sets;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public List<List<Long>> getBackendsPerBucketSeq(String fullGroupName) {
+        readLock();
+        try {
+            GroupId groupId = groupName2Id.get(fullGroupName);
+            if (groupId == null) {
+                return Lists.newArrayList();
+            }
+            List<List<Long>> backendsPerBucketSeq = group2BackendsPerBucketSeq.get(groupId);
+            if (backendsPerBucketSeq == null) {
+                return Lists.newArrayList();
+            }
+            return backendsPerBucketSeq;
         } finally {
             readUnlock();
         }

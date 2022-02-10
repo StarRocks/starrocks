@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -413,7 +414,9 @@ public class OlapTable extends Table {
         }
     }
 
-    public Status resetIdsForRestore(Catalog catalog, Database db, int restoreReplicationNum) {
+    // reservedBackendsSeq stores non-existent colocate group's backends seq
+    public Status resetIdsForRestore(Catalog catalog, Database db, int restoreReplicationNum,
+                                     Map<String, List<List<Long>>> reservedBackendsSeq) {
         // table id
         id = catalog.getNextId();
 
@@ -469,6 +472,24 @@ public class OlapTable extends Table {
             }
         }
 
+        List<List<Long>> backendsPerBucketSeq = null;
+        boolean isColocate = !Strings.isNullOrEmpty(colocateGroup);
+        // If this is a colocate table
+        // 1. Get the BucketSeq from the colocateIndex if colcoate group is existed.
+        // 2. Get the BucketSeq from the reservedBackendsSeq if colocate group is not existed in colcoateIndex.
+        // 3. Set it to an empty arrayList, if the group is not existed in colcoateIndex or reservedBackendsSeq.
+        //    and this array will be set value for the first round in the partitions loop.
+        if (isColocate) {
+            String fullGroupName = db.getId() + "_" + colocateGroup;
+            backendsPerBucketSeq = Catalog.getCurrentColocateIndex().getBackendsPerBucketSeq(fullGroupName);
+            if (backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty()) {
+                backendsPerBucketSeq = reservedBackendsSeq.get(fullGroupName);
+            }
+            if (backendsPerBucketSeq == null) {
+                backendsPerBucketSeq = new ArrayList<>();
+            }
+        }
+
         // for each partition, reset rollup index map
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             Partition partition = entry.getValue();
@@ -492,14 +513,21 @@ public class OlapTable extends Table {
                     idx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
 
                     // replicas
-                    List<Long> beIds = Catalog.getCurrentSystemInfo()
-                            .seqChooseBackendIds(partitionInfo.getReplicationNum(entry.getKey()),
-                                    true, true,
-                                    db.getClusterName());
+                    List<Long> beIds = null;
+                    if (backendsPerBucketSeq != null && backendsPerBucketSeq.size() == tabletNum) {
+                        beIds = backendsPerBucketSeq.get(i);
+                    } else {
+                        beIds = Catalog.getCurrentSystemInfo()
+                                .seqChooseBackendIds(partitionInfo.getReplicationNum(entry.getKey()),
+                                        true, true, db.getClusterName());
+                    }
                     if (beIds == null) {
                         return new Status(ErrCode.COMMON_ERROR, "failed to find "
                                 + partitionInfo.getReplicationNum(entry.getKey())
                                 + " different hosts to create table: " + name);
+                    }
+                    if (isColocate && backendsPerBucketSeq.size() != tabletNum) {
+                        backendsPerBucketSeq.add(beIds);
                     }
                     for (Long beId : beIds) {
                         long newReplicaId = catalog.getNextId();
@@ -512,6 +540,14 @@ public class OlapTable extends Table {
 
             // reset partition id
             partition.setIdForRestore(entry.getKey());
+        }
+
+        if (isColocate) {
+            String fullGroupName = db.getId() + "_" + colocateGroup;
+            if (!Catalog.getCurrentColocateIndex().isGroupExist(fullGroupName)
+                    && !reservedBackendsSeq.containsKey(fullGroupName)) {
+                reservedBackendsSeq.put(fullGroupName, backendsPerBucketSeq);
+            }
         }
 
         return Status.OK;

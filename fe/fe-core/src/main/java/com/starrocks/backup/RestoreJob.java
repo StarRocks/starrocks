@@ -23,6 +23,7 @@ package com.starrocks.backup;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.HashMultimap;
@@ -38,6 +39,8 @@ import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.ColocateGroupSchema;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
@@ -58,11 +61,13 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -83,6 +88,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -463,6 +469,7 @@ public class RestoreJob extends AbstractJob {
 
         // Check and prepare meta objects.
         AgentBatchTask batchTask = new AgentBatchTask();
+        Map<String, List<List<Long>>> reservedBackendsSeq = new HashMap<>();
         db.readLock();
         try {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
@@ -473,7 +480,7 @@ public class RestoreJob extends AbstractJob {
                     // table already exist, check schema
                     if (localTbl.getType() != TableType.OLAP) {
                         status = new Status(ErrCode.COMMON_ERROR,
-                                "Only support retore olap table: " + localTbl.getName());
+                                "Only support restore olap table: " + localTbl.getName());
                         return;
                     }
                     OlapTable localOlapTbl = (OlapTable) localTbl;
@@ -493,6 +500,8 @@ public class RestoreJob extends AbstractJob {
                                         + " already exist but with different schema");
                         return;
                     }
+
+                    boolean isColocateTable = Catalog.getCurrentColocateIndex().isColocateTable(localOlapTbl.getId());
 
                     // Table with same name and has same schema. Check partition
                     for (BackupPartitionInfo backupPartInfo : tblInfo.partitions.values()) {
@@ -529,6 +538,43 @@ public class RestoreJob extends AbstractJob {
                             }
                         } else {
                             // partitions does not exist
+                            // 1. check for colocate structure if localTable is colocate table
+                            // 2. check for intersections with existing partitions
+
+                            // check for colocate
+                            if (isColocateTable) {
+                                String fullGroupName = db.getId() + "_" + localOlapTbl.getColocateGroup();
+                                ColocateGroupSchema groupSchema = Catalog.getCurrentColocateIndex()
+                                        .getGroupSchema(fullGroupName);
+                                if (groupSchema == null) {
+                                    status = new Status(ErrCode.COMMON_ERROR, "group schema ["
+                                            + fullGroupName + "] dose not exist");
+                                    return;
+                                }
+
+                                try {
+                                    groupSchema.checkDistribution(remoteOlapTbl.
+                                            getPartition(backupPartInfo.id).
+                                            getDistributionInfo());
+                                } catch (DdlException e) {
+                                    status = new Status(ErrCode.COMMON_ERROR, "remote partition ["
+                                            + backupPartInfo.name + "] is inconsistent " +
+                                            "with the current colocate group's structure");
+                                    return;
+                                }
+                                try {
+                                    groupSchema.checkReplicationNum((short) restoreReplicationNum);
+                                } catch (DdlException e) {
+                                    status = new Status(ErrCode.COMMON_ERROR, "remote partition ["
+                                            + backupPartInfo.name + "] is inconsistent " +
+                                            "with the current colocate group's replication number. " +
+                                            "remote partition is [" + restoreReplicationNum + "], " +
+                                            "but current colocate group is [" + groupSchema.getReplicationNum() + "]");
+                                    return;
+                                }
+                            }
+
+                            //check for intersections
                             PartitionInfo localPartitionInfo = localOlapTbl.getPartitionInfo();
                             if (localPartitionInfo.getType() == PartitionType.RANGE) {
                                 // Check if the partition range can be added to the table
@@ -564,6 +610,33 @@ public class RestoreJob extends AbstractJob {
                     // Table does not exist
                     OlapTable remoteOlapTbl = (OlapTable) remoteTbl;
 
+                    // check for colocate structure if remote table is colocate table
+                    if (!Strings.isNullOrEmpty(remoteOlapTbl.getColocateGroup())) {
+                        String fullGroupName = db.getId() + "_" + remoteOlapTbl.getColocateGroup();
+                        ColocateGroupSchema groupSchema = Catalog.getCurrentColocateIndex()
+                                .getGroupSchema(fullGroupName);
+                        if (groupSchema != null) {
+                            try {
+                                groupSchema.checkDistribution(remoteOlapTbl.getDefaultDistributionInfo());
+                            } catch (DdlException e) {
+                                status = new Status(ErrCode.COMMON_ERROR, "remote table ["
+                                        + remoteOlapTbl.getName() + "] is inconsistent " +
+                                        "with the current colocate group's structure");
+                                return;
+                            }
+                            try {
+                                groupSchema.checkReplicationNum((short) restoreReplicationNum);
+                            } catch (DdlException e) {
+                                status = new Status(ErrCode.COMMON_ERROR, "remote table ["
+                                        + remoteOlapTbl.getName() + "] is inconsistent " +
+                                        "with the current colocate group's replication number. " +
+                                        "remote partition is [" + restoreReplicationNum + "], " +
+                                        "but current colocate group is [" + groupSchema.getReplicationNum() + "]");
+                                return;
+                            }
+                        }
+                    }
+
                     // Retain only expected restore partitions in this table;
                     Set<String> allPartNames = remoteOlapTbl.getPartitionNames();
                     for (String partName : allPartNames) {
@@ -573,7 +646,8 @@ public class RestoreJob extends AbstractJob {
                     }
 
                     // reset all ids in this table
-                    Status st = remoteOlapTbl.resetIdsForRestore(catalog, db, restoreReplicationNum);
+                    Status st = remoteOlapTbl.resetIdsForRestore(catalog, db,
+                            restoreReplicationNum, reservedBackendsSeq);
                     if (!st.ok()) {
                         status = st;
                         return;
@@ -827,6 +901,12 @@ public class RestoreJob extends AbstractJob {
         // save version info for creating replicas
         long visibleVersion = remotePart.getVisibleVersion();
 
+        List<List<Long>> backendsPerBucketSeq = null;
+        if (Catalog.getCurrentColocateIndex().isColocateTable(localTbl.getId())) {
+            ColocateTableIndex.GroupId groupId = Catalog.getCurrentColocateIndex().getGroup(localTbl.getId());
+            backendsPerBucketSeq = Catalog.getCurrentColocateIndex().getBackendsPerBucketSeq(groupId);
+        }
+
         // tablets
         for (MaterializedIndex remoteIdx : remotePart.getMaterializedIndices(IndexExtState.VISIBLE)) {
             int schemaHash = remoteTbl.getSchemaHashByIndexId(remoteIdx.getId());
@@ -840,8 +920,13 @@ public class RestoreJob extends AbstractJob {
                 remoteIdx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
 
                 // replicas
-                List<Long> beIds = Catalog.getCurrentSystemInfo().seqChooseBackendIds(restoreReplicationNum, true,
-                        true, clusterName);
+                List<Long> beIds = null;
+                if (backendsPerBucketSeq != null && backendsPerBucketSeq.size() > 0) {
+                    beIds = backendsPerBucketSeq.get(i);
+                } else {
+                    beIds = Catalog.getCurrentSystemInfo().seqChooseBackendIds(restoreReplicationNum, true,
+                            true, clusterName);
+                }
                 if (beIds == null) {
                     status = new Status(ErrCode.COMMON_ERROR,
                             "failed to get enough backends for creating replica of tablet "
@@ -1232,6 +1317,35 @@ public class RestoreJob extends AbstractJob {
         }
 
         if (!isReplay) {
+            // set colocate info
+            for (OlapTable table : restoredTbls) {
+                if (!Strings.isNullOrEmpty(table.getColocateGroup())) {
+                    String fullGroupName = db.getId() + "_" + table.getColocateGroup();
+                    ColocateGroupSchema groupSchema = Catalog.getCurrentColocateIndex().getGroupSchema(fullGroupName);
+                    List<List<Long>> backendsPerBucketSeq = null;
+                    if (groupSchema == null) {
+                        try {
+                            backendsPerBucketSeq = table.getArbitraryTabletBucketsSeq();
+                        } catch (DdlException e) {
+                            LOG.warn("get buckets seq for colocate table failed", e);
+                            continue;
+                        }
+                    }
+                    // add to group after getting backends sequence(if has),
+                    // in case 'getArbitraryTabletBucketsSeq' failed
+                    ColocateTableIndex.GroupId groupId = Catalog.getCurrentColocateIndex()
+                            .addTableToGroup(db.getId(), table, table.getColocateGroup(), null);
+                    if (groupSchema == null) {
+                        Catalog.getCurrentColocateIndex().addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+                    }
+
+                    // log colocate add table
+                    ColocatePersistInfo info =
+                            ColocatePersistInfo.createForAddTable(groupId, table.getId(), backendsPerBucketSeq);
+                    Catalog.getCurrentCatalog().getEditLog().logColocateAddTable(info);
+                }
+            }
+
             restoredPartitions.clear();
             restoredTbls.clear();
 
