@@ -28,7 +28,7 @@ import com.starrocks.common.AnalysisException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ValueList {
+public class ValueList implements ParseNode {
     private List<ArrayList<Expr>> rows;
     private List<Type> rowsType;
 

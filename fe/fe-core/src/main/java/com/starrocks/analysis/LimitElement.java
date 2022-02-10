@@ -24,7 +24,7 @@ package com.starrocks.analysis;
 /**
  * Combination of limit and offset expressions.
  */
-public class LimitElement {
+public class LimitElement implements ParseNode {
     public static LimitElement NO_LIMIT = new LimitElement();
 
     /////////////////////////////////////////
