@@ -15,7 +15,6 @@ class OlapMetaScanNode;
 
 struct OlapMetaScannerParams {
     const TInternalScanRange* scan_range = nullptr;
-    const std::vector<OlapScanRange*>* key_ranges = nullptr;
 };
 
 class OlapMetaScanner {
@@ -32,7 +31,7 @@ public:
 
     Status open(RuntimeState* state);
 
-    Status close(RuntimeState* state);
+    void close(RuntimeState* state);
 
     Status get_chunk(RuntimeState* state, ChunkPtr* chunk);
 
