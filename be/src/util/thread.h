@@ -136,7 +136,7 @@ public:
 
     // Set name for thread
     // name's size should be less than 16, otherwise it will be truncated
-    static void set_thread_name(pthread_t t, const std::strings& name);
+    static void set_thread_name(pthread_t t, const std::string& name);
     static void set_thread_name(std::thread& t, const std::string& name);
 
 private:
