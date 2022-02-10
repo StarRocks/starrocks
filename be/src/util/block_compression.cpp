@@ -134,6 +134,9 @@ public:
         uint32_t decompressed_block_len = 0;
 
         for (const auto& input : inputs) {
+            if (remaining_output_size < kHadoopLz4InnerBlockPrefixLength) {
+                return Status::InvalidArgument("Output buffer too small for Lz4HadoopBlockCompression::compress");
+            }
             Slice raw_output(output_ptr + kHadoopLz4InnerBlockPrefixLength,
                              remaining_output_size - kHadoopLz4InnerBlockPrefixLength);
             RETURN_IF_ERROR(Lz4BlockCompression::compress(input, &raw_output));
