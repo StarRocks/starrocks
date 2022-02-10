@@ -267,6 +267,9 @@ struct UDFFunctionCallHelper {
 
     void combine_inputs(std::vector<jvalue>* res, VariantContainer& data, Column* col, int col_idx, int num_cols,
                         int num_rows) {
+        if (col->only_null()) {
+            return;
+        }
         if (col->is_nullable()) {
             std::visit(
                     [&](auto&& container) {
