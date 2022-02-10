@@ -118,4 +118,22 @@ public class ScalarOperatorEvaluatorTest {
         assertEquals(LocalDateTime.of(2003, 10, 11, 23, 56, 25), ((ConstantOperator) result).getDatetime());
     }
 
+    @Test
+    public void evaluationNonNullableFunc() {
+        CallOperator operator = new CallOperator("bitmap_count", Type.BIGINT,
+                Lists.newArrayList(ConstantOperator.createNull(Type.BITMAP)));
+
+        Function fn = new Function(new FunctionName("bitmap_count"), new Type[] {Type.BITMAP}, Type.BIGINT, false);
+        new Expectations(operator) {
+            {
+                operator.getFunction();
+                result = fn;
+            }
+        };
+
+        ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
+
+        assertEquals(result, operator);
+    }
+
 }
