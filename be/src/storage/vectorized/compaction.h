@@ -28,7 +28,6 @@ class DataDir;
 //  4. gc unused rowstes
 class Compaction {
 public:
-
     explicit Compaction(MemTracker* mem_tracker, TabletSharedPtr tablet);
     virtual ~Compaction();
 

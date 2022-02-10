@@ -987,13 +987,13 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
         }
     }
 
-    uint32_t max_rows_per_segment = CompactionUtils::get_segment_max_rows(config::max_segment_file_size,
-                                                                                 input_row_num, input_rowsets_size);
+    uint32_t max_rows_per_segment =
+            CompactionUtils::get_segment_max_rows(config::max_segment_file_size, input_row_num, input_rowsets_size);
 
     int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
     size_t num_columns = _tablet.num_columns();
-    CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
-            num_columns, max_columns_per_group, input_rowsets.size());
+    CompactionAlgorithm algorithm =
+            CompactionUtils::choose_compaction_algorithm(num_columns, max_columns_per_group, input_rowsets.size());
 
     // create rowset writer
     RowsetWriterContext context(kDataFormatV2, config::storage_format_version);

@@ -247,8 +247,8 @@ public:
         timer.start();
         if (cfg.algorithm == VERTICAL_COMPACTION) {
             int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
-            CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.num_key_columns(), max_columns_per_group,
-                                                 &column_groups);
+            CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.num_key_columns(),
+                                                      max_columns_per_group, &column_groups);
             RETURN_IF_ERROR(_do_merge_vertically(tablet, version, rowsets, writer, cfg, column_groups,
                                                  &total_input_size, &total_rows, &total_chunk, &stats));
         } else {
