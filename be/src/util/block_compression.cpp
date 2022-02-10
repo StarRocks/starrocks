@@ -51,14 +51,14 @@ Status BlockCompressionCodec::compress(const std::vector<Slice>& inputs, Slice* 
     return compress(buf, output);
 }
 
-class Lz4Compression : public BlockCompressionCodec {
+class Lz4BlockCompression : public BlockCompressionCodec {
 public:
-    static const Lz4Compression* instance() {
-        static Lz4Compression s_instance;
+    static const Lz4BlockCompression* instance() {
+        static Lz4BlockCompression s_instance;
         return &s_instance;
     }
 
-    ~Lz4Compression() override = default;
+    ~Lz4BlockCompression() override = default;
 
     Status compress(const Slice& input, Slice* output) const override {
         auto compressed_len = LZ4_compress_default(input.data, output->data, input.size, output->size);
@@ -87,75 +87,155 @@ public:
     size_t max_input_size() const override { return LZ4_MAX_INPUT_SIZE; }
 };
 
-class Lz4BlockCompression : public BlockCompressionCodec {
+// hadoop-lz4 is not compatible with lz4 CLI.
+// hadoop-lz4 uses a block compression scheme on top of lz4.  As per the hadoop docs
+// (BlockCompressorStream.java and BlockDecompressorStream.java) the input is split
+// into blocks.  Each block "contains the uncompressed length for the block followed
+// by one of more length-prefixed blocks of compressed data."
+// This is essentially blocks of blocks.
+// The outer block consists of:
+//   - 4 byte big endian uncompressed_size
+//   < inner blocks >
+//   ... repeated until input_len is consumed ...
+// The inner blocks have:
+//   - 4-byte big endian compressed_size
+//   < lz4 compressed block >
+//   - 4-byte big endian compressed_size
+//   < lz4 compressed block >
+//   ... repeated until uncompressed_size from outer block is consumed ...
+//
+// the hadoop lz4codec source code can be found here:
+// https://github.com/apache/hadoop/blob/trunk/hadoop-mapreduce-project/hadoop-mapreduce-client/hadoop-mapreduce-client-nativetask/src/main/native/src/codec/lz4codec.cc
+//
+// More details refer to https://issues.apache.org/jira/browse/HADOOP-12990
+class Lz4HadoopBlockCompression : public Lz4BlockCompression {
 public:
-    static const Lz4BlockCompression* instance() {
-        static Lz4BlockCompression s_instance;
+    static const Lz4HadoopBlockCompression* instance() {
+        static Lz4HadoopBlockCompression s_instance;
         return &s_instance;
     }
 
-    ~Lz4BlockCompression() override = default;
+    ~Lz4HadoopBlockCompression() override = default;
 
     Status compress(const Slice& input, Slice* output) const override {
-        return Status::NotSupported("Lz4BlockCompression::compress not supported yet");
+        std::vector<Slice> orig_slices;
+        orig_slices.emplace_back(input);
+        RETURN_IF_ERROR(compress(orig_slices, output));
+        return Status::OK();
+    }
+
+    Status compress(const std::vector<Slice>& inputs, Slice* output) const override {
+        if (output->size < kHadoopLz4PrefixLength + kHadoopLz4InnerBlockPrefixLength) {
+            return Status::InvalidArgument("Output buffer too small for Lz4HadoopBlockCompression::compress");
+        }
+
+        auto* output_ptr = output->data + kHadoopLz4PrefixLength;
+        auto remaining_output_size = output->size - kHadoopLz4PrefixLength;
+        uint32_t decompressed_block_len = 0;
+
+        for (const auto& input : inputs) {
+            Slice raw_output(output_ptr + kHadoopLz4InnerBlockPrefixLength,
+                             remaining_output_size - kHadoopLz4InnerBlockPrefixLength);
+            RETURN_IF_ERROR(Lz4BlockCompression::compress(input, &raw_output));
+
+            // Prepend compressed size in bytes to be compatible with Hadoop Lz4Codec
+            BigEndian::Store32(output_ptr, static_cast<uint32_t>(raw_output.size));
+
+            output_ptr += raw_output.size + kHadoopLz4InnerBlockPrefixLength;
+            remaining_output_size -= raw_output.size + kHadoopLz4InnerBlockPrefixLength;
+            decompressed_block_len += input.size;
+        }
+
+        // Prepend decompressed size in bytes to be compatible with Hadoop Lz4Codec
+        BigEndian::Store32(output->data, decompressed_block_len);
+
+        output->size = output->size - remaining_output_size;
+
+        return Status::OK();
     }
 
     Status decompress(const Slice& input, Slice* output) const override {
-        if (output->size == 0) return Status::OK();
-        int64_t uncompressed_total_len = 0;
-        const int64_t buffer_size = output->size;
+        auto st = try_decompress(input, output);
+        if (st.ok()) {
+            return st;
+        }
+
+        // some parquet file might be compressed with lz4 while others might be compressed with hadoop-lz4.
+        // for compatibility reason, we need to fall back to lz4 if hadoop-lz4 decompress failed.
+        return Lz4BlockCompression::decompress(input, output);
+    }
+
+    // TODO(@DorianZheng) May not enough for multiple input buffers.
+    size_t max_compressed_len(size_t len) const override {
+        return Lz4BlockCompression::max_compressed_len(len) + kHadoopLz4PrefixLength + kHadoopLz4InnerBlockPrefixLength;
+    }
+
+private:
+    static const std::size_t kHadoopLz4PrefixLength = sizeof(uint32_t);
+    static const std::size_t kHadoopLz4InnerBlockPrefixLength = sizeof(uint32_t);
+
+    Status try_decompress(const Slice& input, Slice* output) const {
+        if (output->size == 0) {
+            return Status::OK();
+        }
+
+        // data written with the hadoop lz4codec contain at the beginning
+        // of the input buffer two uint32_t's representing (in this order) expected
+        // decompressed size in bytes and expected compressed size in bytes.
+        if (input.size < kHadoopLz4PrefixLength + kHadoopLz4InnerBlockPrefixLength) {
+            return Status::InvalidArgument(
+                    strings::Substitute("fail to do hadoop-lz4 decompress, input size=$0", input.size));
+        }
+
+        std::size_t decompressed_total_len = 0;
+        const std::size_t buffer_size = output->size;
         auto* input_ptr = input.data;
         auto* out_ptr = output->data;
         std::size_t input_len = input.size;
 
         while (input_len > 0) {
-            uint32_t uncompressed_block_len = BigEndian::ToHost32(*reinterpret_cast<uint32_t*>(input_ptr));
+            uint32_t decompressed_block_len = BigEndian::Load32(input_ptr);
             input_ptr += sizeof(uint32_t);
             input_len -= sizeof(uint32_t);
-            int64_t remaining_output_size = buffer_size - uncompressed_total_len;
-            if (remaining_output_size < uncompressed_block_len) {
-                return Status::InvalidArgument(
-                        strings::Substitute("fail to do LZ4 decompress, remaining_output_size=$0, uncompressed_block_len=$1", remaining_output_size, uncompressed_block_len));
+            std::size_t remaining_output_size = buffer_size - decompressed_total_len;
+            if (remaining_output_size < decompressed_block_len) {
+                return Status::InvalidArgument(strings::Substitute(
+                        "fail to do hadoop-lz4 decompress, remaining_output_size=$0, decompressed_block_len=$1",
+                        remaining_output_size, decompressed_block_len));
             }
 
-            while (uncompressed_block_len > 0) {
+            while (decompressed_block_len > 0) {
                 // Check that input length should not be negative.
                 if (input_len < 0) {
-                    return Status::InvalidArgument(
-                            strings::Substitute("fail to do LZ4 decompress, uncompressed_total_len=$0, input_len=$1", uncompressed_total_len, input_len));
+                    return Status::InvalidArgument(strings::Substitute(
+                            "fail to do hadoop-lz4 decompress, decompressed_total_len=$0, input_len=$1",
+                            decompressed_total_len, input_len));
                 }
                 // Read the length of the next lz4 compressed block.
-                size_t compressed_len = BigEndian::ToHost32(*reinterpret_cast<uint32_t*>(input_ptr));
+                size_t compressed_len = BigEndian::Load32(input_ptr);
                 input_ptr += sizeof(uint32_t);
                 input_len -= sizeof(uint32_t);
 
                 if (compressed_len == 0 || compressed_len > input_len) {
-                    return Status::InvalidArgument(
-                            strings::Substitute("fail to do LZ4 decompress, uncompressed_total_len=$0, compressed_len=$1", uncompressed_total_len, compressed_len));
+                    return Status::InvalidArgument(strings::Substitute(
+                            "fail to do hadoop-lz4 decompress, decompressed_total_len=$0, compressed_len=$1",
+                            decompressed_total_len, compressed_len));
                 }
 
                 // Decompress this block.
-                int64_t remaining_output_size = buffer_size - uncompressed_total_len;
-                int uncompressed_len =
-                        LZ4_decompress_safe(input_ptr, reinterpret_cast<char*>(out_ptr),
-                                            compressed_len, remaining_output_size);
-                if (uncompressed_len < 0) {
-                    return Status::InvalidArgument(
-                            strings::Substitute("fail to do LZ4 decompress, error=$0", uncompressed_len));
-                }
+                remaining_output_size = buffer_size - decompressed_total_len;
+                Slice input_block(input_ptr, compressed_len);
+                Slice output_block(out_ptr, remaining_output_size);
+                RETURN_IF_ERROR(Lz4BlockCompression::decompress(input_block, &output_block));
 
-                out_ptr += uncompressed_len;
+                out_ptr += output_block.size;
                 input_ptr += compressed_len;
                 input_len -= compressed_len;
-                uncompressed_block_len -= uncompressed_len;
-                uncompressed_total_len += uncompressed_len;
+                decompressed_block_len -= output_block.size;
+                decompressed_total_len += output_block.size;
             }
         }
         return Status::OK();
-    }
-
-    size_t max_compressed_len(size_t len) const override {
-        return UINT64_MAX;
     }
 };
 
@@ -626,10 +706,10 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         *codec = SnappyBlockCompression::instance();
         break;
     case CompressionTypePB::LZ4:
-        *codec = Lz4Compression::instance();
+        *codec = Lz4BlockCompression::instance();
         break;
     case CompressionTypePB::LZ4_FRAME:
-        *codec = Lz4BlockCompression::instance();
+        *codec = Lz4fBlockCompression::instance();
         break;
     case CompressionTypePB::ZLIB:
         *codec = ZlibBlockCompression::instance();
@@ -639,6 +719,9 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         break;
     case CompressionTypePB::GZIP:
         *codec = GzipBlockCompression::instance();
+        break;
+    case CompressionTypePB::LZ4_HADOOP:
+        *codec = Lz4HadoopBlockCompression::instance();
         break;
     default:
         return Status::NotFound(strings::Substitute("unknown compression type($0)", type));
