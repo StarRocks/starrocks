@@ -53,12 +53,12 @@ import static java.util.Collections.emptyList;
  * TYPE_PERCENTILE |    NOT_SUPPORT
  */
 public final class ConstantOperator extends ScalarOperator implements Comparable<ConstantOperator> {
-    private static final Logger LOG = LogManager.getLogger(ConstantOperator.class);
 
     private static final LocalDateTime MAX_DATETIME = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
     private static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
 
-    private static java.time.format.DateTimeFormatter DATE_TIME_FORMATTER_MS = ScalarOperatorFunctions.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();;
+    private static java.time.format.DateTimeFormatter DATE_TIME_FORMATTER_MS
+            = ScalarOperatorFunctions.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
 
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
         if (null == dateTime || dateTime.isBefore(MIN_DATETIME) || dateTime.isAfter(MAX_DATETIME)) {
