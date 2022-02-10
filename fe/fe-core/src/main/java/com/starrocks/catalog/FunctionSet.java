@@ -173,7 +173,7 @@ public class FunctionSet {
     private final Map<String, List<Function>> vectorizedFunctions;
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
-    private final ImmutableSet<String> nonNullResultWithNullParamNullFunctions = ImmutableSet.of("if",
+    private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions = ImmutableSet.of("if",
             "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce");
 
     // If low cardinality string column with global dict, for some string functions,
@@ -287,8 +287,8 @@ public class FunctionSet {
         initAggregateBuiltins();
     }
 
-    public boolean isNonNullResultWithNullParamFunctions(String funcName) {
-        return nonNullResultWithNullParamNullFunctions.contains(funcName)
+    public boolean isNotAlwaysNullResultWithNullParamFunctions(String funcName) {
+        return notAlwaysNullResultWithNullParamFunctions.contains(funcName)
                 || alwaysReturnNonNullableFunctions.contains(funcName);
     }
 
