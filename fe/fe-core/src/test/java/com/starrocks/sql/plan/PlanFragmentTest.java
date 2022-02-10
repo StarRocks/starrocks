@@ -5524,4 +5524,13 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("other predicates: md5sum(CAST(4: v4 AS VARCHAR)) = 'a'"));
     }
 
+    @Test
+    public void testBitmapCount() throws Exception {
+        String sql = "SELECT 1 FROM t0 LEFT OUTER JOIN t1 ON t0.v1=t1.v4 " +
+                "WHERE NOT CAST(bitmap_count(CASE WHEN t1.v4 in (10000) THEN bitmap_hash('abc') END) AS BOOLEAN)";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (BROADCAST)"));
+        Assert.assertTrue(plan.contains(
+                "other predicates: NOT (CAST(bitmap_count(if(4: v4 = 10000, bitmap_hash('abc'), NULL)) AS BOOLEAN))"));
+    }
 }
