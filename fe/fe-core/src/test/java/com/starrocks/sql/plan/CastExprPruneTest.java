@@ -1,9 +1,18 @@
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.TableFunction;
+import com.starrocks.catalog.Type;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 
 public class CastExprPruneTest extends PlanTestBase {
     @BeforeClass
@@ -77,5 +86,41 @@ public class CastExprPruneTest extends PlanTestBase {
                 "     numNodes=0";
         System.out.println(explain);
         Assert.assertTrue(explain.contains(snippet));
+    }
+
+    @Test
+    public void testUDTF() throws Exception {
+        final Catalog catalog = connectContext.getCatalog();
+        final Field functionSetField = Catalog.class.getDeclaredField("functionSet");
+        functionSetField.setAccessible(true);
+        final FunctionSet functionSet = (FunctionSet)functionSetField.get(catalog);
+
+
+        {
+            String fn = "table_function";
+            final FunctionName functionName = new FunctionName(fn);
+            List<String> colNames = new ArrayList<>();
+            colNames.add("table_function");
+            List<Type> argTypes = new ArrayList<>();
+            argTypes.add(Type.VARCHAR);
+            List<Type> retTypes = new ArrayList<>();
+            retTypes.add(Type.VARCHAR);
+            final TableFunction tableFunction = new TableFunction(functionName, colNames, argTypes, retTypes);
+            functionSet.addBuiltin(tableFunction);
+        }
+
+        String sql;
+        String explain;
+
+        sql = "select table_function from tab0,table_function(c_0_3)";
+        explain = getVerboseExplain(sql);
+        Assert.assertTrue(explain.contains("  1:Project"));
+        Assert.assertTrue(explain.contains("  |  output columns:\n" +
+                "  |  17 <-> cast([4: c_0_3, BOOLEAN, false] as VARCHAR)"));
+
+        sql = "select table_function from tab0, table_function(c_0_3 + 3)";
+        explain = getVerboseExplain(sql);
+        Assert.assertTrue(explain.contains("  |  17 <-> cast(cast([4: c_0_3, BOOLEAN, false] as BIGINT) + 3 as VARCHAR)"));
+
     }
 }
