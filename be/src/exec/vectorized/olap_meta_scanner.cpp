@@ -15,16 +15,13 @@ Status OlapMetaScanner::init(RuntimeState* runtime_state, const OlapMetaScannerP
     _runtime_state = runtime_state;
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
     RETURN_IF_ERROR(_init_meta_reader_params());
-
     _reader = std::make_shared<MetaReader>();
-    if (_reader.get() == nullptr) {
+
+    if (_reader == nullptr) {
         return Status::InternalError("Failed to allocate meta reader.");
     }
 
     RETURN_IF_ERROR(_reader->init(_reader_params));
-
-    _is_open = true;
-
     return Status::OK();
 }
 
@@ -50,12 +47,22 @@ Status OlapMetaScanner::get_chunk(RuntimeState* state, ChunkPtr* chunk) {
     return _reader->do_get_next(chunk);
 }
 
-Status OlapMetaScanner::close(RuntimeState* state) {
-    if (_is_closed) {
-        return Status::OK();
+Status OlapMetaScanner::open(RuntimeState* state) {
+    DCHECK(!_is_closed);
+    if (!_is_open) {
+        _is_open = true;
+        RETURN_IF_ERROR(_reader->open());
     }
-    _is_closed = true;
     return Status::OK();
+}
+
+void OlapMetaScanner::close(RuntimeState* state) {
+    if (_is_closed) {
+        return;
+    }
+    _tablet.reset();
+    _reader.reset();
+    _is_closed = true;
 }
 
 bool OlapMetaScanner::has_more() {
