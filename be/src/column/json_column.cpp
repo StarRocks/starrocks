@@ -2,6 +2,7 @@
 
 #include "column/json_column.h"
 
+#include "glog/logging.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 
@@ -23,14 +24,13 @@ void JsonColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
 }
 
 void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const {
-    for (int i = 0; i < size(); i++) {
-        JsonValue* value = get_object(i);
-        auto json_str = value->to_string();
-        if (!json_str.ok()) {
-            buf->push_null();
-        } else {
-            buf->push_string(json_str->data(), json_str->size());
-        }
+    JsonValue* value = get_object(idx);
+    DCHECK_NOTNULL(value);
+    auto json_str = value->to_string();
+    if (!json_str.ok()) {
+        buf->push_null();
+    } else {
+        buf->push_string(json_str->data(), json_str->size());
     }
 }
 
