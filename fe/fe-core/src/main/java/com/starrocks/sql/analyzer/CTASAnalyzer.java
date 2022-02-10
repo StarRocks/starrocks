@@ -90,8 +90,14 @@ public class CTASAnalyzer {
             }
             finalColumnNames.addAll(columnNames);
         } else {
-            for (Field allField : allFields) {
-                finalColumnNames.add(allField.getName());
+            for (Field oneField : allFields) {
+                Expr originExpression = oneField.getOriginExpression();
+                if (originExpression instanceof SlotRef) {
+                    finalColumnNames.add(oneField.getName());
+                } else {
+                    throw new SemanticException("Expression [%s] should have specification column name",
+                            oneField.getOriginExpression().toSql());
+                }
             }
         }
 
