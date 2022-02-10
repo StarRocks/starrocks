@@ -23,7 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 
-public class SelectListItem {
+public class SelectListItem implements ParseNode {
     private Expr expr;
     // for "[name.]*"
     private final TableName tblName;
@@ -132,5 +132,4 @@ public class SelectListItem {
         }
         return expr.toColumnLabel();
     }
-
 }
