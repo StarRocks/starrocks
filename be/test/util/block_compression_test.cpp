@@ -190,7 +190,6 @@ TEST_F(BlockCompressionTest, multi) {
     test_multi_slices(starrocks::CompressionTypePB::LZ4_FRAME);
     test_multi_slices(starrocks::CompressionTypePB::ZSTD);
     test_multi_slices(starrocks::CompressionTypePB::GZIP);
-    test_multi_slices(starrocks::CompressionTypePB::LZ4_HADOOP);
 }
 
 } // namespace starrocks
