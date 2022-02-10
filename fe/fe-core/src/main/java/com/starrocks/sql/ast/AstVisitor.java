@@ -14,7 +14,6 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FieldReference;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;

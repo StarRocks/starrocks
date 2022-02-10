@@ -1,10 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TExprNode;
 
 import java.util.Objects;
