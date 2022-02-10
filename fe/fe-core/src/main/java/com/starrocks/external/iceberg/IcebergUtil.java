@@ -4,11 +4,13 @@ package com.starrocks.external.iceberg;
 
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.external.hive.HdfsFileFormat;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.UnboundPredicate;
 
 import java.util.List;
@@ -76,7 +78,7 @@ public class IcebergUtil {
      */
     public static Optional<Snapshot> getCurrentTableSnapshot(Table table, boolean refresh) {
         if (refresh) {
-            table.refresh();
+            refreshTable(table);
         }
         return Optional.ofNullable(table.currentSnapshot());
     }
@@ -95,7 +97,7 @@ public class IcebergUtil {
                                          List<UnboundPredicate> icebergPredicates,
                                          boolean refresh) {
         if (refresh) {
-            table.refresh();
+            refreshTable(table);
         }
 
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
@@ -103,5 +105,24 @@ public class IcebergUtil {
             tableScan = tableScan.filter(predicate);
         }
         return tableScan;
+    }
+
+    private static void refreshTable(Table table) {
+        try {
+            table.refresh();
+            if (table instanceof BaseTable && ((BaseTable) table).operations().current() == null) {
+                // TableOperation like HiveTableOperations will not throw NoSuchTableException after the first time.
+                // We should throw here to let user get the same semantic for this case.
+                // See: https://github.com/StarRocks/starrocks/issues/3076
+                throw new NoSuchTableException("No such table: %s", table.name());
+            }
+        } catch (NoSuchTableException e) {
+            throw new StarRocksIcebergException("Refresh table with failure ", e);
+
+        } catch (IllegalArgumentException e1) {
+            throw new StarRocksIcebergException("Refresh table with failure, the table under hood may have been" +
+                    " dropped. You should re create the external table.", e1);
+
+        }
     }
 }
