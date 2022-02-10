@@ -208,30 +208,27 @@ public:
                 data = data_result;
             }
 
-            NullColumnPtr nulls;
             if (data->is_nullable()) {
-                nulls = ColumnHelper::as_raw_column<NullableColumn>(data)->null_column();
-            } else {
-                nulls = RunTimeColumnType<TYPE_NULL>::create();
-                nulls->resize(data->size());
+                return data_result;
             }
-            auto* ns = nulls->get_data().data();
+            NullColumnPtr null_flag = RunTimeColumnType<TYPE_NULL>::create();
+            null_flag->resize(data->size());
 
             const ColumnPtr& real_data = FunctionHelper::get_real_data_column(data);
-            auto& r1 = ColumnHelper::cast_to_raw<ResultType>(real_data)->get_data();
+            auto& row_real_data = ColumnHelper::cast_to_raw<ResultType>(real_data)->get_data();
 
             for (size_t i = 0; i < data->size(); ++i) {
-                ns[i] = NULL_OP::template apply<RunTimeCppType<ResultType>, RunTimeCppType<ResultType>>(r1[i]);
+                null_flag->get_data()[i] =
+                        NULL_OP::template apply<RunTimeCppType<ResultType>, RunTimeCppType<ResultType>>(
+                                row_real_data[i]);
             }
 
-            if (!data->is_nullable()) {
-                if (SIMD::count_nonzero(nulls->get_data())) {
-                    auto null_result = NullableColumn::create(data, nulls);
-                    if (data_result->is_constant()) {
-                        return ConstColumn::create(null_result, data_result->size());
-                    }
-                    return null_result;
+            if (SIMD::count_nonzero(null_flag->get_data())) {
+                auto null_result = NullableColumn::create(data, null_flag);
+                if (data_result->is_constant()) {
+                    return ConstColumn::create(null_result, data_result->size());
                 }
+                return null_result;
             }
         }
 
