@@ -26,8 +26,9 @@ struct DecimalDecimalCast {
 
         // source type and target type has the same primitive type and scale
         if (to_scale == from_scale && Type == ResultType) {
-            data_column->set_precision(to_precision);
-            return column;
+            auto result = column->clone_shared();
+            ColumnHelper::cast_to_raw<Type>(result)->set_precision(to_precision);
+            return result;
         }
 
         const auto data = &data_column->get_data().front();
