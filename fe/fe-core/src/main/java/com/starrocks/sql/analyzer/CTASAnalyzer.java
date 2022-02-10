@@ -11,8 +11,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
+import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.ArrayType;
@@ -90,13 +92,27 @@ public class CTASAnalyzer {
             }
             finalColumnNames.addAll(columnNames);
         } else {
-            for (Field oneField : allFields) {
-                Expr originExpression = oneField.getOriginExpression();
-                if (originExpression instanceof SlotRef) {
-                    finalColumnNames.add(oneField.getName());
+            List<SelectListItem> selectListItems = ((SelectStmt) queryStmt).getSelectList().getItems();
+            for (int i = 0; i < selectListItems.size(); i++) {
+                SelectListItem selectListItem = selectListItems.get(i);
+                if (selectListItem.isStar()) {
+                    for (Field allField : allFields) {
+                        finalColumnNames.add(allField.getName());
+                    }
+                    continue;
+                }
+                String alias = selectListItem.getAlias();
+                if (alias != null) {
+                    finalColumnNames.add(alias);
                 } else {
-                    throw new SemanticException("Expression [%s] should have specification column name",
-                            oneField.getOriginExpression().toSql());
+                    Field oneField = allFields.get(i);
+                    Expr originExpression = oneField.getOriginExpression();
+                    if (originExpression == null || originExpression instanceof SlotRef) {
+                        finalColumnNames.add(oneField.getName());
+                    } else {
+                        throw new SemanticException("Expression [%s] should have specification column name",
+                                originExpression.toSql());
+                    }
                 }
             }
         }

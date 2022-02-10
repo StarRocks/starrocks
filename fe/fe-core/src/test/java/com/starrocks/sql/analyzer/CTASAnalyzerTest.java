@@ -197,6 +197,19 @@ public class CTASAnalyzerTest {
         UtFrameUtils.parseStmtWithNewAnalyzer(CTASSQL3, ctx);
     }
 
+    @Test(expected = SemanticException.class)
+    public void testErrorCase() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String CTASSQL2 = "create table test6 as select c1+c2 from test3;";
+
+        UtFrameUtils.parseStmtWithNewAnalyzer(CTASSQL2, ctx);
+
+        String CTASSQL3 = "create table t1 as select k1,sum(k8) from duplicate_table_with_null group by k8;";
+
+        UtFrameUtils.parseStmtWithNewAnalyzer(CTASSQL3, ctx);
+    }
+
     @Test
     public void testSelectColumn() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
