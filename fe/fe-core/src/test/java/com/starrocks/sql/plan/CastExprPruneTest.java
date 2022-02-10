@@ -109,11 +109,18 @@ public class CastExprPruneTest extends PlanTestBase {
             functionSet.addBuiltin(tableFunction);
         }
 
-        String sql = "select table_function from tab0,table_function(c_0_3)";
-        String explain = getVerboseExplain(sql);
+        String sql;
+        String explain;
+
+        sql = "select table_function from tab0,table_function(c_0_3)";
+        explain = getVerboseExplain(sql);
         Assert.assertTrue(explain.contains("  1:Project"));
         Assert.assertTrue(explain.contains("  |  output columns:\n" +
                 "  |  17 <-> cast([4: c_0_3, BOOLEAN, false] as VARCHAR)"));
+
+        sql = "select table_function from tab0, table_function(c_0_3 + 3)";
+        explain = getVerboseExplain(sql);
+        Assert.assertTrue(explain.contains("  |  17 <-> cast(cast([4: c_0_3, BOOLEAN, false] as BIGINT) + 3 as VARCHAR)"));
 
     }
 }

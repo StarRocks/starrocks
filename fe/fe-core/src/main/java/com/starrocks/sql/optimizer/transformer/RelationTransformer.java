@@ -543,15 +543,12 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context);
 
         Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
-        for (int i = 0; i < node.getChildExpressions().size(); i++) {
-            Expr e = node.getChildExpressions().get(i);
-            final ScalarOperator scalarOperator = operator.getChild(i);
+        for (ScalarOperator scalarOperator : operator.getChildren()) {
             if (scalarOperator instanceof ColumnRefOperator) {
                 projectMap.put((ColumnRefOperator) scalarOperator, scalarOperator);
             } else {
-                ColumnRefOperator columnRefOperator = columnRefFactory.create(e, e.getType(), e.isNullable());
+                ColumnRefOperator columnRefOperator = columnRefFactory.create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
                 projectMap.put(columnRefOperator, scalarOperator);
-                context.put(e, columnRefOperator);
             }
         }
 
