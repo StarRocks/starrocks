@@ -168,9 +168,10 @@ public:
         return Lz4BlockCompression::decompress(input, output);
     }
 
-    // TODO(@DorianZheng) May not enough for multiple input buffers.
+    // TODO(@DorianZheng) Hack, refine it in the future.
     size_t max_compressed_len(size_t len) const override {
-        return Lz4BlockCompression::max_compressed_len(len) + kHadoopLz4PrefixLength + kHadoopLz4InnerBlockPrefixLength;
+        return Lz4BlockCompression::max_compressed_len(len) + kHadoopLz4PrefixLength +
+               kHadoopLz4InnerBlockPrefixLength * 10;
     }
 
 private:
