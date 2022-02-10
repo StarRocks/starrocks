@@ -7,13 +7,13 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -56,7 +56,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     private static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
 
     private static java.time.format.DateTimeFormatter DATE_TIME_FORMATTER_MS
-            = ScalarOperatorFunctions.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
+            = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
 
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
         if (null == dateTime || dateTime.isBefore(MIN_DATETIME) || dateTime.isAfter(MAX_DATETIME)) {
