@@ -117,7 +117,7 @@ public class IcebergUtil {
                 throw new NoSuchTableException("No such table: %s", table.name());
             }
         } catch (NoSuchTableException e) {
-            throw new StarRocksIcebergException(String.format("Refresh table with failure %s", e.getMessage()));
+            throw new StarRocksIcebergException(String.format("No such table  %s", table.name()));
             
         } catch (IllegalStateException ei) {
             throw new StarRocksIcebergException(String.format("Refresh table %s with failure, the table under hood" +
