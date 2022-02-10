@@ -104,7 +104,7 @@ bool ScanOperator::is_finished() const {
         }
     }
 
-    // This can operator is finished, if no more io tasks are running
+    // This scan operator is finished, if no more io tasks are running
     // or need to run, and all the read chunks are consumed.
     return true;
 }

@@ -59,20 +59,33 @@ public:
 
     bool empty() const { return _pop_index >= _num_morsels; }
 
-    std::vector<MorselQueuePtr> splitByNum(size_t num_dest_morsel_queues) {
-        const size_t num_morsels_per_queue = (_num_morsels + num_dest_morsel_queues - 1) / num_dest_morsel_queues;
-        std::vector<MorselQueuePtr> dest_morsel_queues;
-        for (int i = 0; i < num_dest_morsel_queues; ++i) {
-            Morsels morsels;
-            while (morsels.size() < num_morsels_per_queue && !empty()) {
-                auto maybe_morsel = try_get();
-                DCHECK(maybe_morsel.has_value());
-                morsels.emplace_back(std::move(maybe_morsel.value()));
-            }
-            dest_morsel_queues.emplace_back(std::make_unique<MorselQueue>(std::move(morsels)));
+    // Split the morsel queue into `split_size` morsel queues.
+    // For example:
+    // morsel queue is: [1, 2, 3, 4, 5, 6, 7]
+    // split_size is: 3
+    // return:
+    //  [1, 4, 7]
+    //  [2, 5]
+    //  [3, 6]
+    std::vector<MorselQueuePtr> split_by_size(size_t split_size) {
+        // split_size is in (0, split_size].
+        DCHECK_GT(split_size, 0);
+        DCHECK_LE(split_size, _num_morsels);
+
+        std::vector<Morsels> split_morsels_list(split_size);
+        for (int i = 0; i < _num_morsels; ++i) {
+            auto maybe_morsel = try_get();
+            DCHECK(maybe_morsel.has_value());
+            split_morsels_list[i % split_size].emplace_back(std::move(maybe_morsel.value()));
         }
 
-        return dest_morsel_queues;
+        std::vector<MorselQueuePtr> split_morsel_queues;
+        split_morsel_queues.reserve(split_size);
+        for (auto& split_morsels : split_morsels_list) {
+            split_morsel_queues.emplace_back(std::make_unique<MorselQueue>(std::move(split_morsels)));
+        }
+
+        return split_morsel_queues;
     }
 
 private:

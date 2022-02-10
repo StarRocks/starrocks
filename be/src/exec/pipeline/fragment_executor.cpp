@@ -219,7 +219,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             if (morsel_queue->num_morsels() > 0) {
                 DCHECK(degree_of_parallelism <= morsel_queue->num_morsels());
             }
-            std::vector<MorselQueuePtr> morsel_queue_per_driver = morsel_queue->splitByNum(degree_of_parallelism);
+            std::vector<MorselQueuePtr> morsel_queue_per_driver = morsel_queue->split_by_size(degree_of_parallelism);
             DCHECK(morsel_queue_per_driver.size() == degree_of_parallelism);
 
             if (is_root) {
