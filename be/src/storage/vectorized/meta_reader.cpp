@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "column/datum_convert.h"
+#include "common/status.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -190,6 +191,13 @@ Status MetaReader::do_get_next(ChunkPtr* result) {
     return Status::OK();
 }
 
+Status MetaReader::open() {
+    for (auto collector : _collect_context.seg_collecters) {
+        RETURN_IF_ERROR(collector->open());
+    }
+    return Status::OK();
+}
+
 Status MetaReader::_read(Chunk* chunk, size_t n) {
     std::vector<vectorized::Column*> columns;
     for (size_t i = 0; i < _collect_context.seg_collecter_params.fields.size(); ++i) {
@@ -221,8 +229,11 @@ SegmentMetaCollecter::~SegmentMetaCollecter() {}
 
 Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params) {
     _params = params;
-    RETURN_IF_ERROR(_init_return_column_iterators());
+    return Status::OK();
+}
 
+Status SegmentMetaCollecter::open() {
+    RETURN_IF_ERROR(_init_return_column_iterators());
     return Status::OK();
 }
 
