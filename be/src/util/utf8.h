@@ -38,7 +38,6 @@ static const uint8_t UTF8_BYTE_LENGTH_TABLE[256] = {
 static inline size_t get_utf8_index(const Slice& str, std::vector<size_t>* index) {
     for (int i = 0, char_size = 0; i < str.size; i += char_size) {
         char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[i])];
-        char_size = std::min<size_t>(str.size - i, char_size);
         index->push_back(i);
     }
     return index->size();
@@ -52,7 +51,6 @@ static inline size_t get_utf8_small_index(const Slice& str, uint8_t* small_index
     size_t n = 0;
     for (uint8_t i = 0, char_size = 0; i < str.size; i += char_size) {
         char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[i])];
-        char_size = std::min<size_t>(str.size - i, char_size);
         small_index[n++] = i;
     }
     return n;
@@ -74,7 +72,6 @@ static inline const char* skip_leading_utf8(const char* p, const char* end, size
     size_t i = 0;
     for (; i < n && p < end; ++i, p += char_size) {
         char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<uint8_t>(*p)];
-        char_size = std::min<size_t>(end - p, char_size);
     }
     if constexpr (use_skipped_chars) {
         *skipped_chars = i;
