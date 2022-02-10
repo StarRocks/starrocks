@@ -116,12 +116,13 @@ public class IcebergUtil {
                 // See: https://github.com/StarRocks/starrocks/issues/3076
                 throw new NoSuchTableException("No such table: %s", table.name());
             }
-        } catch (NoSuchTableException en) {
-            throw new StarRocksIcebergException("Refresh table with failure ", en);
-
+        } catch (NoSuchTableException e) {
+            throw new StarRocksIcebergException(String.format("Refresh table with failure %s", e.getMessage()));
+            
         } catch (IllegalStateException ei) {
-            throw new StarRocksIcebergException("Refresh table with failure, the table under hood may have been" +
-                    " dropped. You should re create the external table.", ei);
+            throw new StarRocksIcebergException(String.format("Refresh table %s with failure, the table under hood" +
+                    " may have been dropped. You should re create the external table. cause %s",
+                    table.name(), ei.getMessage()));
 
         }
     }
