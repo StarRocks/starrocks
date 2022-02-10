@@ -8,7 +8,9 @@
 #include "column/column.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "glog/logging.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/mem_pool.h"
 #include "simdjson.h"
 #include "velocypack/vpack.h"
 
@@ -214,6 +216,20 @@ int JsonValue::compare(const JsonValue& rhs) const {
 
 int64_t JsonValue::hash() const {
     return to_vslice().normalizedHash();
+}
+
+// NOTE
+// Returned Json pointer should not be deconstructed!!
+// Memory allocated by binary_ is located at mempool, not in std::malloc, which should not
+// be freeed by deconstructor.
+// Instead, the memory should be freeed by the mempool
+JsonValue* JsonValue::clone(MemPool* mem) const {
+    DCHECK_NOTNULL(mem);
+    pooled_string binary(this->binary_, pool_allocator<char>(mem));
+    JsonValue* res;
+    res = (JsonValue*)mem->allocate(sizeof(JsonValue));
+    new (res) JsonValue(std::move(binary));
+    return res;
 }
 
 Slice JsonValue::get_slice() const {

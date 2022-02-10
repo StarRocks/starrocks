@@ -8,6 +8,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
+#include "runtime/mem_pool.h"
 #include "simdjson.h"
 #include "util/coding.h"
 #include "velocypack/vpack.h"
@@ -41,6 +42,8 @@ public:
 
     JsonValue(JsonValue&& rhs) : binary_(std::move(rhs.binary_)) {}
 
+    explicit JsonValue(pooled_string&& binary) : binary_(std::move(binary)) {}
+
     JsonValue& operator=(const JsonValue& rhs) {
         binary_ = rhs.binary_;
         return *this;
@@ -53,7 +56,6 @@ public:
     explicit JsonValue(const VSlice& slice) { assign(Slice(slice.start(), slice.byteSize())); }
 
     void assign(const Slice& src) { binary_.assign(src.get_data(), src.get_size()); }
-
     void assign(const vpack::Builder& b) { binary_.assign((const char*)b.data(), (size_t)b.size()); }
 
     ////////////////// builder  //////////////////////
@@ -97,6 +99,7 @@ public:
     std::string to_string_uncheck() const;
     int compare(const JsonValue& rhs) const;
     int64_t hash() const;
+    JsonValue* clone(MemPool* mem) const;
 
 private:
     template <class Ret, class Fn>

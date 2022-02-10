@@ -13,6 +13,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "runtime/mem_pool.h"
 #include "runtime/types.h"
 #include "testutil/parallel_test.h"
 #include "util/json.h"
@@ -213,6 +214,16 @@ PARALLEL_TEST(JsonColumnTest, test_fmt) {
 
     std::string str = fmt::format("{}", json);
     ASSERT_EQ("1", str);
+}
+
+PARALLEL_TEST(JsonColumnTest, test_clone) {
+    JsonValue json = JsonValue::parse("{}").value();
+    MemPool pool;
+    JsonValue* cloned = json.clone(&pool);
+
+    ASSERT_EQ(json, *cloned);
+    ASSERT_EQ("{}", cloned->to_string_uncheck());
+    ASSERT_EQ(32, pool.total_allocated_bytes());
 }
 
 // NOLINTNEXTLINE

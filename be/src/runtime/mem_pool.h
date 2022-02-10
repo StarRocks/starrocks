@@ -243,6 +243,37 @@ private:
     std::vector<ChunkInfo> chunks_;
 };
 
+// Custom allocator based on mempool
+template <class T, typename Base = std::allocator<T>>
+class pool_allocator : public Base {
+public:
+    typedef std::allocator_traits<Base> b_t;
+
+    pool_allocator(MemPool* mem) : _mem(mem) {}
+    ~pool_allocator() = default;
+
+    using Base::Base;
+
+    template <typename U>
+    struct rebind {
+        using other = pool_allocator<U, typename b_t::template rebind_alloc<U>>;
+    };
+
+    // allocate more than caller required
+    T* allocate(size_t n) { return (T*)_mem->allocate(n); }
+
+    T* allocate(size_t n, const void* hint) { return (T*)_mem->allocate(n); }
+
+    void deallocate(T* p, size_t n) {
+        // noop
+    }
+
+private:
+    MemPool* _mem;
+};
+
+using pooled_string = std::basic_string<char, std::char_traits<char>, pool_allocator<char>>;
+
 // Stamp out templated implementations here so they're included in IR module
 template uint8_t* MemPool::allocate<false>(int64_t size, int alignment);
 template uint8_t* MemPool::allocate<true>(int64_t size, int alignment);
