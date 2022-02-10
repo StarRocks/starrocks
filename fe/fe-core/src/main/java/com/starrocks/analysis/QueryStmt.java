@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -169,6 +170,9 @@ public abstract class QueryStmt extends StatementBase {
         super.analyze(analyzer);
         analyzeLimit(analyzer);
         if (hasWithClause()) {
+            for (View v : withClause_.getViews()) {
+                v.getQueryStmt().setNeedToSql(this.needToSql);
+            }
             withClause_.analyze(analyzer);
         }
         if (hasOutFileClause()) {
