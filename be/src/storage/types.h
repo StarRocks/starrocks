@@ -586,6 +586,11 @@ struct CppColumnTraits<OLAP_FIELD_TYPE_UNSIGNED_INT> {
     using ColumnType = vectorized::UInt32Column;
 };
 
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_JSON> {
+    using ColumnType = vectorized::JsonColumn;
+};
+
 // Instantiate this template to get static access to the type traits.
 template <FieldType field_type>
 struct TypeTraits {
