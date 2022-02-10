@@ -834,7 +834,7 @@ ColumnPtr TimeFunctions::from_unix_with_format_const(std::string& format_content
 
     auto size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
-        if (data_column.is_null(row)) {
+        if (data_column.is_null(row) || format_content.empty()) {
             result.append_null();
             continue;
         }
