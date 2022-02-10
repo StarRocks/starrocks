@@ -7,7 +7,9 @@
 #include <gtest/gtest.h>
 
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
 #include "runtime/vectorized/time_types.h"
@@ -852,6 +854,24 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
         ASSERT_EQ("1970-01-01 16:01:01", v->get_data()[1]);
         ASSERT_EQ("1970-01-01 17:03:09", v->get_data()[2]);
 
+        ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
+                                                   FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+    }
+
+    // Test empty string
+    {
+        auto tc1 = ColumnHelper::create_const_column<TYPE_INT>(24 * 60 * 60, 1);
+        auto tc2 = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1);
+
+        Columns columns = {tc1, tc2};
+        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
+                                                     FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format(_utils->get_fn_ctx(), columns);
+        ASSERT_TRUE(result->only_null());
         ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
