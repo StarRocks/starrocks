@@ -175,10 +175,6 @@ private:
     static const std::size_t kHadoopLz4InnerBlockPrefixLength = sizeof(uint32_t);
 
     Status try_decompress(const Slice& input, Slice* output) const {
-        if (output->size == 0) {
-            return Status::OK();
-        }
-
         // data written with the hadoop lz4codec contain at the beginning
         // of the input buffer two uint32_t's representing (in this order) expected
         // decompressed size in bytes and expected compressed size in bytes.
@@ -204,7 +200,7 @@ private:
                         remaining_output_size, decompressed_block_len));
             }
 
-            while (decompressed_block_len > 0) {
+            do {
                 // Check that input length should not be negative.
                 if (input_len < 0) {
                     return Status::InvalidArgument(strings::Substitute(
@@ -216,10 +212,15 @@ private:
                 input_ptr += sizeof(uint32_t);
                 input_len -= sizeof(uint32_t);
 
-                if (compressed_len == 0 || compressed_len > input_len) {
-                    return Status::InvalidArgument(strings::Substitute(
-                            "fail to do hadoop-lz4 decompress, decompressed_total_len=$0, compressed_len=$1",
-                            decompressed_total_len, compressed_len));
+                if (compressed_len == 0) {
+                    continue;
+                }
+
+                if (compressed_len > input_len) {
+                    return Status::InvalidArgument(
+                            strings::Substitute("fail to do hadoop-lz4 decompress, decompressed_total_len=$0, "
+                                                "compressed_len=$1, input_len=$2",
+                                                decompressed_total_len, compressed_len, input_len));
                 }
 
                 // Decompress this block.
@@ -233,7 +234,7 @@ private:
                 input_len -= compressed_len;
                 decompressed_block_len -= output_block.size;
                 decompressed_total_len += output_block.size;
-            }
+            } while (decompressed_block_len > 0);
         }
         return Status::OK();
     }
