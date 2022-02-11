@@ -1660,6 +1660,9 @@ static inline void utf8_reverse_per_slice(const char* src_begin, const char* src
     auto src_curr = src_begin;
     for (auto char_size = 0; src_curr < src_end; src_curr += char_size) {
         char_size = UTF8_BYTE_LENGTH_TABLE[(uint8_t)*src_curr];
+        // utf8 chars are copied from src_curr to  dst_curr one by one reversely, an illegal utf8 char
+        // would give a larger char_size than expected, which would cause dst_curr advance to exceed its lower,
+        // so protect char_size to not exceeds src_end-src_curr.
         char_size = std::min<size_t>(src_end - src_curr, char_size);
         dst_curr -= char_size;
         strings::memcpy_inlined(dst_curr, src_curr, char_size);
