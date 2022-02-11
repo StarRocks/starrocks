@@ -103,9 +103,9 @@ public enum ScalarOperatorEvaluator {
 
         // return Null directly iff:
         // 1. Not UDF
-        // 2. Not in NonNullResultWithNullParamFunctions
+        // 2. Not in isNotAlwaysNullResultWithNullParamFunctions
         // 3. Has null parameter
-        if (!Catalog.getCurrentCatalog().isNonNullResultWithNullParamFunction(fn.getFunctionName().getFunction())
+        if (!Catalog.getCurrentCatalog().isNotAlwaysNullResultWithNullParamFunction(fn.getFunctionName().getFunction())
                 && !fn.isUdf()) {
             for (ScalarOperator op : root.getChildren()) {
                 if (((ConstantOperator) op).isNull()) {
