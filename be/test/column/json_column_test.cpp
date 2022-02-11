@@ -219,10 +219,11 @@ PARALLEL_TEST(JsonColumnTest, test_fmt) {
 PARALLEL_TEST(JsonColumnTest, test_clone) {
     JsonValue json = JsonValue::parse("{}").value();
     MemPool pool;
-    JsonValue* cloned = json.clone(&pool);
+    StatusOr<JsonValue*> cloned = json.clone(&pool);
 
-    ASSERT_EQ(json, *cloned);
-    ASSERT_EQ("{}", cloned->to_string_uncheck());
+    ASSERT_TRUE(cloned.ok());
+    ASSERT_EQ(json, *cloned.value());
+    ASSERT_EQ("{}", cloned.value()->to_string_uncheck());
     ASSERT_EQ(32, pool.total_allocated_bytes());
 }
 

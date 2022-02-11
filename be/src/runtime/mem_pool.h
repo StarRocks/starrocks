@@ -24,11 +24,14 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
+#include <new>
 #include <string>
 #include <vector>
 
+#include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "common/status.h"
 #include "gutil/dynamic_annotations.h"
 #include "runtime/memory/chunk.h"
 #include "storage/olap_define.h"
@@ -259,10 +262,15 @@ public:
         using other = pool_allocator<U, typename b_t::template rebind_alloc<U>>;
     };
 
-    // allocate more than caller required
-    T* allocate(size_t n) { return (T*)_mem->allocate(n); }
+    // Throw std::bad_alloc if allocation failed
+    // TODO currently nobody catch this exception, leave it to future mempool framework
+    T* allocate(size_t n) {
+        T* res = (T*)_mem->allocate(n * sizeof(T));
+        THROW_BAD_ALLOC_IF_NULL(res);
+        return res;
+    }
 
-    T* allocate(size_t n, const void* hint) { return (T*)_mem->allocate(n); }
+    T* allocate(size_t n, const void* hint) { return allocate(n); }
 
     void deallocate(T* p, size_t n) {
         // noop

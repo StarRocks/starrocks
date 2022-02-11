@@ -99,7 +99,7 @@ public:
     std::string to_string_uncheck() const;
     int compare(const JsonValue& rhs) const;
     int64_t hash() const;
-    JsonValue* clone(MemPool* mem) const;
+    StatusOr<JsonValue*> clone(MemPool* mem) const;
 
 private:
     template <class Ret, class Fn>

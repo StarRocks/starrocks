@@ -10,6 +10,7 @@
 #include "common/statusor.h"
 #include "glog/logging.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
 #include "simdjson.h"
 #include "velocypack/vpack.h"
@@ -223,11 +224,12 @@ int64_t JsonValue::hash() const {
 // Memory allocated by binary_ is located at mempool, not in std::malloc, which should not
 // be freeed by deconstructor.
 // Instead, the memory should be freeed by the mempool
-JsonValue* JsonValue::clone(MemPool* mem) const {
+StatusOr<JsonValue*> JsonValue::clone(MemPool* mem) const {
     DCHECK_NOTNULL(mem);
+
     pooled_string binary(this->binary_, pool_allocator<char>(mem));
-    JsonValue* res;
-    res = (JsonValue*)mem->allocate(sizeof(JsonValue));
+    JsonValue* res = (JsonValue*)mem->allocate(sizeof(JsonValue));
+    RETURN_IF_UNLIKELY_NULL(res, Status::MemoryAllocFailed("mempool exceeded"));
     new (res) JsonValue(std::move(binary));
     return res;
 }

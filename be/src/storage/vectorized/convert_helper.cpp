@@ -619,8 +619,9 @@ public:
         RETURN_IF_ERROR(JsonValue::parse(source, &json));
 
         // TODO(mofei) optimize this, avoid clone
-        JsonValue* copy = json.clone(mem_pool);
-        dst.set_json(copy);
+        StatusOr<JsonValue*> copy = json.clone(mem_pool);
+        RETURN_IF_ERROR(copy.status());
+        dst.set_json(copy.value());
 
         return Status::OK();
     }
@@ -686,6 +687,7 @@ public:
         std::string json_str = json->to_string_uncheck();
         Slice dst_slice = json_str;
         dst_slice.data = reinterpret_cast<char*>(mem_pool->allocate(dst_slice.size));
+        RETURN_IF_UNLIKELY_NULL(dst_slice.data, Status::MemoryAllocFailed("mempool exceeded"));
         memcpy(dst_slice.data, json_str.data(), dst_slice.size);
         dst.set_slice(dst_slice);
         return Status::OK();
