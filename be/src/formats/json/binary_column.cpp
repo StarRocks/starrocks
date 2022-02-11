@@ -128,7 +128,7 @@ Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, c
 
     auto json_value = JsonValue::from_simdjson(value);
     RETURN_IF(!json_value.ok(), json_value.status());
-    json_column->append(&json_value.value());
+    json_column->append(std::move(json_value).value());
     return Status::OK();
 }
 
