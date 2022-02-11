@@ -339,6 +339,7 @@ enum ReaderType {
     READER_BASE_COMPACTION = 2,
     READER_CUMULATIVE_COMPACTION = 3,
     READER_CHECKSUM = 4,
+    READER_LEVEL_COMPACTION = 5,
 };
 
 inline bool is_query(ReaderType reader_type) {
@@ -346,7 +347,8 @@ inline bool is_query(ReaderType reader_type) {
 }
 
 inline bool is_compaction(ReaderType reader_type) {
-    return reader_type == READER_BASE_COMPACTION || reader_type == READER_CUMULATIVE_COMPACTION;
+    return reader_type == READER_BASE_COMPACTION || reader_type == READER_CUMULATIVE_COMPACTION ||
+           reader_type == READER_LEVEL_COMPACTION;
 }
 
 // <start_version_id, end_version_id>, such as <100, 110>
@@ -358,6 +360,12 @@ struct Version {
 
     Version(int64_t first_, int64_t second_) : first(first_), second(second_) {}
     Version() {}
+
+    Version& operator=(const Version& version) {
+        first = version.first;
+        second = version.second;
+        return *this;
+    }
 
     friend std::ostream& operator<<(std::ostream& os, const Version& version);
 

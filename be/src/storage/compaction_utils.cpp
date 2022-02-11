@@ -2,6 +2,8 @@
 
 #include "storage/compaction_utils.h"
 
+#include "storage/compaction_context.h"
+#include "storage/compaction_policy.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -114,4 +116,9 @@ CompactionAlgorithm CompactionUtils::choose_compaction_algorithm(size_t num_colu
     return VERTICAL_COMPACTION;
 }
 
-} // namespace starrocks
+std::unique_ptr<CompactionPolicy> CompactionUtils::create_compaction_policy(CompactionContext* context) {
+    // now only support LevelCompactionPolicy
+    return nullptr;
+}
+
+} // namespace starrocks 
