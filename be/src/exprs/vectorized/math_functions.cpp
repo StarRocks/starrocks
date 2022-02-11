@@ -23,6 +23,10 @@ DEFINE_UNARY_FN_WITH_IMPL(NanCheck, value) {
     return std::isnan(value);
 }
 
+DEFINE_UNARY_FN_WITH_IMPL(ExpCheck, value) {
+    return std::isnan(value) || value > MathFunctions::MAX_EXP_PARAMETER;
+}
+
 DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
     return value == 0;
 }
@@ -65,6 +69,12 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
         return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));                  \
     }
 
+#define DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN(NAME, TYPE, RESULT_TYPE, NULL_FN)                             \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
+        using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, NULL_FN>;             \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));                  \
+    }
+
 #define DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                         \
     ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
         using VectorizedBinaryFunction = VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>;           \
@@ -103,6 +113,10 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
 #define DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(NAME, TYPE, RESULT_TYPE, FN) \
     DEFINE_UNARY_FN(NAME##Impl, FN);                                                      \
     DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, TYPE, RESULT_TYPE);
+
+#define DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN_WITH_IMPL(NAME, TYPE, RESULT_TYPE, FN, NULL_FN) \
+    DEFINE_UNARY_FN(NAME##Impl, FN);                                                           \
+    DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN(NAME, TYPE, RESULT_TYPE, NULL_FN);
 
 #define DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(NAME, LTYPE, RTYPE, RESULT_TYPE, FN) \
     DEFINE_BINARY_FUNCTION(NAME##Impl, FN);                                                        \
@@ -225,7 +239,7 @@ DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(tan, TYPE_DOUBLE, TYPE_DOUB
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan, TYPE_DOUBLE, TYPE_DOUBLE, std::atan);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(ceil, TYPE_DOUBLE, TYPE_BIGINT, std::ceil);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(floor, TYPE_DOUBLE, TYPE_BIGINT, std::floor);
-DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(exp, TYPE_DOUBLE, TYPE_DOUBLE, std::exp);
+DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN_WITH_IMPL(exp, TYPE_DOUBLE, TYPE_DOUBLE, std::exp, ExpCheck);
 
 DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN_WITH_IMPL(ln, TYPE_DOUBLE, TYPE_DOUBLE, std::log);
 DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN_WITH_IMPL(log10, TYPE_DOUBLE, TYPE_DOUBLE, std::log10);
