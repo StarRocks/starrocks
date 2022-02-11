@@ -248,7 +248,6 @@ StatusOr<PriorityThreadPool::Task> IoWorkGroupQueue::pick_next_task() {
 
     _adjust_weight();
     WorkGroupPtr wg = _select_next_wg();
-    ++wg->num_selected_io_times;
     if (wg->io_task_queue_size() == 1) {
         _ready_wgs.erase(wg);
     }
@@ -328,24 +327,6 @@ StatusOr<PriorityThreadPool::Task> WorkGroupManager::pick_next_task_for_io() {
 
 bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
     return _wg_io_queue.try_offer_io_task(wg, task);
-}
-
-void WorkGroupManager::log_cpu() {
-    LOG(WARNING) << "[TEST] ===============================";
-    for (auto [_, wg] : _workgroups) {
-        LOG(WARNING) << "[TEST] cpu "
-                     << "[wg=" << wg->name() << "] "
-                     << "[cpu_limit=" << wg->get_cpu_limit() << "] "
-                     << "[runtime=" << wg->get_real_runtime_ns() / 1000'000.0L << "] "
-                     << "[vruntime=" << wg->get_vruntime_ns() / 1000'000.0L << "] "
-                     << "[expected_ratio=" << wg->get_cpu_expected_use_ratio() << "] "
-                     << "[real_ratio=" << wg->get_cpu_unadjusted_actual_use_ratio() << "] ";
-        LOG(WARNING) << "[TEST] io "
-                     << "[select_factor=" << wg->get_select_factor() << "] "
-                     << "[cur_hold_total_chunk_num " << wg->get_cur_hold_total_chunk_num() << "] "
-                     << "[selected_io_times=" << wg->num_selected_io_times << "] ";
-    }
-    LOG(WARNING) << "[TEST] ===============================";
 }
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {

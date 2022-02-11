@@ -130,8 +130,6 @@ public:
     double get_cur_select_factor() const;
     void update_cur_select_factor(double value);
 
-    // TODO(ZiheLiu): remove them. They are just for test.
-    std::atomic<int> num_selected_io_times = 0;
 private:
     std::string _name;
     int _id;
@@ -196,8 +194,6 @@ public:
         _sum_unadjusted_cpu_runtime_ns += cpu_runtime_ns;
     }
     int64_t get_sum_unadjusted_cpu_runtime_ns() const { return _sum_unadjusted_cpu_runtime_ns; }
-
-    void log_cpu();
 
 private:
     std::mutex _mutex;

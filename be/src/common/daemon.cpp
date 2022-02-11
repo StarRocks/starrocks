@@ -114,14 +114,6 @@ void gc_tcmalloc_memory(void* arg_this) {
     }
 }
 
-void log_workgroup(void* arg_this) {
-    Daemon* daemon = static_cast<Daemon*>(arg_this);
-    while (!daemon->stopped()) {
-        workgroup::WorkGroupManager::instance()->log_cpu();
-        sleep(1); // 1 second
-    }
-}
-
 /*
  * this thread will calculate some metrics at a fix interval(15 sec)
  * 1. push bytes per second
@@ -284,10 +276,6 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
         Thread::set_thread_name(calculate_metrics_thread, "metrics_daemon");
         _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
     }
-
-    std::thread log_workgroup_thread(log_workgroup, this);
-    Thread::set_thread_name(log_workgroup_thread, "log_workgroup");
-    _daemon_threads.emplace_back(std::move(log_workgroup_thread));
 
     init_signals();
     init_minidump();
