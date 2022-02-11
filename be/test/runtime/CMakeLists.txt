@@ -23,6 +23,6 @@
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/test/runtime")
 
 ADD_BE_TEST(routine_load_task_executor_test)
-ADD_BE_TEST(small_file_mgr_test)
+# ADD_BE_TEST(small_file_mgr_test)
 ADD_BE_TEST(user_function_cache_test)
 
