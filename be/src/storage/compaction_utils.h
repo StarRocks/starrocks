@@ -12,8 +12,6 @@ namespace starrocks {
 
 class RowsetWriter;
 class Tablet;
-class CompactionPolicy;
-class CompactionContext;
 
 enum CompactionAlgorithm {
     // compaction by all columns together.
