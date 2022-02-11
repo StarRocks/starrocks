@@ -2,9 +2,13 @@
 
 #include "storage/persistent_index.h"
 
+#include <cstring>
+#include <numeric>
+
 #include "gutil/strings/substitute.h"
 #include "storage/fs/fs_util.h"
 #include "util/coding.h"
+#include "util/crc32c.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/faststring.h"
@@ -14,12 +18,51 @@
 
 namespace starrocks {
 
+constexpr size_t default_usage_percent = 85;
+constexpr size_t page_size = 4096;
+constexpr size_t page_header_size = 64;
+constexpr size_t bucket_per_page = 16;
+constexpr size_t shard_max = 1 << 16;
+constexpr size_t pack_size = 16;
+constexpr size_t page_pack_limit = (page_size - page_header_size) / pack_size;
+constexpr uint64_t seed0 = 12980785309524476958ULL;
+constexpr uint64_t seed1 = 9110941936030554525ULL;
+
+using KVPairPtr = const uint8_t*;
+
+template <class T, class P>
+T npad(T v, P p) {
+    return (v + p - 1) / p;
+}
+
+template <class T, class P>
+T pad(T v, P p) {
+    return npad(v, p) * p;
+}
+
+struct IndexHash {
+    IndexHash(uint64_t hash) : hash(hash) {}
+    uint64_t shard() const { return hash >> 48; }
+    uint64_t page() const { return (hash >> 16) & 0xffffffff; }
+    uint64_t bucket() const { return (hash >> 8) & (bucket_per_page - 1); }
+    uint64_t tag() const { return hash & 0xff; }
+
+    uint64_t hash;
+};
+
 MutableIndex::MutableIndex() {}
 
 MutableIndex::~MutableIndex() {}
 
-constexpr uint64_t seed0 = 12980785309524476958ULL;
-constexpr uint64_t seed1 = 9110941936030554525ULL;
+template <size_t KeySize>
+struct FixedKey {
+    uint8_t data[KeySize];
+};
+
+template <size_t KeySize>
+bool operator==(const FixedKey<KeySize>& lhs, const FixedKey<KeySize>& rhs) {
+    return memcmp(lhs.data, rhs.data, KeySize) == 0;
+}
 
 template <size_t KeySize>
 struct FixedKeyHash {
@@ -30,6 +73,378 @@ struct FixedKeyHash {
     }
 };
 
+static std::tuple<size_t, size_t> estimate_nshard_and_npage(size_t kv_size, size_t size, size_t usage_percent) {
+    size_t usage = size * kv_size;
+    size_t cap = usage * 100 / usage_percent;
+    size_t nshard = 1;
+    while (nshard * 1024 * 1024 < cap) {
+        nshard *= 2;
+        if (nshard == shard_max) {
+            break;
+        }
+    }
+    size_t npage = npad(cap / nshard, page_size);
+    return {nshard, npage};
+}
+
+// Page storage layout:
+//   each page has 4096 / 16 = 256 packs, ie
+//   |--------       4096 byte page             -------|
+//   |16b pack0|16b pack0| ... |16b pack254|16b pack255|
+//   | header  |       data for buckets                |
+// Header layout
+//   |BucketInfo0|BucketInfo1|...|BucketInfo14|BucketInfo15|
+// Bucket data layout
+//   | tags (16byte aligned) | kv0,kv1..,kvn (16 byte aligned) |
+
+struct alignas(4) BucketInfo {
+    uint16_t pageid;
+    // bucket position as pack id
+    uint8_t packid;
+    uint8_t size;
+};
+
+struct alignas(page_header_size) PageHeader {
+    BucketInfo buckets[bucket_per_page];
+};
+
+struct alignas(page_size) IndexPage {
+    uint8_t data[page_size];
+    PageHeader& header() { return *reinterpret_cast<PageHeader*>(data); }
+    uint8_t* pack(uint8_t packid) { return &data[packid * pack_size]; }
+};
+
+struct ImmutableIndexShard {
+    ImmutableIndexShard(size_t npage) : pages(npage) {}
+
+    size_t npage() const { return pages.size(); }
+
+    IndexPage& page(uint32_t pageid) { return pages[pageid]; }
+
+    PageHeader& header(uint32_t pageid) { return pages[pageid].header(); }
+
+    BucketInfo& bucket(uint32_t pageid, uint32_t bucketid) { return pages[pageid].header().buckets[bucketid]; }
+
+    uint8_t* pack(uint32_t pageid, uint32_t bucketid) {
+        auto& info = bucket(pageid, bucketid);
+        return pages[info.pageid].pack(info.packid);
+    }
+
+    Status write(fs::WritableBlock& wb) const;
+
+    static StatusOr<std::unique_ptr<ImmutableIndexShard>> create(size_t kv_size, const std::vector<IndexHash>& hashes,
+                                                                 const std::vector<KVPairPtr>& kv_ptrs,
+                                                                 size_t npage_hint);
+    vector<IndexPage> pages;
+    size_t num_entry_moved = 0;
+};
+
+Status ImmutableIndexShard::write(fs::WritableBlock& wb) const {
+    return wb.append(Slice((uint8_t*)pages.data(), page_size * pages.size()));
+}
+
+inline size_t num_pack_for_bucket(size_t kv_size, size_t num_kv) {
+    return npad(num_kv, pack_size) + npad(kv_size * num_kv, pack_size);
+}
+
+struct BucketToMove {
+    uint32_t npack = 0;
+    uint32_t pageid = 0;
+    uint32_t bucketid = 0;
+    BucketToMove(uint32_t npack, uint32_t pageid, uint32_t bucketid)
+            : npack(npack), pageid(pageid), bucketid(bucketid) {}
+    bool operator<(const BucketToMove& rhs) const { return npack < rhs.npack; }
+};
+
+struct MoveDest {
+    uint32_t npack = 0;
+    uint32_t pageid = 0;
+    MoveDest(uint32_t npack, uint32_t pageid) : npack(npack), pageid(pageid) {}
+    bool operator<(const MoveDest& rhs) const { return npack < rhs.npack; }
+};
+
+static Status find_buckets_to_move(uint32_t pageid, size_t min_pack_to_move, const uint8_t* bucket_packs_in_page,
+                                   std::vector<BucketToMove>* buckets_to_move) {
+    std::vector<int> bucketid_ordered_by_packs(bucket_per_page);
+    for (int i = 0; i < bucket_per_page; i++) {
+        bucketid_ordered_by_packs[i] = i;
+    }
+    std::sort(bucketid_ordered_by_packs.begin(), bucketid_ordered_by_packs.end(),
+              [&](const int& l, const int& r) -> bool { return bucket_packs_in_page[l] < bucket_packs_in_page[r]; });
+    // try find solution of moving 1 bucket
+    for (int oi = 0; oi < bucket_per_page; oi++) {
+        int i = bucketid_ordered_by_packs[oi];
+        auto bucket_packs = bucket_packs_in_page[i];
+        if (bucket_packs >= min_pack_to_move) {
+            buckets_to_move->emplace_back(bucket_packs, pageid, i);
+            return Status::OK();
+        }
+    }
+    // try find solution of moving 2 bucket
+    std::array<int, 3> move2_min = {INT_MAX, -1, -1};
+    for (int oi = 0; oi < bucket_per_page; oi++) {
+        int i = bucketid_ordered_by_packs[oi];
+        if (bucket_packs_in_page[i] == 0) {
+            continue;
+        }
+        for (int oj = oi + 1; oj < bucket_per_page; oj++) {
+            int j = bucketid_ordered_by_packs[oj];
+            auto bucket_packs = bucket_packs_in_page[i] + bucket_packs_in_page[j];
+            if (bucket_packs == min_pack_to_move) {
+                buckets_to_move->emplace_back(bucket_packs_in_page[i], pageid, i);
+                buckets_to_move->emplace_back(bucket_packs_in_page[j], pageid, j);
+                return Status::OK();
+            } else if (bucket_packs > min_pack_to_move && bucket_packs < move2_min[0]) {
+                move2_min = {bucket_packs, i, j};
+                break;
+            }
+        }
+    }
+    if (move2_min[2] >= 0) {
+        for (int i = 1; i < 3; i++) {
+            auto bucketid = move2_min[i];
+            buckets_to_move->emplace_back(bucket_packs_in_page[bucketid], pageid, bucketid);
+        }
+        return Status::OK();
+    }
+    // try find solution of moving 3 bucket
+    std::array<int, 4> move3_min = {INT_MAX, -1, -1, -1};
+    for (int oi = 0; oi < bucket_per_page; oi++) {
+        int i = bucketid_ordered_by_packs[oi];
+        if (bucket_packs_in_page[i] == 0) {
+            continue;
+        }
+        for (int oj = oi + 1; oj < bucket_per_page; oj++) {
+            int j = bucketid_ordered_by_packs[oj];
+            for (int ok = oj + 1; ok < bucket_per_page; ok++) {
+                int k = bucketid_ordered_by_packs[ok];
+                auto bucket_packs = bucket_packs_in_page[i] + bucket_packs_in_page[j] + bucket_packs_in_page[k];
+                if (bucket_packs == min_pack_to_move) {
+                    buckets_to_move->emplace_back(bucket_packs_in_page[i], pageid, i);
+                    buckets_to_move->emplace_back(bucket_packs_in_page[j], pageid, j);
+                    buckets_to_move->emplace_back(bucket_packs_in_page[k], pageid, k);
+                    return Status::OK();
+                } else if (bucket_packs > min_pack_to_move && bucket_packs < move3_min[0]) {
+                    move3_min = {bucket_packs, i, j, k};
+                    break;
+                }
+            }
+        }
+    }
+    if (move3_min[2] >= 0) {
+        for (int i = 1; i < 4; i++) {
+            auto bucketid = move3_min[i];
+            buckets_to_move->emplace_back(bucket_packs_in_page[bucketid], pageid, bucketid);
+        }
+        return Status::OK();
+    }
+    // TODO: current algorithm is sub-optimal, find buckets to move using DP
+    return Status::InternalError("find_buckets_to_move");
+}
+
+struct BucketMovement {
+    uint32_t src_pageid;
+    uint32_t src_bucketid;
+    uint32_t dest_pageid;
+    BucketMovement(uint32_t src_pageid, uint32_t src_bucketid, uint32_t dest_pageid)
+            : src_pageid(src_pageid), src_bucketid(src_bucketid), dest_pageid(dest_pageid) {}
+};
+
+static void remove_packs_from_dests(std::vector<MoveDest>& dests, int idx, int npack) {
+    auto& d = dests[idx];
+    d.npack -= npack;
+    if (d.npack == 0) {
+        dests.erase(dests.begin() + idx);
+    } else {
+        for (int c = idx; c > 0; c--) {
+            if (dests[c] < dests[c - 1]) {
+                std::swap(dests[c], dests[c - 1]);
+            }
+        }
+    }
+}
+
+static StatusOr<std::vector<BucketMovement>> move_buckets(std::vector<BucketToMove>& buckets_to_move,
+                                                          std::vector<MoveDest>& dests) {
+    std::vector<BucketMovement> ret;
+    std::sort(buckets_to_move.begin(), buckets_to_move.end());
+    std::sort(dests.begin(), dests.end());
+    // move largest bucket first
+    for (ssize_t i = buckets_to_move.size() - 1; i >= 0; i--) {
+        auto& src = buckets_to_move[i];
+        auto pos = std::lower_bound(dests.begin(), dests.end(), src.npack,
+                                    [](const MoveDest& lhs, const uint32_t& rhs) { return lhs.npack < rhs; });
+        if (pos == dests.end()) {
+            return Status::InternalError("move_buckets failed");
+        }
+        auto idx = pos - dests.begin();
+        auto& dest = dests[idx];
+        ret.emplace_back(src.pageid, src.bucketid, dest.pageid);
+        remove_packs_from_dests(dests, idx, src.npack);
+    }
+    return std::move(ret);
+}
+
+static void copy_kv_to_page(size_t kv_size, size_t num_kv, const KVPairPtr* kv_ptrs, const uint8_t* tags,
+                            uint8_t* dest_pack) {
+    uint8_t* tags_dest = dest_pack;
+    size_t tags_len = pad(num_kv, pack_size);
+    memcpy(tags_dest, tags, num_kv);
+    memset(tags_dest + num_kv, 0, tags_len - num_kv);
+    uint8_t* kvs_dest = dest_pack + tags_len;
+    for (size_t i = 0; i < num_kv; i++) {
+        memcpy(kvs_dest, kv_ptrs[i], kv_size);
+        kvs_dest += kv_size;
+    }
+}
+
+StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_t kv_size,
+                                                                           const std::vector<IndexHash>& hashes,
+                                                                           const std::vector<KVPairPtr>& kv_ptrs,
+                                                                           size_t npage_hint) {
+    size_t npage = npage_hint;
+    size_t bucket_size_max = std::min(256UL, (page_size - page_header_size) / (kv_size + 1));
+    size_t nbucket = npage * bucket_per_page;
+    std::vector<uint8_t> bucket_sizes(nbucket);
+    std::vector<std::pair<std::vector<KVPairPtr>, std::vector<uint8_t>>> bucket_kv_ptrs_tags(nbucket);
+    size_t estimated_entry_per_bucket = npad(hashes.size() * 100 / 85, nbucket);
+    for (auto& p : bucket_kv_ptrs_tags) {
+        p.first.reserve(estimated_entry_per_bucket);
+        p.second.reserve(estimated_entry_per_bucket);
+    }
+    DCHECK(hashes.size() == kv_ptrs.size());
+    for (size_t i = 0; i < hashes.size(); i++) {
+        auto& h = hashes[i];
+        auto page = h.page() % npage;
+        auto bucket = h.bucket();
+        auto bid = page * bucket_per_page + bucket;
+        auto& sz = bucket_sizes[bid];
+        if (sz == bucket_size_max) {
+            // TODO: increase npage and retry
+            return Status::InternalError("bucket size limit exceeded");
+        }
+        sz++;
+        bucket_kv_ptrs_tags[bid].first.emplace_back(kv_ptrs[i]);
+        bucket_kv_ptrs_tags[bid].second.emplace_back(h.tag());
+    }
+    std::vector<uint8_t> bucket_packs(nbucket);
+    for (size_t i = 0; i < nbucket; i++) {
+        auto npack = num_pack_for_bucket(kv_size, bucket_sizes[i]);
+        if (npack >= page_pack_limit) {
+            return Status::InternalError("page page limit exceeded");
+        }
+        bucket_packs[i] = npack;
+    }
+    // check over-limit pages and reassign some buckets in those pages to under-limit pages
+    std::vector<BucketToMove> buckets_to_move;
+    std::vector<MoveDest> dests;
+    std::vector<bool> page_has_move(npage, false);
+    for (uint32_t pageid = 0; pageid < npage; pageid++) {
+        const uint8_t* bucket_packs_in_page = &bucket_packs[pageid * bucket_per_page];
+        int npack = std::accumulate(bucket_packs_in_page, bucket_packs_in_page + bucket_per_page, 0);
+        if (npack < page_pack_limit) {
+            dests.emplace_back(page_pack_limit - npack, pageid);
+        } else if (npack > page_pack_limit) {
+            page_has_move[pageid] = true;
+            RETURN_IF_ERROR(
+                    find_buckets_to_move(pageid, npack - page_pack_limit, bucket_packs_in_page, &buckets_to_move));
+        }
+    }
+    auto move_rs = move_buckets(buckets_to_move, dests);
+    if (!move_rs.ok()) {
+        return std::move(move_rs).status();
+    }
+    auto& moves = move_rs.value();
+    auto bucket_moved = [&](uint32_t pageid, uint32_t bucketid) -> bool {
+        for (auto& move : moves) {
+            if (move.src_pageid == pageid && move.src_bucketid == bucketid) {
+                return true;
+            }
+        }
+        return false;
+    };
+    // calculate bucket positions
+    std::unique_ptr<ImmutableIndexShard> ret = std::make_unique<ImmutableIndexShard>(npage);
+    for (auto& move : moves) {
+        ret->num_entry_moved += bucket_sizes[move.src_pageid * bucket_per_page + move.src_bucketid];
+    }
+    for (uint32_t pageid = 0; pageid < npage; pageid++) {
+        IndexPage& page = ret->page(pageid);
+        PageHeader& header = ret->header(pageid);
+        size_t cur_packid = page_header_size / pack_size;
+        for (uint32_t bucketid = 0; bucketid < bucket_per_page; bucketid++) {
+            if (page_has_move[pageid] && bucket_moved(pageid, bucketid)) {
+                continue;
+            }
+            auto bid = pageid * bucket_per_page + bucketid;
+            auto& bucket_info = header.buckets[bucketid];
+            bucket_info.pageid = pageid;
+            bucket_info.packid = cur_packid;
+            bucket_info.size = bucket_sizes[bid];
+            copy_kv_to_page(kv_size, bucket_info.size, bucket_kv_ptrs_tags[bid].first.data(),
+                            bucket_kv_ptrs_tags[bid].second.data(), page.pack(cur_packid));
+            cur_packid += bucket_packs[bid];
+            DCHECK(cur_packid <= page_size / pack_size);
+        }
+        for (auto& move : moves) {
+            if (move.dest_pageid == pageid) {
+                auto bid = move.src_pageid * bucket_per_page + move.src_bucketid;
+                auto& bucket_info = ret->bucket(move.src_pageid, move.src_bucketid);
+                bucket_info.pageid = pageid;
+                bucket_info.packid = cur_packid;
+                bucket_info.size = bucket_sizes[bid];
+                copy_kv_to_page(kv_size, bucket_info.size, bucket_kv_ptrs_tags[bid].first.data(),
+                                bucket_kv_ptrs_tags[bid].second.data(), page.pack(cur_packid));
+                cur_packid += bucket_packs[bid];
+                DCHECK(cur_packid <= page_size / pack_size);
+            }
+        }
+    }
+    return std::move(ret);
+}
+
+Status write_immutable_index(size_t kv_size, const std::vector<std::vector<IndexHash>>& hashes_by_shard,
+                             const std::vector<std::vector<KVPairPtr>>& kv_ptrs_by_shard, size_t npage_hint,
+                             const EditVersion& version, fs::WritableBlock& wb) {
+    ImmutableIndexMetaPB meta;
+    size_t total = 0;
+    size_t total_moved = 0;
+    size_t total_bytes = 0;
+    for (size_t i = 0; i < hashes_by_shard.size(); i++) {
+        auto rs_create = ImmutableIndexShard::create(kv_size, hashes_by_shard[i], kv_ptrs_by_shard[i], npage_hint);
+        if (!rs_create.ok()) {
+            return std::move(rs_create).status();
+        }
+        auto& shard = rs_create.value();
+        size_t pos_before = wb.bytes_appended();
+        RETURN_IF_ERROR(shard->write(wb));
+        size_t pos_after = wb.bytes_appended();
+        auto shard_meta = meta.add_shards();
+        shard_meta->set_size(hashes_by_shard[i].size());
+        shard_meta->set_npage(shard->npage());
+        auto ptr_meta = shard_meta->mutable_data();
+        ptr_meta->set_offset(pos_before);
+        ptr_meta->set_size(pos_after - pos_before);
+        total += hashes_by_shard[i].size();
+        total_moved += shard->num_entry_moved;
+        total_bytes += pos_after - pos_before;
+    }
+    LOG(INFO) << strings::Substitute(
+            "write immutable index kv_size:$0 shard:$1 npage_hint:$2 #kv:$3 #moved:$4($5) bytes:$6 usage:$7", kv_size,
+            hashes_by_shard.size(), npage_hint, total, total_moved, total_moved * 1000 / total / 1000.0, total_bytes,
+            kv_size * total * 1000 / total_bytes / 1000.0);
+    version.to_pb(meta.mutable_version());
+    meta.set_size(total);
+    std::string footer;
+    if (!meta.SerializeToString(&footer)) {
+        return Status::InternalError("ImmutableIndexMetaPB::SerializeToString failed");
+    }
+    put_fixed32_le(&footer, static_cast<uint32_t>(footer.size()));
+    uint32_t checksum = crc32c::Value(footer.data(), footer.size());
+    put_fixed32_le(&footer, checksum);
+    return wb.append(Slice(footer));
+}
+
 template <size_t KeySize>
 class FixedMutableIndex : public MutableIndex {
 private:
@@ -38,6 +453,34 @@ private:
 public:
     FixedMutableIndex() {}
     ~FixedMutableIndex() override {}
+
+    size_t size() const override { return _map.size(); }
+
+    Status flush_to_immutable_index(size_t num_entry, const EditVersion& version,
+                                    fs::WritableBlock& wb) const override {
+        size_t kv_size = KeySize + sizeof(IndexValue);
+        auto [nshard, npage_hint] = estimate_nshard_and_npage(kv_size, num_entry, default_usage_percent);
+        std::vector<std::vector<IndexHash>> hashes_by_shard(nshard);
+        std::vector<std::vector<KVPairPtr>> kv_ptrs_by_shard(nshard);
+        size_t estimated_per_shard_entry = num_entry / nshard * 100 / default_usage_percent;
+        for (size_t i = 0; i < nshard; i++) {
+            hashes_by_shard[i].reserve(estimated_per_shard_entry);
+            kv_ptrs_by_shard[i].reserve(estimated_per_shard_entry);
+        }
+        auto hasher = FixedKeyHash<KeySize>();
+        size_t shard_mask = nshard - 1;
+        for (const auto& e : _map) {
+            if (e.second == NullIndexValue) {
+                continue;
+            }
+            const auto& k = e.first;
+            IndexHash h(hasher(k));
+            auto shard = h.shard() & shard_mask;
+            hashes_by_shard[shard].emplace_back(h);
+            kv_ptrs_by_shard[shard].emplace_back((const KVPairPtr)&k);
+        }
+        return write_immutable_index(kv_size, hashes_by_shard, kv_ptrs_by_shard, npage_hint, version, wb);
+    }
 
     Status get(size_t n, const void* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found) const override {
         const FixedKey<KeySize>* fkeys = reinterpret_cast<const FixedKey<KeySize>*>(keys);
@@ -384,6 +827,18 @@ Status PersistentIndex::_append_wal(size_t n, const void* keys, const IndexValue
     }
     RETURN_IF_ERROR(_index_block->append(fixed_buf));
     _page_size += fixed_buf.size();
+}
+
+Status PersistentIndex::_flush_l0() {
+    auto idx_file_path = strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
+    auto idx_file_path_tmp = idx_file_path + ".tmp";
+    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    std::unique_ptr<fs::WritableBlock> wblock;
+    fs::CreateBlockOptions wblock_opts({idx_file_path_tmp});
+    RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
+    DeferOp remove_tmp_file([&] { Env::Default()->delete_file(idx_file_path_tmp); });
+    RETURN_IF_ERROR(_l0->flush_to_immutable_index(_size, _version, *wblock));
+    RETURN_IF_ERROR(Env::Default()->rename_file(idx_file_path_tmp, idx_file_path));
     return Status::OK();
 }
 

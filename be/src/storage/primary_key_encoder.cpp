@@ -22,7 +22,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "primary_key_encoder.h"
+#include "storage/primary_key_encoder.h"
 
 #include <cstring>
 #include <memory>

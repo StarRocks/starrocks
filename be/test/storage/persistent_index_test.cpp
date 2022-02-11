@@ -4,12 +4,9 @@
 
 #include <gtest/gtest.h>
 
-#include "gutil/strings/substitute.h"
-#include "runtime/mem_tracker.h"
+#include "env/env_memory.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/storage_engine.h"
-#include "storage/tablet.h"
-#include "storage/tablet_meta_manager.h"
 #include "testutil/parallel_test.h"
 #include "util/coding.h"
 #include "util/faststring.h"
@@ -194,6 +191,37 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
 
     wblock->close();
     FileUtils::remove_all(kPersistentIndexDir);
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
+    using Key = uint64_t;
+    int N = 200000;
+    vector<Key> keys(N);
+    vector<IndexValue> values(N);
+    for (int i = 0; i < N; i++) {
+        char* dst = (char*)&keys[i];
+        snprintf(dst, 8, "%07d", i);
+        values[i] = i * 2;
+    }
+    auto rs = MutableIndex::create(sizeof(Key));
+    ASSERT_TRUE(rs.ok());
+    std::unique_ptr<MutableIndex> idx = std::move(rs).value();
+
+    // test insert
+    ASSERT_TRUE(idx->insert(keys.size(), keys.data(), values.data()).ok());
+
+    //auto env = std::make_unique<EnvMemory>();
+    auto env = Env::Default();
+    auto block_mgr = std::make_unique<fs::FileBlockManager>(env, fs::BlockManagerOptions());
+    std::unique_ptr<fs::WritableBlock> wblock;
+    fs::CreateBlockOptions opts({"./index.l1.1.1"});
+    ASSERT_TRUE(block_mgr->create_block(opts, &wblock).ok());
+    auto st = idx->flush_to_immutable_index(idx->size(), EditVersion(1, 1), *wblock);
+    if (!st.ok()) {
+        LOG(WARNING) << st;
+    }
+    ASSERT_TRUE(wblock->finalize().ok());
+    ASSERT_TRUE(wblock->close().ok());
 }
 
 } // namespace starrocks
