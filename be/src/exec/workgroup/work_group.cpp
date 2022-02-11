@@ -13,10 +13,10 @@ WorkGroup::WorkGroup(const std::string& name, int id, size_t cpu_limit, size_t m
                      WorkGroupType type)
         : _name(name),
           _id(id),
-          _type(type),
           _cpu_limit(cpu_limit),
           _memory_limit(memory_limit),
-          _concurrency(concurrency) {}
+          _concurrency(concurrency),
+          _type(type) {}
 
 WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     if (twg.__isset.cpu_limit) {

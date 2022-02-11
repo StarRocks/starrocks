@@ -18,16 +18,7 @@ using starrocks::workgroup::WorkGroupManager;
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
-    DCHECK(_io_threads != nullptr);
-
     _state = state;
-    auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
-    if (num_scan_operators > _io_threads->get_queue_capacity()) {
-        state->exec_env()->decrement_num_scan_operators(1);
-        return Status::TooManyTasks(
-                strings::Substitute("num_scan_operators exceeds queue capacity($0) of pipeline_pool_thread",
-                                    _io_threads->get_queue_capacity()));
-    }
 
     // init filtered_ouput_columns
     for (const auto& col_name : _olap_scan_node.unused_output_column_name) {
@@ -40,7 +31,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
 Status ScanOperator::close(RuntimeState* state) {
     DCHECK(_num_running_io_tasks == 0);
 
-    state->exec_env()->decrement_num_scan_operators(1);
     for (auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr) {
             chunk_source->close(_state);
@@ -179,20 +169,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
-    bool assign_ok = false;
-    if (_workgroup != nullptr) {
-        if (WorkGroupManager::instance()->try_offer_io_task(_workgroup, task)) {
-            _io_task_retry_cnt = 0;
-            assign_ok = true;
-        }
-    } else {
-        if (_io_threads->try_offer(task)) {
-            _io_task_retry_cnt = 0;
-            assign_ok = true;
-        }
-    }
 
-    if (!assign_ok) {
+    if (WorkGroupManager::instance()->try_offer_io_task(_workgroup, task)) {
+        _io_task_retry_cnt = 0;
+    } else {
         _num_running_io_tasks--;
         _is_io_task_running[chunk_source_index] = false;
         // TODO(hcf) set a proper retry times
