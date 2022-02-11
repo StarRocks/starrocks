@@ -503,6 +503,41 @@ TEST_F(VecMathFunctionsTest, LnTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, ExpTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        tc1->append(0);
+        tc1->append(2.0);
+        columns.emplace_back(tc1);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result_exp = MathFunctions::exp(ctx.get(), columns);
+
+        ASSERT_EQ(false, result_exp->is_null(0));
+        ASSERT_EQ(std::exp(0), result_exp->get(0).get_double());
+        ASSERT_EQ(std::exp(2), result_exp->get(1).get_double());
+    }
+}
+
+TEST_F(VecMathFunctionsTest, ExpOverflowTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        tc1->append(2.47498282E8);
+        tc1->append(2.47498282E3);
+        columns.emplace_back(tc1);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result_exp = MathFunctions::exp(ctx.get(), columns);
+
+        ASSERT_EQ(true, result_exp->is_null(0));
+        ASSERT_EQ(true, result_exp->is_null(1));
+    }
+}
+
 TEST_F(VecMathFunctionsTest, AbsTest) {
     {
         Columns columns;
