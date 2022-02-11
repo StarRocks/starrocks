@@ -105,7 +105,7 @@ public:
 //   ... repeated until uncompressed_size from outer block is consumed ...
 //
 // the hadoop lz4codec source code can be found here:
-// https://github.com/apache/hadoop/blob/trunk/hadoop-mapreduce-project/hadoop-mapreduce-client/hadoop-mapreduce-client-nativetask/src/main/native/src/codec/lz4codec.cc
+// https://github.com/apache/hadoop/blob/trunk/hadoop-mapreduce-project/hadoop-mapreduce-client/hadoop-mapreduce-client-nativetask/src/main/native/src/codec/Lz4Codec.cc
 //
 // More details refer to https://issues.apache.org/jira/browse/HADOOP-12990
 class Lz4HadoopBlockCompression : public Lz4BlockCompression {
