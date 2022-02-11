@@ -109,21 +109,25 @@ public class IcebergUtil {
 
     private static void refreshTable(Table table) {
         try {
-            table.refresh();
-            if (table instanceof BaseTable && ((BaseTable) table).operations().current() == null) {
-                // TableOperation like HiveTableOperations will not throw NoSuchTableException after the first time.
-                // We should throw here to let user get the same semantic for this case.
-                // See: https://github.com/StarRocks/starrocks/issues/3076
-                throw new NoSuchTableException("No such table: %s", table.name());
+            if (table instanceof BaseTable) {
+                BaseTable baseTable = (BaseTable) table;
+                if (baseTable.operations().refresh() == null) {
+                    // If table is loaded successfully, current table metadata will never be null.
+                    // So when we get a null metadata after refresh, it indicates the table has been dropped.
+                    // See: https://github.com/StarRocks/starrocks/issues/3076
+                    throw new NoSuchTableException("No such table: %s", table.name());
+                }
+            } else {
+                // table loaded by Catalog should be a base table
+                throw new StarRocksIcebergException(String.format("Invalid table type of %s, it should be a BaseTable!",
+                        table.name()));
             }
         } catch (NoSuchTableException e) {
             throw new StarRocksIcebergException(String.format("No such table  %s", table.name()));
-            
         } catch (IllegalStateException ei) {
             throw new StarRocksIcebergException(String.format("Refresh table %s with failure, the table under hood" +
                     " may have been dropped. You should re create the external table. cause %s",
                     table.name(), ei.getMessage()));
-
         }
     }
 }
