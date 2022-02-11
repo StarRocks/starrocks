@@ -73,13 +73,13 @@ Status JavaUDTFState::open() {
     auto* analyzer = _analyzer.get();
     auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaMethodDescriptor>* res) {
         std::string method_name = name;
-        std::string sign;
+        std::string signature;
         std::vector<MethodTypeDescriptor> mtdesc;
-        RETURN_IF_ERROR(analyzer->get_signature(clazz, method_name, &sign));
-        RETURN_IF_ERROR(analyzer->get_udaf_method_desc(sign, &mtdesc));
+        RETURN_IF_ERROR(analyzer->get_signature(clazz, method_name, &signature));
+        RETURN_IF_ERROR(analyzer->get_udaf_method_desc(signature, &mtdesc));
         *res = std::make_unique<JavaMethodDescriptor>();
         (*res)->name = std::move(method_name);
-        (*res)->sign = std::move(sign);
+        (*res)->signature = std::move(signature);
         (*res)->method_desc = std::move(mtdesc);
         return Status::OK();
     };
@@ -120,13 +120,14 @@ std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* stat
     JNIEnv* env = helper.getEnv();
 
     jmethodID methodID = env->GetMethodID(stateUDTF->get_udtf_clazz(), stateUDTF->method_process()->name.c_str(),
-                                          stateUDTF->method_process()->sign.c_str());
+                                          stateUDTF->method_process()->signature.c_str());
 
     std::vector<jvalue> call_stack;
     std::vector<jobject> rets;
     size_t num_rows = cols[0]->size();
     size_t num_cols = cols.size();
 
+    call_stack.reserve(num_cols);
     rets.resize(num_rows);
     for (int i = 0; i < num_rows; ++i) {
         for (int j = 0; j < num_cols; ++j) {
