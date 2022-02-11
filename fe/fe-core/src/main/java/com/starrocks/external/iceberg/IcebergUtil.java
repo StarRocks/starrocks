@@ -126,7 +126,7 @@ public class IcebergUtil {
             throw new StarRocksIcebergException(String.format("No such table  %s", table.name()));
         } catch (IllegalStateException ei) {
             throw new StarRocksIcebergException(String.format("Refresh table %s with failure, the table under hood" +
-                    " may have been dropped. You should re create the external table. cause %s",
+                    " may have been dropped. You should re-create the external table. cause %s",
                     table.name(), ei.getMessage()));
         }
     }
