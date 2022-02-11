@@ -150,6 +150,7 @@ std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* stat
     offsets.resize(num_rows + 1);
 
     auto col = ColumnHelper::create_column(stateUDTF->type_desc(), true);
+    col->reserve(num_rows);
 
     // TODO: support primitive array
     MethodTypeDescriptor method_desc{stateUDTF->type_desc().type, true, true};
