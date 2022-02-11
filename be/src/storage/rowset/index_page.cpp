@@ -87,6 +87,7 @@ Status IndexPageReader::parse(const Slice& body, const IndexPageFooterPB& footer
 }
 ///////////////////////////////////////////////////////////////////////////////
 
+// This function has the meaning of interval, in fact, it is to find first possible Page which <=search key
 Status IndexPageIterator::seek_at_or_before(const Slice& search_key) {
     int32_t left = 0;
     int32_t right = _reader->count() - 1;
@@ -113,6 +114,7 @@ Status IndexPageIterator::seek_at_or_before(const Slice& search_key) {
     return Status::OK();
 }
 
+// This function has the meaning of interval, in fact, it is to find first possible Page which >=search key
 Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
     size_t num_entries = _reader->count();
     DCHECK_GT(num_entries, 0);
