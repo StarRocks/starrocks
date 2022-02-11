@@ -38,7 +38,7 @@ Status Aggregator::open(RuntimeState* state) {
 
     if (_group_by_expr_ctxs.empty()) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-        THROW_BAD_ALLOC_IF_NULL(_single_agg_state);
+        RETURN_IF_UNLIKELY_NULL(res, Status::MemoryAllocFailed("alloc single agg state failed"));
         for (int i = 0; i < _agg_functions.size(); i++) {
             _agg_functions[i]->create(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
         }
