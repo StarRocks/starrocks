@@ -184,7 +184,7 @@ struct UDFFunctionCallHelper {
         const auto& result_data = std::get<std::vector<jobject>>(result);        \
         for (int i = 0; i < num_rows; ++i) {                                     \
             if (result_data[i] != nullptr) {                                     \
-                container[i] = helper.valint8_t(result_data[i]);                 \
+                container[i] = helper.val##cxx_type(result_data[i]);             \
             } else {                                                             \
                 null_data[i] = true;                                             \
             }                                                                    \
