@@ -200,8 +200,7 @@ public class CachedStatisticStorage implements StatisticStorage {
             return ColumnStatistic.unknown();
         }
 
-        Table statisticsTable = StatisticUtils.getStatisticsTable();
-        if (statisticsTable == null) {
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
             return ColumnStatistic.unknown();
         }
 
@@ -237,8 +236,7 @@ public class CachedStatisticStorage implements StatisticStorage {
             return getDefaultColumnStatisticList(columns);
         }
 
-        Table statisticsTable = StatisticUtils.getStatisticsTable();
-        if (statisticsTable == null) {
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
             return getDefaultColumnStatisticList(columns);
         }
 
