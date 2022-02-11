@@ -107,7 +107,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -404,8 +403,6 @@ public class Coordinator {
         computeScanRangeAssignment();
 
         computeFragmentExecParams();
-
-        computeScanDop();
 
         traceInstance();
 
@@ -927,36 +924,6 @@ public class Coordinator {
 
     }
 
-    // compute degree of parallelism(dop) for each OlapScanNode in a fragment instance.
-    // the maxScanOperators is numRows of ScanNode divided by session variable pipelineMaxRowCountPerScanOperator,
-    // then each fragment instance take the share of itself own numScanRanges divided by totalNumScanRanges, and
-    // the dop of OlapScanNode is at least 1 and at most minimum(itself own numScanRanges, half the avg number of be cores).
-    private void computeScanDop() {
-        // only take effect in pipeline engine
-        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
-            return;
-        }
-        int dop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
-        for (FragmentExecParams params : fragmentExecParamsMap.values()) {
-            if (!params.fragment.getPlanRoot().canUsePipeLine()) {
-                continue;
-            }
-            List<PlanNode> scanNodes = new LinkedList<>();
-            params.fragment.getOlapScanNodes(params.fragment.getPlanRoot(), scanNodes);
-            for (PlanNode node : scanNodes) {
-                OlapScanNode scanNode = (OlapScanNode) node;
-                for (FInstanceExecParam instanceExecParam : params.instanceExecParams) {
-                    int numScanRanges = 0;
-                    if (instanceExecParam.perNodeScanRanges.containsKey(scanNode.getId().asInt())) {
-                        numScanRanges = instanceExecParam.perNodeScanRanges.get(scanNode.getId().asInt()).size();
-                    }
-                    int scanDopLimit = Math.max(1, Math.min(dop, numScanRanges));
-                    instanceExecParam.perScanNodeDop.put(scanNode.getId().asInt(), scanDopLimit);
-                }
-            }
-        }
-    }
-
     private void handleMultiCastFragmentParams() throws Exception {
         for (FragmentExecParams params : fragmentExecParamsMap.values()) {
             if (!(params.fragment instanceof MultiCastPlanFragment)) {
@@ -1223,31 +1190,9 @@ public class Coordinator {
                     int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
                     FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
                     int numBackends = param.scanRangeAssignment.size();
-                    // param.instanceExecParams.size() maybe zero
-                    int numInstances = Math.max(1, param.instanceExecParams.size());
-                    OlapScanNode scanNode = (OlapScanNode) leftMostNode;
-                    int numScanRangesPerInstance = scanNode.getScanRangeLocations(0).size() / numInstances;
-                    numScanRangesPerInstance = Math.max(1, numScanRangesPerInstance);
-                    long numRows = scanNode.getCardinality();
-                    if (scanNode.hasLimit()) {
-                        numRows = Math.min(numRows, scanNode.getLimit());
-                    }
-
-                    float inputBytes = numRows * scanNode.getAvgRowSize();
-                    long maxBytesPerOperator =
-                            ConnectContext.get().getSessionVariable().getPipelineMaxInputBytesPerOperator();
-                    int numOperatorsPerInstance = Math.max(1, (int) (inputBytes / maxBytesPerOperator / numInstances));
+                    int numInstances = param.instanceExecParams.size();
                     int pipelineDop =
                             Math.max(1, degreeOfParallelism / Math.max(1, numInstances / Math.max(1, numBackends)));
-
-                    // Although 0 may be returned by scanNode.getCardinality(), scanNode still can produce rows for its
-                    // following operator.
-                    if (numRows > 0 && numScanRangesPerInstance < pipelineDop) {
-                        pipelineDop = Math.min(pipelineDop, numOperatorsPerInstance);
-                    } else {
-                        pipelineDop = Math.min(pipelineDop, numScanRangesPerInstance);
-                    }
-                    pipelineDop = Math.max(1, pipelineDop);
                     param.fragment.setPipelineDop(pipelineDop);
                 }
             }
@@ -1684,7 +1629,6 @@ public class Coordinator {
         TUniqueId instanceId;
         TNetworkAddress host;
         Map<Integer, List<TScanRangeParams>> perNodeScanRanges = Maps.newHashMap();
-        Map<Integer, Integer> perScanNodeDop = Maps.newHashMap();
 
         int perFragmentInstanceIdx;
 
@@ -1981,7 +1925,6 @@ public class Coordinator {
                             params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
                         }
                         params.setPipeline_dop(fragment.getPipelineDop());
-                        params.setPer_scan_node_dop(instanceExecParam.perScanNodeDop);
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {

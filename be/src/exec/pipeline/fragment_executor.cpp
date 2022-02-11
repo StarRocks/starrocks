@@ -180,11 +180,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
     }
 
-    std::remove_cv_t<typeof(request.per_scan_node_dop)> per_scan_node_dop;
-    if (request.__isset.per_scan_node_dop) {
-        per_scan_node_dop = request.per_scan_node_dop;
-    }
-    PipelineBuilderContext context(_fragment_ctx, degree_of_parallelism, std::move(per_scan_node_dop));
+    PipelineBuilderContext context(_fragment_ctx, degree_of_parallelism);
     PipelineBuilder builder(context);
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
     // Set up sink, if required
@@ -223,6 +219,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             if (morsel_queue->num_morsels() > 0) {
                 DCHECK(degree_of_parallelism <= morsel_queue->num_morsels());
             }
+            std::vector<MorselQueuePtr> morsel_queue_per_driver = morsel_queue->split_by_size(degree_of_parallelism);
+            DCHECK(morsel_queue_per_driver.size() == degree_of_parallelism);
+
             if (is_root) {
                 num_root_drivers += degree_of_parallelism;
             }
@@ -230,7 +229,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx,
                                                                     driver_id++, is_root);
-                driver->set_morsel_queue(morsel_queue.get());
+                driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
                 setup_profile_hierarchy(pipeline, driver);
