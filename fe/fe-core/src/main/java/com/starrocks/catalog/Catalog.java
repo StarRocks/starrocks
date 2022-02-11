@@ -3103,6 +3103,9 @@ public class Catalog {
         } else if (engineName.equalsIgnoreCase("hudi")) {
             createHudiTable(db, stmt);
             return;
+        } else if (engineName.equalsIgnoreCase("jdbc")) {
+            createJDBCTable(db, stmt);
+            return;
         } else {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
         }
@@ -4382,6 +4385,36 @@ public class Catalog {
         LOG.info("Successfully create table[{}-{}]", tableName, tableId);
     }
 
+    private void createJDBCTable(Database db, CreateTableStmt stmt) throws DdlException {
+        String tableName = stmt.getTableName();
+        List<Column> columns = stmt.getColumns();
+        Map<String, String> properties = stmt.getProperties();
+        long tableId = getNextId();
+        JDBCTable jdbcTable = new JDBCTable(tableId, tableName, columns, properties);
+
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire catalog lock. Try again");
+        }
+
+        try {
+            if (getDb(db.getFullName()) == null) {
+                throw new DdlException("database has been dropped when creating table");
+            }
+            if (!db.createTableWithLock(jdbcTable, false)) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("create table [{}] which already exists", tableName);
+                    return;
+                }
+            }
+        } finally {
+            unlock();
+        }
+
+        LOG.info("successfully create jdbc table[{}-{}]", tableName, tableId);
+    }
+
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
                                   List<String> createRollupStmt, boolean separatePartition,
                                   boolean hidePassword) {
@@ -4407,7 +4440,7 @@ public class Catalog {
         sb.append("CREATE ");
         if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
                 || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE
-                || table.getType() == TableType.OLAP_EXTERNAL) {
+                || table.getType() == TableType.OLAP_EXTERNAL || table.getType() == TableType.JDBC) {
             sb.append("EXTERNAL ");
         }
         sb.append("TABLE ");
@@ -4625,6 +4658,21 @@ public class Catalog {
             sb.append("\"table\" = \"").append(hiveTable.getHiveTable()).append("\",\n");
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\",\n");
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+            sb.append("\n)");
+        } else if (table.getType() == TableType.JDBC) {
+            JDBCTable jdbcTable = (JDBCTable)  table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
+            sb.append("\"database\" = \"").append(jdbcTable.getJdbcDatabase()).append("\",\n");
+            sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
+            if (!jdbcTable.getJdbcProperties().isEmpty()) {
+                sb.append(",\n").append(new PrintableMap<>(jdbcTable.getJdbcProperties(), " = ", true, true, false).toString());
+            }
             sb.append("\n)");
         }
         sb.append(";");
