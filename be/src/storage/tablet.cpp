@@ -36,7 +36,6 @@
 #include "storage/compaction_manager.h"
 #include "storage/compaction_policy.h"
 #include "storage/compaction_task.h"
-#include "storage/compaction_policy.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_factory.h"

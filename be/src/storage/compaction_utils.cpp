@@ -121,4 +121,4 @@ std::unique_ptr<CompactionPolicy> CompactionUtils::create_compaction_policy(Comp
     return nullptr;
 }
 
-} // namespace starrocks 
+} // namespace starrocks
