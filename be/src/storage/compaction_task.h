@@ -100,7 +100,7 @@ struct CompactionTaskInfo {
         ss << " task_id:" << task_id;
         ss << ", tablet_id:" << tablet_id;
         ss << ", compaction score:" << compaction_score;
-        ss << ", algorithm:" << algorithm_to_string(algorithm);
+        ss << ", algorithm:" << CompactionUtils::compaction_algorithm_to_string(algorithm);
         ss << ", state:" << compaction_state_to_string(state);
         ss << ", compaction_level:" << (int32_t)compaction_level;
         ss << ", output_version:" << output_version;

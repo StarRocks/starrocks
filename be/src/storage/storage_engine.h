@@ -89,6 +89,8 @@ public:
     template <bool include_unused = false>
     std::vector<DataDir*> get_stores();
 
+    size_t get_store_num() { return _store_map.size(); }
+
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
     // get root path for creating tablet. The returned vector of root path should be random,

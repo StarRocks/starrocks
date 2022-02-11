@@ -13,7 +13,7 @@ namespace starrocks {
 
 void CompactionTask::run() {
     LOG(INFO) << "start compaction. task_id:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id
-              << ", algorithm:" << algorithm_to_string(_task_info.algorithm)
+              << ", algorithm:" << CompactionUtils::compaction_algorithm_to_string(_task_info.algorithm)
               << ", compaction_level:" << (int)_task_info.compaction_level
               << ", compaction_score:" << _task_info.compaction_score
               << ", output_version:" << _task_info.output_version << ", input rowsets size:" << _input_rowsets.size();
@@ -29,8 +29,9 @@ void CompactionTask::run() {
     ADOPT_TRACE(trace.get());
     TRACE("[Compaction] start to perform compaction. task_id:$0, tablet:$1, algorithm::$2, compaction_level:$3, "
           "compaction_score:$4",
-          _task_info.task_id, _task_info.tablet_id, algorithm_to_string(_task_info.algorithm),
-          (int)_task_info.compaction_level, _task_info.compaction_score);
+          _task_info.task_id, _task_info.tablet_id,
+          CompactionUtils::compaction_algorithm_to_string(_task_info.algorithm), (int)_task_info.compaction_level,
+          _task_info.compaction_score);
     std::stringstream ss;
     ss << "output version:" << _task_info.output_version << ", input rowsets size:" << _input_rowsets.size()
        << ", input versions:";
