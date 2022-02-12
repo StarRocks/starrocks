@@ -354,44 +354,6 @@ TEST_F(ParquetEncodingTest, Boolean) {
 
         DecoderChecker<uint8_t, false>::check(values, encoder->build(), decoder.get());
     }
-
-    const EncodingInfo* dict_encoding = nullptr;
-    EncodingInfo::get(tparquet::Type::BOOLEAN, tparquet::Encoding::RLE_DICTIONARY, &dict_encoding);
-    ASSERT_TRUE(dict_encoding != nullptr);
-    // dict
-    {
-        std::unique_ptr<Decoder> decoder;
-        auto st = dict_encoding->create_decoder(&decoder);
-        ASSERT_TRUE(st.ok());
-
-        std::unique_ptr<Encoder> encoder;
-        st = dict_encoding->create_encoder(&encoder);
-        ASSERT_TRUE(st.ok());
-
-        st = encoder->append(reinterpret_cast<uint8_t*>(&values[0]), 20);
-        ASSERT_TRUE(st.ok());
-
-        // construct dictionary encoder
-        std::unique_ptr<Encoder> dict_encoder;
-        st = plain_encoding->create_encoder(&dict_encoder);
-        ASSERT_TRUE(st.ok());
-
-        size_t num_dicts = 0;
-        st = encoder->encode_dict(dict_encoder.get(), &num_dicts);
-        ASSERT_TRUE(st.ok());
-
-        // construct dictionary decoder
-        std::unique_ptr<Decoder> dict_decoder;
-        st = plain_encoding->create_decoder(&dict_decoder);
-        ASSERT_TRUE(st.ok());
-
-        dict_decoder->set_data(dict_encoder->build());
-
-        st = decoder->set_dict(config::vector_chunk_size, num_dicts, dict_decoder.get());
-        ASSERT_TRUE(st.ok());
-
-        DecoderChecker<uint8_t, true>::check(values, encoder->build(), decoder.get());
-    }
 }
 
 } // namespace starrocks::parquet
