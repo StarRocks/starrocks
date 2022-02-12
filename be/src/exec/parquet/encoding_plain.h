@@ -252,6 +252,8 @@ private:
         _decoded_values_offset = 0;
     }
 
+    // BatchedBitReader::unpack_batch may drop trailing bits, for safety, we should decode 32*n value a batch
+    // and buffer it.
     std::size_t unpack_batch(std::size_t num_values, uint8_t* v) {
         // if _decoded_values has remaining unread values, read it first
         auto read_count = read_decoded_values(num_values, v);
