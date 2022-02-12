@@ -1762,14 +1762,13 @@ TEST_F(VecBitmapFunctionsTest, bitmapMaxTest) {
 
         auto v = BitmapFunctions::bitmap_max(ctx, columns);
 
-        ASSERT_FALSE(v->is_nullable());
-        ASSERT_TRUE(v->is_numeric());
+        ASSERT_TRUE(v->is_nullable());
 
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(v);
+        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
 
         ASSERT_EQ(0, p->get_data()[0]);
-        ASSERT_EQ(0, p->get_data()[1]);
-        ASSERT_EQ(0, p->get_data()[2]);
+        ASSERT_TRUE(v->is_null(1));
+        ASSERT_TRUE(v->is_null(2));
         ASSERT_EQ(4123102120, p->get_data()[3]);
     }
 }
@@ -1814,7 +1813,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
         auto p = ColumnHelper::cast_to<TYPE_BIGINT>(column);
 
         ASSERT_EQ(0, p->get_data()[0]);
-        ASSERT_EQ(0, p->get_data()[1]);
+        ASSERT_EQ(-1, p->get_data()[1]);
         ASSERT_EQ(1, p->get_data()[2]);
         ASSERT_EQ(23074, p->get_data()[3]);
     }
@@ -1839,14 +1838,13 @@ TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
 
         auto v = BitmapFunctions::bitmap_min(ctx, columns);
 
-        ASSERT_FALSE(v->is_nullable());
-        ASSERT_TRUE(v->is_numeric());
+        ASSERT_TRUE(v->is_nullable());
 
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(v);
+        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
 
         ASSERT_EQ(0, p->get_data()[0]);
-        ASSERT_EQ(0, p->get_data()[1]);
-        ASSERT_EQ(0, p->get_data()[2]);
+        ASSERT_TRUE(v->is_null(1));
+        ASSERT_TRUE(v->is_null(2));
         ASSERT_EQ(23074, p->get_data()[3]);
     }
 }

@@ -338,8 +338,13 @@ ColumnPtr BitmapFunctions::bitmap_max(FunctionContext* context, const starrocks:
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> builder(size);
     for (int row = 0; row < size; ++row) {
-        int64_t value = viewer.is_null(row) ? std::numeric_limits<uint64_t>::lowest() : viewer.value(row)->max();
-        builder.append(value);
+        if (viewer.is_null(row)) {
+            builder.append_null();
+        } else {
+            int64_t value = viewer.value(row)->max();
+            builder.append(value);
+        }
+
     }
 
     return builder.build(ColumnHelper::is_all_const(columns));
@@ -352,8 +357,12 @@ ColumnPtr BitmapFunctions::bitmap_min(FunctionContext* context, const starrocks:
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> builder(size);
     for (int row = 0; row < size; ++row) {
-        int64_t value = viewer.is_null(row) ? std::numeric_limits<uint64_t>::lowest() : viewer.value(row)->min();
-        builder.append(value);
+        if (viewer.is_null(row)) {
+            builder.append_null();
+        } else {
+            int64_t value = viewer.value(row)->min();
+            builder.append(value);
+        }
     }
 
     return builder.build(ColumnHelper::is_all_const(columns));

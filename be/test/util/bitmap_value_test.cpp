@@ -336,7 +336,7 @@ TEST(BitmapValueTest, bitmap_single_convert) {
 
 TEST(BitmapValueTest, bitmap_max) {
     BitmapValue bitmap;
-    ASSERT_EQ(bitmap.max(), std::numeric_limits<uint64_t>::lowest());
+    ASSERT_EQ(bitmap.max(), 0);
     bitmap.add(0);
     ASSERT_EQ(bitmap.max(), 0);
     bitmap.add(1);
@@ -349,7 +349,7 @@ TEST(BitmapValueTest, bitmap_max) {
 
 TEST(BitmapValueTest, bitmap_min) {
     BitmapValue bitmap;
-    ASSERT_EQ(bitmap.min(), std::numeric_limits<uint64_t>::lowest());
+    ASSERT_EQ(bitmap.min(), -1);
     bitmap.add(std::numeric_limits<uint64_t>::max());
     ASSERT_EQ(bitmap.min(), std::numeric_limits<uint64_t>::max());
     bitmap.add(1);
