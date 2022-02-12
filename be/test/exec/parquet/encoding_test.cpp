@@ -334,7 +334,7 @@ TEST_F(ParquetEncodingTest, FixedString) {
 TEST_F(ParquetEncodingTest, Boolean) {
     std::vector<uint8_t> values;
     for (int i = 0; i < 20; i++) {
-        values.push_back(i % 3);
+        values.push_back(i % 3 == 0);
     }
 
     const EncodingInfo* plain_encoding = nullptr;
