@@ -1495,45 +1495,45 @@ public:
         return 0;
     }
 
-    uint64_t max() const{
+    uint64_t max() const {
         switch (_type) {
-            case EMPTY:
-                return 0;
-            case SINGLE:
-                return _sv;
-            case BITMAP:
-                return _bitmap->maximum();
-            case SET:
-                uint64_t max = 0;
-                for (const auto value : _set) {
-                    if(value > max) {
-                        max = value;
-                    }
+        case EMPTY:
+            return 0;
+        case SINGLE:
+            return _sv;
+        case BITMAP:
+            return _bitmap->maximum();
+        case SET:
+            uint64_t max = 0;
+            for (const auto value : _set) {
+                if (value > max) {
+                    max = value;
                 }
-                return max;
+            }
+            return max;
         }
         return 0;
     }
 
-    int64_t min() const{
+    int64_t min() const {
         switch (_type) {
-            case EMPTY:
+        case EMPTY:
+            return -1;
+        case SINGLE:
+            return _sv;
+        case BITMAP:
+            return _bitmap->minimum();
+        case SET:
+            if (_set.size() == 0) {
                 return -1;
-            case SINGLE:
-                return _sv;
-            case BITMAP:
-                return _bitmap->minimum();
-            case SET:
-                if(_set.size() == 0) {
-                    return -1;
+            }
+            uint64_t min = std::numeric_limits<uint64_t>::max();
+            for (const auto value : _set) {
+                if (value < min) {
+                    min = value;
                 }
-                uint64_t min = std::numeric_limits<uint64_t>::max();
-                for (const auto value : _set) {
-                    if(value < min) {
-                        min = value;
-                    }
-                }
-                return min;
+            }
+            return min;
         }
         return -1;
     }

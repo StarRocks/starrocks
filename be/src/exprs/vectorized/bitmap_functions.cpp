@@ -344,12 +344,10 @@ ColumnPtr BitmapFunctions::bitmap_max(FunctionContext* context, const starrocks:
             int64_t value = viewer.value(row)->max();
             builder.append(value);
         }
-
     }
 
     return builder.build(ColumnHelper::is_all_const(columns));
 }
-
 
 ColumnPtr BitmapFunctions::bitmap_min(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
