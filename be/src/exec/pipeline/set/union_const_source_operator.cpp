@@ -44,7 +44,7 @@ Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(exprs, state, _row_desc));
+        RETURN_IF_ERROR(Expr::prepare(exprs, state));
     }
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {

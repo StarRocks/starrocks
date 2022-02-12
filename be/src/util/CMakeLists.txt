@@ -43,6 +43,7 @@ set(UTIL_FILES
   errno.cpp
   hash_util.hpp
   json_util.cpp
+  json.cpp
   starrocks_metrics.cpp
   mem_info.cpp
   metrics.cpp
@@ -108,6 +109,14 @@ set(UTIL_FILES
   gc_helper_smoothstep.cpp
   sha.cpp
 )
+
+# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
+# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    set_source_files_properties(json.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(json.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+endif()
+
 
 set(UTIL_FILES ${UTIL_FILES}
     mysql_load_error_hub.cpp

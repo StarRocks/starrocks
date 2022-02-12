@@ -42,7 +42,10 @@ static const uint32_t MAX_SHARD_NUM = 1024;
 static const std::string SHARD_PREFIX = "__shard_";
 
 LoadPathMgr::LoadPathMgr(ExecEnv* exec_env) : _exec_env(exec_env), _idx(0), _next_shard(0) {}
-
+LoadPathMgr::~LoadPathMgr() {
+    _stop.set_value(true);
+    pthread_join(_cleaner_id, nullptr);
+}
 Status LoadPathMgr::init() {
     _path_vec.clear();
     for (auto& path : _exec_env->store_paths()) {
@@ -56,7 +59,10 @@ Status LoadPathMgr::init() {
     RETURN_IF_ERROR(FileUtils::create_dir(_error_log_dir));
 
     _idx = 0;
-    pthread_create(&_cleaner_id, nullptr, LoadPathMgr::cleaner, this);
+    _stop_future = _stop.get_future();
+    if (pthread_create(&_cleaner_id, nullptr, LoadPathMgr::cleaner, this)) {
+        return Status::InternalError("Fail to create thread 'load_path_mgr'");
+    }
     Thread::set_thread_name(_cleaner_id, "load_path_mgr");
     return Status::OK();
 }
@@ -64,8 +70,14 @@ Status LoadPathMgr::init() {
 void* LoadPathMgr::cleaner(void* param) {
     LoadPathMgr* mgr = (LoadPathMgr*)param;
     while (true) {
-        sleep(3600); // clean every one hour
-        mgr->clean();
+        static constexpr auto one_hour = std::chrono::seconds(3600);
+        // clean every one hour
+        auto status = mgr->stop_future().wait_for(one_hour);
+        if (status == std::future_status::ready) {
+            return nullptr;
+        } else if (status == std::future_status::timeout) {
+            mgr->clean();
+        }
     }
     return nullptr;
 }

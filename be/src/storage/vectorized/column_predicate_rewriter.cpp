@@ -349,8 +349,7 @@ bool ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const Co
     builder.add_values(used_values, 0);
     ExprContext* filter = builder.get_in_const_predicate();
 
-    RowDescriptor row_desc; // I think we don't need to use it at all.
-    DCHECK_IF_ERROR(filter->prepare(state, row_desc));
+    DCHECK_IF_ERROR(filter->prepare(state));
     DCHECK_IF_ERROR(filter->open(state));
     *ptr = new ColumnExprPredicate(get_type_info(kDictCodeType), pred->column_id(), state, filter, pred->slot_desc());
     filter->close(state);

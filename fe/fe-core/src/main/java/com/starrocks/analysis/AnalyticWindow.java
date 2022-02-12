@@ -34,7 +34,7 @@ import java.math.BigDecimal;
  * Windowing clause of an analytic expr
  * Both left and right boundaries are always non-null after analyze().
  */
-public class AnalyticWindow {
+public class AnalyticWindow implements ParseNode {
     // default window used when an analytic expr was given an order by but no window
     public static final AnalyticWindow DEFAULT_WINDOW = new AnalyticWindow(Type.RANGE,
             new Boundary(BoundaryType.UNBOUNDED_PRECEDING, null),
@@ -128,7 +128,7 @@ public class AnalyticWindow {
         }
     }
 
-    public static class Boundary {
+    public static class Boundary implements ParseNode {
         private BoundaryType type;
 
         // Offset expr. Only set for PRECEDING/FOLLOWING. Needed for toSql().

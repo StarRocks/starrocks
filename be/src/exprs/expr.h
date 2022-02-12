@@ -48,7 +48,6 @@ namespace starrocks {
 
 class Expr;
 class ObjectPool;
-class RowDescriptor;
 class RuntimeState;
 class TColumnValue;
 class TExpr;
@@ -163,7 +162,7 @@ public:
                                           int* node_idx, Expr** root_expr, ExprContext** ctx);
 
     /// Convenience function for preparing multiple expr trees.
-    static Status prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state, const RowDescriptor& row_desc);
+    static Status prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
 
     /// Convenience function for opening multiple expr trees.
     static Status open(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
@@ -216,7 +215,7 @@ protected:
     ///
     /// Subclasses overriding this function should call Expr::Prepare() to recursively call
     /// Prepare() on the expr tree.
-    virtual Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context);
+    virtual Status prepare(RuntimeState* state, ExprContext* context);
 
     /// Initializes 'context' for execution. If scope if FRAGMENT_LOCAL, both fragment- and
     /// thread-local state should be initialized. Otherwise, if scope is THREAD_LOCAL, only

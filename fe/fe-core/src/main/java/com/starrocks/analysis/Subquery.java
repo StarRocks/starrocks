@@ -29,8 +29,8 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.thrift.TExprNode;
 import org.slf4j.Logger;
@@ -64,7 +64,11 @@ public class Subquery extends Expr {
 
     @Override
     public String toSqlImpl() {
-        return "(" + stmt.toSql() + ")";
+        if (stmt != null) {
+            return "(" + stmt.toSql() + ")";
+        } else {
+            return "(" + queryBlock.toSql() + ")";
+        }
     }
 
     @Override
@@ -91,6 +95,12 @@ public class Subquery extends Expr {
         // needToSql will affect the toSQL result, so we must clone it
         stmt.setNeedToSql(other.stmt.needToSql);
         analyzer = other.analyzer;
+    }
+
+
+    public Subquery(QueryRelation queryBlock) {
+        super();
+        this.queryBlock = queryBlock;
     }
 
     /**
@@ -249,4 +259,3 @@ public class Subquery extends Expr {
         return queryBlock;
     }
 }
-

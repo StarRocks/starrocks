@@ -3302,8 +3302,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "CASE WHEN CAST(substr(9: k7, 2, 1) AS BOOLEAN) THEN 3 WHEN TRUE THEN 1 ELSE 2 END"));
 
         // 1.9 test remove when clause when is false/null
-        String sql19 = "select case when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql19), "if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), 3, 2)"));
+        String sql19 =
+                "select case when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
+        Assert.assertTrue(StringUtils
+                .containsIgnoreCase(getFragmentPlan(sql19), "if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), 3, 2)"));
 
         // test 2: case xxx when then
         // 2.1 test equal
@@ -3353,13 +3355,16 @@ public class PlanFragmentTest extends PlanTestBase {
                 "constant exprs: \n         'a'"));
 
         // 2.6 when expr equals case expr in middle
-        String sql26 = "select case 'a' when substr(k7,2,1) then 2 when 'a' then 'b' else 'other' end as col2 from test.baseall;";
+        String sql26 =
+                "select case 'a' when substr(k7,2,1) then 2 when 'a' then 'b' else 'other' end as col2 from test.baseall;";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql26),
                 "CASE 'a' WHEN substr(9: k7, 2, 1) THEN '2' WHEN 'a' THEN 'b' ELSE 'other' END"));
 
         // 2.7 test remove when clause not equals case expr
-        String sql27 = "select case 'a' when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql27), "if(substr(9: k7, 2, 1) = 'a', 3, 2)"));
+        String sql27 =
+                "select case 'a' when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
+        Assert.assertTrue(
+                StringUtils.containsIgnoreCase(getFragmentPlan(sql27), "if(substr(9: k7, 2, 1) = 'a', 3, 2)"));
 
         // 3.1 test float,float in case expr
         String sql31 = "select case cast(100 as float) when 1 then 'a' when 2 then 'b' else 'other' end as col31;";
@@ -3387,7 +3392,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql423 = "select case 'a' when null then 'a' when false then 'b' end as col421";
         Assert.assertTrue(
                 StringUtils.containsIgnoreCase(getFragmentPlan(sql423), "constant exprs: \n         NULL"));
-     }
+    }
 
     @Test
     public void testJoinPredicateTransitivityWithSubqueryInWhereClause() throws Exception {
@@ -5053,7 +5058,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  6:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (PARTITIONED)"));
     }
-    
+
     @Test
     public void testDeriveOutputColumns() throws Exception {
         String sql = "select \n" +
@@ -5553,10 +5558,14 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  8 <-> [2: v2, BIGINT, true] + [6: v6, BIGINT, true]\n" +
                 "  |  cardinality: 1"));
         Assert.assertTrue(plan.contains("output columns: 2, 6"));
+
+        sql = "select * from t0,t1 where v1 = v4";
+        plan = getVerboseExplain(sql);
+        Assert.assertFalse(plan.contains("output columns"));
     }
 
     @Test
-    public void testSingleNodeExecPlan() throws  Exception {
+    public void testSingleNodeExecPlan() throws Exception {
         String sql = "select v1,v2,v3 from t0";
         connectContext.getSessionVariable().setSingleNodeExecPlan(true);
         String plan = getFragmentPlan(sql);
@@ -5584,5 +5593,51 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select v1 from t0 where v1 is null";
         String thrift = getThriftPlan(sql);
         Assert.assertTrue(thrift.contains("fn:TFunction(name:TFunctionName(function_name:is_null_pred)"));
+    }
+
+    @Test
+    public void testSemiJoinReorderWithProject() throws Exception {
+        String sql = "select x1.s1 from " +
+                "(select t0.v1 + 1 as s1, t0.v2 from t0 left join t1 on t0.v2 = t1.v4) as x1 " +
+                "left semi join t2 on x1.v2 = t2.v7";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:Project\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 7> : 1: v1 + 1\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN"));
+    }
+
+    @Test
+    public void testWindowWithAgg() throws Exception {
+        String sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY v1) AS rank  FROM t0 group BY v1, v2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
+
+        sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank  FROM t0 group BY v1, v2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
+    }
+
+    @Test
+    public void testWindowWithChildProjectAgg() throws Exception {
+        String sql = "SELECT v1, sum(v2) as x1, row_number() over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank " +
+                "FROM t0 group BY v1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : 4: sum\n" +
+                "  |  <slot 8> : if(CAST(1: v1 AS BOOLEAN), 1, NULL)"));
+    }
+
+    @Test
+    public void testBitmapCount() throws Exception {
+        String sql = "SELECT 1 FROM t0 LEFT OUTER JOIN t1 ON t0.v1=t1.v4 " +
+                "WHERE NOT CAST(bitmap_count(CASE WHEN t1.v4 in (10000) THEN bitmap_hash('abc') END) AS BOOLEAN)";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (BROADCAST)"));
+        Assert.assertTrue(plan.contains(
+                "other predicates: NOT (CAST(bitmap_count(if(4: v4 = 10000, bitmap_hash('abc'), NULL)) AS BOOLEAN))"));
     }
 }

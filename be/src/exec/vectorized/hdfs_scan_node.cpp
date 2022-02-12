@@ -60,8 +60,6 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (hdfs_scan_node.__isset.min_max_tuple_id) {
         _min_max_tuple_id = hdfs_scan_node.min_max_tuple_id;
         _min_max_tuple_desc = state->desc_tbl().get_tuple_descriptor(_min_max_tuple_id);
-        _min_max_row_desc = _pool->add(new RowDescriptor(state->desc_tbl(), std::vector<TTupleId>{_min_max_tuple_id},
-                                                         std::vector<bool>{true}));
     }
 
     const auto& slots = _tuple_desc->slots();
@@ -115,8 +113,8 @@ Status HdfsScanNode::prepare(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(ScanNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state, *_min_max_row_desc));
-    RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state, row_desc()));
+    RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state));
     _init_counter(state);
     _runtime_state = state;
     return Status::OK();

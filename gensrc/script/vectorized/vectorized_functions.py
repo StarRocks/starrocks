@@ -158,6 +158,8 @@ vectorized_functions = [
     [10320, "conv", "VARCHAR", ["BIGINT", "TINYINT", "TINYINT"], "MathFunctions::conv_int"],
     [10321, "conv", "VARCHAR", ["VARCHAR", "TINYINT", "TINYINT"], "MathFunctions::conv_string"],
 
+    [10322, "square", "DOUBLE", ["DOUBLE"], "MathFunctions::square"],
+
     # 20xxx: bit functions
     [20010, 'bitand', 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],
@@ -472,14 +474,27 @@ vectorized_functions = [
     [100014, 'last_query_id', 'VARCHAR', [], "UtilityFunctions::last_query_id"],
     [100015, 'uuid', 'VARCHAR', [], "UtilityFunctions::uuid"],
 
-    # json function
+    # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",
      "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close"],
     [110001, "get_json_double", "DOUBLE", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_double",
      "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close"],
     [110002, "get_json_string", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
      "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close"],
-
+     
+    # json type function
+    [110003, "parse_json", "JSON", ["VARCHAR"], "JsonFunctions::parse_json"],
+    [110004, "json_string", "VARCHAR", ["JSON"], "JsonFunctions::json_string"],
+    [110005, "json_query", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query", 
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    # [110006, "json_value", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query"],
+    [110007, "json_exists", "BOOLEAN", ["JSON", "VARCHAR"], "JsonFunctions::json_exists",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    [110008, "json_object", "JSON", ["JSON", "..."], "JsonFunctions::json_object"],
+    [110009, "json_array", "JSON", ["JSON", "..."], "JsonFunctions::json_array"],
+    [110010, "json_object", "JSON", [], "JsonFunctions::json_object_empty"],
+    [110011, "json_array", "JSON", [], "JsonFunctions::json_array_empty"],
+    
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt"],
     [120110, "aes_decrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt"],
@@ -610,4 +625,20 @@ vectorized_functions = [
     [150119, 'array_sort', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_sort_decimalv2'],
     [150120, 'array_sort', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_sort_datetime'],
     [150121, 'array_sort', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_sort_date'],
+
+    [150130, 'reverse', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::array_reverse_boolean'],
+    [150131, 'reverse', 'ARRAY_TINYINT',   ['ARRAY_TINYINT'],   'ArrayFunctions::array_reverse_tinyint'],
+    [150132, 'reverse', 'ARRAY_SMALLINT',  ['ARRAY_SMALLINT'],  'ArrayFunctions::array_reverse_smallint'],
+    [150133, 'reverse', 'ARRAY_INT',       ['ARRAY_INT'],       'ArrayFunctions::array_reverse_int'],
+    [150134, 'reverse', 'ARRAY_BIGINT',    ['ARRAY_BIGINT'],    'ArrayFunctions::array_reverse_bigint'],
+    [150135, 'reverse', 'ARRAY_LARGEINT',  ['ARRAY_LARGEINT'],  'ArrayFunctions::array_reverse_largeint'],
+    [150136, 'reverse', 'ARRAY_FLOAT',     ['ARRAY_FLOAT'],     'ArrayFunctions::array_reverse_float'],
+    [150137, 'reverse', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE'],    'ArrayFunctions::array_reverse_double'],
+    [150138, 'reverse', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR'],   'ArrayFunctions::array_reverse_varchar'],
+    [150139, 'reverse', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_reverse_decimalv2'],
+    [150140, 'reverse', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_reverse_datetime'],
+    [150141, 'reverse', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_reverse_date'],
+
+    [150150, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join_varchar'],
+    [150151, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join_varchar'],
 ]

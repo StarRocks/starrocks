@@ -81,6 +81,7 @@ public:
     bool support_bloom_filter() const override { return true; }
 
     bool bloom_filter(const BloomFilter* bf) const override {
+        static_assert(field_type != OLAP_FIELD_TYPE_JSON, "TODO");
         static_assert(field_type != OLAP_FIELD_TYPE_HLL, "TODO");
         static_assert(field_type != OLAP_FIELD_TYPE_OBJECT, "TODO");
         static_assert(field_type != OLAP_FIELD_TYPE_PERCENTILE, "TODO");

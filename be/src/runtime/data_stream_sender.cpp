@@ -485,9 +485,9 @@ Status DataStreamSender::prepare(RuntimeState* state) {
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc));
+        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
     } else {
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc));
+        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
         for (auto iter : _partition_infos) {
             RETURN_IF_ERROR(iter->prepare(state, _row_desc));
         }

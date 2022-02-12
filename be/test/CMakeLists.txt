@@ -9,9 +9,10 @@ set(EXEC_FILES
         ./column/column_pool_test.cpp
         ./column/const_column_test.cpp
         ./column/date_value_test.cpp
+        ./column/decimalv3_column_test.cpp
         ./column/field_test.cpp
         ./column/fixed_length_column_test.cpp
-        ./column/decimalv3_column_test.cpp
+        ./column/json_column_test.cpp
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
@@ -52,6 +53,7 @@ set(EXEC_FILES
         ./exprs/vectorized/decimal_binary_function_test.cpp
         ./exprs/vectorized/array_expr_test.cpp
         ./exprs/vectorized/array_functions_test.cpp
+        ./exprs/vectorized/binary_functions_test.cpp
         ./exprs/vectorized/binary_predicate_test.cpp
         ./exprs/vectorized/bitmap_functions_test.cpp
         ./exprs/vectorized/case_expr_test.cpp
@@ -112,6 +114,7 @@ set(EXEC_FILES
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
         ./io/array_random_access_file_test.cpp
+        ./io/fd_random_access_file_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
@@ -124,6 +127,7 @@ set(EXEC_FILES
         ./storage/kv_store_test.cpp
         ./storage/protobuf_file_test.cpp
         ./storage/page_cache_test.cpp
+        ./storage/persistent_index_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
         ./storage/rowset_update_state_test.cpp

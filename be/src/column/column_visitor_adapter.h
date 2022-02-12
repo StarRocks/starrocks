@@ -19,6 +19,8 @@ public:
 
     ~ColumnVisitorAdapter() override = default;
 
+    Status visit(const vectorized::JsonColumn& column) override { return _impl->do_visit(column); }
+
     Status visit(const vectorized::HyperLogLogColumn& column) override { return _impl->do_visit(column); }
 
     Status visit(const vectorized::BitmapColumn& column) override { return _impl->do_visit(column); }
@@ -83,6 +85,8 @@ public:
     explicit ColumnVisitorMutableAdapter(Impl* impl) : _impl(impl) {}
 
     ~ColumnVisitorMutableAdapter() override = default;
+
+    Status visit(vectorized::JsonColumn* column) override { return _impl->do_visit(column); }
 
     Status visit(vectorized::HyperLogLogColumn* column) override { return _impl->do_visit(column); }
 

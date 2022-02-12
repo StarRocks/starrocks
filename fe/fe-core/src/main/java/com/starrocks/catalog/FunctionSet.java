@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -88,6 +89,7 @@ public class FunctionSet {
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String IF = "if";
     public static final String IF_NULL = "ifnull";
+    public static final String MD5_SUM = "md5sum";
 
     // Arithmetic functions:
     public static final String ADD = "add";
@@ -125,6 +127,11 @@ public class FunctionSet {
     // geo functions
     public static final String ST_ASTEXT = "st_astext";
     public static final String GEO_FUNCTION_PREFIX = "st_";
+    // JSON functions
+    public static final String JSON_QUERY = "json_query";
+    public static final String PARSE_JSON = "parse_json";
+    public static final Function JSON_QUERY_FUNC = new Function(
+            new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
@@ -164,9 +171,10 @@ public class FunctionSet {
      * to row function when init.
      */
     private final Map<String, List<Function>> vectorizedFunctions;
+    // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
-    private final ImmutableSet<String> nonNullResultWithNullParamFunctions = ImmutableSet.of("if", "hll_hash",
-            "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce", "md5sum");
+    private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions = ImmutableSet.of("if",
+            "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce");
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -210,6 +218,7 @@ public class FunctionSet {
                     .add(FunctionSet.CURRENT_TIME)
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
+                    .add(FunctionSet.MD5_SUM)
                     .build();
 
     public FunctionSet() {
@@ -278,8 +287,9 @@ public class FunctionSet {
         initAggregateBuiltins();
     }
 
-    public boolean isNonNullResultWithNullParamFunctions(String funcName) {
-        return nonNullResultWithNullParamFunctions.contains(funcName);
+    public boolean isNotAlwaysNullResultWithNullParamFunctions(String funcName) {
+        return notAlwaysNullResultWithNullParamFunctions.contains(funcName)
+                || alwaysReturnNonNullableFunctions.contains(funcName);
     }
 
     public Function getFunction(Function desc, Function.CompareMode mode) {

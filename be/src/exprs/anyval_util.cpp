@@ -125,6 +125,9 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         out.precision = type.precision;
         out.scale = type.scale;
         break;
+    case TYPE_JSON:
+        out.type = FunctionContext::TYPE_JSON;
+        break;
     default:
         DCHECK(false) << "Unknown type: " << type;
     }

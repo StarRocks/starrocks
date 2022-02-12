@@ -1,7 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/array_column.h"
+#include "column/column_builder.h"
 #include "column/column_hash.h"
+#include "column/column_viewer.h"
 #include "exprs/vectorized/function_helper.h"
 #include "util/orlp/pdqsort.h"
 
@@ -155,7 +157,7 @@ private:
     }
 
     static void _sort_item(std::vector<uint32_t>* sort_index, const Column& src_column,
-                                      const UInt32Column& offset_column, size_t index) {
+                           const UInt32Column& offset_column, size_t index) {
         const auto& offsets = offset_column.get_data();
 
         size_t start = offsets[index];
@@ -165,12 +167,11 @@ private:
         }
 
         _sort_column(sort_index, src_column, start, count);
-
     }
 
     static void _sort_nullable_item(std::vector<uint32_t>* sort_index, const Column& src_data_column,
-                                               const NullColumn& src_null_column, const UInt32Column& offset_column,
-                                               size_t index) {
+                                    const NullColumn& src_null_column, const UInt32Column& offset_column,
+                                    size_t index) {
         const auto& offsets = offset_column.get_data();
         size_t start = offsets[index];
         size_t count = offsets[index + 1] - offsets[index];
@@ -228,6 +229,203 @@ private:
         for (size_t i = 0; i < count; i++) {
             (*sort_index)[i] = i;
         }
+    }
+};
+
+template <PrimitiveType PT>
+class ArrayReverse {
+public:
+    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<PT>;
+
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        DCHECK_EQ(columns.size(), 1);
+
+        size_t chunk_size = columns[0]->size();
+
+        if (columns[0]->only_null()) {
+            return ColumnHelper::create_const_null_column(chunk_size);
+        }
+
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+        ColumnPtr dest_column = src_column->clone();
+
+        if (dest_column->is_nullable()) {
+            _reverse_array_column(down_cast<NullableColumn*>(dest_column.get())->mutable_data_column(), chunk_size);
+        } else {
+            _reverse_array_column(dest_column.get(), chunk_size);
+        }
+        return dest_column;
+    }
+
+private:
+    static void _reverse_fixed_column(Column* column, const Buffer<uint32_t>& array_offsets, size_t chunk_size) {
+        for (size_t i = 0; i < chunk_size; i++) {
+            auto& data = down_cast<ColumnType*>(column)->get_data();
+            std::reverse(data.begin() + array_offsets[i], data.begin() + array_offsets[i + 1]);
+        }
+    }
+
+    static void _reverse_binary_column(Column* column, const Buffer<uint32_t>& array_offsets, size_t chunk_size) {
+        auto& offsets = down_cast<BinaryColumn*>(column)->get_offset();
+        // convert offset ot size
+        for (size_t i = offsets.size() - 1; i > 0; i--) {
+            offsets[i] = offsets[i] - offsets[i - 1];
+        }
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            size_t begin = array_offsets[i];
+            size_t end = array_offsets[i + 1];
+
+            // revert size
+            std::reverse(offsets.begin() + begin + 1, offsets.begin() + end + 1);
+
+            // convert size to offset
+            for (size_t j = begin; j < end; j++) {
+                offsets[j + 1] = offsets[j] + offsets[j + 1];
+            }
+
+            // revert all byte of one array
+            auto& bytes = down_cast<BinaryColumn*>(column)->get_bytes();
+            std::reverse(bytes.begin() + offsets[begin], bytes.begin() + offsets[end]);
+
+            // revert string one by one
+            for (size_t j = begin; j < end; j++) {
+                std::reverse(bytes.begin() + offsets[j], bytes.begin() + offsets[j + 1]);
+            }
+        }
+    }
+
+    static void _reverse_data_column(Column* column, const Buffer<uint32_t>& offsets, size_t chunk_size) {
+        if constexpr (pt_is_fixedlength<PT>) {
+            _reverse_fixed_column(column, offsets, chunk_size);
+        } else if constexpr (pt_is_binary<PT>) {
+            _reverse_binary_column(column, offsets, chunk_size);
+        } else {
+            assert(false);
+        }
+    }
+
+    static void _reverse_null_column(Column* column, const Buffer<uint32_t>& offsets, size_t chunk_size) {
+        auto& data = down_cast<UInt8Column*>(column)->get_data();
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            std::reverse(data.begin() + offsets[i], data.begin() + offsets[i + 1]);
+        }
+    }
+
+    static void _reverse_array_column(Column* column, size_t chunk_size) {
+        auto* array_column = down_cast<ArrayColumn*>(column);
+        auto& elements_column = array_column->elements_column();
+        auto& offsets = array_column->offsets_column()->get_data();
+
+        if (elements_column->is_nullable()) {
+            auto* nullable_column = down_cast<NullableColumn*>(elements_column.get());
+            auto* null_column = nullable_column->mutable_null_column();
+            auto* data_column = nullable_column->data_column().get();
+
+            if (nullable_column->has_null()) {
+                _reverse_null_column(null_column, offsets, chunk_size);
+            }
+            _reverse_data_column(data_column, offsets, chunk_size);
+        } else {
+            _reverse_data_column(column, offsets, chunk_size);
+        }
+    }
+};
+
+class ArrayJoin {
+public:
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        // TODO: optimize the performace of const sep or const null replace str
+        DCHECK_GE(columns.size(), 2);
+        size_t chunk_size = columns[0]->size();
+
+        if (std::any_of(columns.begin(), columns.end(), [](const auto& col) { return col->only_null(); })) {
+            return ColumnHelper::create_const_null_column(chunk_size);
+        }
+
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+        if (columns.size() <= 2) {
+            return _join_column_ignore_null(src_column, columns[1], chunk_size);
+        } else {
+            return _join_column_replace_null(src_column, columns[1], columns[2], chunk_size);
+        }
+    }
+
+private:
+    static ColumnPtr _join_column_replace_null(const ColumnPtr& src_column, const ColumnPtr& sep_column,
+                                               const ColumnPtr& null_replace_column, size_t chunk_size) {
+        NullableBinaryColumnBuilder res;
+        // byte_size may be smaller or larger then actual used size
+        // byte_size is only one reserve size
+        size_t byte_size = ColumnHelper::get_data_column(src_column.get())->byte_size() +
+                           ColumnHelper::get_data_column(sep_column.get())->byte_size(0) * src_column->size() +
+                           ColumnHelper::get_data_column(null_replace_column.get())->byte_size(0) *
+                                   ColumnHelper::count_nulls(src_column);
+        res.resize(chunk_size, byte_size);
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (src_column->is_null(i) || sep_column->is_null(i) || null_replace_column->is_null(i)) {
+                res.set_null(i);
+                continue;
+            }
+            auto datum = src_column->get(i);
+            const auto& datum_array = datum.get_array();
+            bool append = false;
+            Slice sep_slice = sep_column->get(i).get_slice();
+            Slice null_slice = null_replace_column->get(i).get_slice();
+            for (size_t j = 0; j < datum_array.size(); j++) {
+                if (append) {
+                    res.append_partial(sep_slice);
+                }
+                if (datum_array[j].is_null()) {
+                    res.append_partial(null_slice);
+                } else {
+                    Slice value_slice = datum_array[j].get_slice();
+                    res.append_partial(value_slice);
+                }
+                append = true;
+            }
+            res.append_complete(i);
+        }
+        return res.build_nullable_column();
+    }
+
+    static ColumnPtr _join_column_ignore_null(const ColumnPtr& src_column, const ColumnPtr& sep_column,
+                                              size_t chunk_size) {
+        NullableBinaryColumnBuilder res;
+        // bytes_size may be smaller or larger then actual used size
+        // byte_size is only one reserve size
+        size_t byte_size = ColumnHelper::get_data_column(src_column.get())->byte_size() +
+                           ColumnHelper::get_data_column(sep_column.get())->byte_size(0) * src_column->size();
+        res.resize(chunk_size, byte_size);
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (src_column->is_null(i) || sep_column->is_null(i)) {
+                res.set_null(i);
+                continue;
+            }
+
+            auto datum = src_column->get(i);
+            const auto& datum_array = datum.get_array();
+            bool append = false;
+            Slice sep_slice = sep_column->get(i).get_slice();
+            for (size_t j = 0; j < datum_array.size(); j++) {
+                if (datum_array[j].is_null()) {
+                    continue;
+                }
+                if (append) {
+                    res.append_partial(sep_slice);
+                }
+                Slice value_slice = datum_array[j].get_slice();
+                res.append_partial(value_slice);
+                append = true;
+            }
+            res.append_complete(i);
+        }
+
+        return res.build_nullable_column();
     }
 };
 } // namespace starrocks::vectorized

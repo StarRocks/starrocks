@@ -117,8 +117,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_DOP = "pipeline_dop";
 
-    public static final String PIPELINE_MAX_INPUT_BYTES_PER_OPERATOR = "pipeline_max_input_bytes_per_operator";
-
     public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
 
     // hash join right table push down
@@ -170,6 +168,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
+    public static final String GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE = "global_runtime_filter_build_max_size";
+    public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
+    public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
+            "global_runtime_filter_probe_min_selectivity";
+
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
 
@@ -324,9 +327,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
-    @VariableMgr.VarAttr(name = PIPELINE_MAX_INPUT_BYTES_PER_OPERATOR, flag = VariableMgr.INVISIBLE)
-    private long pipelineMaxInputBytesPerOperator = 100000000;
-
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
     private String pipelineProfileMode = "brief";
 
@@ -414,6 +414,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_GLOBAL_RUNTIME_FILTER)
     private boolean enableGlobalRuntimeFilter = true;
+
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterBuildMaxSize = 64 * 1024 * 1024;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterProbeMinSize = 100 * 1024;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
+    private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
 
     //In order to be compatible with the logic of the old planner,
     //When the column name is the same as the alias name,
@@ -725,6 +732,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableGlobalRuntimeFilter = value;
     }
 
+    public long getGlobalRuntimeFilterBuildMaxSize() {
+        return globalRuntimeFilterBuildMaxSize;
+    }
+
+    public long getGlobalRuntimeFilterProbeMinSize() {
+        return globalRuntimeFilterProbeMinSize;
+    }
+
+    public float getGlobalRuntimeFilterProbeMinSelectivity() {
+        return globalRuntimeFilterProbeMinSelectivity;
+    }
+
     public boolean isEnablePipelineEngine() {
         return enablePipelineEngine;
     }
@@ -739,10 +758,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineDop() {
         return this.pipelineDop;
-    }
-
-    public long getPipelineMaxInputBytesPerOperator() {
-        return pipelineMaxInputBytesPerOperator;
     }
 
     public boolean isEnableReplicationJoin() {

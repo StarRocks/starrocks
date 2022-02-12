@@ -3,9 +3,11 @@ package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
@@ -14,7 +16,6 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FieldReference;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
@@ -28,10 +29,14 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.ResolvedField;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -193,6 +198,23 @@ public final class SqlToScalarOperatorTranslator {
             ScalarOperator arrayOperator = visit(node.getChild(0));
             ScalarOperator subscriptOperator = visit(node.getChild(1));
             return new ArrayElementOperator(node.getType(), arrayOperator, subscriptOperator);
+        }
+
+        @Override
+        public ScalarOperator visitArrowExpr(ArrowExpr node, Void context) {
+            Preconditions.checkArgument(node.getChildren().size() == 2);
+
+            // TODO(mofei) make it more elegant
+            Function func = Catalog.getCurrentCatalog().getFunction(FunctionSet.JSON_QUERY_FUNC,
+                    Function.CompareMode.IS_IDENTICAL);
+            Preconditions.checkNotNull(func, "json_query function not exists");
+
+            List<ScalarOperator> arguments = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
+            return new CallOperator(
+                    FunctionSet.JSON_QUERY,
+                    Type.JSON,
+                    arguments,
+                    func);
         }
 
         @Override
@@ -359,6 +381,20 @@ public final class SqlToScalarOperatorTranslator {
                     arguments,
                     expr.getFn(),
                     expr.getParams().isDistinct());
+        }
+
+        @Override
+        public ScalarOperator visitAnalyticExpr(AnalyticExpr expr, Void context) {
+            FunctionCallExpr functionCallExpr = expr.getFnCall();
+
+            List<ScalarOperator> arguments =
+                    functionCallExpr.getChildren().stream().map(this::visit).collect(Collectors.toList());
+            return new CallOperator(
+                    functionCallExpr.getFnName().getFunction(),
+                    functionCallExpr.getType(),
+                    arguments,
+                    functionCallExpr.getFn(),
+                    functionCallExpr.getParams().isDistinct());
         }
 
         @Override

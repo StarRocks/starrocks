@@ -32,6 +32,13 @@ NullableColumn::NullableColumn(ColumnPtr data_column, NullColumnPtr null_column)
             << "nullable column's data must be single column";
 }
 
+size_t NullableColumn::null_count() const {
+    if (!_has_null) {
+        return 0;
+    }
+    return SIMD::count_nonzero(_null_column->get_data());
+}
+
 void NullableColumn::append_datum(const Datum& datum) {
     if (datum.is_null()) {
         append_nulls(1);

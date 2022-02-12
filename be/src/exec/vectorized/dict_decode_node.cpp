@@ -47,7 +47,7 @@ void DictDecodeNode::_init_counter() {
 Status DictDecodeNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc()));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
     return Status::OK();
 }
 

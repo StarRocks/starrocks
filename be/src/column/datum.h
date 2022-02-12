@@ -19,6 +19,7 @@ class Status;
 class BitmapValue;
 class HyperLogLog;
 class PercentileValue;
+class JsonValue;
 } // namespace starrocks
 
 namespace starrocks::vectorized {
@@ -60,6 +61,7 @@ public:
     const HyperLogLog* get_hyperloglog() const { return get<HyperLogLog*>(); }
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }
     const PercentileValue* get_percentile() const { return get<PercentileValue*>(); }
+    const JsonValue* get_json() const { return get<JsonValue*>(); }
 
     void set_int8(int8_t v) { set<decltype(v)>(v); }
     void set_uint8(uint8_t v) { set<decltype(v)>(v); }
@@ -83,6 +85,7 @@ public:
     void set_hyperloglog(HyperLogLog* v) { set<decltype(v)>(v); }
     void set_bitmap(BitmapValue* v) { set<decltype(v)>(v); }
     void set_percentile(PercentileValue* v) { set<decltype(v)>(v); }
+    void set_json(JsonValue* v) { set<decltype(v)>(v); }
 
     template <typename T>
     const T& get() const {
@@ -128,7 +131,7 @@ public:
 private:
     using Variant = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t,
                                  int64_t, uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float,
-                                 double, DatumArray, HyperLogLog*, BitmapValue*, PercentileValue*>;
+                                 double, DatumArray, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>;
     Variant _value;
 };
 

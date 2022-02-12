@@ -24,6 +24,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -162,6 +163,11 @@ Status JsonScanner::_construct_json_types() {
             break;
         }
 
+        case TYPE_JSON: {
+            _json_types[column_pos] = TypeDescriptor::create_json_type();
+            break;
+        }
+
         // Treat other types as VARCHAR.
         default: {
             auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
@@ -207,7 +213,8 @@ Status JsonScanner::_construct_cast_exprs() {
     return Status::OK();
 }
 
-Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<std::vector<JsonPath>>* path_vecs) {
+Status JsonScanner::_parse_json_paths(const std::string& jsonpath,
+                                      std::vector<std::vector<SimpleJsonPath>>* path_vecs) {
     try {
         simdjson::dom::parser parser;
         simdjson::dom::element elem = parser.parse(jsonpath.c_str(), jsonpath.length());
@@ -219,7 +226,7 @@ Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<s
                 return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", jsonpath));
             }
 
-            std::vector<JsonPath> parsed_paths;
+            std::vector<SimpleJsonPath> parsed_paths;
             const char* cstr = path.get_c_str();
 
             JsonFunctions::parse_json_paths(std::string(cstr), &parsed_paths);

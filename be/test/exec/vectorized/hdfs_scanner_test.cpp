@@ -426,9 +426,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};
     extend_orc_min_max_conjuncts(&_pool, param, thres);
-    RowDescriptor row_desc(param->min_max_tuple_desc, true);
     for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state, row_desc);
+        ctx->prepare(_runtime_state);
         ctx->open(_runtime_state);
     }
 
@@ -461,9 +460,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {2000, 5000, 20, 20};
     extend_orc_min_max_conjuncts(&_pool, param, thres);
-    RowDescriptor row_desc(param->min_max_tuple_desc, true);
     for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state, row_desc);
+        ctx->prepare(_runtime_state);
         ctx->open(_runtime_state);
     }
 
@@ -496,9 +494,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {3000, 10000, 20, 20};
     extend_orc_min_max_conjuncts(&_pool, param, thres);
-    RowDescriptor row_desc(param->min_max_tuple_desc, true);
     for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state, row_desc);
+        ctx->prepare(_runtime_state);
         ctx->open(_runtime_state);
     }
 
@@ -572,11 +569,10 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
         param->conjunct_ctxs_by_slot[0].push_back(ctx);
     }
 
-    RowDescriptor row_desc(tuple_desc, true);
     for (auto& it : param->conjunct_ctxs_by_slot) {
         for (auto& it2 : it.second) {
             ExprContext* ctx = it2;
-            ctx->prepare(_runtime_state, row_desc);
+            ctx->prepare(_runtime_state);
             ctx->open(_runtime_state);
         }
     }
@@ -605,7 +601,7 @@ static SlotDesc datetime_orc_descs[] = {{"c0", TypeDescriptor::from_primtive_typ
 std::string datetime_orc_file = "./be/test/exec/test_data/orc_scanner/datetime_20k.orc.zlib";
 
 /**
- * 
+ *
 datetime are all in UTC timezone.
 
 File Version: 0.12 with ORC_CPP_ORIGINAL
@@ -685,9 +681,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
 
     param->min_max_tuple_desc = tuple_desc;
     extend_datetime_orc_min_max_conjuncts(&_pool, param);
-    RowDescriptor row_desc(param->min_max_tuple_desc, true);
     for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state, row_desc);
+        ctx->prepare(_runtime_state);
         ctx->open(_runtime_state);
     }
 
@@ -787,11 +782,10 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
         param->conjunct_ctxs_by_slot[0].push_back(ctx);
     }
 
-    RowDescriptor row_desc(tuple_desc, true);
     for (auto& it : param->conjunct_ctxs_by_slot) {
         for (auto& it2 : it.second) {
             ExprContext* ctx = it2;
-            ctx->prepare(_runtime_state, row_desc);
+            ctx->prepare(_runtime_state);
             ctx->open(_runtime_state);
         }
     }

@@ -60,7 +60,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _local_rf_waiting_set_counter->set((int64_t)all_local_rf_set.size());
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
-    source_operator()->add_morsel_queue(_morsel_queue);
+    source_operator()->add_morsel_queue(_morsel_queue.get());
     for (auto& op : _operators) {
         RETURN_IF_ERROR(op->prepare(runtime_state));
         _operator_stages[op->get_id()] = OperatorStage::PREPARED;
