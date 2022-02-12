@@ -35,7 +35,8 @@ Usage: $0 <options>
      --clean                        clean and build ut
      --run                          build and run ut
      --gtest_filter                 specify test cases
-     --with-aws                     also test aws s3
+     --with-hdfs                    enable to test hdfs
+     --with-aws                     enable to test aws
 
   Eg.
     $0                              build ut
@@ -54,6 +55,7 @@ OPTS=$(getopt \
   -l 'run' \
   -l 'clean' \
   -l "gtest_filter:" \
+  -l "with-hdfs" \
   -l 'with-aws' \
   -l 'help' \
   -- "$@")
@@ -69,13 +71,15 @@ RUN=0
 TEST_FILTER=*
 HELP=0
 WITH_AWS=OFF
+WITH_HDFS=OFF
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
         --run) RUN=1 ; shift ;;
         --gtest_filter) TEST_FILTER=$2 ; shift 2;; 
-        --with-aws) WITH_AWS=ON ; shift 1;;
         --help) HELP=1 ; shift ;; 
+        --with-aws) WITH_AWS=ON; shift ;;
+        --with-hdfs) WITH_HDFS=ON; shift ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -105,7 +109,7 @@ fi
 
 cd ${CMAKE_BUILD_DIR}
 
-${CMAKE_CMD} ../ -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} -DSTARROCKS_HOME=${STARROCKS_HOME} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DWITH_HDFS=OFF -DWITH_AWS=${WITH_AWS} -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DUSE_AVX2=$USE_AVX2
+${CMAKE_CMD} ../ -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} -DSTARROCKS_HOME=${STARROCKS_HOME} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DWITH_HDFS=${WITH_HDFS} -DWITH_AWS={WITH_AWS} -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DUSE_AVX2=$USE_AVX2
 
 time make -j${PARALLEL}
 

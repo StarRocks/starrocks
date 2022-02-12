@@ -63,6 +63,7 @@ Usage: $0 <options>
      --with-hdfs        enable hdfs support
      --without-hdfs     disable hdfs support
      --with-aws         enable aws support
+     --without-aws      disable aws support
 
   Eg.
     $0                                      build all
@@ -87,6 +88,7 @@ OPTS=$(getopt \
   -l 'with-hdfs' \
   -l 'without-hdfs' \
   -l 'with-aws' \
+  -l 'without-aws' \
   -l 'help' \
   -- "$@")
 
@@ -103,7 +105,7 @@ CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
 WITH_HDFS=ON
-WITH_AWS=OFF
+WITH_AWS=ON
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
@@ -135,6 +137,7 @@ else
             --with-hdfs) WITH_HDFS=ON; shift ;;
             --without-hdfs) WITH_HDFS=OFF; shift ;;
             --with-aws) WITH_AWS=ON; shift ;;
+            --without-aws) WITH_AWS=OFF; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             --) shift ;  break ;;

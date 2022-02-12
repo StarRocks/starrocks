@@ -115,6 +115,11 @@ if(NOT ${MAKE_GENSRC_RESULT} EQUAL 0 AND NOT APPLE)
     message(FATAL_ERROR "Failed to build ${BASE_DIR}/../gensrc/")
 endif()
 
+# Add common cmake prefix path and link library path
+list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/cmake)
+list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/cmake)
+link_directories(${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64)
+
 # Set Boost
 set(Boost_DEBUG FALSE)
 set(Boost_USE_MULTITHREADED ON)
@@ -192,6 +197,10 @@ set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 
 if (WITH_AWS)
     set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
+    set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n")
+    foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
+        list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
+    endforeach()
     find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer)
     include_directories(${AWSSDK_INCLUDE_DIRS})
 endif()
