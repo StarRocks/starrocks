@@ -78,7 +78,6 @@ public:
             DCHECK(maybe_morsel.has_value());
             split_morsels_list[i % split_size].emplace_back(std::move(maybe_morsel.value()));
         }
-
         std::vector<MorselQueuePtr> split_morsel_queues;
         split_morsel_queues.reserve(split_size);
         for (auto& split_morsels : split_morsels_list) {
