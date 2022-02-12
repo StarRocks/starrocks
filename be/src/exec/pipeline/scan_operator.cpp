@@ -158,10 +158,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             size_t num_read_chunks = 0;
             _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished,
                                                                                   &num_read_chunks);
-            if (this->_workgroup != nullptr) {
-                // TODO (by laotan332): More detailed information is needed
-                this->_workgroup->increase_chunk_num(num_read_chunks);
-            }
+            // TODO (by laotan332): More detailed information is needed
+            _workgroup->increase_chunk_num(num_read_chunks);
         }
 
         _num_running_io_tasks--;
