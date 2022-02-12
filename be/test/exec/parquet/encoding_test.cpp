@@ -333,7 +333,7 @@ TEST_F(ParquetEncodingTest, FixedString) {
 
 TEST_F(ParquetEncodingTest, Boolean) {
     std::vector<uint8_t> values;
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 32; i++) {
         values.push_back(i % 3 == 0);
     }
 
@@ -348,10 +348,15 @@ TEST_F(ParquetEncodingTest, Boolean) {
 
         std::unique_ptr<Encoder> encoder;
         st = plain_encoding->create_encoder(&encoder);
-
-        st = encoder->append(reinterpret_cast<uint8_t*>(&values[0]), 20);
         ASSERT_TRUE(st.ok());
 
+        // decode without buffer
+        st = encoder->append(reinterpret_cast<uint8_t*>(&values[0]), 32);
+        ASSERT_TRUE(st.ok());
+        DecoderChecker<uint8_t, false>::check(values, encoder->build(), decoder.get());
+
+        // decode with buffer
+        values.resize(31);
         DecoderChecker<uint8_t, false>::check(values, encoder->build(), decoder.get());
     }
 }
