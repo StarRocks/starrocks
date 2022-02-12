@@ -205,8 +205,9 @@ public:
     }
 
     Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
-        dst->resize(count);
-        auto num_unpacked_values = unpack_batch(count, dst->mutable_raw_data());
+        auto original_size = dst->size();
+        dst->resize(original_size + count);
+        auto num_unpacked_values = unpack_batch(count, dst->mutable_raw_data() + original_size);
         if (num_unpacked_values < count) {
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, count=$0,num_unpacked_values=$1", count, num_unpacked_values));
