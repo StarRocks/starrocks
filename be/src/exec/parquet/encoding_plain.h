@@ -209,7 +209,7 @@ public:
         auto num_unpacked_values = unpack_batch(count, dst->mutable_raw_data());
         if (num_unpacked_values < count) {
             return Status::InternalError(strings::Substitute(
-                    "going to read out-of-bounds data, count=$1,num_unpacked_values=$2", count, num_unpacked_values));
+                    "going to read out-of-bounds data, count=$0,num_unpacked_values=$1", count, num_unpacked_values));
         }
         return Status::OK();
     }
@@ -218,7 +218,7 @@ public:
         auto num_unpacked_values = unpack_batch(count, dst);
         if (num_unpacked_values < count) {
             return Status::InternalError(strings::Substitute(
-                    "going to read out-of-bounds data, count=$1,num_unpacked_values=$2", count, num_unpacked_values));
+                    "going to read out-of-bounds data, count=$0,num_unpacked_values=$1", count, num_unpacked_values));
         }
         return Status::OK();
     }
@@ -230,12 +230,12 @@ private:
     BatchedBitReader _batched_bit_reader;
 
     std::unique_ptr<uint8_t[]> _decoded_values;
-    int _decoded_values_size;
-    int _decoded_values_offset;
+    std::size_t _decoded_values_size;
+    std::size_t _decoded_values_offset;
 
     std::size_t read_decoded_values(std::size_t num_values, uint8_t* v) {
-        if (_decoded_values && _decoded_values_offset < _decoded_values_size) {
-            auto read_count = std::min(static_cast<int>(num_values), _decoded_values_size - _decoded_values_offset);
+        if (_decoded_values != nullptr && _decoded_values_offset < _decoded_values_size) {
+            auto read_count = std::min(num_values, _decoded_values_size - _decoded_values_offset);
             memcpy(v, &_decoded_values[_decoded_values_offset], read_count * sizeof(uint8_t));
             _decoded_values_offset += read_count;
             return read_count;
@@ -245,7 +245,7 @@ private:
     }
 
     void unpack_round_up_num_values(int bit_width, std::size_t num_values) {
-        auto round_up_num_values = BitUtil::round_up_numi32(num_values);
+        auto round_up_num_values = BitUtil::round_up_numi32(num_values) * 32;
         _decoded_values = std::make_unique<uint8_t[]>(round_up_num_values);
         _decoded_values_size = _batched_bit_reader.unpack_batch(bit_width, static_cast<int>(round_up_num_values),
                                                                 _decoded_values.get());
@@ -263,9 +263,9 @@ private:
         // If 'num_values' is a multiple of 32 or 'bit_width' * 'num_values' must be a multiple of 8.
         // We will not drop any trailing bits.
         if (num_values % kBitPackedBatchSize == 0 ||
-            num_values * kBooleanBitPackedBitWidth % kBitPackedDefaultValue == 0) {
-            read_count += _batched_bit_reader.unpack_batch(kBooleanBitPackedBitWidth,
-                                                                 static_cast<int>(num_values), v + read_count);
+            (num_values * kBooleanBitPackedBitWidth) % kBitPackedDefaultValue == 0) {
+            read_count += _batched_bit_reader.unpack_batch(kBooleanBitPackedBitWidth, static_cast<int>(num_values),
+                                                           v + read_count);
         } else {
             // Else, read round up number to 32 of values and buffer it
             unpack_round_up_num_values(kBooleanBitPackedBitWidth, num_values);
