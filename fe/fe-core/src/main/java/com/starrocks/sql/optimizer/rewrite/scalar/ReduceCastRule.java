@@ -153,9 +153,9 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-28)
             // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-27)
             // Eg:cast dateTime(2021-12-28 00:20:00.0) to date(2021-12-27)
-            if(originalDateTime.isEqual(bottomLocalDateTime)){
+            if (originalDateTime.isEqual(bottomLocalDateTime)) {
                 offset = 0;
-            }else {
+            } else {
                 offset = -1;
             }
             targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
