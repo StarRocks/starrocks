@@ -5,10 +5,14 @@
 #include <memory>
 
 #include "common/statusor.h"
+#include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
+#include "storage/fs/block_manager.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
+
+class Tablet;
 
 template <size_t KeySize>
 struct FixedKey {
@@ -100,6 +104,14 @@ public:
     virtual Status erase(size_t n, const void* keys, IndexValue* old_values, KeysInfo* not_found,
                          size_t* num_found) = 0;
 
+    // batch append wal
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array, if operation is erase, |values| is nullptr
+    // |page_size|: size of wal recode page
+    virtual Status append_wal(size_t n, const void* keys, const IndexValue* values, fs::WritableBlock* wblock,
+                              uint32_t* page_size) = 0;
+
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 };
 
@@ -151,7 +163,7 @@ public:
     Status create(size_t key_size, const EditVersion& version);
 
     // load required states from underlying file
-    Status load();
+    Status load(Tablet* tablet);
 
     // start modification with intended version
     Status prepare(const EditVersion& version);
@@ -190,6 +202,8 @@ public:
     // |old_values|: return old values if key exist, or set to NullValue if not
     Status erase(size_t n, const void* keys, IndexValue* old_values);
 
+    PersistentIndexMetaPB* index_meta() { return &_index_meta; }
+
 private:
     // index storage directory
     std::string _path;
@@ -198,6 +212,12 @@ private:
     EditVersion _version;
     std::unique_ptr<MutableIndex> _l0;
     std::unique_ptr<ImmutableIndex> _l1;
+    PersistentIndexMetaPB _index_meta;
+    // |_offset|: the start offset of last wal in index file
+    // |_page_size|: the size of last wal in index file
+    uint64_t _offset = 0;
+    uint32_t _page_size = 0;
+    std::unique_ptr<fs::WritableBlock> _index_block;
 };
 
 } // namespace starrocks

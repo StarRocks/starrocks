@@ -390,7 +390,6 @@ Status FileBlockManager::create_block(const CreateBlockOptions& opts, std::uniqu
     WritableFileOptions wr_opts;
     wr_opts.mode = opts.mode;
     RETURN_IF_ERROR(env_util::open_file_for_write(wr_opts, _env, opts.path, &writer));
-
     VLOG(1) << "Creating new block at " << opts.path;
     *block = std::make_unique<internal::FileWritableBlock>(this, opts.path, writer);
     return Status::OK();

@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "common/status.h"
+#include "gen_cpp/persistent_index.pb.h"
 #include "storage/olap_common.h"
 #include "storage/vectorized/chunk_iterator.h"
 
@@ -87,6 +88,9 @@ public:
     void reserve(size_t s);
 
     std::string to_string() const;
+
+    // TODO: return PersistentIndexMetaPB if use persistent index
+    PersistentIndexMetaPB* index_meta() { return nullptr; }
 
 private:
     void _set_schema(const vectorized::Schema& pk_schema);

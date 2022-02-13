@@ -5,7 +5,13 @@
 #include <gtest/gtest.h>
 
 #include "gutil/strings/substitute.h"
+#include "runtime/mem_tracker.h"
+#include "storage/fs/file_block_manager.h"
+#include "storage/storage_engine.h"
+#include "storage/tablet.h"
+#include "storage/tablet_meta_manager.h"
 #include "testutil/parallel_test.h"
+#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -87,6 +93,99 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.key_idxes.size(), expect_not_found);
+}
+
+TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
+    TCreateTabletReq request;
+    request.tablet_id = tablet_id;
+    request.__set_version(1);
+    request.__set_version_hash(0);
+    request.tablet_schema.schema_hash = schema_hash;
+    request.tablet_schema.short_key_column_count = 6;
+    request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+    request.tablet_schema.storage_type = TStorageType::COLUMN;
+
+    TColumn k1;
+    k1.column_name = "pk";
+    k1.__set_is_key(true);
+    k1.column_type.type = TPrimitiveType::BIGINT;
+    request.tablet_schema.columns.push_back(k1);
+
+    TColumn k2;
+    k2.column_name = "v1";
+    k2.__set_is_key(false);
+    k2.column_type.type = TPrimitiveType::SMALLINT;
+    request.tablet_schema.columns.push_back(k2);
+
+    TColumn k3;
+    k3.column_name = "v2";
+    k3.__set_is_key(false);
+    k3.column_type.type = TPrimitiveType::INT;
+    request.tablet_schema.columns.push_back(k3);
+    auto st = StorageEngine::instance()->create_tablet(request);
+    CHECK(st.ok()) << st.to_string();
+    return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
+    Env* env = Env::Default();
+    const std::string kPersistentIndexDir = "./ut_dir/persistent_index_test";
+    const std::string kIndexFile = "./ut_dir/persistent_index_test/index_file";
+    ASSERT_TRUE(env->create_dir(kPersistentIndexDir).ok());
+
+    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    std::unique_ptr<fs::WritableBlock> wblock;
+    fs::CreateBlockOptions wblock_opts({kIndexFile});
+    ASSERT_TRUE((block_mgr->create_block(wblock_opts, &wblock)).ok());
+
+    using Key = uint64_t;
+    EditVersion version(0, 0);
+    PersistentIndex index(kIndexFile);
+    ASSERT_TRUE(index.create(sizeof(Key), version).ok());
+    TabletSharedPtr tablet = create_tablet(rand(), rand());
+
+    // insert
+    vector<Key> keys;
+    vector<IndexValue> values;
+    int N = 1000;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        values.emplace_back(i * 2);
+    }
+    ASSERT_TRUE(index.insert(keys.size(), keys.data(), values.data(), false).ok());
+    ASSERT_TRUE(index.commit().ok());
+    ASSERT_TRUE(TabletMetaManager::write_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(),
+                                                               *(index.index_meta()))
+                        .ok());
+    // erase
+    vector<Key> erase_keys;
+    for (int i = 0; i < 100; i++) {
+        erase_keys.emplace_back(i);
+    }
+    vector<IndexValue> erase_old_values(erase_keys.size());
+    ASSERT_TRUE(index.erase(erase_keys.size(), erase_keys.data(), erase_old_values.data()).ok());
+    // update PersistentMetaPB in memory
+    ASSERT_TRUE(index.commit().ok());
+    ASSERT_TRUE(TabletMetaManager::write_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(),
+                                                               *(index.index_meta()))
+                        .ok());
+
+    // generate persistent_index from index_meta
+    PersistentIndex new_index(kIndexFile);
+    ASSERT_TRUE(new_index.create(sizeof(Key), version).ok());
+    ASSERT_TRUE(new_index.load(tablet.get()).ok());
+    std::vector<IndexValue> get_values(keys.size());
+
+    ASSERT_TRUE(new_index.get(keys.size(), keys.data(), get_values.data()).ok());
+    ASSERT_EQ(keys.size(), get_values.size());
+    for (int i = 0; i < 100; i++) {
+        ASSERT_EQ(NullIndexValue, get_values[i]);
+    }
+    for (int i = 100; i < values.size(); i++) {
+        ASSERT_EQ(values[i], get_values[i]);
+    }
+    ASSERT_TRUE(FileUtils::remove_all(kPersistentIndexDir).ok());
+    wblock->close();
 }
 
 } // namespace starrocks

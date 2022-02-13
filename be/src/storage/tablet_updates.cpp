@@ -773,6 +773,8 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         delete_op += one_delete->size();
         index.erase(*one_delete, &new_deletes);
     }
+    // TODO: get persistent index meta and write into RocksDB with rowset meta if use persistent_index
+    PersistentIndexMetaPB* index_meta = index.index_meta();
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
     // release resource
     // update state only used once, so delete it
@@ -866,7 +868,8 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     {
         std::lock_guard wl(_lock);
         // 4. write meta
-        st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version, new_del_vecs);
+        st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version, new_del_vecs,
+                                                    index_meta);
         if (!st.ok()) {
             std::string msg = Substitute("_apply_rowset_commit error: write meta failed: $0 $1", st.to_string(),
                                          _debug_string(false));
@@ -1204,6 +1207,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     }
     // release memory
     _compaction_state.reset();
+    PersistentIndexMetaPB* index_meta = index.index_meta();
     // index may be used for later commits, so keep in cache
     manager->index_cache().release(index_entry);
     int64_t t_index_delvec = MonotonicMillis();
@@ -1212,7 +1216,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         std::lock_guard wl(_lock);
         // 3. write meta
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version_info.version,
-                                                    delvecs);
+                                                    delvecs, index_meta);
         if (!st.ok()) {
             manager->index_cache().release(index_entry);
             std::string msg = Substitute("_apply_compaction_commit error: write meta failed: $0 $1", st.to_string(),
