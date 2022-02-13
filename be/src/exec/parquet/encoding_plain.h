@@ -230,14 +230,15 @@ private:
 
     BatchedBitReader _batched_bit_reader;
 
-    std::unique_ptr<uint8_t[]> _decoded_values;
+    std::unique_ptr<uint8_t[]> _decoded_values_buffer;
+    std::size_t _decoded_buffer_size;
     std::size_t _decoded_values_size;
     std::size_t _decoded_values_offset;
 
     std::size_t read_decoded_values(std::size_t num_values, uint8_t* v) {
-        if (_decoded_values != nullptr && _decoded_values_offset < _decoded_values_size) {
+        if (_decoded_values_buffer != nullptr && _decoded_values_offset < _decoded_values_size) {
             auto read_count = std::min(num_values, _decoded_values_size - _decoded_values_offset);
-            memcpy(v, &_decoded_values[_decoded_values_offset], read_count * sizeof(uint8_t));
+            memcpy(v, &_decoded_values_buffer[_decoded_values_offset], read_count * sizeof(uint8_t));
             _decoded_values_offset += read_count;
             return read_count;
         } else {
@@ -247,16 +248,19 @@ private:
 
     void unpack_round_up_num_values(int bit_width, std::size_t num_values) {
         auto round_up_num_values = BitUtil::round_up_numi32(num_values) << 5;
-        _decoded_values = std::make_unique<uint8_t[]>(round_up_num_values);
+        if (_decoded_values_buffer == nullptr || _decoded_buffer_size < round_up_num_values) {
+            _decoded_values_buffer = std::make_unique<uint8_t[]>(round_up_num_values);
+        }
+        _decoded_buffer_size = round_up_num_values;
         _decoded_values_size = _batched_bit_reader.unpack_batch(bit_width, static_cast<int>(round_up_num_values),
-                                                                _decoded_values.get());
+                                                                _decoded_values_buffer.get());
         _decoded_values_offset = 0;
     }
 
     // BatchedBitReader::unpack_batch may drop trailing bits, for safety, we should decode 32*n value a batch
     // and buffer it.
     std::size_t unpack_batch(std::size_t num_values, uint8_t* v) {
-        // if _decoded_values has remaining unread values, read it first
+        // if _decoded_values_buffer has remaining unread values, read it first
         auto read_count = read_decoded_values(num_values, v);
         if (read_count == num_values) {
             return num_values;
