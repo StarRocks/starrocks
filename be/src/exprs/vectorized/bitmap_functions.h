@@ -106,6 +106,20 @@ public:
      * @return ARRAY_VARCHAR
      */
     DEFINE_VECTORIZED_FN(bitmap_to_array);
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_OBJECT]
+     * @return TYPE_BIGINT
+     */
+    DEFINE_VECTORIZED_FN(bitmap_max);
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_OBJECT]
+     * @return TYPE_BIGINT
+     */
+    DEFINE_VECTORIZED_FN(bitmap_min);
 };
 
 } // namespace vectorized

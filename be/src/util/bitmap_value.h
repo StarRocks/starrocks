@@ -197,24 +197,20 @@ public:
                 return uniteBytes(roaring_iter->first, roaring_iter->second.maximum());
             }
         }
-        // we put std::numeric_limits<>::max/lowest in parenthesis
-        // to avoid a clash with the Windows.h header under Windows
-        return (std::numeric_limits<uint64_t>::lowest)();
+        return 0;
     }
 
     /**
      * Return the smallest value (if not empty)
      *
      */
-    uint64_t minimum() const {
+    int64_t minimum() const {
         for (const auto& roaring : roarings) {
             if (!roaring.second.isEmpty()) {
                 return uniteBytes(roaring.first, roaring.second.minimum());
             }
         }
-        // we put std::numeric_limits<>::max/lowest in parenthesis
-        // to avoid a clash with the Windows.h header under Windows
-        return (std::numeric_limits<uint64_t>::max)();
+        return -1;
     }
 
     /**
@@ -1497,6 +1493,49 @@ public:
             return _set.size();
         }
         return 0;
+    }
+
+    uint64_t max() const {
+        switch (_type) {
+        case EMPTY:
+            return 0;
+        case SINGLE:
+            return _sv;
+        case BITMAP:
+            return _bitmap->maximum();
+        case SET:
+            uint64_t max = 0;
+            for (const auto value : _set) {
+                if (value > max) {
+                    max = value;
+                }
+            }
+            return max;
+        }
+        return 0;
+    }
+
+    int64_t min() const {
+        switch (_type) {
+        case EMPTY:
+            return -1;
+        case SINGLE:
+            return _sv;
+        case BITMAP:
+            return _bitmap->minimum();
+        case SET:
+            if (_set.size() == 0) {
+                return -1;
+            }
+            uint64_t min = std::numeric_limits<uint64_t>::max();
+            for (const auto value : _set) {
+                if (value < min) {
+                    min = value;
+                }
+            }
+            return min;
+        }
+        return -1;
     }
 
     // Return how many bytes are required to serialize this bitmap.
