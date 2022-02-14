@@ -40,7 +40,11 @@ public class PushDownLimitJoinRule extends TransformationRule {
         // set limit
         join.setLimit(limit.getLimit());
 
-        if (joinType.isInnerJoin() || joinType.isSemiAntiJoin()) {
+        if (joinType.isSemiAntiJoin()) {
+            return Lists.newArrayList(child);
+        } else if (joinType.isInnerJoin() && join.getOnPredicate() != null) {
+            return Lists.newArrayList(child);
+        } else if (joinType.isCrossJoin() && join.getOnPredicate() != null) {
             return Lists.newArrayList(child);
         }
 
