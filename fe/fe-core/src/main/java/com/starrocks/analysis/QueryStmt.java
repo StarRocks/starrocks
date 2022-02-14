@@ -556,6 +556,10 @@ public abstract class QueryStmt extends StatementBase {
         return limitElement.hasLimit();
     }
 
+    public LimitElement getLimitClause() {
+        return limitElement;
+    }
+
     public SortInfo getSortInfo() {
         return sortInfo;
     }
