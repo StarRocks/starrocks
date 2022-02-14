@@ -320,7 +320,7 @@ template <PrimitiveType ptype>
 struct RunTimeTypeLimits<ptype, BinaryPTGuard<ptype>> {
     using value_type = RunTimeCppType<ptype>;
 
-    static constexpr value_type min_value() { return Slice(&_min, 1); }
+    static constexpr value_type min_value() { return Slice(&_min, 0); }
     static constexpr value_type max_value() { return Slice(&_max, 1); }
 
 private:
