@@ -250,8 +250,8 @@ private:
         auto round_up_num_values = BitUtil::round_up_numi32(num_values) << 5;
         if (_decoded_values_buffer == nullptr || _decoded_buffer_size < round_up_num_values) {
             _decoded_values_buffer = std::make_unique<uint8_t[]>(round_up_num_values);
+            _decoded_buffer_size = round_up_num_values;
         }
-        _decoded_buffer_size = round_up_num_values;
         _decoded_values_size = _batched_bit_reader.unpack_batch(bit_width, static_cast<int>(round_up_num_values),
                                                                 _decoded_values_buffer.get());
         _decoded_values_offset = 0;
