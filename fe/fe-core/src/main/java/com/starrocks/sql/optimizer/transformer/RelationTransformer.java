@@ -342,7 +342,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             }
 
             HashDistributionDesc hashDistributionDesc =
-                    new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
+                    new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.SHUFFLE_LOCAL);
             if (node.isMetaQuery()) {
                 scanOperator = new LogicalMetaScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build());
             } else {

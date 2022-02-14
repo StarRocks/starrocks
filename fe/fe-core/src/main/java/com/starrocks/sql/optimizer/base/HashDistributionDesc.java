@@ -9,7 +9,7 @@ import java.util.Objects;
 
 public class HashDistributionDesc {
     public enum SourceType {
-        LOCAL, // hash property from scan node
+        SHUFFLE_LOCAL, // hash property from scan node
         // @Todo: Should modify Coordinator and PlanFragmentBuilder.
         //  For sql: select * from t1 join[shuffle] (select x1, sum(1) from t1 group by x1) s on t1.x2 = s.x1;
         //  Join check isn't bucket shuffle/shuffle depend on child is exchange node.
@@ -18,7 +18,8 @@ public class HashDistributionDesc {
         //  the result will be error
         SHUFFLE_AGG, // hash property from shuffle agg
         SHUFFLE_JOIN, // hash property from shuffle join
-        BUCKET_JOIN // hash property from bucket join
+        BUCKET_JOIN, // hash property from bucket join
+        SHUFFLE_ENFORCE // parent node which can not satisfy the requirement will enforce child this hash property
     }
 
     private final List<Integer> columns;
@@ -43,16 +44,23 @@ public class HashDistributionDesc {
         if (item == this) {
             return true;
         }
-
-        if (!sourceType.equals(item.sourceType)) {
-            return false;
-        }
-
         return isColumnsSatisfy(this.columns, item.columns);
     }
 
     public static boolean isColumnsSatisfy(List<Integer> left, List<Integer> right) {
         return right.containsAll(left);
+    }
+
+    public boolean isLocalShuffle() {
+        return this.sourceType == SourceType.SHUFFLE_LOCAL;
+    }
+
+    public boolean isJoinShuffle() {
+        return this.sourceType == SourceType.SHUFFLE_JOIN;
+    }
+
+    public boolean isAggregateShuffle() {
+        return this.sourceType == SourceType.SHUFFLE_AGG;
     }
 
     @Override

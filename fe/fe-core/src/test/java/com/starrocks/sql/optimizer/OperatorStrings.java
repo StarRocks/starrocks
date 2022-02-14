@@ -253,7 +253,7 @@ public class OperatorStrings {
             if (exchange.getDistributionSpec() instanceof HashDistributionSpec) {
                 HashDistributionDesc desc =
                         ((HashDistributionSpec) exchange.getDistributionSpec()).getHashDistributionDesc();
-                String s = desc.getSourceType() == HashDistributionDesc.SourceType.LOCAL ? "LOCAL" : "SHUFFLE";
+                String s = desc.getSourceType() == HashDistributionDesc.SourceType.SHUFFLE_LOCAL ? "LOCAL" : "SHUFFLE";
                 return new OperatorStr("EXCHANGE " + s + desc.getColumns(), step, Collections.singletonList(child));
             }
 

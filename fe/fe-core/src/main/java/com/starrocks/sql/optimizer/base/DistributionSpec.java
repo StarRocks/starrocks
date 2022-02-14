@@ -4,11 +4,39 @@ package com.starrocks.sql.optimizer.base;
 
 import com.starrocks.thrift.TDistributionType;
 
+import java.util.List;
+
 public class DistributionSpec {
     protected final DistributionType type;
+    protected PhysicalPropertyInfo physicalPropertyInfo;
 
     protected DistributionSpec(DistributionType type) {
+        this(type, new PhysicalPropertyInfo());
+    }
+
+    protected DistributionSpec(DistributionType type, PhysicalPropertyInfo physicalPropertyInfo) {
         this.type = type;
+        this.physicalPropertyInfo = physicalPropertyInfo;
+    }
+
+    // Physical property for hash distribution desc
+    public static class PhysicalPropertyInfo {
+        public List<Long> colocateTableList = com.clearspring.analytics.util.Lists.newArrayList();
+        public boolean isReplicate = false;
+        public List<Long> partitionIds = com.clearspring.analytics.util.Lists.newArrayList();
+        public ColumnRefSet nullableColumns = new ColumnRefSet();
+
+        public boolean isSinglePartition() {
+            return partitionIds.size() == 1;
+        }
+
+        public void addColocateTableList(List<Long> colocateTableList) {
+            this.colocateTableList.addAll(colocateTableList);
+        }
+    }
+
+    public PhysicalPropertyInfo getPhysicalPropertyInfo() {
+        return physicalPropertyInfo;
     }
 
     public DistributionType getType() {

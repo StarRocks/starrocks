@@ -121,6 +121,12 @@ public class Group {
         }
     }
 
+    public void setBestExpressionWithoutCostCheck(GroupExpression expression, double cost,
+                                                  PhysicalPropertySet physicalPropertySet) {
+        lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
+        confidenceStatistics = statistics;
+    }
+
     public void setBestExpressionWithStatistics(GroupExpression expression, double cost,
                                                 PhysicalPropertySet physicalPropertySet,
                                                 Statistics newStatistics) {
@@ -150,7 +156,7 @@ public class Group {
     }
 
     public void addSatisfyRequiredPropertyGroupExpressions(PhysicalPropertySet outputProperty,
-                                                          Set<GroupExpression> groupExpressions) {
+                                                           Set<GroupExpression> groupExpressions) {
         if (!satisfyRequiredPropertyGroupExpressions.containsKey(outputProperty)) {
             satisfyRequiredPropertyGroupExpressions.put(outputProperty, Sets.newLinkedHashSet());
         }

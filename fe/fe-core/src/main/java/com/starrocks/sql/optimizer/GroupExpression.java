@@ -41,6 +41,9 @@ public class GroupExpression {
     private final Map<PhysicalPropertySet, Pair<Double, List<PhysicalPropertySet>>> lowestCostTable;
     private final Set<OutputInputProperty> validOutputInputProperties;
     private Map<OutputInputProperty, Integer> propertiesPlanCountMap;
+    // required property by parent -> output property
+    private Map<PhysicalPropertySet, PhysicalPropertySet> outputPropertySatisfyRequiredPropertyMap;
+
     private boolean isUnused = false;
 
     public GroupExpression(Operator op, List<Group> inputs) {
@@ -49,6 +52,7 @@ public class GroupExpression {
         this.lowestCostTable = Maps.newHashMap();
         this.validOutputInputProperties = Sets.newLinkedHashSet();
         this.propertiesPlanCountMap = Maps.newLinkedHashMap();
+        this.outputPropertySatisfyRequiredPropertyMap = Maps.newHashMap();
     }
 
     public Group getGroup() {
@@ -105,6 +109,17 @@ public class GroupExpression {
 
     public boolean hasRuleExplored(Rule rule) {
         return ruleMasks.get(rule.type().ordinal());
+    }
+
+    public PhysicalPropertySet getOutputPropertySetSatisfyRequiredProperty(PhysicalPropertySet requiredPropertySet) {
+        PhysicalPropertySet outputProperty = outputPropertySatisfyRequiredPropertyMap.get(requiredPropertySet);
+        Preconditions.checkState(outputProperty != null);
+        return outputProperty;
+    }
+
+    public void setOutputPropertySatisfyRequiredProperty(PhysicalPropertySet outputPropertySet,
+                                                         PhysicalPropertySet requiredPropertySet) {
+        this.outputPropertySatisfyRequiredPropertyMap.put(requiredPropertySet, outputPropertySet);
     }
 
     public void addValidOutputInputProperties(PhysicalPropertySet outputProperty,
@@ -175,16 +190,19 @@ public class GroupExpression {
      * @param inputProperties  List of children input properties required
      * @param cost             Cost
      */
-    public void setPropertyWithCost(PhysicalPropertySet outputProperties,
+    public boolean setPropertyWithCost(PhysicalPropertySet outputProperties,
                                     List<PhysicalPropertySet> inputProperties,
                                     double cost) {
         if (lowestCostTable.containsKey(outputProperties)) {
             if (lowestCostTable.get(outputProperties).first > cost) {
                 lowestCostTable.put(outputProperties, new Pair<>(cost, inputProperties));
+                return true;
             }
         } else {
             lowestCostTable.put(outputProperties, new Pair<>(cost, inputProperties));
+            return true;
         }
+        return false;
     }
 
     // This function will drive input group logical property first,
