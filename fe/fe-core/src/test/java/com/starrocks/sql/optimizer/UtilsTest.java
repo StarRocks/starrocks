@@ -2,8 +2,10 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
@@ -12,7 +14,10 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -257,5 +262,35 @@ public class UtilsTest {
                 new ColumnStatistic(1, 1, 0, 1, 1));
         opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
+    }
+
+    @Test
+    public void testCapableSemiReorder() {
+        OptExpression root = OptExpression.create(
+                new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
+                    OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
+                            OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
+                            OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
+                    OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
+
+        Assert.assertFalse(Utils.capableSemiReorder(root, false, 0, 1));
+        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 2));
+        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 3));
+
+        root = OptExpression.create(
+                new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
+                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
+                        OptExpression.create(new LogicalProjectOperator(Maps.newHashMap()),
+                                OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
+                                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
+                                                OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null)),
+                                                OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
+                                        OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())))),
+                OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
+
+        Assert.assertFalse(Utils.capableSemiReorder(root, false, 0, 0));
+        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 1));
+        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 2));
+        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 3));
     }
 }
