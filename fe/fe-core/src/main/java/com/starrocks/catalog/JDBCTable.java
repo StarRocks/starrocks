@@ -96,6 +96,8 @@ public class JDBCTable extends Table {
 
     }
 
+    // @TODO implement toThrift function
+
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
