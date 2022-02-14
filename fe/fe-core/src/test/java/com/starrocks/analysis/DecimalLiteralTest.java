@@ -245,7 +245,7 @@ public class DecimalLiteralTest {
         ScalarType decimal32p4s3 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3);
         for (BigDecimal dec32 : decimal32Values) {
             try {
-                DecimalLiteral.checkLiteralOverflow(dec32, decimal32p4s3);
+                DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec32, decimal32p4s3);
                 Assert.fail("should throw exception");
             } catch (Exception ignored){}
         }
@@ -259,7 +259,7 @@ public class DecimalLiteralTest {
         ScalarType decimal64p10s6 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 6);
         for (BigDecimal dec64 : decimal64Values) {
             try {
-                DecimalLiteral.checkLiteralOverflow(dec64, decimal64p10s6);
+                DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec64, decimal64p10s6);
                 Assert.fail("should throw exception");
             }catch (Exception ignored) { }
         }
@@ -273,7 +273,7 @@ public class DecimalLiteralTest {
         ScalarType decimal128p36s11 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 36, 11);
         for (BigDecimal dec128 : decimal128Values) {
             try {
-                DecimalLiteral.checkLiteralOverflow(dec128, decimal128p36s11);
+                DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec128, decimal128p36s11);
                 Assert.fail("should throw exception");
             }catch (Exception ignored) { }
         }
@@ -296,7 +296,7 @@ public class DecimalLiteralTest {
         ScalarType decimal32p4s3 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3);
         for (BigDecimal dec32 : decimal32Values) {
             try {
-                DecimalLiteral.checkLiteralOverflow(dec32, decimal32p4s3);
+                DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec32, decimal32p4s3);
             }catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
@@ -316,7 +316,7 @@ public class DecimalLiteralTest {
         ScalarType decimal64p10s6 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 6);
         for (BigDecimal dec64 : decimal64Values) {
             try {
-                DecimalLiteral.checkLiteralOverflow(dec64, decimal64p10s6);
+                DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec64, decimal64p10s6);
             }catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
@@ -336,8 +336,119 @@ public class DecimalLiteralTest {
         ScalarType decimal128p36s11 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 36, 11);
         for (BigDecimal dec128 : decimal128Values) {
             try {
-                DecimalLiteral.checkLiteralOverflow(dec128, decimal128p36s11);
+                DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec128, decimal128p36s11);
             }catch (Exception ignored) {
+                Assert.fail("should not throw exception");
+            }
+        }
+    }
+
+    @Test
+    public void testCheckLiteralOverflowInDecimalStyleFail() throws AnalysisException {
+        BigDecimal decimal32Values[] = {
+                new BigDecimal("100000.0000"),
+                new BigDecimal("99999.99995"),
+                new BigDecimal("-100000.0000"),
+                new BigDecimal("-99999.99995"),
+        };
+        ScalarType decimal32p9s4 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4);
+        for (BigDecimal dec32 : decimal32Values) {
+            try {
+                DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec32, decimal32p9s4);
+                Assert.fail("should throw exception");
+            } catch (Exception ignored) {
+            }
+        }
+
+        BigDecimal decimal64Values[] = {
+                new BigDecimal("1000000000000.000000"),
+                new BigDecimal("999999999999.9999995"),
+                new BigDecimal("-1000000000000.000000"),
+                new BigDecimal("-999999999999.9999995"),
+        };
+        ScalarType decimal64p18s6 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
+        for (BigDecimal dec64 : decimal64Values) {
+            try {
+                DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec64, decimal64p18s6);
+                Assert.fail("should throw exception");
+            } catch (Exception ignored) {
+            }
+        }
+
+        BigDecimal decimal128Values[] = {
+                new BigDecimal("1000000000000000000000000000.00000000000"),
+                new BigDecimal("999999999999999999999999999.999999999995"),
+                new BigDecimal("-1000000000000000000000000000.00000000000"),
+                new BigDecimal("-999999999999999999999999999.999999999995"),
+        };
+        ScalarType decimal128p38s11 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 11);
+        for (BigDecimal dec128 : decimal128Values) {
+            try {
+                DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec128, decimal128p38s11);
+                Assert.fail("should throw exception");
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    @Test
+    public void testCheckLiteralOverflowInDecimalStyleSuccess() throws AnalysisException {
+        BigDecimal decimal32Values[] = {
+                new BigDecimal("99999.99994"),
+                new BigDecimal("99999.9999"),
+                new BigDecimal("99999.999"),
+                new BigDecimal("-99999.99994"),
+                new BigDecimal("-99999.9999"),
+                new BigDecimal("-99999.999"),
+                new BigDecimal("0.0001"),
+                new BigDecimal("0.0"),
+                new BigDecimal("-0.0001"),
+        };
+        ScalarType decimal32p9s4 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4);
+        for (BigDecimal dec32 : decimal32Values) {
+            try {
+                DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec32, decimal32p9s4);
+            } catch (Exception ignored) {
+                Assert.fail("should not throw exception");
+            }
+        }
+
+        BigDecimal decimal64Values[] = {
+                new BigDecimal("999999999999.9999994"),
+                new BigDecimal("999999999999.999999"),
+                new BigDecimal("999999999999.99999"),
+                new BigDecimal("-999999999999.9999994"),
+                new BigDecimal("-999999999999.999999"),
+                new BigDecimal("-999999999999.99999"),
+                new BigDecimal("-0.000001"),
+                new BigDecimal("0.000001"),
+                new BigDecimal("0.0"),
+        };
+        ScalarType decimal64p18s6 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
+        for (BigDecimal dec64 : decimal64Values) {
+            try {
+                DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec64, decimal64p18s6);
+            } catch (Exception ignored) {
+                Assert.fail("should not throw exception");
+            }
+        }
+
+        BigDecimal decimal128Values[] = {
+                new BigDecimal("999999999999999999999999999.999999999994"),
+                new BigDecimal("999999999999999999999999999.99999999999"),
+                new BigDecimal("999999999999999999999999999.9999999999"),
+                new BigDecimal("-999999999999999999999999999.999999999994"),
+                new BigDecimal("-999999999999999999999999999.99999999999"),
+                new BigDecimal("-999999999999999999999999999.9999999999"),
+                new BigDecimal("-0.00000000001"),
+                new BigDecimal("0.00000000001"),
+                new BigDecimal("0.0"),
+        };
+        ScalarType decimal128p38s11 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 11);
+        for (BigDecimal dec128 : decimal128Values) {
+            try {
+                DecimalLiteral.checkLiteralOverflowInDecimalStyle(dec128, decimal128p38s11);
+            } catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
         }

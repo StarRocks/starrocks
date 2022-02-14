@@ -382,7 +382,7 @@ public class DecimalLiteral extends LiteralExpr {
         return fracPart.intValue();
     }
 
-    public static void checkLiteralOverflow(BigDecimal value, ScalarType scalarType) throws AnalysisException {
+    public static void checkLiteralOverflowInBinaryStyle(BigDecimal value, ScalarType scalarType) throws AnalysisException {
         int realPrecision = getRealPrecision(value);
         int realScale = getRealScale(value);
         BigInteger underlyingInt = value.setScale(scalarType.getScalarScale(), RoundingMode.HALF_UP).unscaledValue();
@@ -400,11 +400,33 @@ public class DecimalLiteral extends LiteralExpr {
         }
     }
 
+    // for Predicates that contain constant operators of decimal type, the constant value is transferred to
+    // to BE in string type, and in BE, an corresponding VectorizedLiteral is constructed after string value
+    // is converted to decimal via the string-to-decimal casting function who checks decimal overflowing in
+    // decimal style. but in FE, checking decimal overflow in binary style instead of decimal style would
+    // given an incorrect result that overflow checking should fail(in decimal style) expectedly but succeeds
+    // (in decimal style)actually. When checkLiteralOverflowInDecimalStyle fails, proper cast exprs are interpolated
+    // into Predicates to cast the type of decimal constant value to a type wider enough to holds the value.
+    public static void checkLiteralOverflowInDecimalStyle(BigDecimal value, ScalarType scalarType) throws AnalysisException {
+        int realPrecision = getRealPrecision(value);
+        int realScale = getRealScale(value);
+        BigInteger underlyingInt = value.setScale(scalarType.getScalarScale(), RoundingMode.HALF_UP).unscaledValue();
+        BigInteger maxDecimal = BigInteger.TEN.pow(scalarType.decimalPrecision());
+        BigInteger minDecimal = BigInteger.TEN.pow(scalarType.decimalPrecision()).negate();
+
+        if (underlyingInt.compareTo(minDecimal) <= 0 || underlyingInt.compareTo(maxDecimal) >= 0) {
+            String errMsg = String.format(
+                    "Typed decimal literal(%s) is overflow, value='%s' (precision=%d, scale=%d)",
+                    scalarType.toString(), value.toPlainString(), realPrecision, realScale);
+            throw new AnalysisException(errMsg);
+        }
+    }
+
     @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
         if (targetType.getPrimitiveType().isDecimalV3Type()) {
             this.type = targetType;
-            checkLiteralOverflow(this.value, (ScalarType) targetType);
+            checkLiteralOverflowInBinaryStyle(this.value, (ScalarType) targetType);
             // round
             int realScale = getRealScale(value);
             int scale = ((ScalarType) targetType).getScalarScale();

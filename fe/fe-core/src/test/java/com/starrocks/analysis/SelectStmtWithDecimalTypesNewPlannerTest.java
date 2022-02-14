@@ -34,6 +34,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "CREATE TABLE if not exists db1.decimal_table\n" +
                 "(\n" +
                 "key0 INT NOT NULL,\n" +
+                "col_decimal64p13s0 DECIMAL64(13,0) NOT NULL,\n" +
                 "col_double DOUBLE,\n" +
                 "col_decimal128p20s3 DECIMAL128(20, 3)\n" +
                 ") ENGINE=OLAP\n" +
@@ -156,6 +157,37 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains("arg_types:[TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))"));
+    }
+
+    @Test
+    public void testDecimalBinaryPredicate() throws Exception {
+        String sql = "select col_decimal64p13s0 > -9.223372E+18 from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "cast([2: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
+                "> -9223372000000000000";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalInPredicates() throws Exception {
+        String sql = "select * from db1.decimal_table where col_decimal64p13s0 in (0, 1, 9999, -9.223372E+18)";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        System.out.println(plan);
+        String snippet = "CAST(2: col_decimal64p13s0 AS DECIMAL128(19,0))" +
+                " IN (0, 1, 9999, -9223372000000000000)";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalBetweenPredicates() throws Exception {
+        String sql = "select * from db1.decimal_table where col_decimal64p13s0 between -9.223372E+18 and 9.223372E+18";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        System.out.println(plan);
+        String snippet = "cast([2: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
+                ">= -9223372000000000000, " +
+                "cast([2: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
+                "<= 9223372000000000000";
+        Assert.assertTrue(plan.contains(snippet));
     }
 }
 
