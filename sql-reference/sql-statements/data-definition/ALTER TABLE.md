@@ -44,7 +44,10 @@ partition 支持如下几种修改方式
     语法：
 
     ```sql
+    -- 2.0之前版本
     DROP PARTITION [IF EXISTS | FORCE] partition_name
+    -- 2.0及之后版本
+    DROP PARTITION [IF EXISTS] partition_name [FORCE]
     ```
 
     注意：
