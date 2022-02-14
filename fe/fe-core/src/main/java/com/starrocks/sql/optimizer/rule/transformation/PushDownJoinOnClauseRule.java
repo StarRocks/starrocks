@@ -27,7 +27,7 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
 
-        if (joinOperator.getJoinType().isCrossJoin() || joinOperator.isHasPushDownJoinOnClause()) {
+        if (joinOperator.isHasPushDownJoinOnClause()) {
             return false;
         }
         return joinOperator.getOnPredicate() != null;
