@@ -876,11 +876,12 @@ public class Coordinator {
             }
 
             PlanNodeId exchId = sink.getExchNodeId();
-            // we might have multiple fragments sending to this exchange node
-            // (distributed MERGE), which is why we need to add up the #senders
             if (destParams.perExchNumSenders.get(exchId.asInt()) == null) {
                 destParams.perExchNumSenders.put(exchId.asInt(), params.instanceExecParams.size());
             } else {
+                // we might have multiple fragments sending to this exchange node
+                // (distributed MERGE), which is why we need to add up the #senders
+                // e.g. sort-merge
                 destParams.perExchNumSenders.put(exchId.asInt(),
                         params.instanceExecParams.size() + destParams.perExchNumSenders.get(exchId.asInt()));
             }
@@ -945,14 +946,10 @@ public class Coordinator {
                 FragmentExecParams destParams = fragmentExecParamsMap.get(destFragment.getFragmentId());
 
                 PlanNodeId exchId = sink.getExchNodeId();
-                // we might have multiple fragments sending to this exchange node
-                // (distributed MERGE), which is why we need to add up the #senders
-                if (destParams.perExchNumSenders.get(exchId.asInt()) == null) {
-                    destParams.perExchNumSenders.put(exchId.asInt(), params.instanceExecParams.size());
-                } else {
-                    destParams.perExchNumSenders.put(exchId.asInt(),
-                            params.instanceExecParams.size() + destParams.perExchNumSenders.get(exchId.asInt()));
-                }
+                // MultiCastSink only send to itself, destination exchange only one senders
+                // and it's don't support sort-merge
+                Preconditions.checkState(!destParams.perExchNumSenders.containsKey(exchId.asInt()));
+                destParams.perExchNumSenders.put(exchId.asInt(), 1);
 
                 if (needScheduleByShuffleJoin(destFragment.getFragmentId().asInt(), sink)) {
                     int bucketSeq = 0;
@@ -1038,6 +1035,16 @@ public class Coordinator {
             boolean dopAdaptionEnabled = ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
                     fragment.getPlanRoot().canUsePipeLine();
+
+            // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
+            if (fragment.getChildren().size() > 0 && fragment.getChild(0) instanceof MultiCastPlanFragment) {
+                FragmentExecParams childFragmentParams =
+                        fragmentExecParamsMap.get(fragment.getChild(0).getFragmentId());
+                for (FInstanceExecParam childInstanceParam : childFragmentParams.instanceExecParams) {
+                    params.instanceExecParams.add(new FInstanceExecParam(null, childInstanceParam.host, 0, params));
+                }
+                continue;
+            }
 
             if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
                 Reference<Long> backendIdRef = new Reference<>();
@@ -1852,7 +1859,7 @@ public class Coordinator {
             this.fragment = fragment;
         }
 
-        List<TExecPlanFragmentParams> toThrift(int backendNum, boolean isEnablePipelineEngine) {
+        List<TExecPlanFragmentParams> toThrift(int backendNum, boolean isEnablePipelineEngine) throws Exception {
             // add instance number in file name prefix when export job
             DataSink sink = fragment.getSink();
             ExportSink exportSink = null;
@@ -1873,6 +1880,25 @@ public class Coordinator {
 
                 params.setProtocol_version(InternalServiceVersion.V1);
                 params.setFragment(fragment.toThrift());
+
+                /*
+                 * For MultiCastDataFragment, output only send to local, and the instance is keep
+                 * same with MultiCastDataFragment
+                 * */
+                if (fragment instanceof MultiCastPlanFragment) {
+                    List<List<TPlanFragmentDestination>> multiFragmentDestinations =
+                            params.getFragment().getOutput_sink().getMulti_cast_stream_sink().getDestinations();
+                    List<List<TPlanFragmentDestination>> newDestinations = Lists.newArrayList();
+                    for (List<TPlanFragmentDestination> destinations : multiFragmentDestinations) {
+                        Preconditions.checkState(instanceExecParams.size() == destinations.size());
+                        TPlanFragmentDestination ndes = destinations.get(i);
+
+                        Preconditions.checkState(ndes.getServer().equals(toRpcHost(instanceExecParam.host)));
+                        newDestinations.add(Lists.newArrayList(ndes));
+                    }
+                    params.getFragment().getOutput_sink().getMulti_cast_stream_sink().setDestinations(newDestinations);
+                }
+
                 params.setDesc_tbl(descTable);
                 params.setParams(new TPlanFragmentExecParams());
                 params.setResource_info(tResourceInfo);
