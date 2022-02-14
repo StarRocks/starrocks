@@ -252,7 +252,7 @@ rollup 支持如下几种创建方式：
     语法：
 
     ```sql
-    RENAME new_table_name;
+    ALTER TABLE table_name RENAME new_table_name;
     ```
 
 2. 修改 rollup index 名称
