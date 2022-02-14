@@ -8,10 +8,7 @@
 #include "column/column.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "glog/logging.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
-#include "runtime/mem_pool.h"
 #include "simdjson.h"
 #include "velocypack/vpack.h"
 
