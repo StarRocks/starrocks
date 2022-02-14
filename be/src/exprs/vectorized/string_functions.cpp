@@ -20,7 +20,6 @@
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"
-#include "util/utf8_check.h"
 
 namespace starrocks::vectorized {
 
@@ -471,8 +470,7 @@ ColumnPtr substr_const_not_null(const Columns& columns, BinaryColumn* src, Subst
     offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
 
     auto& src_bytes = src->get_bytes();
-    auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size()) ||
-                    !validate_utf8((const char*)src_bytes.data(), src_bytes.size());
+    auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (is_ascii) {
         if (off > 0) {
             // off_is_negative=false
@@ -520,8 +518,7 @@ ColumnPtr right_const_not_null(const Columns& columns, BinaryColumn* src, Substr
     raw_offsets.resize(size + 1);
     raw_offsets[0] = 0;
     offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
-    auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size) ||
-                    !validate_utf8((const char*)src_bytes.data(), src_bytes_size);
+    auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size);
     if (is_ascii) {
         // off_is_negative=true, off=-len
         // allow_out_of_left_bound=true
@@ -706,8 +703,7 @@ static inline ColumnPtr substr_not_const(FunctionContext* context, const starroc
     result.resize(rows_num, src->byte_size());
 
     Bytes& src_bytes = src->get_bytes();
-    auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size()) ||
-                    !validate_utf8((const char*)src_bytes.data(), src_bytes.size());
+    auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (is_ascii) {
         ascii_substr_not_const(rows_num, &str_viewer, &off_viewer, &len_viewer, &result);
     } else {
@@ -727,8 +723,7 @@ static inline ColumnPtr right_not_const(FunctionContext* context, const starrock
     NullableBinaryColumnBuilder result;
 
     Bytes& src_bytes = src->get_bytes();
-    auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size()) ||
-                    !validate_utf8((const char*)src_bytes.data(), src_bytes.size());
+    auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     result.resize(rows_num, src->byte_size());
 
     if (is_ascii) {
@@ -1230,7 +1225,7 @@ static inline ColumnPtr pad_const_not_null(const Columns& columns, BinaryColumn*
         return substr_const_not_null(columns, src, &state);
     }
     auto& src_bytes = src->get_bytes();
-    auto src_is_utf8 = validate_utf8((const char*)src_bytes.data(), src_bytes.size());
+    auto src_is_utf8 = !validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (src_is_utf8 && pad_state->fill_is_utf8) {
         return pad_utf8_const<true, true, pad_type>(columns, src, (uint8_t*)fill.data, fill.size, len,
                                                     pad_state->fill_utf8_index);
@@ -1388,8 +1383,7 @@ template <bool pad_is_const, PadType pad_type>
 ColumnPtr pad_not_const_check_ascii(const Columns& columns, [[maybe_unused]] const PadState* state) {
     auto src = ColumnHelper::get_binary_column(columns[0].get());
     auto& bytes = src->get_bytes();
-    auto is_ascii = validate_ascii_fast((const char*)bytes.data(), bytes.size()) ||
-                    !validate_utf8((const char*)bytes.data(), bytes.size());
+    auto is_ascii = validate_ascii_fast((const char*)bytes.data(), bytes.size());
     if (is_ascii) {
         return pad_not_const<true, pad_is_const, pad_type>(columns, state);
     } else {
@@ -1666,6 +1660,10 @@ static inline void utf8_reverse_per_slice(const char* src_begin, const char* src
     auto src_curr = src_begin;
     for (auto char_size = 0; src_curr < src_end; src_curr += char_size) {
         char_size = UTF8_BYTE_LENGTH_TABLE[(uint8_t)*src_curr];
+        // utf8 chars are copied from src_curr to  dst_curr one by one reversely, an illegal utf8 char
+        // would give a larger char_size than expected, which would cause dst_curr advance to exceed its lower,
+        // so protect char_size to not exceeds src_end-src_curr.
+        char_size = std::min<size_t>(src_end - src_curr, char_size);
         dst_curr -= char_size;
         strings::memcpy_inlined(dst_curr, src_curr, char_size);
     }
@@ -1702,8 +1700,7 @@ struct ReverseFunction {
         dst_offsets.assign(src_offsets.begin(), src_offsets.end());
         dst_bytes.resize(src_bytes.size());
 
-        const auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size()) ||
-                              !validate_utf8((const char*)src_bytes.data(), src_bytes.size());
+        const auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
         if (is_ascii) {
             reverse<true>(src, &dst_bytes);
         } else {
