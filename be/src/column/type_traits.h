@@ -309,23 +309,9 @@ template <PrimitiveType ptype, typename = guard::Guard>
 struct RunTimeTypeLimits {};
 
 template <PrimitiveType ptype>
-struct RunTimeTypeLimits<ptype, NumberPTGuard<ptype>> {
+struct RunTimeTypeLimits<ptype, ArithmeticPTGuard<ptype>> {
     using value_type = RunTimeCppType<ptype>;
 
-    static constexpr value_type min_value() { return std::numeric_limits<value_type>::lowest(); }
-    static constexpr value_type max_value() { return std::numeric_limits<value_type>::max(); }
-};
-
-template <>
-struct RunTimeTypeLimits<TYPE_TINYINT> {
-    using value_type = int32_t;
-    static constexpr value_type min_value() { return std::numeric_limits<value_type>::lowest(); }
-    static constexpr value_type max_value() { return std::numeric_limits<value_type>::max(); }
-};
-
-template <>
-struct RunTimeTypeLimits<TYPE_BOOLEAN> {
-    using value_type = int32_t;
     static constexpr value_type min_value() { return std::numeric_limits<value_type>::lowest(); }
     static constexpr value_type max_value() { return std::numeric_limits<value_type>::max(); }
 };

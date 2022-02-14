@@ -3,6 +3,7 @@
 
 #include "exec/vectorized/olap_scan_prepare.h"
 
+#include "column/type_traits.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "gutil/map_util.h"
 #include "runtime/date_value.hpp"
@@ -482,10 +483,12 @@ struct ColumnRangeBuilder {
     template <PrimitiveType ptype>
     void operator()(OlapScanConjunctsManager* cm, const SlotDescriptor* slot,
                     std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
-        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || pt_is_float<ptype>) {
+        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype>) {
             return;
         } else {
-            using value_type = typename RunTimeTypeLimits<ptype>::value_type;
+            // Treat tinyint and boolean as int
+            constexpr PrimitiveType real_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
+            using value_type = typename RunTimeTypeLimits<real_type>::value_type;
             using RangeType = ColumnValueRange<value_type>;
 
             const std::string& col_name = slot->col_name();
@@ -493,7 +496,7 @@ struct ColumnRangeBuilder {
                                  RunTimeTypeLimits<ptype>::max_value());
             ColumnValueRangeType& v = LookupOrInsert(column_value_ranges, col_name, full_range);
             RangeType& range = boost::get<ColumnValueRange<value_type>>(v);
-            cm->normalize_predicate<ptype, value_type>(*slot, &range);
+            cm->normalize_predicate<real_type, value_type>(*slot, &range);
         }
     }
 };
