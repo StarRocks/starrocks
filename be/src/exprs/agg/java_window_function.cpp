@@ -43,13 +43,13 @@ Status window_init_jvm_context(int fid, const std::string& url, const std::strin
 
     auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaMethodDescriptor>* res) {
         std::string method_name = name;
-        std::string sign;
+        std::string signature;
         std::vector<MethodTypeDescriptor> mtdesc;
-        RETURN_IF_ERROR(analyzer->get_signature(clazz, method_name, &sign));
-        RETURN_IF_ERROR(analyzer->get_udaf_method_desc(sign, &mtdesc));
+        RETURN_IF_ERROR(analyzer->get_signature(clazz, method_name, &signature));
+        RETURN_IF_ERROR(analyzer->get_udaf_method_desc(signature, &mtdesc));
         *res = std::make_unique<JavaMethodDescriptor>();
         (*res)->name = std::move(method_name);
-        (*res)->sign = std::move(sign);
+        (*res)->signature = std::move(signature);
         (*res)->method_desc = std::move(mtdesc);
         return Status::OK();
     };

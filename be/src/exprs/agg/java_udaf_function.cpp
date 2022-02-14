@@ -251,7 +251,7 @@ Status init_udaf_context(int id, const std::string& url, const std::string& chec
         RETURN_IF_ERROR(analyzer->get_udaf_method_desc(sign, &mtdesc));
         *res = std::make_unique<JavaMethodDescriptor>();
         (*res)->name = std::move(method_name);
-        (*res)->sign = std::move(sign);
+        (*res)->signature = std::move(sign);
         (*res)->method_desc = std::move(mtdesc);
         return Status::OK();
     };
