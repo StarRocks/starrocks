@@ -44,7 +44,6 @@ void CompactionManager::insert_candidates(const std::vector<Tablet*>& tablets) {
 
 Tablet* CompactionManager::pick_candidate() {
     std::lock_guard lg(_candidates_mutex);
-    size_t original_num = _candidate_tablets.size();
     if (_candidate_tablets.empty()) {
         // return nullptr if _candidate_tablets is empty
         return nullptr;

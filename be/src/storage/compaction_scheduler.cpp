@@ -65,7 +65,6 @@ bool CompactionScheduler::_can_schedule_next() {
 
 void CompactionScheduler::_wait_to_run() {
     std::unique_lock<std::mutex> lk(_mutex);
-    int wait_round = 0;
     // check _can_schedule_next every one second to avoid deadlock and support modifying config online
     while (!_cv.wait_for(lk, 5000ms, [this] { return _can_schedule_next(); })) {
     }
