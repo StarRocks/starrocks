@@ -32,6 +32,7 @@ public class TableRelation extends Relation {
                          List<Long> tabletIds,
                          boolean isMetaQuery) {
         this.name = name;
+        this.alias = name;
         this.table = table;
         this.columns = columns;
         this.partitionNames = partitionNames;
