@@ -10,8 +10,9 @@ CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type cod
         return NO_COMPRESSION;
     case tparquet::CompressionCodec::SNAPPY:
         return SNAPPY;
+    // parquet-mr uses hadoop-lz4. more details refers to https://issues.apache.org/jira/browse/PARQUET-1878
     case tparquet::CompressionCodec::LZ4:
-        return LZ4;
+        return LZ4_HADOOP;
     case tparquet::CompressionCodec::ZSTD:
         return ZSTD;
     case tparquet::CompressionCodec::GZIP:
