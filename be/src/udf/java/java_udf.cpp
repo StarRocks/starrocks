@@ -322,7 +322,7 @@ JVMClass ClassLoader::getClass(const std::string& className) {
 }
 
 jmethodID JavaMethodDescriptor::get_method_id(jclass clazz) const {
-    return JVMFunctionHelper::getInstance().getMethod(clazz, name, sign);
+    return JVMFunctionHelper::getInstance().getMethod(clazz, name, signature);
 }
 
 Status ClassAnalyzer::has_method(jclass clazz, const std::string& method, bool* has) {

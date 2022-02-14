@@ -7,6 +7,7 @@
 #include "column/column.h"
 #include "column/type_traits.h"
 #include "exprs/table_function/unnest.h"
+#include "udf/java/java_function_fwd.h"
 
 namespace starrocks::vectorized {
 
@@ -81,7 +82,15 @@ TableFunctionResolver::TableFunctionResolver() {
 TableFunctionResolver::~TableFunctionResolver() = default;
 
 const TableFunction* get_table_function(const std::string& name, const std::vector<PrimitiveType>& arg_type,
-                                        const std::vector<PrimitiveType>& return_type) {
-    return TableFunctionResolver::instance()->get_table_function(name, arg_type, return_type);
+                                        const std::vector<PrimitiveType>& return_type,
+                                        TFunctionBinaryType::type binary_type) {
+    if (binary_type == TFunctionBinaryType::BUILTIN) {
+        return TableFunctionResolver::instance()->get_table_function(name, arg_type, return_type);
+    } else if (binary_type == TFunctionBinaryType::SRJAR) {
+#ifdef STARROCKS_WITH_HDFS
+        return getJavaUDTFFunction();
+#endif
+    }
+    return nullptr;
 }
 } // namespace starrocks::vectorized

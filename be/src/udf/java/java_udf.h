@@ -193,8 +193,8 @@ struct MethodTypeDescriptor {
 };
 
 struct JavaMethodDescriptor {
-    std::string sign; // sign
-    std::string name; // function name
+    std::string signature; // function signature
+    std::string name;      // function name
     std::vector<MethodTypeDescriptor> method_desc;
     // thread safe
     jmethodID get_method_id(jclass clazz) const;
