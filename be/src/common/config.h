@@ -651,6 +651,8 @@ CONF_Int64(pipeline_scan_max_tasks_per_operator, "4");
 CONF_Int64(pipeline_scan_task_yield_max_tims_spent, "100000000");
 // the number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
+// The max schedule period for adjusting io weight of each workgroup.
+CONF_Int32(pipeline_max_io_schedule_num_period, "512");
 // the buffer size of io task
 CONF_Int64(pipeline_io_buffer_size, "64");
 // the buffer size of SinkBuffer

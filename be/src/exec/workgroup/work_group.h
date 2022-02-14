@@ -50,11 +50,9 @@ public:
     void close() override;
 
 private:
-    void _adjust_weight();
-
+    void _maybe_adjust_weight();
     WorkGroupPtr _select_next_wg();
 
-private:
     std::mutex _global_io_mutex;
     std::condition_variable _cv;
 
@@ -62,6 +60,10 @@ private:
 
     std::unordered_set<WorkGroupPtr> _ready_wgs;
     std::atomic<size_t> _total_task_num = 0;
+
+    const int _max_schedule_num_period = config::pipeline_max_io_schedule_num_period;
+    // Adjust select factor of each wg after every `min(_max_schedule_num_period, num_tasks)` schedule times.
+    int _remaining_schedule_num_period = 0;
 };
 
 class WorkGroupManager;

@@ -155,11 +155,19 @@ size_t WorkGroup::io_task_queue_size() {
     return _io_work_queue.size();
 }
 
-void IoWorkGroupQueue::_adjust_weight() {
+void IoWorkGroupQueue::_maybe_adjust_weight() {
+    if (--_remaining_schedule_num_period > 0) {
+        return;
+    }
+
+    int num_tasks = 0;
     // calculate all wg factors
     for (auto& wg : _ready_wgs) {
         wg->estimate_trend_factor_period();
+        num_tasks += wg->io_task_queue_size();
     }
+
+    _remaining_schedule_num_period = std::min(_max_schedule_num_period, num_tasks);
 
     // negative_total_diff_factor Accumulate All Under-resourced WorkGroup
     // positive_total_diff_factor Cumulative All Resource Excess WorkGroup
@@ -246,7 +254,7 @@ StatusOr<PriorityThreadPool::Task> IoWorkGroupQueue::pick_next_task() {
         }
     }
 
-    _adjust_weight();
+    _maybe_adjust_weight();
     WorkGroupPtr wg = _select_next_wg();
     if (wg->io_task_queue_size() == 1) {
         _ready_wgs.erase(wg);
