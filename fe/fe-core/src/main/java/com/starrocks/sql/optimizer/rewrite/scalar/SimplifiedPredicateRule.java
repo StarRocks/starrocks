@@ -12,6 +12,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -19,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -270,6 +272,34 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
     }
 
+    // cast(field(date) as datetime) < '2013-01-01 00:00:00'  =>  field < '2013-01-01'
+    private BinaryPredicateOperator removeCastToDatetimeOp(BinaryPredicateOperator predicate) {
+        ScalarOperator left = predicate.getChild(0);
+        if (!(left instanceof CastOperator)) {
+            return predicate;
+        }
+
+        CastOperator leftCast = (CastOperator) left;
+        if (!(leftCast.getType().equals(Type.DATETIME) &&
+                leftCast.getChild(0).isColumnRef() &&
+                leftCast.fromType().equals(Type.DATE))) {
+            return predicate;
+        }
+
+        ScalarOperator right = predicate.getChild(1);
+        if (!(right instanceof ConstantOperator)) {
+            return predicate;
+        }
+        LocalDateTime dtValue = (LocalDateTime) ((ConstantOperator) right).getValue();
+        if (!(dtValue.getHour() == 0 && dtValue.getMinute() == 0 && dtValue.getSecond() == 0)) {
+            return predicate;
+        }
+
+        return new BinaryPredicateOperator(predicate.getBinaryType(),
+                left.getChild(0),  // column
+                ConstantOperator.createDate(dtValue));
+    }
+
     //Simplify the comparison result of the same column
     //eg a >= a with not nullable transform to true constant;
     @Override
@@ -280,6 +310,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 return ConstantOperator.createBoolean(true);
             }
         }
+        predicate = removeCastToDatetimeOp(predicate);
         return predicate;
     }
 
