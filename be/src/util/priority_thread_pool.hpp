@@ -59,8 +59,8 @@ public:
     //     queue exceeds this size, subsequent calls to Offer will block until there is
     //     capacity available.
     //  -- work_function: the function to run every time an item is consumed from the queue
-    PriorityThreadPool(const std::string& name, uint32_t num_threads, uint32_t queue_size)
-            : _name(name), _work_queue(queue_size), _shutdown(false) {
+    PriorityThreadPool(std::string name, uint32_t num_threads, uint32_t queue_size)
+            : _name(std::move(name)), _work_queue(queue_size), _shutdown(false) {
         for (int i = 0; i < num_threads; ++i) {
             new_thread(++_current_thread_id);
         }
