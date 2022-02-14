@@ -645,18 +645,20 @@ CONF_Int64(pipeline_yield_max_chunks_moved, "100");
 CONF_Int64(pipeline_yield_max_time_spent, "100000000");
 // the number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
-// queue size of scan thread pool for pipeline engine.
-CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
+// The max number of io tasks for each scan operator.
+CONF_Int64(pipeline_scan_max_tasks_per_operator, "4");
+// The max number of io tasks for each scan operator.
+CONF_Int64(pipeline_scan_task_yield_max_tims_spent, "100000000");
 // the number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
+// The max schedule period for adjusting io weight of each workgroup.
+CONF_Int32(pipeline_max_io_schedule_num_period, "512");
 // the buffer size of io task
 CONF_Int64(pipeline_io_buffer_size, "64");
 // the buffer size of SinkBuffer
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // the degree of parallelism of brpc
 CONF_Int64(pipeline_sink_brpc_dop, "8");
-
-CONF_Int64(pipeline_scan_max_tasks_per_operator, "4");
 
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");

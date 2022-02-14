@@ -4,6 +4,10 @@ namespace starrocks::workgroup {
 
 IoDispatcher::IoDispatcher(std::unique_ptr<ThreadPool> thread_pool) : _thread_pool(std::move(thread_pool)) {}
 
+IoDispatcher::~IoDispatcher() {
+    workgroup::WorkGroupManager::instance()->close();
+}
+
 void IoDispatcher::initialize(int num_threads) {
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
@@ -27,8 +31,12 @@ void IoDispatcher::run() {
             break;
         }
 
-        auto task = WorkGroupManager::instance()->pick_next_task_for_io();
-        task.work_function();
+        auto maybe_task = WorkGroupManager::instance()->pick_next_task_for_io();
+        if (maybe_task.status().is_cancelled()) {
+            return;
+        }
+
+        maybe_task.value().work_function();
     }
 }
 

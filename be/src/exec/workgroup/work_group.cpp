@@ -16,11 +16,7 @@ WorkGroup::WorkGroup(const std::string& name, int id, size_t cpu_limit, size_t m
           _cpu_limit(cpu_limit),
           _memory_limit(memory_limit),
           _concurrency(concurrency),
-          _type(type) {
-    _expect_factor = _cpu_expect_use_ratio;
-    _select_factor = _expect_factor;
-    _cur_select_factor = _select_factor;
-}
+          _type(type) {}
 
 WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     if (twg.__isset.cpu_limit) {
@@ -81,41 +77,6 @@ double WorkGroup::get_cpu_actual_use_ratio() const {
     return static_cast<double>(get_real_runtime_ns()) / sum_cpu_runtime_ns;
 }
 
-WorkGroupManager::WorkGroupManager() {}
-WorkGroupManager::~WorkGroupManager() {}
-void WorkGroupManager::destroy() {
-    std::lock_guard<std::mutex> lock(_mutex);
-    this->_workgroups.clear();
-}
-
-WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (!_workgroups.count(wg->id())) {
-        _workgroups[wg->id()] = wg;
-        _wg_io_queue.add(wg);
-        _sum_cpu_limit += wg->get_cpu_limit();
-        return wg;
-    } else {
-        return _workgroups[wg->id()];
-    }
-}
-
-WorkGroupPtr WorkGroupManager::get_default_workgroup() {
-    std::lock_guard<std::mutex> lock(_mutex);
-    DCHECK(_workgroups.count(WorkGroup::DEFAULT_WG_ID));
-    return _workgroups[WorkGroup::DEFAULT_WG_ID];
-}
-
-void WorkGroupManager::remove_workgroup(int wg_id) {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (_workgroups.count(wg_id)) {
-        auto wg = std::move(_workgroups[wg_id]);
-        _sum_cpu_limit -= wg->get_cpu_limit();
-        _workgroups.erase(wg_id);
-        _wg_io_queue.remove(wg);
-    }
-}
-
 bool WorkGroup::try_offer_io_task(const PriorityThreadPool::Task& task) {
     _io_work_queue.emplace(std::move(task));
     return true;
@@ -127,7 +88,7 @@ PriorityThreadPool::Task WorkGroup::pick_io_task() {
     return task;
 }
 
-// shuold be call when read chunk_num from disk
+// Should be call when read chunk_num from disk.
 void WorkGroup::increase_chunk_num(int32_t chunk_num) {
     _cur_hold_total_chunk_num += chunk_num;
     _increase_chunk_num_period += chunk_num;
@@ -188,36 +149,31 @@ void WorkGroup::estimate_trend_factor_period() {
     // If it is positive, it means that its resources are sufficient and can be reduced by a fraction
     //_diff_factor = get_cpu_expected_use_ratio() - _expect_factor;
     _diff_factor = _select_factor - _expect_factor;
-
-    // reset
-    _decrease_chunk_num_period = 1;
-    _increase_chunk_num_period = 1;
 }
 
 size_t WorkGroup::io_task_queue_size() {
     return _io_work_queue.size();
 }
 
-void IoWorkGroupQueue::adjust_weight_if_need() {
-    if (--_cur_schedule_num > 0) {
+void IoWorkGroupQueue::_maybe_adjust_weight() {
+    if (--_remaining_schedule_num_period > 0) {
         return;
     }
 
-    _io_wgs.clear();
-    for (const auto& wg : _ready_wgs) {
-        _io_wgs.push_back(wg);
+    int num_tasks = 0;
+    // calculate all wg factors
+    for (auto& wg : _ready_wgs) {
+        wg->estimate_trend_factor_period();
+        num_tasks += wg->io_task_queue_size();
     }
 
-    // calculate all wg factors
-    for (auto const& wg : _io_wgs) {
-        wg->estimate_trend_factor_period();
-    }
+    _remaining_schedule_num_period = std::min(_max_schedule_num_period, num_tasks);
 
     // negative_total_diff_factor Accumulate All Under-resourced WorkGroup
     // positive_total_diff_factor Cumulative All Resource Excess WorkGroup
     double positive_total_diff_factor = 0.0;
     double negative_total_diff_factor = 0.0;
-    for (auto const& wg : _io_wgs) {
+    for (auto const& wg : _ready_wgs) {
         if (wg->get_diff_factor() > 0) {
             positive_total_diff_factor += wg->get_diff_factor();
         } else {
@@ -225,20 +181,12 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         }
     }
 
-    if (_schedule_num_period > _total_task_num) {
-        _cur_schedule_num_period = _total_task_num;
-    } else {
-        _cur_schedule_num_period = _schedule_num_period;
-    }
-
     // If positive_total_diff_factor <= 0, it This means that all WorkGs have no excess resources
     // So we don't need to adjust it and keep the original limit
     if (positive_total_diff_factor <= 0) {
-        for (auto const& wg : _io_wgs) {
+        for (auto& wg : _ready_wgs) {
             wg->set_select_factor(wg->get_cpu_expected_use_ratio());
         }
-        schedule_io_task();
-        _cur_schedule_num = _cur_schedule_num_period;
         return;
     }
 
@@ -253,7 +201,7 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         // This means that the resources are sufficient
         // So we can reduce the proportion of resources in the WorkGroup that are over-resourced
         // Then increase the proportion of resources for those WorkGs that are under-resourced
-        for (auto const& wg : _io_wgs) {
+        for (auto& wg : _ready_wgs) {
             if (wg->get_diff_factor() < 0) {
                 wg->update_select_factor(0 - negative_total_diff_factor * wg->get_diff_factor() /
                                                      negative_total_diff_factor);
@@ -267,7 +215,7 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
         // This means that there are not enough resources, but some WorkGs are still over-resourced
         // So we can reduce the proportion of resources in the WorkGroup that are over-resourced
         // Then increase the proportion of resources for those WorkGs that are under-resourced
-        for (auto const& wg : _io_wgs) {
+        for (auto& wg : _ready_wgs) {
             if (wg->get_diff_factor() < 0) {
                 wg->update_select_factor(positive_total_diff_factor * wg->get_diff_factor() /
                                          negative_total_diff_factor);
@@ -277,72 +225,49 @@ void IoWorkGroupQueue::adjust_weight_if_need() {
             }
         }
     }
-
-    schedule_io_task();
-    _cur_schedule_num = _cur_schedule_num_period;
 }
 
-void IoWorkGroupQueue::schedule_io_task() {
-    // In a scheduling period, we calculate in advance
-    for (size_t i = 0; i < _cur_schedule_num_period; i++) {
-        size_t idx = get_next_wg_index();
-        _cur_wait_run_wgs[i] = _io_wgs[idx];
-    }
-    _cur_index = 0;
-}
-
-size_t IoWorkGroupQueue::get_next_wg_index() {
-    int index = -1;
+WorkGroupPtr IoWorkGroupQueue::_select_next_wg() {
+    WorkGroupPtr max_wg = nullptr;
     double total = 0;
-    for (int i = 0; i < _io_wgs.size(); i++) {
-        _io_wgs[i]->update_cur_select_factor(_io_wgs[i]->get_select_factor());
-        total += _io_wgs[i]->get_select_factor();
-        if (index == -1 || _io_wgs[i]->get_cur_select_factor() > _io_wgs[index]->get_cur_select_factor()) {
-            index = i;
+    for (auto wg : _ready_wgs) {
+        wg->update_cur_select_factor(wg->get_select_factor());
+        total += wg->get_select_factor();
+        if (max_wg == nullptr || wg->get_cur_select_factor() > max_wg->get_cur_select_factor()) {
+            max_wg = wg;
         }
     }
-    _io_wgs[index]->update_cur_select_factor(0 - total);
-    return index;
+    max_wg->update_cur_select_factor(0 - total);
+    return max_wg;
 }
 
-WorkGroupPtr IoWorkGroupQueue::get_next_wg() {
-    int index = _cur_index++;
-    if (index < _cur_schedule_num_period) {
-        return _cur_wait_run_wgs[index];
-    }
-
-    return nullptr;
-}
-
-PriorityThreadPool::Task IoWorkGroupQueue::pick_next_task() {
+StatusOr<PriorityThreadPool::Task> IoWorkGroupQueue::pick_next_task() {
     std::unique_lock<std::mutex> lock(_global_io_mutex);
+
+    if (_is_closed) {
+        return Status::Cancelled("Shutdown");
+    }
     while (_ready_wgs.empty()) {
         _cv.wait(lock);
+        if (_is_closed) {
+            return Status::Cancelled("Shutdown");
+        }
     }
-    WorkGroupPtr wg = nullptr;
-    do {
-        adjust_weight_if_need();
-        wg = get_next_wg();
-    } while (wg == nullptr || wg->io_task_queue_size() == 0);
 
+    _maybe_adjust_weight();
+    WorkGroupPtr wg = _select_next_wg();
     if (wg->io_task_queue_size() == 1) {
         _ready_wgs.erase(wg);
     }
+
     _total_task_num--;
 
     return wg->pick_io_task();
 }
 
-PriorityThreadPool::Task WorkGroupManager::pick_next_task_for_io() {
-    return _wg_io_queue.pick_next_task();
-}
-
-WorkGroupQueue& WorkGroupManager::get_io_queue() {
-    return _wg_io_queue;
-}
-
 bool IoWorkGroupQueue::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
     std::lock_guard<std::mutex> lock(_global_io_mutex);
+
     wg->try_offer_io_task(task);
     if (_ready_wgs.find(wg) == _ready_wgs.end()) {
         _ready_wgs.emplace(wg);
@@ -353,25 +278,63 @@ bool IoWorkGroupQueue::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPo
     return true;
 }
 
-bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
-    return _wg_io_queue.try_offer_io_task(wg, task);
+void IoWorkGroupQueue::close() {
+    std::lock_guard<std::mutex> lock(_global_io_mutex);
+
+    if (_is_closed) {
+        return;
+    }
+
+    _is_closed = true;
+    _cv.notify_all();
 }
 
-void WorkGroupManager::log_cpu() {
-    LOG(WARNING) << "[TEST] ===============================";
-    for (auto [_, wg] : _workgroups) {
-        LOG(WARNING) << "[TEST] cpu "
-                     << "[wg=" << wg->name() << "] "
-                     << "[cpu_limit=" << wg->get_cpu_limit() << "] "
-                     << "[runtime=" << wg->get_real_runtime_ns() / 1000'000.0L << "] "
-                     << "[vruntime=" << wg->get_vruntime_ns() / 1000'000.0L << "] "
-                     << "[expected_ratio=" << wg->get_cpu_expected_use_ratio() << "] "
-                     << "[real_ratio=" << wg->get_cpu_unadjusted_actual_use_ratio() << "] ";
-        LOG(WARNING) << "[TEST] io "
-                     << "select_factor: " << wg->get_select_factor() << " cur_hold_total_chunk_num "
-                     << wg->get_cur_hold_total_chunk_num();
+WorkGroupManager::WorkGroupManager() {}
+WorkGroupManager::~WorkGroupManager() {}
+
+void WorkGroupManager::destroy() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    this->_workgroups.clear();
+}
+
+WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (!_workgroups.count(wg->id())) {
+        _workgroups[wg->id()] = wg;
+        _wg_io_queue.add(wg);
+        _sum_cpu_limit += wg->get_cpu_limit();
+        return wg;
+    } else {
+        return _workgroups[wg->id()];
     }
-    LOG(WARNING) << "[TEST] ===============================";
+}
+
+WorkGroupPtr WorkGroupManager::get_default_workgroup() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    DCHECK(_workgroups.count(WorkGroup::DEFAULT_WG_ID));
+    return _workgroups[WorkGroup::DEFAULT_WG_ID];
+}
+
+void WorkGroupManager::remove_workgroup(int wg_id) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (_workgroups.count(wg_id)) {
+        auto wg = std::move(_workgroups[wg_id]);
+        _sum_cpu_limit -= wg->get_cpu_limit();
+        _workgroups.erase(wg_id);
+        _wg_io_queue.remove(wg);
+    }
+}
+
+void WorkGroupManager::close() {
+    _wg_io_queue.close();
+}
+
+StatusOr<PriorityThreadPool::Task> WorkGroupManager::pick_next_task_for_io() {
+    return _wg_io_queue.pick_next_task();
+}
+
+bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
+    return _wg_io_queue.try_offer_io_task(wg, task);
 }
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
