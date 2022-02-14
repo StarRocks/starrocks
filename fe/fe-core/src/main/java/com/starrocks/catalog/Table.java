@@ -246,7 +246,6 @@ public class Table extends MetaObject implements Writable {
         super.readFields(in);
 
         this.id = in.readLong();
-        LOG.info("read id [{}]", this.id);
         this.name = Text.readString(in);
 
         // base schema
