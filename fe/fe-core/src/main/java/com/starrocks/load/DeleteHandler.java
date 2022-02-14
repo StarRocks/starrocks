@@ -183,18 +183,19 @@ public class DeleteHandler implements Writable {
                         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                         Map<String, PartitionColumnFilter> columnFilters = extractColumnFilter(stmt, table);
                         Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
-                        RangePartitionPruner pruner = new RangePartitionPruner(keyRangeById,
-                                rangePartitionInfo.getPartitionColumns(), columnFilters);
-                        Collection<Long> selectedPartitionIds = pruner.prune();
-
-                        if (selectedPartitionIds == null) {
+                        if (columnFilters == null) {
                             partitionNames.addAll(olapTable.getPartitionNames());
                         } else {
-                            Set<String> candidatePartitionNames = olapTable.getPartitionNames();
-                            for (String candidatePartitionName : candidatePartitionNames) {
-                                Partition partition = olapTable.getPartition(candidatePartitionName);
-                                if (selectedPartitionIds.contains(partition.getId())) {
-                                    partitionNames.add(candidatePartitionName);
+                            RangePartitionPruner pruner = new RangePartitionPruner(keyRangeById,
+                                    rangePartitionInfo.getPartitionColumns(), columnFilters);
+                            Collection<Long> selectedPartitionIds = pruner.prune();
+
+                            if (selectedPartitionIds == null) {
+                                partitionNames.addAll(olapTable.getPartitionNames());
+                            } else {
+                                for (Long partitionId : selectedPartitionIds) {
+                                    Partition partition = olapTable.getPartition(partitionId);
+                                    partitionNames.add(partition.getName());
                                 }
                             }
                         }
@@ -406,17 +407,16 @@ public class DeleteHandler implements Writable {
             throws DdlException, AnalysisException {
         Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
         List<Predicate> deleteConditions = stmt.getDeleteConditions();
+        Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (Column column : table.getBaseSchema()) {
+            nameToColumn.put(column.getName(), column);
+        }
         for (Predicate condition : deleteConditions) {
             SlotRef slotRef = (SlotRef) condition.getChild(0);
             String columnName = slotRef.getColumnName();
-            Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-            for (Column column : table.getBaseSchema()) {
-                nameToColumn.put(column.getName(), column);
-            }
             if (!nameToColumn.containsKey(columnName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FIELD_ERROR, columnName, table.getName());
             }
-
             if (condition instanceof BinaryPredicate) {
                 BinaryPredicate binaryPredicate = (BinaryPredicate) condition;
                 LiteralExpr literalExpr = (LiteralExpr) binaryPredicate.getChild(1);
@@ -449,8 +449,10 @@ public class DeleteHandler implements Writable {
                 }
                 columnFilters.put(slotRef.getColumnName(), filter);
             } else if (condition instanceof InPredicate) {
-
                 InPredicate inPredicate = (InPredicate) condition;
+                if (inPredicate.isNotIn()) {
+                    return null;
+                }
                 List<LiteralExpr> list = Lists.newArrayList();
                 Column column = nameToColumn.get(columnName);
                 for (int i = 1; i < inPredicate.getChildren().size(); i++) {
