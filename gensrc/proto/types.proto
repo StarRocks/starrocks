@@ -81,5 +81,6 @@ enum CompressionTypePB {
     BZIP2 = 10;
     LZO = 11; // Deprecated
     BROTLI = 12;
+    LZ4_HADOOP = 13;
 }
 
