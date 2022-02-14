@@ -562,7 +562,43 @@ TEST_F(JsonScannerTest, test_native_json_ndjson_with_jsonpath) {
 }
 
 TEST_F(JsonScannerTest, test_native_json_single_column) {
-    // TODO(mofei)
+    std::vector<TypeDescriptor> types;
+    constexpr int kColumns = 2;
+    for (int i = 0; i < kColumns; i++) {
+        types.emplace_back(TypeDescriptor::create_json_type());
+    }
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = R"(["$", "$.k1"])";
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"$", "k1"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(kColumns, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ(R"([{"k1": "v1", "keyname": {"ip": "10.10.0.1", "value": "10"}, "kind": "server"}, "v1"])",
+              chunk->debug_row(0));
+    EXPECT_EQ(R"([{"k1": "v2", "keyname": {"ip": "10.10.0.2", "value": "20"}, "kind": "server"}, "v2"])",
+              chunk->debug_row(1));
+    EXPECT_EQ(R"([{"k1": "v3", "keyname": {"ip": "10.10.0.3", "value": "30"}, "kind": "server"}, "v3"])",
+              chunk->debug_row(2));
+    EXPECT_EQ(R"([{"k1": "v4", "keyname": {"ip": "10.10.0.4", "value": "40"}, "kind": "server"}, "v4"])",
+              chunk->debug_row(3));
+    EXPECT_EQ(R"([{"k1": "v5", "keyname": {"ip": "10.10.0.5", "value": "50"}, "kind": "server"}, "v5"])",
+              chunk->debug_row(4));
 }
 
 } // namespace starrocks::vectorized
