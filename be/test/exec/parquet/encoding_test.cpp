@@ -331,4 +331,34 @@ TEST_F(ParquetEncodingTest, FixedString) {
     }
 }
 
+TEST_F(ParquetEncodingTest, Boolean) {
+    std::vector<uint8_t> values;
+    for (int i = 0; i < 32; i++) {
+        values.push_back(i % 3 == 0);
+    }
+
+    const EncodingInfo* plain_encoding = nullptr;
+    EncodingInfo::get(tparquet::Type::BOOLEAN, tparquet::Encoding::PLAIN, &plain_encoding);
+    ASSERT_TRUE(plain_encoding != nullptr);
+    // plain
+    {
+        std::unique_ptr<Decoder> decoder;
+        auto st = plain_encoding->create_decoder(&decoder);
+        ASSERT_TRUE(st.ok());
+
+        std::unique_ptr<Encoder> encoder;
+        st = plain_encoding->create_encoder(&encoder);
+        ASSERT_TRUE(st.ok());
+
+        // decode without buffer
+        st = encoder->append(reinterpret_cast<uint8_t*>(&values[0]), 32);
+        ASSERT_TRUE(st.ok());
+        DecoderChecker<uint8_t, false>::check(values, encoder->build(), decoder.get());
+
+        // decode with buffer
+        values.resize(31);
+        DecoderChecker<uint8_t, false>::check(values, encoder->build(), decoder.get());
+    }
+}
+
 } // namespace starrocks::parquet
