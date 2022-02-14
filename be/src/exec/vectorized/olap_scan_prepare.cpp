@@ -481,10 +481,10 @@ void OlapScanConjunctsManager::normalize_predicate(const SlotDescriptor& slot,
 
 struct ColumnRangeBuilder {
     template <PrimitiveType ptype>
-    void operator()(OlapScanConjunctsManager* cm, const SlotDescriptor* slot,
-                    std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
+    std::nullptr_t operator()(OlapScanConjunctsManager* cm, const SlotDescriptor* slot,
+                              std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
         if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype>) {
-            return;
+            return nullptr;
         } else {
             // Treat tinyint and boolean as int
             constexpr PrimitiveType real_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
@@ -505,6 +505,7 @@ struct ColumnRangeBuilder {
                 range.set_scale(slot->type().scale);
             }
             cm->normalize_predicate<real_type, value_type>(*slot, &range);
+            return nullptr;
         }
     }
 };
@@ -520,7 +521,8 @@ Status OlapScanConjunctsManager::normalize_conjuncts() {
     // TODO(zhuming): if any of the normalized column range is empty, we can know that
     // no row will be selected anymore and can return EOF directly.
     for (auto& slot : tuple_desc->decoded_slots()) {
-        type_dispatch_predicate(slot->type().type, ColumnRangeBuilder(), this, slot, &column_value_ranges);
+        type_dispatch_predicate<std::nullptr_t>(slot->type().type, false, ColumnRangeBuilder(), this, slot,
+                                                &column_value_ranges);
     }
     return Status::OK();
 }

@@ -112,7 +112,7 @@ struct BinaryPredicateBuilder {
 Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     PrimitiveType type = thrift_to_type(node.child_type);
 
-    return type_dispatch_predicate(type, BinaryPredicateBuilder(), node);
+    return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
 }
 
 } // namespace starrocks::vectorized
