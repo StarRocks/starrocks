@@ -5686,4 +5686,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |    \n" +
                 "  0:OlapScanNode"));
     }
+
+    @Test
+    public void testRemoveCastDatetimeOperator() throws Exception {
+        String sql = "select * from test_all_type where cast(id_date as datetime) < '2021-01-01 00:00:00'";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("id_date < '2021-01-01'"));
+    }
 }
