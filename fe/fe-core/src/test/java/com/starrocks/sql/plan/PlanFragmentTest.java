@@ -5640,4 +5640,50 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(
                 "other predicates: NOT (CAST(bitmap_count(if(4: v4 = 10000, bitmap_hash('abc'), NULL)) AS BOOLEAN))"));
     }
+
+    @Test
+    public void testCrossJoinOnPredicate() throws Exception {
+        String sql = "select * from t0 cross join t1 on t0.v1 != t1.v4 and t0.v2 != t1.v5";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: 1: v1 != 4: v4, 2: v2 != 5: v5"));
+    }
+
+    @Test
+    public void testCrossJoinCastToInner() throws Exception {
+        String sql = "select * from t0 cross join t1 on t0.v1 = t1.v4 and t0.v2 != t1.v5";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  other join predicates: 2: v2 != 5: v5"));
+    }
+
+    @Test
+    public void testCrossJoinPushLimit() throws Exception {
+        String sql = "select * from t0 cross join t1 on t0.v2 != t1.v5 limit 10";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: 2: v2 != 5: v5\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode"));
+
+        sql = "select * from t0 inner join t1 on t0.v2 != t1.v5 limit 10";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: 2: v2 != 5: v5\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode"));
+    }
 }
