@@ -17,6 +17,7 @@ import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.SchemaTable;
@@ -69,7 +70,7 @@ public class AnalyzerUtils {
     public static boolean isSupportedTable(Table table) {
         return table instanceof OlapTable || table instanceof HiveTable || table instanceof SchemaTable ||
                 table instanceof MysqlTable || table instanceof EsTable || table instanceof IcebergTable ||
-                table instanceof HudiTable;
+                table instanceof HudiTable || table instanceof JDBCTable;
     }
 
     //Get all the db used, the query needs to add locks to them
