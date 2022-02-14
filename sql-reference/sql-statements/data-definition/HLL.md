@@ -65,6 +65,7 @@ HLL_EMPTY()
 
     create table test_uv(
     dt date,
+    id int,
     uv_set hll hll_union)
     distributed by hash(id) buckets 32;
 
