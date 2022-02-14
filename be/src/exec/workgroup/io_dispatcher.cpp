@@ -2,8 +2,8 @@
 
 namespace starrocks::workgroup {
 
-IoDispatcher::IoDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool set_high_priority)
-        : _set_high_priority(set_high_priority), _thread_pool(std::move(thread_pool)) {}
+IoDispatcher::IoDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool is_real_time)
+        : _is_real_time(is_real_time), _thread_pool(std::move(thread_pool)) {}
 
 IoDispatcher::~IoDispatcher() {
     workgroup::WorkGroupManager::instance()->close();
@@ -36,7 +36,7 @@ void IoDispatcher::run() {
             break;
         }
 
-        auto maybe_task = WorkGroupManager::instance()->pick_next_task_for_io(_set_high_priority);
+        auto maybe_task = WorkGroupManager::instance()->pick_next_task_for_io(_is_real_time);
         if (maybe_task.status().is_cancelled()) {
             return;
         }

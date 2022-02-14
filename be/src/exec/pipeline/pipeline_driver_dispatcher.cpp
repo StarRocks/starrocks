@@ -8,11 +8,11 @@
 
 namespace starrocks::pipeline {
 
-GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool is_low_latency)
+GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool is_real_time)
         : _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
           _exec_state_reporter(new ExecStateReporter()) {
-    if (is_low_latency) {
+    if (is_real_time) {
         _driver_queue = std::make_unique<QuerySharedDriverQueue>();
     } else {
         _driver_queue = std::make_unique<DriverQueueWithWorkGroup>();
