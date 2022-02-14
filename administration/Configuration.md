@@ -84,7 +84,7 @@
 |qe_max_connection|1024|FE上最多接收的连接数，适用于所有用户|
 |max_conn_per_user|100|单个用户能够处理的最大连接数|
 |query_colocate_join_memory_limit_penalty_factor|8|Colocte Join的内存限制|
-|disable_colocate_join|false|不开启Colocate Join|
+|disable_colocate_join|false|false表示开启Colocate Join，true表示不开启Colocate Join|
 |expr_children_limit|10000|查询中in中可以涉及的数目|
 |expr_depth_limit|3000|查询嵌套的层次|
 |locale|zh_CN.UTF-8|字符集|
