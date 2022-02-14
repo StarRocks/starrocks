@@ -109,6 +109,18 @@ StatusOr<JsonValue> JsonValue::from_simdjson(simdjson::ondemand::value* value) {
     return Status::OK();
 }
 
+StatusOr<JsonValue> JsonValue::from_simdjson(simdjson::ondemand::object* obj) {
+    // TODO(mofei) optimize this, avoid convert to string then parse it
+    std::string_view view = obj->raw_json();
+    try {
+        return parse(Slice(view.data(), view.size()));
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = strings::Substitute("Failed to parse value, json=$0, error=$1", view.data(),
+                                           simdjson::error_message(e.error()));
+        return Status::DataQualityError(err_msg);
+    }
+}
+
 StatusOr<JsonValue> JsonValue::parse(const Slice& src) {
     JsonValue json;
     RETURN_IF_ERROR(parse(src, &json));
