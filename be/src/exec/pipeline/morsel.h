@@ -70,7 +70,7 @@ public:
     std::vector<MorselQueuePtr> split_by_size(size_t split_size) {
         // split_size is in (0, split_size].
         DCHECK_GT(split_size, 0);
-        DCHECK_LE(split_size, _num_morsels);
+        DCHECK(_num_morsels == 0 || split_size <= _num_morsels);
 
         std::vector<Morsels> split_morsels_list(split_size);
         for (int i = 0; i < _num_morsels; ++i) {
