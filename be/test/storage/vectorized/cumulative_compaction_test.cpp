@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "runtime/exec_env.h"
+#include "storage/compaction_utils.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -259,17 +260,17 @@ TEST_F(CumulativeCompactionTest, test_read_chunk_size) {
     int64_t total_num_rows = 10000;
     int64_t total_mem_footprint = 0;
     size_t source_num = 10;
-    ASSERT_EQ(config_chunk_size, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
+    ASSERT_EQ(config_chunk_size, CompactionUtils::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
                                                                  total_mem_footprint, source_num));
 
     // normal total memory footprint
     total_mem_footprint = 1073741824;
-    ASSERT_EQ(2001, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows, total_mem_footprint,
+    ASSERT_EQ(2001, CompactionUtils::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows, total_mem_footprint,
                                                     source_num));
 
     // mem limit is 0
     mem_limit = 0;
-    ASSERT_EQ(config_chunk_size, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
+    ASSERT_EQ(config_chunk_size, CompactionUtils::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
                                                                  total_mem_footprint, source_num));
 }
 
