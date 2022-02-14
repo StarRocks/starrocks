@@ -7,7 +7,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
@@ -27,6 +28,8 @@ import java.util.Map;
  *
  * */
 public class CTEContext {
+    private static final Logger LOG = LogManager.getLogger(CTEContext.class);
+
     // All CTE produce, OptExpression should bind GroupExpression
     private Map<Integer, OptExpression> produces;
 
@@ -46,7 +49,19 @@ public class CTEContext {
 
     private Map<Integer, List<Long>> consumeLimits;
 
+    // Evaluate the complexity of the produce plan.
+    // Why need this?
+    // * Join will produce GlobalRuntimeFilter, will let us can't
+    //   calculate the exact join cost
+    // * Multi-Equivalence predicate will case inaccurate rows selectivity
+    //
+    // So in some simpler cases, the effect of directly reuse cte may be worse.
+    // We want to keep complexity score between 0~2
+    private Map<Integer, Double> produceComplexityScores;
+
     private boolean enableCTE;
+
+    private double inlineCTERatio = 2.0;
 
     public CTEContext() {
     }
@@ -60,10 +75,15 @@ public class CTEContext {
 
         consumeInlineCosts = Maps.newHashMap();
         produceCosts = Maps.newHashMap();
+        produceComplexityScores = Maps.newHashMap();
     }
 
     public void setEnableCTE(boolean enableCTE) {
         this.enableCTE = enableCTE;
+    }
+
+    public void setInlineCTERatio(double ratio) {
+        this.inlineCTERatio = ratio;
     }
 
     public void addCTEProduce(int cteId, OptExpression produce) {
@@ -73,6 +93,10 @@ public class CTEContext {
     public void addCTEConsume(int cteId) {
         int i = this.consumeNums.getOrDefault(cteId, 0);
         this.consumeNums.put(cteId, i + 1);
+    }
+
+    public void addCTEProduceComplexityScores(int cteId, double score) {
+        produceComplexityScores.put(cteId, score);
     }
 
     public void addCTEProduceCost(int cteId, double cost) {
@@ -90,6 +114,10 @@ public class CTEContext {
     public OptExpression getCTEProduce(int cteId) {
         Preconditions.checkState(produces.containsKey(cteId));
         return produces.get(cteId);
+    }
+
+    public Map<Integer, OptExpression> getAllCTEProduce() {
+        return produces;
     }
 
     public int getCTEConsumeNums(int cteId) {
@@ -168,17 +196,21 @@ public class CTEContext {
         Preconditions.checkState(produceCosts.containsKey(cteId));
         Preconditions.checkState(consumeInlineCosts.containsKey(cteId));
 
-        double p = produceCosts.get(cteId);
-        double c = consumeInlineCosts.get(cteId).stream().reduce(Double::sum).orElse(Double.MAX_VALUE);
-
-        // if was none statistic, default don't inline
-        if (p <= 0 || c <= 0) {
+        if (inlineCTERatio <= 0) {
             return false;
         }
 
-        // 3. CTE produce cost > sum of all consume inline costs
+        double p = produceCosts.get(cteId);
+        double c = consumeInlineCosts.get(cteId).stream().reduce(Double::sum).orElse(Double.MAX_VALUE);
+
+        // 3. Statistic is unknown, must inline
+        if (p <= 0 || c <= 0) {
+            return true;
+        }
+
+        // 4. CTE produce cost > sum of all consume inline costs
         // Consume output rows less produce rows * rate choose inline
-        return p * StatisticsEstimateCoefficient.DEFAULT_CTE_INLINE_COST_RATE >= c;
+        return p * (inlineCTERatio + produceComplexityScores.getOrDefault(cteId, 0D)) > c;
     }
 
     public boolean hasInlineCTE() {

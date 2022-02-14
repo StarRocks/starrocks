@@ -116,7 +116,7 @@ public class ExpressionStatisticCalculator {
                     min = min.castTo(cast.getType());
                 }
             } catch (Exception e) {
-                LOG.warn("expression statistic compute cast failed: " + max.toString() + ", " + min.toString() +
+                LOG.debug("expression statistic compute cast failed: " + max.toString() + ", " + min.toString() +
                         ", to type: " + cast.getType());
                 return childStatistic;
             }
@@ -179,7 +179,7 @@ public class ExpressionStatisticCalculator {
                         minValue = getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
                         maxValue = getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
                     } catch (DateTimeException e) {
-                        LOG.warn("get date type column statistics min/max failed. " + e);
+                        LOG.debug("get date type column statistics min/max failed. " + e);
                     }
                     return new ColumnStatistic(minValue, maxValue, 0,
                             callOperator.getType().getTypeSize(),

@@ -903,7 +903,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Catalog catalog = connectContext.getCatalog();
         connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
-
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
 
         OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
         OlapTable t2 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t2");
