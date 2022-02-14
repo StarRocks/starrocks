@@ -6,9 +6,6 @@
 
 #include <vector>
 
-#include "storage/compaction_context.h"
-#include "storage/level_compaction_policy.h"
-
 namespace starrocks {
 
 TEST(CompactionUtilsTest, test_algorithm_to_string) {
