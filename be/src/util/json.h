@@ -68,6 +68,7 @@ public:
 
     // construct a JsonValue from simdjson::value
     static StatusOr<JsonValue> from_simdjson(simdjson::ondemand::value* value);
+    static StatusOr<JsonValue> from_simdjson(simdjson::ondemand::object* obj);
 
     ////////////////// parsing  //////////////////////
     static Status parse(const Slice& src, JsonValue* out);

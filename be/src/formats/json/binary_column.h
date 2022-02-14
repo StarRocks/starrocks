@@ -16,5 +16,7 @@ Status add_binary_column(Column* column, const TypeDescriptor& type_desc, const 
 
 Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                               simdjson::ondemand::value* value);
+Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                              simdjson::ondemand::object* value);
 
 } // namespace starrocks::vectorized
