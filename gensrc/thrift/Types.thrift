@@ -285,7 +285,7 @@ struct TAggregateFunction {
 
 struct TTableFunction {
   1: required list<TTypeDesc> ret_types
-  2: optional string symbol;
+  2: optional string symbol
 }
 
 // Represents a function in the Catalog.
