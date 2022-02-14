@@ -52,6 +52,7 @@ set(EXEC_FILES
         ./exprs/vectorized/decimal_binary_function_test.cpp
         ./exprs/vectorized/array_expr_test.cpp
         ./exprs/vectorized/array_functions_test.cpp
+        ./exprs/vectorized/binary_functions_test.cpp
         ./exprs/vectorized/binary_predicate_test.cpp
         ./exprs/vectorized/bitmap_functions_test.cpp
         ./exprs/vectorized/case_expr_test.cpp
