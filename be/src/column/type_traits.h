@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <limits>
+
 #include "column/binary_column.h"
 #include "column/decimalv3_column.h"
 #include "column/json_column.h"
@@ -9,6 +11,7 @@
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/primitive_type.h"
+#include "util/json.h"
 
 namespace starrocks {
 
@@ -301,5 +304,83 @@ template <>
 struct ColumnTraits<TimestampValue> {
     using ColumnType = TimestampColumn;
 };
+
+template <PrimitiveType ptype, typename = guard::Guard>
+struct RunTimeTypeLimits {};
+
+template <PrimitiveType ptype>
+struct RunTimeTypeLimits<ptype, NumberPTGuard<ptype>> {
+    using value_type = RunTimeCppType<ptype>;
+
+    static constexpr value_type min_value() { return std::numeric_limits<value_type>::lowest(); }
+    static constexpr value_type max_value() { return std::numeric_limits<value_type>::max(); }
+};
+
+template <>
+struct RunTimeTypeLimits<TYPE_TINYINT> {
+    using value_type = int32_t;
+    static constexpr value_type min_value() { return std::numeric_limits<value_type>::lowest(); }
+    static constexpr value_type max_value() { return std::numeric_limits<value_type>::max(); }
+};
+
+template <>
+struct RunTimeTypeLimits<TYPE_BOOLEAN> {
+    using value_type = int32_t;
+    static constexpr value_type min_value() { return std::numeric_limits<value_type>::lowest(); }
+    static constexpr value_type max_value() { return std::numeric_limits<value_type>::max(); }
+};
+
+template <PrimitiveType ptype>
+struct RunTimeTypeLimits<ptype, BinaryPTGuard<ptype>> {
+    using value_type = RunTimeCppType<ptype>;
+
+    static constexpr value_type min_value() { return Slice(&_min, 1); }
+    static constexpr value_type max_value() { return Slice(&_max, 1); }
+
+private:
+    static inline char _min = 0x00;
+    static inline char _max = 0xff;
+};
+
+template <>
+struct RunTimeTypeLimits<TYPE_DATE> {
+    using value_type = RunTimeCppType<TYPE_DATE>;
+
+    static value_type min_value() { return DateValue::MIN_DATE_VALUE; }
+    static value_type max_value() { return DateValue::MAX_DATE_VALUE; }
+};
+
+template <>
+struct RunTimeTypeLimits<TYPE_DATETIME> {
+    using value_type = RunTimeCppType<TYPE_DATETIME>;
+
+    static value_type min_value() { return TimestampValue::MIN_TIMESTAMP_VALUE; }
+    static value_type max_value() { return TimestampValue::MAX_TIMESTAMP_VALUE; }
+};
+
+template <>
+struct RunTimeTypeLimits<TYPE_DECIMALV2> {
+    using value_type = RunTimeCppType<TYPE_DECIMALV2>;
+
+    static value_type min_value() { return DecimalV2Value::get_min_decimal(); }
+    static value_type max_value() { return DecimalV2Value::get_max_decimal(); }
+};
+
+template <PrimitiveType ptype>
+struct RunTimeTypeLimits<ptype, DecimalPTGuard<ptype>> {
+    using value_type = RunTimeCppType<ptype>;
+
+    static constexpr value_type min_value() { return get_min_decimal<value_type>(); }
+    static constexpr value_type max_value() { return get_max_decimal<value_type>(); }
+};
+
+template <>
+struct RunTimeTypeLimits<TYPE_JSON> {
+    using value_type = JsonValue;
+
+    static value_type min_value() { return JsonValue{vpack::Slice::minKeySlice()}; }
+    static value_type max_value() { return JsonValue{vpack::Slice::maxKeySlice()}; }
+};
+
 } // namespace vectorized
 } // namespace starrocks
