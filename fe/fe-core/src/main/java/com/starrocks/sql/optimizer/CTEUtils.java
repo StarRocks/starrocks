@@ -181,7 +181,8 @@ public class CTEUtils {
         if (OperatorType.LOGICAL_OLAP_SCAN.equals(expr.getOp().getOpType()) &&
                 expressionContext.getStatistics().getColumnStatistics().values().stream()
                         .anyMatch(ColumnStatistic::isUnknown)) {
-            // Mark output rows is zero, inline CTE
+            // Can't evaluated the effect of CTE if don't know statistic,
+            // Mark output rows is zero, will choose inline when CTEContext check output rows
             expr.setStatistics(Statistics.buildFrom(expressionContext.getStatistics()).setOutputRowCount(0).build());
         } else {
             expr.setStatistics(expressionContext.getStatistics());
