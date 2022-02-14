@@ -1245,12 +1245,12 @@ public class PlanFragmentBuilder {
                 joinNode.setLimit(node.getLimit());
                 joinNode.computeStatistics(optExpr.getStatistics());
                 List<Expr> conjuncts = Utils.extractConjuncts(node.getPredicate()).stream()
-                        .map(e -> ScalarOperatorToExpr.buildExecExpression(node.getPredicate(),
+                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
                 joinNode.addConjuncts(conjuncts);
                 List<Expr> onConjuncts = Utils.extractConjuncts(node.getOnPredicate()).stream()
-                        .map(e -> ScalarOperatorToExpr.buildExecExpression(node.getOnPredicate(),
+                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
                 joinNode.addConjuncts(onConjuncts);
