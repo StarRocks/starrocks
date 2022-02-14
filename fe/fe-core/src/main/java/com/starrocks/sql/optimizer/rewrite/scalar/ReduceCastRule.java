@@ -151,8 +151,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE)) {
             // when the BinaryType is <= ,cast dateTime to maximum date type；
             // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-28)
-            // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-27)
-            // Eg:cast dateTime(2021-12-28 00:20:00.0) to date(2021-12-27)
+            // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-28)
+            // Eg:cast dateTime(2021-12-28 00:20:00.0) to date(2021-12-28)
             offset = 0;
             targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
             ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));

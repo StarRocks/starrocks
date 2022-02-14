@@ -5319,7 +5319,7 @@ public class PlanFragmentTest extends PlanTestBase {
                         "and cast(cast(id_datetime as date) as datetime) <= '1970-01-01 18:00:00'";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "CAST(8: id_datetime AS DATE) >= '1970-01-02', CAST(8: id_datetime AS DATE) <= '1969-12-31'"));
+                "CAST(8: id_datetime AS DATE) >= '1970-01-02', CAST(8: id_datetime AS DATE) <= '1970-01-01'"));
     }
 
     @Test
