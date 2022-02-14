@@ -617,11 +617,7 @@ public:
         }
         JsonValue json;
         RETURN_IF_ERROR(JsonValue::parse(source, &json));
-
-        // TODO(mofei) optimize this, avoid clone
-        StatusOr<JsonValue*> copy = json.clone(mem_pool);
-        RETURN_IF_ERROR(copy.status());
-        dst.set_json(copy.value());
+        dst.set<JsonValue>(json);
 
         return Status::OK();
     }

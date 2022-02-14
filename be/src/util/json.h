@@ -8,7 +8,6 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
-#include "runtime/mem_pool.h"
 #include "simdjson.h"
 #include "util/coding.h"
 #include "velocypack/vpack.h"
@@ -41,8 +40,6 @@ public:
     JsonValue(const JsonValue& rhs) : binary_(rhs.binary_.data(), rhs.binary_.size()) {}
 
     JsonValue(JsonValue&& rhs) : binary_(std::move(rhs.binary_)) {}
-
-    explicit JsonValue(pooled_string&& binary) : binary_(std::move(binary)) {}
 
     JsonValue& operator=(const JsonValue& rhs) {
         binary_ = rhs.binary_;
@@ -99,7 +96,6 @@ public:
     std::string to_string_uncheck() const;
     int compare(const JsonValue& rhs) const;
     int64_t hash() const;
-    StatusOr<JsonValue*> clone(MemPool* mem) const;
 
 private:
     template <class Ret, class Fn>
@@ -198,3 +194,9 @@ struct formatter<starrocks::JsonValue> : formatter<std::string> {
     }
 };
 } // namespace fmt
+
+namespace std {
+inline std::string to_string(const starrocks::JsonValue& value) {
+    return value.to_string_uncheck();
+}
+} // namespace std

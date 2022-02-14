@@ -10,6 +10,7 @@
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
 #include "util/int96.h"
+#include "util/json.h"
 #include "util/percentile_value.h"
 #include "util/slice.h"
 
@@ -105,6 +106,11 @@ public:
     }
 
     template <typename T>
+    std::add_pointer_t<std::add_const_t<T>> get_if() const {
+        return std::get_if<std::remove_const_t<T>>(&_value);
+    }
+
+    template <typename T>
     void set(T value) {
         if constexpr (std::is_same_v<DateValue, T>) {
             _value = value.julian();
@@ -129,9 +135,10 @@ public:
     }
 
 private:
-    using Variant = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t,
-                                 int64_t, uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float,
-                                 double, DatumArray, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>;
+    using Variant =
+            std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
+                         uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double, DatumArray,
+                         HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*, JsonValue>;
     Variant _value;
 };
 

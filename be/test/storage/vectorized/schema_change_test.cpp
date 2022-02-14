@@ -145,7 +145,7 @@ class SchemaChangeTest : public testing::Test {
         ASSERT_TRUE(st.ok());
 
         if constexpr (std::is_same_v<T, JsonValue*>) {
-            EXPECT_EQ(*expect_val, *dst_datum.get<T>());
+            EXPECT_EQ(*expect_val, dst_datum.get<JsonValue>());
         } else {
             EXPECT_EQ(expect_val, dst_datum.get<T>());
         }

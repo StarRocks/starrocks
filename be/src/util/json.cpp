@@ -219,21 +219,6 @@ int64_t JsonValue::hash() const {
     return to_vslice().normalizedHash();
 }
 
-// NOTE
-// Returned Json pointer should not be deconstructed!!
-// Memory allocated by binary_ is located at mempool, not in std::malloc, which should not
-// be freeed by deconstructor.
-// Instead, the memory should be freeed by the mempool
-StatusOr<JsonValue*> JsonValue::clone(MemPool* mem) const {
-    DCHECK_NOTNULL(mem);
-
-    pooled_string binary(this->binary_, pool_allocator<char>(mem));
-    JsonValue* res = (JsonValue*)mem->allocate(sizeof(JsonValue));
-    RETURN_IF_UNLIKELY_NULL(res, Status::MemoryAllocFailed("mempool exceeded"));
-    new (res) JsonValue(std::move(binary));
-    return res;
-}
-
 Slice JsonValue::get_slice() const {
     return Slice(binary_);
 }

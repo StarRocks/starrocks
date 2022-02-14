@@ -216,17 +216,6 @@ PARALLEL_TEST(JsonColumnTest, test_fmt) {
     ASSERT_EQ("1", str);
 }
 
-PARALLEL_TEST(JsonColumnTest, test_clone) {
-    JsonValue json = JsonValue::parse("{}").value();
-    MemPool pool;
-    StatusOr<JsonValue*> cloned = json.clone(&pool);
-
-    ASSERT_TRUE(cloned.ok());
-    ASSERT_EQ(json, *cloned.value());
-    ASSERT_EQ("{}", cloned.value()->to_string_uncheck());
-    ASSERT_EQ(32, pool.total_allocated_bytes());
-}
-
 // NOLINTNEXTLINE
 PARALLEL_TEST(JsonColumnTest, test_column_builder) {
     // create from type traits

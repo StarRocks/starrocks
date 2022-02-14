@@ -25,6 +25,7 @@ public:
     MutableColumnPtr clone_empty() const override;
     ColumnPtr clone_shared() const override;
 
+    void append_datum(const Datum& datum) override;
     int compare_at(size_t left, size_t right, const starrocks::vectorized::Column& rhs,
                    int nan_direction_hint) const override;
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
