@@ -245,10 +245,10 @@ public:
         vector<vector<uint32_t>> column_groups;
         MonotonicStopWatch timer;
         timer.start();
-        if (cfg.algorithm == kVertical) {
+        if (cfg.algorithm == VERTICAL_COMPACTION) {
             int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
-            Compaction::split_column_into_groups(tablet.num_columns(), tablet.num_key_columns(), max_columns_per_group,
-                                                 &column_groups);
+            CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.num_key_columns(),
+                                                      max_columns_per_group, &column_groups);
             RETURN_IF_ERROR(_do_merge_vertically(tablet, version, rowsets, writer, cfg, column_groups,
                                                  &total_input_size, &total_rows, &total_chunk, &stats));
         } else {
@@ -262,7 +262,7 @@ public:
         StarRocksMetrics::instance()->update_compaction_outputs_total.increment(1);
         StarRocksMetrics::instance()->update_compaction_outputs_bytes_total.increment(writer->total_data_size());
         LOG(INFO) << "compaction merge finished. tablet=" << tablet.tablet_id() << " #key=" << schema.num_key_fields()
-                  << " algorithm=" << compaction_algorithm_to_string(cfg.algorithm)
+                  << " algorithm=" << CompactionUtils::compaction_algorithm_to_string(cfg.algorithm)
                   << " column_group_size=" << column_groups.size() << " input("
                   << "entry=" << _entries.size() << " rows=" << stats.raw_rows_read
                   << " del=" << stats.rows_del_vec_filtered << " actual=" << stats.raw_rows_read

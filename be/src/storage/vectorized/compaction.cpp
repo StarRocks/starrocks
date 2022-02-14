@@ -18,16 +18,6 @@
 
 namespace starrocks::vectorized {
 
-const char* compaction_algorithm_to_string(CompactionAlgorithm algorithm) {
-    switch (algorithm) {
-    case kHorizontal:
-        return "horizontal";
-    case kVertical:
-        return "vertical";
-    }
-    return "unknown";
-}
-
 Semaphore Compaction::_concurrency_sem;
 
 Compaction::Compaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
@@ -43,68 +33,6 @@ Compaction::~Compaction() = default;
 Status Compaction::init(int concurreny) {
     _concurrency_sem.set_count(concurreny);
     return Status::OK();
-}
-
-CompactionAlgorithm Compaction::choose_compaction_algorithm(size_t num_columns, int64_t max_columns_per_group,
-                                                            size_t source_num) {
-    // if the number of columns in the schema is less than or equal to max_columns_per_group, use kHorizontal.
-    if (num_columns <= max_columns_per_group) {
-        return kHorizontal;
-    }
-
-    // if source_num is less than or equal to 1, heap merge iterator is not used in compaction,
-    // and row source mask is not created.
-    // if source_num is more than MAX_SOURCES, mask in RowSourceMask may overflow.
-    if (source_num <= 1 || source_num > RowSourceMask::MAX_SOURCES) {
-        return kHorizontal;
-    }
-
-    return kVertical;
-}
-
-uint32_t Compaction::get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size) {
-    // max segment rows
-    int64_t max_segment_rows = max_segment_file_size * input_row_num / (input_size + 1);
-    // default value in RowsetWriterContext is INT32_MAX.
-    // segment file use uint32 to represent row number,
-    // and use INT32_MAX to avoid overflow issue when casting from uint32_t to int.
-    if (max_segment_rows > INT32_MAX) {
-        max_segment_rows = INT32_MAX;
-    } else if (max_segment_rows < 1) {
-        max_segment_rows = 1;
-    }
-    return max_segment_rows;
-}
-
-int32_t Compaction::get_read_chunk_size(int64_t mem_limit, int32_t config_chunk_size, int64_t total_num_rows,
-                                        int64_t total_mem_footprint, size_t source_num) {
-    uint64_t chunk_size = config_chunk_size;
-    if (mem_limit > 0) {
-        int64_t avg_row_size = (total_mem_footprint + 1) / (total_num_rows + 1);
-        // The result of the division operation be zero, so added one
-        chunk_size = 1 + mem_limit / (source_num * avg_row_size + 1);
-    }
-
-    if (chunk_size > config_chunk_size) {
-        chunk_size = config_chunk_size;
-    }
-    return chunk_size;
-}
-
-void Compaction::split_column_into_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
-                                          std::vector<std::vector<uint32_t>>* column_groups) {
-    std::vector<uint32_t> key_columns;
-    for (size_t i = 0; i < num_key_columns; ++i) {
-        key_columns.emplace_back(i);
-    }
-    column_groups->emplace_back(std::move(key_columns));
-
-    for (size_t i = num_key_columns; i < num_columns; ++i) {
-        if ((i - num_key_columns) % max_columns_per_group == 0) {
-            column_groups->emplace_back();
-        }
-        column_groups->back().emplace_back(i);
-    }
 }
 
 Status Compaction::do_compaction() {
@@ -145,30 +73,31 @@ Status Compaction::do_compaction_impl() {
     int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
     size_t num_columns = _tablet->num_columns();
     CompactionAlgorithm algorithm =
-            choose_compaction_algorithm(num_columns, max_columns_per_group, segment_iterator_num);
-    if (algorithm == kVertical) {
-        split_column_into_groups(_tablet->num_columns(), _tablet->num_key_columns(), max_columns_per_group,
-                                 &_column_groups);
+            CompactionUtils::choose_compaction_algorithm(num_columns, max_columns_per_group, segment_iterator_num);
+    if (algorithm == VERTICAL_COMPACTION) {
+        CompactionUtils::split_column_into_groups(_tablet->num_columns(), _tablet->num_key_columns(),
+                                                  max_columns_per_group, &_column_groups);
     }
 
     // max rows per segment
     int64_t max_rows_per_segment =
-            get_segment_max_rows(config::max_segment_file_size, _input_row_num, _input_rowsets_size);
+            CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _input_row_num, _input_rowsets_size);
 
     LOG(INFO) << "start " << compaction_name() << ". tablet=" << _tablet->tablet_id()
               << ", output version is=" << _output_version.first << "-" << _output_version.second
               << ", max rows per segment=" << max_rows_per_segment << ", segment iterator num=" << segment_iterator_num
-              << ", algorithm=" << compaction_algorithm_to_string(algorithm)
+              << ", algorithm=" << CompactionUtils::compaction_algorithm_to_string(algorithm)
               << ", column group size=" << _column_groups.size() << ", columns per group=" << max_columns_per_group;
 
     // create rowset writer
-    RETURN_IF_ERROR(construct_output_rowset_writer(max_rows_per_segment, algorithm));
+    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment, algorithm,
+                                                                    _output_version, &_output_rs_writer));
     TRACE("prepare finished");
 
     // 2. write combined rows to output rowset
     Statistics stats;
     Status st;
-    if (algorithm == kVertical) {
+    if (algorithm == VERTICAL_COMPACTION) {
         st = _merge_rowsets_vertically(segment_iterator_num, &stats);
     } else {
         st = _merge_rowsets_horizontally(segment_iterator_num, &stats);
@@ -235,31 +164,6 @@ StatusOr<size_t> Compaction::_get_segment_iterator_num() {
     return seg_iters.size();
 }
 
-Status Compaction::construct_output_rowset_writer(uint32_t max_rows_per_segment, CompactionAlgorithm algorithm) {
-    RowsetWriterContext context(kDataFormatV2, config::storage_format_version);
-    context.rowset_id = StorageEngine::instance()->next_rowset_id();
-    context.tablet_uid = _tablet->tablet_uid();
-    context.tablet_id = _tablet->tablet_id();
-    context.partition_id = _tablet->partition_id();
-    context.tablet_schema_hash = _tablet->schema_hash();
-    context.rowset_type = BETA_ROWSET;
-    context.rowset_path_prefix = _tablet->schema_hash_path();
-    context.tablet_schema = &(_tablet->tablet_schema());
-    context.rowset_state = VISIBLE;
-    context.version = _output_version;
-    context.segments_overlap = NONOVERLAPPING;
-    context.max_rows_per_segment = max_rows_per_segment;
-    context.writer_type = (algorithm == kVertical ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
-    Status st = RowsetFactory::create_rowset_writer(context, &_output_rs_writer);
-    if (!st.ok()) {
-        std::stringstream ss;
-        ss << "Fail to create rowset writer. tablet_id=" << context.tablet_id << " err=" << st;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
-    }
-    return Status::OK();
-}
-
 Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
@@ -274,8 +178,9 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
         total_num_rows += rowset->num_rows();
         total_mem_footprint += rowset->total_row_size();
     }
-    int32_t chunk_size = get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
-                                             total_num_rows, total_mem_footprint, segment_iterator_num);
+    int32_t chunk_size =
+            CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
+                                                 total_num_rows, total_mem_footprint, segment_iterator_num);
     VLOG(1) << "tablet=" << _tablet->tablet_id() << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;
     RETURN_IF_ERROR(reader.prepare());
@@ -372,8 +277,9 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
                 }
             }
         }
-        int32_t chunk_size = get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
-                                                 total_num_rows, total_mem_footprint, segment_iterator_num);
+        int32_t chunk_size = CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
+                                                                  config::vector_chunk_size, total_num_rows,
+                                                                  total_mem_footprint, segment_iterator_num);
         VLOG(1) << "tablet=" << _tablet->tablet_id() << ", column group=" << i << ", reader chunk size=" << chunk_size;
         reader_params.chunk_size = chunk_size;
         RETURN_IF_ERROR(reader.prepare());
