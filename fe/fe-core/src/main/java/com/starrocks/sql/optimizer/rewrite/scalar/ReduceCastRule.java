@@ -153,11 +153,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-28)
             // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-27)
             // Eg:cast dateTime(2021-12-28 00:20:00.0) to date(2021-12-27)
-            if (originalDateTime.isEqual(bottomLocalDateTime)) {
-                offset = 0;
-            } else {
-                offset = -1;
-            }
+            offset = 0;
             targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
             ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
             BinaryPredicateOperator binaryPredicateOperator =
@@ -166,9 +162,13 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT)) {
             // when the BinaryType is < ,cast dateTime to maximum date type；
             // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-27)
-            // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-27)
-            // Eg:cast dateTime(2021-12-28 12:00:00.1) to date(2021-12-27)
-            offset = -1;
+            // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-28)
+            // Eg:cast dateTime(2021-12-28 12:00:00.1) to date(2021-12-28)
+            if (originalDateTime.isEqual(bottomLocalDateTime)) {
+                offset = -1;
+            } else {
+                offset = 0;
+            }
             targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
             ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
             BinaryPredicateOperator binaryPredicateOperator =
