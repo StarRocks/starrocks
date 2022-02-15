@@ -34,6 +34,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TDecimalLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
+import javassist.bytecode.ByteArray;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -237,6 +238,40 @@ public class DecimalLiteral extends LiteralExpr {
         }
     }
 
+    // pack an int32/64/128 value into ByteBuffer in little endian
+    ByteBuffer packDecimal() {
+        ByteBuffer buffer = ByteBuffer.allocate(type.getTypeSize());
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+        int scale = ((ScalarType) type).getScalarScale();
+        BigDecimal scaledValue = value.multiply(SCALE_FACTOR[scale]);
+        switch (type.getPrimitiveType()) {
+            case DECIMAL32:
+                buffer.putInt(scaledValue.intValue());
+                break;
+            case DECIMAL64:
+                buffer.putLong(scaledValue.longValue());
+                break;
+            case DECIMAL128:
+            case DECIMALV2:
+                // BigInteger::toByteArray returns a big-endian byte[], so copy in reverse order one by one byte.
+                byte[] bytes = scaledValue.toBigInteger().toByteArray();
+                for (int i = bytes.length - 1; i >= 0; --i) {
+                    buffer.put(bytes[i]);
+                }
+                // pad with sign bits
+                byte prefixByte = scaledValue.signum() >= 0 ? (byte) 0 : (byte) 0xff;
+                int numPaddingBytes = 16 - bytes.length;
+                for (int i = 0; i < numPaddingBytes; ++i) {
+                    buffer.put(prefixByte);
+                }
+                break;
+            default:
+                Preconditions.checkArgument(false, "Type bust be decimal type");
+        }
+        buffer.flip();
+        return buffer;
+    }
+
     @Override
     public ByteBuffer getHashValue(Type type) {
         ByteBuffer buffer;
@@ -344,8 +379,9 @@ public class DecimalLiteral extends LiteralExpr {
     protected void toThrift(TExprNode msg) {
         // TODO(hujie01) deal with loss information
         msg.node_type = TExprNodeType.DECIMAL_LITERAL;
-        BigDecimal v = new BigDecimal(value.toBigInteger());
-        msg.decimal_literal = new TDecimalLiteral(value.toPlainString());
+        msg.decimal_literal = new TDecimalLiteral();
+        msg.decimal_literal.value = value.toPlainString();
+        msg.decimal_literal.integer_value = packDecimal();
     }
 
     @Override
