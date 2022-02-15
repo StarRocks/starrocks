@@ -125,18 +125,6 @@ public class SelectRelation extends QueryRelation {
         return isDistinct;
     }
 
-    public LimitElement getLimit() {
-        return limit;
-    }
-
-    public void setLimit(LimitElement limit) {
-        this.limit = limit;
-    }
-
-    public boolean hasLimit() {
-        return limit != null;
-    }
-
     public List<FunctionCallExpr> getAggregate() {
         return aggregate;
     }

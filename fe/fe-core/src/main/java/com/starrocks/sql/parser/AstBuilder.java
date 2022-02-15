@@ -182,7 +182,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         QueryRelation term = (QueryRelation) visit(context.queryTerm());
         term.setOrderBy(orderByElements);
-        term.setLimitElement(limitElement);
+        term.setLimit(limitElement);
         return term;
     }
 
