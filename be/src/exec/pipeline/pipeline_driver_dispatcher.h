@@ -49,7 +49,6 @@ public:
     void set_os_priority(int32_t priority) override;
 
 private:
-    template <bool is_use_workgroup>
     void run();
     void finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
     void update_profile_by_mode(FragmentContext* fragment_ctx, bool done);

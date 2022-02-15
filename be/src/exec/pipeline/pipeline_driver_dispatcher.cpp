@@ -28,13 +28,7 @@ void GlobalDriverDispatcher::initialize(int num_threads) {
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() {
-            if (_is_use_workgroup) {
-                this->run<true>();
-            } else {
-                this->run<false>();
-            }
-        });
+        _thread_pool->submit_func([this]() { this->run(); });
     }
 }
 
@@ -48,13 +42,7 @@ void GlobalDriverDispatcher::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() {
-            if (_is_use_workgroup) {
-                this->run<true>();
-            } else {
-                this->run<false>();
-            }
-        });
+        _thread_pool->submit_func([this]() { this->run(); });
     }
 }
 
@@ -67,21 +55,13 @@ void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* 
         QueryContextManager::instance()->remove(query_id);
     }
 }
-template <bool is_use_workgroup>
 void GlobalDriverDispatcher::run() {
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
 
-        size_t queue_index;
-        StatusOr<DriverRawPtr> maybe_driver;
-        if constexpr (is_use_workgroup) {
-            maybe_driver = this->_driver_queue->take();
-        } else {
-            maybe_driver = this->_driver_queue->take(&queue_index);
-        }
-
+        auto maybe_driver = this->_driver_queue->take();
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
@@ -116,11 +96,8 @@ void GlobalDriverDispatcher::run() {
             // query context has ready drivers to run, so extend its lifetime.
             query_ctx->extend_lifetime();
             auto status = driver->process(runtime_state);
-            if constexpr (is_use_workgroup) {
-                this->_driver_queue->update_statistics(driver);
-            } else {
-                this->_driver_queue->get_sub_queue(queue_index)->update_accu_time(driver);
-            }
+            this->_driver_queue->update_statistics(driver);
+
             if (!status.ok()) {
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
@@ -139,11 +116,7 @@ void GlobalDriverDispatcher::run() {
             switch (driver_state) {
             case READY:
             case RUNNING: {
-                if constexpr (is_use_workgroup) {
-                    this->_driver_queue->put_back_from_dispatcher(driver);
-                } else {
-                    this->_driver_queue->put_back(driver);
-                }
+                this->_driver_queue->put_back_from_dispatcher(driver);
                 break;
             }
             case FINISH:

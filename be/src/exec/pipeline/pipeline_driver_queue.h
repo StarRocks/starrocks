@@ -46,13 +46,10 @@ public:
     virtual void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) = 0;
 
     virtual StatusOr<DriverRawPtr> take() = 0;
-    virtual StatusOr<DriverRawPtr> take(size_t* queue_index) = 0;
 
     // Update statistics of the driver's workgroup,
     // when yielding the driver in the dispatcher thread.
     virtual void update_statistics(const DriverRawPtr driver) = 0;
-
-    virtual SubQuerySharedDriverQueue* get_sub_queue(size_t) = 0;
 
     virtual size_t size() = 0;
     bool empty() { return size() == 0; }
@@ -81,15 +78,13 @@ public:
     void put_back(const DriverRawPtr driver) override;
     void put_back(const std::vector<DriverRawPtr>& drivers) override;
 
-    void put_back_from_dispatcher(const DriverRawPtr driver) override {}
-    void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override {}
+    void put_back_from_dispatcher(const DriverRawPtr driver) override;
+    void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override;
 
-    void update_statistics(const DriverRawPtr driver) override{};
+    void update_statistics(const DriverRawPtr driver) override;
 
     // return nullptr if queue is closed;
     StatusOr<DriverRawPtr> take() override;
-    StatusOr<DriverRawPtr> take(size_t* queue_index) override;
-    SubQuerySharedDriverQueue* get_sub_queue(size_t) override;
 
     size_t size() override { return 0; }
 
@@ -125,12 +120,10 @@ public:
 
     // return nullptr if queue is closed;
     StatusOr<DriverRawPtr> take() override;
-    StatusOr<DriverRawPtr> take(size_t* queue_index) override;
 
     void update_statistics(const DriverRawPtr driver) override;
 
     size_t size() override { return _size; }
-    SubQuerySharedDriverQueue* get_sub_queue(size_t) override;
 
 private:
     void _put_back(const DriverRawPtr driver);
@@ -164,13 +157,10 @@ public:
     // Firstly, select the work group with the minimum vruntime.
     // Secondly, select the proper driver from the driver queue of this work group.
     StatusOr<DriverRawPtr> take() override;
-    StatusOr<DriverRawPtr> take(size_t* queue_index) override;
 
     void update_statistics(const DriverRawPtr driver) override;
 
     size_t size() override;
-
-    SubQuerySharedDriverQueue* get_sub_queue(size_t) override;
 
 private:
     // The schedule period is equal to DISPATCH_PERIOD_PER_WG_NS * num_workgroups.

@@ -58,10 +58,6 @@ StatusOr<DriverRawPtr> DriverQueueWithoutLock::take() {
     return driver_ptr;
 }
 
-StatusOr<DriverRawPtr> DriverQueueWithoutLock::take(size_t* queue_index) {
-    return Status::NotSupported("not support, call take()");
-}
-
 void DriverQueueWithoutLock::update_statistics(const DriverRawPtr driver) {
     _queues[driver->get_dispatch_queue_index()].update_accu_time(driver);
 }
@@ -73,10 +69,6 @@ void DriverQueueWithoutLock::_put_back(const DriverRawPtr driver) {
     ++_size;
 }
 
-SubQuerySharedDriverQueue* DriverQueueWithoutLock::get_sub_queue(size_t index) {
-    return nullptr;
-}
-
 void QuerySharedDriverQueue::close() {
     std::lock_guard<std::mutex> lock(_global_mutex);
     _is_closed = true;
@@ -84,10 +76,11 @@ void QuerySharedDriverQueue::close() {
 }
 
 void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
-    int level = driver->driver_acct().get_level();
+    int level = driver->driver_acct().get_level() % QUEUE_SIZE;
     {
+        driver->set_dispatch_queue_index(level);
         std::lock_guard<std::mutex> lock(_global_mutex);
-        _queues[level % QUEUE_SIZE].queue.emplace(driver);
+        _queues[level].queue.emplace(driver);
         _cv.notify_one();
     }
 }
@@ -95,21 +88,28 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
 void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) {
     std::vector<int> levels(drivers.size());
     for (int i = 0; i < drivers.size(); i++) {
-        levels[i] = drivers[i]->driver_acct().get_level();
+        levels[i] = drivers[i]->driver_acct().get_level() % QUEUE_SIZE;
+        drivers[i]->set_dispatch_queue_index(levels[i]);
     }
 
     std::lock_guard<std::mutex> lock(_global_mutex);
     for (int i = 0; i < drivers.size(); i++) {
-        _queues[levels[i] % QUEUE_SIZE].queue.emplace(drivers[i]);
+        _queues[levels[i]].queue.emplace(drivers[i]);
         _cv.notify_one();
     }
 }
 
-StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
-    return Status::NotSupported("not support, call take(queue_index)");
+void QuerySharedDriverQueue::put_back_from_dispatcher(const DriverRawPtr driver) {
+    // QuerySharedDriverQueue::put_back_from_dispatcher is identical to put_back.
+    put_back(driver);
 }
 
-StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(size_t* queue_index) {
+void QuerySharedDriverQueue::put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) {
+    // QuerySharedDriverQueue::put_back_from_dispatcher is identical to put_back.
+    put_back(drivers);
+}
+
+StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
@@ -142,7 +142,6 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(size_t* queue_index) {
             _cv.wait(lock);
         }
         // record queue's index to accumulate time for it.
-        *queue_index = queue_idx;
         driver_ptr = _queues[queue_idx].queue.front();
         _queues[queue_idx].queue.pop();
     }
@@ -151,8 +150,8 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(size_t* queue_index) {
     return driver_ptr;
 }
 
-SubQuerySharedDriverQueue* QuerySharedDriverQueue::get_sub_queue(size_t index) {
-    return _queues + index;
+void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
+    _queues[driver->get_dispatch_queue_index()].update_accu_time(driver);
 }
 
 void DriverQueueWithWorkGroup::close() {
@@ -210,10 +209,6 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take() {
     return wg->driver_queue()->take();
 }
 
-StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(size_t* queue_index) {
-    return Status::NotSupported("not support, call take()");
-}
-
 void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
@@ -234,10 +229,6 @@ size_t DriverQueueWithWorkGroup::size() {
     }
 
     return size;
-}
-
-SubQuerySharedDriverQueue* DriverQueueWithWorkGroup::get_sub_queue(size_t index) {
-    return nullptr;
 }
 
 template <bool from_dispatcher>
