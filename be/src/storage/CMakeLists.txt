@@ -151,4 +151,5 @@ add_library(Storage STATIC
     vectorized/rowset_merger.cpp
     vectorized/column_predicate_rewriter.cpp
     vectorized/column_predicate_dict_conjuct.cpp
+    level_compaction_policy.cpp
 )
