@@ -17,6 +17,7 @@
 #include "storage/schema.h"
 #include "storage/tablet_schema.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "util/json.h"
 #include "util/pred_guard.h"
 #include "util/stack_util.h"
 #include "util/unaligned_access.h"
@@ -592,6 +593,36 @@ public:
     }
 };
 
+// Convert string to json
+// JSON needs dynamic memory allocation, which could not fit in TypeInfo::from_string
+template <>
+class StringToOtherTypeConverter<OLAP_FIELD_TYPE_JSON> : public TypeConverter {
+public:
+    using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_JSON>::CppType;
+
+    StringToOtherTypeConverter() = default;
+    ~StringToOtherTypeConverter() = default;
+
+    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+        return Status::InternalError("not supported");
+    }
+
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+                         MemPool* mem_pool) const override {
+        Slice source;
+        if (src.is_null()) {
+            source = "null";
+        } else {
+            source = src.get_slice();
+        }
+        JsonValue json;
+        RETURN_IF_ERROR(JsonValue::parse(source, &json));
+        dst.set<JsonValue>(json);
+
+        return Status::OK();
+    }
+};
+
 template <FieldType Type>
 class OtherToStringTypeConverter : public TypeConverter {
 public:
@@ -626,6 +657,35 @@ public:
             memcpy(slice.data, source.data(), slice.size);
         }
         dst.set_slice(slice);
+        return Status::OK();
+    }
+};
+
+template <>
+class OtherToStringTypeConverter<OLAP_FIELD_TYPE_JSON> : public TypeConverter {
+public:
+    using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_JSON>::CppType;
+
+    OtherToStringTypeConverter() = default;
+    ~OtherToStringTypeConverter() = default;
+
+    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+        return Status::InternalError("not supported");
+    }
+
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+                         MemPool* mem_pool) const override {
+        if (src.is_null()) {
+            dst.set_null();
+            return Status::OK();
+        }
+        const JsonValue* json = src.get_json();
+        std::string json_str = json->to_string_uncheck();
+        Slice dst_slice = json_str;
+        dst_slice.data = reinterpret_cast<char*>(mem_pool->allocate(dst_slice.size));
+        RETURN_IF_UNLIKELY_NULL(dst_slice.data, Status::MemoryAllocFailed("mempool exceeded"));
+        memcpy(dst_slice.data, json_str.data(), dst_slice.size);
+        dst.set_slice(dst_slice);
         return Status::OK();
     }
 };
