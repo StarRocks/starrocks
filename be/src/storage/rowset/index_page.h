@@ -154,6 +154,7 @@ public:
 
 private:
     const IndexPageReader* _reader;
+    void _seek(const Slice& search_key);
 
     size_t _pos;
 };
