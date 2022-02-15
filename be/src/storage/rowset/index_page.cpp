@@ -94,6 +94,7 @@ Status IndexPageIterator::seek_at_or_before(const Slice& search_key) {
     if (iter == keys.begin()) {
         return Status::NotFound("no page contains the given key");
     } else {
+        // upper_bound is search the first key > search key, so should return last entry
         _pos = iter - keys.begin() - 1;
         return Status::OK();
     }
@@ -106,6 +107,7 @@ Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
     if (iter == keys.begin()) {
         _pos = 0;
     } else {
+        // upper_bound is search the first key > search key, so should return last entry
         _pos = iter - keys.begin() - 1;
     }
     return Status::OK();
