@@ -73,7 +73,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         boolean isOriginalDateType = castChild.getType().isDate();
         boolean isDatetimeType = child2.getType().isDatetime();
         if (isOriginalDateType && isDatetimeType) {
-            return optimizeDateTimeToDateCastSituation(operator);
+            return optimizeDateTimeToDateCast(operator);
         }
 
         // BinaryPredicate involving Decimal
@@ -113,81 +113,82 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         return childCompatibleType != Type.INVALID && parentCompatibleType != Type.INVALID;
     }
 
-    public ScalarOperator optimizeDateTimeToDateCastSituation(BinaryPredicateOperator operator) {
+    public ScalarOperator optimizeDateTimeToDateCast(BinaryPredicateOperator operator) {
         ScalarOperator child1 = operator.getChild(0);
         ScalarOperator child2 = operator.getChild(1);
-
         ScalarOperator castChild = child1.getChild(0);
-        // optimize cast
         LocalDateTime originalDateTime = ((ConstantOperator) child2).getDatetime();
         LocalDateTime bottomLocalDateTime = ((ConstantOperator) child2).getDatetime().toLocalDate().atTime(0, 0, 0, 0);
         LocalDateTime targetLocalDateTime;
         BinaryPredicateOperator.BinaryType binaryType = operator.getBinaryType();
         int offset;
-        if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE)) {
-            // when the BinaryType is >= ,cast dateTime to minimum date type；
-            // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-28)
-            // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-29)
-            if (originalDateTime.isEqual(bottomLocalDateTime)) {
-                offset = 0;
-            } else {
+        BinaryPredicateOperator resultBinaryPredicateOperator;
+        ConstantOperator newDate;
+        switch (binaryType) {
+            case GE:
+                // when the BinaryType is >= ,cast dateTime to minimum date type；
+                // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-28)
+                // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-29)
+                if (originalDateTime.isEqual(bottomLocalDateTime)) {
+                    offset = 0;
+                } else {
+                    offset = 1;
+                }
+                targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
+                newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
+                resultBinaryPredicateOperator =
+                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
+                break;
+            case GT:
+                // when the BinaryType is > ,cast dateTime to minimum date type；
+                // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-29)
+                // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-29)
                 offset = 1;
-            }
-            targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
-            ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
-            BinaryPredicateOperator binaryPredicateOperator =
-                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
-            return binaryPredicateOperator;
-        } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT)) {
-            // when the BinaryType is > ,cast dateTime to minimum date type；
-            // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-29)
-            // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-29)
-            offset = 1;
-            targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
-            ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
-            BinaryPredicateOperator binaryPredicateOperator =
-                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
-            return binaryPredicateOperator;
-        } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE)) {
-            // when the BinaryType is <= ,cast dateTime to maximum date type；
-            // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-28)
-            // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-28)
-            // Eg:cast dateTime(2021-12-28 00:20:00.0) to date(2021-12-28)
-            offset = 0;
-            targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
-            ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
-            BinaryPredicateOperator binaryPredicateOperator =
-                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
-            return binaryPredicateOperator;
-        } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT)) {
-            // when the BinaryType is < ,cast dateTime to maximum date type；
-            // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-27)
-            // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-28)
-            // Eg:cast dateTime(2021-12-28 12:00:00.1) to date(2021-12-28)
-            if (originalDateTime.isEqual(bottomLocalDateTime)) {
-                offset = -1;
-            } else {
+                targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
+                newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
+                resultBinaryPredicateOperator =
+                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
+                break;
+            case LE:
+                // when the BinaryType is <= ,cast dateTime to maximum date type；
+                // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-28)
+                // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-27)
                 offset = 0;
-            }
-            targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
-            ConstantOperator newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
-            BinaryPredicateOperator binaryPredicateOperator =
-                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
-            return binaryPredicateOperator;
-        } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.EQ)) {
-            // when the BinaryType is = ,cast dateTime to equivalent date type；
-            // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-28)
-            if (!originalDateTime.isEqual(bottomLocalDateTime)) {
-                return operator;
-            } else {
-                ConstantOperator newDate = ConstantOperator.createDate(bottomLocalDateTime.truncatedTo(ChronoUnit.DAYS));
-                BinaryPredicateOperator binaryPredicateOperator =
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, castChild, newDate);
-                return binaryPredicateOperator;
-            }
-        } else {
-            // current not support !=
-            return operator;
+                targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
+                newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
+                resultBinaryPredicateOperator =
+                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
+                break;
+            case LT:
+                // when the BinaryType is < ,cast dateTime to maximum date type；
+                // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-27)
+                // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-28)
+                if (originalDateTime.isEqual(bottomLocalDateTime)) {
+                    offset = -1;
+                } else {
+                    offset = 0;
+                }
+                targetLocalDateTime = bottomLocalDateTime.plusDays(offset);
+                newDate = ConstantOperator.createDate(targetLocalDateTime.truncatedTo(ChronoUnit.DAYS));
+                resultBinaryPredicateOperator =
+                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
+                break;
+            case EQ:
+                // when the BinaryType is = ,cast dateTime to equivalent date type；
+                // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-28)
+                if (!originalDateTime.isEqual(bottomLocalDateTime)) {
+                    resultBinaryPredicateOperator = operator;
+                } else {
+                    newDate = ConstantOperator.createDate(bottomLocalDateTime.truncatedTo(ChronoUnit.DAYS));
+                    resultBinaryPredicateOperator =
+                            new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, castChild, newDate);
+                }
+                break;
+            default:
+                // current not support !=
+                resultBinaryPredicateOperator = operator;
+                break;
         }
+        return resultBinaryPredicateOperator;
     }
 }
