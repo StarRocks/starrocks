@@ -27,7 +27,6 @@ void IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& c
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
         _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size());
-        THROW_BAD_ALLOC_IF_NULL(_buffer);
     }
 
     _serialize_columns(chunkPtr, exprs, chunk_size);
@@ -37,7 +36,6 @@ void IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& c
         _hash_set->lazy_emplace(key, [&](const auto& ctor) {
             // we must persist the slice before insert
             uint8_t* pos = pool->allocate(key.slice.size);
-            ERASE_AND_THROW_BAD_ALLOC_IF_NULL((*_hash_set), pos, key);
             memcpy(pos, key.slice.data, key.slice.size);
             ctor(pos, key.slice.size);
         });
