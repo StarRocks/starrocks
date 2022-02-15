@@ -4,6 +4,7 @@
 
 #include "column/array_column.h"
 #include "column/column_hash.h"
+#include "column/type_traits.h"
 #include "util/raw_container.h"
 
 namespace starrocks::vectorized {
@@ -672,43 +673,11 @@ public:
 
                 size_t index;
                 if constexpr (!pt_is_binary<value_type>) {
-                    if constexpr (pt_is_arithmetic<value_type>) {
-                        if constexpr (is_min) {
-                            result = std::numeric_limits<ResultType>::max();
-                        } else {
-                            result = std::numeric_limits<ResultType>::lowest();
-                        }
-                    } else if constexpr (pt_is_decimalv2<value_type>) {
-                        if constexpr (is_min) {
-                            result = DecimalV2Value::get_max_decimal();
-                        } else {
-                            result = DecimalV2Value::get_min_decimal();
-                        }
-                    } else if constexpr (pt_is_decimal<value_type>) {
-                        if constexpr (is_min) {
-                            result = get_max_decimal<ResultType>();
-                        } else {
-                            result = get_min_decimal<ResultType>();
-                        }
-                    } else if constexpr (pt_is_datetime<value_type>) {
-                        if constexpr (is_min) {
-                            result = TimestampValue::MAX_TIMESTAMP_VALUE;
-                        } else {
-                            result = TimestampValue::MIN_TIMESTAMP_VALUE;
-                        }
-                    } else if constexpr (pt_is_date<value_type>) {
-                        if constexpr (is_min) {
-                            result = DateValue::MAX_DATE_VALUE;
-                        } else {
-                            result = DateValue::MIN_DATE_VALUE;
-                        }
+                    if constexpr (is_min) {
+                        result = RunTimeTypeLimits<value_type>::max_value();
                     } else {
-                        LOG(ERROR) << "unhandled types other than arithmetic/time/decimal/string "
-                                      "for min and max";
-                        DCHECK(false) << "other types than arithmetic/time/decimal/string is not "
-                                         "support min and max";
+                        result = RunTimeTypeLimits<value_type>::min_value();
                     }
-
                     index = 0;
                 } else {
                     int j = 0;

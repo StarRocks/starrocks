@@ -48,6 +48,7 @@ public:
                            bool enable_column_expr_predicate = false);
 
 private:
+    friend struct ColumnRangeBuilder;
     Status normalize_conjuncts();
     Status build_olap_filters();
     Status build_scan_keys(bool unlimited, int32_t max_scan_key_num);
