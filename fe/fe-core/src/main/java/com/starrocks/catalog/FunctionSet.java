@@ -123,6 +123,7 @@ public class FunctionSet {
 
     // string functions
     public static final String SUBSTRING = "substring";
+    public static final String STARTS_WITH = "starts_with";
 
     // geo functions
     public static final String ST_ASTEXT = "st_astext";
