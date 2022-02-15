@@ -276,7 +276,7 @@ public class CreateFunctionStmt extends DdlStmt {
         // check argument
         argsDef.analyze(analyzer);
         returnType.analyze(analyzer);
-        intermediateType = TypeDef.createVarchar(-1);
+        intermediateType = TypeDef.createVarchar(ScalarType.MAX_VARCHAR_LENGTH);
 
         String type = properties.get(TYPE_KEY);
         if (TYPE_STARROCKS_JAR.equals(type)) {
