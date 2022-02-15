@@ -69,7 +69,6 @@ static inline T string_to_float(const Slice& s) {
     return v;
 }
 
-
 class ColumnPredicateAssignOp {
 public:
     inline static uint8_t apply(uint8_t a, uint8_t b) { return b; }
@@ -191,7 +190,8 @@ ColumnPredicate* new_column_lt_predicate(const TypeInfoPtr& type, ColumnId id, c
 ColumnPredicate* new_column_le_predicate(const TypeInfoPtr& type, ColumnId id, const Slice& operand);
 ColumnPredicate* new_column_gt_predicate(const TypeInfoPtr& type, ColumnId id, const Slice& operand);
 ColumnPredicate* new_column_ge_predicate(const TypeInfoPtr& type, ColumnId id, const Slice& operand);
-ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInfoPtr& type, ColumnId id, const Slice& operand);
+ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInfoPtr& type, ColumnId id,
+                                          const Slice& operand);
 
 ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                          const std::vector<std::string>& operands);

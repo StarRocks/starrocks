@@ -449,7 +449,8 @@ class BinaryColumnPredicateCmpBase : public ColumnPredicate {
     using ValueType = Slice;
 
 public:
-    BinaryColumnPredicateCmpBase(PredicateType predicate_type, const TypeInfoPtr& type_info, ColumnId id, ValueType value)
+    BinaryColumnPredicateCmpBase(PredicateType predicate_type, const TypeInfoPtr& type_info, ColumnId id,
+                                 ValueType value)
             : ColumnPredicate(type_info, id),
               _predicate_type(predicate_type),
               _zero_padded_str(value.data, value.size),
@@ -765,22 +766,23 @@ ColumnPredicate* new_column_ge_predicate(const TypeInfoPtr& type_info, ColumnId 
     return new_column_predicate<ColumnGePredicate, BinaryColumnGePredicate>(type_info, id, operand);
 }
 
-ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInfoPtr& type, ColumnId id, const Slice& operand) {
+ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInfoPtr& type, ColumnId id,
+                                          const Slice& operand) {
     switch (predicate) {
-        case PredicateType::kEQ:
-            return new_column_eq_predicate(type, id, operand);
-        case PredicateType::kNE:
-            return new_column_ne_predicate(type, id, operand);
-        case PredicateType::kLT:
-            return new_column_lt_predicate(type, id, operand);
-        case PredicateType::kLE:
-            return new_column_le_predicate(type, id, operand);
-        case PredicateType::kGT:
-            return new_column_gt_predicate(type, id, operand);
-        case PredicateType::kGE:
-            return new_column_ge_predicate(type, id, operand);
-        default:
-            CHECK(false) << "not a cmp predicate";
+    case PredicateType::kEQ:
+        return new_column_eq_predicate(type, id, operand);
+    case PredicateType::kNE:
+        return new_column_ne_predicate(type, id, operand);
+    case PredicateType::kLT:
+        return new_column_lt_predicate(type, id, operand);
+    case PredicateType::kLE:
+        return new_column_le_predicate(type, id, operand);
+    case PredicateType::kGT:
+        return new_column_gt_predicate(type, id, operand);
+    case PredicateType::kGE:
+        return new_column_ge_predicate(type, id, operand);
+    default:
+        CHECK(false) << "not a cmp predicate";
     }
 }
 
