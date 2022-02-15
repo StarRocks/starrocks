@@ -1148,7 +1148,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         sc_procedure = std::make_unique<LinkedSchemaChange>(chunk_changer);
     }
 
-    if (sc_procedure.get() == nullptr) {
+    if (sc_procedure == nullptr) {
         LOG(WARNING) << "failed to malloc SchemaChange. "
                      << "malloc_size=" << sizeof(SchemaChangeWithSorting);
         return Status::InternalError("failed to malloc SchemaChange");
@@ -1181,7 +1181,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
         if (!status.ok()) {
-            LOG(INFO) << "build rowset writer failed";
             return Status::InternalError("build rowset writer failed");
         }
 
@@ -1191,10 +1190,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                          << " version=" << sc_params.version.first << "-" << sc_params.version.second;
             return Status::InternalError("process failed");
         }
-        // Add the new version of the data to the header,
-        // To prevent deadlocks, be sure to lock the old table first and then the new one
-        sc_params.new_tablet->obtain_push_lock();
-        DeferOp new_tablet_release_lock([&] { sc_params.new_tablet->release_push_lock(); });
         auto new_rowset = rowset_writer->build();
         if (!new_rowset.ok()) {
             LOG(WARNING) << "failed to build rowset: " << new_rowset.status() << ". exit alter process";
