@@ -378,10 +378,11 @@ public class DecimalLiteral extends LiteralExpr {
     @Override
     protected void toThrift(TExprNode msg) {
         // TODO(hujie01) deal with loss information
-        msg.node_type = TExprNodeType.DECIMAL_LITERAL;
-        msg.decimal_literal = new TDecimalLiteral();
-        msg.decimal_literal.value = value.toPlainString();
-        msg.decimal_literal.integer_value = packDecimal();
+        msg.setNode_type(TExprNodeType.DECIMAL_LITERAL);
+        TDecimalLiteral decimalLiteral = new TDecimalLiteral();
+        decimalLiteral.setValue(value.toPlainString());
+        decimalLiteral.setInteger_value(packDecimal());
+        msg.setDecimal_literal(decimalLiteral);
     }
 
     @Override
@@ -418,6 +419,9 @@ public class DecimalLiteral extends LiteralExpr {
         return fracPart.intValue();
     }
 
+    // check decimal overflow in binary style, used in ArithmeticExpr and CastExpr.
+    // binary-style overflow checking is high-performance, because it just check ALU flags
+    // after computation.
     public static void checkLiteralOverflowInBinaryStyle(BigDecimal value, ScalarType scalarType) throws AnalysisException {
         int realPrecision = getRealPrecision(value);
         int realScale = getRealScale(value);
@@ -436,6 +440,8 @@ public class DecimalLiteral extends LiteralExpr {
         }
     }
 
+    // check overflow overflow in decimal style, used in Predicates processing or Predicates reducing. it
+    // is less efficient that its binary-style counterpart(cost 2.5X ~ 3.X).
     // for Predicates that contain constant operators of decimal type, the constant value is transferred to
     // to BE in string type, and in BE, an corresponding VectorizedLiteral is constructed after string value
     // is converted to decimal via the string-to-decimal casting function who checks decimal overflowing in

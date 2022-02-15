@@ -26,7 +26,7 @@ static RunTimeCppType<PT> unpack_decimal(const std::string& s) {
 #ifdef IS_LITTLE_ENDIAN
     strings::memcpy_inlined(&value, &s.front(), sizeof(value));
 #else
-    std::copy(s.rbegin(), s.rend(), (char*)&datum);
+    std::copy(s.rbegin(), s.rend(), (char*)&value);
 #endif
     return value;
 }
@@ -108,13 +108,7 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
         break;
     }
     case TYPE_DECIMALV2: {
-        DecimalV2Value datum;
-        if (node.decimal_literal.__isset.integer_value) {
-            datum = DecimalV2Value(unpack_decimal<TYPE_DECIMAL128>(node.decimal_literal.integer_value));
-        } else {
-            datum = DecimalV2Value(node.decimal_literal.value);
-        }
-        _value = ColumnHelper::create_const_column<TYPE_DECIMALV2>(datum, 1);
+        _value = ColumnHelper::create_const_column<TYPE_DECIMALV2>(DecimalV2Value(node.decimal_literal.value), 1);
         break;
     }
     case TYPE_DECIMAL32: {

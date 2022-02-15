@@ -453,4 +453,40 @@ public class DecimalLiteralTest {
             }
         }
     }
+
+    @Test
+    public void testPackDecimal() {
+        BigInteger[] bigIntegers = new BigInteger[]{
+                BigInteger.ZERO,
+                BigInteger.ONE,
+                BigInteger.ONE.shiftLeft(31).subtract(BigInteger.ONE),
+                BigInteger.ONE.shiftLeft(31).negate(),
+                BigInteger.ONE.shiftLeft(32).subtract(BigInteger.ONE),
+                BigInteger.ONE.shiftLeft(32).negate(),
+                BigInteger.ONE.shiftLeft(63).subtract(BigInteger.ONE),
+                BigInteger.ONE.shiftLeft(63).negate(),
+                BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE),
+                BigInteger.ONE.shiftLeft(64).negate(),
+                BigInteger.ONE.shiftLeft(126).subtract(BigInteger.ONE),
+                BigInteger.ONE.shiftLeft(126).negate(),
+        };
+        for (BigInteger integer : bigIntegers) {
+            BigDecimal decimal = new BigDecimal(integer, 3);
+            DecimalLiteral decimalLiteral = new DecimalLiteral(decimal);
+            ByteBuffer packed = decimalLiteral.packDecimal();
+            int numBytes = packed.limit();
+            byte[] bytes = new byte[numBytes];
+            packed.get(bytes);
+            int i = 0, j = numBytes - 1;
+            while (i < j) {
+                byte tmp = bytes[j];
+                bytes[j] = bytes[i];
+                bytes[i] = tmp;
+                ++i;
+                --j;
+            }
+            BigInteger expected = new BigInteger(bytes);
+            Assert.assertEquals(expected, integer);
+        }
+    }
 }
