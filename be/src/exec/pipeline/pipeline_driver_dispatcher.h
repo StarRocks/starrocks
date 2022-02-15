@@ -40,7 +40,7 @@ public:
 
 class GlobalDriverDispatcher final : public FactoryMethod<DriverDispatcher, GlobalDriverDispatcher> {
 public:
-    explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool is_real_time = false);
+    explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool is_use_workgroup = false);
     ~GlobalDriverDispatcher() override;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
@@ -49,6 +49,7 @@ public:
     void set_os_priority(int32_t priority) override;
 
 private:
+    template <bool is_use_workgroup>
     void run();
     void finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
     void update_profile_by_mode(FragmentContext* fragment_ctx, bool done);
@@ -59,6 +60,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool;
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
+    bool _is_use_workgroup = false;
 };
 
 } // namespace pipeline
