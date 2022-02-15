@@ -1003,6 +1003,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     std::vector<RowsetSharedPtr> rowsets_to_change;
     int32_t end_version = -1;
     Status status;
+    std::vector<std::unique_ptr<vectorized::TabletReader>> readers;
     {
         std::lock_guard l1(base_tablet->get_push_lock());
         std::lock_guard l2(new_tablet->get_push_lock());
@@ -1018,6 +1019,11 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         LOG(INFO) << "versions to be changed size:" << versions_to_be_changed.size();
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
+            // prepare tablet_reader to prevent rowsets being compacted
+            vectorized::TabletReader* tablet_reader = new TabletReader(base_tablet, version, base_schema);
+            std::unique_ptr<vectorized::TabletReader> tablet_reader = std::make_unique<TabletReader>(base_tablet, rowset->version(), base_schema);
+            RETURN_IF_ERROR(tablet_reader->prepare());
+            readers.emplace_back(std::move(tablet_reader));
         }
         LOG(INFO) << "rowsets_to_change size is:" << rowsets_to_change.size();
 
@@ -1064,13 +1070,10 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
 
-    std::vector<std::unique_ptr<vectorized::TabletReader>> readers;
-    for (auto rowset : rowsets_to_change) {
-        vectorized::TabletReader* tablet_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
+    // open tablet readers out of lock for open is heavy because of io
+    for (auto& tablet_reader : readers) {
         tablet_reader->set_delete_predicates_version(delete_predicates_version);
-        RETURN_IF_ERROR(tablet_reader->prepare());
         RETURN_IF_ERROR(tablet_reader->open(read_params));
-        readers.emplace_back(std::move(tablet_reader));
     }
 
     sc_params.rowset_readers = std::move(readers);
