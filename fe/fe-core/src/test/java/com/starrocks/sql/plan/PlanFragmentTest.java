@@ -530,7 +530,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testWindowLimitPushdown() throws Exception {
         String sql = "select lag(v1, 1,1) OVER () from t0 limit 1";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING\n" +
                 "  |  limit: 1"));
     }
@@ -2387,6 +2386,8 @@ public class PlanFragmentTest extends PlanTestBase {
 
         String sql10 = "select 499 union select 670 except select 499";
         String plan = getFragmentPlan(sql10);
+        System.out.println("=========================");
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  10:UNION\n" +
                 "     constant exprs: \n" +
                 "         499"));
@@ -4840,7 +4841,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "WHERE l1.tc < s0.t1c";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
@@ -5372,7 +5372,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEqStringCast() throws Exception {
         String sql = "select 'a' = v1 from t0";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) = 'a'\n"));
     }
 
@@ -5436,7 +5435,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEqDoubleCast() throws Exception {
         String sql = "select 'a' = t1e from test_all_type";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("CAST(5: t1e AS DOUBLE) = CAST('a' AS DOUBLE)\n"));
     }
 
@@ -5644,7 +5642,8 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
 
-        sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank  FROM t0 group BY v1, v2";
+        sql =
+                "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank  FROM t0 group BY v1, v2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
     }
@@ -5714,5 +5713,33 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |----2:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode"));
+    }
+
+    @Test
+    public void testUnionDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(2);
+        String sql = "select * from t0 union all select * from t0;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       limit: 2\n" +
+                "  |    \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 2"));
+    }
+
+    @Test
+    public void testValuesDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(1);
+        String sql = "select * from (values (1,2,3), (4,5,6)) x";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1 | 2 | 3\n" +
+                "     limit: 1"));
     }
 }
