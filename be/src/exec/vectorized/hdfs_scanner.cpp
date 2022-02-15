@@ -116,7 +116,10 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         return Status::OK();
     }
 #ifndef BE_TEST
-    RETURN_IF_ERROR(down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->open());
+    if (_scanner_params.fs_handle_type == HdfsFsHandle::Type::HDFS) {
+        auto* file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get());
+        RETURN_IF_ERROR(file->open());
+    }
 #endif
     _build_file_read_param();
     auto status = do_open(runtime_state);
@@ -142,7 +145,10 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     }
     do_close(runtime_state);
 #ifndef BE_TEST
-    down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->close();
+    if (_scanner_params.fs_handle_type == HdfsFsHandle::Type::HDFS) {
+        auto* file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get());
+        file->close();
+    }
     if (_is_open) {
         (*_scanner_params.open_limit)--;
     }
@@ -190,11 +196,12 @@ void HdfsScanner::update_counter() {
     if (_scanner_params.fs == nullptr) return;
 
     HdfsReadStats hdfs_stats;
-    auto hdfs_file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->hdfs_file();
-    if (hdfs_file == nullptr) return;
-    // Hdfslib only supports obtaining statistics of hdfs file system.
-    // For other systems such as s3, calling this function will cause be crash.
-    if (_scanner_params.parent->_is_hdfs_fs) {
+
+    if (_scanner_params.fs_handle_type == HdfsFsHandle::Type::HDFS) {
+        auto hdfs_file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->hdfs_file();
+        if (hdfs_file == nullptr) return;
+        // Hdfslib only supports obtaining statistics of hdfs file system.
+        // For other systems such as s3, calling this function will cause be crash.
         get_hdfs_statistics(hdfs_file, &hdfs_stats);
     }
 

@@ -16,12 +16,12 @@
 namespace starrocks::vectorized {
 
 struct HdfsFileDesc {
-    hdfsFS hdfs_fs;
     THdfsFileFormat::type hdfs_file_format;
+    HdfsFsHandle::Type fs_handle_type;
     std::shared_ptr<RandomAccessFile> fs;
 
     int partition_id = 0;
-    std::string path;
+    std::string scan_range_path;
     int64_t file_length = 0;
     std::vector<const THdfsScanRange*> splits;
 
@@ -153,8 +153,6 @@ private:
     mutable SpinLock _status_mutex;
     Status _status;
     RuntimeState* _runtime_state = nullptr;
-    bool _is_hdfs_fs = true;
-
     std::atomic_bool _pending_token = true;
 
     std::atomic<int32_t> _scanner_submit_count = 0;

@@ -254,7 +254,7 @@ public:
     PosixRandomAccessFile(std::string filename, int fd) : _filename(std::move(filename)), _fd(fd) {}
     ~PosixRandomAccessFile() override {
         int res;
-        RETRY_ON_EINTR(res, close(_fd));
+        RETRY_ON_EINTR(res, ::close(_fd));
         if (res != 0) {
             LOG(WARNING) << "close file failed, name=" << _filename << ", msg=" << errno_to_string(errno);
         }

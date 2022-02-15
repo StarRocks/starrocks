@@ -13,7 +13,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.external.ObejctStorageUtils;
+import com.starrocks.external.ObjectStorageUtils;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -230,8 +230,8 @@ public class HiveMetaCache {
 
     private HivePartition getPartitionByEvent(StorageDescriptor sd) throws Exception {
         HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
-        String path = ObejctStorageUtils.formatObjectStoragePath(sd.getLocation());
-        boolean isSplittable = ObejctStorageUtils.isObjectStorage(path) ||
+        String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
+        boolean isSplittable = ObjectStorageUtils.isObjectStorage(path) ||
                 HdfsFileFormat.isSplittable(sd.getInputFormat());
         List<HdfsFileDesc> fileDescs = client.getHdfsFileDescs(path, isSplittable, sd);
         return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
@@ -319,7 +319,8 @@ public class HiveMetaCache {
     public void refreshColumnStats(String dbName, String tableName, List<Column> partColumns, List<String> columnNames)
             throws DdlException {
         try {
-            HiveTableColumnsKey hiveTableColumnsKey = HiveTableColumnsKey.gen(dbName, tableName, partColumns, columnNames);
+            HiveTableColumnsKey hiveTableColumnsKey =
+                    HiveTableColumnsKey.gen(dbName, tableName, partColumns, columnNames);
             tableColumnStatsCache.put(hiveTableColumnsKey, loadTableColumnStats(hiveTableColumnsKey));
         } catch (Exception e) {
             throw new DdlException("refresh table column statistic cached failed: " + e.getMessage());

@@ -5,77 +5,58 @@
 #include <memory>
 #include <utility>
 
+#include "common/config.h"
 #include "gutil/strings/substitute.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {
 
-static Status parse_namenode(const std::string& path, std::string* namenode) {
-    const std::string local_fs("file:/");
-    size_t n = path.find("://");
+static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* handle) {
+    const char* nn = namenode.c_str();
+    if (is_hdfs_path(nn)) {
+        handle->type = HdfsFsHandle::Type::HDFS;
+        auto hdfs_builder = hdfsNewBuilder();
+        hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
+        handle->hdfs_fs = hdfsBuilderConnect(hdfs_builder);
+        if (handle->hdfs_fs == nullptr) {
+            return Status::InternalError(strings::Substitute("fail to connect hdfs namenode, namenode=$0, err=$1",
+                                                             namenode, get_hdfs_err_msg()));
+        }
 
-    if (n == std::string::npos) {
-        if (path.compare(0, local_fs.length(), local_fs) == 0) {
-            // Hadoop Path routines strip out consecutive /'s, so recognize 'file:/blah'.
-            *namenode = "file:///";
-        } else {
-            // Path is not qualified, so use the default FS.
-            *namenode = "default";
-        }
-    } else if (n == 0) {
-        return Status::InvalidArgument(strings::Substitute("Path missing scheme: $0", path));
+    } else if (is_s3a_path(nn) || is_oss_path(nn)) {
+        handle->type = HdfsFsHandle::Type::S3;
+        Aws::Client::ClientConfiguration config;
+        config.scheme = Aws::Http::Scheme::HTTP;
+        config.endpointOverride = config::aws_s3_endpoint;
+        config.maxConnections = config::aws_s3_max_connection;
+
+        S3Credential cred;
+        cred.access_key_id = config::aws_access_key_id;
+        cred.secret_access_key = config::aws_secret_access_key;
+
+        S3Client* s3_client = new S3Client(config, &cred, false);
+        handle->s3_client = s3_client;
     } else {
-        // Path is qualified, i.e. "scheme://authority/path/to/file".  Extract
-        // "scheme://authority/".
-        n = path.find('/', n + 3);
-        if (n == std::string::npos) {
-            return Status::InvalidArgument(strings::Substitute("Path missing '/' after authority: $0", path));
-        } else {
-            // Include the trailing '/' for local filesystem case, i.e. "file:///".
-            *namenode = path.substr(0, n + 1);
-        }
+        return Status::InternalError(strings::Substitute("failed to make client, namenode=$0", namenode));
     }
     return Status::OK();
 }
 
-Status HdfsFsCache::get_connection(const std::string& path, hdfsFS* fs, FileOpenLimitPtr* res, HdfsFsMap* local_cache) {
-    std::string namenode;
-    RETURN_IF_ERROR(parse_namenode(path, &namenode));
-
-    if (local_cache != nullptr) {
-        auto it = local_cache->find(namenode);
-        if (it != local_cache->end()) {
-            *fs = it->second.first;
-            *res = it->second.second.get();
-            return Status::OK();
-        }
-    }
-
+Status HdfsFsCache::get_connection(const std::string& namenode, HdfsFsHandle* handle, FileOpenLimitPtr* res) {
     {
         std::lock_guard<std::mutex> l(_lock);
-
         auto it = _cache.find(namenode);
         if (it != _cache.end()) {
-            *fs = it->second.first;
+            *handle = it->second.first;
             *res = it->second.second.get();
         } else {
-            auto hdfs_builder = hdfsNewBuilder();
-            hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
+            handle->namenode = namenode;
+            RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, handle));
             auto semaphore = std::make_unique<FileOpenLimit>(0);
-            *fs = hdfsBuilderConnect(hdfs_builder);
             *res = semaphore.get();
-            if (*fs == nullptr) {
-                return Status::InternalError(strings::Substitute("fail to connect hdfs namenode, name=$0, err=$1",
-                                                                 namenode, get_hdfs_err_msg()));
-            }
-            _cache[namenode] = std::make_pair(*fs, std::move(semaphore));
+            _cache[namenode] = std::make_pair(*handle, std::move(semaphore));
         }
     }
-
-    if (local_cache != nullptr) {
-        local_cache->emplace(namenode, std::make_pair(*fs, std::make_unique<FileOpenLimit>(0)));
-    }
-
     return Status::OK();
 }
 
