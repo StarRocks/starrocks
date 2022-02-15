@@ -408,14 +408,14 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
 }
 
 void show_segment_footer(const std::string& file_name) {
-    std::unique_ptr<RandomAccessFile> input_file;
-    Status status = starrocks::Env::Default()->new_random_access_file(file_name, &input_file);
-    if (!status.ok()) {
-        std::cout << "open file failed: " << status.to_string() << std::endl;
+    auto res = starrocks::Env::Default()->new_random_access_file(file_name);
+    if (!res.ok()) {
+        std::cout << "open file failed: " << res.status() << std::endl;
         return;
     }
+    auto input_file = std::move(res).value();
     SegmentFooterPB footer;
-    status = get_segment_footer(input_file.get(), &footer);
+    auto status = get_segment_footer(input_file.get(), &footer);
     if (!status.ok()) {
         std::cout << "get footer failed: " << status.to_string() << std::endl;
         return;

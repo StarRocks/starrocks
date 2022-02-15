@@ -257,8 +257,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
     }
     case TFileType::FILE_BROKER: {
         EnvBroker env_broker(address, params.properties);
-        std::unique_ptr<SequentialFile> broker_file;
-        RETURN_IF_ERROR(env_broker.new_sequential_file(range_desc.path, &broker_file));
+        ASSIGN_OR_RETURN(auto broker_file, env_broker.new_sequential_file(range_desc.path));
         src_file = std::shared_ptr<SequentialFile>(std::move(broker_file));
         break;
     }
@@ -286,8 +285,7 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     }
     case TFileType::FILE_BROKER: {
         EnvBroker env_broker(address, params.properties);
-        std::unique_ptr<RandomAccessFile> broker_file;
-        RETURN_IF_ERROR(env_broker.new_random_access_file(range_desc.path, &broker_file));
+        ASSIGN_OR_RETURN(auto broker_file, env_broker.new_random_access_file(range_desc.path));
         if (range_desc.start_offset != 0) {
             return Status::NotSupported("non-zero start offset");
         }

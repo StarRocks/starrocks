@@ -39,7 +39,7 @@ Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync)
     header.magic_number = OLAP_FIX_HEADER_MAGIC_NUMBER;
 
     std::unique_ptr<WritableFile> output_file;
-    RETURN_IF_ERROR(_env->new_writable_file(_path, &output_file));
+    ASSIGN_OR_RETURN(output_file, _env->new_writable_file(_path));
     RETURN_IF_ERROR(output_file->append(Slice((const char*)(&header), sizeof(header))));
     RETURN_IF_ERROR(output_file->append(Slice((const char*)(&unused_flag), sizeof(unused_flag))));
     RETURN_IF_ERROR(output_file->append(serialized_message));
@@ -47,8 +47,7 @@ Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync)
 }
 
 Status ProtobufFile::load(::google::protobuf::Message* message) {
-    std::unique_ptr<SequentialFile> input_file;
-    RETURN_IF_ERROR(_env->new_sequential_file(_path, &input_file));
+    ASSIGN_OR_RETURN(auto input_file, _env->new_sequential_file(_path));
 
     FixedFileHeader header;
     Slice buff((char*)&header, sizeof(header));

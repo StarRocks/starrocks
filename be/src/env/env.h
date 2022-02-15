@@ -12,7 +12,7 @@
 #include <memory>
 #include <string>
 
-#include "common/status.h"
+#include "common/statusor.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -46,49 +46,42 @@ public:
     static Env* Default();
 
     // Create a brand new sequentially-readable file with the specified name.
-    // On success, stores a pointer to the new file in *result and returns OK.
-    // On failure stores NULL in *result and returns non-OK.  If the file does
-    // not exist, returns a non-OK status.
+    //  If the file does not exist, returns a non-OK status.
     //
     // The returned file will only be accessed by one thread at a time.
-    virtual Status new_sequential_file(const std::string& fname, std::unique_ptr<SequentialFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& fname) = 0;
 
     // Create a brand new random access read-only file with the
-    // specified name.  On success, stores a pointer to the new file in
-    // *result and returns OK.  On failure stores nullptr in *result and
-    // returns non-OK.  If the file does not exist, returns a non-OK
-    // status.
+    // specified name.
     //
-    // The returned file may be concurrently accessed by multiple threads.
-    virtual Status new_random_access_file(const std::string& fname, std::unique_ptr<RandomAccessFile>* result) = 0;
+    // The returned file will only be accessed by one thread at a time.
+    virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& fname) = 0;
 
-    virtual Status new_random_access_file(const RandomAccessFileOptions& opts, const std::string& fname,
-                                          std::unique_ptr<RandomAccessFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                               const std::string& fname) = 0;
 
     // Create an object that writes to a new file with the specified
     // name.  Deletes any existing file with the same name and creates a
-    // new file.  On success, stores a pointer to the new file in
-    // *result and returns OK.  On failure stores NULL in *result and
-    // returns non-OK.
+    // new file.
     //
     // The returned file will only be accessed by one thread at a time.
-    virtual Status new_writable_file(const std::string& fname, std::unique_ptr<WritableFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& fname) = 0;
 
     // Like the previous new_writable_file, but allows options to be
     // specified.
-    virtual Status new_writable_file(const WritableFileOptions& opts, const std::string& fname,
-                                     std::unique_ptr<WritableFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
+                                                                      const std::string& fname) = 0;
 
     // Creates a new readable and writable file. If a file with the same name
     // already exists on disk, it is deleted.
     //
     // Some of the methods of the new file may be accessed concurrently,
     // while others are only safe for access by one thread at a time.
-    virtual Status new_random_rw_file(const std::string& fname, std::unique_ptr<RandomRWFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const std::string& fname) = 0;
 
     // Like the previous new_random_rw_file, but allows options to be specified.
-    virtual Status new_random_rw_file(const RandomRWFileOptions& opts, const std::string& fname,
-                                      std::unique_ptr<RandomRWFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
+                                                                       const std::string& fname) = 0;
 
     // Returns OK if the path exists.
     //         NotFound if the named file does not exist,
