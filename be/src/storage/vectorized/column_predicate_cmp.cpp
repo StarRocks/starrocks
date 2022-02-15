@@ -173,14 +173,14 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
 
 // Base class for column predicate
 template <FieldType field_type, class Eval>
-class ColumnPredicateBase : public ColumnPredicate {
+class ColumnPredicateCmpBase : public ColumnPredicate {
     using ValueType = typename CppTypeTraits<field_type>::CppType;
 
 public:
-    ColumnPredicateBase(PredicateType predicate, const TypeInfoPtr& type_info, ColumnId id, ValueType value)
+    ColumnPredicateCmpBase(PredicateType predicate, const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : ColumnPredicate(type_info, id), _predicate(predicate), _value(value) {}
 
-    ~ColumnPredicateBase() override = default;
+    ~ColumnPredicateCmpBase() override = default;
 
     template <typename Op>
     inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
@@ -232,10 +232,10 @@ protected:
 };
 
 template <FieldType field_type>
-class ColumnGePredicate : public ColumnPredicateBase<field_type, GeEval<field_type>> {
+class ColumnGePredicate : public ColumnPredicateCmpBase<field_type, GeEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
-    using Base = ColumnPredicateBase<field_type, GeEval<field_type>>;
+    using Base = ColumnPredicateCmpBase<field_type, GeEval<field_type>>;
 
     ColumnGePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kGE, type_info, id, value) {}
@@ -267,10 +267,10 @@ public:
 };
 
 template <FieldType field_type>
-class ColumnGtPredicate : public ColumnPredicateBase<field_type, GtEval<field_type>> {
+class ColumnGtPredicate : public ColumnPredicateCmpBase<field_type, GtEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
-    using Base = ColumnPredicateBase<field_type, GtEval<field_type>>;
+    using Base = ColumnPredicateCmpBase<field_type, GtEval<field_type>>;
 
     ColumnGtPredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kGT, type_info, id, value) {}
@@ -302,10 +302,10 @@ public:
 };
 
 template <FieldType field_type>
-class ColumnLePredicate : public ColumnPredicateBase<field_type, LeEval<field_type>> {
+class ColumnLePredicate : public ColumnPredicateCmpBase<field_type, LeEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
-    using Base = ColumnPredicateBase<field_type, LeEval<field_type>>;
+    using Base = ColumnPredicateCmpBase<field_type, LeEval<field_type>>;
 
     ColumnLePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kLE, type_info, id, value) {}
@@ -338,10 +338,10 @@ public:
 };
 
 template <FieldType field_type>
-class ColumnLtPredicate : public ColumnPredicateBase<field_type, LtEval<field_type>> {
+class ColumnLtPredicate : public ColumnPredicateCmpBase<field_type, LtEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
-    using Base = ColumnPredicateBase<field_type, LtEval<field_type>>;
+    using Base = ColumnPredicateCmpBase<field_type, LtEval<field_type>>;
 
     ColumnLtPredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kLT, type_info, id, value) {}
@@ -374,10 +374,10 @@ public:
 };
 
 template <FieldType field_type>
-class ColumnEqPredicate : public ColumnPredicateBase<field_type, EqEval<field_type>> {
+class ColumnEqPredicate : public ColumnPredicateCmpBase<field_type, EqEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
-    using Base = ColumnPredicateBase<field_type, EqEval<field_type>>;
+    using Base = ColumnPredicateCmpBase<field_type, EqEval<field_type>>;
 
     ColumnEqPredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kEQ, type_info, id, value) {}
@@ -422,10 +422,10 @@ public:
 };
 
 template <FieldType field_type>
-class ColumnNePredicate : public ColumnPredicateBase<field_type, NeEval<field_type>> {
+class ColumnNePredicate : public ColumnPredicateCmpBase<field_type, NeEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
-    using Base = ColumnPredicateBase<field_type, NeEval<field_type>>;
+    using Base = ColumnPredicateCmpBase<field_type, NeEval<field_type>>;
 
     ColumnNePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kNE, type_info, id, value) {}
@@ -445,17 +445,17 @@ public:
 
 // Base class for binary column predicate
 template <FieldType field_type, class Eval>
-class BinaryColumnPredicateBase : public ColumnPredicate {
+class BinaryColumnPredicateCmpBase : public ColumnPredicate {
     using ValueType = Slice;
 
 public:
-    BinaryColumnPredicateBase(PredicateType predicate_type, const TypeInfoPtr& type_info, ColumnId id, ValueType value)
+    BinaryColumnPredicateCmpBase(PredicateType predicate_type, const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : ColumnPredicate(type_info, id),
               _predicate_type(predicate_type),
               _zero_padded_str(value.data, value.size),
               _value(_zero_padded_str) {}
 
-    ~BinaryColumnPredicateBase() override = default;
+    ~BinaryColumnPredicateCmpBase() override = default;
 
     template <typename Op>
     inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
@@ -559,10 +559,10 @@ protected:
 };
 
 template <FieldType field_type>
-class BinaryColumnEqPredicate : public BinaryColumnPredicateBase<field_type, EqEval<field_type>> {
+class BinaryColumnEqPredicate : public BinaryColumnPredicateCmpBase<field_type, EqEval<field_type>> {
 public:
     using ValueType = Slice;
-    using Base = BinaryColumnPredicateBase<field_type, std::equal_to<ValueType>>;
+    using Base = BinaryColumnPredicateCmpBase<field_type, std::equal_to<ValueType>>;
 
     BinaryColumnEqPredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kEQ, type_info, id, value) {}
@@ -600,10 +600,10 @@ public:
 };
 
 template <FieldType field_type>
-class BinaryColumnGePredicate : public BinaryColumnPredicateBase<field_type, GeEval<field_type>> {
+class BinaryColumnGePredicate : public BinaryColumnPredicateCmpBase<field_type, GeEval<field_type>> {
 public:
     using ValueType = Slice;
-    using Base = BinaryColumnPredicateBase<field_type, std::greater_equal<ValueType>>;
+    using Base = BinaryColumnPredicateCmpBase<field_type, std::greater_equal<ValueType>>;
 
     BinaryColumnGePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kGE, type_info, id, value) {}
@@ -632,10 +632,10 @@ public:
 };
 
 template <FieldType field_type>
-class BinaryColumnGtPredicate : public BinaryColumnPredicateBase<field_type, GtEval<field_type>> {
+class BinaryColumnGtPredicate : public BinaryColumnPredicateCmpBase<field_type, GtEval<field_type>> {
 public:
     using ValueType = Slice;
-    using Base = BinaryColumnPredicateBase<field_type, std::greater<ValueType>>;
+    using Base = BinaryColumnPredicateCmpBase<field_type, std::greater<ValueType>>;
 
     BinaryColumnGtPredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kGT, type_info, id, value) {}
@@ -663,10 +663,10 @@ public:
 };
 
 template <FieldType field_type>
-class BinaryColumnLtPredicate : public BinaryColumnPredicateBase<field_type, LtEval<field_type>> {
+class BinaryColumnLtPredicate : public BinaryColumnPredicateCmpBase<field_type, LtEval<field_type>> {
 public:
     using ValueType = Slice;
-    using Base = BinaryColumnPredicateBase<field_type, std::less<ValueType>>;
+    using Base = BinaryColumnPredicateCmpBase<field_type, std::less<ValueType>>;
 
     BinaryColumnLtPredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kLT, type_info, id, value) {}
@@ -695,10 +695,10 @@ public:
 };
 
 template <FieldType field_type>
-class BinaryColumnLePredicate : public BinaryColumnPredicateBase<field_type, LeEval<field_type>> {
+class BinaryColumnLePredicate : public BinaryColumnPredicateCmpBase<field_type, LeEval<field_type>> {
 public:
     using ValueType = Slice;
-    using Base = BinaryColumnPredicateBase<field_type, std::less_equal<ValueType>>;
+    using Base = BinaryColumnPredicateCmpBase<field_type, std::less_equal<ValueType>>;
 
     BinaryColumnLePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kLE, type_info, id, value) {}
@@ -726,10 +726,10 @@ public:
 };
 
 template <FieldType field_type>
-class BinaryColumnNePredicate : public BinaryColumnPredicateBase<field_type, NeEval<field_type>> {
+class BinaryColumnNePredicate : public BinaryColumnPredicateCmpBase<field_type, NeEval<field_type>> {
 public:
     using ValueType = Slice;
-    using Base = BinaryColumnPredicateBase<field_type, std::not_equal_to<ValueType>>;
+    using Base = BinaryColumnPredicateCmpBase<field_type, std::not_equal_to<ValueType>>;
 
     BinaryColumnNePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kNE, type_info, id, value) {}
