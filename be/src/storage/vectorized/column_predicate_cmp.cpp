@@ -49,10 +49,10 @@ using EqEval = std::equal_to<typename CppTypeTraits<field_type>::CppType>;
 template <FieldType field_type>
 using NeEval = std::not_equal_to<typename CppTypeTraits<field_type>::CppType>;
 
-template <FieldType field_type, template <FieldType> typename Predicate, typename NewColumnPredicateFunc>
+template <FieldType field_type, template <FieldType> typename Predicate, typename ColumnPredicateBuilder>
 static Status predicate_convert_to(Predicate<field_type> const& input_predicate,
                                    typename CppTypeTraits<field_type>::CppType const& value,
-                                   NewColumnPredicateFunc new_column_predicate_func, const ColumnPredicate** output,
+                                   ColumnPredicateBuilder column_predicate_builder, const ColumnPredicate** output,
                                    const TypeInfoPtr& target_type_info, ObjectPool* obj_pool) {
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     const auto to_type = target_type_info->type();
@@ -63,7 +63,7 @@ static Status predicate_convert_to(Predicate<field_type> const& input_predicate,
     auto cid = input_predicate.column_id();
     const auto type_info = input_predicate.type_info();
     std::string str = type_info->to_string(&value);
-    *output = obj_pool->add(new_column_predicate_func(target_type_info, cid, str));
+    *output = obj_pool->add(column_predicate_builder(target_type_info, cid, str));
     return Status::OK();
 }
 
