@@ -19,7 +19,6 @@ void ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chun
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
         _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size());
-        THROW_BAD_ALLOC_IF_NULL(_buffer);
     }
 
     _serialize_columns(chunk, exprs, chunk_size);
@@ -28,7 +27,6 @@ void ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chun
         ExceptSliceFlag key(_buffer + i * _max_one_row_size, _slice_sizes[i]);
         _hash_set->lazy_emplace(key, [&](const auto& ctor) {
             uint8_t* pos = pool->allocate(key.slice.size);
-            ERASE_AND_THROW_BAD_ALLOC_IF_NULL((*_hash_set), pos, key);
             memcpy(pos, key.slice.data, key.slice.size);
             ctor(pos, key.slice.size);
         });
