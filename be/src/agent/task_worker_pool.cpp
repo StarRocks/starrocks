@@ -34,6 +34,7 @@
 
 #include "common/status.h"
 #include "env/env.h"
+#include "exec/workgroup/work_group.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
@@ -131,6 +132,9 @@ void TaskWorkerPool::start() {
         break;
     case TaskWorkerType::REPORT_OLAP_TABLE:
         _callback_function = _report_tablet_worker_thread_callback;
+        break;
+    case TaskWorkerType::REPORT_WORKGROUP:
+        _callback_function = _report_workgroup_thread_callback;
         break;
     case TaskWorkerType::UPLOAD:
         _callback_function = _upload_worker_thread_callback;
@@ -1375,6 +1379,43 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
 
         // wait for notifying until timeout
         StorageEngine::instance()->wait_for_report_notify(config::report_tablet_interval_seconds, true);
+    }
+
+    return (void*)nullptr;
+}
+
+void* TaskWorkerPool::_report_workgroup_thread_callback(void* arg_this) {
+    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+
+    TReportRequest request;
+    request.__set_backend(worker_pool_this->_backend);
+    AgentStatus status = STARROCKS_SUCCESS;
+
+    while ((!worker_pool_this->_stopped)) {
+        if (worker_pool_this->_master_info.network_address.port == 0) {
+            // port == 0 means not received heartbeat yet
+            // sleep a short time and try again
+            LOG(INFO) << "Waiting to receive first heartbeat from frontend";
+            sleep(config::sleep_one_second);
+            continue;
+        }
+
+        StarRocksMetrics::instance()->report_workgroup_requests_total.increment(1);
+        request.__set_report_version(_s_report_version);
+        auto workgroups = workgroup::WorkGroupManager::instance()->list_workgroups();
+        request.__set_active_workgroups(std::move(workgroups));
+        TMasterResult result;
+        status = worker_pool_this->_master_client->report(request, &result);
+
+        if (status != STARROCKS_SUCCESS) {
+            StarRocksMetrics::instance()->report_workgroup_requests_failed.increment(1);
+            LOG(WARNING) << "Fail to report workgroup to " << worker_pool_this->_master_info.network_address.hostname
+                         << ":" << worker_pool_this->_master_info.network_address.port << ", err=" << status;
+        }
+        if (result.__isset.workgroup_ops) {
+            workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
+        }
+        sleep(config::report_workgroup_interval_seconds);
     }
 
     return (void*)nullptr;

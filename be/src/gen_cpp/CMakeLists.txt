@@ -38,6 +38,8 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/TFileBrokerService.cpp
     ${GEN_CPP_DIR}/HeartbeatService_constants.cpp
     ${GEN_CPP_DIR}/HeartbeatService.cpp
+    ${GEN_CPP_DIR}/WorkGroup_types.cpp
+    ${GEN_CPP_DIR}/WorkGroup_constants.cpp
     ${GEN_CPP_DIR}/HeartbeatService_types.cpp
     ${GEN_CPP_DIR}/InternalService_constants.cpp
     ${GEN_CPP_DIR}/InternalService_types.cpp

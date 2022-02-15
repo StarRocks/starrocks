@@ -233,6 +233,7 @@ public class HeartbeatMgr extends MasterDaemon {
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(backendId);
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
+                //Catalog.getCurrentCatalog().getWorkGroupMgr()
 
                 ok = true;
                 if (result.getStatus().getStatus_code() == TStatusCode.OK) {

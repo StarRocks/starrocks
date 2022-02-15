@@ -446,6 +446,8 @@ public class Catalog {
 
     private long feStartTime;
 
+    private WorkGroupMgr workGroupMgr;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -582,6 +584,8 @@ public class Catalog {
         this.auth = new Auth();
         this.domainResolver = new DomainResolver(auth);
 
+        this.workGroupMgr = new WorkGroupMgr(this);
+
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
         this.hiveRepository = new HiveRepository();
@@ -672,6 +676,10 @@ public class Catalog {
 
     public Auth getAuth() {
         return auth;
+    }
+
+    public WorkGroupMgr getWorkGroupMgr() {
+        return workGroupMgr;
     }
 
     public TabletScheduler getTabletScheduler() {
@@ -1553,6 +1561,7 @@ public class Catalog {
             remoteChecksum = dis.readLong();
             checksum = loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = loadWorkGroups(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1877,8 +1886,23 @@ public class Catalog {
         return checksum;
     }
 
+    public long loadWorkGroups(DataInputStream dis, long checksum) throws IOException {
+        try {
+            this.getWorkGroupMgr().readFields(dis);
+            LOG.info("finished replaying WorkGroups from image");
+        } catch (EOFException e) {
+            LOG.info("no WorkGroups to replay.");
+        }
+        return checksum;
+    }
+
     public long saveDeleteHandler(DataOutputStream dos, long checksum) throws IOException {
         getDeleteHandler().write(dos);
+        return checksum;
+    }
+
+    public long saveWorkGroups(DataOutputStream dos, long checksum) throws IOException {
+        getWorkGroupMgr().write(dos);
         return checksum;
     }
 
@@ -2012,6 +2036,7 @@ public class Catalog {
             dos.writeLong(checksum);
             checksum = saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
+            checksum = saveWorkGroups(dos, checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();

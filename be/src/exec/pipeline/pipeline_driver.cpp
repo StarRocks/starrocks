@@ -13,6 +13,11 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+
+PipelineDriver::~PipelineDriver() noexcept {
+    _workgroup->decrease_num_drivers();
+}
+
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _runtime_state = runtime_state;
 
@@ -355,6 +360,7 @@ starrocks::workgroup::WorkGroup* PipelineDriver::workgroup() {
 
 void PipelineDriver::set_workgroup(starrocks::workgroup::WorkGroup* wg) {
     this->_workgroup = wg;
+    this->_workgroup->increase_num_drivers();
 }
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {

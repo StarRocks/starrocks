@@ -32,6 +32,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -131,12 +133,6 @@ public class Coordinator {
     private static final Random instanceRandom = new Random();
     // parallel execute
     private final TUniqueId nextInstanceId;
-    // Overall status of the entire query; set to the first reported fragment error
-    // status or to CANCELLED, if Cancel() is called.
-    Status queryStatus = new Status();
-    // save of related backends of this query
-    Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
-    private ImmutableMap<Long, Backend> idToBackend = ImmutableMap.of();
     // copied from TQueryExecRequest; constant across all fragments
     private final TDescriptorTable descTable;
     // Why we use query global?
@@ -145,16 +141,8 @@ public class Coordinator {
     // So we make a query global value here to make one `now()` value in one query process.
     private final TQueryGlobals queryGlobals = new TQueryGlobals();
     private final TQueryOptions queryOptions;
-    private TNetworkAddress coordAddress;
     // protects all fields below
     private final Lock lock = new ReentrantLock();
-    // If true, the query is done returning all results.  It is possible that the
-    // coordinator still needs to wait for cleanup on remote fragments (e.g. queries
-    // with limit)
-    // Once this is set to true, errors from remote fragments are ignored.
-    private boolean returnedAllResults;
-    private RuntimeProfile queryProfile;
-    private List<RuntimeProfile> fragmentProfile;
     // populated in computeFragmentExecParams()
     private final Map<PlanFragmentId, FragmentExecParams> fragmentExecParamsMap = Maps.newHashMap();
     private final List<PlanFragment> fragments;
@@ -163,38 +151,22 @@ public class Coordinator {
     // backend which state need to be checked when joining this coordinator.
     // It is supposed to be the subset of backendExecStates.
     private final List<BackendExecState> needCheckBackendExecStates = Lists.newArrayList();
-    private ResultReceiver receiver;
     private final List<ScanNode> scanNodes;
     // number of instances of this query, equals to
     // number of backends executing plan fragments on behalf of this query;
     // set in computeFragmentExecParams();
     // same as backend_exec_states_.size() after Exec()
     private final Set<TUniqueId> instanceIds = Sets.newHashSet();
-    // instance id -> dummy value
-    private MarkedCountDownLatch<TUniqueId, Long> profileDoneSignal;
     private final boolean isBlockQuery;
-    private int numReceivedRows = 0;
-    private List<String> deltaUrls;
-    private Map<String, String> loadCounters;
-    private String trackingUrl;
-    // for export
-    private List<String> exportFiles;
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
-    // Input parameter
-    private long jobId = -1; // job which this task belongs to
-    private TUniqueId queryId;
     private final TResourceInfo tResourceInfo;
     private final boolean needReport;
     private final String clusterName;
-    // force schedule local be for HybridBackendSelector
-    // only for hive now
-    private boolean forceScheduleLocal = false;
     private final Set<Integer> colocateFragmentIds = new HashSet<>();
     private final Set<Integer> replicateFragmentIds = new HashSet<>();
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
-
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
     private final Map<PlanFragmentId, BucketSeqToScanRange> fragmentIdBucketSeqToScanRangeMap = Maps.newHashMap();
@@ -202,6 +174,36 @@ public class Coordinator {
     private final Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap = Maps.newHashMap();
     // fragment_id -> < be_id -> bucket_count >
     private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
+    private final Map<TNetworkAddress, Integer> hostToNumbers = Maps.newHashMap();
+    // Overall status of the entire query; set to the first reported fragment error
+    // status or to CANCELLED, if Cancel() is called.
+    Status queryStatus = new Status();
+    // save of related backends of this query
+    Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
+    private ImmutableMap<Long, Backend> idToBackend = ImmutableMap.of();
+    private TNetworkAddress coordAddress;
+    // If true, the query is done returning all results.  It is possible that the
+    // coordinator still needs to wait for cleanup on remote fragments (e.g. queries
+    // with limit)
+    // Once this is set to true, errors from remote fragments are ignored.
+    private boolean returnedAllResults;
+    private RuntimeProfile queryProfile;
+    private List<RuntimeProfile> fragmentProfile;
+    private ResultReceiver receiver;
+    // instance id -> dummy value
+    private MarkedCountDownLatch<TUniqueId, Long> profileDoneSignal;
+    private int numReceivedRows = 0;
+    private List<String> deltaUrls;
+    private Map<String, String> loadCounters;
+    private String trackingUrl;
+    // for export
+    private List<String> exportFiles;
+    // Input parameter
+    private long jobId = -1; // job which this task belongs to
+    private TUniqueId queryId;
+    // force schedule local be for HybridBackendSelector
+    // only for hive now
+    private boolean forceScheduleLocal = false;
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
@@ -549,8 +551,6 @@ public class Coordinator {
             unlock();
         }
     }
-
-    private final Map<TNetworkAddress, Integer> hostToNumbers = Maps.newHashMap();
 
     // Compute the fragment instance numbers in every BE for one query
     private void computeBeInstanceNumbers() {
@@ -1613,6 +1613,10 @@ public class Coordinator {
         }
     }
 
+    private int getFragmentBucketNum(PlanFragmentId fragmentId) {
+        return fragmentIdToBucketNumMap.get(fragmentId);
+    }
+
     // For HybridBackendSelector
     private enum ScanRangeAssignType {
         SCAN_RANGE_NUM,
@@ -1637,16 +1641,16 @@ public class Coordinator {
 
         FragmentExecParams fragmentExecParams;
 
-        public void addBucketSeq(int bucketSeq) {
-            this.bucketSeqSet.add(bucketSeq);
-        }
-
         public FInstanceExecParam(TUniqueId id, TNetworkAddress host,
                                   int perFragmentInstanceIdx, FragmentExecParams fragmentExecParams) {
             this.instanceId = id;
             this.host = host;
             this.perFragmentInstanceIdx = perFragmentInstanceIdx;
             this.fragmentExecParams = fragmentExecParams;
+        }
+
+        public void addBucketSeq(int bucketSeq) {
+            this.bucketSeqSet.add(bucketSeq);
         }
 
         public PlanFragment fragment() {
@@ -1662,10 +1666,6 @@ public class Coordinator {
 
     static class BucketSeqToScanRange extends HashMap<Integer, Map<Integer, List<TScanRangeParams>>> {
 
-    }
-
-    private int getFragmentBucketNum(PlanFragmentId fragmentId) {
-        return fragmentIdToBucketNumMap.get(fragmentId);
     }
 
     // record backend execute state
@@ -1863,6 +1863,16 @@ public class Coordinator {
                 fileNamePrefix = exportSink.getFileNamePrefix();
             }
 
+            WorkGroup workgroup = null;
+            if (ConnectContext.get() != null) {
+                String user = ConnectContext.get().getCurrentUserIdentity().getQualifiedUser();
+                String roleName = Catalog.getCurrentCatalog().getAuth()
+                        .getRoleName(ConnectContext.get().getCurrentUserIdentity());
+                String remoteIp = ConnectContext.get().getRemoteIP();
+                workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
+                        user, roleName, WorkGroupClassifier.QueryType.SELECT, remoteIp);
+            }
+
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
             for (int i = 0; i < instanceExecParams.size(); ++i) {
                 final FInstanceExecParam instanceExecParam = instanceExecParams.get(i);
@@ -1927,10 +1937,16 @@ public class Coordinator {
                         }
                         params.setPipeline_dop(fragment.getPipelineDop());
                         // TODO (by satanson): just for verification of resource isolation.
-                        TWorkGroup wg = new TWorkGroup();
-                        wg.setName("");
-                        wg.setId(ConnectContext.get().getSessionVariable().getWorkgroupId());
-                        params.setWorkgroup(wg);
+                        long workgroupId = ConnectContext.get().getSessionVariable().getWorkgroupId();
+                        if (workgroupId > 0) {
+                            TWorkGroup wg = new TWorkGroup();
+                            wg.setName("");
+                            wg.setId(ConnectContext.get().getSessionVariable().getWorkgroupId());
+                            wg.setVersion(0);
+                            params.setWorkgroup(wg);
+                        } else if (workgroup != null) {
+                            params.setWorkgroup(workgroup.toThrift());
+                        }
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {
@@ -2230,6 +2246,11 @@ public class Coordinator {
      * assign scan ranges to local backend if there has one.
      */
     private class HDFSBackendSelector implements BackendSelector {
+        private final ScanNode scanNode;
+        private final List<TScanRangeLocations> locations;
+        private final FragmentScanRangeAssignment assignment;
+        private final ScanRangeAssignType assignType;
+        private final List<Long> remoteScanRangesBytes = Lists.newArrayList();
         // be -> assigned scans
         // type:
         //     SCAN_RANGE_NUM: assigned scan range num
@@ -2237,13 +2258,8 @@ public class Coordinator {
         Map<Backend, Long> assignedScansPerBe = Maps.newHashMap();
         // be host -> bes
         Multimap<String, Backend> hostToBes = HashMultimap.create();
-        private final ScanNode scanNode;
-        private final List<TScanRangeLocations> locations;
-        private final FragmentScanRangeAssignment assignment;
-        private final ScanRangeAssignType assignType;
         // for SCAN_DATA_SIZE assign type
         private List<Long> scanRangesBytes = Lists.newArrayList();
-        private final List<Long> remoteScanRangesBytes = Lists.newArrayList();
         // TODO: disk stats
 
         public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
