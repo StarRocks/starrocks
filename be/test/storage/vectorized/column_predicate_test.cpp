@@ -7,6 +7,7 @@
 #include "gtest/gtest.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/column_or_predicate.h"
+#include "testutil/assert.h"
 
 namespace starrocks::vectorized {
 
@@ -2158,4 +2159,44 @@ TEST(ColumnPredicateTest, zone_map_filter_varchar) {
     EXPECT_TRUE(not_in_xx_yy->ZMF(Datum("xy"), Datum("zz")));
 }
 
+// NOLINTNEXTLINE
+TEST(ColumnPredicateTest, test_convert_cmp_predicate) {
+    // clang-format off
+    std::vector<PredicateType> testcases = {
+        PredicateType::kEQ,
+        PredicateType::kNE,
+        PredicateType::kLT,
+        PredicateType::kLE,
+        PredicateType::kGT,
+        PredicateType::kGE
+    };
+    // clang-format on
+
+    for (auto predicate : testcases) {
+        std::unique_ptr<ColumnPredicate> p(
+                new_column_cmp_predicate(predicate, get_type_info(OLAP_FIELD_TYPE_BOOL), 0, "1"));
+
+        const ColumnPredicate* new_p;
+        TypeInfoPtr new_type = get_type_info(OLAP_FIELD_TYPE_INT);
+        ObjectPool op;
+        ASSERT_OK(p->convert_to(&new_p, new_type, &op));
+        EXPECT_EQ(new_p->type(), p->type());
+        EXPECT_EQ(new_p->value(), p->value());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST(ColumnPredicateTest, test_convert_cmp_binary_predicate) {
+    std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(OLAP_FIELD_TYPE_VARCHAR), 0, "1"));
+
+    const ColumnPredicate* new_p;
+    TypeInfoPtr new_type = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    ObjectPool op;
+    ASSERT_OK(p->convert_to(&new_p, new_type, &op));
+    EXPECT_EQ(new_p->type(), p->type());
+    EXPECT_EQ(new_p->value(), p->value());
+
+    TypeInfoPtr not_support_type = get_type_info(OLAP_FIELD_TYPE_INT);
+    ASSERT_ERROR(p->convert_to(&new_p, not_support_type, &op));
+}
 } // namespace starrocks::vectorized
