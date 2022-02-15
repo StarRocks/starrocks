@@ -466,7 +466,9 @@ public class WindowTransformer {
         }
 
         public void addFunction(AnalyticExpr analyticExpr) {
-            windowFunctions.add(analyticExpr);
+            if (!windowFunctions.contains(analyticExpr)) {
+                windowFunctions.add(analyticExpr);
+            }
         }
 
         public List<AnalyticExpr> getWindowFunctions() {
