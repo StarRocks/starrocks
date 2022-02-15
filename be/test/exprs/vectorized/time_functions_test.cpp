@@ -1433,19 +1433,26 @@ TEST_F(TimeFunctionsTest, convertTzGeneralTest) {
     tc->append(TimestampValue::create(2019, 8, 1, 13, 21, 3));
     tc->append(TimestampValue::create(2019, 8, 1, 13, 21, 3));
     tc->append(TimestampValue::create(2019, 8, 1, 13, 21, 3));
+    tc->append(TimestampValue::create(2019, 8, 1, 8, 21, 3));
+    tc->append(TimestampValue::create(2019, 8, 1, 8, 21, 3));
 
     auto tc_from = BinaryColumn::create();
     tc_from->append(Slice("Asia/Shanghai"));
     tc_from->append(Slice("Asia/Urumqi"));
     tc_from->append(Slice("America/Los_Angeles"));
+    tc_from->append(Slice("Asia/Shanghai"));
+    tc_from->append(Slice("Asia/Shanghai"));
 
     auto tc_to = BinaryColumn::create();
     tc_to->append(Slice("America/Los_Angeles"));
     tc_to->append(Slice("America/Los_Angeles"));
     tc_to->append(Slice("Asia/Urumqi"));
+    tc_to->append(Slice("UTC"));
+    tc_to->append(Slice("+08:00"));
 
     TimestampValue res[] = {TimestampValue::create(2019, 7, 31, 22, 21, 3),
-                            TimestampValue::create(2019, 8, 1, 0, 21, 3), TimestampValue::create(2019, 8, 2, 2, 21, 3)};
+                            TimestampValue::create(2019, 8, 1, 0, 21, 3), TimestampValue::create(2019, 8, 2, 2, 21, 3),
+                            TimestampValue::create(2019, 8, 1, 0, 21, 3), TimestampValue::create(2019, 8, 1, 8, 21, 3)};
     Columns columns;
     columns.emplace_back(tc);
     columns.emplace_back(tc_from);

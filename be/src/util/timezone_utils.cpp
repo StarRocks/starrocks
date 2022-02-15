@@ -22,15 +22,59 @@
 
 #include "util/timezone_utils.h"
 
+#include <charconv>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "glog/logging.h"
+#include "util/phmap/phmap.h"
+
 namespace starrocks {
 
 RE2 TimezoneUtils::time_zone_offset_format_reg(R"(^[+-]{1}\d{2}\:\d{2}$)");
 
 const std::string TimezoneUtils::default_time_zone = "+08:00";
 
-bool TimezoneUtils::find_cctz_time_zone(const std::string& timezone, cctz::time_zone& ctz) {
+static phmap::flat_hash_map<std::string_view, cctz::time_zone> _s_cached_timezone;
+static phmap::flat_hash_map<std::pair<std::string_view, std::string_view>, int64_t> _s_cached_offsets;
+
+void TimezoneUtils::init_time_zones() {
+    // timezone cache list
+    // We cannot add a time zone to the cache that contains both daylight saving time and winter time
+    static std::vector<std::string> timezones = {"UTC", "Asia/Shanghai", "Asia/Hong_Kong"};
+    for (const auto& timezone : timezones) {
+        cctz::time_zone ctz;
+        CHECK(cctz::load_time_zone(timezone, &ctz));
+        _s_cached_timezone.emplace(timezone, std::move(ctz));
+    }
+    auto civil = cctz::civil_second(2021, 12, 1, 8, 30, 1);
+    for (const auto& timezone1 : timezones) {
+        for (const auto& timezone2 : timezones) {
+            const auto tp1 = cctz::convert(civil, _s_cached_timezone[timezone1]);
+            const auto tp2 = cctz::convert(civil, _s_cached_timezone[timezone2]);
+            std::pair<std::string_view, std::string_view> key = {timezone1, timezone2};
+            _s_cached_offsets[key] = tp1.time_since_epoch().count() - tp2.time_since_epoch().count();
+        }
+    }
+
+    // other cached timezone
+    // only cache CCTZ, won't caculate offsets
+    static std::vector<std::string> other_timezones = {"America/Chicago", "Asia/Yangon"};
+    for (const auto& timezone : other_timezones) {
+        cctz::time_zone ctz;
+        CHECK(cctz::load_time_zone(timezone, &ctz));
+        _s_cached_timezone.emplace(timezone, std::move(ctz));
+    }
+}
+
+bool TimezoneUtils::find_cctz_time_zone(const std::string_view& timezone, cctz::time_zone& ctz) {
     re2::StringPiece value;
-    if (time_zone_offset_format_reg.Match(timezone, 0, timezone.size(), RE2::UNANCHORED, &value, 1)) {
+    if (auto iter = _s_cached_timezone.find(timezone); iter != _s_cached_timezone.end()) {
+        ctz = iter->second;
+        return true;
+    } else if (time_zone_offset_format_reg.Match(re2::StringPiece(timezone.data(), timezone.size()), 0, timezone.size(),
+                                                 RE2::UNANCHORED, &value, 1)) {
         bool positive = (value[0] != '-');
 
         //Regular expression guarantees hour and minute mush be int
@@ -52,15 +96,29 @@ bool TimezoneUtils::find_cctz_time_zone(const std::string& timezone, cctz::time_
         ctz = cctz::fixed_time_zone(cctz::seconds(8 * 60 * 60));
         return true;
     } else {
-        return cctz::load_time_zone(timezone, &ctz);
+        return cctz::load_time_zone(std::string(timezone), &ctz);
     }
 }
 
-bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, const std::string& timezone,
+bool TimezoneUtils::timezone_offsets(const std::string_view& src, const std::string_view& dst, int64_t* offset) {
+    if (const auto iter = _s_cached_offsets.find(std::make_pair(src, dst)); iter != _s_cached_offsets.end()) {
+        *offset = iter->second;
+        return true;
+    }
+    return false;
+}
+
+bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, const std::string_view& timezone,
                                         cctz::time_zone& ctz) {
+    // find time_zone by cache
+    if (auto iter = _s_cached_timezone.find(timezone); iter != _s_cached_timezone.end()) {
+        ctz = iter->second;
+        return true;
+    }
+
     bool v = false;
     hs_scan(
-            timezone_hsscan.database, timezone.c_str(), timezone.size(), 0, timezone_hsscan.scratch,
+            timezone_hsscan.database, timezone.data(), timezone.size(), 0, timezone_hsscan.scratch,
             [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags, void* ctx) -> int {
                 *((bool*)ctx) = true;
                 return 1;
@@ -71,8 +129,12 @@ bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, c
         bool positive = (timezone.substr(0, 1) != "-");
 
         //Regular expression guarantees hour and minute mush be int
-        int hour = std::stoi(timezone.substr(1, 2));
-        int minute = std::stoi(timezone.substr(4, 5));
+        int hour;
+        std::string_view hour_str = timezone.substr(1, 2);
+        std::from_chars(hour_str.begin(), hour_str.end(), hour);
+        int minute;
+        std::string_view minute_str = timezone.substr(4, 5);
+        std::from_chars(minute_str.begin(), minute_str.end(), minute);
 
         // timezone offsets around the world extended from -12:00 to +14:00
         if (!positive && hour > 12) {
@@ -91,7 +153,7 @@ bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, c
         ctz = cctz::fixed_time_zone(cctz::seconds(8 * 60 * 60));
         return true;
     } else {
-        return cctz::load_time_zone(timezone, &ctz);
+        return cctz::load_time_zone(std::string(timezone), &ctz);
     }
 }
 
