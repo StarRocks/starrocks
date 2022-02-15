@@ -2386,8 +2386,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
         String sql10 = "select 499 union select 670 except select 499";
         String plan = getFragmentPlan(sql10);
-        System.out.println("=========================");
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  10:UNION\n" +
                 "     constant exprs: \n" +
                 "         499"));
