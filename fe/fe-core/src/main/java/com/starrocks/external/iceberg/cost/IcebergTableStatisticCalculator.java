@@ -2,9 +2,14 @@
 
 package com.starrocks.external.iceberg.cost;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Column;
 import com.starrocks.external.iceberg.IcebergUtil;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
@@ -41,16 +46,19 @@ public class IcebergTableStatisticCalculator {
         this.icebergTable = icebergTable;
     }
 
-    public static IcebergTableStats getTableStatistics(List<Expression> icebergPredicates, Table icebergTable) {
+    public static Statistics getTableStatistics(List<Expression> icebergPredicates,
+                                                Table icebergTable,
+                                                Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         return new IcebergTableStatisticCalculator(icebergTable)
-                .makeTableStatistics(icebergPredicates);
+                .makeTableStatistics(icebergPredicates, colRefToColumnMetaMap);
     }
 
-    private IcebergTableStats makeTableStatistics(List<Expression> icebergPredicates) {
+    private Statistics makeTableStatistics(List<Expression> icebergPredicates,
+                                           Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         LOG.debug("Begin to make iceberg table statistics!");
         Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(icebergTable, true);
         if (!snapshot.isPresent()) {
-            return IcebergTableStats.empty();
+            return Statistics.builder().build();
         }
 
         List<Types.NestedField> columns = icebergTable.schema().columns();
@@ -107,34 +115,40 @@ public class IcebergTableStatisticCalculator {
         }
 
         if (icebergFileStats == null) {
-            return IcebergTableStats.empty();
+            return Statistics.builder().build();
         }
 
-        ImmutableMap.Builder<String, IcebergColumnStats> columnStatsBuilder = ImmutableMap.builder();
+        Statistics.Builder statisticsBuilder = Statistics.builder();
+        ImmutableMap.Builder<String, ColumnStatistic> columnStatsBuilder = ImmutableMap.builder();
         double recordCount = icebergFileStats.getRecordCount();
         for (Map.Entry<Integer, String> idColumn : idToColumnNames.entrySet()) {
             int fieldId = idColumn.getKey();
-            IcebergColumnStats columnStats = new IcebergColumnStats();
+            ColumnStatistic.Builder columnBuilder = ColumnStatistic.builder();
             Long nullCount = icebergFileStats.getNullCounts().get(fieldId);
             if (nullCount != null) {
-                columnStats.setNumNulls(nullCount);
+                columnBuilder.setNullsFraction(nullCount / recordCount);
             }
             if (icebergFileStats.getColumnSizes() != null) {
                 Long columnSize = icebergFileStats.getColumnSizes().get(fieldId);
                 if (columnSize != null) {
-                    columnStats.setAvgSize(columnSize / recordCount);
+                    columnBuilder.setAverageRowSize(columnSize / recordCount);
                 }
             }
             Object min = icebergFileStats.getMinValues().get(fieldId);
             Object max = icebergFileStats.getMaxValues().get(fieldId);
             if (min instanceof Number && max instanceof Number) {
-                columnStats.setMinValue(((Number) min).doubleValue());
-                columnStats.setMaxValue(((Number) max).doubleValue());
+                columnBuilder.setMinValue(((Number) min).doubleValue());
+                columnBuilder.setMaxValue(((Number) max).doubleValue());
             }
-            columnStatsBuilder.put(idColumn.getValue(), columnStats);
+            List<ColumnRefOperator> columnList = colRefToColumnMetaMap.keySet().stream().filter( key -> {
+                return key.getName().equals(idColumn.getValue());
+            }).collect(Collectors.toList());
+            Preconditions.checkState(columnList.size() == 1);
+            statisticsBuilder.addColumnStatistic(columnList.get(0), columnBuilder.build());
         }
+        statisticsBuilder.setOutputRowCount(recordCount);
         LOG.debug("Finish make iceberg table statistics!");
-        return new IcebergTableStats(recordCount, columnStatsBuilder.build());
+        return statisticsBuilder.build();
     }
 
     public List<Type> partitionTypes(List<PartitionField> partitionFields,

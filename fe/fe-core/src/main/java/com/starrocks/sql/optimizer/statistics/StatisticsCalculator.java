@@ -27,9 +27,7 @@ import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveTableStats;
-import com.starrocks.external.iceberg.cost.IcebergColumnStats;
 import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
-import com.starrocks.external.iceberg.cost.IcebergTableStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -242,38 +240,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        IcebergTableStats stats = IcebergTableStatisticCalculator.getTableStatistics(
+        Statistics stats = IcebergTableStatisticCalculator.getTableStatistics(
                 // TODO: pass predicate to get table statistics
                 new ArrayList<>(),
-                ((IcebergTable) table).getIcebergTable());
-        Statistics.Builder builder = estimateIcebergScanColumns(table, colRefToColumnMetaMap, stats);
-        builder.setOutputRowCount(stats.getRowCount());
-        context.setStatistics(builder.build());
+                ((IcebergTable) table).getIcebergTable(), colRefToColumnMetaMap);
+        context.setStatistics(stats);
         return visitOperator(node, context);
-    }
-
-    private Statistics.Builder estimateIcebergScanColumns(Table table,
-                                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                                          IcebergTableStats stats) {
-        Statistics.Builder builder = Statistics.builder();
-        List<ColumnRefOperator> requiredColumns = new ArrayList<>(colRefToColumnMetaMap.keySet());
-        for (int i = 0; i < requiredColumns.size(); ++i) {
-            IcebergColumnStats columnStats = stats.getColumnStatistics()
-                    .get(requiredColumns.get(i).getName());
-            ColumnStatistic statistic = new ColumnStatistic(
-                    columnStats.getMinValue(),
-                    columnStats.getMaxValue(),
-                    columnStats.getNumNulls() / stats.getRowCount(),
-                    columnStats.getAvgSize() < 0 ?
-                            requiredColumns.get(i).getType().getTypeSize() :
-                            columnStats.getAvgSize(),
-                    columnStats.getNumDistinctValues() != -1 ? columnStats.getNumDistinctValues() : 1);
-            builder.addColumnStatistic(requiredColumns.get(i), statistic);
-            optimizerContext.getDumpInfo()
-                    .addTableStatistics(table, requiredColumns.get(i).getName(), statistic);
-        }
-
-        return builder;
     }
 
     @Override
