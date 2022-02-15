@@ -2,9 +2,12 @@
 
 #include "exprs/vectorized/time_functions.h"
 
+#include <string_view>
+
 #include "column/column_helper.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
+#include "runtime/date_value.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
 
@@ -115,7 +118,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
     }
 
     auto from_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(from);
-    if (!TimezoneUtils::find_cctz_time_zone(std::string(from_value.data, from_value.size), ctc->from_tz)) {
+    if (!TimezoneUtils::find_cctz_time_zone(std::string_view(from_value), ctc->from_tz)) {
         ctc->is_valid = false;
         return Status::OK();
     }
@@ -128,7 +131,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
     }
 
     auto to_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(to);
-    if (!TimezoneUtils::find_cctz_time_zone(std::string(to_value.data, to_value.size), ctc->to_tz)) {
+    if (!TimezoneUtils::find_cctz_time_zone(std::string_view(to_value.data), ctc->to_tz)) {
         ctc->is_valid = false;
         return Status::OK();
     }
@@ -175,14 +178,21 @@ ColumnPtr TimeFunctions::convert_tz_general(FunctionContext* context, const Colu
 
         cctz::time_zone ctz;
         int64_t timestamp;
-        // TODO find a better approach to replace datetime_value.unix_timestamp
-        if (!ts_value.from_cctz_timezone(timezone_hsscan, std::string(from_format.data, from_format.size), ctz) ||
+        int64_t offset;
+        if (TimezoneUtils::timezone_offsets(std::string_view(from_format), std::string_view(to_format), &offset)) {
+            TimestampValue ts = TimestampValue::create(year, month, day, hour, minute, second);
+            ts.from_unix_second(ts.to_unix_second() + offset);
+            result.append(ts);
+            continue;
+        }
+
+        if (!ts_value.from_cctz_timezone(timezone_hsscan, std::string_view(from_format), ctz) ||
             !ts_value.unix_timestamp(&timestamp, ctz)) {
             result.append_null();
             continue;
         }
+
         DateTimeValue ts_value2;
-        // TODO find a better approach to replace datetime_value.from_unixtime
         if (!ts_value2.from_cctz_timezone(timezone_hsscan, std::string(to_format.data, to_format.size), ctz) ||
             !ts_value2.from_unixtime(timestamp, ctz)) {
             result.append_null();
