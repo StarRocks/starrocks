@@ -9,6 +9,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
+import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
@@ -16,6 +17,8 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
@@ -95,6 +98,22 @@ public class StatisticsMetaManager extends MasterDaemon {
         return db.getTable(Constants.StatisticsTableName) != null;
     }
 
+    private boolean checkReplicateNormal() {
+        Database db = Catalog.getCurrentCatalog().getDb(Constants.StatisticsDBName);
+        Preconditions.checkState(db != null);
+        OlapTable table = (OlapTable) db.getTable(Constants.StatisticsTableName);
+        Preconditions.checkState(table != null);
+
+        for (Partition partition : table.getPartitions()) {
+            // check replicate miss
+            if (partition.getBaseIndex().getTablets().stream()
+                    .anyMatch(t -> t.getNormalReplicaBackendIds().isEmpty())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static final List<String> keyColumnNames = ImmutableList.of(
             "table_id", "column_name", "db_id"
     );
@@ -133,6 +152,21 @@ public class StatisticsMetaManager extends MasterDaemon {
         return checkTableExist();
     }
 
+    private boolean dropTable() {
+        LOG.info("drop statistics table start");
+        TableName tableName = new TableName(Constants.StatisticsDBName, Constants.StatisticsTableName);
+        DropTableStmt stmt = new DropTableStmt(true, tableName, true);
+
+        try {
+            Catalog.getCurrentCatalog().dropTable(stmt);
+        } catch (DdlException e) {
+            LOG.warn("Failed to drop table" + e.getMessage());
+            return false;
+        }
+        LOG.info("drop statistics table done");
+        return !checkTableExist();
+    }
+
     private void trySleep(long millis) {
         try {
             Thread.sleep(millis);
@@ -151,6 +185,14 @@ public class StatisticsMetaManager extends MasterDaemon {
             }
             trySleep(10000);
         }
+
+        while (checkTableExist() && !checkReplicateNormal()) {
+            if (dropTable()) {
+                break;
+            }
+            trySleep(10000);
+        }
+
         while (!checkTableExist()) {
             if (createTable()) {
                 break;

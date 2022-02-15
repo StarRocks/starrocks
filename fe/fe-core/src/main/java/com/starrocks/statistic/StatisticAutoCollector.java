@@ -62,8 +62,8 @@ public class StatisticAutoCollector extends MasterDaemon {
             return;
         }
 
-        // none statistic table
-        if (null == StatisticUtils.getStatisticsTable()) {
+        // check statistic table state
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
             return;
         }
 

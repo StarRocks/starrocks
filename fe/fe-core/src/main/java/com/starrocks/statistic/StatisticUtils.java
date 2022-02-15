@@ -75,6 +75,31 @@ public class StatisticUtils {
         return false;
     }
 
+    public static boolean checkStatisticTableStateNormal() {
+        Database db = Catalog.getCurrentCatalog().getDb(Constants.StatisticsDBName);
+
+        // check database
+        if (db == null) {
+            return false;
+        }
+
+        // check table
+        OlapTable table = (OlapTable) db.getTable(Constants.StatisticsTableName);
+        if (table == null) {
+            return false;
+        }
+
+        // check replicate miss
+        for (Partition partition : table.getPartitions()) {
+            if (partition.getBaseIndex().getTablets().stream()
+                    .anyMatch(t -> t.getNormalReplicaBackendIds().isEmpty())) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         long maxTime = ((OlapTable) table).getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);

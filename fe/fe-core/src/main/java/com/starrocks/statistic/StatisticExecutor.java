@@ -28,7 +28,6 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.relation.QueryRelation;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -307,7 +306,7 @@ public class StatisticExecutor {
 
     private static ExecPlan getExecutePlan(Map<String, Database> dbs, ConnectContext context,
                                            StatementBase parsedStmt, boolean isStatistic) {
-        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+        SessionVariable sessionVariable = context.getSessionVariable();
         ExecPlan execPlan;
         try {
             lock(dbs);
