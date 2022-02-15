@@ -53,7 +53,6 @@ public:
     explicit JsonValue(const VSlice& slice) { assign(Slice(slice.start(), slice.byteSize())); }
 
     void assign(const Slice& src) { binary_.assign(src.get_data(), src.get_size()); }
-
     void assign(const vpack::Builder& b) { binary_.assign((const char*)b.data(), (size_t)b.size()); }
 
     ////////////////// builder  //////////////////////
@@ -196,3 +195,9 @@ struct formatter<starrocks::JsonValue> : formatter<std::string> {
     }
 };
 } // namespace fmt
+
+namespace std {
+inline std::string to_string(const starrocks::JsonValue& value) {
+    return value.to_string_uncheck();
+}
+} // namespace std

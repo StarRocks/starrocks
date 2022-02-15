@@ -24,11 +24,14 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
+#include <new>
 #include <string>
 #include <vector>
 
+#include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "common/status.h"
 #include "gutil/dynamic_annotations.h"
 #include "runtime/memory/chunk.h"
 #include "storage/olap_define.h"
