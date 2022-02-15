@@ -112,7 +112,6 @@ struct AggHashMapWithOneNumberKey {
             FieldType key = column->get_data()[i];
             auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
                 AggDataPtr pv = allocate_func();
-                ERASE_AND_THROW_BAD_ALLOC_IF_NULL_WITH_HASH(hash_map, pv, key, hash_values[i]);
                 ctor(key, pv);
             });
             (*agg_states)[i] = iter->second;
@@ -168,7 +167,6 @@ struct AggHashMapWithOneNullableNumberKey {
         if (key_columns[0]->only_null()) {
             if (null_key_data == nullptr) {
                 null_key_data = allocate_func();
-                THROW_BAD_ALLOC_IF_NULL(null_key_data);
             }
             for (size_t i = 0; i < chunk_size; i++) {
                 (*agg_states)[i] = null_key_data;
@@ -185,7 +183,6 @@ struct AggHashMapWithOneNullableNumberKey {
                     auto key = data_column->get_data()[i];
                     auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
                         AggDataPtr pv = allocate_func();
-                        ERASE_AND_THROW_BAD_ALLOC_IF_NULL_WITH_HASH(hash_map, pv, key, hash_values[i]);
                         ctor(key, pv);
                     });
                     (*agg_states)[i] = iter->second;
@@ -197,7 +194,6 @@ struct AggHashMapWithOneNullableNumberKey {
                 if (key_columns[0]->is_null(i)) {
                     if (null_key_data == nullptr) {
                         null_key_data = allocate_func();
-                        THROW_BAD_ALLOC_IF_NULL(null_key_data);
                     }
                     (*agg_states)[i] = null_key_data;
                 } else {
@@ -218,7 +214,6 @@ struct AggHashMapWithOneNullableNumberKey {
         if (key_columns[0]->only_null()) {
             if (null_key_data == nullptr) {
                 null_key_data = allocate_func();
-                THROW_BAD_ALLOC_IF_NULL(null_key_data);
             }
             for (size_t i = 0; i < chunk_size; i++) {
                 (*agg_states)[i] = null_key_data;
@@ -242,7 +237,6 @@ struct AggHashMapWithOneNullableNumberKey {
                 if (key_columns[0]->is_null(i)) {
                     if (null_key_data == nullptr) {
                         null_key_data = allocate_func();
-                        THROW_BAD_ALLOC_IF_NULL(null_key_data);
                     }
                     (*agg_states)[i] = null_key_data;
                 } else {
@@ -258,7 +252,6 @@ struct AggHashMapWithOneNullableNumberKey {
         auto key = data_column->get_data()[row];
         auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
             AggDataPtr pv = allocate_func();
-            ERASE_AND_THROW_BAD_ALLOC_IF_NULL(hash_map, pv, key);
             ctor(key, pv);
         });
         (*agg_states)[row] = iter->second;
@@ -309,11 +302,9 @@ struct AggHashMapWithOneStringKey {
             auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
                 // we must persist the slice before insert
                 uint8_t* pos = pool->allocate(key.size);
-                ERASE_AND_THROW_BAD_ALLOC_IF_NULL_WITH_HASH(hash_map, pos, key, hash_values[i]);
                 strings::memcpy_inlined(pos, key.data, key.size);
                 Slice pk{pos, key.size};
                 AggDataPtr pv = allocate_func();
-                ERASE_AND_THROW_BAD_ALLOC_IF_NULL_WITH_HASH(hash_map, pv, key, hash_values[i]);
                 ctor(pk, pv);
             });
             (*agg_states)[i] = iter->second;
@@ -364,7 +355,6 @@ struct AggHashMapWithOneNullableStringKey {
         if (key_columns[0]->only_null()) {
             if (null_key_data == nullptr) {
                 null_key_data = allocate_func();
-                THROW_BAD_ALLOC_IF_NULL(null_key_data);
             }
             for (size_t i = 0; i < chunk_size; i++) {
                 (*agg_states)[i] = null_key_data;
@@ -382,11 +372,9 @@ struct AggHashMapWithOneNullableStringKey {
                     auto key = data_column->get_slice(i);
                     auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
                         uint8_t* pos = pool->allocate(key.size);
-                        ERASE_AND_THROW_BAD_ALLOC_IF_NULL_WITH_HASH(hash_map, pos, key, hash_values[i]);
                         strings::memcpy_inlined(pos, key.data, key.size);
                         Slice pk{pos, key.size};
                         AggDataPtr pv = allocate_func();
-                        ERASE_AND_THROW_BAD_ALLOC_IF_NULL_WITH_HASH(hash_map, pv, key, hash_values[i]);
                         ctor(pk, pv);
                     });
                     (*agg_states)[i] = iter->second;
@@ -398,7 +386,6 @@ struct AggHashMapWithOneNullableStringKey {
                 if (key_columns[0]->is_null(i)) {
                     if (null_key_data == nullptr) {
                         null_key_data = allocate_func();
-                        THROW_BAD_ALLOC_IF_NULL(null_key_data);
                     }
                     (*agg_states)[i] = null_key_data;
                 } else {
@@ -418,7 +405,6 @@ struct AggHashMapWithOneNullableStringKey {
         if (key_columns[0]->only_null()) {
             if (null_key_data == nullptr) {
                 null_key_data = allocate_func();
-                THROW_BAD_ALLOC_IF_NULL(null_key_data);
             }
             for (size_t i = 0; i < chunk_size; i++) {
                 (*agg_states)[i] = null_key_data;
@@ -440,7 +426,6 @@ struct AggHashMapWithOneNullableStringKey {
                 if (nullable_column->is_null(i)) {
                     if (null_key_data == nullptr) {
                         null_key_data = allocate_func();
-                        THROW_BAD_ALLOC_IF_NULL(null_key_data);
                     }
                     (*agg_states)[i] = null_key_data;
                 } else {
@@ -456,11 +441,9 @@ struct AggHashMapWithOneNullableStringKey {
         auto key = data_column->get_slice(row);
         auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
             uint8_t* pos = pool->allocate(key.size);
-            ERASE_AND_THROW_BAD_ALLOC_IF_NULL(hash_map, pos, key);
             strings::memcpy_inlined(pos, key.data, key.size);
             Slice pk{pos, key.size};
             AggDataPtr pv = allocate_func();
-            ERASE_AND_THROW_BAD_ALLOC_IF_NULL(hash_map, pv, key);
             ctor(pk, pv);
         });
         (*agg_states)[row] = iter->second;
@@ -499,9 +482,7 @@ struct AggHashMapWithSerializedKey {
     AggHashMapWithSerializedKey(int32_t chunk_size)
             : mem_pool(std::make_unique<MemPool>()),
               buffer(mem_pool->allocate(max_one_row_size * chunk_size)),
-              _chunk_size(chunk_size) {
-        THROW_BAD_ALLOC_IF_NULL(buffer);
-    }
+              _chunk_size(chunk_size) {}
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -515,7 +496,6 @@ struct AggHashMapWithSerializedKey {
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
             buffer = mem_pool->allocate(max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            THROW_BAD_ALLOC_IF_NULL(buffer);
         }
 
         for (const auto& key_column : key_columns) {
@@ -527,11 +507,9 @@ struct AggHashMapWithSerializedKey {
             auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
                 // we must persist the slice before insert
                 uint8_t* pos = pool->allocate(key.size);
-                ERASE_AND_THROW_BAD_ALLOC_IF_NULL(hash_map, pos, key);
                 strings::memcpy_inlined(pos, key.data, key.size);
                 Slice pk{pos, key.size};
                 AggDataPtr pv = allocate_func();
-                ERASE_AND_THROW_BAD_ALLOC_IF_NULL(hash_map, pv, key);
                 ctor(pk, pv);
             });
             (*agg_states)[i] = iter->second;
@@ -551,7 +529,6 @@ struct AggHashMapWithSerializedKey {
             max_one_row_size = cur_max_one_row_size;
             mem_pool->clear();
             buffer = mem_pool->allocate(max_one_row_size * _chunk_size);
-            THROW_BAD_ALLOC_IF_NULL(buffer);
         }
 
         for (const auto& key_column : key_columns) {
@@ -668,7 +645,6 @@ struct AggHashMapWithSerializedKeyFixedSize {
             FixedSizeSliceKey& key = caches[i].key;
             auto iter = hash_map.lazy_emplace_with_hash(key, caches[i].hashval, [&](const auto& ctor) {
                 AggDataPtr pv = allocate_func();
-                ERASE_AND_THROW_BAD_ALLOC_IF_NULL_WITH_HASH(hash_map, pv, key, caches[i].hashval);
                 ctor(key, pv);
             });
             (*agg_states)[i] = iter->second;
