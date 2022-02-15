@@ -181,6 +181,8 @@ void* StorageEngine::_base_compaction_thread_callback(void* arg, DataDir* data_d
         // must be here, because this thread is start on start and
         if (!data_dir->reach_capacity_limit(0)) {
             status = _perform_base_compaction(data_dir);
+        } else {
+            status = Status::InternalError("data dir out of capacity");
         }
         if (status.ok()) {
             continue;
@@ -211,6 +213,8 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
         // must be here, because this thread is start on start and
         if (!data_dir->reach_capacity_limit(0)) {
             status = _perform_update_compaction(data_dir);
+        } else {
+            status = Status::InternalError("data dir out of capacity");
         }
         if (status.ok()) {
             continue;
@@ -304,6 +308,8 @@ void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* 
         // must be here, because this thread is start on start and
         if (!data_dir->reach_capacity_limit(0)) {
             status = _perform_cumulative_compaction(data_dir);
+        } else {
+            status = Status::InternalError("data dir out of capacity");
         }
         if (status.ok()) {
             continue;
