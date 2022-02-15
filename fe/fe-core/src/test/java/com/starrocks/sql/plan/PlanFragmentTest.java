@@ -1333,6 +1333,35 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testSameWindowFunctionReuse() throws Exception {
+        String sql = "select sum(v1) over() as c1, sum(v1) over() as c2 from t0";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  3:Project\n" +
+                "  |  <slot 4> : 4: sum(1: v1)\n" +
+                "  |  \n" +
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ]"));
+
+        sql = "select c1+1, c2+2 from (select sum(v1) over() as c1, sum(v1) over() as c2 from t0) t";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  3:Project\n" +
+                "  |  <slot 5> : 4: sum(1: v1) + 1\n" +
+                "  |  <slot 6> : 4: sum(1: v1) + 2\n" +
+                "  |  \n" +
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ]"));
+
+        sql = "select c1+1, c2+2 from (select sum(v1) over() as c1, sum(v3) over() as c2 from t0) t";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  3:Project\n" +
+                "  |  <slot 6> : 4: sum(1: v1) + 1\n" +
+                "  |  <slot 7> : 5: sum(3: v3) + 2\n" +
+                "  |  \n" +
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, sum(3: v3), ]"));
+    }
+
+    @Test
     public void testJoinWithLimitSubQuery() throws Exception {
         String sql = "select * from (select v1, v2 from t0 limit 10) a join " +
                 "(select v1, v2 from t0 limit 1) b";
