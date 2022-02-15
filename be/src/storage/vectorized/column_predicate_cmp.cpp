@@ -49,6 +49,128 @@ using EqEval = std::equal_to<typename CppTypeTraits<field_type>::CppType>;
 template <FieldType field_type>
 using NeEval = std::not_equal_to<typename CppTypeTraits<field_type>::CppType>;
 
+template <FieldType field_type, template <FieldType> typename Predicate, typename NewColumnPredicateFunc>
+static Status predicate_convert_to(Predicate<field_type> const& input_predicate,
+                                   typename CppTypeTraits<field_type>::CppType const& value,
+                                   NewColumnPredicateFunc new_column_predicate_func, const ColumnPredicate** output,
+                                   const TypeInfoPtr& target_type_info, ObjectPool* obj_pool) {
+    using ValueType = typename CppTypeTraits<field_type>::CppType;
+    const auto to_type = target_type_info->type();
+    if (to_type == field_type) {
+        *output = &input_predicate;
+        return Status::OK();
+    }
+    auto cid = input_predicate.column_id();
+    const auto type_info = input_predicate.type_info();
+    std::string str = type_info->to_string(&value);
+    *output = obj_pool->add(new_column_predicate_func(target_type_info, cid, str));
+    return Status::OK();
+}
+
+template <template <FieldType> typename Predicate, template <FieldType> typename BinaryPredicate>
+static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, ColumnId id, const Slice& operand) {
+    auto type = type_info->type();
+    switch (type) {
+    case OLAP_FIELD_TYPE_BOOL:
+        return new Predicate<OLAP_FIELD_TYPE_BOOL>(type_info, id, string_to_int<int>(operand) != 0);
+    case OLAP_FIELD_TYPE_TINYINT:
+        return new Predicate<OLAP_FIELD_TYPE_TINYINT>(type_info, id, string_to_int<int8_t>(operand));
+    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+        return nullptr;
+    case OLAP_FIELD_TYPE_SMALLINT:
+        return new Predicate<OLAP_FIELD_TYPE_SMALLINT>(type_info, id, string_to_int<int16_t>(operand));
+    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+        return nullptr;
+    case OLAP_FIELD_TYPE_INT:
+        return new Predicate<OLAP_FIELD_TYPE_INT>(type_info, id, string_to_int<int32_t>(operand));
+    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+        return nullptr;
+    case OLAP_FIELD_TYPE_BIGINT:
+        return new Predicate<OLAP_FIELD_TYPE_BIGINT>(type_info, id, string_to_int<int64_t>(operand));
+    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+        return nullptr;
+    case OLAP_FIELD_TYPE_LARGEINT:
+        return new Predicate<OLAP_FIELD_TYPE_LARGEINT>(type_info, id, string_to_int<int128_t>(operand));
+    case OLAP_FIELD_TYPE_FLOAT:
+        return new Predicate<OLAP_FIELD_TYPE_FLOAT>(type_info, id, string_to_float<float>(operand));
+    case OLAP_FIELD_TYPE_DOUBLE:
+        return new Predicate<OLAP_FIELD_TYPE_DOUBLE>(type_info, id, string_to_float<double>(operand));
+    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
+        return nullptr;
+    case OLAP_FIELD_TYPE_DECIMAL: {
+        decimal12_t value;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<OLAP_FIELD_TYPE_DECIMAL>(type_info, id, value);
+    }
+    case OLAP_FIELD_TYPE_DECIMAL_V2: {
+        DecimalV2Value value;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<OLAP_FIELD_TYPE_DECIMAL_V2>(type_info, id, value);
+    }
+    case OLAP_FIELD_TYPE_DECIMAL32: {
+        int32_t value;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<OLAP_FIELD_TYPE_DECIMAL32>(type_info, id, value);
+    }
+    case OLAP_FIELD_TYPE_DECIMAL64: {
+        int64_t value;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<OLAP_FIELD_TYPE_DECIMAL64>(type_info, id, value);
+    }
+    case OLAP_FIELD_TYPE_DECIMAL128: {
+        int128_t value;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<OLAP_FIELD_TYPE_DECIMAL128>(type_info, id, value);
+    }
+    case OLAP_FIELD_TYPE_DATE: {
+        uint24_t value = 0;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<OLAP_FIELD_TYPE_DATE>(type_info, id, value);
+    }
+    case OLAP_FIELD_TYPE_DATE_V2: {
+        int32_t value = 0;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<OLAP_FIELD_TYPE_DATE_V2>(type_info, id, value);
+    }
+    case OLAP_FIELD_TYPE_DATETIME: {
+        uint64_t value = 0;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<OLAP_FIELD_TYPE_DATETIME>(type_info, id, value);
+    }
+    case OLAP_FIELD_TYPE_TIMESTAMP: {
+        int64_t value = 0;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<OLAP_FIELD_TYPE_TIMESTAMP>(type_info, id, value);
+    }
+    case OLAP_FIELD_TYPE_CHAR:
+        return new BinaryPredicate<OLAP_FIELD_TYPE_CHAR>(type_info, id, operand);
+    case OLAP_FIELD_TYPE_VARCHAR:
+        return new BinaryPredicate<OLAP_FIELD_TYPE_VARCHAR>(type_info, id, operand);
+    case OLAP_FIELD_TYPE_STRUCT:
+    case OLAP_FIELD_TYPE_ARRAY:
+    case OLAP_FIELD_TYPE_MAP:
+    case OLAP_FIELD_TYPE_UNKNOWN:
+    case OLAP_FIELD_TYPE_NONE:
+    case OLAP_FIELD_TYPE_HLL:
+    case OLAP_FIELD_TYPE_OBJECT:
+    case OLAP_FIELD_TYPE_PERCENTILE:
+    case OLAP_FIELD_TYPE_JSON:
+    case OLAP_FIELD_TYPE_MAX_VALUE:
+        return nullptr;
+        // No default to ensure newly added enumerator will be handled.
+    }
+    return nullptr;
+}
+
 // Base class for column predicate
 template <FieldType field_type, class Eval>
 class ColumnPredicateBase : public ColumnPredicate {
@@ -641,6 +763,25 @@ ColumnPredicate* new_column_gt_predicate(const TypeInfoPtr& type_info, ColumnId 
 
 ColumnPredicate* new_column_ge_predicate(const TypeInfoPtr& type_info, ColumnId id, const Slice& operand) {
     return new_column_predicate<ColumnGePredicate, BinaryColumnGePredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInfoPtr& type, ColumnId id, const Slice& operand) {
+    switch (predicate) {
+        case PredicateType::kEQ:
+            return new_column_eq_predicate(type, id, operand);
+        case PredicateType::kNE:
+            return new_column_ne_predicate(type, id, operand);
+        case PredicateType::kLT:
+            return new_column_lt_predicate(type, id, operand);
+        case PredicateType::kLE:
+            return new_column_le_predicate(type, id, operand);
+        case PredicateType::kGT:
+            return new_column_gt_predicate(type, id, operand);
+        case PredicateType::kGE:
+            return new_column_ge_predicate(type, id, operand);
+        default:
+            CHECK(false) << "not a cmp predicate";
+    }
 }
 
 } //namespace starrocks::vectorized

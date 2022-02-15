@@ -6,7 +6,7 @@
 
 namespace starrocks::vectorized {
 
-inline std::ostream& operator<<(std::ostream& os, PredicateType p) {
+std::ostream& operator<<(std::ostream& os, PredicateType p) {
     switch (p) {
     case PredicateType::kUnknown:
         os << "unknown";
