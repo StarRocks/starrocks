@@ -118,6 +118,8 @@ public:
         return size;
     }
 
+    const std::vector<Slice>& get_keys() const { return _keys; }
+
 private:
     bool _parsed{false};
 
@@ -128,7 +130,7 @@ private:
 
 class IndexPageIterator {
 public:
-    explicit IndexPageIterator(const IndexPageReader* reader) : _reader(reader), _pos(0) {}
+    explicit IndexPageIterator(const IndexPageReader* reader) : _reader(reader) {}
 
     // Find the largest index entry whose key is <= search_key.
     // Return OK status when such entry exists.
@@ -154,9 +156,8 @@ public:
 
 private:
     const IndexPageReader* _reader;
-    void _seek(const Slice& search_key);
 
-    size_t _pos;
+    size_t _pos = 0;
 };
 
 } // namespace starrocks

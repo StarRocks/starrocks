@@ -89,44 +89,26 @@ Status IndexPageReader::parse(const Slice& body, const IndexPageFooterPB& footer
 
 // This function has the meaning of interval, in fact, it is to find first possible Page which <=search key
 Status IndexPageIterator::seek_at_or_before(const Slice& search_key) {
-    _seek(search_key);
-
-    // no exact match, the insertion point is `left`
-    if (_pos == 0 && search_key.compare(_reader->get_key(0)) < 0) {
-        // search key is smaller than all keys
+    const auto& keys = _reader->get_keys();
+    auto iter = std::upper_bound(keys.begin(), keys.end(), search_key);
+    if (iter == keys.begin()) {
         return Status::NotFound("no page contains the given key");
+    } else {
+        _pos = iter - keys.begin() - 1;
+        return Status::OK();
     }
-    return Status::OK();
 }
 
 // This function has the meaning of interval, in fact, it is to find first possible Page which >=search key
 Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
-    _seek(search_key);
-    return Status::OK();
-}
-
-void IndexPageIterator::_seek(const Slice& search_key) {
-    size_t num_entries = _reader->count();
-    DCHECK_GT(num_entries, 0);
-
-    int32_t left = 0;
-    int32_t right = num_entries - 1;
-    while (left < right) {
-        int32_t mid = (right + left + 1) / 2;
-        int cmp = search_key.compare(_reader->get_key(mid));
-        if (cmp > 0) {
-            left = mid;
-        } else if (cmp < 0) {
-            right = mid - 1;
-        } else {
-            _pos = mid;
-            return;
-        }
+    const auto& keys = _reader->get_keys();
+    auto iter = std::upper_bound(keys.begin(), keys.end(), search_key);
+    if (iter == keys.begin()) {
+        _pos = 0;
+    } else {
+        _pos = iter - keys.begin() - 1;
     }
-
-    // TODO: add page index entry for the end key of last page
-    _pos = left;
-    return;
+    return Status::OK();
 }
 
 } // namespace starrocks
