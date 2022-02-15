@@ -39,7 +39,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -385,14 +384,12 @@ public class DecimalLiteral extends LiteralExpr {
     public static void checkLiteralOverflow(BigDecimal value, ScalarType scalarType) throws AnalysisException {
         int realPrecision = getRealPrecision(value);
         int realScale = getRealScale(value);
-        BigInteger underlyingInt = value.setScale(scalarType.getScalarScale(), RoundingMode.HALF_UP).unscaledValue();
-        int numBytes = scalarType.getPrimitiveType().getTypeSize();
-        // In BE, Overflow checking uses maximum/minimum binary values instead of maximum/minimum decimal values.
-        // for instance: if PrimitiveType is decimal32, then 2147483647/-2147483648 is used instead of
-        // 999999999/-999999999.
-        BigInteger maxBinary = BigInteger.ONE.shiftLeft(numBytes * 8 - 1).subtract(BigInteger.ONE);
-        BigInteger minBinary = BigInteger.ONE.shiftLeft(numBytes * 8 - 1).negate();
-        if (underlyingInt.compareTo(minBinary) < 0 || underlyingInt.compareTo(maxBinary) > 0) {
+        int realIntegerPartWidth = realPrecision - realScale;
+        int precision = scalarType.getScalarPrecision();
+        int scale = scalarType.getScalarScale();
+        int maxIntegerPartWidth = precision - scale;
+        // integer part of decimal literal should not exceed precision - scale
+        if (realIntegerPartWidth > maxIntegerPartWidth) {
             String errMsg = String.format(
                     "Typed decimal literal(%s) is overflow, value='%s' (precision=%d, scale=%d)",
                     scalarType.toString(), value.toPlainString(), realPrecision, realScale);
