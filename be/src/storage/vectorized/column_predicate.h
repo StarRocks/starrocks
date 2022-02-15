@@ -12,6 +12,7 @@
 #include "column/column.h" // Column
 #include "column/datum.h"
 #include "common/object_pool.h"
+#include "gen_cpp/Opcodes_types.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/vectorized/range.h"
 #include "storage/vectorized/zone_map_detail.h"
@@ -50,6 +51,33 @@ enum class PredicateType {
     kTrue = 14,
     kMap = 15,
 };
+
+inline TExprOpcode::type convert_predicate_type_to_thrift(PredicateType p) {
+    switch (p) {
+    case PredicateType::kEQ:
+        return TExprOpcode::EQ;
+    case PredicateType::kNE:
+        return TExprOpcode::NE;
+    case PredicateType::kGT:
+        return TExprOpcode::GT;
+    case PredicateType::kGE:
+        return TExprOpcode::GE;
+    case PredicateType::kLT:
+        return TExprOpcode::LT;
+    case PredicateType::kLE:
+        return TExprOpcode::LE;
+    case PredicateType::kInList:
+        return TExprOpcode::FILTER_IN;
+    case PredicateType::kNotInList:
+        return TExprOpcode::FILTER_NOT_IN;
+    case PredicateType::kAnd:
+        return TExprOpcode::COMPOUND_AND;
+    case PredicateType::kOr:
+        return TExprOpcode::COMPOUND_OR;
+    default:
+        CHECK(false) << "not supported";
+    }
+}
 
 template <typename T>
 static inline T string_to_int(const Slice& s) {

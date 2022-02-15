@@ -4,9 +4,20 @@
 
 #include <vector>
 
+#include "exec/vectorized/olap_scan_prepare.h"
+#include "exprs/slot_ref.h"
+#include "exprs/vectorized/binary_predicate.h"
+#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "exprs/vectorized/runtime_filter_bank.h"
+#include "gen_cpp/Opcodes_types.h"
 #include "gtest/gtest.h"
+#include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
+#include "runtime/primitive_type.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized/predicate_parser.h"
+#include "testutil//assert.h"
 
 namespace starrocks::vectorized {
 
@@ -202,6 +213,141 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
         selection.assign(chunk->num_rows(), 1);
         conjuncts.evaluate_or(chunk.get(), selection.data());
         EXPECT_EQ("1,1,1,1", to_string(selection));
+    }
+}
+
+struct MockConstExprBuilder {
+    template <PrimitiveType ptype>
+    Expr* operator()(ObjectPool* pool) {
+        if constexpr (pt_is_decimal<ptype>) {
+            CHECK(false) << "not supported";
+        } else {
+            TExprNode expr_node;
+            expr_node.child_type = TPrimitiveType::INT;
+            expr_node.node_type = TExprNodeType::INT_LITERAL;
+            expr_node.num_children = 1;
+            expr_node.__isset.opcode = true;
+            expr_node.__isset.child_type = true;
+            expr_node.type = gen_type_desc(TPrimitiveType::INT);
+
+            using CppType = RunTimeCppType<ptype>;
+            Expr* expr = pool->add(new MockConstVectorizedExpr<ptype>(expr_node, CppType{}));
+            return expr;
+        }
+    }
+};
+
+class ConjunctiveTestFixture : public testing::Test {
+public:
+    TSlotDescriptor _create_slot_desc(PrimitiveType type, const std::string& col_name, int col_pos) {
+        TSlotDescriptorBuilder builder;
+
+        if (type == PrimitiveType::TYPE_VARCHAR || type == PrimitiveType::TYPE_CHAR) {
+            return builder.string_type(1024).column_name(col_name).column_pos(col_pos).nullable(false).build();
+        } else {
+            return builder.type(type).column_name(col_name).column_pos(col_pos).nullable(false).build();
+        }
+    }
+
+    TupleDescriptor _create_tuple_desc() {
+        TDescriptorTableBuilder table_builder;
+        TTupleDescriptorBuilder tuple_builder;
+
+        for (int i = 0; i < _primitive_type.size(); i++) {
+            tuple_builder.add_slot(_create_slot_desc(_primitive_type[i], "c" + std::to_string(i), i));
+        }
+
+        tuple_builder.build(&table_builder);
+
+        std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+        std::vector<bool> nullable_tuples = std::vector<bool>{true};
+        DescriptorTbl* tbl = nullptr;
+        DescriptorTbl::create(&_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* tuple_desc = row_desc->tuple_descriptors()[0];
+
+        return *tuple_desc;
+    }
+
+    TabletSchemaPB create_tablet_schema() {
+        TabletSchemaPB tablet_schema;
+
+        for (int i = 0; i < _primitive_type.size(); i++) {
+            ColumnPB* col = tablet_schema.add_column();
+            col->set_name("c" + std::to_string(i));
+            std::string type_name = type_to_string(_primitive_type[i]);
+            col->set_type(type_name);
+        }
+
+        return tablet_schema;
+    }
+
+    // Build an expression: col < literal
+    Expr* build_predicate(PrimitiveType ptype, TExprOpcode::type op, SlotDescriptor* slot) {
+        TExprNode expr_node;
+        expr_node.opcode = op;
+        expr_node.child_type = to_thrift(ptype);
+        expr_node.node_type = TExprNodeType::BINARY_PRED;
+        expr_node.num_children = 2;
+        expr_node.__isset.opcode = true;
+        expr_node.__isset.child_type = true;
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+
+        Expr* expr = VectorizedBinaryPredicateFactory::from_thrift(expr_node);
+        SlotRef* slot_ref = new SlotRef(slot);
+        auto col2 = _pool.add(type_dispatch_basic(ptype, MockConstExprBuilder(), &_pool));
+        expr->_children.push_back(slot_ref);
+        expr->_children.push_back(col2);
+
+        return expr;
+    }
+
+protected:
+    ObjectPool _pool;
+    // TODO test all types
+    std::vector<PrimitiveType> _primitive_type = {PrimitiveType::TYPE_TINYINT,  PrimitiveType::TYPE_SMALLINT,
+                                                  PrimitiveType::TYPE_INT,      PrimitiveType::TYPE_BIGINT,
+                                                  PrimitiveType::TYPE_LARGEINT, PrimitiveType::TYPE_VARCHAR,
+                                                  PrimitiveType::TYPE_CHAR,     PrimitiveType::TYPE_BOOLEAN};
+};
+
+// NOLINTNEXTLINE
+TEST_F(ConjunctiveTestFixture, test_parse_conjuncts) {
+    // normalize a simple predicate: col op const
+    std::vector<TExprOpcode::type> test_ops = {
+            TExprOpcode::LT, TExprOpcode::LE, TExprOpcode::GT, TExprOpcode::GE, TExprOpcode::EQ, TExprOpcode::NE,
+    };
+
+    for (auto op : test_ops) {
+        for (int slot_pos = 0; slot_pos < _primitive_type.size(); slot_pos++) {
+            std::cerr << "test case op=" << op << ", slot_type=" << type_to_string(_primitive_type[slot_pos])
+                      << std::endl;
+
+            PrimitiveType ptype = _primitive_type[slot_pos];
+            MemTracker mem_tracker;
+            TupleDescriptor tuple_desc = _create_tuple_desc();
+            std::vector<std::string> key_column_names = {"c1", "c2"};
+            SlotDescriptor* slot = tuple_desc.slots()[slot_pos];
+            std::vector<ExprContext*> conjunct_ctxs = {new ExprContext(build_predicate(ptype, op, slot))};
+            auto tablet_schema = TabletSchema::create(&mem_tracker, create_tablet_schema());
+
+            OlapScanConjunctsManager cm;
+            cm.conjunct_ctxs_ptr = &conjunct_ctxs;
+            cm.tuple_desc = &tuple_desc;
+            cm.obj_pool = &_pool;
+            cm.key_column_names = &key_column_names;
+            cm.runtime_filters = new RuntimeFilterProbeCollector();
+
+            ASSERT_OK(cm.parse_conjuncts(true, 1));
+            ASSERT_GT(cm.olap_filters.size(), 0);
+            ASSERT_GT(cm.column_value_ranges.size(), 0);
+            ASSERT_GT(cm.column_value_ranges.count(slot->col_name()), 0);
+
+            PredicateParser pp(*tablet_schema);
+            std::unique_ptr<ColumnPredicate> predicate(pp.parse_thrift_cond(cm.olap_filters[0]));
+            ASSERT_EQ(op, convert_predicate_type_to_thrift(predicate->type()));
+        }
     }
 }
 
