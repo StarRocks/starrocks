@@ -105,6 +105,7 @@ Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
     const auto& keys = _reader->get_keys();
     auto iter = std::upper_bound(keys.begin(), keys.end(), search_key);
     if (iter == keys.begin()) {
+        // all the key is larger then search key, so shoud the first entry
         _pos = 0;
     } else {
         // upper_bound is search the first key > search key, so should return last entry
