@@ -272,8 +272,10 @@ int main(int argc, char** argv) {
         LOG(INFO) << "StarRocks BE HeartBeat Service started correctly.";
     }
 
+#ifdef STARROCKS_WITH_AWS
     Aws::SDKOptions aws_sdk_options;
     Aws::InitAPI(aws_sdk_options);
+#endif
 
     while (!starrocks::k_starrocks_exit) {
         sleep(10);
@@ -281,7 +283,9 @@ int main(int argc, char** argv) {
     daemon->stop();
     daemon.reset();
 
+#ifdef STARROCKS_WITH_AWS
     Aws::ShutdownAPI(aws_sdk_options);
+#endif
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
     delete heartbeat_thrift_server;
