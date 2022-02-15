@@ -202,11 +202,9 @@ Status FileUtils::split_pathes(const char* path, std::vector<std::string>* path_
 }
 
 Status FileUtils::copy_file(const std::string& src_path, const std::string& dest_path) {
-    std::unique_ptr<SequentialFile> src_file;
-    RETURN_IF_ERROR(Env::Default()->new_sequential_file(src_path, &src_file));
+    ASSIGN_OR_RETURN(auto src_file, Env::Default()->new_sequential_file(src_path));
 
-    std::unique_ptr<WritableFile> dest_file;
-    RETURN_IF_ERROR(Env::Default()->new_writable_file(dest_path, &dest_file));
+    ASSIGN_OR_RETURN(auto dest_file, Env::Default()->new_writable_file(dest_path));
 
     return copy(src_file.get(), dest_file.get()).status();
 }

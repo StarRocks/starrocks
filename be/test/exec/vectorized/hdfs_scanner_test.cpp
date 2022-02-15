@@ -62,8 +62,7 @@ void HdfsScannerTest::_create_runtime_state() {
 
 std::shared_ptr<RandomAccessFile> HdfsScannerTest::_create_file_handler(const std::string& name) {
     auto* env = Env::Default();
-    std::unique_ptr<RandomAccessFile> file;
-    env->new_random_access_file(name, &file);
+    auto file = *env->new_random_access_file(name);
     std::shared_ptr<RandomAccessFile> file2 = std::move(file);
     return file2;
 }

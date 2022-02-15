@@ -216,10 +216,7 @@ void FileReaderTest::_create_conjunct_ctxs_for_dict_filter(std::vector<ExprConte
 }
 
 std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string& file_path) {
-    auto* env = Env::Default();
-    std::unique_ptr<RandomAccessFile> file;
-    env->new_random_access_file(file_path, &file);
-    return file;
+    return *Env::Default()->new_random_access_file(file_path);
 }
 
 HdfsFileReaderParam* FileReaderTest::_create_param() {

@@ -109,22 +109,22 @@ public:
     EnvMemory(const EnvMemory&) = delete;
     void operator=(const EnvMemory&) = delete;
 
-    Status new_sequential_file(const std::string& url, std::unique_ptr<SequentialFile>* file) override;
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& url) override;
 
-    Status new_random_access_file(const std::string& url, std::unique_ptr<RandomAccessFile>* file) override;
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& url) override;
 
-    Status new_random_access_file(const RandomAccessFileOptions& opts, const std::string& url,
-                                  std::unique_ptr<RandomAccessFile>* file) override;
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& url) override;
 
-    Status new_writable_file(const std::string& url, std::unique_ptr<WritableFile>* file) override;
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& url) override;
 
-    Status new_writable_file(const WritableFileOptions& opts, const std::string& url,
-                             std::unique_ptr<WritableFile>* file) override;
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
+                                                              const std::string& url) override;
 
-    Status new_random_rw_file(const std::string& url, std::unique_ptr<RandomRWFile>* file) override;
+    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const std::string& url) override;
 
-    Status new_random_rw_file(const RandomRWFileOptions& opts, const std::string& url,
-                              std::unique_ptr<RandomRWFile>* file) override;
+    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
+                                                               const std::string& url) override;
 
     Status path_exists(const std::string& url) override;
 
