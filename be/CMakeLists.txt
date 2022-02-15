@@ -52,7 +52,6 @@ message(STATUS "Build target arch is ${CMAKE_BUILD_TARGET_ARCH}")
 
 # Set dirs
 set(BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-set(ENV{STARROCKS_HOME} "${BASE_DIR}/../")
 set(BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}/installed/")
 set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
@@ -115,6 +114,11 @@ execute_process(COMMAND make -C ${BASE_DIR}/../gensrc/
 if(NOT ${MAKE_GENSRC_RESULT} EQUAL 0 AND NOT APPLE)
     message(FATAL_ERROR "Failed to build ${BASE_DIR}/../gensrc/")
 endif()
+
+# Add common cmake prefix path and link library path
+list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/cmake)
+list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/cmake)
+link_directories(${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64)
 
 # Set Boost
 set(Boost_DEBUG FALSE)
@@ -188,11 +192,21 @@ if (WITH_HDFS)
     set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
 endif()
 
-add_library(libevent STATIC IMPORTED)
-set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
-
 add_library(crypto STATIC IMPORTED)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
+
+if (WITH_AWS)
+    set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
+    set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n")
+    foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
+        list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
+    endforeach()
+    find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer)
+    include_directories(${AWSSDK_INCLUDE_DIRS})
+endif()
+
+add_library(libevent STATIC IMPORTED)
+set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
 
 add_library(openssl STATIC IMPORTED)
 set_target_properties(openssl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libssl.a)
@@ -328,6 +342,10 @@ if (WITH_HDFS)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_HDFS")
 endif()
 
+if (WITH_AWS)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_AWS")
+endif()
+
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -faligned-new")
 endif()
@@ -447,6 +465,7 @@ set(STARROCKS_LINK_LIBS
     Tools
     Geo
     Plugin
+    ObjectStore
     ${WL_END_GROUP}
 )
 
@@ -465,6 +484,13 @@ if (WITH_HDFS)
     set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
     include_directories(${JAVA_HOME}/include)
     include_directories(${JAVA_HOME}/include/linux)
+endif()
+
+if (WITH_AWS)
+    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+        ${AWSSDK_LINK_LIBRARIES}
+        ${AWSSDK_PLATFORM_DEPS}
+        )
 endif()
 
 # Set thirdparty libraries
@@ -587,6 +613,7 @@ add_subdirectory(${SRC_DIR}/geo)
 add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/io)
+add_subdirectory(${SRC_DIR}/object_store)
 add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
