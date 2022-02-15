@@ -3,9 +3,13 @@
 
 #include "exec/vectorized/olap_scan_prepare.h"
 
+#include "column/type_traits.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "gutil/map_util.h"
 #include "runtime/date_value.hpp"
+#include "runtime/descriptors.h"
+#include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/predicate_parser.h"
 
@@ -475,6 +479,37 @@ void OlapScanConjunctsManager::normalize_predicate(const SlotDescriptor& slot,
     normalize_join_runtime_filter<SlotType, RangeValueType>(slot, range);
 }
 
+struct ColumnRangeBuilder {
+    template <PrimitiveType ptype>
+    std::nullptr_t operator()(OlapScanConjunctsManager* cm, const SlotDescriptor* slot,
+                              std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
+        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype>) {
+            return nullptr;
+        } else {
+            // Treat tinyint and boolean as int
+            constexpr PrimitiveType real_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
+            using value_type = typename RunTimeTypeLimits<real_type>::value_type;
+            using RangeType = ColumnValueRange<value_type>;
+
+            const std::string& col_name = slot->col_name();
+            RangeType full_range(col_name, ptype, RunTimeTypeLimits<ptype>::min_value(),
+                                 RunTimeTypeLimits<ptype>::max_value());
+            if constexpr (pt_is_decimal<real_type>) {
+                full_range.set_precision(slot->type().precision);
+                full_range.set_scale(slot->type().scale);
+            }
+            ColumnValueRangeType& v = LookupOrInsert(column_value_ranges, col_name, full_range);
+            RangeType& range = boost::get<ColumnValueRange<value_type>>(v);
+            if constexpr (pt_is_decimal<real_type>) {
+                range.set_precision(slot->type().precision);
+                range.set_scale(slot->type().scale);
+            }
+            cm->normalize_predicate<real_type, value_type>(*slot, &range);
+            return nullptr;
+        }
+    }
+};
+
 Status OlapScanConjunctsManager::normalize_conjuncts() {
     // Note: _normalized_conjuncts size must be equal to _conjunct_ctxs size,
     // but HashJoinNode will push down predicate to OlapScanNode's _conjunct_ctxs,
@@ -486,162 +521,8 @@ Status OlapScanConjunctsManager::normalize_conjuncts() {
     // TODO(zhuming): if any of the normalized column range is empty, we can know that
     // no row will be selected anymore and can return EOF directly.
     for (auto& slot : tuple_desc->decoded_slots()) {
-        const std::string& col_name = slot->col_name();
-        PrimitiveType type = slot->type().type;
-        switch (type) {
-        case TYPE_TINYINT: {
-            // TYPE_TINYINT use int32_t to present
-            // because it's easy to be converted to string when building Olap fetch Query
-            using RangeType = ColumnValueRange<int32_t>;
-            RangeType full_range(col_name, type, std::numeric_limits<int8_t>::lowest(),
-                                 std::numeric_limits<int8_t>::max());
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<ColumnValueRange<int32_t>>(v);
-            normalize_predicate<TYPE_TINYINT, int32_t>(*slot, &range);
-            break;
-        }
-        case TYPE_BOOLEAN: {
-            // TYPE_BOOLEAN use int32_t to present
-            // because it's easy to be converted to string when building Olap fetch Query
-            using RangeType = ColumnValueRange<int32_t>;
-            RangeType full_range(col_name, type, 0, 1);
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<ColumnValueRange<int32_t>>(v);
-            normalize_predicate<TYPE_BOOLEAN, int32_t>(*slot, &range);
-            break;
-        }
-        case TYPE_SMALLINT: {
-            using RangeType = ColumnValueRange<int16_t>;
-            RangeType full_range(col_name, type, std::numeric_limits<int16_t>::lowest(),
-                                 std::numeric_limits<int16_t>::max());
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<ColumnValueRange<int16_t>>(v);
-            normalize_predicate<TYPE_SMALLINT, int16_t>(*slot, &range);
-            break;
-        }
-        case TYPE_INT: {
-            using RangeType = ColumnValueRange<int32_t>;
-            RangeType full_range(col_name, type, std::numeric_limits<int32_t>::lowest(),
-                                 std::numeric_limits<int32_t>::max());
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<ColumnValueRange<int32_t>>(v);
-            normalize_predicate<TYPE_INT, int32_t>(*slot, &range);
-            break;
-        }
-        case TYPE_BIGINT: {
-            using RangeType = ColumnValueRange<int64_t>;
-            RangeType full_range(col_name, type, std::numeric_limits<int64_t>::lowest(),
-                                 std::numeric_limits<int64_t>::max());
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<ColumnValueRange<int64_t>>(v);
-            normalize_predicate<TYPE_BIGINT, int64_t>(*slot, &range);
-            break;
-        }
-        case TYPE_LARGEINT: {
-            using RangeType = ColumnValueRange<int128_t>;
-            RangeType full_range(col_name, type, MIN_INT128, MAX_INT128);
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<ColumnValueRange<int128_t>>(v);
-            normalize_predicate<TYPE_LARGEINT, int128_t>(*slot, &range);
-            break;
-        }
-        case TYPE_CHAR:
-            // for a CHAR column, its `in` predicate will be represented as a
-            // `InConstPredicate<PrimitiveType::TYPE_VARCHAR>`, so here we mapping CHAR as VARCHAR.
-            [[fallthrough]];
-        case TYPE_VARCHAR: {
-            using RangeType = ColumnValueRange<Slice>;
-            static char min_char = 0x00;
-            static char max_char = (char)0xff;
-            RangeType full_range(col_name, type, Slice(&min_char, 0), Slice(&max_char, 1));
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<ColumnValueRange<Slice>>(v);
-            normalize_predicate<TYPE_VARCHAR, Slice>(*slot, &range);
-            break;
-        }
-        case TYPE_DATE: {
-            using RangeType = ColumnValueRange<DateValue>;
-            RangeType full_range(col_name, type, DateValue::MIN_DATE_VALUE, DateValue::MAX_DATE_VALUE);
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<ColumnValueRange<DateValue>>(v);
-            normalize_predicate<TYPE_DATE, DateValue>(*slot, &range);
-            break;
-        }
-        case TYPE_DATETIME: {
-            using RangeType = ColumnValueRange<TimestampValue>;
-            RangeType full_range(col_name, type, TimestampValue::MIN_TIMESTAMP_VALUE,
-                                 TimestampValue::MAX_TIMESTAMP_VALUE);
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<ColumnValueRange<TimestampValue>>(v);
-            normalize_predicate<TYPE_DATETIME, TimestampValue>(*slot, &range);
-            break;
-        }
-        case TYPE_DECIMALV2: {
-            using RangeType = ColumnValueRange<DecimalV2Value>;
-            RangeType full_range(col_name, type, DecimalV2Value::get_min_decimal(), DecimalV2Value::get_max_decimal());
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<ColumnValueRange<DecimalV2Value>>(v);
-            normalize_predicate<TYPE_DECIMALV2, DecimalV2Value>(*slot, &range);
-            break;
-        }
-        case TYPE_DECIMAL32: {
-            using DecimalValueType = int32_t;
-            using RangeType = ColumnValueRange<DecimalValueType>;
-            RangeType full_range(col_name, type, get_min_decimal<DecimalValueType>(),
-                                 get_max_decimal<DecimalValueType>());
-            full_range.set_precision(slot->type().precision);
-            full_range.set_scale(slot->type().scale);
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<RangeType>(v);
-            range.set_precision(slot->type().precision);
-            range.set_scale(slot->type().scale);
-            normalize_predicate<TYPE_DECIMAL32, DecimalValueType>(*slot, &range);
-            break;
-        }
-        case TYPE_DECIMAL64: {
-            using DecimalValueType = int64_t;
-            using RangeType = ColumnValueRange<DecimalValueType>;
-            RangeType full_range(col_name, type, get_min_decimal<DecimalValueType>(),
-                                 get_max_decimal<DecimalValueType>());
-            full_range.set_precision(slot->type().precision);
-            full_range.set_scale(slot->type().scale);
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<RangeType>(v);
-            range.set_precision(slot->type().precision);
-            range.set_scale(slot->type().scale);
-            normalize_predicate<TYPE_DECIMAL64, DecimalValueType>(*slot, &range);
-            break;
-        }
-        case TYPE_DECIMAL128: {
-            using DecimalValueType = int128_t;
-            using RangeType = ColumnValueRange<DecimalValueType>;
-            RangeType full_range(col_name, type, get_min_decimal<DecimalValueType>(),
-                                 get_max_decimal<DecimalValueType>());
-            full_range.set_precision(slot->type().precision);
-            full_range.set_scale(slot->type().scale);
-            ColumnValueRangeType& v = LookupOrInsert(&column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<RangeType>(v);
-            range.set_precision(slot->type().precision);
-            range.set_scale(slot->type().scale);
-            normalize_predicate<TYPE_DECIMAL128, DecimalValueType>(*slot, &range);
-            break;
-        }
-        case INVALID_TYPE:
-        case TYPE_NULL:
-        case TYPE_FLOAT:
-        case TYPE_DOUBLE:
-        case TYPE_BINARY:
-        case TYPE_DECIMAL:
-        case TYPE_STRUCT:
-        case TYPE_ARRAY:
-        case TYPE_MAP:
-        case TYPE_HLL:
-        case TYPE_TIME:
-        case TYPE_OBJECT:
-        case TYPE_PERCENTILE:
-        case TYPE_JSON:
-            break;
-        }
+        type_dispatch_predicate<std::nullptr_t>(slot->type().type, false, ColumnRangeBuilder(), this, slot,
+                                                &column_value_ranges);
     }
     return Status::OK();
 }
