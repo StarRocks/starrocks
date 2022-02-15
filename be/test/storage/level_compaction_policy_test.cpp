@@ -70,7 +70,6 @@ TEST(LevelCompactionPolicyTest, test_need_compaction) {
     }
     LevelCompactionPolicy policy(compaction_context.get());
     ASSERT_TRUE(policy.need_compaction());
-    std::cout << "compaction score:" << policy.compaction_score() << std::endl;
 }
 
 } // namespace starrocks
