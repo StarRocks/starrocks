@@ -313,7 +313,7 @@ public:
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
         const auto& min = detail.min_or_null_value();
         const auto& max = detail.max_value();
-        return (this->type_info()->cmp(Datum(this->_value), min) > 0) & !max.is_null();
+        return (this->type_info()->cmp(Datum(this->_value), min) >= 0) & !max.is_null();
     }
 
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
@@ -349,7 +349,7 @@ public:
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
         const auto& min = detail.min_or_null_value();
         const auto& max = detail.max_value();
-        return (this->type_info()->cmp(Datum(this->_value), min) >= 0) & !max.is_null();
+        return (this->type_info()->cmp(Datum(this->_value), min) > 0) & !max.is_null();
     }
 
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
