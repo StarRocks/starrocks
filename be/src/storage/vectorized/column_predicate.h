@@ -67,6 +67,8 @@ static inline T string_to_float(const Slice& s) {
     return v;
 }
 
+inline std::ostream& operator<<(std::ostream&os, PredicateType p);
+
 class ColumnPredicateAssignOp {
 public:
     inline static uint8_t apply(uint8_t a, uint8_t b) { return b; }

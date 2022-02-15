@@ -113,13 +113,9 @@ add_library(Storage STATIC
     vectorized/aggregate_iterator.cpp
     vectorized/async_delta_writer.cpp
     vectorized/chunk_helper.cpp
-    vectorized/column_eq_predicate.cpp
-    vectorized/column_ge_predicate.cpp
-    vectorized/column_gt_predicate.cpp
+    vectorized/column_predicate_cmp.cpp
+    vectorized/column_predicate.cpp
     vectorized/column_in_predicate.cpp
-    vectorized/column_le_predicate.cpp
-    vectorized/column_lt_predicate.cpp
-    vectorized/column_ne_predicate.cpp
     vectorized/column_not_in_predicate.cpp
     vectorized/column_null_predicate.cpp
     vectorized/column_or_predicate.cpp
