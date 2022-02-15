@@ -184,19 +184,19 @@ configure_file (
   )
 
 
-  if (DEFINED ENV{STARROCKS_HOME}) # starrocks: orc prioritize project search path
-  include_directories (
-    BEFORE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_BINARY_DIR}
-    )
-  else()
-  include_directories (
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${LIBHDFSPP_INCLUDE_DIR}
-    )
-  endif()
+if (DEFINED ENV{STARROCKS_HOME}) # starrocks: orc prioritize project search path
+include_directories (
+  BEFORE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}
+  )
+else()
+include_directories (
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}
+  ${LIBHDFSPP_INCLUDE_DIR}
+  )
+endif()
 
   add_custom_command(OUTPUT orc_proto.pb.h orc_proto.pb.cc
    COMMAND ${PROTOBUF_EXECUTABLE}
