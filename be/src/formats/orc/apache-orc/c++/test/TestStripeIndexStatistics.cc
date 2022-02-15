@@ -45,37 +45,25 @@ TEST(TestStripeIndexStatistics, testIndexStatistics) {
 
     const orc::IntegerColumnStatistics* intColStats;
     intColStats = reinterpret_cast<const orc::IntegerColumnStatistics*>(stripeStats->getRowIndexStatistics(1, 0));
-    EXPECT_EQ(
-            "Data type: Integer\nValues: 2000\nHas null: no\nMinimum: 1\nMaximum: 2000\nSum: "
-            "2001000\n",
-            intColStats->toString());
+    EXPECT_EQ("Data type: Integer\nValues: 2000\nHas null: no\nMinimum: 1\nMaximum: 2000\nSum: 2001000\n",
+              intColStats->toString());
     intColStats = reinterpret_cast<const orc::IntegerColumnStatistics*>(stripeStats->getRowIndexStatistics(1, 1));
-    EXPECT_EQ(
-            "Data type: Integer\nValues: 2000\nHas null: no\nMinimum: 2001\nMaximum: 4000\nSum: "
-            "6001000\n",
-            intColStats->toString());
+    EXPECT_EQ("Data type: Integer\nValues: 2000\nHas null: no\nMinimum: 2001\nMaximum: 4000\nSum: 6001000\n",
+              intColStats->toString());
     intColStats = reinterpret_cast<const orc::IntegerColumnStatistics*>(stripeStats->getRowIndexStatistics(1, 2));
-    EXPECT_EQ(
-            "Data type: Integer\nValues: 2000\nHas null: no\nMinimum: 4001\nMaximum: 6000\nSum: "
-            "10001000\n",
-            intColStats->toString());
+    EXPECT_EQ("Data type: Integer\nValues: 2000\nHas null: no\nMinimum: 4001\nMaximum: 6000\nSum: 10001000\n",
+              intColStats->toString());
 
     const orc::StringColumnStatistics* stringColStats;
     stringColStats = reinterpret_cast<const orc::StringColumnStatistics*>(stripeStats->getRowIndexStatistics(2, 0));
-    EXPECT_EQ(
-            "Data type: String\nValues: 2000\nHas null: no\nMinimum: 1000\nMaximum: 9a\nTotal "
-            "length: 7892\n",
-            stringColStats->toString());
+    EXPECT_EQ("Data type: String\nValues: 2000\nHas null: no\nMinimum: 1000\nMaximum: 9a\nTotal length: 7892\n",
+              stringColStats->toString());
     stringColStats = reinterpret_cast<const orc::StringColumnStatistics*>(stripeStats->getRowIndexStatistics(2, 1));
-    EXPECT_EQ(
-            "Data type: String\nValues: 2000\nHas null: no\nMinimum: 2001\nMaximum: 4000\nTotal "
-            "length: 8000\n",
-            stringColStats->toString());
+    EXPECT_EQ("Data type: String\nValues: 2000\nHas null: no\nMinimum: 2001\nMaximum: 4000\nTotal length: 8000\n",
+              stringColStats->toString());
     stringColStats = reinterpret_cast<const orc::StringColumnStatistics*>(stripeStats->getRowIndexStatistics(2, 2));
-    EXPECT_EQ(
-            "Data type: String\nValues: 2000\nHas null: no\nMinimum: 4001\nMaximum: 6000\nTotal "
-            "length: 8000\n",
-            stringColStats->toString());
+    EXPECT_EQ("Data type: String\nValues: 2000\nHas null: no\nMinimum: 4001\nMaximum: 6000\nTotal length: 8000\n",
+              stringColStats->toString());
 }
 
 } // namespace orc

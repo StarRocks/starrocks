@@ -22,8 +22,9 @@
 
 #include "ByteRLE.hh"
 
+#include <string.h>
+
 #include <algorithm>
-#include <cstring>
 #include <iostream>
 #include <utility>
 
@@ -195,7 +196,7 @@ void ByteRleEncoderImpl::recordPosition(PositionRecorder* recorder) const {
         recorder->add(unflushedSize);
     } else {
         flushedSize -= static_cast<uint64_t>(bufferLength);
-        // byte offset of the RLE run's start location
+        // byte offset of the RLE run’s start location
         recorder->add(flushedSize + unflushedSize);
     }
     recorder->add(static_cast<uint64_t>(numLiterals));

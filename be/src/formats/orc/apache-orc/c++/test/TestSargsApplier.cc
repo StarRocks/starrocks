@@ -35,6 +35,28 @@ TEST(TestSargsApplier, findColumnTest) {
     EXPECT_EQ(std::numeric_limits<uint64_t>::max(), SargsApplier::findColumn(*type, "b"));
 }
 
+TEST(TestSargsApplier, findArrayColumnTest) {
+    auto type = std::unique_ptr<Type>(
+            Type::buildTypeFromString("struct<a:int,c:string,e:array<struct<f:bigint,g:double>>>"));
+    EXPECT_EQ(1, SargsApplier::findColumn(*type, "a"));
+    EXPECT_EQ(2, SargsApplier::findColumn(*type, "c"));
+    EXPECT_EQ(3, SargsApplier::findColumn(*type, "e"));
+    EXPECT_EQ(5, SargsApplier::findColumn(*type, "f"));
+    EXPECT_EQ(6, SargsApplier::findColumn(*type, "g"));
+    EXPECT_EQ(std::numeric_limits<uint64_t>::max(), SargsApplier::findColumn(*type, "b"));
+}
+
+TEST(TestSargsApplier, findMapColumnTest) {
+    auto type = std::unique_ptr<Type>(
+            Type::buildTypeFromString("struct<a:int,c:string,e:map<int,struct<f:bigint,g:double>>>"));
+    EXPECT_EQ(1, SargsApplier::findColumn(*type, "a"));
+    EXPECT_EQ(2, SargsApplier::findColumn(*type, "c"));
+    EXPECT_EQ(3, SargsApplier::findColumn(*type, "e"));
+    EXPECT_EQ(6, SargsApplier::findColumn(*type, "f"));
+    EXPECT_EQ(7, SargsApplier::findColumn(*type, "g"));
+    EXPECT_EQ(std::numeric_limits<uint64_t>::max(), SargsApplier::findColumn(*type, "b"));
+}
+
 static proto::ColumnStatistics createIntStats(int64_t min, int64_t max, bool hasNull = false) {
     proto::ColumnStatistics statistics;
     statistics.set_hasnull(hasNull);

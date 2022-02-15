@@ -26,7 +26,6 @@
 #include <functional>
 #include <sstream>
 #include <unordered_set>
-#include <utility>
 
 namespace orc {
 
@@ -95,16 +94,25 @@ SearchArgumentBuilder& SearchArgumentBuilderImpl::end() {
     return *this;
 }
 
-size_t SearchArgumentBuilderImpl::addLeaf(const PredicateLeaf& leaf) {
+size_t SearchArgumentBuilderImpl::addLeaf(PredicateLeaf leaf) {
     size_t id = mLeaves.size();
     const auto& result = mLeaves.insert(std::make_pair(leaf, id));
     return result.first->second;
 }
 
-SearchArgumentBuilder& SearchArgumentBuilderImpl::compareOperator(PredicateLeaf::Operator op, const std::string& column,
-                                                                  PredicateDataType type, const Literal& literal) {
+bool SearchArgumentBuilderImpl::isInvalidColumn(const std::string& column) {
+    return column.empty();
+}
+
+bool SearchArgumentBuilderImpl::isInvalidColumn(uint64_t columnId) {
+    return columnId == INVALID_COLUMN_ID;
+}
+
+template <typename T>
+SearchArgumentBuilder& SearchArgumentBuilderImpl::compareOperator(PredicateLeaf::Operator op, T column,
+                                                                  PredicateDataType type, Literal literal) {
     TreeNode parent = mCurrTree.front();
-    if (column.empty()) {
+    if (isInvalidColumn(column)) {
         parent->addChild(std::make_shared<ExpressionTree>(TruthValue::YES_NO_NULL));
     } else {
         PredicateLeaf leaf(op, type, column, literal);
@@ -118,9 +126,18 @@ SearchArgumentBuilder& SearchArgumentBuilderImpl::lessThan(const std::string& co
     return compareOperator(PredicateLeaf::Operator::LESS_THAN, column, type, literal);
 }
 
+SearchArgumentBuilder& SearchArgumentBuilderImpl::lessThan(uint64_t columnId, PredicateDataType type, Literal literal) {
+    return compareOperator(PredicateLeaf::Operator::LESS_THAN, columnId, type, literal);
+}
+
 SearchArgumentBuilder& SearchArgumentBuilderImpl::lessThanEquals(const std::string& column, PredicateDataType type,
                                                                  Literal literal) {
     return compareOperator(PredicateLeaf::Operator::LESS_THAN_EQUALS, column, type, literal);
+}
+
+SearchArgumentBuilder& SearchArgumentBuilderImpl::lessThanEquals(uint64_t columnId, PredicateDataType type,
+                                                                 Literal literal) {
+    return compareOperator(PredicateLeaf::Operator::LESS_THAN_EQUALS, columnId, type, literal);
 }
 
 SearchArgumentBuilder& SearchArgumentBuilderImpl::equals(const std::string& column, PredicateDataType type,
@@ -132,15 +149,29 @@ SearchArgumentBuilder& SearchArgumentBuilderImpl::equals(const std::string& colu
     }
 }
 
+SearchArgumentBuilder& SearchArgumentBuilderImpl::equals(uint64_t columnId, PredicateDataType type, Literal literal) {
+    if (literal.isNull()) {
+        return isNull(columnId, type);
+    } else {
+        return compareOperator(PredicateLeaf::Operator::EQUALS, columnId, type, literal);
+    }
+}
+
 SearchArgumentBuilder& SearchArgumentBuilderImpl::nullSafeEquals(const std::string& column, PredicateDataType type,
                                                                  Literal literal) {
     return compareOperator(PredicateLeaf::Operator::NULL_SAFE_EQUALS, column, type, literal);
 }
 
-SearchArgumentBuilder& SearchArgumentBuilderImpl::in(const std::string& column, PredicateDataType type,
-                                                     const std::initializer_list<Literal>& literals) {
+SearchArgumentBuilder& SearchArgumentBuilderImpl::nullSafeEquals(uint64_t columnId, PredicateDataType type,
+                                                                 Literal literal) {
+    return compareOperator(PredicateLeaf::Operator::NULL_SAFE_EQUALS, columnId, type, literal);
+}
+
+template <typename T, typename CONTAINER>
+SearchArgumentBuilder& SearchArgumentBuilderImpl::addChildForIn(T column, PredicateDataType type,
+                                                                const CONTAINER& literals) {
     TreeNode& parent = mCurrTree.front();
-    if (column.empty()) {
+    if (isInvalidColumn(column)) {
         parent->addChild(std::make_shared<ExpressionTree>((TruthValue::YES_NO_NULL)));
     } else {
         if (literals.size() == 0) {
@@ -150,26 +181,32 @@ SearchArgumentBuilder& SearchArgumentBuilderImpl::in(const std::string& column, 
         parent->addChild(std::make_shared<ExpressionTree>(addLeaf(leaf)));
     }
     return *this;
+}
+
+SearchArgumentBuilder& SearchArgumentBuilderImpl::in(const std::string& column, PredicateDataType type,
+                                                     const std::initializer_list<Literal>& literals) {
+    return addChildForIn(column, type, literals);
+}
+
+SearchArgumentBuilder& SearchArgumentBuilderImpl::in(uint64_t columnId, PredicateDataType type,
+                                                     const std::initializer_list<Literal>& literals) {
+    return addChildForIn(columnId, type, literals);
 }
 
 SearchArgumentBuilder& SearchArgumentBuilderImpl::in(const std::string& column, PredicateDataType type,
                                                      const std::vector<Literal>& literals) {
-    TreeNode& parent = mCurrTree.front();
-    if (column.empty()) {
-        parent->addChild(std::make_shared<ExpressionTree>((TruthValue::YES_NO_NULL)));
-    } else {
-        if (literals.size() == 0) {
-            throw std::invalid_argument("Can't create in expression with no arguments");
-        }
-        PredicateLeaf leaf(PredicateLeaf::Operator::IN, type, column, literals);
-        parent->addChild(std::make_shared<ExpressionTree>(addLeaf(leaf)));
-    }
-    return *this;
+    return addChildForIn(column, type, literals);
 }
 
-SearchArgumentBuilder& SearchArgumentBuilderImpl::isNull(const std::string& column, PredicateDataType type) {
+SearchArgumentBuilder& SearchArgumentBuilderImpl::in(uint64_t columnId, PredicateDataType type,
+                                                     const std::vector<Literal>& literals) {
+    return addChildForIn(columnId, type, literals);
+}
+
+template <typename T>
+SearchArgumentBuilder& SearchArgumentBuilderImpl::addChildForIsNull(T column, PredicateDataType type) {
     TreeNode& parent = mCurrTree.front();
-    if (column.empty()) {
+    if (isInvalidColumn(column)) {
         parent->addChild(std::make_shared<ExpressionTree>(TruthValue::YES_NO_NULL));
     } else {
         PredicateLeaf leaf(PredicateLeaf::Operator::IS_NULL, type, column, {});
@@ -178,16 +215,35 @@ SearchArgumentBuilder& SearchArgumentBuilderImpl::isNull(const std::string& colu
     return *this;
 }
 
-SearchArgumentBuilder& SearchArgumentBuilderImpl::between(const std::string& column, PredicateDataType type,
-                                                          Literal lower, Literal upper) {
+SearchArgumentBuilder& SearchArgumentBuilderImpl::isNull(const std::string& column, PredicateDataType type) {
+    return addChildForIsNull(column, type);
+}
+
+SearchArgumentBuilder& SearchArgumentBuilderImpl::isNull(uint64_t columnId, PredicateDataType type) {
+    return addChildForIsNull(columnId, type);
+}
+
+template <typename T>
+SearchArgumentBuilder& SearchArgumentBuilderImpl::addChildForBetween(T column, PredicateDataType type, Literal lower,
+                                                                     Literal upper) {
     TreeNode& parent = mCurrTree.front();
-    if (column.empty()) {
+    if (isInvalidColumn(column)) {
         parent->addChild(std::make_shared<ExpressionTree>(TruthValue::YES_NO_NULL));
     } else {
         PredicateLeaf leaf(PredicateLeaf::Operator::BETWEEN, type, column, {lower, upper});
         parent->addChild(std::make_shared<ExpressionTree>(addLeaf(leaf)));
     }
     return *this;
+}
+
+SearchArgumentBuilder& SearchArgumentBuilderImpl::between(const std::string& column, PredicateDataType type,
+                                                          Literal lower, Literal upper) {
+    return addChildForBetween(column, type, lower, upper);
+}
+
+SearchArgumentBuilder& SearchArgumentBuilderImpl::between(uint64_t columnId, PredicateDataType type, Literal lower,
+                                                          Literal upper) {
+    return addChildForBetween(columnId, type, lower, upper);
 }
 
 SearchArgumentBuilder& SearchArgumentBuilderImpl::literal(TruthValue truth) {
@@ -233,6 +289,8 @@ static TreeNode rewriteLeaves(TreeNode root, size_t leafReorder[]) {
     // Perform BFS
     while (!nodes.empty()) {
         TreeNode& node = nodes.front();
+        nodes.pop_front();
+
         if (node->getOperator() == ExpressionTree::Operator::LEAF) {
             leaves.insert(node);
         } else {
@@ -240,7 +298,6 @@ static TreeNode rewriteLeaves(TreeNode root, size_t leafReorder[]) {
                 nodes.push_back(child);
             }
         }
-        nodes.pop_front();
     }
 
     // Update the leaf in place
@@ -406,7 +463,7 @@ static void generateAllCombinations(std::vector<TreeNode>& result, const std::ve
         std::vector<TreeNode> work(result.begin(), result.end());
         result.clear();
         for (TreeNode& kid : kids) {
-            for (const TreeNode& node : work) {
+            for (TreeNode node : work) {
                 TreeNode copy = std::make_shared<ExpressionTree>(*node);
                 copy->addChild(kid);
                 result.emplace_back(copy);
@@ -474,8 +531,8 @@ TreeNode SearchArgumentBuilderImpl::convertToCNF(TreeNode root) {
     return root;
 }
 
-SearchArgumentImpl::SearchArgumentImpl(TreeNode root, std::vector<PredicateLeaf> leaves)
-        : mExpressionTree(std::move(root)), mLeaves(std::move(leaves)) {
+SearchArgumentImpl::SearchArgumentImpl(TreeNode root, const std::vector<PredicateLeaf>& leaves)
+        : mExpressionTree(root), mLeaves(leaves) {
     // PASS
 }
 

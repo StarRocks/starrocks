@@ -31,7 +31,7 @@
 
 namespace orc {
 StreamsFactory::~StreamsFactory() {
-    // PASS
+    //PASS
 }
 
 class StreamsFactoryImpl : public StreamsFactory {
@@ -295,22 +295,22 @@ void StructColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint6
 
 void StructColumnWriter::flush(std::vector<proto::Stream>& streams) {
     ColumnWriter::flush(streams);
-    for (auto& i : children) {
-        i->flush(streams);
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->flush(streams);
     }
 }
 
 void StructColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    for (const auto& i : children) {
-        i->writeIndex(streams);
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->writeIndex(streams);
     }
 }
 
 uint64_t StructColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    for (const auto& i : children) {
-        size += i->getEstimatedSize();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        size += children[i]->getEstimatedSize();
     }
     return size;
 }
@@ -320,62 +320,62 @@ void StructColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& e
     encoding.set_kind(proto::ColumnEncoding_Kind_DIRECT);
     encoding.set_dictionarysize(0);
     encodings.push_back(encoding);
-    for (const auto& i : children) {
-        i->getColumnEncoding(encodings);
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->getColumnEncoding(encodings);
     }
 }
 
 void StructColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
 
-    for (const auto& i : children) {
-        i->getStripeStatistics(stats);
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->getStripeStatistics(stats);
     }
 }
 
 void StructColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
 
-    for (auto& i : children) {
-        i->mergeStripeStatsIntoFileStats();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->mergeStripeStatsIntoFileStats();
     }
 }
 
 void StructColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
 
-    for (const auto& i : children) {
-        i->getFileStatistics(stats);
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->getFileStatistics(stats);
     }
 }
 
 void StructColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
 
-    for (auto& i : children) {
-        i->mergeRowGroupStatsIntoStripeStats();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->mergeRowGroupStatsIntoStripeStats();
     }
 }
 
 void StructColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
 
-    for (auto& i : children) {
-        i->createRowIndexEntry();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->createRowIndexEntry();
     }
 }
 
 void StructColumnWriter::reset() {
     ColumnWriter::reset();
 
-    for (auto& i : children) {
-        i->reset();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->reset();
     }
 }
 
 void StructColumnWriter::writeDictionary() {
-    for (auto& i : children) {
-        i->writeDictionary();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->writeDictionary();
     }
 }
 
@@ -792,7 +792,7 @@ public:
         size_t length;
     };
 
-    SortedStringDictionary() {}
+    SortedStringDictionary() : totalLength(0) {}
 
     // insert a new string into dictionary, return its insertion order
     size_t insert(const char* data, size_t len);
@@ -827,7 +827,7 @@ private:
 
     std::map<DictEntry, size_t, LessThan> dict;
     std::vector<std::vector<char>> data;
-    uint64_t totalLength{0};
+    uint64_t totalLength;
 
     // use friend class here to avoid being bothered by const function calls
     friend class StringColumnWriter;
@@ -842,7 +842,7 @@ size_t SortedStringDictionary::insert(const char* str, size_t len) {
     auto ret = dict.insert({DictEntry(str, len), dict.size()});
     if (ret.second) {
         // make a copy to internal storage
-        data.emplace_back(len);
+        data.push_back(std::vector<char>(len));
         memcpy(data.back().data(), str, len);
         // update dictionary entry to link pointer to internal storage
         DictEntry* entry = const_cast<DictEntry*>(&(ret.first->first));
@@ -854,9 +854,9 @@ size_t SortedStringDictionary::insert(const char* str, size_t len) {
 
 // write dictionary data & length to output buffer
 void SortedStringDictionary::flush(AppendOnlyBufferedStream* dataStream, RleEncoder* lengthEncoder) const {
-    for (const auto& it : dict) {
-        dataStream->write(it.first.data, it.first.length);
-        lengthEncoder->write(static_cast<int64_t>(it.first.length));
+    for (auto it = dict.cbegin(); it != dict.cend(); ++it) {
+        dataStream->write(it->first.data, it->first.length);
+        lengthEncoder->write(static_cast<int64_t>(it->first.length));
     }
 }
 
@@ -874,8 +874,8 @@ void SortedStringDictionary::reorder(std::vector<int64_t>& idxBuffer) const {
     // iterate the dictionary to get mapping from insertion order to value order
     std::vector<size_t> mapping(dict.size());
     size_t dictIdx = 0;
-    for (const auto& it : dict) {
-        mapping[it.second] = dictIdx++;
+    for (auto it = dict.cbegin(); it != dict.cend(); ++it) {
+        mapping[it->second] = dictIdx++;
     }
 
     // do the transformation
@@ -887,8 +887,8 @@ void SortedStringDictionary::reorder(std::vector<int64_t>& idxBuffer) const {
 // get dict entries in insertion order
 void SortedStringDictionary::getEntriesInInsertionOrder(std::vector<const DictEntry*>& entries) const {
     entries.resize(dict.size());
-    for (const auto& it : dict) {
-        entries[it.second] = &(it.first);
+    for (auto it = dict.cbegin(); it != dict.cend(); ++it) {
+        entries[it->second] = &(it->first);
     }
 }
 
@@ -1842,7 +1842,7 @@ Decimal128ColumnWriter::Decimal128ColumnWriter(const Type& type, const StreamsFa
 }
 
 // Zigzag encoding moves the sign bit to the least significant bit using the
-// expression (val << 1) ^ (val >> 63) and derives its name from the fact that
+// expression (val « 1) ^ (val » 63) and derives its name from the fact that
 // positive and negative numbers alternate once encoded.
 Int128 zigZagInt128(const Int128& value) {
     bool isNegative = value < 0;
@@ -1966,6 +1966,11 @@ void ListColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_
     if (listBatch == nullptr) {
         throw InvalidArgument("Failed to cast to ListVectorBatch");
     }
+    CollectionColumnStatisticsImpl* collectionStats =
+            dynamic_cast<CollectionColumnStatisticsImpl*>(colIndexStatistics.get());
+    if (collectionStats == nullptr) {
+        throw InvalidArgument("Failed to cast to CollectionColumnStatisticsImpl");
+    }
 
     ColumnWriter::add(rowBatch, offset, numValues, incomingMask);
 
@@ -1981,27 +1986,28 @@ void ListColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_
     }
 
     // unnecessary to deal with null as elements are packed together
-    if (child) {
+    if (child.get()) {
         child->add(*listBatch->elements, elemOffset, totalNumValues, nullptr);
     }
     lengthEncoder->add(offsets, numValues, notNull);
 
     if (enableIndex) {
         if (!notNull) {
-            colIndexStatistics->increase(numValues);
+            collectionStats->increase(numValues);
         } else {
             uint64_t count = 0;
             for (uint64_t i = 0; i < numValues; ++i) {
                 if (notNull[i]) {
                     ++count;
+                    collectionStats->update(static_cast<uint64_t>(offsets[i]));
                     if (enableBloomFilter) {
                         bloomFilter->addLong(offsets[i]);
                     }
                 }
             }
-            colIndexStatistics->increase(count);
+            collectionStats->increase(count);
             if (count < numValues) {
-                colIndexStatistics->setHasNull(true);
+                collectionStats->setHasNull(true);
             }
         }
     }
@@ -2016,21 +2022,21 @@ void ListColumnWriter::flush(std::vector<proto::Stream>& streams) {
     stream.set_length(lengthEncoder->flush());
     streams.push_back(stream);
 
-    if (child) {
+    if (child.get()) {
         child->flush(streams);
     }
 }
 
 void ListColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    if (child) {
+    if (child.get()) {
         child->writeIndex(streams);
     }
 }
 
 uint64_t ListColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    if (child) {
+    if (child.get()) {
         size += lengthEncoder->getBufferSize();
         size += child->getEstimatedSize();
     }
@@ -2045,42 +2051,42 @@ void ListColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& enc
         encoding.set_bloomencoding(BloomFilterVersion::UTF8);
     }
     encodings.push_back(encoding);
-    if (child) {
+    if (child.get()) {
         child->getColumnEncoding(encodings);
     }
 }
 
 void ListColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
-    if (child) {
+    if (child.get()) {
         child->getStripeStatistics(stats);
     }
 }
 
 void ListColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
-    if (child) {
+    if (child.get()) {
         child->mergeStripeStatsIntoFileStats();
     }
 }
 
 void ListColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
-    if (child) {
+    if (child.get()) {
         child->getFileStatistics(stats);
     }
 }
 
 void ListColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
-    if (child) {
+    if (child.get()) {
         child->mergeRowGroupStatsIntoStripeStats();
     }
 }
 
 void ListColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
-    if (child) {
+    if (child.get()) {
         child->createRowIndexEntry();
     }
 }
@@ -2169,6 +2175,11 @@ void MapColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t
     if (mapBatch == nullptr) {
         throw InvalidArgument("Failed to cast to MapVectorBatch");
     }
+    CollectionColumnStatisticsImpl* collectionStats =
+            dynamic_cast<CollectionColumnStatisticsImpl*>(colIndexStatistics.get());
+    if (collectionStats == nullptr) {
+        throw InvalidArgument("Failed to cast to CollectionColumnStatisticsImpl");
+    }
 
     ColumnWriter::add(rowBatch, offset, numValues, incomingMask);
 
@@ -2186,29 +2197,30 @@ void MapColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t
     lengthEncoder->add(offsets, numValues, notNull);
 
     // unnecessary to deal with null as keys and values are packed together
-    if (keyWriter) {
+    if (keyWriter.get()) {
         keyWriter->add(*mapBatch->keys, elemOffset, totalNumValues, nullptr);
     }
-    if (elemWriter) {
+    if (elemWriter.get()) {
         elemWriter->add(*mapBatch->elements, elemOffset, totalNumValues, nullptr);
     }
 
     if (enableIndex) {
         if (!notNull) {
-            colIndexStatistics->increase(numValues);
+            collectionStats->increase(numValues);
         } else {
             uint64_t count = 0;
             for (uint64_t i = 0; i < numValues; ++i) {
                 if (notNull[i]) {
                     ++count;
+                    collectionStats->update(static_cast<uint64_t>(offsets[i]));
                     if (enableBloomFilter) {
                         bloomFilter->addLong(offsets[i]);
                     }
                 }
             }
-            colIndexStatistics->increase(count);
+            collectionStats->increase(count);
             if (count < numValues) {
-                colIndexStatistics->setHasNull(true);
+                collectionStats->setHasNull(true);
             }
         }
     }
@@ -2223,20 +2235,20 @@ void MapColumnWriter::flush(std::vector<proto::Stream>& streams) {
     stream.set_length(lengthEncoder->flush());
     streams.push_back(stream);
 
-    if (keyWriter) {
+    if (keyWriter.get()) {
         keyWriter->flush(streams);
     }
-    if (elemWriter) {
+    if (elemWriter.get()) {
         elemWriter->flush(streams);
     }
 }
 
 void MapColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    if (keyWriter) {
+    if (keyWriter.get()) {
         keyWriter->writeIndex(streams);
     }
-    if (elemWriter) {
+    if (elemWriter.get()) {
         elemWriter->writeIndex(streams);
     }
 }
@@ -2244,10 +2256,10 @@ void MapColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
 uint64_t MapColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
     size += lengthEncoder->getBufferSize();
-    if (keyWriter) {
+    if (keyWriter.get()) {
         size += keyWriter->getEstimatedSize();
     }
-    if (elemWriter) {
+    if (elemWriter.get()) {
         size += elemWriter->getEstimatedSize();
     }
     return size;
@@ -2261,60 +2273,60 @@ void MapColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& enco
         encoding.set_bloomencoding(BloomFilterVersion::UTF8);
     }
     encodings.push_back(encoding);
-    if (keyWriter) {
+    if (keyWriter.get()) {
         keyWriter->getColumnEncoding(encodings);
     }
-    if (elemWriter) {
+    if (elemWriter.get()) {
         elemWriter->getColumnEncoding(encodings);
     }
 }
 
 void MapColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
-    if (keyWriter) {
+    if (keyWriter.get()) {
         keyWriter->getStripeStatistics(stats);
     }
-    if (elemWriter) {
+    if (elemWriter.get()) {
         elemWriter->getStripeStatistics(stats);
     }
 }
 
 void MapColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
-    if (keyWriter) {
+    if (keyWriter.get()) {
         keyWriter->mergeStripeStatsIntoFileStats();
     }
-    if (elemWriter) {
+    if (elemWriter.get()) {
         elemWriter->mergeStripeStatsIntoFileStats();
     }
 }
 
 void MapColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
-    if (keyWriter) {
+    if (keyWriter.get()) {
         keyWriter->getFileStatistics(stats);
     }
-    if (elemWriter) {
+    if (elemWriter.get()) {
         elemWriter->getFileStatistics(stats);
     }
 }
 
 void MapColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
-    if (keyWriter) {
+    if (keyWriter.get()) {
         keyWriter->mergeRowGroupStatsIntoStripeStats();
     }
-    if (elemWriter) {
+    if (elemWriter.get()) {
         elemWriter->mergeRowGroupStatsIntoStripeStats();
     }
 }
 
 void MapColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
-    if (keyWriter) {
+    if (keyWriter.get()) {
         keyWriter->createRowIndexEntry();
     }
-    if (elemWriter) {
+    if (elemWriter.get()) {
         elemWriter->createRowIndexEntry();
     }
 }
@@ -2454,23 +2466,23 @@ void UnionColumnWriter::flush(std::vector<proto::Stream>& streams) {
     stream.set_length(rleEncoder->flush());
     streams.push_back(stream);
 
-    for (auto& i : children) {
-        i->flush(streams);
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->flush(streams);
     }
 }
 
 void UnionColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    for (const auto& i : children) {
-        i->writeIndex(streams);
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->writeIndex(streams);
     }
 }
 
 uint64_t UnionColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
     size += rleEncoder->getBufferSize();
-    for (const auto& i : children) {
-        size += i->getEstimatedSize();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        size += children[i]->getEstimatedSize();
     }
     return size;
 }
@@ -2483,43 +2495,43 @@ void UnionColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& en
         encoding.set_bloomencoding(BloomFilterVersion::UTF8);
     }
     encodings.push_back(encoding);
-    for (const auto& i : children) {
-        i->getColumnEncoding(encodings);
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->getColumnEncoding(encodings);
     }
 }
 
 void UnionColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
-    for (const auto& i : children) {
-        i->getStripeStatistics(stats);
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->getStripeStatistics(stats);
     }
 }
 
 void UnionColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
-    for (auto& i : children) {
-        i->mergeStripeStatsIntoFileStats();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->mergeStripeStatsIntoFileStats();
     }
 }
 
 void UnionColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
-    for (const auto& i : children) {
-        i->getFileStatistics(stats);
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->getFileStatistics(stats);
     }
 }
 
 void UnionColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
-    for (auto& i : children) {
-        i->mergeRowGroupStatsIntoStripeStats();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->mergeRowGroupStatsIntoStripeStats();
     }
 }
 
 void UnionColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
-    for (auto& i : children) {
-        i->createRowIndexEntry();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->createRowIndexEntry();
     }
 }
 
@@ -2530,14 +2542,14 @@ void UnionColumnWriter::recordPosition() const {
 
 void UnionColumnWriter::reset() {
     ColumnWriter::reset();
-    for (auto& i : children) {
-        i->reset();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->reset();
     }
 }
 
 void UnionColumnWriter::writeDictionary() {
-    for (auto& i : children) {
-        i->writeDictionary();
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        children[i]->writeDictionary();
     }
 }
 

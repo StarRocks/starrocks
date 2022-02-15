@@ -155,12 +155,12 @@ TEST(TestTimezone, useFutureRule) {
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "2370-12-31 00:00:00"));
 
     rule = parseFutureRule("FOO8BAR,J10,J360");
-    // 1970
+    //1970
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1970-01-11 09:59:59"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1970-01-11 10:00:00"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1970-12-27 08:59:59"));
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1970-12-27 09:00:00"));
-    // 1972
+    //1972
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1972-01-11 09:59:59"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1972-01-11 10:00:00"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1972-12-27 08:59:59"));
@@ -173,12 +173,12 @@ TEST(TestTimezone, useFutureRule) {
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1969-12-27 08:59:59"));
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1969-12-27 09:00:00"));
 #endif
-    // 1970
+    //1970
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1970-01-11 09:59:59"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1970-01-11 10:00:00"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1970-12-27 08:59:59"));
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1970-12-27 09:00:00"));
-    // 1972
+    //1972
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1972-01-11 09:59:59"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1972-01-11 10:00:00"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1972-12-26 08:59:59"));
@@ -186,19 +186,19 @@ TEST(TestTimezone, useFutureRule) {
 
     // test a southern hemisphere timezone
     rule = parseFutureRule("FOO8BAR,360,10");
-    // 1970
+    //1970
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1970-01-11 08:59:59"));
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1970-01-11 09:00:00"));
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1970-12-27 09:59:59"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1970-12-27 10:00:00"));
-    // 1972
+    //1972
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1972-01-11 08:59:59"));
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1972-01-11 09:00:00"));
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1972-12-26 09:59:59"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1972-12-26 10:00:00"));
 
     rule = parseFutureRule("FOO8BAR,J10/3,J360/3:30");
-    // 1970
+    //1970
     EXPECT_EQ("FOO", getZoneFromRule(rule.get(), "1970-01-11 10:59:59"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1970-01-11 11:00:00"));
     EXPECT_EQ("BAR", getZoneFromRule(rule.get(), "1970-12-27 10:29:59"));

@@ -39,6 +39,14 @@
 #include "wrap/coded-stream-wrapper.h"
 
 namespace orc {
+// ORC files writen by these versions of cpp writers have inconsistent bloom filter
+// hashing. Bloom filters of them should not be used.
+static const char* BAD_CPP_BLOOM_FILTER_VERSIONS[] = {"1.6.0", "1.6.1", "1.6.2", "1.6.3",  "1.6.4",  "1.6.5", "1.6.6",
+                                                      "1.6.7", "1.6.8", "1.6.9", "1.6.10", "1.6.11", "1.7.0"};
+
+const RowReaderOptions::IdReadIntentMap EMPTY_IDREADINTENTMAP() {
+    return {};
+}
 
 const WriterVersionImpl& WriterVersionImpl::VERSION_HIVE_8732() {
     static const WriterVersionImpl version(WriterVersion_HIVE_8732);
@@ -79,17 +87,33 @@ WriterVersion getWriterVersionImpl(const FileContents* contents) {
 }
 
 void ColumnSelector::selectChildren(std::vector<bool>& selectedColumns, const Type& type) {
+    return selectChildren(selectedColumns, type, EMPTY_IDREADINTENTMAP());
+}
+
+void ColumnSelector::selectChildren(std::vector<bool>& selectedColumns, const Type& type,
+                                    const RowReaderOptions::IdReadIntentMap& idReadIntentMap) {
     size_t id = static_cast<size_t>(type.getColumnId());
+    TypeKind kind = type.getKind();
     if (!selectedColumns[id]) {
         selectedColumns[id] = true;
-        for (size_t c = id; c <= type.getMaximumColumnId(); ++c) {
-            selectedColumns[c] = true;
+        bool selectChild = true;
+        if (kind == TypeKind::LIST) {
+            auto elem = idReadIntentMap.find(id);
+            if (elem != idReadIntentMap.end() && elem->second == ReadIntent_OFFSETS) {
+                selectChild = false;
+            }
+        }
+
+        if (selectChild) {
+            for (size_t c = id; c <= type.getMaximumColumnId(); ++c) {
+                selectedColumns[c] = true;
+            }
         }
     }
 }
 
 /**
-   * Recurse over a type tree and selects the parents of every selected type.
+   * Recurses over a type tree and selects the parents of every selected type.
    * @return true if any child was selected.
    */
 bool ColumnSelector::selectParents(std::vector<bool>& selectedColumns, const Type& type) {
@@ -103,7 +127,7 @@ bool ColumnSelector::selectParents(std::vector<bool>& selectedColumns, const Typ
 }
 
 /**
-   * Recurse over a type tree and build two maps
+   * Recurses over a type tree and build two maps
    * map<TypeName, TypeId>, map<TypeId, Type>
    */
 void ColumnSelector::buildTypeNameIdMap(const Type* type) {
@@ -129,22 +153,26 @@ void ColumnSelector::buildTypeNameIdMap(const Type* type) {
 void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, const RowReaderOptions& options) {
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
     if (contents->schema->getKind() == STRUCT && options.getIndexesSet()) {
-        for (unsigned long field : options.getInclude()) {
-            updateSelectedByFieldId(selectedColumns, field);
+        for (std::list<uint64_t>::const_iterator field = options.getInclude().begin();
+             field != options.getInclude().end(); ++field) {
+            updateSelectedByFieldId(selectedColumns, *field);
         }
     } else if (contents->schema->getKind() == STRUCT && options.getNamesSet()) {
-        for (const auto& field : options.getIncludeNames()) {
-            updateSelectedByName(selectedColumns, field);
+        for (std::list<std::string>::const_iterator field = options.getIncludeNames().begin();
+             field != options.getIncludeNames().end(); ++field) {
+            updateSelectedByName(selectedColumns, *field);
         }
     } else if (options.getTypeIdsSet()) {
-        for (unsigned long typeId : options.getInclude()) {
-            updateSelectedByTypeId(selectedColumns, typeId);
+        const RowReaderOptions::IdReadIntentMap idReadIntentMap = options.getIdReadIntentMap();
+        for (std::list<uint64_t>::const_iterator typeId = options.getInclude().begin();
+             typeId != options.getInclude().end(); ++typeId) {
+            updateSelectedByTypeId(selectedColumns, *typeId, idReadIntentMap);
         }
     } else {
         // default is to select all columns
         std::fill(selectedColumns.begin(), selectedColumns.end(), true);
     }
-    selectParents(selectedColumns, *contents->schema);
+    selectParents(selectedColumns, *contents->schema.get());
     selectedColumns[0] = true; // column 0 is selected by default
 }
 
@@ -159,9 +187,14 @@ void ColumnSelector::updateSelectedByFieldId(std::vector<bool>& selectedColumns,
 }
 
 void ColumnSelector::updateSelectedByTypeId(std::vector<bool>& selectedColumns, uint64_t typeId) {
+    updateSelectedByTypeId(selectedColumns, typeId, EMPTY_IDREADINTENTMAP());
+}
+
+void ColumnSelector::updateSelectedByTypeId(std::vector<bool>& selectedColumns, uint64_t typeId,
+                                            const RowReaderOptions::IdReadIntentMap& idReadIntentMap) {
     if (typeId < selectedColumns.size()) {
         const Type& type = *idTypeMap[typeId];
-        selectChildren(selectedColumns, type);
+        selectChildren(selectedColumns, type, idReadIntentMap);
     } else {
         std::stringstream buffer;
         buffer << "Invalid type id selected " << typeId << " out of " << selectedColumns.size();
@@ -174,7 +207,15 @@ void ColumnSelector::updateSelectedByName(std::vector<bool>& selectedColumns, co
     if (ite != nameIdMap.end()) {
         updateSelectedByTypeId(selectedColumns, ite->second);
     } else {
-        throw ParseError("Invalid column selected " + fieldName);
+        bool first = true;
+        std::ostringstream ss;
+        ss << "Invalid column selected " << fieldName << ". Valid names are ";
+        for (auto it = nameIdMap.begin(); it != nameIdMap.end(); ++it) {
+            if (!first) ss << ", ";
+            ss << it->first;
+            first = false;
+        }
+        throw ParseError(ss.str());
     }
 }
 
@@ -182,7 +223,7 @@ ColumnSelector::ColumnSelector(const FileContents* _contents) : contents(_conten
     buildTypeNameIdMap(contents->schema.get());
 }
 
-RowReaderImpl::RowReaderImpl(const std::shared_ptr<FileContents>& _contents, const RowReaderOptions& opts)
+RowReaderImpl::RowReaderImpl(std::shared_ptr<FileContents> _contents, const RowReaderOptions& opts)
         : localTimezone(getLocalTimezone()),
           contents(_contents),
           throwOnHive11DecimalOverflow(opts.getThrowOnHive11DecimalOverflow()),
@@ -233,9 +274,37 @@ RowReaderImpl::RowReaderImpl(const std::shared_ptr<FileContents>& _contents, con
     // prepare SargsApplier if SearchArgument is available
     if (opts.getSearchArgument() && footer->rowindexstride() > 0) {
         sargs = opts.getSearchArgument();
-        sargsApplier.reset(new SargsApplier(*contents->schema, sargs.get(), opts.getRowReaderFilter().get(),
-                                            footer->rowindexstride(), getWriterVersionImpl(_contents.get())));
+        sargsApplier.reset(new SargsApplier(*contents->schema, sargs.get(), footer->rowindexstride(),
+                                            getWriterVersionImpl(_contents.get())));
     }
+
+    skipBloomFilters = hasBadBloomFilters();
+}
+
+// Check if the file has inconsistent bloom filters.
+bool RowReaderImpl::hasBadBloomFilters() {
+    // Only C++ writer in old releases could have bad bloom filters.
+    if (footer->writer() != ORC_CPP_WRITER) return false;
+    // 'softwareVersion' is added in 1.5.13, 1.6.11, and 1.7.0.
+    // 1.6.x releases before 1.6.11 won't have it. On the other side, the C++ writer
+    // supports writing bloom filters since 1.6.0. So files written by the C++ writer
+    // and with 'softwareVersion' unset would have bad bloom filters.
+    if (!footer->has_softwareversion()) return true;
+
+    const std::string& fullVersion = footer->softwareversion();
+    std::string version;
+    // Deal with snapshot versions, e.g. 1.6.12-SNAPSHOT.
+    if (fullVersion.find('-') != std::string::npos) {
+        version = fullVersion.substr(0, fullVersion.find('-'));
+    } else {
+        version = fullVersion;
+    }
+    for (const char* v : BAD_CPP_BLOOM_FILTER_VERSIONS) {
+        if (version == v) {
+            return true;
+        }
+    }
+    return false;
 }
 
 CompressionKind RowReaderImpl::getCompression() const {
@@ -251,7 +320,7 @@ const std::vector<bool> RowReaderImpl::getSelectedColumns() const {
 }
 
 const Type& RowReaderImpl::getSelectedType() const {
-    if (selectedSchema == nullptr) {
+    if (selectedSchema.get() == nullptr) {
         selectedSchema = buildSelectedType(contents->schema.get(), selectedColumns);
     }
     return *(selectedSchema.get());
@@ -345,7 +414,7 @@ void RowReaderImpl::loadStripeIndex() {
                     throw ParseError("Failed to parse the row index");
                 }
                 rowIndexes[colId] = rowIndex;
-            } else { // Stream_Kind_BLOOM_FILTER_UTF8
+            } else if (!skipBloomFilters) { // Stream_Kind_BLOOM_FILTER_UTF8
                 proto::BloomFilterIndex pbBFIndex;
                 if (!pbBFIndex.ParseFromZeroCopyStream(inStream.get())) {
                     throw ParseError("Failed to parse bloom filter index");
@@ -366,16 +435,16 @@ void RowReaderImpl::loadStripeIndex() {
 
 void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
     // store positions for selected columns
-    std::vector<std::list<uint64_t>> positions;
+    std::list<std::list<uint64_t>> positions;
     // store position providers for selected colimns
     std::unordered_map<uint64_t, PositionProvider> positionProviders;
 
-    for (const auto& rowIndexe : rowIndexes) {
-        uint64_t colId = rowIndexe.first;
-        const proto::RowIndexEntry& entry = rowIndexe.second.entry(static_cast<int32_t>(rowGroupEntryId));
+    for (auto rowIndex = rowIndexes.cbegin(); rowIndex != rowIndexes.cend(); ++rowIndex) {
+        uint64_t colId = rowIndex->first;
+        const proto::RowIndexEntry& entry = rowIndex->second.entry(static_cast<int32_t>(rowGroupEntryId));
 
         // copy index positions for a specific column
-        positions.emplace_back();
+        positions.push_back({});
         auto& position = positions.back();
         for (int pos = 0; pos != entry.positions_size(); ++pos) {
             position.push_back(entry.positions(pos));
@@ -478,7 +547,7 @@ uint64_t ReaderImpl::getNumberOfStripeStatistics() const {
     if (!isMetadataLoaded) {
         readMetadata();
     }
-    return metadata == nullptr ? 0 : static_cast<uint64_t>(metadata->stripestats_size());
+    return metadata.get() == nullptr ? 0 : static_cast<uint64_t>(metadata->stripestats_size());
 }
 
 std::unique_ptr<StripeInformation> ReaderImpl::getStripe(uint64_t stripeIndex) const {
@@ -497,7 +566,7 @@ FileVersion ReaderImpl::getFormatVersion() const {
     if (contents->postscript->version_size() != 2) {
         return FileVersion::v_0_11();
     }
-    return {contents->postscript->version(0), contents->postscript->version(1)};
+    return FileVersion(contents->postscript->version(0), contents->postscript->version(1));
 }
 
 uint64_t ReaderImpl::getNumberOfRows() const {
@@ -522,6 +591,15 @@ uint32_t ReaderImpl::getWriterIdValue() const {
     } else {
         return WriterId::ORC_JAVA_WRITER;
     }
+}
+
+std::string ReaderImpl::getSoftwareVersion() const {
+    std::ostringstream buffer;
+    buffer << writerIdToString(getWriterIdValue());
+    if (footer->has_softwareversion()) {
+        buffer << " " << footer->softwareversion();
+    }
+    return buffer.str();
 }
 
 WriterVersion ReaderImpl::getWriterVersion() const {
@@ -629,14 +707,14 @@ std::unique_ptr<StripeStatistics> ReaderImpl::getStripeStatistics(uint64_t strip
     if (!isMetadataLoaded) {
         readMetadata();
     }
-    if (metadata == nullptr) {
+    if (metadata.get() == nullptr) {
         throw std::logic_error("No stripe statistics in file");
     }
     size_t num_cols = static_cast<size_t>(metadata->stripestats(static_cast<int>(stripeIndex)).colstats_size());
     std::vector<std::vector<proto::ColumnStatistics>> indexStats(num_cols);
 
     proto::StripeInformation currentStripeInfo = footer->stripes(static_cast<int>(stripeIndex));
-    proto::StripeFooter currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
+    proto::StripeFooter currentStripeFooter = getStripeFooter(currentStripeInfo, *contents.get());
 
     getRowIndexStatistics(currentStripeInfo, stripeIndex, currentStripeFooter, &indexStats);
 
@@ -749,14 +827,14 @@ uint64_t ReaderImpl::getMemoryUseByFieldId(const std::list<uint64_t>& include, i
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
     ColumnSelector column_selector(contents.get());
     if (contents->schema->getKind() == STRUCT && include.begin() != include.end()) {
-        for (unsigned long field : include) {
-            column_selector.updateSelectedByFieldId(selectedColumns, field);
+        for (std::list<uint64_t>::const_iterator field = include.begin(); field != include.end(); ++field) {
+            column_selector.updateSelectedByFieldId(selectedColumns, *field);
         }
     } else {
         // default is to select all columns
         std::fill(selectedColumns.begin(), selectedColumns.end(), true);
     }
-    column_selector.selectParents(selectedColumns, *contents->schema);
+    column_selector.selectParents(selectedColumns, *contents->schema.get());
     selectedColumns[0] = true; // column 0 is selected by default
     return getMemoryUse(stripeIx, selectedColumns);
 }
@@ -766,14 +844,14 @@ uint64_t ReaderImpl::getMemoryUseByName(const std::list<std::string>& names, int
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
     ColumnSelector column_selector(contents.get());
     if (contents->schema->getKind() == STRUCT && names.begin() != names.end()) {
-        for (const auto& name : names) {
-            column_selector.updateSelectedByName(selectedColumns, name);
+        for (std::list<std::string>::const_iterator field = names.begin(); field != names.end(); ++field) {
+            column_selector.updateSelectedByName(selectedColumns, *field);
         }
     } else {
         // default is to select all columns
         std::fill(selectedColumns.begin(), selectedColumns.end(), true);
     }
-    column_selector.selectParents(selectedColumns, *contents->schema);
+    column_selector.selectParents(selectedColumns, *contents->schema.get());
     selectedColumns[0] = true; // column 0 is selected by default
     return getMemoryUse(stripeIx, selectedColumns);
 }
@@ -783,14 +861,14 @@ uint64_t ReaderImpl::getMemoryUseByTypeId(const std::list<uint64_t>& include, in
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
     ColumnSelector column_selector(contents.get());
     if (include.begin() != include.end()) {
-        for (unsigned long field : include) {
-            column_selector.updateSelectedByTypeId(selectedColumns, field);
+        for (std::list<uint64_t>::const_iterator field = include.begin(); field != include.end(); ++field) {
+            column_selector.updateSelectedByTypeId(selectedColumns, *field);
         }
     } else {
         // default is to select all columns
         std::fill(selectedColumns.begin(), selectedColumns.end(), true);
     }
-    column_selector.selectParents(selectedColumns, *contents->schema);
+    column_selector.selectParents(selectedColumns, *contents->schema.get());
     selectedColumns[0] = true; // column 0 is selected by default
     return getMemoryUse(stripeIx, selectedColumns);
 }
@@ -1167,7 +1245,7 @@ std::unique_ptr<proto::Footer> readFooter(InputStream* stream, const DataBuffer<
 }
 
 std::unique_ptr<Reader> createReader(std::unique_ptr<InputStream> stream, const ReaderOptions& options) {
-    std::shared_ptr<FileContents> contents = std::make_shared<FileContents>();
+    std::shared_ptr<FileContents> contents = std::shared_ptr<FileContents>(new FileContents());
     contents->pool = options.getMemoryPool();
     contents->errorStream = options.getErrorStream();
     std::string serializedFooter = options.getSerializedFileTail();
@@ -1187,7 +1265,7 @@ std::unique_ptr<Reader> createReader(std::unique_ptr<InputStream> stream, const 
         // figure out the size of the file using the option or filesystem
         fileLength = std::min(options.getTailLocation(), static_cast<uint64_t>(stream->getLength()));
 
-        // read last bytes into buffer to get PostScript
+        //read last bytes into buffer to get PostScript
         uint64_t readSize = std::min(fileLength, DIRECTORY_SIZE_GUESS);
         if (readSize < 4) {
             throw ParseError("File size too small");

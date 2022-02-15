@@ -24,7 +24,8 @@
 
 // This file is for timezone routines.
 
-#include <cstdint>
+#include <stdint.h>
+
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -111,7 +112,7 @@ class TimezoneError : public std::runtime_error {
 public:
     TimezoneError(const std::string& what);
     TimezoneError(const TimezoneError&);
-    ~TimezoneError() ORC_NOEXCEPT override;
+    virtual ~TimezoneError() ORC_NOEXCEPT;
 };
 
 /**

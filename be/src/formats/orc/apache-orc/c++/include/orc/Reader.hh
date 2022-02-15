@@ -39,18 +39,18 @@
 
 namespace orc {
 
-  // classes that hold data members so we can maintain binary compatibility
-  struct ReaderOptionsPrivate;
-  struct RowReaderOptionsPrivate;
+// classes that hold data members so we can maintain binary compatibility
+struct ReaderOptionsPrivate;
+struct RowReaderOptionsPrivate;
 
-  /**
+/**
    * Options for creating a Reader.
    */
-  class ReaderOptions {
-  private:
+class ReaderOptions {
+private:
     ORC_UNIQUE_PTR<ReaderOptionsPrivate> privateBits;
 
-  public:
+public:
     ReaderOptions();
     ReaderOptions(const ReaderOptions&);
     ReaderOptions(ReaderOptions&);
@@ -106,16 +106,16 @@ namespace orc {
      * Get the memory allocator.
      */
     MemoryPool* getMemoryPool() const;
-  };
+};
 
-  /**
+/**
    * Options for creating a RowReader.
    */
-  class RowReaderOptions {
-  private:
+class RowReaderOptions {
+private:
     ORC_UNIQUE_PTR<RowReaderOptionsPrivate> privateBits;
 
-  public:
+public:
     RowReaderOptions();
     RowReaderOptions(const RowReaderOptions&);
     RowReaderOptions(RowReaderOptions&);
@@ -152,6 +152,23 @@ namespace orc {
      * @return this
      */
     RowReaderOptions& includeTypes(const std::list<uint64_t>& types);
+
+    /**
+     * A map type of <typeId, ReadIntent>.
+     */
+    typedef std::map<uint64_t, ReadIntent> IdReadIntentMap;
+
+    /**
+     * Selects which type ids to read and specific ReadIntents for each
+     * type id. The ancestor types are automatically selected, but the children
+     * are not.
+     *
+     * This option clears any previous setting of the selected columns or
+     * types.
+     * @param idReadIntentMap a map of IdReadIntentMap.
+     * @return this
+     */
+    RowReaderOptions& includeTypesWithIntents(const IdReadIntentMap& idReadIntentMap);
 
     /**
      * Set the section of the file to process.
@@ -275,18 +292,21 @@ namespace orc {
 
     RowReaderOptions& useWriterTimezone();
     bool getUseWriterTimezone() const;
+    
+    /**
+     * Get the IdReadIntentMap map that was supplied by client.
+     */
+    const IdReadIntentMap getIdReadIntentMap() const;
+};
 
-  };
+class RowReader;
 
-
-  class RowReader;
-
-  /**
+/**
    * The interface for reading ORC file meta-data and constructing RowReaders.
    * This is an an abstract class that will be subclassed as necessary.
    */
-  class Reader {
-  public:
+class Reader {
+public:
     virtual ~Reader();
 
     /**
@@ -301,6 +321,12 @@ namespace orc {
      * @return the number of rows
      */
     virtual uint64_t getNumberOfRows() const = 0;
+
+    /**
+     * Get the software instance and version that wrote this file.
+     * @return a user-facing string that specifies the software version
+     */
+    virtual std::string getSoftwareVersion() const = 0;
 
     /**
      * Get the user metadata keys.
@@ -370,8 +396,7 @@ namespace orc {
      * @param stripeIndex the index of the stripe (0 to N-1) to get information about
      * @return the information about that stripe
      */
-    virtual ORC_UNIQUE_PTR<StripeInformation>
-    getStripe(uint64_t stripeIndex) const = 0;
+    virtual ORC_UNIQUE_PTR<StripeInformation> getStripe(uint64_t stripeIndex) const = 0;
 
     /**
      * Get the number of stripe statistics in the file.
@@ -384,8 +409,7 @@ namespace orc {
      * @param stripeIndex the index of the stripe (0 to N-1) to get statistics about
      * @return the statistics about that stripe
      */
-    virtual ORC_UNIQUE_PTR<StripeStatistics>
-    getStripeStatistics(uint64_t stripeIndex) const = 0;
+    virtual ORC_UNIQUE_PTR<StripeStatistics> getStripeStatistics(uint64_t stripeIndex) const = 0;
 
     /**
      * Get the length of the data stripes in the file.
@@ -428,8 +452,7 @@ namespace orc {
      * @param columnId id of the column
      * @return the information about the column
      */
-    virtual ORC_UNIQUE_PTR<ColumnStatistics>
-    getColumnStatistics(uint32_t columnId) const = 0;
+    virtual ORC_UNIQUE_PTR<ColumnStatistics> getColumnStatistics(uint32_t columnId) const = 0;
 
     /**
      * Check if the file has correct column statistics.
@@ -480,7 +503,7 @@ namespace orc {
      *        all stripes are considered).
      * @return upper bound on memory use by all columns
      */
-    virtual uint64_t getMemoryUse(int stripeIx=-1) = 0;
+    virtual uint64_t getMemoryUse(int stripeIx = -1) = 0;
 
     /**
      * @param include Column Field Ids
@@ -488,7 +511,7 @@ namespace orc {
      *        all stripes are considered).
      * @return upper bound on memory use by selected columns
      */
-    virtual uint64_t getMemoryUseByFieldId(const std::list<uint64_t>& include, int stripeIx=-1) = 0;
+    virtual uint64_t getMemoryUseByFieldId(const std::list<uint64_t>& include, int stripeIx = -1) = 0;
 
     /**
      * @param names Column Names
@@ -496,7 +519,7 @@ namespace orc {
      *        all stripes are considered).
      * @return upper bound on memory use by selected columns
      */
-    virtual uint64_t getMemoryUseByName(const std::list<std::string>& names, int stripeIx=-1) = 0;
+    virtual uint64_t getMemoryUseByName(const std::list<std::string>& names, int stripeIx = -1) = 0;
 
     /**
      * @param include Column Type Ids
@@ -504,25 +527,25 @@ namespace orc {
      *        all stripes are considered).
      * @return upper bound on memory use by selected columns
      */
-    virtual uint64_t getMemoryUseByTypeId(const std::list<uint64_t>& include, int stripeIx=-1) = 0;
+    virtual uint64_t getMemoryUseByTypeId(const std::list<uint64_t>& include, int stripeIx = -1) = 0;
 
     /**
-     * Get BloomFilters of all selected columns in the specified stripe
+     * Get BloomFiters of all selected columns in the specified stripe
      * @param stripeIndex index of the stripe to be read for bloom filters.
      * @param included index of selected columns to return (if not specified,
      *        all columns that have bloom filters are considered).
      * @return map of bloom filters with the key standing for the index of column.
      */
-    virtual std::map<uint32_t, BloomFilterIndex>
-    getBloomFilters(uint32_t stripeIndex, const std::set<uint32_t>& included) const = 0;
-  };
+    virtual std::map<uint32_t, BloomFilterIndex> getBloomFilters(uint32_t stripeIndex,
+                                                                 const std::set<uint32_t>& included) const = 0;
+};
 
-  /**
+/**
    * The interface for reading rows in ORC files.
    * This is an an abstract class that will be subclassed as necessary.
    */
-  class RowReader {
-  public:
+class RowReader {
+public:
     virtual ~RowReader();
     /**
      * Get the selected type of the rows in the file. The file's row type
@@ -544,8 +567,7 @@ namespace orc {
      * @param size the number of rows to read
      * @return a new ColumnVectorBatch to read into
      */
-    virtual ORC_UNIQUE_PTR<ColumnVectorBatch> createRowBatch(uint64_t size
-                                                             ) const = 0;
+    virtual ORC_UNIQUE_PTR<ColumnVectorBatch> createRowBatch(uint64_t size) const = 0;
 
     /**
      * Read the next row batch from the current position.
@@ -568,6 +590,5 @@ namespace orc {
      * @param rowNumber the next row the reader should return
      */
     virtual void seekToRow(uint64_t rowNumber) = 0;
-
-  };
-}
+};
+} // namespace orc

@@ -34,7 +34,7 @@ const int DEFAULT_MEM_STREAM_SIZE = 10 * 1024 * 1024; // 10M
 
 class TypeAttributes : public ::testing::Test {
 public:
-    ~TypeAttributes();
+    ~TypeAttributes() override;
 
 protected:
     static void SetUpTestCase() { memStream.reset(); }
@@ -77,7 +77,7 @@ private:
     static MemoryOutputStream memStream;
 };
 
-TypeAttributes::~TypeAttributes() {}
+TypeAttributes::~TypeAttributes() = default;
 MemoryOutputStream TypeAttributes::memStream(DEFAULT_MEM_STREAM_SIZE);
 
 TEST_F(TypeAttributes, writeSimple) {

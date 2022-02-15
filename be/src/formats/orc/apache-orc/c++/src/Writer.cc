@@ -59,9 +59,9 @@ struct WriterOptionsPrivate {
         enableIndex = true;
         bloomFilterFalsePositiveProb = 0.05;
         bloomFilterVersion = UTF8;
-        // Writer timezone uses "GMT" by default to get rid of potential issues
-        // introduced by moving timestamps between different timezones.
-        // Explictly set the writer timezone if the use case depends on it.
+        //Writer timezone uses "GMT" by default to get rid of potential issues
+        //introduced by moving timestamps between different timezones.
+        //Explictly set the writer timezone if the use case depends on it.
         timezone = "GMT";
     }
 };
@@ -167,7 +167,7 @@ CompressionStrategy WriterOptions::getCompressionStrategy() const {
 }
 
 bool WriterOptions::getAlignedBitpacking() const {
-    return privateBits->compressionStrategy == CompressionStrategy::CompressionStrategy_SPEED;
+    return privateBits->compressionStrategy == CompressionStrategy ::CompressionStrategy_SPEED;
 }
 
 WriterOptions& WriterOptions::setPaddingTolerance(double tolerance) {
@@ -371,6 +371,7 @@ void WriterImpl::init() {
     fileFooter.set_numberofrows(0);
     fileFooter.set_rowindexstride(static_cast<uint32_t>(options.getRowIndexStride()));
     fileFooter.set_writer(writerId);
+    fileFooter.set_softwareversion(ORC_VERSION);
 
     uint32_t index = 0;
     buildFooterType(type, fileFooter, index);
@@ -421,15 +422,15 @@ void WriterImpl::writeStripe() {
 
     // generate and write stripe footer
     proto::StripeFooter stripeFooter;
-    for (auto& stream : streams) {
-        *stripeFooter.add_streams() = stream;
+    for (uint32_t i = 0; i < streams.size(); ++i) {
+        *stripeFooter.add_streams() = streams[i];
     }
 
     std::vector<proto::ColumnEncoding> encodings;
     columnWriter->getColumnEncoding(encodings);
 
-    for (auto& encoding : encodings) {
-        *stripeFooter.add_columns() = encoding;
+    for (uint32_t i = 0; i < encodings.size(); ++i) {
+        *stripeFooter.add_columns() = encodings[i];
     }
 
     stripeFooter.set_writertimezone(options.getTimezoneName());
@@ -452,11 +453,12 @@ void WriterImpl::writeStripe() {
     // calculate data length and index length
     uint64_t dataLength = 0;
     uint64_t indexLength = 0;
-    for (auto& stream : streams) {
-        if (stream.kind() == proto::Stream_Kind_ROW_INDEX || stream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8) {
-            indexLength += stream.length();
+    for (uint32_t i = 0; i < streams.size(); ++i) {
+        if (streams[i].kind() == proto::Stream_Kind_ROW_INDEX ||
+            streams[i].kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8) {
+            indexLength += streams[i].length();
         } else {
-            dataLength += stream.length();
+            dataLength += streams[i].length();
         }
     }
 
@@ -480,7 +482,7 @@ void WriterImpl::writeMetadata() {
     if (!metadata.SerializeToZeroCopyStream(compressionStream.get())) {
         throw std::logic_error("Failed to write metadata.");
     }
-    postScript.set_metadatalength(compressionStream->flush());
+    postScript.set_metadatalength(compressionStream.get()->flush());
 }
 
 void WriterImpl::writeFileFooter() {

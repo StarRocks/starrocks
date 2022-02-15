@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-// https://github.com/apache/orc/tree/main/tools/src/CSVFileImport.cc
+//   https://github.com/apache/orc/tree/main/tools/src/CSVFileImport.cc
 
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -258,8 +258,10 @@ void usage() {
               << "                  [-s <size>] [--stripe=<size>]\n"
               << "                  [-c <size>] [--block=<size>]\n"
               << "                  [-b <size>] [--batch=<size>]\n"
+              << "                  [-t <string>] [--timezone=<string>]\n"
               << "                  <schema> <input> <output>\n"
               << "Import CSV file into an Orc file using the specified schema.\n"
+              << "The timezone is writer timezone of timestamp types.\n"
               << "Compound types are not yet supported.\n";
 }
 
@@ -267,20 +269,24 @@ int main(int argc, char* argv[]) {
     std::string input;
     std::string output;
     std::string schema;
+    std::string timezoneName = "GMT";
     uint64_t stripeSize = (128 << 20); // 128M
     uint64_t blockSize = 64 << 10;     // 64K
     uint64_t batchSize = 1024;
     orc::CompressionKind compression = orc::CompressionKind_ZLIB;
 
-    static struct option longOptions[] = {
-            {"help", no_argument, ORC_NULLPTR, 'h'},         {"delimiter", required_argument, ORC_NULLPTR, 'd'},
-            {"stripe", required_argument, ORC_NULLPTR, 'p'}, {"block", required_argument, ORC_NULLPTR, 'c'},
-            {"batch", required_argument, ORC_NULLPTR, 'b'},  {ORC_NULLPTR, 0, ORC_NULLPTR, 0}};
+    static struct option longOptions[] = {{"help", no_argument, ORC_NULLPTR, 'h'},
+                                          {"delimiter", required_argument, ORC_NULLPTR, 'd'},
+                                          {"stripe", required_argument, ORC_NULLPTR, 'p'},
+                                          {"block", required_argument, ORC_NULLPTR, 'c'},
+                                          {"batch", required_argument, ORC_NULLPTR, 'b'},
+                                          {"timezone", required_argument, ORC_NULLPTR, 't'},
+                                          {ORC_NULLPTR, 0, ORC_NULLPTR, 0}};
     bool helpFlag = false;
     int opt;
     char* tail;
     do {
-        opt = getopt_long(argc, argv, "i:o:s:b:c:p:h", longOptions, ORC_NULLPTR);
+        opt = getopt_long(argc, argv, "i:o:s:b:c:p:t:h", longOptions, ORC_NULLPTR);
         switch (opt) {
         case '?':
         case 'h':
@@ -311,6 +317,9 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
             break;
+        case 't':
+            timezoneName = std::string(optarg);
+            break;
         }
     } while (opt != -1);
 
@@ -338,6 +347,7 @@ int main(int argc, char* argv[]) {
     options.setStripeSize(stripeSize);
     options.setCompressionBlockSize(blockSize);
     options.setCompression(compression);
+    options.setTimezoneName(timezoneName);
 
     ORC_UNIQUE_PTR<orc::OutputStream> outStream = orc::writeLocalFile(output);
     ORC_UNIQUE_PTR<orc::Writer> writer = orc::createWriter(*fileType, outStream.get(), options);
@@ -436,7 +446,7 @@ int main(int argc, char* argv[]) {
                         1000000.0;
 
     std::cout << GetDate() << " Finish importing Orc file." << std::endl;
-    std::cout << GetDate() << " Total writer elapsed time: " << totalElapsedTime << "s." << std::endl;
+    std::cout << GetDate() << " Total writer elasped time: " << totalElapsedTime << "s." << std::endl;
     std::cout << GetDate() << " Total writer CPU time: " << static_cast<double>(totalCPUTime) / CLOCKS_PER_SEC << "s."
               << std::endl;
     return 0;

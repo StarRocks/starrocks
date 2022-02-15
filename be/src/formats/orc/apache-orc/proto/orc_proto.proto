@@ -372,6 +372,11 @@ message Footer {
   // information about the encryption in this file
   optional Encryption encryption = 10;
   optional CalendarKind calendar = 11;
+
+  // informative description about the version of the software that wrote
+  // the file. It is assumed to be within a given writer, so for example
+  // ORC 1.7.2 = "1.7.2". It may include suffixes, such as "-SNAPSHOT".
+  optional string softwareVersion = 12;
 }
 
 enum CompressionKind {

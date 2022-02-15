@@ -47,6 +47,14 @@ CHECK_CXX_SOURCE_COMPILES("
 )
 
 CHECK_CXX_SOURCE_COMPILES("
+    int main(){
+      int a;
+      return __builtin_add_overflow(1, 2, &a);
+    }"
+  HAS_BUILTIN_OVERFLOW_CHECK
+)
+
+CHECK_CXX_SOURCE_COMPILES("
     #include<stdint.h>
     #include<stdio.h>
     int main(int,char*[]){
@@ -153,7 +161,7 @@ CHECK_CXX_SOURCE_RUNS("
       struct tm time2038;
       strptime(\"2037-05-05 12:34:56\", \"%Y-%m-%d %H:%M:%S\", &time2037);
       strptime(\"2038-05-05 12:34:56\", \"%Y-%m-%d %H:%M:%S\", &time2038);
-      return mktime(&time2038) - mktime(&time2037) != 31536000;
+      return (mktime(&time2038) - mktime(&time2037)) <= 31500000;
     }"
   HAS_POST_2038
 )
@@ -176,21 +184,21 @@ configure_file (
   )
 
 
-if (DEFINED ENV{STARROCKS_HOME}) # starrocks: orc prioritize project search path
-include_directories (
-  BEFORE
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_BINARY_DIR}
-  )
-else()
-include_directories (
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_BINARY_DIR}
-  ${LIBHDFSPP_INCLUDE_DIR}
-  )
-endif()
+  if (DEFINED ENV{STARROCKS_HOME}) # starrocks: orc prioritize project search path
+  include_directories (
+    BEFORE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
+    )
+  else()
+  include_directories (
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${LIBHDFSPP_INCLUDE_DIR}
+    )
+  endif()
 
-add_custom_command(OUTPUT orc_proto.pb.h orc_proto.pb.cc
+  add_custom_command(OUTPUT orc_proto.pb.h orc_proto.pb.cc
    COMMAND ${PROTOBUF_EXECUTABLE}
         -I ${PROJECT_SOURCE_DIR}/proto
         --cpp_out="${CMAKE_CURRENT_BINARY_DIR}"

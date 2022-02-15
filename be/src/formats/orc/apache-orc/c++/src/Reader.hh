@@ -89,13 +89,22 @@ public:
     void updateSelectedByFieldId(std::vector<bool>& selectedColumns, uint64_t fieldId);
     // Select a type by id
     void updateSelectedByTypeId(std::vector<bool>& selectedColumns, uint64_t typeId);
+    // Select a type by id and read intent map.
+    void updateSelectedByTypeId(std::vector<bool>& selectedColumns, uint64_t typeId,
+                                const RowReaderOptions::IdReadIntentMap& idReadIntentMap);
 
     // Select all of the recursive children of the given type.
     void selectChildren(std::vector<bool>& selectedColumns, const Type& type);
+    // Select a type id of the given type.
+    // This function may also select all of the recursive children of the given type
+    // depending on the read intent of that type in idReadIntentMap.
+    void selectChildren(std::vector<bool>& selectedColumns, const Type& type,
+                        const RowReaderOptions::IdReadIntentMap& idReadIntentMap);
 
     // For each child of type, select it if one of its children
     // is selected.
     bool selectParents(std::vector<bool>& selectedColumns, const Type& type);
+
     /**
     * Constructor that selects columns.
     * @param contents of the file
@@ -125,6 +134,7 @@ private:
     proto::Footer* footer;
     DataBuffer<uint64_t> firstRowOfStripe;
     mutable std::unique_ptr<Type> selectedSchema;
+    bool skipBloomFilters;
 
     // reading state
     uint64_t previousRow;
@@ -181,13 +191,20 @@ private:
      */
     void seekToRowGroup(uint32_t rowGroupEntryId);
 
+    /**
+     * Check if the file has bad bloom filters. We will skip using them in the
+     * following reads.
+     * @return true if it has.
+     */
+    bool hasBadBloomFilters();
+
 public:
     /**
     * Constructor that lets the user specify additional options.
     * @param contents of the file
     * @param options options for reading
     */
-    RowReaderImpl(const std::shared_ptr<FileContents>& contents, const RowReaderOptions& options);
+    RowReaderImpl(std::shared_ptr<FileContents> contents, const RowReaderOptions& options);
 
     // Select the columns from the options object
     const std::vector<bool> getSelectedColumns() const override;
@@ -259,6 +276,8 @@ public:
     WriterId getWriterId() const override;
 
     uint32_t getWriterIdValue() const override;
+
+    std::string getSoftwareVersion() const override;
 
     WriterVersion getWriterVersion() const override;
 

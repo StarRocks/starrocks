@@ -38,7 +38,7 @@ namespace orc {
 
 class TestDecompression : public ::testing::Test {
 public:
-    ~TestDecompression();
+    ~TestDecompression() override;
 
 protected:
     // Per-test-case set-up.
@@ -619,6 +619,11 @@ public:
         buf[2] = static_cast<char>(compressedSize >> 15);
     }
 
+    void writeUncompressedHeader(size_t compressedSize) {
+        writeHeader(compressedSize);
+        buf[0] |= 1;
+    }
+
     size_t getCompressedSize() const {
         size_t header = static_cast<unsigned char>(buf[0]);
         header |= static_cast<size_t>(static_cast<unsigned char>(buf[1])) << 8;
@@ -727,4 +732,48 @@ TEST(Snappy, testSkip) {
     }
 }
 
+TEST_F(TestDecompression, testUncompressedSeek) {
+    SCOPED_TRACE("testUncompressedSeek");
+    const int N = 197;
+    CompressBuffer compressBuffer(N);
+    compressBuffer.writeUncompressedHeader(N);
+    for (int i = 0; i < N; ++i) {
+        compressBuffer.getCompressed()[i] = static_cast<char>(i);
+    }
+    size_t chunkSize = compressBuffer.getBufferSize();
+    std::vector<char> buf(chunkSize * 2);
+    ::memcpy(buf.data(), compressBuffer.getBuffer(), chunkSize);
+    ::memcpy(buf.data() + chunkSize, compressBuffer.getBuffer(), chunkSize);
+
+    // Choose a block size larger than the chunk size.
+    const long blockSize = 300;
+    std::unique_ptr<SeekableInputStream> input(new SeekableArrayInputStream(buf.data(), buf.size(), blockSize));
+    std::unique_ptr<SeekableInputStream> stream =
+            createDecompressor(CompressionKind_SNAPPY, std::move(input), chunkSize, *getDefaultPool());
+
+    const void* data;
+    int len;
+    // First read returns the first chunk.
+    ASSERT_TRUE(stream->Next(&data, &len));
+    EXPECT_EQ(N, len);
+    checkBytes(reinterpret_cast<const char*>(data), N, 0);
+    // The second chunk lays across the block boundary.
+    // Second read returns the first part of the second chunk.
+    ASSERT_TRUE(stream->Next(&data, &len));
+    EXPECT_EQ(blockSize - chunkSize - HEADER_SIZE, len);
+    checkBytes(reinterpret_cast<const char*>(data), len, 0);
+
+    // Seek to the 100th item of the second chunk. The position is in the second block.
+    {
+        std::list<uint64_t> offsets;
+        offsets.push_back(compressBuffer.getBufferSize());
+        offsets.push_back(100);
+        PositionProvider posn(offsets);
+        stream->seek(posn);
+    }
+    // Read the remaining N-100 bytes of the second chunk.
+    EXPECT_TRUE(stream->Next(&data, &len));
+    EXPECT_EQ(N - 100, len);
+    checkBytes(reinterpret_cast<const char*>(data), len, 100);
+}
 } // namespace orc

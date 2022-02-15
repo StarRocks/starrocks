@@ -97,10 +97,6 @@ std::unique_ptr<SeekableInputStream> StripeStreamsImpl::getStream(uint64_t colum
         if (stream.has_kind() && stream.kind() == kind && stream.column() == static_cast<uint64_t>(columnId)) {
             uint64_t streamLength = stream.length();
             uint64_t myBlock = shouldStream ? input.getNaturalReadSize() : streamLength;
-            // if we don't need that much data, why we read it.
-            if (streamLength < myBlock) {
-                myBlock = streamLength;
-            }
             if (offset + streamLength > dataEnd) {
                 std::stringstream msg;
                 msg << "Malformed stream meta at stream index " << i << " in stripe " << stripeIndex
@@ -136,7 +132,7 @@ bool StripeStreamsImpl::getUseWriterTimezone() const {
 }
 
 void StripeInformationImpl::ensureStripeFooterLoaded() const {
-    if (stripeFooter == nullptr) {
+    if (stripeFooter.get() == nullptr) {
         std::unique_ptr<SeekableInputStream> pbStream =
                 createDecompressor(compression,
                                    std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(

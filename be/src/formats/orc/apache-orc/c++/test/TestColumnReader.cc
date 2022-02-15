@@ -51,14 +51,18 @@ public:
     std::unique_ptr<SeekableInputStream> getStream(uint64_t columnId, proto::Stream_Kind kind,
                                                    bool stream) const override;
 
-    MOCK_CONST_METHOD0(getSelectedColumns, const std::vector<bool>());
+    MOCK_CONST_METHOD0(getSelectedColumns,
+
+                       const std::vector<bool>()
+
+    );
     MOCK_CONST_METHOD1(getEncoding, proto::ColumnEncoding(uint64_t));
     MOCK_CONST_METHOD3(getStreamProxy, SeekableInputStream*(uint64_t, proto::Stream_Kind, bool));
     MOCK_CONST_METHOD0(getErrorStream, std::ostream*());
     MOCK_CONST_METHOD0(getThrowOnHive11DecimalOverflow, bool());
     MOCK_CONST_METHOD0(getForcedScaleOnHive11Decimal, int32_t());
 
-    MemoryPool& getMemoryPool() const { return *getDefaultPool(); }
+    MemoryPool& getMemoryPool() const override { return *getDefaultPool(); }
 
     const Timezone& getWriterTimezone() const override { return getTimezoneByName("America/Los_Angeles"); }
 
@@ -79,7 +83,7 @@ bool isNotNull(tm* timeptr) {
 }
 
 class TestColumnReaderEncoded : public TestWithParam<bool> {
-    virtual void SetUp();
+    void SetUp() override;
 
 protected:
     bool encoded;

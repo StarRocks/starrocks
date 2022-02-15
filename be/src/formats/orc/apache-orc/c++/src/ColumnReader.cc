@@ -22,9 +22,8 @@
 
 #include "ColumnReader.hh"
 
-#include <bits/endian.h>
+#include <math.h>
 
-#include <cmath>
 #include <iostream>
 
 #include "Adaptor.hh"
@@ -32,6 +31,7 @@
 #include "RLE.hh"
 #include "orc/Exceptions.hh"
 #include "orc/Int128.hh"
+
 namespace orc {
 
 StripeStreams::~StripeStreams() {
@@ -54,7 +54,7 @@ inline RleVersion convertRleVersion(proto::ColumnEncoding_Kind kind) {
 ColumnReader::ColumnReader(const Type& type, StripeStreams& stripe)
         : columnId(type.getColumnId()), memoryPool(stripe.getMemoryPool()) {
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_PRESENT, true);
-    if (stream) {
+    if (stream.get()) {
         notNullDecoder = createBooleanRleDecoder(std::move(stream));
     }
 }
@@ -112,7 +112,7 @@ void ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* i
 }
 
 void ColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) {
-    if (notNullDecoder) {
+    if (notNullDecoder.get()) {
         notNullDecoder->seek(positions.at(columnId));
     }
 }
@@ -298,7 +298,6 @@ TimestampColumnReader::TimestampColumnReader(const Type& type, StripeStreams& st
     if (stream == nullptr) throw ParseError("SECONDARY stream not found in Timestamp column");
     nanoRle = createRleDecoder(std::move(stream), false, vers, memoryPool, stripe.getSharedBuffer());
 }
-
 TimestampColumnReader::~TimestampColumnReader() {
     // PASS
 }
@@ -1141,7 +1140,7 @@ void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numVal
 void ListColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) {
     ColumnReader::seekToRowGroup(positions);
     rle->seek(positions.at(columnId));
-    if (child) {
+    if (child.get()) {
         child->seekToRowGroup(positions);
     }
 }
@@ -1274,10 +1273,10 @@ void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValu
 void MapColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) {
     ColumnReader::seekToRowGroup(positions);
     rle->seek(positions.at(columnId));
-    if (keyReader) {
+    if (keyReader.get()) {
         keyReader->seekToRowGroup(positions);
     }
-    if (elementReader) {
+    if (elementReader.get()) {
         elementReader->seekToRowGroup(positions);
     }
 }
@@ -1503,7 +1502,7 @@ Decimal64ColumnReader::Decimal64ColumnReader(const Type& type, StripeStreams& st
     RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_SECONDARY, true);
     if (stream == nullptr) throw ParseError("SECONDARY stream not found in Decimal64Column");
-    scaleDecoder = createRleDecoder(std::move(stream), true, vers, memoryPool, stripe.getSharedBuffer());
+    scaleDecoder = createRleDecoder(std::move(stream), true, vers, memoryPool);
 }
 
 Decimal64ColumnReader::~Decimal64ColumnReader() {

@@ -29,7 +29,8 @@ namespace orc {
 // find column id from column name
 uint64_t SargsApplier::findColumn(const Type& type, const std::string& colName) {
     for (uint64_t i = 0; i != type.getSubtypeCount(); ++i) {
-        if (i < type.getFieldNamesCount() && (type.getFieldName(i) == colName)) {
+        // Only STRUCT type has field names
+        if (type.getKind() == STRUCT && i < type.getFieldNamesCount() && (type.getFieldName(i) == colName)) {
             return type.getSubtype(i)->getColumnId();
         } else {
             uint64_t ret = findColumn(*type.getSubtype(i), colName);
@@ -59,7 +60,11 @@ SargsApplier::SargsApplier(const Type& type, const SearchArgument* searchArgumen
     const std::vector<PredicateLeaf>& leaves = sargs->getLeaves();
     mFilterColumns.resize(leaves.size(), INVALID_COLUMN_ID);
     for (size_t i = 0; i != mFilterColumns.size(); ++i) {
-        mFilterColumns[i] = findColumn(type, leaves[i].getColumnName());
+        if (leaves[i].hasColumnName()) {
+            mFilterColumns[i] = findColumn(type, leaves[i].getColumnName());
+        } else {
+            mFilterColumns[i] = leaves[i].getColumnId();
+        }
     }
 }
 

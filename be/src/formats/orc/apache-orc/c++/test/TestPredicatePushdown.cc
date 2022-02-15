@@ -30,8 +30,7 @@ namespace orc {
 
 static const int DEFAULT_MEM_STREAM_SIZE = 10 * 1024 * 1024; // 10M
 
-TEST(TestPredicatePushdown, testPredicatePushdown) {
-    MemoryOutputStream memStream(DEFAULT_MEM_STREAM_SIZE);
+void createMemTestFile(MemoryOutputStream& memStream) {
     MemoryPool* pool = getDefaultPool();
     auto type = std::unique_ptr<Type>(Type::buildTypeFromString("struct<int1:bigint,string1:string>"));
     WriterOptions options;
@@ -69,24 +68,32 @@ TEST(TestPredicatePushdown, testPredicatePushdown) {
     strBatch.numElements = 3500;
     writer->add(*batch);
     writer->close();
+}
 
-    std::unique_ptr<InputStream> inStream(new MemoryInputStream(memStream.getData(), memStream.getLength()));
-    ReaderOptions readerOptions;
-    options.setMemoryPool(pool);
-    auto reader = createReader(std::move(inStream), readerOptions);
-    EXPECT_EQ(3500, reader->getNumberOfRows());
-
-    // build search argument (x >= 300000 AND x < 600000)
-    {
-        std::unique_ptr<SearchArgument> sarg =
-                SearchArgumentFactory::newBuilder()
-                        ->startAnd()
-                        .startNot()
-                        .lessThan("int1", PredicateDataType::LONG, Literal(static_cast<int64_t>(300000L)))
-                        .end()
-                        .lessThan("int1", PredicateDataType::LONG, Literal(static_cast<int64_t>(600000L)))
-                        .end()
-                        .build();
+void TestRangePredicates(Reader* reader) {
+    // Build search argument (x >= 300000 AND x < 600000) for column 'int1'.
+    // Test twice for using column name and column id respectively.
+    for (int k = 0; k < 2; ++k) {
+        std::unique_ptr<SearchArgument> sarg;
+        if (k == 0) {
+            sarg = SearchArgumentFactory::newBuilder()
+                           ->startAnd()
+                           .startNot()
+                           .lessThan("int1", PredicateDataType::LONG, Literal(static_cast<int64_t>(300000L)))
+                           .end()
+                           .lessThan("int1", PredicateDataType::LONG, Literal(static_cast<int64_t>(600000L)))
+                           .end()
+                           .build();
+        } else {
+            sarg = SearchArgumentFactory::newBuilder()
+                           ->startAnd()
+                           .startNot()
+                           .lessThan(/*columnId=*/1, PredicateDataType::LONG, Literal(static_cast<int64_t>(300000L)))
+                           .end()
+                           .lessThan(/*columnId=*/1, PredicateDataType::LONG, Literal(static_cast<int64_t>(600000L)))
+                           .end()
+                           .build();
+        }
 
         RowReaderOptions rowReaderOpts;
         rowReaderOpts.searchArgument(std::move(sarg));
@@ -108,15 +115,26 @@ TEST(TestPredicatePushdown, testPredicatePushdown) {
         EXPECT_EQ(false, rowReader->next(*readBatch));
         EXPECT_EQ(3500, rowReader->getRowNumber());
     }
+}
 
-    // look through the file with no rows selected: x < 0
-    {
-        std::unique_ptr<SearchArgument> sarg =
-                SearchArgumentFactory::newBuilder()
-                        ->startAnd()
-                        .lessThan("int1", PredicateDataType::LONG, Literal(static_cast<int64_t>(0)))
-                        .end()
-                        .build();
+void TestNoRowsSelected(Reader* reader) {
+    // Look through the file with no rows selected: x < 0
+    // Test twice for using column name and column id respectively.
+    for (int i = 0; i < 2; ++i) {
+        std::unique_ptr<SearchArgument> sarg;
+        if (i == 0) {
+            sarg = SearchArgumentFactory::newBuilder()
+                           ->startAnd()
+                           .lessThan("int1", PredicateDataType::LONG, Literal(static_cast<int64_t>(0)))
+                           .end()
+                           .build();
+        } else {
+            sarg = SearchArgumentFactory::newBuilder()
+                           ->startAnd()
+                           .lessThan(/*columnId=*/1, PredicateDataType::LONG, Literal(static_cast<int64_t>(0)))
+                           .end()
+                           .build();
+        }
 
         RowReaderOptions rowReaderOpts;
         rowReaderOpts.searchArgument(std::move(sarg));
@@ -126,18 +144,32 @@ TEST(TestPredicatePushdown, testPredicatePushdown) {
         EXPECT_EQ(false, rowReader->next(*readBatch));
         EXPECT_EQ(3500, rowReader->getRowNumber());
     }
+}
 
-    // select first 1000 and last 500 rows: x < 30000 OR x >= 1020000
-    {
-        std::unique_ptr<SearchArgument> sarg =
-                SearchArgumentFactory::newBuilder()
-                        ->startOr()
-                        .lessThan("int1", PredicateDataType::LONG, Literal(static_cast<int64_t>(300 * 100)))
-                        .startNot()
-                        .lessThan("int1", PredicateDataType::LONG, Literal(static_cast<int64_t>(300 * 3400)))
-                        .end()
-                        .end()
-                        .build();
+void TestOrPredicates(Reader* reader) {
+    // Select first 1000 and last 500 rows: x < 30000 OR x >= 1020000
+    // Test twice for using column name and column id respectively.
+    for (int k = 0; k < 2; ++k) {
+        std::unique_ptr<SearchArgument> sarg;
+        if (k == 0) {
+            sarg = SearchArgumentFactory::newBuilder()
+                           ->startOr()
+                           .lessThan("int1", PredicateDataType::LONG, Literal(static_cast<int64_t>(300 * 100)))
+                           .startNot()
+                           .lessThan("int1", PredicateDataType::LONG, Literal(static_cast<int64_t>(300 * 3400)))
+                           .end()
+                           .end()
+                           .build();
+        } else {
+            sarg = SearchArgumentFactory::newBuilder()
+                           ->startOr()
+                           .lessThan(/*columnId=*/1, PredicateDataType::LONG, Literal(static_cast<int64_t>(300 * 100)))
+                           .startNot()
+                           .lessThan(/*columnId=*/1, PredicateDataType::LONG, Literal(static_cast<int64_t>(300 * 3400)))
+                           .end()
+                           .end()
+                           .build();
+        }
 
         RowReaderOptions rowReaderOpts;
         rowReaderOpts.searchArgument(std::move(sarg));
@@ -183,4 +215,18 @@ TEST(TestPredicatePushdown, testPredicatePushdown) {
     }
 }
 
+TEST(TestPredicatePushdown, testPredicatePushdown) {
+    MemoryOutputStream memStream(DEFAULT_MEM_STREAM_SIZE);
+    MemoryPool* pool = getDefaultPool();
+    createMemTestFile(memStream);
+    std::unique_ptr<InputStream> inStream(new MemoryInputStream(memStream.getData(), memStream.getLength()));
+    ReaderOptions readerOptions;
+    readerOptions.setMemoryPool(*pool);
+    std::unique_ptr<Reader> reader = createReader(std::move(inStream), readerOptions);
+    EXPECT_EQ(3500, reader->getNumberOfRows());
+
+    TestRangePredicates(reader.get());
+    TestNoRowsSelected(reader.get());
+    TestOrPredicates(reader.get());
+}
 } // namespace orc
