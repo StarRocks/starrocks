@@ -42,9 +42,8 @@ TEST_F(EnvPosixTest, random_access) {
     WritableFileOptions ops;
     std::unique_ptr<WritableFile> wfile;
     auto env = Env::Default();
-    auto st = env->new_writable_file(fname, &wfile);
-    ASSERT_TRUE(st.ok());
-    st = wfile->pre_allocate(1024);
+    wfile = *env->new_writable_file(fname);
+    auto st = wfile->pre_allocate(1024);
     ASSERT_TRUE(st.ok());
     // wirte data
     Slice field1("123456789");
@@ -76,9 +75,7 @@ TEST_F(EnvPosixTest, random_access) {
     ASSERT_EQ(115, size);
     {
         char mem[1024];
-        std::unique_ptr<RandomAccessFile> rfile;
-        st = env->new_random_access_file(fname, &rfile);
-        ASSERT_TRUE(st.ok());
+        auto rfile = *env->new_random_access_file(fname);
 
         Slice slice1(mem, 9);
         Slice slice2(mem + 9, 100);
@@ -103,9 +100,7 @@ TEST_F(EnvPosixTest, random_access) {
     // test try read
     {
         char mem[1024];
-        std::unique_ptr<RandomAccessFile> rfile;
-        st = env->new_random_access_file(fname, &rfile);
-        ASSERT_TRUE(st.ok());
+        auto rfile = *env->new_random_access_file(fname);
 
         // normal read
         {
@@ -137,11 +132,10 @@ TEST_F(EnvPosixTest, random_rw) {
     WritableFileOptions ops;
     std::unique_ptr<RandomRWFile> wfile;
     auto env = Env::Default();
-    auto st = env->new_random_rw_file(fname, &wfile);
-    ASSERT_TRUE(st.ok());
+    wfile = *env->new_random_rw_file(fname);
     // wirte data
     Slice field1("123456789");
-    st = wfile->write_at(0, field1);
+    auto st = wfile->write_at(0, field1);
     ASSERT_TRUE(st.ok());
     std::string buf;
     for (int i = 0; i < 100; ++i) {
@@ -175,8 +169,7 @@ TEST_F(EnvPosixTest, random_rw) {
         std::unique_ptr<RandomRWFile> rfile;
         RandomRWFileOptions opts;
         opts.mode = Env::MUST_EXIST;
-        st = env->new_random_rw_file(opts, fname, &rfile);
-        ASSERT_TRUE(st.ok());
+        rfile = *env->new_random_rw_file(opts, fname);
 
         Slice slice1(mem, 3);
         Slice slice2(mem + 3, 3);
@@ -202,9 +195,7 @@ TEST_F(EnvPosixTest, random_rw) {
     // SequentialFile
     {
         char mem[1024];
-        std::unique_ptr<SequentialFile> rfile;
-        st = env->new_sequential_file(fname, &rfile);
-        ASSERT_TRUE(st.ok());
+        auto rfile = *env->new_sequential_file(fname);
 
         Slice slice1(mem, 3);
         st = rfile->read(&slice1);
