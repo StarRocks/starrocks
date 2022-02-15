@@ -504,7 +504,7 @@ struct ColumnRangeBuilder {
                 range.set_precision(slot->type().precision);
                 range.set_scale(slot->type().scale);
             }
-            cm->normalize_predicate<real_type, value_type>(*slot, &range);
+            cm->normalize_predicate<ptype, value_type>(*slot, &range);
             return nullptr;
         }
     }
