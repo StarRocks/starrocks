@@ -1370,19 +1370,31 @@ public:
     template <class K = key_type, class F>
     iterator lazy_emplace(const key_arg<K>& key, F&& f) {
         auto res = find_or_prepare_insert(key);
+        auto iter = iterator_at(res.first);
         if (res.second) {
-            lazy_emplace_at(res.first, std::forward<F>(f));
+            try {
+                lazy_emplace_at(res.first, std::forward<F>(f));
+            } catch (std::bad_alloc const& e) {
+                erase(iter);
+                throw e;
+            }
         }
-        return iterator_at(res.first);
+        return iter;
     }
 
     template <class K = key_type, class F>
     iterator lazy_emplace_with_hash(const key_arg<K>& key, size_t& hashval, F&& f) {
         auto res = find_or_prepare_insert(key, hashval);
+        auto iter = iterator_at(res.first);
         if (res.second) {
-            lazy_emplace_at(res.first, std::forward<F>(f));
+            try {
+                lazy_emplace_at(res.first, std::forward<F>(f));
+            } catch (std::bad_alloc const& e) {
+                erase(iter);
+                throw e;
+            }
         }
-        return iterator_at(res.first);
+        return iter;
     }
 
     template <class K = key_type, class F>
