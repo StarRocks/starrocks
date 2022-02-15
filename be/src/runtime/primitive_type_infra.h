@@ -129,23 +129,26 @@ auto type_dispatch_sortable(PrimitiveType ptype, Functor fun, Args... args) {
     }
 }
 
-template <class Functor, class... Args>
-auto type_dispatch_predicate(PrimitiveType ptype, Functor fun, Args... args) {
+template <class Ret, class Functor, class... Args>
+Ret type_dispatch_predicate(PrimitiveType ptype, bool assert, Functor fun, Args... args) {
     switch (ptype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
-        CHECK(false) << "Unknown type: " << ptype;
-        __builtin_unreachable();
+        if (assert) {
+            CHECK(false) << "Unknown type: " << ptype;
+            __builtin_unreachable();
+        } else {
+            return Ret{};
+        }
     }
 }
 
-template <class Functor, class... Args>
-auto type_dispatch_filter(PrimitiveType ptype, Functor fun, Args... args) {
+template <class Functor, class Ret, class... Args>
+auto type_dispatch_filter(PrimitiveType ptype, Ret default_value, Functor fun, Args... args) {
     switch (ptype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
-        CHECK(false) << "Unknown type: " << ptype;
-        __builtin_unreachable();
+        return default_value;
     }
 }
 
