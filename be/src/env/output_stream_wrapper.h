@@ -14,8 +14,7 @@ namespace starrocks {
 // Example usage:
 // #1. Write to file as std::ostream
 // ```
-//   std::unique_ptr<WritableFile> f;
-//   Env::Default()->new_writable_file("a.txt", &f);
+//   ASSIGN_OR_RETURN(std::unique_ptr<WritableFile> f, Env::Default()->new_writable_file("a.txt"));
 //   OutputStreamWrapper wrapper(f.release(), kTakesOwnership);
 //   wrapper << "anything can be sent to std::ostream";
 // ```
@@ -24,8 +23,7 @@ namespace starrocks {
 // ```
 //   TabletMetaPB tablet_meta_pb;
 //
-//   std::unique_ptr<WritableFile> f;
-//   Env::Default()->new_writable_file("a.txt", &f);
+//   ASSIGN_OR_RETURN(std::unique_ptr<WritableFile> f, Env::Default()->new_writable_file("a.txt"));
 //   OutputStreamWrapper wrapper(f.release(), kTakesOwnership);
 //   tablet_meta.SerializeToOStream(&wrapper);
 // ```

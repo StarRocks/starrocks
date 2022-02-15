@@ -162,10 +162,9 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
 
             EnvBroker env_broker(broker_addr, broker_prop);
             std::unique_ptr<WritableFile> broker_file;
-            RETURN_IF_ERROR(env_broker.new_writable_file(tmp_broker_file_name, &broker_file));
+            ASSIGN_OR_RETURN(broker_file, env_broker.new_writable_file(tmp_broker_file_name));
 
-            std::unique_ptr<SequentialFile> input_file;
-            RETURN_IF_ERROR(Env::Default()->new_sequential_file(local_file_path, &input_file));
+            ASSIGN_OR_RETURN(auto input_file, Env::Default()->new_sequential_file(local_file_path));
 
             auto res = FileUtils::copy(input_file.get(), broker_file.get(), 1024 * 1024);
             if (!res.ok()) {
@@ -313,8 +312,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             }
 
             EnvBroker env_broker(broker_addr, broker_prop);
-            std::unique_ptr<SequentialFile> broker_file;
-            RETURN_IF_ERROR(env_broker.new_sequential_file(full_remote_file, &broker_file));
+            ASSIGN_OR_RETURN(auto broker_file, env_broker.new_sequential_file(full_remote_file));
 
             // remove file which will be downloaded now.
             // this file will be added to local_files if it be downloaded successfully.
@@ -322,7 +320,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
             // 3. open local file for write
             std::unique_ptr<WritableFile> local_file;
-            RETURN_IF_ERROR(Env::Default()->new_writable_file(full_local_file, &local_file));
+            ASSIGN_OR_RETURN(local_file, Env::Default()->new_writable_file(full_local_file));
 
             auto res = FileUtils::copy(broker_file.get(), local_file.get(), 1024 * 1024);
             if (!res.ok()) {

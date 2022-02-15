@@ -31,22 +31,19 @@ Status open_file_for_write(Env* env, const std::string& path, std::shared_ptr<Wr
 
 Status open_file_for_write(const WritableFileOptions& opts, Env* env, const std::string& path,
                            std::shared_ptr<WritableFile>* file) {
-    std::unique_ptr<WritableFile> w;
-    RETURN_IF_ERROR(env->new_writable_file(opts, path, &w));
+    ASSIGN_OR_RETURN(auto w, env->new_writable_file(opts, path));
     file->reset(w.release());
     return Status::OK();
 }
 
 Status open_file_for_sequential(Env* env, const std::string& path, std::shared_ptr<SequentialFile>* file) {
-    std::unique_ptr<SequentialFile> r;
-    RETURN_IF_ERROR(env->new_sequential_file(path, &r));
+    ASSIGN_OR_RETURN(auto r, env->new_sequential_file(path));
     file->reset(r.release());
     return Status::OK();
 }
 
 Status open_file_for_random(Env* env, const std::string& path, std::shared_ptr<RandomAccessFile>* file) {
-    std::unique_ptr<RandomAccessFile> r;
-    RETURN_IF_ERROR(env->new_random_access_file(path, &r));
+    ASSIGN_OR_RETURN(auto r, env->new_random_access_file(path));
     file->reset(r.release());
     return Status::OK();
 }

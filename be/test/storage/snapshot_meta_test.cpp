@@ -92,14 +92,12 @@ protected:
 
 // NOLINTNEXTLINE
 TEST_F(SnapshotMetaTest, test_serialize_and_parse) {
-    std::unique_ptr<WritableFile> wf;
-    ASSERT_TRUE(Env::Default()->new_writable_file("test_serialize_and_parse.meta", &wf).ok());
+    auto wf = *Env::Default()->new_writable_file("test_serialize_and_parse.meta");
     ASSERT_TRUE(_snapshot_meta.serialize_to_file(wf.get()).ok());
     wf->close();
     DeferOp defer([&]() { std::filesystem::remove("test_serialize_and_parse.meta"); });
 
-    std::unique_ptr<RandomAccessFile> rf;
-    ASSERT_TRUE(Env::Default()->new_random_access_file("test_serialize_and_parse.meta", &rf).ok());
+    auto rf = *Env::Default()->new_random_access_file("test_serialize_and_parse.meta");
     SnapshotMeta meta;
     auto st = meta.parse_from_file(rf.get());
     ASSERT_TRUE(st.ok()) << st;
