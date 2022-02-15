@@ -13,6 +13,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "runtime/mem_pool.h"
 #include "runtime/types.h"
 #include "testutil/parallel_test.h"
 #include "util/json.h"
