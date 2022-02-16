@@ -289,9 +289,17 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     if (scanOperator.getPredicate() != null &&
                             scanOperator.getPredicate().getUsedColumns().contains(columnId)) {
                         List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
-                        for (ScalarOperator predicate : predicates) {
-                            if (predicate.getUsedColumns().contains(columnId)) {
-                                if (couldApplyDictOptimize(predicate)) {
+                        boolean couldApply = predicates.stream()
+                                .allMatch(predicate -> !predicate.getUsedColumns().contains(columnId) ||
+                                        couldApplyDictOptimize(predicate));
+                        if (!couldApply) {
+                            globalDictStringColumns.remove(stringColumn);
+                            dictStringIdToIntIds.remove(stringColumn.getId());
+                            couldEncoded = false;
+                        } else {
+                            for (ScalarOperator predicate : predicates) {
+                                if (predicate.getUsedColumns().contains(columnId)) {
+                                    Preconditions.checkState(couldApplyDictOptimize(predicate));
                                     if (newDictColumn == null) {
                                         newDictColumn = context.columnRefFactory.create(
                                                 stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
@@ -299,6 +307,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
                                     // For simple predicate, our olap scan node handle it by string,
                                     // So we couldn't rewrite it.
+                                    // TODO:
                                     if (isSimpleStrictPredicate(predicate)) {
                                         globalDictStringColumns.add(stringColumn);
                                         dictStringIdToIntIds.put(stringColumn.getId(), newDictColumn.getId());
@@ -307,18 +316,15 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                         Map<ColumnRefOperator, ScalarOperator> rewriteMap =
                                                 Maps.newHashMapWithExpectedSize(1);
                                         rewriteMap.put(stringColumn, newDictColumn);
-                                        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
+                                        ReplaceColumnRefRewriter rewriter =
+                                                new ReplaceColumnRefRewriter(rewriteMap);
                                         ScalarOperator rewritePredicate = predicate.accept(rewriter, null);
                                         Preconditions.checkState(rewritePredicate.equals(predicate));
                                     }
-                                } else {
-                                    globalDictStringColumns.remove(stringColumn);
-                                    dictStringIdToIntIds.remove(stringColumn.getId());
-                                    couldEncoded = false;
-                                    break;
                                 }
                             }
                         }
+
                         newPredicate = Utils.compoundAnd(predicates);
                     }
 
