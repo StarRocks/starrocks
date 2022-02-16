@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/rowset/segmentv2/index_page.h"
+#include "storage/rowset/segment_v2/index_page.h"
 
 #include <gtest/gtest.h>
 
