@@ -35,6 +35,7 @@
 #include "gen_cpp/segment.pb.h" // for ColumnMetaPB
 #include "runtime/mem_pool.h"
 #include "storage/collection.h"
+#include "storage/olap_common.h"
 #include "util/mem_util.hpp"
 #include "util/unaligned_access.h"
 
@@ -590,6 +591,18 @@ template <>
 struct CppColumnTraits<OLAP_FIELD_TYPE_JSON> {
     using ColumnType = vectorized::JsonColumn;
 };
+
+constexpr bool type_support_bloom_filter(FieldType ftype) {
+    switch (ftype) {
+    case OLAP_FIELD_TYPE_JSON:
+    case OLAP_FIELD_TYPE_OBJECT:
+    case OLAP_FIELD_TYPE_HLL:
+    case OLAP_FIELD_TYPE_PERCENTILE:
+        return false;
+    default:
+        return true;
+    }
+}
 
 // Instantiate this template to get static access to the type traits.
 template <FieldType field_type>

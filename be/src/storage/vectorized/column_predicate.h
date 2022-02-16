@@ -11,11 +11,19 @@
 #include "column/chunk.h"
 #include "column/column.h" // Column
 #include "column/datum.h"
+#include "column/type_traits.h"
 #include "common/object_pool.h"
+<<<<<<< HEAD
 #include "gen_cpp/Opcodes_types.h"
+=======
+#include "common/status.h"
+#include "runtime/primitive_type.h"
+>>>>>>> 08b3b0e5 (implement binary predicate for json)
 #include "storage/olap_common.h" // ColumnId
+#include "storage/types.h"
 #include "storage/vectorized/range.h"
 #include "storage/vectorized/zone_map_detail.h"
+#include "util/json.h"
 #include "util/string_parser.hpp"
 
 class Roaring;
@@ -32,6 +40,26 @@ class BloomFilter;
 } // namespace starrocks
 
 namespace starrocks::vectorized {
+
+template <FieldType ftype>
+struct PredicateCmpTypeForField {
+    using ValueType = typename CppTypeTraits<ftype>::CppType;
+};
+
+template <>
+struct PredicateCmpTypeForField<OLAP_FIELD_TYPE_JSON> {
+    using ValueType = JsonValue;
+};
+
+template <PrimitiveType ptype>
+struct PredicateCmpType {
+    using CmpType = RunTimeCppType<ptype>;
+};
+
+template <>
+struct PredicateCmpType<TYPE_JSON> {
+    using CmpType = JsonValue;
+};
 
 enum class PredicateType {
     kUnknown = 0,

@@ -4,28 +4,21 @@
 
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
+#include "column/type_traits.h"
 #include "exprs/vectorized/binary_function.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
+#include "storage/vectorized/column_predicate.h"
 
 namespace starrocks::vectorized {
 
-#define DEFINE_BINARY_PRED_FN(FN, OP)                                    \
-    struct BinaryPred##FN {                                              \
-        template <typename LType, typename RType, typename ResultType>   \
-        static inline ResultType apply(const LType& l, const RType& r) { \
-            return l OP r;                                               \
-        }                                                                \
+template <typename CMP>
+struct BinaryPredFunc {
+    template <typename LType, typename RType, typename ResultType>
+    static inline ResultType apply(const LType& l, const RType& r) {
+        return CMP()(l, r);
     }
-
-DEFINE_BINARY_PRED_FN(Eq, ==);
-DEFINE_BINARY_PRED_FN(Ne, !=);
-DEFINE_BINARY_PRED_FN(Lt, <);
-DEFINE_BINARY_PRED_FN(Le, <=);
-DEFINE_BINARY_PRED_FN(Gt, >);
-DEFINE_BINARY_PRED_FN(Ge, >=);
-
-#undef DEFINE_BINARY_PRED_FN
+};
 
 template <PrimitiveType Type, typename OP>
 class VectorizedBinaryPredicate final : public Predicate {
@@ -76,7 +69,8 @@ public:
                 builder.append(false);
             } else {
                 // all not null = value eq
-                builder.append(v1.value(row) == v2.value(row));
+                using CppType = RunTimeCppType<Type>;
+                builder.append(OP::template apply<CppType, CppType, bool>(v1.value(row), v2.value(row)));
             }
         }
 
@@ -87,21 +81,22 @@ public:
 struct BinaryPredicateBuilder {
     template <PrimitiveType data_type>
     Expr* operator()(const TExprNode& node) {
+        using CmpType = typename PredicateCmpType<data_type>::CmpType;
         switch (node.opcode) {
         case TExprOpcode::EQ:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredEq>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::equal_to<CmpType>>>(node);
         case TExprOpcode::NE:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredNe>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::not_equal_to<CmpType>>>(node);
         case TExprOpcode::LT:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredLt>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::less<CmpType>>>(node);
         case TExprOpcode::LE:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredLe>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::less_equal<CmpType>>>(node);
         case TExprOpcode::GT:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredGt>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::greater<CmpType>>>(node);
         case TExprOpcode::GE:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredGe>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::greater_equal<CmpType>>>(node);
         case TExprOpcode::EQ_FOR_NULL:
-            return new VectorizedNullSafeEqPredicate<data_type, BinaryPredEq>(node);
+            return new VectorizedNullSafeEqPredicate<data_type, BinaryPredFunc<std::equal_to<CmpType>>>(node);
         default:
             break;
         }
