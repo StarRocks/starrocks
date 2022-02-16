@@ -1017,11 +1017,12 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
             return status;
         }
         LOG(INFO) << "versions to be changed size:" << versions_to_be_changed.size();
+        Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
-            // prepare tablet_reader to prevent rowsets being compacted
+            // prepare tablet reader to prevent rowsets being compacted
             std::unique_ptr<vectorized::TabletReader> tablet_reader =
-                    std::make_unique<TabletReader>(base_tablet, rowset->version(), base_schema);
+                    std::make_unique<TabletReader>(base_tablet, version, base_schema);
             RETURN_IF_ERROR(tablet_reader->prepare());
             readers.emplace_back(std::move(tablet_reader));
         }
@@ -1063,7 +1064,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         }
     }
 
-    Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
     Version delete_predicates_version(0, max_rowset->version().second);
     TabletReaderParams read_params;
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
