@@ -1040,7 +1040,7 @@ public class StmtExecutor {
     }
 
     public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {
-        if (stmt.getQueryStmt().isExplain()) {
+        if (stmt.getQueryStatement().isExplain()) {
             handleExplainStmt(execPlan.getExplainString(TExplainLevel.NORMAL));
             return;
         }

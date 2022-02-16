@@ -1,26 +1,17 @@
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
-import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.StringReader;
 
 public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @BeforeClass
@@ -148,24 +139,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
-    public static String getInsertExecPlan(String originStmt) throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
-        SqlScanner input =
-                new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-        connectContext.getDumpInfo().setOriginStmt(originStmt);
-        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
-
-        String ret = execPlan.getExplainString(TExplainLevel.NORMAL);
-        //        System.out.println(ret);
-        return ret;
-    }
-
     @Test
     public void testInsert() throws Exception {
         String sql = "insert into test_all_type select * from test_all_type limit 5";
-        String planFragment = getInsertExecPlan(sql);
+        String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:1: t1a | 2: t1b | 3: t1c | 4: t1d | 5: t1e | 6: t1f | 7: t1g | 8: id_datetime | 9: id_date | 10: id_decimal\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -198,7 +175,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     limit: 5"));
 
         sql = "insert into test_all_type select * from test_all_type";
-        planFragment = getInsertExecPlan(sql);
+        planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:1: t1a | 2: t1b | 3: t1c | 4: t1d | 5: t1e | 6: t1f | 7: t1g | 8: id_datetime | 9: id_date | 10: id_decimal\n" +
                 "  PARTITION: RANDOM\n" +
@@ -219,7 +196,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     numNodes=0"));
 
         sql = "insert into test_all_type(t1a,t1b) select t1a,t1b from test_all_type limit 5";
-        planFragment = getInsertExecPlan(sql);
+        planFragment = getFragmentPlan(sql);
         System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:1: t1a | 2: t1b | 11: expr | 12: expr | 13: expr | 14: expr | 15: expr | 16: expr | 17: expr | 18: expr\n" +

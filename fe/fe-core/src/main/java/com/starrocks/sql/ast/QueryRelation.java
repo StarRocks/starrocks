@@ -81,11 +81,6 @@ public abstract class QueryRelation extends Relation {
     }
 
     @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitQueryRelation(this, context);
-    }
-
-    @Override
     public String toSql() {
         StringBuilder sqlBuilder = new StringBuilder();
 
@@ -104,5 +99,10 @@ public abstract class QueryRelation extends Relation {
             sqlBuilder.append(limit.toSql());
         }
         return sqlBuilder.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitQueryRelation(this, context);
     }
 }

@@ -18,6 +18,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
+import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
@@ -50,6 +51,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitQueryStatement(QueryStatement node, C context) {
+        return visitStatement(node, context);
+    }
+
+    public R visitInsertStatement(InsertStmt node, C context) {
         return visitStatement(node, context);
     }
 

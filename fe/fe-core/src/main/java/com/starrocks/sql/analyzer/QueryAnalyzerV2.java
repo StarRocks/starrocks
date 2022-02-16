@@ -215,7 +215,7 @@ public class QueryAnalyzerV2 {
                 if (table instanceof View) {
                     View view = (View) table;
                     String inlineViewDef = view.getInlineViewDef();
-                    QueryStatement stmt = (QueryStatement) SqlParser.parse(inlineViewDef).get(0);
+                    QueryStatement stmt = (QueryStatement) SqlParser.parse(inlineViewDef, session).get(0);
                     SubqueryRelation viewRelation = new SubqueryRelation(tableName.getTbl(), stmt.getQueryRelation());
                     viewRelation.setAlias(tableName);
                     return viewRelation;
