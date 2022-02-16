@@ -4,7 +4,6 @@ package com.starrocks.external.iceberg.cost;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -119,9 +118,18 @@ public class IcebergTableStatisticCalculator {
         }
 
         Statistics.Builder statisticsBuilder = Statistics.builder();
-        ImmutableMap.Builder<String, ColumnStatistic> columnStatsBuilder = ImmutableMap.builder();
         double recordCount = icebergFileStats.getRecordCount();
         for (Map.Entry<Integer, String> idColumn : idToColumnNames.entrySet()) {
+            List<ColumnRefOperator> columnList = colRefToColumnMetaMap.keySet().stream().filter(key -> {
+                LOG.debug("test key name " + key.getName());
+                LOG.debug("test id column name " + idColumn.getValue());
+                return key.getName().equals(idColumn.getValue());
+            }).collect(Collectors.toList());
+            if (columnList == null || columnList.size() != 1) {
+                LOG.debug("This column is not required " + (columnList == null ? "null" : columnList.size()));
+                continue;
+            }
+
             int fieldId = idColumn.getKey();
             ColumnStatistic.Builder columnBuilder = ColumnStatistic.builder();
             Long nullCount = icebergFileStats.getNullCounts().get(fieldId);
@@ -140,12 +148,6 @@ public class IcebergTableStatisticCalculator {
                 columnBuilder.setMinValue(((Number) min).doubleValue());
                 columnBuilder.setMaxValue(((Number) max).doubleValue());
             }
-            List<ColumnRefOperator> columnList = colRefToColumnMetaMap.keySet().stream().filter(key -> {
-                LOG.debug("test key name " + key.getName());
-                LOG.debug("test id column name " + idColumn.getValue());
-                return key.getName().equals(idColumn.getValue());
-            }).collect(Collectors.toList());
-            Preconditions.checkState(columnList.size() == 1);
             statisticsBuilder.addColumnStatistic(columnList.get(0), columnBuilder.build());
         }
         statisticsBuilder.setOutputRowCount(recordCount);
