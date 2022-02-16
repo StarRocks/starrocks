@@ -25,6 +25,7 @@
 #include <cstdio>
 #include <sstream>
 
+#include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
 #include "util/bit_util.h"
@@ -120,7 +121,11 @@ bool MemPool::find_chunk(size_t min_size, bool check_limits) {
     // Allocate a new chunk. Return early if allocate fails.
     Chunk chunk;
     if (!ChunkAllocator::instance()->allocate(chunk_size, &chunk)) {
-        return false;
+        if (tls_thread_status.is_catched()) {
+            throw std::bad_alloc();
+        } else {
+            return false;
+        }
     }
     ASAN_POISON_MEMORY_REGION(chunk.data, chunk_size);
     // Put it before the first free chunk. If no free chunks, it goes at the end.
