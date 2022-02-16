@@ -11,7 +11,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
-import org.apache.iceberg.expressions.UnboundPredicate;
+import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Type;
@@ -41,12 +41,12 @@ public class IcebergTableStatisticCalculator {
         this.icebergTable = icebergTable;
     }
 
-    public static IcebergTableStats getTableStatistics(List<UnboundPredicate> icebergPredicates, Table icebergTable) {
+    public static IcebergTableStats getTableStatistics(List<Expression> icebergPredicates, Table icebergTable) {
         return new IcebergTableStatisticCalculator(icebergTable)
                 .makeTableStatistics(icebergPredicates);
     }
 
-    private IcebergTableStats makeTableStatistics(List<UnboundPredicate> icebergPredicates) {
+    private IcebergTableStats makeTableStatistics(List<Expression> icebergPredicates) {
         LOG.debug("Begin to make iceberg table statistics!");
         Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(icebergTable, true);
         if (!snapshot.isPresent()) {
