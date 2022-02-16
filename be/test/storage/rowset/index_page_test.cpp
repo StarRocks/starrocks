@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-namespace starrocks {
+namespace starrocks::segment_v2 {
 
 class IndexPageTest : public testing::Test {};
 
@@ -108,4 +108,4 @@ TEST_F(IndexPageTest, test_seek_at_or_after) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::segment_v2
