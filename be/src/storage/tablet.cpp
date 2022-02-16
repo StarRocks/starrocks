@@ -914,7 +914,7 @@ void Tablet::pick_candicate_rowsets_to_base_compaction(vector<RowsetSharedPtr>* 
     size_t i = 0;
     for (auto& it : _rs_version_map) {
         if (it.first.first < _cumulative_point) {
-            if (i < config.max_base_compaction_num_cumulative_deltas) {
+            if (i < config::max_base_compaction_num_cumulative_deltas) {
                 candidate_rowsets->push_back(it.second);
                 i++;
             } else {
