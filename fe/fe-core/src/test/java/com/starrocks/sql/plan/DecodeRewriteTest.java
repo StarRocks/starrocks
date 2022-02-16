@@ -434,6 +434,29 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
+    public void testDecodeNodeRewrite15() throws Exception {
+        // Test Predicate dict columns both has support predicate and no-support predicate
+        String sql;
+        String plan;
+        {
+            sql = "select count(*) from " +
+                    "supplier where S_ADDRESS like '%A%' and S_ADDRESS not like '%B%'";
+            plan = getCostExplain(sql);
+            Assert.assertFalse(plan.contains(" dict_col=S_ADDRESS "));
+        }
+        {
+            sql = "select * from supplier l join supplier r on " +
+                    "l.S_NAME = r.S_NAME where upper(l.S_ADDRESS) like '%A%' and upper(l.S_ADDRESS) not like '%B%'";
+            plan = getCostExplain(sql);
+            Assert.assertTrue(plan.contains("  1:OlapScanNode\n" +
+                    "     table: supplier, rollup: supplier\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: upper(3: S_ADDRESS) LIKE '%A%', NOT (upper(3: S_ADDRESS) LIKE '%B%')\n" +
+                    "     dict_col=S_COMMENT"));
+        }
+    }
+
+    @Test
     public void testLeftJoinWithUnion() throws Exception {
         String sql;
         String plan;
