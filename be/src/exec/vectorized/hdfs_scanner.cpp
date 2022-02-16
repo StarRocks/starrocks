@@ -273,5 +273,3 @@ bool HdfsFileReaderParam::can_use_dict_filter_on_slot(SlotDescriptor* slot) cons
 }
 
 } // namespace starrocks::vectorized
-
-} // namespace starrocks::vectorized
