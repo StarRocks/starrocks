@@ -59,7 +59,7 @@ class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriv
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
 
 public:
-    QuerySharedDriverQueue() : _is_closed(false) {
+    QuerySharedDriverQueue() {
         double factor = 1;
         for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
             // initialize factor for every sub queue,
@@ -92,7 +92,7 @@ private:
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
     std::mutex _global_mutex;
     std::condition_variable _cv;
-    bool _is_closed;
+    bool _is_closed = false;
 };
 
 // All the QuerySharedDriverQueueWithoutLock's methods MUST be guarded by the outside lock.

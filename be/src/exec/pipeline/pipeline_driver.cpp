@@ -15,7 +15,9 @@
 namespace starrocks::pipeline {
 
 PipelineDriver::~PipelineDriver() noexcept {
-    _workgroup->decrease_num_drivers();
+    if (_workgroup != nullptr) {
+        _workgroup->decrease_num_drivers();
+    }
 }
 
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {

@@ -647,6 +647,8 @@ CONF_Int64(pipeline_yield_max_chunks_moved, "100");
 CONF_Int64(pipeline_yield_max_time_spent, "100000000");
 // the number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
+// queue size of scan thread pool for pipeline engine.
+CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The max number of io tasks for each scan operator.
 CONF_Int64(pipeline_scan_max_tasks_per_operator, "4");
 // The max number of io tasks for each scan operator.

@@ -47,6 +47,8 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
+
     void set_workgroup(starrocks::workgroup::WorkGroupPtr wg);
 
 private:
@@ -67,6 +69,7 @@ private:
 
     const TOlapScanNode& _olap_scan_node;
     const std::vector<ExprContext*>& _conjunct_ctxs;
+    PriorityThreadPool* _io_threads = nullptr;
     std::vector<std::string> _unused_output_columns;
     // Pass limit info to scan operator in order to improve sql:
     // select * from table limit x;

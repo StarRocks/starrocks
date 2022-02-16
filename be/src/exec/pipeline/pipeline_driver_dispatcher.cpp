@@ -8,9 +8,12 @@
 
 namespace starrocks::pipeline {
 
-GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool)
-        : _driver_queue(std::make_unique<DriverQueueWithWorkGroup>()),
-          _thread_pool(std::move(thread_pool)),
+GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group)
+        : _thread_pool(std::move(thread_pool)),
+          _enable_resource_group(enable_resource_group),
+          _driver_queue(enable_resource_group
+                                ? std::unique_ptr<DriverQueue>(std::make_unique<DriverQueueWithWorkGroup>())
+                                : std::make_unique<QuerySharedDriverQueue>()),
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
           _exec_state_reporter(new ExecStateReporter()) {}
 

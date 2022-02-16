@@ -119,6 +119,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
 
+    public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
+
     public static final String WORKGROUP_ID = "workgroup_id";
 
     // hash join right table push down
@@ -182,6 +184,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
+    private boolean enableResourceGroup = false;
 
     // max memory used on every backend.
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
@@ -759,6 +764,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {
         this.enablePipelineEngine = enablePipelineEngine;
+    }
+
+    public boolean isEnableResourceGroup() {
+        return enableResourceGroup;
+    }
+
+    public void setEnableResourceGroup(boolean enableResourceGroup) {
+        this.enableResourceGroup = enableResourceGroup;
     }
 
     public int getPipelineDop() {

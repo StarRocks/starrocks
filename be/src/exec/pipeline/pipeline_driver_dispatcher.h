@@ -39,7 +39,7 @@ public:
 
 class GlobalDriverDispatcher final : public FactoryMethod<DriverDispatcher, GlobalDriverDispatcher> {
 public:
-    explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool);
+    explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group);
     ~GlobalDriverDispatcher() override;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
@@ -53,8 +53,9 @@ private:
 
 private:
     LimitSetter _num_threads_setter;
-    std::unique_ptr<DriverQueue> _driver_queue;
     std::unique_ptr<ThreadPool> _thread_pool;
+    const bool _enable_resource_group;
+    std::unique_ptr<DriverQueue> _driver_queue;
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
 };

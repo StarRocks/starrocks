@@ -20,6 +20,17 @@ Status ScanOperator::prepare(RuntimeState* state) {
 
     _state = state;
 
+    if (_workgroup == nullptr) {
+        DCHECK(_io_threads != nullptr);
+        auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
+        if (num_scan_operators > _io_threads->get_queue_capacity()) {
+            state->exec_env()->decrement_num_scan_operators(1);
+            return Status::TooManyTasks(
+                    strings::Substitute("num_scan_operators exceeds queue capacity($0) of pipeline_pool_thread",
+                                        _io_threads->get_queue_capacity()));
+        }
+    }
+
     // init filtered_ouput_columns
     for (const auto& col_name : _olap_scan_node.unused_output_column_name) {
         _unused_output_columns.emplace_back(col_name);
@@ -30,6 +41,10 @@ Status ScanOperator::prepare(RuntimeState* state) {
 
 Status ScanOperator::close(RuntimeState* state) {
     DCHECK(_num_running_io_tasks == 0);
+
+    if (_workgroup == nullptr) {
+        state->exec_env()->decrement_num_scan_operators(1);
+    }
 
     for (auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr) {
@@ -109,7 +124,9 @@ void ScanOperator::set_finishing(RuntimeState* state) {
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
 
-    _workgroup->decrease_chunk_num(1);
+    if (_workgroup != nullptr) {
+        _workgroup->decrease_chunk_num(1);
+    }
 
     for (auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr && chunk_source->has_output()) {
@@ -155,11 +172,16 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.work_function = [this, state, chunk_source_index]() {
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-            size_t num_read_chunks = 0;
-            _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished,
-                                                                                  &num_read_chunks);
-            // TODO (by laotan332): More detailed information is needed
-            _workgroup->increase_chunk_num(num_read_chunks);
+
+            if (_workgroup == nullptr) {
+                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
+            } else {
+                size_t num_read_chunks = 0;
+                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
+                        _buffer_size, _is_finished, &num_read_chunks);
+                // TODO (by laotan332): More detailed information is needed
+                _workgroup->increase_chunk_num(num_read_chunks);
+            }
         }
 
         _num_running_io_tasks--;
@@ -168,7 +190,14 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     // TODO(by satanson): set a proper priority
     task.priority = 20;
 
-    if (WorkGroupManager::instance()->try_offer_io_task(_workgroup, task)) {
+    bool offer_task_success = false;
+    if (_workgroup != nullptr) {
+        offer_task_success = WorkGroupManager::instance()->try_offer_io_task(_workgroup, task);
+    } else {
+        offer_task_success = _io_threads->try_offer(task);
+    }
+
+    if (offer_task_success) {
         _io_task_retry_cnt = 0;
     } else {
         _num_running_io_tasks--;

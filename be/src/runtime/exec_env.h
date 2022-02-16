@@ -127,9 +127,13 @@ public:
 
     ThreadResourceMgr* thread_mgr() { return _thread_mgr; }
     PriorityThreadPool* thread_pool() { return _thread_pool; }
+    PriorityThreadPool* pipeline_scan_io_thread_pool() { return _pipeline_scan_io_thread_pool; }
+    size_t increment_num_scan_operators(size_t n) { return _num_scan_operators.fetch_add(n); }
+    size_t decrement_num_scan_operators(size_t n) { return _num_scan_operators.fetch_sub(n); }
     PriorityThreadPool* etl_thread_pool() { return _etl_thread_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverDispatcher* driver_dispatcher() { return _driver_dispatcher; }
+    starrocks::pipeline::DriverDispatcher* wg_driver_dispatcher() { return _wg_driver_dispatcher; }
     TMasterInfo* master_info() { return _master_info; }
     LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
@@ -204,10 +208,13 @@ private:
 
     ThreadResourceMgr* _thread_mgr = nullptr;
     PriorityThreadPool* _thread_pool = nullptr;
+    PriorityThreadPool* _pipeline_scan_io_thread_pool = nullptr;
     std::atomic<size_t> _num_scan_operators;
     PriorityThreadPool* _etl_thread_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
-    starrocks::pipeline::DriverDispatcher* _driver_dispatcher = nullptr;
+    pipeline::DriverDispatcher* _wg_driver_dispatcher = nullptr;
+    pipeline::DriverDispatcher* _driver_dispatcher = nullptr;
+    starrocks::workgroup::IoDispatcher* _io_dispatcher = nullptr;
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
 
@@ -227,8 +234,6 @@ private:
     PluginMgr* _plugin_mgr = nullptr;
 
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
-
-    starrocks::workgroup::IoDispatcher* _io_dispatcher = nullptr;
 };
 
 template <>
