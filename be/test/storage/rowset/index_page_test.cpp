@@ -1,10 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/rowset/index_page.h"
+#include "storage/rowset/segmentv2/index_page.h"
 
 #include <gtest/gtest.h>
 
-namespace starrocks {
+namespace starrocks::segment_v2 {
 
 class IndexPageTest : public testing::Test {};
 
@@ -108,4 +108,4 @@ TEST_F(IndexPageTest, test_seek_at_or_after) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::segment_v2
