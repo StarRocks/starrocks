@@ -2,7 +2,6 @@
 
 package com.starrocks.external.iceberg.cost;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.external.iceberg.IcebergUtil;
