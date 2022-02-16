@@ -1,8 +1,13 @@
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.WorkGroupAnalyzer;
+import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.thrift.TWorkGroupType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -19,6 +24,7 @@ public class CreateWorkGroupStmt extends DdlStmt {
     private boolean replaceIfExists;
     private List<List<Predicate>> classifiers;
     private Map<String, String> properties;
+    private WorkGroup workgroup;
 
     public CreateWorkGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists, List<List<Predicate>> classifiers, Map<String, String> proeprties) {
         this.name = name;
@@ -45,6 +51,32 @@ public class CreateWorkGroupStmt extends DdlStmt {
     }
 
     public Relation analyze() throws SemanticException {
+        workgroup = new WorkGroup();
+        workgroup.setName(name);
+        List<WorkGroupClassifier> classifierList = new ArrayList<>();
+        for (List<Predicate> predicates : classifiers) {
+            WorkGroupClassifier classifier = WorkGroupAnalyzer.convertPredicateToClassifier(predicates);
+            classifierList.add(classifier);
+        }
+        workgroup.setClassifiers(classifierList);
+        WorkGroupAnalyzer.analyzeProperties(workgroup, properties);
+
+        if (workgroup.getWorkGroupType() == null) {
+            workgroup.setWorkGroupType(TWorkGroupType.WG_NORMAL);
+        }
+        if (workgroup.getCpuCoreLimit() == null) {
+            throw new SemanticException("property 'cpu_core_limit' is absent");
+        }
+        if (workgroup.getMemLimit() == null) {
+            throw new SemanticException("property 'mem_limit' is absent");
+        }
+        if (workgroup.getConcurrencyLimit() == null) {
+            throw new SemanticException("property 'concurrent_limit' is absent");
+        }
         return null;
+    }
+
+    public WorkGroup getWorkgroup() {
+        return workgroup;
     }
 }

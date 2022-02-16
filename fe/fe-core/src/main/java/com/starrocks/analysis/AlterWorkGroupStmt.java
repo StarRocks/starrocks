@@ -3,8 +3,14 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.WorkGroupAnalyzer;
+import com.starrocks.catalog.WorkGroupClassifier;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.Relation;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -21,6 +27,8 @@ import java.util.Map;
 public class AlterWorkGroupStmt extends DdlStmt {
     private String name;
     private SubCommand cmd;
+    private List<WorkGroupClassifier> newAddedClassifiers = Collections.emptyList();
+    private WorkGroup changedProperties = new WorkGroup();
 
     public AlterWorkGroupStmt(String name, SubCommand cmd) {
         this.name = name;
@@ -36,7 +44,36 @@ public class AlterWorkGroupStmt extends DdlStmt {
     }
 
     public Relation analyze() {
+        if (cmd instanceof AddClassifiers) {
+            AddClassifiers addClassifiers = (AddClassifiers) cmd;
+            List<WorkGroupClassifier> classifierList = new ArrayList<>();
+            for (List<Predicate> predicates : addClassifiers.classifiers) {
+                WorkGroupClassifier classifier = WorkGroupAnalyzer.convertPredicateToClassifier(predicates);
+                classifierList.add(classifier);
+            }
+            newAddedClassifiers = classifierList;
+        } else if (cmd instanceof AlterProperties) {
+            AlterProperties alterProperties = (AlterProperties) cmd;
+            WorkGroupAnalyzer.analyzeProperties(changedProperties, alterProperties.properties);
+            if (changedProperties.getWorkGroupType() != null) {
+                throw new SemanticException("type of WorkGroup is immutable");
+            }
+            if (changedProperties.getCpuCoreLimit() == null &&
+                    changedProperties.getMemLimit() == null &&
+                    changedProperties.getConcurrencyLimit() == null) {
+                throw new SemanticException(
+                        "At least one of ('cpu_core_limit', 'mem_limit', 'concurrency_limit' should be specified");
+            }
+        }
         return null;
+    }
+
+    public List<WorkGroupClassifier> getNewAddedClassifiers() {
+        return newAddedClassifiers;
+    }
+
+    public WorkGroup getChangedProperties() {
+        return changedProperties;
     }
 
     public List<Long> getClassifiersToDrop() {
