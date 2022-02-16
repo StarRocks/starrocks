@@ -289,6 +289,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     if (scanOperator.getPredicate() != null &&
                             scanOperator.getPredicate().getUsedColumns().contains(columnId)) {
                         List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
+                        // If there is an unsupported expression in any of the low cardinality columns,
+                        // we disable low cardinality optimization.
+                        // TODO(stdpain):
+                        // If one of the two low-cardinality columns is supported and the other is not,
+                        // we could make the first column apply low cardinality optimization
                         boolean couldApply = predicates.stream()
                                 .allMatch(predicate -> !predicate.getUsedColumns().contains(columnId) ||
                                         couldApplyDictOptimize(predicate));

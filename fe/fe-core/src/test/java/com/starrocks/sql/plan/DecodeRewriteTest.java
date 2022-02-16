@@ -475,7 +475,6 @@ public class DecodeRewriteTest extends PlanTestBase {
                     "     preAggregation: on\n" +
                     "     Predicates: upper(3: S_ADDRESS) LIKE '%A%', NOT (upper(3: S_ADDRESS) LIKE '%B%')\n" +
                     "     dict_col=S_COMMENT"));
-            System.out.println("plan = " + plan);
         }
     }
 
