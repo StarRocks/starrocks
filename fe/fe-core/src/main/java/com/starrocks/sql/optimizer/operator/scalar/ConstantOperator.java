@@ -333,6 +333,30 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return type.equals(Type.NULL) || isNull;
     }
 
+    public ConstantOperator castToStrictly(Type type) throws Exception {
+        if (!type.isDecimalV3()) {
+            return castTo(type);
+        }
+
+        BigDecimal decimal = new BigDecimal(value.toString());
+        ScalarType scalarType = (ScalarType) type;
+        try {
+            DecimalLiteral.checkLiteralOverflowInDecimalStyle(decimal, scalarType);
+        } catch (AnalysisException ignored) {
+            return ConstantOperator.createNull(type);
+        }
+        int realScale = DecimalLiteral.getRealScale(decimal);
+        int scale = scalarType.getScalarScale();
+        if (scale <= realScale) {
+            decimal = decimal.setScale(scale, RoundingMode.HALF_UP);
+        }
+
+        if (scalarType.getScalarScale() == 0 && scalarType.getScalarPrecision() == 0) {
+            throw new SemanticException("Forbidden cast to decimal(precision=0, scale=0)");
+        }
+        return ConstantOperator.createDecimal(decimal, type);
+    }
+
     public ConstantOperator castTo(Type desc) throws Exception {
         if (type.isTime() || desc.isTime()) {
             // Don't support constant time cast in FE
@@ -395,7 +419,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             BigDecimal decimal = new BigDecimal(childString);
             ScalarType scalarType = (ScalarType) desc;
             try {
-                DecimalLiteral.checkLiteralOverflow(decimal, scalarType);
+                DecimalLiteral.checkLiteralOverflowInBinaryStyle(decimal, scalarType);
             } catch (AnalysisException ignored) {
                 return ConstantOperator.createNull(desc);
             }

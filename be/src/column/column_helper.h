@@ -67,6 +67,18 @@ public:
         return ConstColumn::create(ptr, chunk_size);
     }
 
+    template <PrimitiveType PT>
+    static inline ColumnPtr create_const_decimal_column(RunTimeCppType<PT> value, int precision, int scale,
+                                                        size_t size) {
+        static_assert(pt_is_decimal<PT>);
+        using ColumnType = RunTimeColumnType<PT>;
+        auto data_column = ColumnType::create(precision, scale, 1);
+        auto& data = ColumnHelper::cast_to_raw<PT>(data_column)->get_data();
+        DCHECK(data.size() == 1);
+        data[0] = value;
+        return ConstColumn::create(data_column, size);
+    }
+
     // If column is const column, duplicate the data column to chunk_size
     static ColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, const ColumnPtr& column) {
         if (column->is_constant()) {
