@@ -130,6 +130,13 @@ public:
     PriorityThreadPool* etl_thread_pool() { return _etl_thread_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverDispatcher* driver_dispatcher() { return _driver_dispatcher; }
+
+    // The real_time_driver_dispatcher does not use our resource isolation mechanism 
+    // and still relies only on the OS dispatcher
+    // which may result in lower latency and is more stable. In the absence of competition
+    // it can use 100% of the system resources, and in the case of fierce competition
+    // it can use half of the resources
+    // and probably soon we will adjust the priority to make this mechanism meet the requirements of even lower latency
     starrocks::pipeline::DriverDispatcher* real_time_driver_dispatcher() { return _real_time_driver_dispatcher; }
     TMasterInfo* master_info() { return _master_info; }
     LoadPathMgr* load_path_mgr() { return _load_path_mgr; }

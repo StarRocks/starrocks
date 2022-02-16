@@ -170,14 +170,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.priority = 20;
 
     if (_workgroup != nullptr) {
-        if (_workgroup->type() == WorkGroupType::WG_REALTIME) {
-            if (WorkGroupManager::instance()->try_offer_real_time_io_task(task)) {
-                _io_task_retry_cnt = 0;
-            }
-        } else {
-            if (WorkGroupManager::instance()->try_offer_io_task(_workgroup, task)) {
-                _io_task_retry_cnt = 0;
-            }
+        if (WorkGroupManager::instance()->try_offer_io_task(_workgroup, task)) {
+            _io_task_retry_cnt = 0;
         }
     } else {
         _num_running_io_tasks--;

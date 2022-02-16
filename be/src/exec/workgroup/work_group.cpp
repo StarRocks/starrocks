@@ -285,30 +285,6 @@ WorkGroupPtr IoWorkGroupQueue::_select_next_wg() {
     return max_wg;
 }
 
-StatusOr<PriorityThreadPool::Task> IoWorkGroupQueue::pick_next_task() {
-    std::unique_lock<std::mutex> lock(_global_io_mutex);
-
-    if (_is_closed) {
-        return Status::Cancelled("Shutdown");
-    }
-    while (_ready_wgs.empty()) {
-        _cv.wait(lock);
-        if (_is_closed) {
-            return Status::Cancelled("Shutdown");
-        }
-    }
-
-    _maybe_adjust_weight();
-    WorkGroupPtr wg = _select_next_wg();
-    if (wg->io_task_queue_size() == 1) {
-        _ready_wgs.erase(wg);
-    }
-
-    _total_task_num--;
-
-    return wg->pick_io_task();
-}
-
 void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     std::unique_lock write_lock(_mutex);
 
@@ -408,28 +384,49 @@ std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
     return workgroups;
 }
 
-StatusOr<PriorityThreadPool::Task> IoWorkGroupQueue::pick_next_real_time_task() {
-    std::unique_lock<std::mutex> lock(_realtime_io_mutex);
+StatusOr<PriorityThreadPool::Task> IoWorkGroupQueue::pick_next_task(bool is_real_time_type) {
+    if (is_real_time_type) {
+        std::unique_lock<std::mutex> lock(_realtime_io_mutex);
 
-    if (_is_closed) {
-        return Status::Cancelled("Shutdown");
-    }
-
-    while (_real_time_wg->io_task_queue_size() == 0) {
-        _realtime_io_cv.wait(lock);
         if (_is_closed) {
             return Status::Cancelled("Shutdown");
         }
-    }
 
-    return _real_time_wg->pick_io_task();
+        while (_real_time_wg->io_task_queue_size() == 0) {
+            _realtime_io_cv.wait(lock);
+            if (_is_closed) {
+                return Status::Cancelled("Shutdown");
+            }
+        }
+
+        return _real_time_wg->pick_io_task();
+    } else {
+        std::unique_lock<std::mutex> lock(_global_io_mutex);
+
+        if (_is_closed) {
+            return Status::Cancelled("Shutdown");
+        }
+        while (_ready_wgs.empty()) {
+            _cv.wait(lock);
+            if (_is_closed) {
+                return Status::Cancelled("Shutdown");
+            }
+        }
+
+        _maybe_adjust_weight();
+        WorkGroupPtr wg = _select_next_wg();
+        if (wg->io_task_queue_size() == 1) {
+            _ready_wgs.erase(wg);
+        }
+
+        _total_task_num--;
+
+        return wg->pick_io_task();
+    }
 }
 
 StatusOr<PriorityThreadPool::Task> WorkGroupManager::pick_next_task_for_io(bool is_real_time_type) {
-    if (is_real_time_type) {
-        return _wg_io_queue.pick_next_real_time_task();
-    }
-    return _wg_io_queue.pick_next_task();
+    return _wg_io_queue.pick_next_task(is_real_time_type);
 }
 
 WorkGroupQueue& WorkGroupManager::get_io_queue() {
@@ -437,23 +434,22 @@ WorkGroupQueue& WorkGroupManager::get_io_queue() {
 }
 
 bool IoWorkGroupQueue::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
-    std::lock_guard<std::mutex> lock(_global_io_mutex);
+    if (wg->type() == WorkGroupType::WG_REALTIME) {
+        std::unique_lock<std::mutex> lock(_realtime_io_mutex);
+        _real_time_wg->try_offer_io_task(task);
+        _realtime_io_cv.notify_one();
+        return true;
+    } else {
+        std::lock_guard<std::mutex> lock(_global_io_mutex);
+        wg->try_offer_io_task(task);
+        if (_ready_wgs.find(wg) == _ready_wgs.end()) {
+            _ready_wgs.emplace(wg);
+        }
 
-    wg->try_offer_io_task(task);
-    if (_ready_wgs.find(wg) == _ready_wgs.end()) {
-        _ready_wgs.emplace(wg);
+        _total_task_num++;
+        _cv.notify_one();
+        return true;
     }
-
-    _total_task_num++;
-    _cv.notify_one();
-    return true;
-}
-
-bool IoWorkGroupQueue::try_offer_real_time_io_task(const PriorityThreadPool::Task& task) {
-    std::unique_lock<std::mutex> lock(_realtime_io_mutex);
-    _real_time_wg->try_offer_io_task(task);
-    _realtime_io_cv.notify_one();
-    return true;
 }
 
 void IoWorkGroupQueue::close() {
@@ -479,10 +475,6 @@ void WorkGroupManager::close() {
 
 bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
     return _wg_io_queue.try_offer_io_task(wg, task);
-}
-
-bool WorkGroupManager::try_offer_real_time_io_task(const PriorityThreadPool::Task& task) {
-    return _wg_io_queue.try_offer_real_time_io_task(task);
 }
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {

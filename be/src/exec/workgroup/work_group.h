@@ -48,12 +48,8 @@ public:
     void remove(const WorkGroupPtr& wg) override {}
     WorkGroupPtr pick_next() override { return nullptr; };
 
-    StatusOr<PriorityThreadPool::Task> pick_next_task();
+    StatusOr<PriorityThreadPool::Task> pick_next_task(bool is_real_time_type);
     bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
-
-    // for real_time wg
-    bool try_offer_real_time_io_task(const PriorityThreadPool::Task& task);
-    StatusOr<PriorityThreadPool::Task> pick_next_real_time_task();
 
     void close() override;
 
@@ -242,9 +238,6 @@ public:
     // get next workgroup for io
     StatusOr<PriorityThreadPool::Task> pick_next_task_for_io(bool is_real_time_type = false);
     bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
-
-    // for real time workgroup
-    bool try_offer_real_time_io_task(const PriorityThreadPool::Task& task);
 
     WorkGroupQueue& get_cpu_queue();
 
