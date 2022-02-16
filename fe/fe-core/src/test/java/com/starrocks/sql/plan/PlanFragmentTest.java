@@ -5740,4 +5740,20 @@ public class PlanFragmentTest extends PlanTestBase {
                 "         1 | 2 | 3\n" +
                 "     limit: 1"));
     }
+
+    @Test
+    public void testUnionSubqueryDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(2);
+        String sql = "select * from (select * from t0 union all select * from t0) xx limit 10;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       limit: 10\n" +
+                "  |    \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 10"));
+    }
 }
