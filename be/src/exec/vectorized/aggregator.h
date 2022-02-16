@@ -262,7 +262,6 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
                         _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
                     }
@@ -278,7 +277,6 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
                         _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
                     }
