@@ -193,6 +193,12 @@ size_t WorkGroup::io_task_queue_size() {
     return _io_work_queue.size();
 }
 
+void IoWorkGroupQueue::add(const WorkGroupPtr& wg) {
+    if (wg->type() == WorkGroupType::WG_REALTIME) {
+        _real_time_wg = wg;
+    }
+}
+
 void IoWorkGroupQueue::_maybe_adjust_weight() {
     if (--_remaining_schedule_num_period > 0) {
         return;

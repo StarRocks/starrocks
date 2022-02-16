@@ -13,7 +13,7 @@ GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> threa
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
           _exec_state_reporter(new ExecStateReporter()),
           _is_use_workgroup(is_use_workgroup) {
-    if (_is_use_workgroup) {
+    if (!_is_use_workgroup) {
         _driver_queue = std::make_unique<QuerySharedDriverQueue>();
     } else {
         _driver_queue = std::make_unique<DriverQueueWithWorkGroup>();

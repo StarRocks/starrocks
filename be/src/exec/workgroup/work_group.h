@@ -44,7 +44,7 @@ public:
     IoWorkGroupQueue() = default;
     ~IoWorkGroupQueue() override = default;
 
-    void add(const WorkGroupPtr& wg) override {}
+    void add(const WorkGroupPtr& wg) override;
     void remove(const WorkGroupPtr& wg) override {}
     WorkGroupPtr pick_next() override { return nullptr; };
 
