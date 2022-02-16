@@ -39,7 +39,7 @@ public:
     bool empty() { return size() == 0; }
 };
 
-class SubQuerySharedDriverQueue {
+class SubQuerySharedDriverQueueWithoutLock {
 public:
     void update_accu_time(const DriverRawPtr driver) {
         _accu_consume_time.fetch_add(driver->driver_acct().get_last_time_spent());
@@ -55,12 +55,12 @@ private:
     std::atomic<int64_t> _accu_consume_time = 0;
 };
 
-// All the QuerySharedDriverQueue's methods MUST be guarded by the outside lock.
-class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriverQueue> {
-    friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
+// All the QuerySharedDriverQueueWithoutLock's methods MUST be guarded by the outside lock.
+class QuerySharedDriverQueueWithoutLock : public FactoryMethod<DriverQueue, QuerySharedDriverQueueWithoutLock> {
+    friend class FactoryMethod<DriverQueue, QuerySharedDriverQueueWithoutLock>;
 
 public:
-    QuerySharedDriverQueue() {
+    QuerySharedDriverQueueWithoutLock() {
         double factor = 1;
         for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
             // initialize factor for every sub queue,
@@ -70,7 +70,7 @@ public:
             factor *= RATIO_OF_ADJACENT_QUEUE;
         }
     }
-    ~QuerySharedDriverQueue() override = default;
+    ~QuerySharedDriverQueueWithoutLock() override = default;
     void close() override {}
 
     void put_back(const DriverRawPtr driver) override;
@@ -91,7 +91,7 @@ private:
     static constexpr size_t QUEUE_SIZE = 8;
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
 
-    SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
+    SubQuerySharedDriverQueueWithoutLock _queues[QUEUE_SIZE];
 
     size_t _size = 0;
 };

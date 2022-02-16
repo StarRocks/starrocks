@@ -7,27 +7,27 @@
 
 namespace starrocks::pipeline {
 
-void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
+void QuerySharedDriverQueueWithoutLock::put_back(const DriverRawPtr driver) {
     _put_back(driver);
 }
 
-void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) {
+void QuerySharedDriverQueueWithoutLock::put_back(const std::vector<DriverRawPtr>& drivers) {
     for (auto driver : drivers) {
         _put_back(driver);
     }
 }
 
-void QuerySharedDriverQueue::put_back_from_dispatcher(const DriverRawPtr driver) {
-    // QuerySharedDriverQueue::put_back_from_dispatcher is identical to put_back.
+void QuerySharedDriverQueueWithoutLock::put_back_from_dispatcher(const DriverRawPtr driver) {
+    // QuerySharedDriverQueueWithoutLock::put_back_from_dispatcher is identical to put_back.
     put_back(driver);
 }
 
-void QuerySharedDriverQueue::put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) {
-    // QuerySharedDriverQueue::put_back_from_dispatcher is identical to put_back.
+void QuerySharedDriverQueueWithoutLock::put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) {
+    // QuerySharedDriverQueueWithoutLock::put_back_from_dispatcher is identical to put_back.
     put_back(drivers);
 }
 
-StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
+StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take() {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
@@ -58,11 +58,11 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
     return driver_ptr;
 }
 
-void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
+void QuerySharedDriverQueueWithoutLock::update_statistics(const DriverRawPtr driver) {
     _queues[driver->get_dispatch_queue_index()].update_accu_time(driver);
 }
 
-void QuerySharedDriverQueue::_put_back(const DriverRawPtr driver) {
+void QuerySharedDriverQueueWithoutLock::_put_back(const DriverRawPtr driver) {
     int level = driver->driver_acct().get_level() % QUEUE_SIZE;
     driver->set_dispatch_queue_index(level);
     _queues[level].queue.emplace(driver);
