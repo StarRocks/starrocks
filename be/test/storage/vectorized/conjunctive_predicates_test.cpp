@@ -300,7 +300,7 @@ public:
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
 
         Expr* expr = _pool.add(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
-        SlotRef* slot_ref = new SlotRef(slot);
+        SlotRef* slot_ref = _pool.add(new SlotRef(slot));
         Expr* col2 = type_dispatch_basic(ptype, MockConstExprBuilder(), &_pool);
         expr->_children.push_back(slot_ref);
         expr->_children.push_back(col2);
@@ -322,7 +322,7 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     TupleDescriptor* tuple_desc = _create_tuple_desc(ptype);
     std::vector<std::string> key_column_names = {"c1"};
     SlotDescriptor* slot = tuple_desc->slots()[0];
-    std::vector<ExprContext*> conjunct_ctxs = {new ExprContext(build_predicate(ptype, op, slot))};
+    std::vector<ExprContext*> conjunct_ctxs = {_pool.add(new ExprContext(build_predicate(ptype, op, slot)))};
     auto tablet_schema = TabletSchema::create(&mem_tracker, create_tablet_schema(ptype));
 
     OlapScanConjunctsManager cm;
@@ -330,7 +330,7 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     cm.tuple_desc = tuple_desc;
     cm.obj_pool = &_pool;
     cm.key_column_names = &key_column_names;
-    cm.runtime_filters = new RuntimeFilterProbeCollector();
+    cm.runtime_filters = _pool.add(new RuntimeFilterProbeCollector());
 
     ASSERT_OK(cm.parse_conjuncts(true, 1));
     // col >= false will be elimated
