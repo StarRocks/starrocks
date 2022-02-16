@@ -39,7 +39,7 @@ public:
     bool empty() { return size() == 0; }
 };
 
-class SubQuerySharedDriverQueueWithoutLock {
+class SubQuerySharedDriverQueue {
 public:
     void update_accu_time(const DriverRawPtr driver) {
         _accu_consume_time.fetch_add(driver->driver_acct().get_last_time_spent());
@@ -53,6 +53,46 @@ public:
 
 private:
     std::atomic<int64_t> _accu_consume_time = 0;
+};
+
+class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriverQueue> {
+    friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
+
+public:
+    QuerySharedDriverQueue() : _is_closed(false) {
+        double factor = 1;
+        for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
+            // initialize factor for every sub queue,
+            // Higher priority queues have more execution time,
+            // so they have a larger factor.
+            _queues[i].factor_for_normal = factor;
+            factor *= RATIO_OF_ADJACENT_QUEUE;
+        }
+    }
+    ~QuerySharedDriverQueue() override = default;
+    void close() override;
+
+    static const size_t QUEUE_SIZE = 8;
+    // maybe other value for ratio.
+    static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
+    void put_back(const DriverRawPtr driver) override;
+    void put_back(const std::vector<DriverRawPtr>& drivers) override;
+
+    void put_back_from_dispatcher(const DriverRawPtr driver) override;
+    void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override;
+
+    void update_statistics(const DriverRawPtr driver) override;
+
+    // return nullptr if queue is closed;
+    StatusOr<DriverRawPtr> take() override;
+
+    size_t size() override { return 0; }
+
+private:
+    SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
+    std::mutex _global_mutex;
+    std::condition_variable _cv;
+    bool _is_closed;
 };
 
 // All the QuerySharedDriverQueueWithoutLock's methods MUST be guarded by the outside lock.
@@ -91,7 +131,7 @@ private:
     static constexpr size_t QUEUE_SIZE = 8;
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
 
-    SubQuerySharedDriverQueueWithoutLock _queues[QUEUE_SIZE];
+    SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
 
     size_t _size = 0;
 };
