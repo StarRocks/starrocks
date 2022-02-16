@@ -117,10 +117,10 @@ public class IcebergTableStatisticCalculator {
         }
 
         Statistics.Builder statisticsBuilder = Statistics.builder();
-        double recordCount = icebergFileStats.getRecordCount();
+        double recordCount = Math.max(icebergFileStats.getRecordCount(), 1);
         for (Map.Entry<Integer, String> idColumn : idToColumnNames.entrySet()) {
             List<ColumnRefOperator> columnList = colRefToColumnMetaMap.keySet().stream().filter(
-                    key -> key.getName().equals(idColumn.getValue())).collect(Collectors.toList());
+                    key -> key.getName().equalsIgnoreCase(idColumn.getValue())).collect(Collectors.toList());
             if (columnList == null || columnList.size() != 1) {
                 LOG.debug("This column is not required column name " + idColumn.getValue() + " column list size "
                         + (columnList == null ? "null" : columnList.size()));
