@@ -1,0 +1,25 @@
+{
+    "col_int": 1234,
+    "col_double": 3.14,
+    "col_string": "123",
+    "col_bool": true,
+    "col_null": null,
+    "col_map": {
+        "f1": 1,
+        "f2": "s",
+        "f3": 3.14,
+        "f4": [
+            1,
+            2,
+            3
+        ],
+        "f5": {
+            "ff1": 2
+        }
+    },
+    "col_list": [
+        1,
+        2,
+        3
+    ]
+}
