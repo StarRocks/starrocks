@@ -470,7 +470,7 @@ public class DecodeRewriteTest extends PlanTestBase {
             sql = "select * from supplier l join supplier r on " +
                     "l.S_NAME = r.S_NAME where upper(l.S_ADDRESS) like '%A%' and upper(l.S_ADDRESS) not like '%B%'";
             plan = getCostExplain(sql);
-            Assert.assertFalse(plan.contains("  1:OlapScanNode\n" +
+            Assert.assertTrue(plan.contains("  1:OlapScanNode\n" +
                     "     table: supplier, rollup: supplier\n" +
                     "     preAggregation: on\n" +
                     "     Predicates: upper(3: S_ADDRESS) LIKE '%A%', NOT (upper(3: S_ADDRESS) LIKE '%B%')\n" +
