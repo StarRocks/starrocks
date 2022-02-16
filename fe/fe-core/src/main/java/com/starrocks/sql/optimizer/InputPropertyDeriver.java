@@ -267,7 +267,7 @@ public class InputPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
-        inputProperties.add(Lists.newArrayList(requirements));
+        inputProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, requirements));
         return null;
     }
 

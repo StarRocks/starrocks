@@ -202,12 +202,12 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
         curTotalCost += childCost;
 
         enforcer.setPropertyWithCost(newOutputProperty, Lists.newArrayList(oldOutputProperty), childCost);
-        childGroup.setBestExpressionWithoutCostCheck(enforcer, childCost, newOutputProperty);
-        // TODO: 2022/1/29 enum plan
-        //        if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
-        //            enforcer.addValidOutputInputProperties(newOutputProperty, Lists.newArrayList(oldOutputProperty));
-        //            groupExpression.getGroup().addSatisfyRequiredPropertyGroupExpression(newOutputProperty, enforcer);
-        //        }
+        childGroup.setBestExpression(enforcer, childCost, newOutputProperty);
+
+        if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
+            enforcer.addValidOutputInputProperties(newOutputProperty, Lists.newArrayList(PhysicalPropertySet.EMPTY));
+            enforcer.getGroup().addSatisfyRequiredPropertyGroupExpression(newOutputProperty, enforcer);
+        }
     }
 
     private void transToBucketShuffleJoin(HashDistributionDesc leftLocalDistributionDesc,
@@ -258,7 +258,12 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
             child.setPropertyWithCost(newChildOutputProperty,
                     child.getInputProperties(childOutputProperty), childCosts);
             child.getGroup()
-                    .setBestExpressionWithoutCostCheck(child, childCosts, newChildOutputProperty);
+                    .setBestExpression(child, childCosts, newChildOutputProperty);
+            if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
+                // record the output/input properties when child group could satisfy this group expression required property
+                child.addValidOutputInputProperties(newChildOutputProperty, child.getInputProperties(childOutputProperty));
+                child.getGroup().addSatisfyRequiredPropertyGroupExpression(newChildOutputProperty, child);
+            }
         } else {
             // add physical distribution operator
             addChildEnforcer(childOutputProperty, new DistributionProperty(distributionSpec),

@@ -129,7 +129,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
                 childrenBestExprList.add(childBestExpr);
                 // Get the output properties of children
-                childrenOutputProperties.add(childBestExpr.getOutputPropertySetSatisfyRequiredProperty(inputProperty));
+                PhysicalPropertySet childOutputProperty =
+                        childBestExpr.getOutputPropertySetSatisfyRequiredProperty(inputProperty);
+                childrenOutputProperties.add(childOutputProperty);
+                // Change child required property to child output property
+                inputProperties.set(curChildIndex, childOutputProperty);
 
                 // Directly get back the best expr if the child group is optimized
                 // Don't allow enforce sort and distribution below project node
@@ -369,7 +373,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
             // record the output/input properties when child group could satisfy this group expression required property
             groupExpression.addValidOutputInputProperties(requiredProperty, inputProperties);
-            this.groupExpression.getGroup().addSatisfyRequiredPropertyGroupExpression(requiredProperty, groupExpression);
+            this.groupExpression.getGroup()
+                    .addSatisfyRequiredPropertyGroupExpression(requiredProperty, groupExpression);
         }
     }
 
@@ -465,7 +470,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         enforcer.setPropertyWithCost(newOutputProperty, Lists.newArrayList(oldOutputProperty), curTotalCost);
         groupExpression.getGroup().setBestExpression(enforcer, curTotalCost, newOutputProperty);
         if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
-            enforcer.addValidOutputInputProperties(newOutputProperty, Lists.newArrayList(oldOutputProperty));
+            enforcer.addValidOutputInputProperties(newOutputProperty, Lists.newArrayList(PhysicalPropertySet.EMPTY));
             groupExpression.getGroup().addSatisfyRequiredPropertyGroupExpression(newOutputProperty, enforcer);
         }
     }
