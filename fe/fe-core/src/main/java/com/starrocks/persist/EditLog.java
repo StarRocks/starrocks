@@ -704,7 +704,8 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_WORKGROUP: {
-                    // TODO(by satanson) read out workgroup entry and ignore it, go on processing sequential entries
+                    final WorkGroupOpEntry entry = (WorkGroupOpEntry) journal.getData();
+                    catalog.getWorkGroupMgr().replayWorkGroupOp(entry);
                     break;
                 }
                 case OperationType.OP_CREATE_SMALL_FILE: {
@@ -933,6 +934,10 @@ public class EditLog {
 
     public void logCreateTable(CreateTableInfo info) {
         logEdit(OperationType.OP_CREATE_TABLE, info);
+    }
+
+    public void logWorkGroupOp(WorkGroupOpEntry op) {
+        logEdit(OperationType.OP_WORKGROUP, op);
     }
 
     public void logAddPartition(PartitionPersistInfo info) {
