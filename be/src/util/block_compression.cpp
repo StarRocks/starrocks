@@ -194,8 +194,8 @@ private:
 
         while (input_len > 0) {
             if (input_len < sizeof(uint32_t)) {
-                return Status::InvalidArgument(strings::Substitute(
-                        "fail to do hadoop-lz4 decompress, input_len=$0",input_len));
+                return Status::InvalidArgument(
+                        strings::Substitute("fail to do hadoop-lz4 decompress, input_len=$0", input_len));
             }
             uint32_t decompressed_block_len = BigEndian::Load32(input_ptr);
             input_ptr += sizeof(uint32_t);
