@@ -256,7 +256,7 @@ Status PersistentIndex::load(Tablet* tablet) {
         return Status::OK();
     }
     MutableIndexMetaPB* l0_meta = _index_meta.mutable_l0_meta();
-    int n = l0_meta->wals_size();    
+    int n = l0_meta->wals_size();
     // read wals and build l0
     for (int i = 0; i < n; i++) {
         auto* wal_pb = l0_meta->mutable_wals(i);
