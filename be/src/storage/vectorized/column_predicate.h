@@ -76,6 +76,7 @@ inline TExprOpcode::type convert_predicate_type_to_thrift(PredicateType p) {
         return TExprOpcode::COMPOUND_OR;
     default:
         CHECK(false) << "not supported";
+        __builtin_unreachable();
     }
 }
 
