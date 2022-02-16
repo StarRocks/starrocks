@@ -827,7 +827,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 SqlModeHelper.MODE_DEFAULT));
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCluster(SystemInfoService.DEFAULT_CLUSTER);
-        connectContext.setDatabase(Catalog.getCurrentCatalog().getDb(dbId).getFullName());
+        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        if (db == null) {
+            return;
+        }
+        connectContext.setDatabase(db.getFullName());
         Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
         analyzer.setIgnoreCast();
         CreateMaterializedViewStmt stmt = null;
