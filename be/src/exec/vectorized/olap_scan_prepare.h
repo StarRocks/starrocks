@@ -50,7 +50,7 @@ public:
 private:
     friend struct ColumnRangeBuilder;
     friend class ConjunctiveTestFixture;
-    
+
     Status normalize_conjuncts();
     Status build_olap_filters();
     Status build_scan_keys(bool unlimited, int32_t max_scan_key_num);

@@ -233,7 +233,15 @@ struct MockConstExprBuilder {
             expr_node.type = gen_type_desc(TPrimitiveType::INT);
 
             using CppType = RunTimeCppType<ptype>;
-            Expr* expr = pool->add(new MockConstVectorizedExpr<ptype>(expr_node, CppType{}));
+            CppType literal_value;
+            if constexpr (pt_is_binary<ptype>) {
+                literal_value = "123";
+            } else if constexpr (pt_is_integer<ptype>) {
+                literal_value = 123;
+            } else {
+                literal_value = CppType{};
+            }
+            Expr* expr = pool->add(new MockConstVectorizedExpr<ptype>(expr_node, literal_value));
             return expr;
         }
     }
@@ -325,15 +333,27 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     cm.runtime_filters = new RuntimeFilterProbeCollector();
 
     ASSERT_OK(cm.parse_conjuncts(true, 1));
-    ASSERT_GT(cm.olap_filters.size(), 0);
-    ASSERT_GT(cm.column_value_ranges.size(), 0);
-    ASSERT_GT(cm.column_value_ranges.count(slot->col_name()), 0);
+    // col >= false will be elimated
+    if (ptype == TYPE_BOOLEAN && op == TExprOpcode::GE) {
+        ASSERT_EQ(0, cm.olap_filters.size());
+        return;
+    } else {
+        ASSERT_EQ(1, cm.olap_filters.size());
+    }
+    ASSERT_EQ(1, cm.column_value_ranges.size());
+    ASSERT_EQ(1, cm.column_value_ranges.count(slot->col_name()));
 
     {
         PredicateParser pp(*tablet_schema);
         std::unique_ptr<ColumnPredicate> predicate(pp.parse_thrift_cond(cm.olap_filters[0]));
         ASSERT_TRUE(!!predicate);
-        ASSERT_EQ(op, convert_predicate_type_to_thrift(predicate->type()));
+
+        // BOOLEAN is special, col <= false will be convert to col = false
+        if (ptype == TYPE_BOOLEAN && op == TExprOpcode::LE) {
+            ASSERT_EQ(TExprOpcode::EQ, convert_predicate_type_to_thrift(predicate->type()));
+        } else {
+            ASSERT_EQ(op, convert_predicate_type_to_thrift(predicate->type()));
+        }
     }
 }
 
