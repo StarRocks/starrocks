@@ -15,7 +15,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TMySQLScanNode;
+import com.starrocks.thrift.TPlan;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -110,8 +112,15 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
+
+    @Override
     protected void toThrift(TPlanNode msg) {
-        // @TODO this will be added when implementing the related executors on BE
+        msg.node_type = TPlanNodeType.JDBC_SCAN_NODE;
+        msg.jdbc_scan_node = new TJDBCScanNode(desc.getId().asInt(), tableName, columns, filters);
+        msg.jdbc_scan_node.setLimit(limit);
     }
 
     @Override
