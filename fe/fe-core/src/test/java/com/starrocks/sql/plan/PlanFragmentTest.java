@@ -4749,7 +4749,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 3"));
 
-
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = v2;";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
@@ -4759,7 +4758,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 2: v2"));
-
 
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 <=> v2;";
         plan = getFragmentPlan(sql);
@@ -5022,7 +5020,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
     }
-    
+
     @Test
     public void testSemiReorder() throws Exception {
         String sql = "select 0 from t0,t1 left semi join t2 on v1 = v7";
@@ -5395,8 +5393,9 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testFunctionNullable() throws Exception {
         String sql = "select UNIX_TIMESTAMP(\"2015-07-28 19:41:12\", \"22\");";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), " +
-                "id:0, fid:50303, could_apply_dict_optimize:false), use_vectorized:true, has_nullable_child:false, is_nullable:true"));
+        Assert.assertTrue(
+                plan.contains("signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), " +
+                        "id:0, fid:50303, could_apply_dict_optimize:false), use_vectorized:true, has_nullable_child:false, is_nullable:true"));
     }
 
     @Test
@@ -5573,7 +5572,8 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
 
-        sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank  FROM t0 group BY v1, v2";
+        sql =
+                "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank  FROM t0 group BY v1, v2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
     }
@@ -5587,5 +5587,33 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 4: sum\n" +
                 "  |  <slot 8> : if(CAST(1: v1 AS BOOLEAN), 1, NULL)"));
+    }
+
+    @Test
+    public void testUnionDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(2);
+        String sql = "select * from t0 union all select * from t0;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  limit: 2"));
+    }
+
+    @Test
+    public void testUnionSubqueryDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(2);
+        String sql = "select * from (select * from t0 union all select * from t0) xx limit 10;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  limit: 10\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       limit: 10\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 10"));
     }
 }
