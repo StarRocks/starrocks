@@ -10,6 +10,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.external.PredicateUtils;
+import com.starrocks.external.iceberg.ExpressionConverter;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
@@ -24,13 +25,13 @@ import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
-import org.apache.iceberg.expressions.UnboundPredicate;
+import org.apache.iceberg.exceptions.ValidationException;
+import org.apache.iceberg.expressions.Binder;
+import org.apache.iceberg.expressions.Expression;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.*;
-
-import static com.starrocks.external.iceberg.ExpressionConverter.toIcebergExpression;
 
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
@@ -39,8 +40,8 @@ public class IcebergScanNode extends ScanNode {
 
     private List<TScanRangeLocations> result = new ArrayList<>();
 
-    // Exprs in icebergConjuncts converted to UnboundPredicate.
-    private final List<UnboundPredicate> icebergPredicates = new ArrayList<>();
+    // Exprs in icebergConjuncts converted to Iceberg Expression.
+    private List<Expression> icebergPredicates = null;
 
     // List of conjuncts for min/max values that are used to skip data when scanning Parquet files.
     private final List<Expr> minMaxConjuncts = new ArrayList<>();
@@ -89,12 +90,23 @@ public class IcebergScanNode extends ScanNode {
      * please refer: https://iceberg.apache.org/spec/#scan-planning
      */
     private void preProcessConjuncts() {
+        List<Expression> expressions = new ArrayList<>(conjuncts.size());
+        ExpressionConverter convertor = new ExpressionConverter();
         for (Expr expr : conjuncts) {
-            UnboundPredicate unboundPredicate = toIcebergExpression(expr);
-            if (unboundPredicate != null) {
-                icebergPredicates.add(unboundPredicate);
+            Expression filterExpr = convertor.convert(expr);
+            if (filterExpr != null) {
+                try {
+                    Binder.bind(srIcebergTable.getIcebergTable().schema().asStruct(), filterExpr, false);
+                    expressions.add(filterExpr);
+                } catch (ValidationException e) {
+                    LOG.debug("binding to the table schema failed, cannot be pushed down expression: {}",
+                            expr.toSql());
+                }
             }
         }
+        LOG.debug("Number of predicates pushed down / Total number of predicates: {}/{}",
+                expressions.size(), conjuncts.size());
+        icebergPredicates = expressions;
     }
 
     @Override
