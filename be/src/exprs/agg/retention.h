@@ -24,7 +24,7 @@
 
 namespace starrocks::vectorized {
 struct RetentionState {
-    static void udpate(uint64_t* value_ptr, const ArrayColumn* column, size_t row_num) {
+    static void udpate(uint64_t* value_ptr, const ArrayColumn* column, size_t num_row) {
         const auto& ele_col = column->elements();
         const auto& offsets = column->offsets().get_data();
 
@@ -32,8 +32,8 @@ struct RetentionState {
         if (ele_col.is_nullable()) {
             const auto& null_column = down_cast<const NullableColumn&>(ele_col);
             auto data_column = down_cast<BooleanColumn*>(null_column.data_column().get());
-            size_t offset = offsets[row_num];
-            array_size = offsets[row_num + 1] - offset;
+            size_t offset = offsets[num_row];
+            array_size = offsets[num_row + 1] - offset;
 
             // We allow 31 conditions at most, so limit it
             if (array_size > MAX_CONDITION_SIZE) {
@@ -49,8 +49,8 @@ struct RetentionState {
             }
         } else {
             const auto& data_column = down_cast<const BooleanColumn&>(ele_col);
-            size_t offset = offsets[row_num];
-            array_size = offsets[row_num + 1] - offset;
+            size_t offset = offsets[num_row];
+            array_size = offsets[num_row + 1] - offset;
 
             if (array_size > MAX_CONDITION_SIZE) {
                 array_size = MAX_CONDITION_SIZE;
@@ -66,9 +66,9 @@ struct RetentionState {
         (*value_ptr) |= array_size;
     }
 
-    void udpate(const ArrayColumn* column, size_t row_num) {
+    void udpate(const ArrayColumn* column, size_t num_row) {
         uint64_t* value_ptr = &boolean_value;
-        RetentionState::udpate(value_ptr, column, row_num);
+        RetentionState::udpate(value_ptr, column, num_row);
     }
 
     void finalize_to_array_column(ArrayColumn* array_column) const {
@@ -126,14 +126,14 @@ class RetentionAggregateFunction final
         : public AggregateFunctionBatchHelper<RetentionState, RetentionAggregateFunction> {
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
-                size_t row_num) const override {
+                size_t num_row) const override {
         auto column = down_cast<const ArrayColumn*>(columns[0]);
-        this->data(state).udpate(column, row_num);
+        this->data(state).udpate(column, num_row);
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t num_row) const override {
         const auto* input_column = down_cast<const Int64Column*>(column);
-        this->data(state).boolean_value |= input_column->get_data()[row_num];
+        this->data(state).boolean_value |= input_column->get_data()[num_row];
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
