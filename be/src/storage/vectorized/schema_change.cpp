@@ -1020,7 +1020,8 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
             // prepare tablet_reader to prevent rowsets being compacted
-            std::unique_ptr<vectorized::TabletReader> tablet_reader = std::make_unique<TabletReader>(base_tablet, rowset->version(), base_schema);
+            std::unique_ptr<vectorized::TabletReader> tablet_reader =
+                    std::make_unique<TabletReader>(base_tablet, rowset->version(), base_schema);
             RETURN_IF_ERROR(tablet_reader->prepare());
             readers.emplace_back(std::move(tablet_reader));
         }
