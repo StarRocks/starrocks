@@ -5738,6 +5738,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         1 | 2 | 3\n" +
+                "         4 | 5 | 6\n" +
                 "     limit: 1"));
     }
 
