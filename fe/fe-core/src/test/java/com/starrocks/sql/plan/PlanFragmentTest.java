@@ -5552,7 +5552,7 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testSingleNodeExecPlan() throws  Exception {
+    public void testSingleNodeExecPlan() throws Exception {
         String sql = "select v1,v2,v3 from t0";
         connectContext.getSessionVariable().setSingleNodeExecPlan(true);
         String plan = getFragmentPlan(sql);
@@ -5591,7 +5591,8 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
 
-        sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank  FROM t0 group BY v1, v2";
+        sql =
+                "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank  FROM t0 group BY v1, v2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
     }
@@ -5605,5 +5606,21 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 4: sum\n" +
                 "  |  <slot 8> : if(CAST(1: v1 AS BOOLEAN), 1, NULL)"));
+    }
+
+    @Test
+    public void testUnionDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(2);
+        String sql = "select * from t0 union all select * from t0;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       limit: 2\n" +
+                "  |    \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 2"));
     }
 }
