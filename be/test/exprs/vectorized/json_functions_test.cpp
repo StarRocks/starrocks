@@ -334,7 +334,7 @@ TEST_P(JsonQueryTestFixture, json_query) {
 
 INSTANTIATE_TEST_SUITE_P(JsonQueryTest, JsonQueryTestFixture,
                          ::testing::Values(
-                                // empty
+                                 // empty
                                  std::make_tuple(R"( {"k1":1} )", "$", R"( {"k1": 1} )"),
                                  std::make_tuple(R"( {"k1":1} )", "", R"( {"k1": 1} )"),
 
@@ -442,8 +442,7 @@ INSTANTIATE_TEST_SUITE_P(JsonExistTest, JsonExistTestFixture,
 
                                            // special case
                                            std::make_tuple(R"({ "k1": {}})", "$", true),
-                                           std::make_tuple(R"({ "k1": {}})", "", true)
-                                           ));
+                                           std::make_tuple(R"({ "k1": {}})", "", true)));
 
 class JsonParseTestFixture : public ::testing::TestWithParam<std::tuple<std::string, bool>> {};
 
