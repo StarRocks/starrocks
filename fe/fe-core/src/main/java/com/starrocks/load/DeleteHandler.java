@@ -182,6 +182,7 @@ public class DeleteHandler implements Writable {
                     if (olapTable.getPartitionInfo().getType() == PartitionType.RANGE) {
                         partitionNames = extractPartitionNamesByCondition(stmt, olapTable);
                         if (partitionNames.size() == 0) {
+                            LOG.info("delete stmt [{}] pruned all partition", stmt.getOrigStmt().originStmt);
                             return;
                         }
                     } else if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
@@ -394,7 +395,7 @@ public class DeleteHandler implements Writable {
         Map<String, PartitionColumnFilter> columnFilters = extractColumnFilter(stmt, olapTable,
                 rangePartitionInfo.getPartitionColumns());
         Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
-        if (columnFilters == null) {
+        if (columnFilters.size() == 0) {
             partitionNames.addAll(olapTable.getPartitionNames());
         } else {
             RangePartitionPruner pruner = new RangePartitionPruner(keyRangeById,
@@ -468,7 +469,7 @@ public class DeleteHandler implements Writable {
             } else if (condition instanceof InPredicate) {
                 InPredicate inPredicate = (InPredicate) condition;
                 if (inPredicate.isNotIn()) {
-                    return null;
+                    continue;
                 }
                 List<LiteralExpr> list = Lists.newArrayList();
                 Column column = nameToColumn.get(columnName);
