@@ -6,6 +6,8 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "gutil/port.h"
+#include "gutil/strings/fastmem.h"
 
 namespace starrocks::vectorized {
 
@@ -17,25 +19,40 @@ namespace starrocks::vectorized {
         break;                                                                              \
     }
 
+template <PrimitiveType PT>
+static RunTimeCppType<PT> unpack_decimal(const std::string& s) {
+    static_assert(pt_is_decimal<PT>);
+    RunTimeCppType<PT> value;
+#ifdef IS_LITTLE_ENDIAN
+    strings::memcpy_inlined(&value, &s.front(), sizeof(value));
+#else
+    std::copy(s.rbegin(), s.rend(), (char*)&value);
+#endif
+    return value;
+}
+
 template <PrimitiveType DecimalType, typename = DecimalPTGuard<DecimalType>>
 static ColumnPtr const_column_from_literal(const TExprNode& node, int precision, int scale) {
     using CppType = RunTimeCppType<DecimalType>;
     using ColumnType = RunTimeColumnType<DecimalType>;
     CppType datum;
     DCHECK(node.__isset.decimal_literal);
+    // using TDecimalLiteral::integer_value take precedence over using TDecimalLiteral::value
+    if (node.decimal_literal.__isset.integer_value) {
+        const std::string& s = node.decimal_literal.integer_value;
+        datum = unpack_decimal<DecimalType>(s);
+        return ColumnHelper::create_const_decimal_column<DecimalType>(datum, precision, scale, 1);
+    }
     auto& literal_value = node.decimal_literal.value;
     auto fail =
             DecimalV3Cast::from_string<CppType>(&datum, precision, scale, literal_value.c_str(), literal_value.size());
     if (fail) {
         return ColumnHelper::create_const_null_column(1);
     } else {
-        auto data_column = ColumnType::create(precision, scale, 1);
-        auto& data = ColumnHelper::cast_to_raw<DecimalType>(data_column)->get_data();
-        DCHECK(data.size() == 1);
-        data[0] = datum;
-        return ConstColumn::create(data_column, 1);
+        return ColumnHelper::create_const_decimal_column<DecimalType>(datum, precision, scale, 1);
     }
 }
+
 VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
     if (node.node_type == TExprNodeType::NULL_LITERAL) {
         _value = ColumnHelper::create_const_null_column(1);
