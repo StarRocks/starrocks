@@ -39,6 +39,7 @@ namespace starrocks {
 const uint32_t REPORT_TASK_WORKER_COUNT = 1;
 const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
+const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 
 AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
         : _exec_env(exec_env), _master_info(master_info) {
@@ -87,6 +88,7 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
     CREATE_AND_START_POOL(REPORT_TASK, _report_task_workers, REPORT_TASK_WORKER_COUNT);
     CREATE_AND_START_POOL(REPORT_DISK_STATE, _report_disk_state_workers, REPORT_DISK_STATE_WORKER_COUNT);
     CREATE_AND_START_POOL(REPORT_OLAP_TABLE, _report_tablet_workers, REPORT_OLAP_TABLE_WORKER_COUNT);
+    CREATE_AND_START_POOL(REPORT_WORKGROUP, _report_workgroup_workers, REPORT_WORKGROUP_WORKER_COUNT);
     CREATE_AND_START_POOL(UPLOAD, _upload_workers, config::upload_worker_count);
     CREATE_AND_START_POOL(DOWNLOAD, _download_workers, config::download_worker_count);
     CREATE_AND_START_POOL(MAKE_SNAPSHOT, _make_snapshot_workers, config::make_snapshot_worker_count);
@@ -115,6 +117,7 @@ AgentServer::~AgentServer() {
     STOP_POOL(REPORT_TASK, _report_task_workers);
     STOP_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
     STOP_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
+    STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
     STOP_POOL(UPLOAD, _upload_workers);
     STOP_POOL(DOWNLOAD, _download_workers);
     STOP_POOL(MAKE_SNAPSHOT, _make_snapshot_workers);
