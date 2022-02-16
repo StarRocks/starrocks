@@ -26,6 +26,7 @@ include "AgentService.thrift"
 include "InternalService.thrift"
 include "Types.thrift"
 include "Status.thrift"
+include "WorkGroup.thrift"
 
 struct TTabletInfo {
     1: required Types.TTabletId tablet_id
@@ -93,11 +94,14 @@ struct TReportRequest {
     // the max compaction score of all tablets on a backend,
     // this field should be set along with tablet report
     8: optional i64 tablet_max_compaction_score
+    // active workgroup on this backend
+    9: optional list<WorkGroup.TWorkGroup> active_workgroups
 }
 
 struct TMasterResult {
     // required in V1
     1: required Status.TStatus status
+    2: optional list<WorkGroup.TWorkGroupOp> workgroup_ops
 }
 
 // Now we only support CPU share.
