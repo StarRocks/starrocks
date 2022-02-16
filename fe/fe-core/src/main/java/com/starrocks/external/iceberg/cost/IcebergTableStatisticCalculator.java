@@ -119,34 +119,47 @@ public class IcebergTableStatisticCalculator {
         Statistics.Builder statisticsBuilder = Statistics.builder();
         double recordCount = icebergFileStats.getRecordCount();
         for (Map.Entry<Integer, String> idColumn : idToColumnNames.entrySet()) {
-            List<ColumnRefOperator> columnList = colRefToColumnMetaMap.keySet().stream().filter(key -> {
-                LOG.debug("test key name " + key.getName());
-                LOG.debug("test id column name " + idColumn.getValue());
-                return key.getName().equals(idColumn.getValue());
-            }).collect(Collectors.toList());
+            List<ColumnRefOperator> columnList = colRefToColumnMetaMap.keySet().stream().filter(
+                    key -> key.getName().equals(idColumn.getValue())).collect(Collectors.toList());
             if (columnList == null || columnList.size() != 1) {
-                LOG.debug("This column is not required " + (columnList == null ? "null" : columnList.size()));
+                LOG.debug("This column is not required column name " + idColumn.getValue() + " column list size "
+                        + (columnList == null ? "null" : columnList.size()));
                 continue;
             }
 
             int fieldId = idColumn.getKey();
             ColumnStatistic.Builder columnBuilder = ColumnStatistic.builder();
+
+            // nulls fraction
             Long nullCount = icebergFileStats.getNullCounts().get(fieldId);
             if (nullCount != null) {
                 columnBuilder.setNullsFraction(nullCount / recordCount);
+            } else {
+                columnBuilder.setNullsFraction(-1L / recordCount);
             }
+
+            // avg row size
             if (icebergFileStats.getColumnSizes() != null) {
                 Long columnSize = icebergFileStats.getColumnSizes().get(fieldId);
                 if (columnSize != null) {
                     columnBuilder.setAverageRowSize(columnSize / recordCount);
+                } else {
+                    columnBuilder.setAverageRowSize(columnList.get(0).getType().getTypeSize());
                 }
+            } else {
+                columnBuilder.setAverageRowSize(columnList.get(0).getType().getTypeSize());
             }
+
+            // min max stats
             Object min = icebergFileStats.getMinValues().get(fieldId);
             Object max = icebergFileStats.getMaxValues().get(fieldId);
             if (min instanceof Number && max instanceof Number) {
                 columnBuilder.setMinValue(((Number) min).doubleValue());
                 columnBuilder.setMaxValue(((Number) max).doubleValue());
             }
+
+            // TODO: get num distinct value count from file stats
+            columnBuilder.setDistinctValuesCount(1);
             statisticsBuilder.addColumnStatistic(columnList.get(0), columnBuilder.build());
         }
         statisticsBuilder.setOutputRowCount(recordCount);
