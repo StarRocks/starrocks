@@ -188,7 +188,7 @@ RowReaderOptions& RowReaderOptions::include(const std::list<std::string>& includ
     return *this;
 }
 
-RowReaderOptions& RowReaderOptions::includeLazyLoadFields(const std::list<std::string>& include) {
+RowReaderOptions& RowReaderOptions::includeLazyLoadColumnNames(const std::list<std::string>& include) {
     privateBits->lazyLoadColumnNames.assign(include.begin(), include.end());
     return *this;
 }
@@ -226,7 +226,7 @@ const std::list<std::string>& RowReaderOptions::getIncludeNames() const {
     return privateBits->includedColumnNames;
 }
 
-const std::list<std::string>& RowReaderOptions::getLazyLoadNames() const {
+const std::list<std::string>& RowReaderOptions::getLazyLoadColumnNames() const {
     return privateBits->lazyLoadColumnNames;
 }
 

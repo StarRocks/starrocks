@@ -276,8 +276,8 @@ public:
 
     RowReaderOptions& useWriterTimezone();
     bool getUseWriterTimezone() const;
-    RowReaderOptions& includeLazyLoadFields(const std::list<std::string>& include);
-    const std::list<std::string>& getLazyLoadNames() const;
+    RowReaderOptions& includeLazyLoadColumnNames(const std::list<std::string>& include);
+    const std::list<std::string>& getLazyLoadColumnNames() const;
 };
 
 class RowReader;
@@ -535,7 +535,8 @@ public:
     /**
      * Get the selected columns of the file.
      */
-    virtual const std::vector<bool> getSelectedColumns() const = 0;
+    virtual const std::vector<bool>& getSelectedColumns() const = 0;
+    virtual const std::vector<bool>& getLazyLoadColumns() const = 0;
 
     /**
      * Create a row batch for reading the selected columns of this file.
@@ -553,6 +554,9 @@ public:
      *   end of the file was reached.
      */
     virtual bool next(ColumnVectorBatch& data) = 0;
+
+    virtual void lazyLoadSkip(uint64_t numValues) = 0;
+    virtual void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) = 0;
 
     /**
      * Get the row number of the first row in the previously read batch.
