@@ -29,13 +29,13 @@ import java.util.Map;
 * DROP RESOURCE "jdbc_pg";
 * */
 public class JDBCResource extends Resource {
-    private static final String HOSTS = "hosts";
-    private static final String USER = "user";
-    private static final String PASSWORD = "password";
-    private static final String DRIVER = "driver";
+    public static final String DRIVER = "driver";
+    public static final String URI = "jdbc_uri";
+    public static final String USER = "user";
+    public static final String PASSWORD = "password";
 
     // @TODO is this necessary?
-    private static final String JDBC_TYPE = "jdbc_type";
+    // private static final String JDBC_TYPE = "jdbc_type";
 
     @SerializedName(value = "configs")
     private Map<String, String> configs;
@@ -62,11 +62,10 @@ public class JDBCResource extends Resource {
 
         configs = properties;
 
-        checkProperties(HOSTS);
+        checkProperties(DRIVER);
+        checkProperties(URI);
         checkProperties(USER);
         checkProperties(PASSWORD);
-        checkProperties(DRIVER);
-        checkProperties(JDBC_TYPE);
     }
 
     public String getProperty(String propertyKey) {
