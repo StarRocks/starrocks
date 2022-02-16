@@ -73,7 +73,7 @@ void FileResultWriter::_init_profile() {
 Status FileResultWriter::_create_file_writer() {
     std::string file_name = _get_next_file_name();
     std::unique_ptr<WritableFile> writable_file;
-    RETURN_IF_ERROR(_env->new_writable_file(file_name, &writable_file));
+    ASSIGN_OR_RETURN(writable_file, _env->new_writable_file(file_name));
 
     switch (_file_opts->file_format) {
     case TFileFormatType::FORMAT_CSV_PLAIN:

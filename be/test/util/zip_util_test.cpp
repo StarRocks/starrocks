@@ -54,8 +54,7 @@ TEST(ZipUtilTest, basic) {
     ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_normal_data"));
     ASSERT_FALSE(FileUtils::is_dir(path + "/test_data/target/zip_normal_data"));
 
-    std::unique_ptr<RandomAccessFile> file;
-    Env::Default()->new_random_access_file(path + "/test_data/target/zip_normal_data", &file);
+    auto file = *Env::Default()->new_random_access_file(path + "/test_data/target/zip_normal_data");
 
     char f[11];
     Slice slice(f, 11);
@@ -86,8 +85,7 @@ TEST(ZipUtilTest, dir) {
     ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_test/two"));
     ASSERT_TRUE(FileUtils::is_dir(path + "/test_data/target/zip_test/two"));
 
-    std::unique_ptr<RandomAccessFile> file;
-    Env::Default()->new_random_access_file(path + "/test_data/target/zip_test/one/data", &file);
+    auto file = *Env::Default()->new_random_access_file(path + "/test_data/target/zip_test/one/data");
 
     char f[4];
     Slice slice(f, 4);

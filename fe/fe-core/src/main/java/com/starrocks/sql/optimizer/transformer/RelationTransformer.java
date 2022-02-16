@@ -62,6 +62,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -114,11 +115,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     public LogicalPlan transform(Relation relation) {
         // Set limit if user set sql_select_limit.
-        if (relation instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) relation;
+        if (relation instanceof QueryRelation) {
+            QueryRelation selectRelation = (QueryRelation) relation;
             long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
-            if (!selectRelation.hasLimit() &&
-                    selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
+            if (!selectRelation.hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
                 selectRelation.setLimit(new LimitElement(selectLimit));
             }
         }
@@ -264,6 +264,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         ExpressionMapping expressionMapping = new ExpressionMapping(outputScope, outputColumns);
 
         LogicalOperator setOperator;
+        OptExprBuilder subOpt;
         if (setOperationRelation instanceof UnionRelation) {
             setOperator = new LogicalUnionOperator.Builder()
                     .setOutputColumnRefOp(outputColumns)
@@ -273,24 +274,33 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
             if (setOperationRelation.getQualifier().equals(SetQualifier.DISTINCT)) {
                 OptExprBuilder unionOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
-                return new LogicalPlan(new OptExprBuilder(
+                subOpt = new OptExprBuilder(
                         new LogicalAggregationOperator(AggType.GLOBAL, outputColumns, Maps.newHashMap()),
-                        Lists.newArrayList(unionOpt), expressionMapping), outputColumns, null);
+                        Lists.newArrayList(unionOpt), expressionMapping);
+            } else {
+                subOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
             }
         } else if (setOperationRelation instanceof ExceptRelation) {
             setOperator = new LogicalExceptOperator.Builder()
                     .setOutputColumnRefOp(outputColumns)
                     .setChildOutputColumns(childOutputColumnList).build();
-
+            subOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
         } else if (setOperationRelation instanceof IntersectRelation) {
             setOperator = new LogicalIntersectOperator.Builder()
                     .setOutputColumnRefOp(outputColumns)
                     .setChildOutputColumns(childOutputColumnList).build();
+            subOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
         } else {
             throw unsupportedException("New Planner only support Query Statement");
         }
 
-        return new LogicalPlan(new OptExprBuilder(setOperator, childPlan, expressionMapping), outputColumns, null);
+        if (setOperationRelation.hasLimit()) {
+            LogicalLimitOperator limitOperator = new LogicalLimitOperator(setOperationRelation.getLimit().getLimit(),
+                    setOperationRelation.getLimit().getOffset());
+            subOpt = subOpt.withNewRoot(limitOperator);
+        }
+
+        return new LogicalPlan(subOpt, outputColumns, null);
     }
 
     @Override

@@ -21,11 +21,12 @@ protected:
         }
 
         std::filesystem::path file = path / "test.txt";
-        auto st = Env::Default()->new_writable_file(file.string(), &_file);
-        if (!st.ok()) {
-            std::cerr << "Fail to create " << file << ": " << st.to_string() << std::endl;
-            LOG(FATAL) << "Fail to create " << file << ": " << st.to_string();
+        auto res = Env::Default()->new_writable_file(file.string());
+        if (!res.ok()) {
+            std::cerr << "Fail to create " << file << ": " << res.status() << std::endl;
+            LOG(FATAL) << "Fail to create " << file << ": " << res.status();
         }
+        _file = std::move(res).value();
         _stream = std::make_unique<OutputStreamWrapper>(_file.get());
     }
 
@@ -54,13 +55,11 @@ TEST_F(OutputStreamWrapperTest, test_write) {
     ASSERT_TRUE(stream.good());
     ASSERT_EQ(21, stream.size());
 
-    std::unique_ptr<RandomAccessFile> rf;
-    auto st = Env::Default()->new_random_access_file(_file->filename(), &rf);
-    ASSERT_TRUE(st.ok()) << st;
+    auto rf = *Env::Default()->new_random_access_file(_file->filename());
     std::string buff(21, 0);
     Slice slice(buff);
     uint64_t size = 0;
-    st = rf->size(&size);
+    auto st = rf->size(&size);
     ASSERT_TRUE(st.ok()) << st;
     ASSERT_EQ(21, size);
 
