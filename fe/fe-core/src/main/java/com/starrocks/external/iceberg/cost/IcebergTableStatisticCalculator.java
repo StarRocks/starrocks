@@ -141,6 +141,8 @@ public class IcebergTableStatisticCalculator {
                 columnBuilder.setMaxValue(((Number) max).doubleValue());
             }
             List<ColumnRefOperator> columnList = colRefToColumnMetaMap.keySet().stream().filter(key -> {
+                LOG.debug("test key name " + key.getName());
+                LOG.debug("test id column name " + idColumn.getValue());
                 return key.getName().equals(idColumn.getValue());
             }).collect(Collectors.toList());
             Preconditions.checkState(columnList.size() == 1);
