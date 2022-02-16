@@ -499,8 +499,8 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     wg2->set_select_factor(wg2->get_cpu_expected_use_ratio());
 
     // add real_time workgroup
-    auto real_time_wg =
-            std::make_shared<WorkGroup>("real_time", 100, 1, 20L * (1L << 30), 10, WorkGroupType::WG_REALTIME);
+    auto real_time_wg = std::make_shared<WorkGroup>("real_time", 100, WorkGroup::DEFAULT_VERSION, 1, 20L * (1L << 30),
+                                                    10, WorkGroupType::WG_REALTIME);
     real_time_wg->init();
     WorkGroupManager::instance()->add_workgroup(real_time_wg);
 }

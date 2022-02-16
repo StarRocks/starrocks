@@ -80,17 +80,8 @@ private:
 };
 
 class WorkGroupManager;
-<<<<<<< HEAD
 using WorkGroupType = TWorkGroupType::type;
-=======
 
-enum WorkGroupType {
-    WG_NORMAL = 0,   // normal work group, maybe added to the BE dynamically
-    WG_DEFAULT = 1,  // default work group
-    WG_REALTIME = 2, // realtime work group, maybe reserved beforehand
-};
-
->>>>>>> 3c7f327e (support low latency wg)
 // WorkGroup is the unit of resource isolation, it has {CPU, Memory, Concurrency} quotas which limit the
 // resource usage of the queries belonging to the WorkGroup. Each user has be bound to a WorkGroup, when
 // the user issues a query, then the corresponding WorkGroup is chosen to manage the query.
