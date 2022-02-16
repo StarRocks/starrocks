@@ -4118,7 +4118,7 @@ public class Catalog {
                 throw new DdlException("Failed to acquire catalog lock. Try again");
             }
             try {
-                if (getDb(db.getFullName()) == null) {
+                if (getDb(db.getId()) == null) {
                     throw new DdlException("database has been dropped when creating table");
                 }
                 createTblSuccess = db.createTableWithLock(olapTable, false);
@@ -4177,7 +4177,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(mysqlTable, false)) {
@@ -4224,7 +4224,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(esTable, false)) {
@@ -4260,7 +4260,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(hiveTable, false)) {
@@ -4292,7 +4292,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(icebergTable, false)) {
@@ -6111,7 +6111,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating view");
             }
             if (!db.createTableWithLock(newView, false)) {
