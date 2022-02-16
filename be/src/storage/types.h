@@ -592,18 +592,6 @@ struct CppColumnTraits<OLAP_FIELD_TYPE_JSON> {
     using ColumnType = vectorized::JsonColumn;
 };
 
-constexpr bool type_support_bloom_filter(FieldType ftype) {
-    switch (ftype) {
-    case OLAP_FIELD_TYPE_JSON:
-    case OLAP_FIELD_TYPE_OBJECT:
-    case OLAP_FIELD_TYPE_HLL:
-    case OLAP_FIELD_TYPE_PERCENTILE:
-        return false;
-    default:
-        return true;
-    }
-}
-
 // Instantiate this template to get static access to the type traits.
 template <FieldType field_type>
 struct TypeTraits {
