@@ -9,7 +9,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
@@ -63,6 +62,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -113,17 +113,24 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
         this.outer = outer;
     }
 
-    public LogicalPlan transform(Relation relation) {
+    // transform relation to plan with session variable sql_select_limit
+    // only top relation need set limit, transform method used by CTE/Subquery
+    public LogicalPlan transformWithSelectLimit(Relation relation) {
+        LogicalPlan plan = transform(relation);
+        OptExprBuilder root = plan.getRootBuilder();
         // Set limit if user set sql_select_limit.
-        if (relation instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) relation;
-            long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
-            if (!selectRelation.hasLimit() &&
-                    selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
-                selectRelation.setLimit(new LimitElement(selectLimit));
-            }
+        long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
+        if (!root.getRoot().getOp().hasLimit() &&
+                selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
+            LogicalLimitOperator limitOperator = new LogicalLimitOperator(selectLimit);
+            root = root.withNewRoot(limitOperator);
+            return new LogicalPlan(root, plan.getOutputColumn(), plan.getCorrelation());
         }
 
+        return plan;
+    }
+
+    public LogicalPlan transform(Relation relation) {
         OptExprBuilder optExprBuilder;
         if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()
                 && session.getSessionVariable().isCboCteReuse()) {
@@ -283,7 +290,6 @@ public class RelationTransformer extends RelationVisitor<LogicalPlan, Expression
             setOperator = new LogicalExceptOperator.Builder()
                     .setOutputColumnRefOp(outputColumns)
                     .setChildOutputColumns(childOutputColumnList).build();
-
         } else if (setOperationRelation instanceof IntersectRelation) {
             setOperator = new LogicalIntersectOperator.Builder()
                     .setOutputColumnRefOp(outputColumns)
