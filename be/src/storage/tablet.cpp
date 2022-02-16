@@ -911,9 +911,15 @@ void Tablet::pick_candicate_rowsets_to_cumulative_compaction(int64_t skip_window
 
 void Tablet::pick_candicate_rowsets_to_base_compaction(vector<RowsetSharedPtr>* candidate_rowsets) {
     std::shared_lock rdlock(_meta_lock);
+    size_t i = 0;
     for (auto& it : _rs_version_map) {
         if (it.first.first < _cumulative_point) {
-            candidate_rowsets->push_back(it.second);
+            if (i < config.max_base_compaction_num_cumulative_deltas) {
+                candidate_rowsets->push_back(it.second);
+                i++;
+            } else {
+                break;
+            }
         }
     }
 }
