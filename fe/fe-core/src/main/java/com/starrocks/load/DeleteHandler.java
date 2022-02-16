@@ -21,6 +21,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -179,26 +180,7 @@ public class DeleteHandler implements Writable {
                 boolean noPartitionSpecified = partitionNames.isEmpty();
                 if (noPartitionSpecified) {
                     if (olapTable.getPartitionInfo().getType() == PartitionType.RANGE) {
-                        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                        Map<String, PartitionColumnFilter> columnFilters = extractColumnFilter(stmt, table);
-                        Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
-                        if (columnFilters == null) {
-                            partitionNames.addAll(olapTable.getPartitionNames());
-                        } else {
-                            RangePartitionPruner pruner = new RangePartitionPruner(keyRangeById,
-                                    rangePartitionInfo.getPartitionColumns(), columnFilters);
-                            Collection<Long> selectedPartitionIds = pruner.prune();
-
-                            if (selectedPartitionIds == null) {
-                                partitionNames.addAll(olapTable.getPartitionNames());
-                            } else {
-                                for (Long partitionId : selectedPartitionIds) {
-                                    Partition partition = olapTable.getPartition(partitionId);
-                                    partitionNames.add(partition.getName());
-                                }
-                            }
-                        }
+                        partitionNames = extractPartitionNamesByCondition(stmt, olapTable);
                         if (partitionNames.size() == 0) {
                             return;
                         }
@@ -403,7 +385,36 @@ public class DeleteHandler implements Writable {
         }
     }
 
-    private Map<String, PartitionColumnFilter> extractColumnFilter(DeleteStmt stmt, Table table)
+    @VisibleForTesting
+    public List<String> extractPartitionNamesByCondition(DeleteStmt stmt, OlapTable olapTable)
+            throws DdlException, AnalysisException {
+        List<String> partitionNames = Lists.newArrayList();
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        Map<String, PartitionColumnFilter> columnFilters = extractColumnFilter(stmt, olapTable,
+                rangePartitionInfo.getPartitionColumns());
+        Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
+        if (columnFilters == null) {
+            partitionNames.addAll(olapTable.getPartitionNames());
+        } else {
+            RangePartitionPruner pruner = new RangePartitionPruner(keyRangeById,
+                    rangePartitionInfo.getPartitionColumns(), columnFilters);
+            Collection<Long> selectedPartitionIds = pruner.prune();
+
+            if (selectedPartitionIds == null) {
+                partitionNames.addAll(olapTable.getPartitionNames());
+            } else {
+                for (Long partitionId : selectedPartitionIds) {
+                    Partition partition = olapTable.getPartition(partitionId);
+                    partitionNames.add(partition.getName());
+                }
+            }
+        }
+        return partitionNames;
+    }
+
+    private Map<String, PartitionColumnFilter> extractColumnFilter(DeleteStmt stmt, Table table, 
+                                                                   List<Column> partitionColumns)
             throws DdlException, AnalysisException {
         Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
         List<Predicate> deleteConditions = stmt.getDeleteConditions();
@@ -414,6 +425,12 @@ public class DeleteHandler implements Writable {
         for (Predicate condition : deleteConditions) {
             SlotRef slotRef = (SlotRef) condition.getChild(0);
             String columnName = slotRef.getColumnName();
+            
+            // filter condition is not partition column;
+            if (partitionColumns.stream().noneMatch(e -> e.getName().equals(columnName))) {
+                continue;
+            }
+
             if (!nameToColumn.containsKey(columnName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FIELD_ERROR, columnName, table.getName());
             }
