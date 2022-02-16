@@ -272,17 +272,6 @@ bool HdfsFileReaderParam::can_use_dict_filter_on_slot(SlotDescriptor* slot) cons
     return true;
 }
 
-static const std::string kHdfsIOProfileSectionPrefix = "HdfsIO";
-
-void HdfsIOProfile::init(RuntimeProfile* root) {
-    if (_toplev != nullptr) return;
-    _toplev = ADD_TIMER(root, kHdfsIOProfileSectionPrefix);
-    bytes_total_read = ADD_CHILD_COUNTER(root, "BytesTotalRead", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
-    bytes_read_local = ADD_CHILD_COUNTER(root, "BytesReadLocal", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
-    bytes_read_short_circuit =
-            ADD_CHILD_COUNTER(root, "BytesReadShortCircuit", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
-    bytes_read_dn_cache = ADD_CHILD_COUNTER(root, "BytesReadDataNodeCache", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
-    bytes_read_remote = ADD_CHILD_COUNTER(root, "BytesReadRemote", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
-}
+} // namespace starrocks::vectorized
 
 } // namespace starrocks::vectorized

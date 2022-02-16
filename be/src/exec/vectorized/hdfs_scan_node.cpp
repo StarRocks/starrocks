@@ -96,7 +96,6 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     _scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
-    _hdfs_io_profile.init(_runtime_profile.get());
 
     _mem_pool = std::make_unique<MemPool>();
 

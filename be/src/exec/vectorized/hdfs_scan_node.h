@@ -174,7 +174,6 @@ private:
     RuntimeProfile::Counter* _column_read_timer = nullptr;
     RuntimeProfile::Counter* _column_convert_timer = nullptr;
 
-    HdfsIOProfile _hdfs_io_profile;
     HdfsParquetProfile _parquet_profile;
 };
 } // namespace starrocks::vectorized
