@@ -60,6 +60,7 @@ enum TPlanNodeType {
   PROJECT_NODE,
   TABLE_FUNCTION_NODE,
   DECODE_NODE,
+  JDBC_SCAN_NODE,
 }
 
 // phases of an execution node
@@ -341,6 +342,16 @@ struct TOlapScanNode {
   // which columns only be used to filter data in the stage of scan data
   24: optional list<string> unused_output_column_name
 }
+
+struct TJDBCScanNode {
+  1: required Types.TTupleId tuple_id
+  2: required string table_name
+  3: required list<string> columns
+  4: required list<string> filters
+  5: optional i64 limit
+}
+
+
 struct TEqJoinCondition {
   // left-hand side of "<a> = <b>"
   1: required Exprs.TExpr left;
@@ -895,6 +906,8 @@ struct TPlanNode {
   58: optional list<Types.TSlotId> filter_null_value_columns;
   // for outer join and cross join
   59: optional bool need_create_tuple_columns;
+  // Scan node for jdbc
+  60: optional TJDBCScanNode jdbc_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

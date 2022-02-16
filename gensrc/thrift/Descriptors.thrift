@@ -322,6 +322,14 @@ struct THudiTable {
     5: optional list<string> partition_prefixes
 }
 
+struct TJDBCTable {
+    1: optional string jdbc_driver
+    2: optional string jdbc_url
+    3: optional string jdbc_database;
+    4: optional string jdbc_table;
+    5: optional map<string, string> jdbc_properties;
+}
+
 // "Union" of all table types.
 struct TTableDescriptor {
   1: required Types.TTableId id
@@ -339,6 +347,7 @@ struct TTableDescriptor {
   12: optional TSchemaTable schemaTable
   14: optional TBrokerTable BrokerTable
   15: optional TEsTable esTable
+  16: optional TJDBCTable jdbcTable
 
   // Hdfs Table schema
   30: optional THdfsTable hdfsTable

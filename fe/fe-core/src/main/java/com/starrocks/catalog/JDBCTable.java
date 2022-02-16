@@ -6,10 +6,13 @@ import com.google.common.collect.Maps;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
-//import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.common.io.Text;
+import com.starrocks.thrift.TJDBCTable;
+import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
@@ -97,6 +100,21 @@ public class JDBCTable extends Table {
     }
 
     // @TODO implement toThrift function
+
+    @Override
+    public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
+        JDBCResource resource = (JDBCResource) (Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName));
+        TJDBCTable tJDBCTable = new TJDBCTable();
+        tJDBCTable.setJdbc_driver(resource.getProperty(JDBCResource.DRIVER));
+        tJDBCTable.setJdbc_url(resource.getProperty(JDBCResource.URI));
+        tJDBCTable.setJdbc_database(jdbcDatabase);
+        tJDBCTable.setJdbc_table(jdbcTable);
+        tJDBCTable.setJdbc_properties(jdbcProperties);
+        TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.JDBC_TABLE,
+                fullSchema.size(), 0, getName(), "");
+        tTableDescriptor.setJdbcTable(tJDBCTable);
+        return tTableDescriptor;
+    }
 
     @Override
     public void write(DataOutput out) throws IOException {
