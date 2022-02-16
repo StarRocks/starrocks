@@ -12,6 +12,31 @@
 
 namespace starrocks::vectorized {
 
+template <PrimitiveType ptype>
+struct PredicateCmpType {
+    using CmpType = RunTimeCppType<ptype>;
+};
+
+template <>
+struct PredicateCmpType<TYPE_JSON> {
+    using CmpType = JsonValue;
+};
+
+// The evaluator for PrimitiveType
+template <PrimitiveType ptype>
+using EvalEq = std::equal_to<typename PredicateCmpType<ptype>::CmpType>;
+template <PrimitiveType ptype>
+using EvalNe = std::not_equal_to<typename PredicateCmpType<ptype>::CmpType>;
+template <PrimitiveType ptype>
+using EvalLt = std::less<typename PredicateCmpType<ptype>::CmpType>;
+template <PrimitiveType ptype>
+using EvalLe = std::less_equal<typename PredicateCmpType<ptype>::CmpType>;
+template <PrimitiveType ptype>
+using EvalGt = std::greater<typename PredicateCmpType<ptype>::CmpType>;
+template <PrimitiveType ptype>
+using EvalGe = std::greater_equal<typename PredicateCmpType<ptype>::CmpType>;
+
+// A wrapper for evaluator, to fit in the Expression framework
 template <typename CMP>
 struct BinaryPredFunc {
     template <typename LType, typename RType, typename ResultType>
@@ -81,22 +106,21 @@ public:
 struct BinaryPredicateBuilder {
     template <PrimitiveType data_type>
     Expr* operator()(const TExprNode& node) {
-        using CmpType = typename PredicateCmpType<data_type>::CmpType;
         switch (node.opcode) {
         case TExprOpcode::EQ:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::equal_to<CmpType>>>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalEq<data_type>>>(node);
         case TExprOpcode::NE:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::not_equal_to<CmpType>>>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalNe<data_type>>>(node);
         case TExprOpcode::LT:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::less<CmpType>>>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalLt<data_type>>>(node);
         case TExprOpcode::LE:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::less_equal<CmpType>>>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalLe<data_type>>>(node);
         case TExprOpcode::GT:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::greater<CmpType>>>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalGt<data_type>>>(node);
         case TExprOpcode::GE:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<std::greater_equal<CmpType>>>(node);
+            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalGe<data_type>>>(node);
         case TExprOpcode::EQ_FOR_NULL:
-            return new VectorizedNullSafeEqPredicate<data_type, BinaryPredFunc<std::equal_to<CmpType>>>(node);
+            return new VectorizedNullSafeEqPredicate<data_type, BinaryPredFunc<EvalEq<data_type>>>(node);
         default:
             break;
         }

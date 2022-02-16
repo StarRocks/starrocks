@@ -51,16 +51,6 @@ struct PredicateCmpTypeForField<OLAP_FIELD_TYPE_JSON> {
     using ValueType = JsonValue;
 };
 
-template <PrimitiveType ptype>
-struct PredicateCmpType {
-    using CmpType = RunTimeCppType<ptype>;
-};
-
-template <>
-struct PredicateCmpType<TYPE_JSON> {
-    using CmpType = JsonValue;
-};
-
 enum class PredicateType {
     kUnknown = 0,
     kEQ = 1,
