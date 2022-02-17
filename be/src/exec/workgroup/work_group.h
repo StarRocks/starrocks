@@ -221,7 +221,7 @@ private:
 
 class DispatcherOwnerManager {
 public:
-    DispatcherOwnerManager(int num_total_dispatchers);
+    explicit DispatcherOwnerManager(int num_total_dispatchers);
     ~DispatcherOwnerManager() = default;
 
     // Disable copy/move ctor and assignment.
@@ -302,8 +302,8 @@ private:
     std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
     std::atomic<int64_t> _sum_unadjusted_cpu_runtime_ns = 0;
 
-    DispatcherOwnerManager _driver_dispatcher_owner_manager;
-    DispatcherOwnerManager _io_dispatcher_owner_manager;
+    std::unique_ptr<DispatcherOwnerManager> _driver_dispatcher_owner_manager;
+    std::unique_ptr<DispatcherOwnerManager> _io_dispatcher_owner_manager;
 };
 
 class DefaultWorkGroupInitialization {
