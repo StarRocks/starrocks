@@ -193,6 +193,10 @@ private:
         std::size_t input_len = input.size;
 
         while (input_len > 0) {
+            if (input_len < sizeof(uint32_t)) {
+                return Status::InvalidArgument(
+                        strings::Substitute("fail to do hadoop-lz4 decompress, input_len=$0", input_len));
+            }
             uint32_t decompressed_block_len = BigEndian::Load32(input_ptr);
             input_ptr += sizeof(uint32_t);
             input_len -= sizeof(uint32_t);
@@ -202,10 +206,13 @@ private:
                         "fail to do hadoop-lz4 decompress, remaining_output_size=$0, decompressed_block_len=$1",
                         remaining_output_size, decompressed_block_len));
             }
+            if (input_len <= 0) {
+                break;
+            }
 
             do {
                 // Check that input length should not be negative.
-                if (input_len < 0) {
+                if (input_len < sizeof(uint32_t)) {
                     return Status::InvalidArgument(strings::Substitute(
                             "fail to do hadoop-lz4 decompress, decompressed_total_len=$0, input_len=$1",
                             decompressed_total_len, input_len));
