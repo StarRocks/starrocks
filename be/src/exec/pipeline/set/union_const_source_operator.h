@@ -27,10 +27,8 @@ public:
                              const std::vector<ExprContext*>* const const_expr_lists, const size_t rows_total)
             : SourceOperator(factory, id, "union_const_source", plan_node_id),
               _dst_slots(dst_slots),
-              _const_expr_lists(const_expr_lists),
-              _rows_total(rows_total) {
-        DCHECK_NOTNULL(_const_expr_lists);
-    }
+              _const_expr_lists(DCHECK_NOTNULL(const_expr_lists)),
+              _rows_total(rows_total) {}
 
     bool has_output() const override { return _next_processed_row_index < _rows_total; }
 

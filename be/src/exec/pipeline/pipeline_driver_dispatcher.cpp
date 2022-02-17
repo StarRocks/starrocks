@@ -153,9 +153,7 @@ void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
 }
 
 void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
-    if (done) {
-        update_profile_by_mode(fragment_ctx, done);
-    }
+    update_profile_by_mode(fragment_ctx, done);
     auto params = ExecStateReporter::create_report_exec_status_params(fragment_ctx, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
@@ -184,7 +182,11 @@ void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ct
         return;
     }
 
-    if (fragment_ctx->profile_mode() != TPipelineProfileMode::type::BRIEF) {
+    if (!fragment_ctx->is_report_profile()) {
+        return;
+    }
+
+    if (fragment_ctx->profile_mode() >= TPipelineProfileMode::type::DETAIL) {
         return;
     }
 
@@ -192,30 +194,63 @@ void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ct
 
     std::vector<RuntimeProfile*> pipeline_profiles;
     profile->get_children(&pipeline_profiles);
-    for (auto* pipeline_profile : pipeline_profiles) {
-        std::vector<RuntimeProfile*> pipeline_driver_profiles;
-        pipeline_profile->get_children(&pipeline_driver_profiles);
 
-        // Find the most time-consuming profile in all driver profiles
-        int64_t max_active_time = 0;
-        RuntimeProfile* pipeline_driver_profile_with_max_active_time = nullptr;
-        for (auto* pipeline_driver_profile : pipeline_driver_profiles) {
-            auto* active_timer = pipeline_driver_profile->get_counter("ActiveTime");
-            if (active_timer == nullptr) {
-                continue;
-            }
-            if (active_timer->value() > max_active_time) {
-                max_active_time = active_timer->value();
-                pipeline_driver_profile_with_max_active_time = pipeline_driver_profile;
-            }
-        }
-        if (pipeline_driver_profile_with_max_active_time == nullptr) {
+    std::vector<RuntimeProfile*> merged_driver_profiles;
+    for (auto* pipeline_profile : pipeline_profiles) {
+        std::vector<RuntimeProfile*> driver_profiles;
+        pipeline_profile->get_children(&driver_profiles);
+
+        if (driver_profiles.empty()) {
             continue;
         }
-        pipeline_profile->remove_childs();
-        pipeline_driver_profile_with_max_active_time->reset_parent();
-        pipeline_profile->add_child(pipeline_driver_profile_with_max_active_time, true, nullptr);
-        pipeline_profile->add_info_string("ContainsAllPipelineDrivers", "false");
+
+        remove_non_core_metrics(fragment_ctx, driver_profiles);
+
+        RuntimeProfile::merge_isomorphic_profiles(driver_profiles);
+        // all the isomorphic profiles will merged into the first profile
+        auto* merged_driver_profile = driver_profiles[0];
+
+        // use the name of pipeline' profile as pipeline driver's
+        merged_driver_profile->set_name(pipeline_profile->name());
+        merged_driver_profiles.push_back(merged_driver_profile);
+
+        // add all the info string and counters of the pipeline's profile
+        // to the pipeline driver's profile
+        merged_driver_profile->copy_all_counters_from(pipeline_profile);
+        merged_driver_profile->copy_all_info_strings_from(pipeline_profile);
+    }
+
+    // remove pipeline's profile from the hierarchy
+    profile->remove_childs();
+    for (auto* merged_driver_profile : merged_driver_profiles) {
+        profile->add_child(merged_driver_profile, true, nullptr);
+    }
+}
+
+void GlobalDriverDispatcher::remove_non_core_metrics(FragmentContext* fragment_ctx,
+                                                     std::vector<RuntimeProfile*>& driver_profiles) {
+    if (fragment_ctx->profile_mode() > TPipelineProfileMode::CORE_METRICS) {
+        return;
+    }
+
+    for (auto* driver_profile : driver_profiles) {
+        driver_profile->remove_counters(std::set<std::string>{"DriverTotalTime", "ActiveTime", "PendingTime"});
+
+        std::vector<RuntimeProfile*> operator_profiles;
+        driver_profile->get_children(&operator_profiles);
+
+        for (auto* operator_profile : operator_profiles) {
+            RuntimeProfile* common_metrics = operator_profile->get_child("CommonMetrics");
+
+            operator_profile->remove_childs();
+
+            if (common_metrics != nullptr) {
+                common_metrics->remove_counters(std::set<std::string>{"OperatorTotalTime"});
+            }
+
+            common_metrics->reset_parent();
+            operator_profile->add_child(common_metrics, true, nullptr);
+        }
     }
 }
 

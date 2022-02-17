@@ -32,6 +32,8 @@ import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileMode;
 import com.starrocks.thrift.TQueryOptions;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 
 import java.io.DataInput;
@@ -42,6 +44,8 @@ import java.lang.reflect.Field;
 
 // System variable
 public class SessionVariable implements Serializable, Writable, Cloneable {
+    private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
+
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
     public static final String QUERY_TIMEOUT = "query_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
@@ -341,7 +345,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int pipelineDop = 0;
 
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
-    private String pipelineProfileMode = "brief";
+    private int pipelineProfileMode = 0;
 
     @VariableMgr.VarAttr(name = WORKGROUP_ID, flag = VariableMgr.INVISIBLE)
     private int workgroupId = 0;
@@ -788,6 +792,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return workgroupId;
     }
 
+    public int getPipelineProfileMode() {
+        return pipelineProfileMode;
+    }
+
+    public void setPipelineProfileMode(int pipelineProfileMode) {
+        this.pipelineProfileMode = pipelineProfileMode;
+    }
+
     public boolean isEnableReplicationJoin() {
         return false;
     }
@@ -850,7 +862,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isSingleNodeExecPlan() {
         return singleNodeExecPlan;
     }
-    
+
     public double getCboCTERuseRatio() {
         return cboCTERuseRatio;
     }
@@ -897,10 +909,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setPipeline_dop(pipelineDop);
-        if ("brief".equalsIgnoreCase(pipelineProfileMode)) {
-            tResult.setPipeline_profile_mode(TPipelineProfileMode.BRIEF);
-        } else {
-            tResult.setPipeline_profile_mode(TPipelineProfileMode.DETAIL);
+        switch (pipelineProfileMode) {
+            case 0:
+                tResult.setPipeline_profile_mode(TPipelineProfileMode.CORE_METRICS);
+                break;
+            case 1:
+                tResult.setPipeline_profile_mode(TPipelineProfileMode.ALL_METRICS);
+                break;
+            case 2:
+                tResult.setPipeline_profile_mode(TPipelineProfileMode.DETAIL);
+                break;
+            default:
+                tResult.setPipeline_profile_mode(TPipelineProfileMode.CORE_METRICS);
+                break;
         }
         return tResult;
     }
@@ -1031,7 +1052,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 }
             }
         } catch (Exception e) {
-            throw new IOException("failed to read session variable: " + e.getMessage());
+            LOG.warn("failed to read session variable: {}", e.getMessage());
         }
     }
 
