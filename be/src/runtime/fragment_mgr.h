@@ -91,7 +91,7 @@ public:
                                        std::vector<TScanColumnDesc>* selected_columns);
 
 private:
-    void exec_actual(std::shared_ptr<FragmentExecState>* exec_state, const FinishCallback& cb);
+    void exec_actual(std::shared_ptr<FragmentExecState> exec_state, const FinishCallback& cb);
 
     // This is input params
     ExecEnv* _exec_env;
