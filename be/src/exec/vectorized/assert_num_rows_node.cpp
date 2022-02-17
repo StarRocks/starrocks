@@ -3,6 +3,7 @@
 #include "exec/vectorized/assert_num_rows_node.h"
 
 #include "exec/pipeline/assert_num_rows_operator.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
@@ -161,6 +162,10 @@ pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::Pipelin
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operator_before_assert_num_rows_source.back().get(), context,
                                            rc_rf_probe_collector);
+    if (limit() != -1) {
+        operator_before_assert_num_rows_source.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
     return operator_before_assert_num_rows_source;
 }
 

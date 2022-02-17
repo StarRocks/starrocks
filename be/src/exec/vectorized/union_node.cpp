@@ -322,7 +322,8 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
 }
 
 pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    std::vector<pipeline::OpFactories> operators_list;
+    using namespace pipeline;
+    std::vector<OpFactories> operators_list;
     operators_list.reserve(_children.size() + 1);
     const auto num_operators_generated = _children.size() + !_const_expr_lists.empty();
     auto&& rc_rf_probe_collector =
@@ -332,7 +333,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     for (; i < _first_materialized_child_idx; i++) {
         operators_list.emplace_back(child(i)->decompose_to_pipeline(context));
 
-        pipeline::UnionPassthroughOperator::SlotMap* dst2src_slot_map = nullptr;
+        UnionPassthroughOperator::SlotMap* dst2src_slot_map = nullptr;
         if (!_pass_through_slot_maps.empty()) {
             dst2src_slot_map = &_pass_through_slot_maps[i];
         }
@@ -345,7 +346,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         const auto& tuple_descs = child(i)->row_desc().tuple_descriptors();
         const auto& src_slots = tuple_descs[0]->slots();
 
-        auto union_passthrough_op = std::make_shared<pipeline::UnionPassthroughOperatorFactory>(
+        auto union_passthrough_op = std::make_shared<UnionPassthroughOperatorFactory>(
                 context->next_operator_id(), id(), dst2src_slot_map, dst_slots, src_slots);
         operators_list[i].emplace_back(std::move(union_passthrough_op));
         // Initialize OperatorFactory's fields involving runtime filters.
@@ -369,7 +370,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
             dst_column_is_nullables.emplace_back(dst_slot->is_nullable());
         }
 
-        auto project_op = std::make_shared<pipeline::ProjectOperatorFactory>(
+        auto project_op = std::make_shared<ProjectOperatorFactory>(
                 context->next_operator_id(), id(), std::move(dst_column_ids), std::move(_child_expr_lists[i]),
                 std::move(dst_column_is_nullables), std::vector<int32_t>(), std::vector<ExprContext*>());
         operators_list[i].emplace_back(std::move(project_op));
@@ -379,12 +380,12 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
 
     // UnionConstSourceOperatorFactory is used for the const sub exprs.
     if (!_const_expr_lists.empty()) {
-        operators_list.emplace_back(pipeline::OpFactories());
+        operators_list.emplace_back(OpFactories());
 
         const auto& dst_tuple_desc =
                 context->fragment_context()->runtime_state()->desc_tbl().get_tuple_descriptor(_tuple_id);
         const auto& dst_slots = dst_tuple_desc->slots();
-        auto union_const_source_op = std::make_shared<pipeline::UnionConstSourceOperatorFactory>(
+        auto union_const_source_op = std::make_shared<UnionConstSourceOperatorFactory>(
                 context->next_operator_id(), id(), dst_slots, _const_expr_lists);
 
         // Each _const_expr_list is project to one row.
@@ -400,13 +401,12 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
-    OpFactories output = context->maybe_gather_pipelines_to_one(runtime_state(), operators_list);
+    auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), operators_list);
     if (limit() != -1) {
-        output.emplace_back(
-                std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+        final_operators.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
-
-    return output;
+    return final_operators;
 }
 
 } // namespace starrocks::vectorized

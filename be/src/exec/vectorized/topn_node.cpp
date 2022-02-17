@@ -6,6 +6,7 @@
 
 #include "column/column_helper.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
@@ -225,6 +226,10 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
         local_merge_sort_source_operator->set_degree_of_parallelism(degree_of_parallelism);
     }
     operators_source_with_sort.emplace_back(std::move(local_merge_sort_source_operator));
+    if (limit() != -1) {
+        operators_source_with_sort.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
 
     return operators_source_with_sort;
 }
