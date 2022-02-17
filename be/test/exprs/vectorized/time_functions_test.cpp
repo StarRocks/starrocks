@@ -17,6 +17,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/vectorized/time_types.h"
 #include "testutil/function_utils.h"
+#include "udf/udf.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -1488,6 +1489,8 @@ TEST_F(TimeFunctionsTest, convertTzConstTest) {
     const char* literal = "America/Los_Angeles";
     auto to_col = BinaryColumn::create();
     to_col->append(Slice(literal));
+    to_col->get_bytes().emplace_back('X');
+    to_col->get_bytes().resize(to_col->get_offset().back());
     auto tc_to = ConstColumn::create(std::move(to_col));
 
     TimestampValue res[] = {TimestampValue::create(2019, 4, 7, 8, 21, 3), TimestampValue::create(2019, 8, 1, 0, 8, 7),
@@ -1498,6 +1501,12 @@ TEST_F(TimeFunctionsTest, convertTzConstTest) {
     columns.emplace_back(tc_to);
 
     _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(
+            FunctionContext::TypeDesc{FunctionContext::Type::TYPE_DATETIME});
+    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(
+            FunctionContext::TypeDesc{FunctionContext::Type::TYPE_VARCHAR});
+    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(
+            FunctionContext::TypeDesc{FunctionContext::Type::TYPE_VARCHAR});
 
     ASSERT_TRUE(
             TimeFunctions::convert_tz_prepare(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
