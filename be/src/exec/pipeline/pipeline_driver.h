@@ -20,7 +20,8 @@ namespace starrocks {
 
 namespace workgroup {
 class WorkGroup;
-}
+using WorkGroupPtr = std::shared_ptr<WorkGroup>;
+} // namespace workgroup
 
 namespace pipeline {
 
@@ -168,7 +169,7 @@ public:
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
     void set_morsel_queue(MorselQueuePtr morsel_queue) { _morsel_queue = std::move(morsel_queue); }
     Status prepare(RuntimeState* runtime_state);
-    StatusOr<DriverState> process(RuntimeState* runtime_state);
+    StatusOr<DriverState> process(RuntimeState* runtime_state, int dispatcher_id);
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
@@ -340,7 +341,7 @@ public:
     std::string to_readable_string() const;
 
     workgroup::WorkGroup* workgroup();
-    void set_workgroup(workgroup::WorkGroup* wg);
+    void set_workgroup(workgroup::WorkGroupPtr wg);
 
     size_t get_dispatch_queue_index() const { return _dispatch_queue_index; }
     void set_dispatch_queue_index(size_t dispatch_queue_index) { _dispatch_queue_index = dispatch_queue_index; }
@@ -396,7 +397,7 @@ private:
 
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
-    workgroup::WorkGroup* _workgroup = nullptr;
+    workgroup::WorkGroupPtr _workgroup = nullptr;
     // The index of QuerySharedDriverQueue{WithoutLock}._queues which this driver belongs to.
     size_t _dispatch_queue_index = 0;
 

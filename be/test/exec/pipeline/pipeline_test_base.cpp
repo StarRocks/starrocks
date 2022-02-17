@@ -120,7 +120,7 @@ void PipelineTestBase::_prepare() {
 
     auto wg = workgroup::WorkGroupManager::instance()->get_default_workgroup();
     for (auto& driver : _fragment_ctx->drivers()) {
-        driver->set_workgroup(wg.get());
+        driver->set_workgroup(wg);
     }
 }
 

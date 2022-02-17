@@ -29,7 +29,7 @@ public:
     virtual void put_back_from_dispatcher(const DriverRawPtr driver) = 0;
     virtual void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) = 0;
 
-    virtual StatusOr<DriverRawPtr> take() = 0;
+    virtual StatusOr<DriverRawPtr> take(int dispatcher_id) = 0;
 
     // Update statistics of the driver's workgroup,
     // when yielding the driver in the dispatcher thread.
@@ -84,7 +84,7 @@ public:
     void update_statistics(const DriverRawPtr driver) override;
 
     // return nullptr if queue is closed;
-    StatusOr<DriverRawPtr> take() override;
+    StatusOr<DriverRawPtr> take(int dispatcher_id) override;
 
     size_t size() override { return 0; }
 
@@ -119,7 +119,7 @@ public:
     void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override;
 
     // return nullptr if queue is closed;
-    StatusOr<DriverRawPtr> take() override;
+    StatusOr<DriverRawPtr> take(int dispatcher_id) override;
 
     void update_statistics(const DriverRawPtr driver) override;
 
@@ -156,7 +156,7 @@ public:
 
     // Firstly, select the work group with the minimum vruntime.
     // Secondly, select the proper driver from the driver queue of this work group.
-    StatusOr<DriverRawPtr> take() override;
+    StatusOr<DriverRawPtr> take(int dispatcher_id) override;
 
     void update_statistics(const DriverRawPtr driver) override;
 
@@ -170,6 +170,7 @@ private:
     template <bool from_dispatcher>
     void _put_back(const DriverRawPtr driver);
     // This method should be guarded by the outside _global_mutex.
+    workgroup::WorkGroup* _find_min_owner_wg(int dispatcher_id);
     workgroup::WorkGroup* _find_min_wg();
     // The ideal runtime of a work group is the weighted average of the schedule period.
     int64_t _ideal_runtime_ns(workgroup::WorkGroup* wg);

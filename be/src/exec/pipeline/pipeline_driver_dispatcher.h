@@ -59,6 +59,8 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool;
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
+
+    std::atomic<int> _next_id = 0;
 };
 
 } // namespace pipeline

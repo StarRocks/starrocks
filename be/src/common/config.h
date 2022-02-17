@@ -645,6 +645,9 @@ CONF_Int64(pipeline_yield_max_chunks_moved, "100");
 // yield PipelineDriver when maximum time in nano-seconds has spent
 // in current execution round.
 CONF_Int64(pipeline_yield_max_time_spent, "100000000");
+// yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
+// if it runs in the dispatcher owned by other workgroup, which has running drivers.
+CONF_Int64(pipeline_yield_preempt_max_time_spent, "20000000");
 // the number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
 // queue size of scan thread pool for pipeline engine.

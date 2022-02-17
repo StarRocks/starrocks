@@ -47,7 +47,7 @@ void QuerySharedDriverQueue::put_back_from_dispatcher(const std::vector<DriverRa
     put_back(drivers);
 }
 
-StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
+StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(int dispatcher_id) {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
@@ -112,7 +112,7 @@ void QuerySharedDriverQueueWithoutLock::put_back_from_dispatcher(const std::vect
     put_back(drivers);
 }
 
-StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take() {
+StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take(int dispatcher_id) {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
@@ -186,7 +186,7 @@ void DriverQueueWithWorkGroup::put_back_from_dispatcher(const std::vector<Driver
     }
 }
 
-StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take() {
+StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(int dispatcher_id) {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
     if (_is_closed) {
@@ -200,13 +200,19 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take() {
         }
     }
 
-    auto wg = _find_min_wg();
+    // Try to take driver from any owner workgroup first.
+    auto wg = _find_min_owner_wg(dispatcher_id);
+    if (wg == nullptr) {
+        // All the owner workgroups don't have ready drivers, so select the other workgroup.
+        wg = _find_min_wg();
+    }
+
     if (wg->driver_queue()->size() == 1) {
         _sum_cpu_limit -= wg->get_cpu_limit();
         _ready_wgs.erase(wg);
     }
 
-    return wg->driver_queue()->take();
+    return wg->driver_queue()->take(dispatcher_id);
 }
 
 void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
@@ -254,9 +260,28 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
     _cv.notify_one();
 }
 
+workgroup::WorkGroup* DriverQueueWithWorkGroup::_find_min_owner_wg(int dispatcher_id) {
+    workgroup::WorkGroup* min_wg = nullptr;
+    int64_t min_vruntime_ns = 0;
+
+    auto owner_wgs = workgroup::WorkGroupManager::instance()->get_owners_of_driver_dispatcher(dispatcher_id);
+    if (owner_wgs != nullptr) {
+        for (auto wg : *owner_wgs) {
+            if (_ready_wgs.find(wg.get()) != _ready_wgs.end() &&
+                (min_wg == nullptr || min_vruntime_ns > wg->get_vruntime_ns())) {
+                min_wg = wg.get();
+                min_vruntime_ns = wg->get_vruntime_ns();
+            }
+        }
+    }
+
+    return min_wg;
+}
+
 workgroup::WorkGroup* DriverQueueWithWorkGroup::_find_min_wg() {
     workgroup::WorkGroup* min_wg = nullptr;
     int64_t min_vruntime_ns = 0;
+
     for (auto wg : _ready_wgs) {
         if (min_wg == nullptr || min_vruntime_ns > wg->get_vruntime_ns()) {
             min_wg = wg;

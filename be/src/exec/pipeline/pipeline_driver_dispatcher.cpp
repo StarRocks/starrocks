@@ -50,12 +50,13 @@ void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* 
 }
 
 void GlobalDriverDispatcher::run() {
+    const int dispatcher_id = _next_id++;
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
 
-        auto maybe_driver = this->_driver_queue->take();
+        auto maybe_driver = this->_driver_queue->take(dispatcher_id);
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
@@ -89,7 +90,7 @@ void GlobalDriverDispatcher::run() {
 
             // query context has ready drivers to run, so extend its lifetime.
             query_ctx->extend_lifetime();
-            auto status = driver->process(runtime_state);
+            auto status = driver->process(runtime_state, dispatcher_id);
             this->_driver_queue->update_statistics(driver);
 
             if (!status.ok()) {

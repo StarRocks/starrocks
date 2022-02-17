@@ -279,7 +279,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     if (wg != nullptr) {
         for (auto& driver : _fragment_ctx->drivers()) {
-            driver->set_workgroup(wg.get());
+            driver->set_workgroup(wg);
         }
     }
 

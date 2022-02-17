@@ -95,7 +95,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
+StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int dispatcher_id) {
     SCOPED_TIMER(_active_timer);
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
@@ -190,6 +190,12 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             // yield when total chunks moved or time spent on-core for evaluation
             // exceed the designated thresholds.
             if (total_chunks_moved >= _yield_max_chunks_moved || time_spent >= _yield_max_time_spent) {
+                should_yield = true;
+                break;
+            }
+
+            if (_workgroup != nullptr && time_spent >= config::pipeline_yield_preempt_max_time_spent &&
+                workgroup::WorkGroupManager::instance()->should_yield_driver_dispatcher(dispatcher_id, _workgroup)) {
                 should_yield = true;
                 break;
             }
@@ -355,12 +361,12 @@ std::string PipelineDriver::to_readable_string() const {
     return ss.str();
 }
 
-starrocks::workgroup::WorkGroup* PipelineDriver::workgroup() {
+workgroup::WorkGroup* PipelineDriver::workgroup() {
     DCHECK(_workgroup != nullptr);
-    return _workgroup;
+    return _workgroup.get();
 }
 
-void PipelineDriver::set_workgroup(starrocks::workgroup::WorkGroup* wg) {
+void PipelineDriver::set_workgroup(workgroup::WorkGroupPtr wg) {
     this->_workgroup = wg;
     this->_workgroup->increase_num_drivers();
 }

@@ -91,7 +91,11 @@ double WorkGroup::get_cpu_actual_use_ratio() const {
     return static_cast<double>(get_real_runtime_ns()) / sum_cpu_runtime_ns;
 }
 
-WorkGroupManager::WorkGroupManager() {}
+WorkGroupManager::WorkGroupManager()
+        : _driver_dispatcher_owner_manager(config::pipeline_exec_thread_pool_thread_num > 0
+                                                   ? config::pipeline_exec_thread_pool_thread_num
+                                                   : std::thread::hardware_concurrency()) {}
+
 WorkGroupManager::~WorkGroupManager() {}
 void WorkGroupManager::destroy() {
     std::unique_lock write_lock(_mutex);
@@ -307,6 +311,7 @@ StatusOr<PriorityThreadPool::Task> IoWorkGroupQueue::pick_next_task() {
 void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     std::unique_lock write_lock(_mutex);
 
+    size_t original_num_workgroups = _workgroups.size();
     auto it = _workgroup_expired_versions.begin();
     // collect removable workgroups
     while (it != _workgroup_expired_versions.end()) {
@@ -315,10 +320,14 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
         if (wg_it->second->is_removable()) {
             _wg_io_queue.remove(wg_it->second);
             _workgroups.erase(wg_it);
+            _sum_cpu_limit -= wg_it->second->get_cpu_limit();
             _workgroup_expired_versions.erase(it++);
         } else {
             ++it;
         }
+    }
+    if (original_num_workgroups != _workgroups.size()) {
+        reassign_dispatcher_to_wgs();
     }
 
     for (const auto& op : ops) {
@@ -346,6 +355,8 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg) {
     }
     wg->init();
     _workgroups[unique_id] = wg;
+    _sum_cpu_limit += wg->get_cpu_limit();
+    reassign_dispatcher_to_wgs();
 
     // old version exists, so mark the stale version delete
     if (_workgroup_versions.count(wg->id())) {
@@ -360,7 +371,6 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg) {
     // install new version
     _workgroup_versions[wg->id()] = wg->version();
     _wg_io_queue.add(wg);
-    _sum_cpu_limit += wg->get_cpu_limit();
 }
 
 void WorkGroupManager::alter_workgroup_unlocked(const WorkGroupPtr& wg) {
@@ -372,7 +382,6 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();
-        _sum_cpu_limit -= wg->get_cpu_limit();
     }
 }
 
@@ -439,6 +448,18 @@ bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPo
     return _wg_io_queue.try_offer_io_task(wg, task);
 }
 
+void WorkGroupManager::reassign_dispatcher_to_wgs() {
+    _driver_dispatcher_owner_manager.reassign_to_wgs(_workgroups, _sum_cpu_limit);
+}
+
+std::shared_ptr<WorkGroupPtrSet> WorkGroupManager::get_owners_of_driver_dispatcher(int dispatcher_id) {
+    return _driver_dispatcher_owner_manager.get_owners(dispatcher_id);
+}
+
+bool WorkGroupManager::should_yield_driver_dispatcher(int dispatcher_id, WorkGroupPtr running_wg) {
+    return _driver_dispatcher_owner_manager.should_yield(dispatcher_id, std::move(running_wg));
+}
+
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     auto default_wg = std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION, 1,
                                                   0.5, 10, WorkGroupType::WG_DEFAULT);
@@ -451,6 +472,52 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     default_wg->set_select_factor(default_wg->get_cpu_expected_use_ratio());
     wg1->set_select_factor(wg1->get_cpu_expected_use_ratio());
     wg2->set_select_factor(wg2->get_cpu_expected_use_ratio());
+}
+
+DispatcherOwnerManager::DispatcherOwnerManager(int num_total_dispatchers)
+        : _num_total_dispatchers(num_total_dispatchers) {
+    for (int i = 0; i < 2; ++i) {
+        _dispatcher_id2owner_wgs[i] = std::vector<std::shared_ptr<WorkGroupPtrSet>>(_num_total_dispatchers);
+    }
+}
+
+void DispatcherOwnerManager::reassign_to_wgs(const std::unordered_map<int128_t, WorkGroupPtr>& workgroups,
+                                             int sum_cpu_limit) {
+    auto& dispatcher_id2owner_wgs = _dispatcher_id2owner_wgs[(_index + 1) % 2];
+    for (auto& owner_wgs : dispatcher_id2owner_wgs) {
+        owner_wgs = std::make_shared<WorkGroupPtrSet>();
+    }
+
+    int dispatcher_id = 0;
+    for (const auto& [_, wg] : workgroups) {
+        int num_dispatchers = std::max(1, _num_total_dispatchers * int(wg->get_cpu_limit()) / sum_cpu_limit);
+        for (int i = 0; i < num_dispatchers; ++i) {
+            dispatcher_id2owner_wgs[(dispatcher_id++) % _num_total_dispatchers]->emplace(wg);
+        }
+    }
+
+    _index++;
+}
+
+bool DispatcherOwnerManager::should_yield(int dispatcher_id, const WorkGroupPtr& running_wg) const {
+    if (dispatcher_id >= _num_total_dispatchers) {
+        return false;
+    }
+
+    auto wgs = _dispatcher_id2owner_wgs[_index % 2][dispatcher_id];
+    // This dispatcher doesn't belong to any workgroup, or running_wg is the owner of it.
+    if (wgs == nullptr || wgs->empty() || wgs->find(running_wg) != wgs->end()) {
+        return false;
+    }
+
+    // Any owner of this dispatcher has running drivers.
+    for (const auto& wg : *wgs) {
+        if (wg->num_drivers() > 0) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 } // namespace workgroup
