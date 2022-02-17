@@ -226,7 +226,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     使用指定的 key 列和指定的数值范围进行分区。
 
     1. 分区名称仅支持字母开头，字母、数字和下划线组成
-    2. 目前仅支持以下类型的列作为 Range 分区列，且只能指定一个分区列
+    2. 目前仅支持以下类型的列作为 Range 分区列，
     TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME
     3. 分区为左闭右开区间，首个分区的左边界为做最小值
     4. NULL 值只会存放在包含最小值的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
