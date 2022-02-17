@@ -131,7 +131,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
     }
 
     auto to_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(to);
-    if (!TimezoneUtils::find_cctz_time_zone(std::string_view(to_value.data), ctc->to_tz)) {
+    if (!TimezoneUtils::find_cctz_time_zone(std::string_view(to_value), ctc->to_tz)) {
         ctc->is_valid = false;
         return Status::OK();
     }
@@ -179,21 +179,21 @@ ColumnPtr TimeFunctions::convert_tz_general(FunctionContext* context, const Colu
         cctz::time_zone ctz;
         int64_t timestamp;
         int64_t offset;
-        if (TimezoneUtils::timezone_offsets(std::string_view(from_format), std::string_view(to_format), &offset)) {
+        if (TimezoneUtils::timezone_offsets(from_format, to_format, &offset)) {
             TimestampValue ts = TimestampValue::create(year, month, day, hour, minute, second);
             ts.from_unix_second(ts.to_unix_second() + offset);
             result.append(ts);
             continue;
         }
 
-        if (!ts_value.from_cctz_timezone(timezone_hsscan, std::string_view(from_format), ctz) ||
+        if (!ts_value.from_cctz_timezone(timezone_hsscan, from_format, ctz) ||
             !ts_value.unix_timestamp(&timestamp, ctz)) {
             result.append_null();
             continue;
         }
 
         DateTimeValue ts_value2;
-        if (!ts_value2.from_cctz_timezone(timezone_hsscan, std::string(to_format.data, to_format.size), ctz) ||
+        if (!ts_value2.from_cctz_timezone(timezone_hsscan, to_format, ctz) ||
             !ts_value2.from_unixtime(timestamp, ctz)) {
             result.append_null();
             continue;
