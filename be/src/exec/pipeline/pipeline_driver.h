@@ -385,7 +385,7 @@ private:
 
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
-    starrocks::workgroup::WorkGroup* _workgroup = nullptr;
+    workgroup::WorkGroupPtr _workgroup = nullptr;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
