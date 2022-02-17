@@ -366,30 +366,30 @@ FragmentMgr::~FragmentMgr() {
 
 static void empty_function(PlanFragmentExecutor* exec) {}
 
-void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState>* exec_state, const FinishCallback& cb) {
+void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState> exec_state, const FinishCallback& cb) {
     // This writing is to ensure that MemTracker will not be destructed before the thread ends.
     // This writing method is a bit tricky, and when there is a better way, replace it
-    auto profile = (*exec_state)->runtime_state()->runtime_profile_ptr();
-    auto q_tracker = (*exec_state)->runtime_state()->query_mem_tracker_ptr();
-    auto s_tracker = (*exec_state)->runtime_state()->instance_mem_tracker_ptr();
+    auto profile = exec_state->runtime_state()->runtime_profile_ptr();
+    auto q_tracker = exec_state->runtime_state()->query_mem_tracker_ptr();
+    auto s_tracker = exec_state->runtime_state()->instance_mem_tracker_ptr();
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(s_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    (*exec_state)->execute();
+    exec_state->execute();
 
     // Callback after remove from this id
-    cb((*exec_state)->executor());
+    cb(exec_state->executor());
 
     {
         std::lock_guard<std::mutex> lock(_lock);
-        auto iter = _fragment_map.find((*exec_state)->fragment_instance_id());
+        auto iter = _fragment_map.find(exec_state->fragment_instance_id());
         if (iter != _fragment_map.end()) {
             _fragment_map.erase(iter);
         } else {
             // Impossible
             LOG(WARNING) << "missing entry in fragment exec state map: instance_id="
-                         << (*exec_state)->fragment_instance_id();
+                         << exec_state->fragment_instance_id();
         }
     }
     // NOTE: 'exec_state' is desconstructed here without lock
@@ -422,7 +422,6 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
                                            params.coord));
     RETURN_IF_ERROR_WITH_WARN(exec_state->prepare(params), "Fail to prepare Fragment");
 
-    std::shared_ptr<FragmentExecState>* exec_state_ptr = nullptr;
     {
         std::lock_guard<std::mutex> lock(_lock);
         auto iter = _fragment_map.find(fragment_instance_id);
@@ -431,13 +430,12 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
             return Status::InternalError("Double execute");
         }
         // register exec_state before starting exec thread
-        auto exec_state_iter = _fragment_map.insert(std::make_pair(fragment_instance_id, exec_state));
-        exec_state_ptr = &exec_state_iter.first->second;
+        _fragment_map.insert(std::make_pair(fragment_instance_id, exec_state));
     }
 
-    auto st = _thread_pool->submit_func([this, exec_state_ptr, cb] { exec_actual(exec_state_ptr, cb); });
+    auto st = _thread_pool->submit_func([this, exec_state, cb] { exec_actual(exec_state, cb); });
     if (!st.ok()) {
-        (*exec_state_ptr)->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR);
+        exec_state->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR);
         std::string error_msg = strings::Substitute("Put planfragment $0 to thread pool failed. err = $1",
                                                     print_id(fragment_instance_id), st.get_error_msg());
         LOG(WARNING) << error_msg;
