@@ -195,6 +195,9 @@ void WorkGroup::estimate_trend_factor_period() {
     // If it is positive, it means that its resources are sufficient and can be reduced by a fraction
     //_diff_factor = get_cpu_expected_use_ratio() - _expect_factor;
     _diff_factor = _select_factor - _expect_factor;
+
+    _decrease_chunk_num_period = 1;
+    _increase_chunk_num_period = 1;
 }
 
 size_t WorkGroup::io_task_queue_size() {
