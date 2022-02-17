@@ -109,6 +109,7 @@ public:
 
 private:
     friend class ThreadPool;
+    // The max length of _name is 15 limited by linux.
     const std::string _name;
     int _min_threads;
     int _max_threads;

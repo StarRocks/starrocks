@@ -154,7 +154,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _driver_dispatcher->initialize(max_thread_num);
 
     std::unique_ptr<ThreadPool> wg_driver_dispatcher_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_dispatcher") // pipeline dispatcher
+    RETURN_IF_ERROR(ThreadPoolBuilder("wg_dispatcher") // pipeline dispatcher
                             .set_min_threads(0)
                             .set_max_threads(max_thread_num)
                             .set_max_queue_size(1000)
