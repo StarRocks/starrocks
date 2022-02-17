@@ -13,12 +13,9 @@
 #include "column/datum.h"
 #include "column/type_traits.h"
 #include "common/object_pool.h"
-<<<<<<< HEAD
-#include "gen_cpp/Opcodes_types.h"
-=======
 #include "common/status.h"
+#include "gen_cpp/Opcodes_types.h"
 #include "runtime/primitive_type.h"
->>>>>>> 08b3b0e5 (implement binary predicate for json)
 #include "storage/olap_common.h" // ColumnId
 #include "storage/types.h"
 #include "storage/vectorized/range.h"
