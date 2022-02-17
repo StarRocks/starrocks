@@ -6,8 +6,11 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
@@ -1482,7 +1485,10 @@ TEST_F(TimeFunctionsTest, convertTzConstTest) {
 
     auto tc_from = ColumnHelper::create_const_column<TYPE_VARCHAR>("Asia/Urumqi", 1);
 
-    auto tc_to = ColumnHelper::create_const_column<TYPE_VARCHAR>("America/Los_Angeles", 1);
+    const char* literal = "America/Los_Angeles";
+    auto to_col = BinaryColumn::create();
+    to_col->append(Slice(literal));
+    auto tc_to = ConstColumn::create(std::move(to_col));
 
     TimestampValue res[] = {TimestampValue::create(2019, 4, 7, 8, 21, 3), TimestampValue::create(2019, 8, 1, 0, 8, 7),
                             TimestampValue::create(2019, 6, 17, 20, 13, 27)};
