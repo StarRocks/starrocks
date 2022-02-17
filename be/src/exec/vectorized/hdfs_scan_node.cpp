@@ -28,7 +28,7 @@
 
 namespace starrocks::vectorized {
 
-// FIXME: this class is append-only, the memory usage will keep growing
+// NOTE: this class is append-only
 class OpenLimitAllocator {
 public:
     OpenLimitAllocator() = default;
@@ -667,13 +667,13 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
     if (is_hdfs_path(native_file_path.c_str())) {
         env = _pool->add(new EnvHdfs());
     } else if (is_object_storage_path(native_file_path.c_str())) {
-        env = _pool->add(new EnvHdfs());
+        env = _pool->add(new EnvS3());
     } else {
         env = Env::Default();
     }
 
-    std::string nn;
-    RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &nn));
+    std::string name_node;
+    RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &name_node));
 
     auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
     hdfs_file_desc->env = env;
@@ -683,7 +683,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
     hdfs_file_desc->file_length = scan_range.file_length;
     hdfs_file_desc->splits.emplace_back(&scan_range);
     hdfs_file_desc->hdfs_file_format = scan_range.file_format;
-    hdfs_file_desc->open_limit = OpenLimitAllocator::instance().allocate(nn);
+    hdfs_file_desc->open_limit = OpenLimitAllocator::instance().allocate(name_node);
     _hdfs_files.emplace_back(hdfs_file_desc);
     return Status::OK();
 }
