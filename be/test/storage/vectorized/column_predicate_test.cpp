@@ -2177,7 +2177,7 @@ TEST(ColumnPredicateTest, test_convert_cmp_predicate) {
                 new_column_cmp_predicate(predicate, get_type_info(OLAP_FIELD_TYPE_BOOL), 0, "1"));
         const ColumnPredicate* new_p;
         ObjectPool op;
-        
+
         // different type
         {
             TypeInfoPtr new_type = get_type_info(OLAP_FIELD_TYPE_INT);
@@ -2208,12 +2208,13 @@ TEST(ColumnPredicateTest, test_convert_cmp_binary_predicate) {
     // clang-format on
 
     for (auto predicate : testcases) {
-        std::unique_ptr<ColumnPredicate> p(new_column_cmp_predicate(predicate, get_type_info(OLAP_FIELD_TYPE_VARCHAR), 0, "1"));
+        std::unique_ptr<ColumnPredicate> p(
+                new_column_cmp_predicate(predicate, get_type_info(OLAP_FIELD_TYPE_VARCHAR), 0, "1"));
 
         const ColumnPredicate* new_p;
         TypeInfoPtr new_type = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
         ObjectPool op;
-        
+
         ASSERT_OK(p->convert_to(&new_p, new_type, &op));
         EXPECT_EQ(new_p->type(), p->type());
     }
