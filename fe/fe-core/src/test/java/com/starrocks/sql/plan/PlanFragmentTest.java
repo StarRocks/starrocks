@@ -5616,4 +5616,12 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  3:EXCHANGE\n" +
                 "     limit: 10"));
     }
+
+    @Test
+    public void testArithmeticDecimalReuse() throws Exception {
+        String sql = "select t1a, sum(id_decimal * t1f), sum(id_decimal * t1f)" +
+                "from test_all_type group by t1a";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: t1a | 12: sum | 12: sum"));
+    }
 }
