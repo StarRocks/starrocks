@@ -680,7 +680,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableReplicationJoin() {
-        return enableReplicationJoin;
+        return false;
     }
 
     public boolean isSetUseNthExecPlan() {
