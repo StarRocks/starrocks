@@ -542,7 +542,7 @@ Status FragmentMgr::trigger_profile_report(const PTriggerProfileReportRequest* r
                 std::lock_guard<std::mutex> lock(_lock);
                 auto iter = _fragment_map.find(id);
                 if (iter != _fragment_map.end()) {
-                    need_report_exec_states.emplace_back(iter->second->executor());
+                    need_report_exec_states.emplace_back(iter->second);
                 }
             }
         }
@@ -550,7 +550,7 @@ Status FragmentMgr::trigger_profile_report(const PTriggerProfileReportRequest* r
         std::lock_guard<std::mutex> lock(_lock);
         auto iter = _fragment_map.begin();
         for (; iter != _fragment_map.end(); iter++) {
-            need_report_exec_states.emplace_back(iter->second->executor());
+            need_report_exec_states.emplace_back(iter->second);
         }
     }
 
