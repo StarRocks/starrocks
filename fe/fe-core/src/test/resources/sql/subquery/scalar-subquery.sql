@@ -326,14 +326,14 @@ CROSS JOIN (join-predicate [null] post-join-predicate [1: v1 <= 11: v4])
             SCAN (columns[11: v4] predicate[null])
     EXCHANGE BROADCAST
         CROSS JOIN (join-predicate [null] post-join-predicate [1: v1 >= 7: v4])
-            CROSS JOIN (join-predicate [null] post-join-predicate [null])
-                SCAN (columns[1: v1] predicate[null])
-                EXCHANGE BROADCAST
-                    SCAN (columns[4: v4] predicate[null])
+            ASSERT LE 1
+                EXCHANGE GATHER
+                    SCAN (columns[7: v4] predicate[null])
             EXCHANGE BROADCAST
-                ASSERT LE 1
-                    EXCHANGE GATHER
-                        SCAN (columns[7: v4] predicate[null])
+                CROSS JOIN (join-predicate [null] post-join-predicate [null])
+                    SCAN (columns[4: v4] predicate[null])
+                    EXCHANGE BROADCAST
+                        SCAN (columns[1: v1] predicate[null])
 [end]
 
 [sql]

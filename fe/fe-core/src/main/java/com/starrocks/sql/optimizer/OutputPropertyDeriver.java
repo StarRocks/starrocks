@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
@@ -50,8 +51,8 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     private PhysicalPropertySet requirements;
     // children best group expression
     private List<GroupExpression> childrenBestExprList;
-    // input(required) property for children.
-    private List<PhysicalPropertySet> childrenInputProperties;
+    // required properties for children.
+    private List<PhysicalPropertySet> requiredChildrenProperties;
     // children output property
     private List<PhysicalPropertySet> childrenOutputProperties;
     private double curTotalCost;
@@ -65,12 +66,12 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
             PhysicalPropertySet requirements,
             GroupExpression groupExpression,
             List<GroupExpression> childrenBestExprList,
-            List<PhysicalPropertySet> childrenInputProperties,
+            List<PhysicalPropertySet> requiredChildrenProperties,
             List<PhysicalPropertySet> childrenOutputProperties) {
         this.requirements = requirements;
         this.groupExpression = groupExpression;
         this.childrenBestExprList = childrenBestExprList;
-        this.childrenInputProperties = childrenInputProperties;
+        this.requiredChildrenProperties = requiredChildrenProperties;
         this.childrenOutputProperties = childrenOutputProperties;
 
         return groupExpression.getOp().accept(this, new ExpressionContext(groupExpression));
@@ -80,12 +81,12 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
             PhysicalPropertySet requirements,
             GroupExpression groupExpression,
             List<GroupExpression> childrenBestExprList,
-            List<PhysicalPropertySet> childrenInputProperties,
+            List<PhysicalPropertySet> requiredChildrenProperties,
             List<PhysicalPropertySet> childrenOutputProperties,
             double curTotalCost) {
         this.curTotalCost = curTotalCost;
         PhysicalPropertySet outputProperty =
-                getOutputProperty(requirements, groupExpression, childrenBestExprList, childrenInputProperties,
+                getOutputProperty(requirements, groupExpression, childrenBestExprList, requiredChildrenProperties,
                         childrenOutputProperties);
         return Pair.create(outputProperty, this.curTotalCost);
     }
@@ -99,24 +100,35 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
                                                                  HashDistributionSpec rightScanDistributionSpec,
                                                                  List<Integer> leftShuffleColumns,
                                                                  List<Integer> rightShuffleColumns) {
-        DistributionSpec.PhysicalPropertyInfo leftInfo = leftScanDistributionSpec.getPhysicalPropertyInfo();
-        DistributionSpec.PhysicalPropertyInfo rightInfo = rightScanDistributionSpec.getPhysicalPropertyInfo();
+        DistributionSpec.PropertyInfo leftInfo = leftScanDistributionSpec.getPhysicalPropertyInfo();
+        DistributionSpec.PropertyInfo rightInfo = rightScanDistributionSpec.getPhysicalPropertyInfo();
 
         ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
-        long leftTableId = leftInfo.colocateTableList.get(0);
-        long rightTableId = rightInfo.colocateTableList.get(0);
+        long leftTableId = leftInfo.tableId;
+        long rightTableId = rightInfo.tableId;
 
         if (leftTableId == rightTableId && !colocateIndex.isSameGroup(leftTableId, rightTableId)) {
             return createPropertySetByDistribution(leftScanDistributionSpec);
         } else {
-            DistributionSpec.PhysicalPropertyInfo newPhysicalPropertyInfo =
-                    new DistributionSpec.PhysicalPropertyInfo();
-            newPhysicalPropertyInfo.addColocateTableList(leftInfo.colocateTableList);
-            newPhysicalPropertyInfo.addColocateTableList(rightInfo.colocateTableList);
+            // TODO(ywb): check columns satisfy here instead of enforce phase because there need to compute equivalence
+            //  columns，we will do this later
+            Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleJoinDesc();
+            if (!requiredShuffleDesc.isPresent()) {
+                return createPropertySetByDistribution(leftScanDistributionSpec);
+            }
 
-            // TODO: compute the shuffle columns, use left and right shuffle columns
-            HashDistributionDesc outputDesc =
-                    new HashDistributionDesc(leftShuffleColumns, HashDistributionDesc.SourceType.SHUFFLE_LOCAL);
+            DistributionSpec.PropertyInfo newPhysicalPropertyInfo =
+                    new DistributionSpec.PropertyInfo();
+
+            newPhysicalPropertyInfo.tableId = leftTableId;
+            HashDistributionDesc outputDesc;
+            if (requiredShuffleDesc.get().getColumns().contains(rightShuffleColumns)) {
+                outputDesc =
+                        new HashDistributionDesc(rightShuffleColumns, HashDistributionDesc.SourceType.SHUFFLE_LOCAL);
+            } else {
+                outputDesc =
+                        new HashDistributionDesc(leftShuffleColumns, HashDistributionDesc.SourceType.SHUFFLE_LOCAL);
+            }
             return createPropertySetByDistribution(new HashDistributionSpec(outputDesc, newPhysicalPropertyInfo));
         }
     }
@@ -131,15 +143,12 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
             return false;
         }
 
-        DistributionSpec.PhysicalPropertyInfo leftInfo = leftLocalDistributionSpec.getPhysicalPropertyInfo();
-        DistributionSpec.PhysicalPropertyInfo rightInfo = rightLocalDistributionSpec.getPhysicalPropertyInfo();
-
-        Preconditions.checkState(!leftInfo.colocateTableList.isEmpty());
-        Preconditions.checkState(!rightInfo.colocateTableList.isEmpty());
+        DistributionSpec.PropertyInfo leftInfo = leftLocalDistributionSpec.getPhysicalPropertyInfo();
+        DistributionSpec.PropertyInfo rightInfo = rightLocalDistributionSpec.getPhysicalPropertyInfo();
 
         ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
-        long leftTableId = leftInfo.colocateTableList.get(0);
-        long rightTableId = rightInfo.colocateTableList.get(0);
+        long leftTableId = leftInfo.tableId;
+        long rightTableId = rightInfo.tableId;
 
         // join self
         if (leftTableId == rightTableId && !colocateIndex.isColocateTable(leftTableId)) {
@@ -229,7 +238,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
 
         // update group expression require property
         PhysicalPropertySet newRightChildInputProperty = createPropertySetByDistribution(rightDistributionSpec);
-        childrenInputProperties.set(1, newRightChildInputProperty);
+        requiredChildrenProperties.set(1, newRightChildInputProperty);
     }
 
     // enforce child SHUFFLE type distribution
@@ -242,7 +251,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
         enforceChildDistribution(enforceDistributionSpec, child, childOutputProperty);
 
         PhysicalPropertySet newChildInputProperty = createPropertySetByDistribution(enforceDistributionSpec);
-        childrenInputProperties.set(childIndex, newChildInputProperty);
+        requiredChildrenProperties.set(childIndex, newChildInputProperty);
     }
 
     private void enforceChildDistribution(DistributionSpec distributionSpec, GroupExpression child,
@@ -261,7 +270,8 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
                     .setBestExpression(child, childCosts, newChildOutputProperty);
             if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
                 // record the output/input properties when child group could satisfy this group expression required property
-                child.addValidOutputInputProperties(newChildOutputProperty, child.getInputProperties(childOutputProperty));
+                child.addValidOutputInputProperties(newChildOutputProperty,
+                        child.getInputProperties(childOutputProperty));
                 child.getGroup().addSatisfyRequiredPropertyGroupExpression(newChildOutputProperty, child);
             }
         } else {
@@ -275,7 +285,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     public PhysicalPropertySet computeHashJoinPhysicalPropertyInfo(PhysicalHashJoinOperator node,
                                                                    PhysicalPropertySet physicalPropertySet,
                                                                    ExpressionContext context) {
-        DistributionSpec.PhysicalPropertyInfo physicalPropertyInfo =
+        DistributionSpec.PropertyInfo physicalPropertyInfo =
                 physicalPropertySet.getDistributionProperty().getSpec()
                         .getPhysicalPropertyInfo();
 
@@ -292,6 +302,11 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
         return physicalPropertySet;
     }
 
+    // compute the hash join node output property, StarRocks support the colocate shuffle join, this join type
+    // not only do child nodes need to satisfy a particular data distribution, but some additional checks are
+    // required(see canColocateJoin). If can not satisfy, It needs to add enforcer to make sure it's an legitimate
+    // plan. Hint is similar, with an extra enforcer
+    // TODO(ywb): Guaranteed to be a legitimate plan before computing the output property
     @Override
     public PhysicalPropertySet visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
         Preconditions.checkState(childrenOutputProperties.size() == 2);
@@ -449,10 +464,10 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     public PhysicalPropertySet visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
         HashDistributionSpec olapDistributionSpec = node.getDistributionSpec();
 
-        DistributionSpec.PhysicalPropertyInfo physicalPropertyInfo =
-                new DistributionSpec.PhysicalPropertyInfo();
+        DistributionSpec.PropertyInfo physicalPropertyInfo =
+                new DistributionSpec.PropertyInfo();
 
-        physicalPropertyInfo.colocateTableList.add(node.getTable().getId());
+        physicalPropertyInfo.tableId = node.getTable().getId();
         physicalPropertyInfo.partitionIds = node.getSelectedPartitionId();
 
         if (node.canDoReplicatedJoin()) {
@@ -523,13 +538,19 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     }
 
     @Override
+    public PhysicalPropertySet visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
+        DistributionSpec gather = DistributionSpec.createGatherDistributionSpec();
+        return createPropertySetByDistribution(gather);
+    }
+
+    @Override
     public PhysicalPropertySet visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
         return requirements;
     }
 
     @Override
     public PhysicalPropertySet visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, ExpressionContext context) {
-        return PhysicalPropertySet.EMPTY;
+        return requirements;
     }
 
     @Override

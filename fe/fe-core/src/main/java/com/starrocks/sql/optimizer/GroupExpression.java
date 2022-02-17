@@ -42,7 +42,7 @@ public class GroupExpression {
     private final Set<OutputInputProperty> validOutputInputProperties;
     private Map<OutputInputProperty, Integer> propertiesPlanCountMap;
     // required property by parent -> output property
-    private Map<PhysicalPropertySet, PhysicalPropertySet> outputPropertySatisfyRequiredPropertyMap;
+    private Map<PhysicalPropertySet, PhysicalPropertySet> outputPropertyMap;
 
     private boolean isUnused = false;
 
@@ -52,7 +52,7 @@ public class GroupExpression {
         this.lowestCostTable = Maps.newHashMap();
         this.validOutputInputProperties = Sets.newLinkedHashSet();
         this.propertiesPlanCountMap = Maps.newLinkedHashMap();
-        this.outputPropertySatisfyRequiredPropertyMap = Maps.newHashMap();
+        this.outputPropertyMap = Maps.newHashMap();
     }
 
     public Group getGroup() {
@@ -111,15 +111,15 @@ public class GroupExpression {
         return ruleMasks.get(rule.type().ordinal());
     }
 
-    public PhysicalPropertySet getOutputPropertySetSatisfyRequiredProperty(PhysicalPropertySet requiredPropertySet) {
-        PhysicalPropertySet outputProperty = outputPropertySatisfyRequiredPropertyMap.get(requiredPropertySet);
+    public PhysicalPropertySet getOutputProperty(PhysicalPropertySet requiredPropertySet) {
+        PhysicalPropertySet outputProperty = outputPropertyMap.get(requiredPropertySet);
         Preconditions.checkState(outputProperty != null);
         return outputProperty;
     }
 
     public void setOutputPropertySatisfyRequiredProperty(PhysicalPropertySet outputPropertySet,
                                                          PhysicalPropertySet requiredPropertySet) {
-        this.outputPropertySatisfyRequiredPropertyMap.put(requiredPropertySet, outputPropertySet);
+        this.outputPropertyMap.put(requiredPropertySet, outputPropertySet);
     }
 
     public void addValidOutputInputProperties(PhysicalPropertySet outputProperty,

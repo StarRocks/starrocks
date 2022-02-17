@@ -9,8 +9,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
-import com.starrocks.sql.optimizer.InputPropertyDeriver;
 import com.starrocks.sql.optimizer.OutputPropertyDeriver;
+import com.starrocks.sql.optimizer.RequiredPropertyDeriver;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
@@ -23,8 +23,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -48,9 +46,8 @@ import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils
  */
 public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     private final GroupExpression groupExpression;
-    // The Pair first is output PropertySet
-    // The Pair second is multi input PropertySets
-    private List<List<PhysicalPropertySet>> inputPropertiesList;
+    // multi required PropertySets for children
+    private List<List<PhysicalPropertySet>> requiredPropertiesList;
     // localCost + sum of all InputCost entries.
     private double curTotalCost;
     // the local cost of the group expression
@@ -95,11 +92,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (groupExpression.isUnused()) {
             return;
         }
+        // Init costs and get required properties for children
+        initRequiredProperties();
 
-        initOutputProperties();
-
-        for (; curPropertyPairIndex < inputPropertiesList.size(); curPropertyPairIndex++) {
-            List<PhysicalPropertySet> inputProperties = inputPropertiesList.get(curPropertyPairIndex);
+        for (; curPropertyPairIndex < requiredPropertiesList.size(); curPropertyPairIndex++) {
+            List<PhysicalPropertySet> requiredProperties = requiredPropertiesList.get(curPropertyPairIndex);
 
             // Calculate local cost and update total cost
             if (curChildIndex == 0 && prevChildIndex == -1) {
@@ -108,11 +105,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             }
 
             for (; curChildIndex < groupExpression.getInputs().size(); curChildIndex++) {
-                PhysicalPropertySet inputProperty = inputProperties.get(curChildIndex);
+                PhysicalPropertySet requiredProperty = requiredProperties.get(curChildIndex);
                 Group childGroup = groupExpression.getInputs().get(curChildIndex);
 
                 // Check whether the child group is already optimized for the property
-                GroupExpression childBestExpr = childGroup.getBestExpression(inputProperty);
+                GroupExpression childBestExpr = childGroup.getBestExpression(requiredProperty);
 
                 if (childBestExpr == null && prevChildIndex >= curChildIndex) {
                     // If there can not find best child expr or push child's OptimizeGroupTask, The child has been
@@ -123,36 +120,28 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 if (childBestExpr == null) {
                     // We haven't optimized child group
                     prevChildIndex = curChildIndex;
-                    optimizeChildGroup(inputProperty, childGroup);
+                    optimizeChildGroup(requiredProperty, childGroup);
                     return;
                 }
 
                 childrenBestExprList.add(childBestExpr);
                 // Get the output properties of children
                 PhysicalPropertySet childOutputProperty =
-                        childBestExpr.getOutputPropertySetSatisfyRequiredProperty(inputProperty);
+                        childBestExpr.getOutputProperty(requiredProperty);
                 childrenOutputProperties.add(childOutputProperty);
                 // Change child required property to child output property
-                inputProperties.set(curChildIndex, childOutputProperty);
-
-                // Directly get back the best expr if the child group is optimized
-                // Don't allow enforce sort and distribution below project node
-                if (!inputProperty.isEmpty() && groupExpression.getOp() instanceof PhysicalProjectOperator &&
-                        (childBestExpr.getOp() instanceof PhysicalDistributionOperator
-                                || childBestExpr.getOp() instanceof PhysicalTopNOperator)) {
-                    break;
-                }
+                requiredProperties.set(curChildIndex, childOutputProperty);
 
                 // check if we can generate one stage agg
                 if (!canGenerateOneStageAgg(childBestExpr)) {
                     break;
                 }
 
-                if (!checkBroadcastRowCountLimit(inputProperty, childBestExpr)) {
+                if (!checkBroadcastRowCountLimit(requiredProperty, childBestExpr)) {
                     break;
                 }
 
-                curTotalCost += childBestExpr.getCost(inputProperty);
+                curTotalCost += childBestExpr.getCost(requiredProperty);
                 if (curTotalCost > context.getUpperBoundCost()) {
                     break;
                 }
@@ -164,7 +153,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 OutputPropertyDeriver outputPropertyDeriver = new OutputPropertyDeriver(context);
                 Pair<PhysicalPropertySet, Double> outputPropertyWithCost = outputPropertyDeriver
                         .getOutputPropertyWithCost(context.getRequiredProperty(), groupExpression, childrenBestExprList,
-                                inputProperties, childrenOutputProperties, curTotalCost);
+                                requiredProperties, childrenOutputProperties, curTotalCost);
                 PhysicalPropertySet outputProperty = outputPropertyWithCost.first;
                 curTotalCost = outputPropertyWithCost.second;
                 if (curTotalCost > context.getUpperBoundCost()) {
@@ -177,7 +166,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                     return;
                 }
 
-                recordCostsAndEnforce(outputProperty, inputProperties);
+                recordCostsAndEnforce(outputProperty, requiredProperties);
             }
             // Reset child idx and total cost
             prevChildIndex = -1;
@@ -188,7 +177,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
     }
 
-    private void initOutputProperties() {
+    private void initRequiredProperties() {
         if (curChildIndex != -1) {
             // Has been init output properties, is optimizer the operator again
             return;
@@ -198,10 +187,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         curTotalCost = 0;
 
         // TODO(kks): do Lower Bound Pruning here
-        InputPropertyDeriver childPropertyDeriver = new InputPropertyDeriver(context);
-        inputPropertiesList = childPropertyDeriver.getInputProps(
-                context.getRequiredProperty(),
-                groupExpression);
+        RequiredPropertyDeriver requiredPropertyDeriver = new RequiredPropertyDeriver(context.getRequiredProperty());
+        requiredPropertiesList = requiredPropertyDeriver.getInputProps(groupExpression);
         curChildIndex = 0;
     }
 

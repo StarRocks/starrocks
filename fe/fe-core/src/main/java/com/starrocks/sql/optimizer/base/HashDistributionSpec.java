@@ -16,8 +16,8 @@ public class HashDistributionSpec extends DistributionSpec {
         this.hashDistributionDesc = distributionDesc;
     }
 
-    public HashDistributionSpec(HashDistributionDesc distributionDesc, PhysicalPropertyInfo physicalPropertyInfo) {
-        super(DistributionType.SHUFFLE, physicalPropertyInfo);
+    public HashDistributionSpec(HashDistributionDesc distributionDesc, PropertyInfo propertyInfo) {
+        super(DistributionType.SHUFFLE, propertyInfo);
         this.hashDistributionDesc = distributionDesc;
     }
 
@@ -42,13 +42,13 @@ public class HashDistributionSpec extends DistributionSpec {
                 thisSourceType != HashDistributionDesc.SourceType.SHUFFLE_LOCAL) {
             return false;
         }
-        // check shuffle_local physicalPropertyInfo
+        // check shuffle_local PropertyInfo
         if (thisSourceType == HashDistributionDesc.SourceType.SHUFFLE_LOCAL) {
             ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
-            long tableId = physicalPropertyInfo.colocateTableList.get(0);
+            long tableId = propertyInfo.tableId;
             boolean satisfyColocate = (colocateIndex.isColocateTable(tableId) &&
                     !colocateIndex.isGroupUnstable(colocateIndex.getGroup(tableId)))
-                    || physicalPropertyInfo.isSinglePartition();
+                    || propertyInfo.isSinglePartition();
             if (!satisfyColocate) {
                 return false;
             }
@@ -58,7 +58,7 @@ public class HashDistributionSpec extends DistributionSpec {
                 otherSourceType == HashDistributionDesc.SourceType.SHUFFLE_AGG) {
             ColumnRefSet otherColumns = new ColumnRefSet();
             other.hashDistributionDesc.getColumns().forEach(otherColumns::union);
-            if (physicalPropertyInfo.nullableColumns.isIntersect(otherColumns)) {
+            if (propertyInfo.nullableColumns.isIntersect(otherColumns)) {
                 return false;
             }
         }
