@@ -1090,6 +1090,16 @@ Status OrcScannerAdapter::_init_include_columns() {
         orc_column_names.push_back(it2->second);
     }
     _row_reader_options.include(orc_column_names);
+
+    if (_lazy_load_ctx != nullptr) {
+        std::list<std::string> orc_lazy_load_column_names;
+        for (SlotDescriptor* desc : _lazy_load_ctx->lazy_load_slots) {
+            if (desc == nullptr) continue;
+            orc_lazy_load_column_names.push_back(desc->col_name());
+        }
+        _row_reader_options.includeLazyLoadColumnNames(orc_lazy_load_column_names);
+    }
+
     return Status::OK();
 }
 
@@ -1317,8 +1327,9 @@ size_t OrcScannerAdapter::get_cvb_size() {
     return _batch->numElements;
 }
 
-Status OrcScannerAdapter::fill_chunk(ChunkPtr* chunk) {
-    int column_size = _src_slot_descriptors.size();
+Status OrcScannerAdapter::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& src_slot_descriptors,
+                                      const std::vector<int>* indices) {
+    int column_size = src_slot_descriptors.size();
     DCHECK_GT(_batch->numElements, 0);
     const auto& batch_vec = down_cast<orc::StructVectorBatch*>(_batch.get())->fields;
     if (_broker_load_mode) {
@@ -1329,12 +1340,16 @@ Status OrcScannerAdapter::fill_chunk(ChunkPtr* chunk) {
         _broker_load_filter->assign(_batch->numElements, 1);
     }
     for (int column_pos = 0; column_pos < column_size; ++column_pos) {
-        SlotDescriptor* slot_desc = _src_slot_descriptors[column_pos];
+        SlotDescriptor* slot_desc = src_slot_descriptors[column_pos];
         if (slot_desc == nullptr) {
             continue;
         }
+        int src_index = column_pos;
+        if (indices != nullptr) {
+            src_index = (*indices)[src_index];
+        }
         set_current_slot(slot_desc);
-        orc::ColumnVectorBatch* cvb = batch_vec[_position_in_orc[column_pos]];
+        orc::ColumnVectorBatch* cvb = batch_vec[_position_in_orc[src_index]];
         if (!slot_desc->is_nullable() && cvb->hasNulls) {
             if (_broker_load_mode) {
                 std::string error_msg =
@@ -1353,7 +1368,7 @@ Status OrcScannerAdapter::fill_chunk(ChunkPtr* chunk) {
             }
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        _fill_functions[column_pos](cvb, col, 0, _batch->numElements, slot_desc->type(), this);
+        _fill_functions[src_index](cvb, col, 0, _batch->numElements, slot_desc->type(), this);
     }
 
     if (_broker_load_mode) {
@@ -1370,36 +1385,85 @@ Status OrcScannerAdapter::fill_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
-ChunkPtr OrcScannerAdapter::create_chunk() {
+ChunkPtr OrcScannerAdapter::_create_chunk(const std::vector<SlotDescriptor*>& src_slot_descriptors,
+                                          const std::vector<int>* indices) {
     auto chunk = std::make_shared<Chunk>();
-    int column_size = _src_slot_descriptors.size();
+    int column_size = src_slot_descriptors.size();
     chunk->columns().reserve(column_size);
 
     for (int column_pos = 0; column_pos < column_size; ++column_pos) {
-        auto slot_desc = _src_slot_descriptors[column_pos];
+        auto slot_desc = src_slot_descriptors[column_pos];
         if (slot_desc == nullptr) {
             continue;
         }
-        auto col = ColumnHelper::create_column(_src_types[column_pos], slot_desc->is_nullable());
+        int src_index = column_pos;
+        if (indices != nullptr) {
+            src_index = (*indices)[src_index];
+        }
+        auto col = ColumnHelper::create_column(_src_types[src_index], slot_desc->is_nullable());
         chunk->append_column(std::move(col), slot_desc->id());
     }
     return chunk;
 }
 
-ChunkPtr OrcScannerAdapter::cast_chunk(ChunkPtr* chunk) {
+ChunkPtr OrcScannerAdapter::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& src_slot_descriptors,
+                                        const std::vector<int>* indices) {
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
     ChunkPtr& src = (*chunk);
-    int column_size = _src_slot_descriptors.size();
+    int column_size = src_slot_descriptors.size();
     for (int column_pos = 0; column_pos < column_size; ++column_pos) {
-        auto slot = _src_slot_descriptors[column_pos];
+        auto slot = src_slot_descriptors[column_pos];
         if (slot == nullptr) {
             continue;
         }
-        ColumnPtr col = _cast_exprs[column_pos]->evaluate(nullptr, src.get());
+        int src_index = column_pos;
+        if (indices != nullptr) {
+            src_index = (*indices)[src_index];
+        }
+        ColumnPtr col = _cast_exprs[src_index]->evaluate(nullptr, src.get());
         col = ColumnHelper::unfold_const_column(slot->type(), src->num_rows(), col);
         cast_chunk->append_column(std::move(col), slot->id());
     }
     return cast_chunk;
+}
+
+ChunkPtr OrcScannerAdapter::create_chunk() {
+    return _create_chunk(_src_slot_descriptors, nullptr);
+}
+Status OrcScannerAdapter::fill_chunk(ChunkPtr* chunk) {
+    return _fill_chunk(chunk, _src_slot_descriptors, nullptr);
+}
+
+ChunkPtr OrcScannerAdapter::cast_chunk(ChunkPtr* chunk) {
+    return _cast_chunk(chunk, _src_slot_descriptors, nullptr);
+}
+
+StatusOr<ChunkPtr> OrcScannerAdapter::load_chunk() {
+    ChunkPtr ptr = create_chunk();
+    RETURN_IF_ERROR(fill_chunk(&ptr));
+    ChunkPtr ret = cast_chunk(&ptr);
+    return ret;
+}
+
+StatusOr<ChunkPtr> OrcScannerAdapter::load_active_chunk() {
+    ChunkPtr ptr = _create_chunk(_lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
+    RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices));
+    ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
+    return ret;
+}
+
+StatusOr<ChunkPtr> OrcScannerAdapter::load_lazy_chunk() {
+    ChunkPtr ptr = _create_chunk(_lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
+    RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices));
+    ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
+    return ret;
+}
+
+void OrcScannerAdapter::lazy_read_next() {
+    _row_reader->lazyLoadNext(*_batch, _batch->numElements);
+}
+void OrcScannerAdapter::lazy_skip_next() {
+    _row_reader->lazyLoadSkip(_batch->numElements);
 }
 
 void OrcScannerAdapter::set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter) {

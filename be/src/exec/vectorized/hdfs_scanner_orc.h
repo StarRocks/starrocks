@@ -39,6 +39,7 @@ private:
     // writing unittest of customized filter
     bool _use_orc_sargs;
     std::vector<SlotDescriptor*> _src_slot_descriptors;
+    OrcScannerAdapter::LazyLoadContext _lazy_load_ctx;
     std::unique_ptr<OrcScannerAdapter> _orc_adapter;
     std::shared_ptr<OrcRowReaderFilter> _orc_row_reader_filter;
 };

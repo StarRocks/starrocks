@@ -33,6 +33,13 @@ using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
 // 4. passing predicate down to apache/orc
 class OrcScannerAdapter {
 public:
+    struct LazyLoadContext {
+        std::vector<SlotDescriptor*> active_load_slots;
+        std::vector<int> active_load_indices;
+        std::vector<SlotDescriptor*> lazy_load_slots;
+        std::vector<int> lazy_load_indices;
+    };
+
     // src slot descriptors should exactly matches columns in row readers.
     explicit OrcScannerAdapter(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors);
     ~OrcScannerAdapter();
@@ -94,7 +101,19 @@ public:
     void report_error_message(const std::string& error_msg);
     int get_column_id_by_name(const std::string& name) const;
 
+    void set_lazy_load_context(LazyLoadContext* ctx) { _lazy_load_ctx = ctx; }
+    bool has_lazy_load_context() { return _lazy_load_ctx != nullptr; }
+    StatusOr<ChunkPtr> load_chunk();
+    StatusOr<ChunkPtr> load_active_chunk();
+    void lazy_read_next();
+    void lazy_skip_next();
+    StatusOr<ChunkPtr> load_lazy_chunk();
+
 private:
+    ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
+    Status _fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
+    ChunkPtr _cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
+
     bool _ok_to_add_conjunct(const Expr* conjunct);
     void _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
     bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
@@ -137,6 +156,7 @@ private:
     SlotDescriptor* _current_slot;
     std::string _current_file_name;
     int _error_message_counter;
+    LazyLoadContext* _lazy_load_ctx;
 };
 
 } // namespace starrocks::vectorized

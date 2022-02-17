@@ -355,11 +355,19 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
 
     // create orc adapter for further reading.
+    int src_slot_index = 0;
     for (const auto& it : _scanner_params.materialize_slots) {
         const std::string& name = it->col_name();
-        if (known_column_names.find(name) != known_column_names.end()) {
-            _src_slot_descriptors.emplace_back(it);
+        if (known_column_names.find(name) == known_column_names.end()) continue;
+        if (_conjunct_ctxs_by_slot.find(it->id()) == _conjunct_ctxs_by_slot.end()) {
+            _lazy_load_ctx.lazy_load_slots.emplace_back(it);
+            _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
+        } else {
+            _lazy_load_ctx.active_load_slots.emplace_back(it);
+            _lazy_load_ctx.active_load_indices.emplace_back(src_slot_index);
         }
+        _src_slot_descriptors.emplace_back(it);
+        src_slot_index++;
     }
 
     _orc_adapter = std::make_unique<OrcScannerAdapter>(runtime_state, _src_slot_descriptors);
@@ -381,6 +389,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _orc_adapter->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector);
     }
     _orc_adapter->set_hive_column_names(_scanner_params.hive_column_names);
+    if (_lazy_load_ctx.lazy_load_slots.size() != 0) {
+        _orc_adapter->set_lazy_load_context(&_lazy_load_ctx);
+    }
     RETURN_IF_ERROR(_orc_adapter->init(std::move(reader)));
     return Status::OK();
 }
@@ -408,10 +419,9 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     }
     {
         SCOPED_RAW_TIMER(&_stats.column_convert_ns);
-        ChunkPtr ptr = _orc_adapter->create_chunk();
-        RETURN_IF_ERROR(_orc_adapter->fill_chunk(&ptr));
-        ChunkPtr result = _orc_adapter->cast_chunk(&ptr);
-        *chunk = std::move(result);
+        StatusOr<ChunkPtr> ret = _orc_adapter->load_chunk();
+        RETURN_IF_ERROR(ret);
+        *chunk = std::move(ret.value());
     }
     ChunkPtr ck = *chunk;
     // important to add columns before evaluation
