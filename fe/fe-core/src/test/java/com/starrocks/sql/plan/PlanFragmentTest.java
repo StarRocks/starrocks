@@ -68,7 +68,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("colocate: false"));
-        Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (REPLICATED)"));
+        Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (BROADCAST)"));
 
         sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1 and colocate1.k2=colocate2.k2;";
         plan = getFragmentPlan(sql);
@@ -4015,7 +4015,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  0:OlapScanNode"));
     }
 
-    @Test
+    // todo(ywb) disable replicate join temporarily
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select * from join1 join join2 on join1.id = join2.id;";
@@ -4067,7 +4067,7 @@ public class PlanFragmentTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 
-    @Test
+    // todo(ywb) disable replicate join temporarily
     public void testReplicationJoinWithEmptyNode() throws Exception {
         // check replicate join without exception
         connectContext.getSessionVariable().setEnableReplicationJoin(true);

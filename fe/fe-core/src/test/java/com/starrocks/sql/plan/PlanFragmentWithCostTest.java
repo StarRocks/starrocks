@@ -484,7 +484,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("rollup: bitmap_mv"));
     }
 
-    @Test
+    // todo(ywb) disable replicate join temporarily
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
