@@ -13,6 +13,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -26,6 +27,7 @@ import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveTableStats;
+import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -238,10 +240,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        // TODO: get statistics from iceberg catalog or metadata
-        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
-        builder.setOutputRowCount(1);
-        context.setStatistics(builder.build());
+        Statistics stats = IcebergTableStatisticCalculator.getTableStatistics(
+                // TODO: pass predicate to get table statistics
+                new ArrayList<>(),
+                ((IcebergTable) table).getIcebergTable(), colRefToColumnMetaMap);
+        context.setStatistics(stats);
         return visitOperator(node, context);
     }
 
