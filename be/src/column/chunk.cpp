@@ -307,7 +307,7 @@ void Chunk::merge(Chunk* src) {
     for (auto& it : src->_slot_id_to_index) {
         SlotId slot_id = it.first;
         size_t index = it.second;
-        ColumnPtr& c = _columns[index];
+        ColumnPtr& c = src->_columns[index];
         append_column(c, slot_id);
     }
 }
