@@ -321,7 +321,7 @@ public:
         bool exact_match = false;
         Status st = iter->seek_dictionary(&this->_value, &exact_match);
         if (st.ok()) {
-            rowid_t seeked_ordinal = iter->current_ordinal();
+            rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
             range->add(Range(0, seeked_ordinal));
         } else if (st.is_not_found()) {
             range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));
@@ -357,7 +357,7 @@ public:
         bool exact_match = false;
         Status st = iter->seek_dictionary(&this->_value, &exact_match);
         if (st.ok()) {
-            rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
+            rowid_t seeked_ordinal = iter->current_ordinal();
             range->add(Range(0, seeked_ordinal));
         } else if (st.is_not_found()) {
             range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));
