@@ -207,9 +207,9 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 2. partition_desc
 
-    partition描述有三种使用方式
+    partition描述有三种使用方式：
 
-    LESS THAN
+    **LESS THAN**
 
     语法：
 
@@ -237,7 +237,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     1. 分区一般用于时间维度的数据管理
     2. 有数据回溯需求的，可以考虑首个分区为空分区，以便后续增加分区
 
-    Fixed Range
+    **Fixed Range**
 
     语法：
 
@@ -255,7 +255,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     2. 其他与LESS THAN保持同步
 
-    批量创建分区
+    **批量创建分区**
 
     语法：
 
