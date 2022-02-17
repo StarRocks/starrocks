@@ -122,7 +122,7 @@ inline bool is_scalar_primitive_type(PrimitiveType ptype) {
     case TYPE_DECIMAL32:  /* 24 */
     case TYPE_DECIMAL64:  /* 25 */
     case TYPE_DECIMAL128: /* 26 */
-    case TYPE_JSON:       /* 27 */
+    case TYPE_JSON:
         return true;
     default:
         return false;
