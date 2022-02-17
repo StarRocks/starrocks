@@ -44,6 +44,8 @@ Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
             *batch = nullptr;
             _state = END_OF_FILE;
             return Status::EndOfFile(Slice());
+        } else if (!status.ok()) {
+            return status;
         }
         break;
     }
