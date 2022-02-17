@@ -38,13 +38,13 @@ public:
     }
 
     Status write(float f) {
-        RETURN_IF_ERROR(_reserve(std::numeric_limits<float>::digits10 + 2));
+        RETURN_IF_ERROR(_reserve(MAX_FLOAT_STR_LENGTH));
         _pos += f2s_buffered_n(f, _pos);
         return Status::OK();
     }
 
     Status write(double d) {
-        RETURN_IF_ERROR(_reserve(std::numeric_limits<double>::digits10 + 2));
+        RETURN_IF_ERROR(_reserve(MAX_DOUBLE_STR_LENGTH));
         _pos += d2s_buffered_n(d, _pos);
         return Status::OK();
     }
