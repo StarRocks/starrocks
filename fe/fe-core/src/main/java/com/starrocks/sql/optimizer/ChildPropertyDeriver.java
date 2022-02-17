@@ -123,6 +123,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                 getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
 
         if (Utils.canOnlyDoBroadcast(node, equalOnPredicate, hint)) {
+            tryReplicatedCrossJoin(context);
             return visitJoinRequirements(node, context, false);
         }
 
@@ -152,6 +153,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         // Colocate join and bucket shuffle join only support column to column binary predicate
         if (equalOnPredicate.stream().anyMatch(p -> !isColumnToColumnBinaryPredicate(p))) {
+            tryReplicatedHashJoin(context, node.getJoinType(), leftDistribution);
             return visitJoinRequirements(node, context, false);
         }
 
@@ -159,6 +161,9 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         // 3 For colocate join
         if (!"BUCKET".equalsIgnoreCase(hint)) {
             canDoColocatedJoin = tryColocate(leftDistribution, rightDistribution);
+            if (!canDoColocatedJoin) {
+                tryReplicatedHashJoin(context, node.getJoinType(), leftDistribution);
+            }
         }
 
         // 4 For bucket shuffle join
