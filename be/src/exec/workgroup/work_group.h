@@ -44,6 +44,8 @@ public:
 
 class IoWorkGroupQueue final : public WorkGroupQueue {
 public:
+    using Task = std::function<void(int)>;
+
     IoWorkGroupQueue() = default;
     ~IoWorkGroupQueue() override = default;
 
@@ -51,14 +53,14 @@ public:
     void remove(const WorkGroupPtr& wg) override {}
     WorkGroupPtr pick_next() override { return nullptr; };
 
-    StatusOr<PriorityThreadPool::Task> pick_next_task();
-    bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
+    StatusOr<Task> pick_next_task(int dispatcher_id);
+    bool try_offer_io_task(WorkGroupPtr wg, Task task);
 
     void close() override;
 
 private:
     void _maybe_adjust_weight();
-    WorkGroupPtr _select_next_wg();
+    WorkGroupPtr _select_next_wg(int dispatcher_id);
 
     std::mutex _global_io_mutex;
     std::condition_variable _cv;
@@ -114,8 +116,8 @@ public:
 
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_VERSION = 0;
-    bool try_offer_io_task(const PriorityThreadPool::Task& task);
-    PriorityThreadPool::Task pick_io_task();
+    bool try_offer_io_task(IoWorkGroupQueue::Task task);
+    IoWorkGroupQueue::Task pick_io_task();
 
 public:
     // Return current io task queue size
@@ -198,8 +200,8 @@ private:
 
     // Queue on which work items are held until a thread is available to process them in
     // FIFO order.
-    // BlockingPriorityQueue<PriorityThreadPool::Task> _io_work_queue;
-    std::queue<PriorityThreadPool::Task> _io_work_queue;
+    // BlockingPriorityQueue<Task> _io_work_queue;
+    std::queue<IoWorkGroupQueue::Task> _io_work_queue;
 
     //  some variables for io schedule
     std::atomic<int64_t> _cur_hold_total_chunk_num = 0; // total chunk num wait for consume
@@ -258,8 +260,8 @@ public:
     void close();
 
     // get next workgroup for io
-    StatusOr<PriorityThreadPool::Task> pick_next_task_for_io();
-    bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
+    StatusOr<IoWorkGroupQueue::Task> pick_next_task_for_io(int dispatcher_id);
+    bool try_offer_io_task(WorkGroupPtr wg, IoWorkGroupQueue::Task task);
 
     size_t get_sum_cpu_limit() const { return _sum_cpu_limit; }
     void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
@@ -275,6 +277,9 @@ public:
 
     std::shared_ptr<WorkGroupPtrSet> get_owners_of_driver_dispatcher(int dispatcher_id);
     bool should_yield_driver_dispatcher(int dispatcher_id, WorkGroupPtr running_wg);
+
+    std::shared_ptr<WorkGroupPtrSet> get_owners_of_io_dispatcher(int dispatcher_id);
+    bool should_yield_io_dispatcher(int dispatcher_id, WorkGroupPtr running_wg);
 
 private:
     // {create, alter,delete}_workgroup_unlocked is used to replay WorkGroupOps.
@@ -298,6 +303,7 @@ private:
     std::atomic<int64_t> _sum_unadjusted_cpu_runtime_ns = 0;
 
     DispatcherOwnerManager _driver_dispatcher_owner_manager;
+    DispatcherOwnerManager _io_dispatcher_owner_manager;
 };
 
 class DefaultWorkGroupInitialization {

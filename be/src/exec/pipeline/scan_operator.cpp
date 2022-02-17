@@ -168,32 +168,38 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
-    PriorityThreadPool::Task task;
-    task.work_function = [this, state, chunk_source_index]() {
-        {
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+    bool offer_task_success = false;
+    if (_workgroup != nullptr) {
+        auto task = [this, state, chunk_source_index](int dispatcher_id) {
+            {
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
-            if (_workgroup == nullptr) {
-                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
-            } else {
                 size_t num_read_chunks = 0;
                 _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
-                        _buffer_size, _is_finished, &num_read_chunks);
+                        _buffer_size, _is_finished, &num_read_chunks, dispatcher_id, _workgroup);
                 // TODO (by laotan332): More detailed information is needed
                 _workgroup->increase_chunk_num(num_read_chunks);
             }
-        }
 
-        _num_running_io_tasks--;
-        _is_io_task_running[chunk_source_index] = false;
-    };
-    // TODO(by satanson): set a proper priority
-    task.priority = 20;
+            _num_running_io_tasks--;
+            _is_io_task_running[chunk_source_index] = false;
+        };
 
-    bool offer_task_success = false;
-    if (_workgroup != nullptr) {
         offer_task_success = WorkGroupManager::instance()->try_offer_io_task(_workgroup, task);
     } else {
+        PriorityThreadPool::Task task;
+        task.work_function = [this, state, chunk_source_index]() {
+            {
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
+            }
+
+            _num_running_io_tasks--;
+            _is_io_task_running[chunk_source_index] = false;
+        };
+        // TODO(by satanson): set a proper priority
+        task.priority = 20;
+
         offer_task_success = _io_threads->try_offer(task);
     }
 

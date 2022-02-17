@@ -26,17 +26,18 @@ void IoDispatcher::change_num_threads(int32_t num_threads) {
 }
 
 void IoDispatcher::run() {
+    const int dispatcher_id = _next_id++;
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
 
-        auto maybe_task = WorkGroupManager::instance()->pick_next_task_for_io();
+        auto maybe_task = WorkGroupManager::instance()->pick_next_task_for_io(dispatcher_id);
         if (maybe_task.status().is_cancelled()) {
             return;
         }
 
-        maybe_task.value().work_function();
+        maybe_task.value()(dispatcher_id);
     }
 }
 

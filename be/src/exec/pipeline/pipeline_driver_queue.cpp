@@ -266,7 +266,7 @@ workgroup::WorkGroup* DriverQueueWithWorkGroup::_find_min_owner_wg(int dispatche
 
     auto owner_wgs = workgroup::WorkGroupManager::instance()->get_owners_of_driver_dispatcher(dispatcher_id);
     if (owner_wgs != nullptr) {
-        for (auto wg : *owner_wgs) {
+        for (const auto& wg : *owner_wgs) {
             if (_ready_wgs.find(wg.get()) != _ready_wgs.end() &&
                 (min_wg == nullptr || min_vruntime_ns > wg->get_vruntime_ns())) {
                 min_wg = wg.get();

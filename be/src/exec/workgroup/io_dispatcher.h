@@ -25,6 +25,7 @@ private:
 private:
     LimitSetter _num_threads_setter;
     std::unique_ptr<ThreadPool> _thread_pool;
+    std::atomic<int> _next_id = 0;
 };
 
 } // namespace workgroup

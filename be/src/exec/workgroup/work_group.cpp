@@ -94,7 +94,10 @@ double WorkGroup::get_cpu_actual_use_ratio() const {
 WorkGroupManager::WorkGroupManager()
         : _driver_dispatcher_owner_manager(config::pipeline_exec_thread_pool_thread_num > 0
                                                    ? config::pipeline_exec_thread_pool_thread_num
-                                                   : std::thread::hardware_concurrency()) {}
+                                                   : std::thread::hardware_concurrency()),
+          _io_dispatcher_owner_manager(config::pipeline_scan_thread_pool_thread_num > 0
+                                               ? config::pipeline_scan_thread_pool_thread_num
+                                               : std::thread::hardware_concurrency()) {}
 
 WorkGroupManager::~WorkGroupManager() {}
 void WorkGroupManager::destroy() {
@@ -120,13 +123,13 @@ WorkGroupPtr WorkGroupManager::get_default_workgroup() {
     return _workgroups[unique_id];
 }
 
-bool WorkGroup::try_offer_io_task(const PriorityThreadPool::Task& task) {
+bool WorkGroup::try_offer_io_task(IoWorkGroupQueue::Task task) {
     _io_work_queue.emplace(std::move(task));
     return true;
 }
 
-PriorityThreadPool::Task WorkGroup::pick_io_task() {
-    PriorityThreadPool::Task task = std::move(_io_work_queue.front());
+IoWorkGroupQueue::Task WorkGroup::pick_io_task() {
+    auto task = std::move(_io_work_queue.front());
     _io_work_queue.pop();
     return task;
 }
@@ -270,21 +273,37 @@ void IoWorkGroupQueue::_maybe_adjust_weight() {
     }
 }
 
-WorkGroupPtr IoWorkGroupQueue::_select_next_wg() {
-    WorkGroupPtr max_wg = nullptr;
+WorkGroupPtr IoWorkGroupQueue::_select_next_wg(int dispatcher_id) {
+    auto owner_wgs = workgroup::WorkGroupManager::instance()->get_owners_of_io_dispatcher(dispatcher_id);
+
+    WorkGroupPtr max_owner_wg = nullptr;
+    WorkGroupPtr max_other_wg = nullptr;
     double total = 0;
     for (auto wg : _ready_wgs) {
         wg->update_cur_select_factor(wg->get_select_factor());
         total += wg->get_select_factor();
-        if (max_wg == nullptr || wg->get_cur_select_factor() > max_wg->get_cur_select_factor()) {
-            max_wg = wg;
+
+        if (owner_wgs->find(wg) != owner_wgs->end()) {
+            if (max_owner_wg == nullptr || wg->get_cur_select_factor() > max_owner_wg->get_cur_select_factor()) {
+                max_owner_wg = wg;
+            }
+        } else if (max_other_wg == nullptr || wg->get_cur_select_factor() > max_other_wg->get_cur_select_factor()) {
+            max_other_wg = wg;
         }
     }
-    max_wg->update_cur_select_factor(0 - total);
-    return max_wg;
+
+    // Try to take task from any owner workgroup first.
+    if (max_owner_wg != nullptr) {
+        max_owner_wg->update_cur_select_factor(0 - total);
+        return max_owner_wg;
+    }
+
+    // All the owner workgroups don't have ready tasks, so select the other workgroup.
+    max_other_wg->update_cur_select_factor(0 - total);
+    return max_other_wg;
 }
 
-StatusOr<PriorityThreadPool::Task> IoWorkGroupQueue::pick_next_task() {
+StatusOr<IoWorkGroupQueue::Task> IoWorkGroupQueue::pick_next_task(int dispatcher_id) {
     std::unique_lock<std::mutex> lock(_global_io_mutex);
 
     if (_is_closed) {
@@ -298,7 +317,9 @@ StatusOr<PriorityThreadPool::Task> IoWorkGroupQueue::pick_next_task() {
     }
 
     _maybe_adjust_weight();
-    WorkGroupPtr wg = _select_next_wg();
+
+    WorkGroupPtr wg = _select_next_wg(dispatcher_id);
+
     if (wg->io_task_queue_size() == 1) {
         _ready_wgs.erase(wg);
     }
@@ -412,10 +433,10 @@ std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
     return workgroups;
 }
 
-bool IoWorkGroupQueue::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
+bool IoWorkGroupQueue::try_offer_io_task(WorkGroupPtr wg, Task task) {
     std::lock_guard<std::mutex> lock(_global_io_mutex);
 
-    wg->try_offer_io_task(task);
+    wg->try_offer_io_task(std::move(task));
     if (_ready_wgs.find(wg) == _ready_wgs.end()) {
         _ready_wgs.emplace(wg);
     }
@@ -440,16 +461,17 @@ void WorkGroupManager::close() {
     _wg_io_queue.close();
 }
 
-StatusOr<PriorityThreadPool::Task> WorkGroupManager::pick_next_task_for_io() {
-    return _wg_io_queue.pick_next_task();
+StatusOr<IoWorkGroupQueue::Task> WorkGroupManager::pick_next_task_for_io(int dispatcher_id) {
+    return _wg_io_queue.pick_next_task(dispatcher_id);
 }
 
-bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
+bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, IoWorkGroupQueue::Task task) {
     return _wg_io_queue.try_offer_io_task(wg, task);
 }
 
 void WorkGroupManager::reassign_dispatcher_to_wgs() {
     _driver_dispatcher_owner_manager.reassign_to_wgs(_workgroups, _sum_cpu_limit);
+    _io_dispatcher_owner_manager.reassign_to_wgs(_workgroups, _sum_cpu_limit);
 }
 
 std::shared_ptr<WorkGroupPtrSet> WorkGroupManager::get_owners_of_driver_dispatcher(int dispatcher_id) {
@@ -458,6 +480,14 @@ std::shared_ptr<WorkGroupPtrSet> WorkGroupManager::get_owners_of_driver_dispatch
 
 bool WorkGroupManager::should_yield_driver_dispatcher(int dispatcher_id, WorkGroupPtr running_wg) {
     return _driver_dispatcher_owner_manager.should_yield(dispatcher_id, std::move(running_wg));
+}
+
+std::shared_ptr<WorkGroupPtrSet> WorkGroupManager::get_owners_of_io_dispatcher(int dispatcher_id) {
+    return _io_dispatcher_owner_manager.get_owners(dispatcher_id);
+}
+
+bool WorkGroupManager::should_yield_io_dispatcher(int dispatcher_id, WorkGroupPtr running_wg) {
+    return _io_dispatcher_owner_manager.should_yield(dispatcher_id, std::move(running_wg));
 }
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
