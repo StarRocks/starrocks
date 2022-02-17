@@ -97,7 +97,7 @@ WorkGroupPtr WorkGroupManager::get_default_workgroup() {
     return _workgroups[unique_id];
 }
 
-bool WorkGroup::try_offer_io_task(const PriorityThreadPool::Task& task) {
+bool WorkGroup::try_offer_io_task(IoWorkGroupQueue::Task task) {
     // TODO: Not Implemented
     return true;
 }
@@ -205,7 +205,7 @@ std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
     return workgroups;
 }
 
-bool IoWorkGroupQueue::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
+bool IoWorkGroupQueue::try_offer_io_task(WorkGroupPtr wg, Task task) {
     // Not implemented
     return true;
 }
@@ -218,13 +218,17 @@ void WorkGroupManager::close() {
     _wg_io_queue.close();
 }
 
-StatusOr<PriorityThreadPool::Task> WorkGroupManager::pick_next_task_for_io() {
+StatusOr<IoWorkGroupQueue::Task> WorkGroupManager::pick_next_task_for_io(int dispatcher_id) {
     // TODO: Not Implemented
     return Status::OK();
 }
 
-bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task) {
+bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, IoWorkGroupQueue::Task task) {
     // TODO: Not Implemented
+    return true;
+}
+
+bool WorkGroupManager::should_yield_io_dispatcher(int dispatcher_id, WorkGroupPtr running_wg) {
     return true;
 }
 
