@@ -5,6 +5,7 @@
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream_string.h"
+#include "runtime/primitive_type.h"
 #include "runtime/types.h"
 
 namespace starrocks::vectorized::csv {
@@ -75,7 +76,7 @@ TEST_F(FloatConverterTest, test_read_string_invalid_value) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(FloatConverterTest, test_write_string) {
+TEST_F(FloatConverterTest, test_double_write_string) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
     col->append_datum((double)1.1);
@@ -88,6 +89,24 @@ TEST_F(FloatConverterTest, test_write_string) {
     ASSERT_TRUE(conv->write_quoted_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(buff.finalize().ok());
     ASSERT_EQ("1.1-0.11.1-0.1", buff.as_string());
+
+    csv::OutputStreamString buff2;
+    auto col2 = ColumnHelper::create_column(_type, false);
+    col2->append_datum((double)1.12345678901234e+18);
+    ASSERT_TRUE(conv->write_string(&buff2, *col2, 0, Converter::Options()).ok());
+    ASSERT_TRUE(buff2.finalize().ok());
+    ASSERT_EQ("1.12345678901234e+18", buff2.as_string());
+}
+
+TEST_F(FloatConverterTest, test_float_write_string) {
+    TypeDescriptor type(TYPE_FLOAT);
+    auto conv = csv::get_converter(type, false);
+    auto col = ColumnHelper::create_column(type, false);
+    col->append_datum((float)7.092579e+08);
+    csv::OutputStreamString buff;
+    ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
+    ASSERT_TRUE(buff.finalize().ok());
+    ASSERT_EQ("7.092579e+08", buff.as_string());
 }
 
 } // namespace starrocks::vectorized::csv

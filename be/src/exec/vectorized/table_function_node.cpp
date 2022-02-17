@@ -59,7 +59,7 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
         TypeDescriptor return_type = TypeDescriptor::from_thrift(ttype_desc);
         return_types.emplace_back(return_type.type);
     }
-    _table_function = get_table_function(table_function_name, arg_types, return_types);
+    _table_function = get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }

@@ -131,7 +131,7 @@ std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* stat
     rets.resize(num_rows);
     for (int i = 0; i < num_rows; ++i) {
         for (int j = 0; j < num_cols; ++j) {
-            jvalue val = cast_to_jvalue<true>(stateUDTF->method_process()->method_desc[j + 1], cols[j].get(), j);
+            jvalue val = cast_to_jvalue<true>(stateUDTF->method_process()->method_desc[j + 1], cols[j].get(), i);
             call_stack.push_back(val);
         }
 

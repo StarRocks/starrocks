@@ -68,7 +68,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("colocate: false"));
-        Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (REPLICATED)"));
+        Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (BROADCAST)"));
 
         sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1 and colocate1.k2=colocate2.k2;";
         plan = getFragmentPlan(sql);
@@ -1152,7 +1152,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testWindowFunctionTest() throws Exception {
         String sql = "select sum(id_decimal - ifnull(id_decimal, 0)) over (partition by t1c) from test_all_type";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("decimal_literal:TDecimalLiteral(value:0)"));
+        Assert.assertTrue(plan.contains("decimal_literal:TDecimalLiteral(value:0, integer_value:00 00 00 00 00 00 00 00)"));
     }
 
     @Test
@@ -4015,7 +4015,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  0:OlapScanNode"));
     }
 
-    @Test
+    // todo(ywb) disable replicate join temporarily
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select * from join1 join join2 on join1.id = join2.id;";
@@ -4067,7 +4067,7 @@ public class PlanFragmentTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 
-    @Test
+    // todo(ywb) disable replicate join temporarily
     public void testReplicationJoinWithEmptyNode() throws Exception {
         // check replicate join without exception
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
@@ -5756,5 +5756,13 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |    \n" +
                 "  3:EXCHANGE\n" +
                 "     limit: 10"));
+    }
+
+    @Test
+    public void testArithmeticDecimalReuse() throws Exception {
+        String sql = "select t1a, sum(id_decimal * t1f), sum(id_decimal * t1f)" +
+                "from test_all_type group by t1a";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: t1a | 12: sum | 12: sum"));
     }
 }

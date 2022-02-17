@@ -10,12 +10,17 @@
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "simdjson.h"
+#include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
 
 Status JsonValue::parse(const Slice& src, JsonValue* out) {
     try {
+        if (src.empty()) {
+            *out = JsonValue(noneJsonSlice());
+            return Status::OK();
+        }
         auto b = vpack::Parser::fromJson(src.get_data(), src.get_size());
         out->assign(*b);
     } catch (const vpack::Exception& e) {
@@ -138,6 +143,9 @@ uint64_t JsonValue::serialize_size() const {
 
 // NOTE: JsonValue must be a valid JSON, which means to_string should not fail
 StatusOr<std::string> JsonValue::to_string() const {
+    if (binary_.empty()) {
+        return "";
+    }
     return callVPack<std::string>([this]() {
         VSlice slice = to_vslice();
         vpack::Options options = vpack::Options::Defaults;
@@ -159,6 +167,15 @@ std::string JsonValue::to_string_uncheck() const {
 
 vpack::Slice JsonValue::to_vslice() const {
     return vpack::Slice((const uint8_t*)binary_.data());
+}
+
+static inline int cmpDouble(double left, double right) {
+    if (std::isless(left, right)) {
+        return -1;
+    } else if (std::isgreater(left, right)) {
+        return 1;
+    }
+    return 0;
 }
 
 static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
@@ -188,31 +205,44 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
             idx++;
         }
         return 0;
-    } else if (left.type() == right.type()) {
-        auto type = left.type();
-        switch (type) {
-        case vpack::ValueType::Null:
-            return 0;
-        case vpack::ValueType::Bool:
-            return left.getBool() - right.getBool();
-        case vpack::ValueType::SmallInt:
-        case vpack::ValueType::Int:
-        case vpack::ValueType::UInt:
-            return left.getIntUnchecked() - right.getIntUnchecked();
-        case vpack::ValueType::Double: {
-            if (std::isless(left.getDouble(), right.getDouble())) {
-                return -1;
-            } else if (std::isgreater(left.getDouble(), right.getDouble())) {
-                return 1;
+    } else if (vpack::valueTypeGroup(left.type()) == vpack::valueTypeGroup(right.type())) {
+        // 1. type are exactly same
+        // 2. type are both number, but could smallInt/Int/Double
+        if (left.type() == right.type()) {
+            switch (left.type()) {
+            case vpack::ValueType::Bool:
+                return left.getBool() - right.getBool();
+            case vpack::ValueType::SmallInt:
+            case vpack::ValueType::Int:
+            case vpack::ValueType::UInt:
+                return left.getInt() - right.getInt();
+            case vpack::ValueType::Double: {
+                return cmpDouble(left.getDouble(), right.getDouble());
             }
-            return 0;
-        }
-        case vpack::ValueType::String:
-            return left.stringRef().compare(right.stringRef());
-        default:
-            DCHECK(false) << "unsupport json type: " << (int)type;
+            case vpack::ValueType::String:
+                return left.stringRef().compare(right.stringRef());
+            default:
+                // other types like illegal, none, min, max are considered equal
+                return 0;
+            }
+        } else if (left.isInteger() && right.isInteger()) {
+            return left.getInt() - right.getInt();
+        } else {
+            return cmpDouble(left.getNumber<double>(), right.getNumber<double>());
         }
     } else {
+        if (left.type() == vpack::ValueType::MinKey) {
+            return -1;
+        }
+        if (right.type() == vpack::ValueType::MinKey) {
+            return 1;
+        }
+        if (left.type() == vpack::ValueType::MaxKey) {
+            return 1;
+        }
+        if (right.type() == vpack::ValueType::MaxKey) {
+            return -1;
+        }
         return (int)left.type() - (int)right.type();
     }
     return 0;
@@ -222,6 +252,23 @@ int JsonValue::compare(const JsonValue& rhs) const {
     auto left = to_vslice();
     auto right = rhs.to_vslice();
     return sliceCompare(left, right);
+}
+
+int JsonValue::compare(const Slice& lhs, const Slice& rhs) {
+    vpack::Slice ls;
+    if (lhs.size > 0) {
+        ls = vpack::Slice((const uint8_t*)lhs.data);
+    } else {
+        ls = vpack::Slice::noneSlice();
+    }
+    vpack::Slice rs;
+    if (rhs.size > 0) {
+        rs = vpack::Slice((const uint8_t*)rhs.data);
+    } else {
+        rs = vpack::Slice::noneSlice();
+    }
+
+    return sliceCompare(ls, rs);
 }
 
 int64_t JsonValue::hash() const {

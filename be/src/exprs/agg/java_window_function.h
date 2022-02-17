@@ -11,6 +11,7 @@
 #include "exprs/agg/java_udaf_function.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
+#include "udf/java/java_udf.h"
 
 namespace starrocks::vectorized {
 void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val);
@@ -27,7 +28,7 @@ public:
     Status do_visit(const BinaryColumn& column);
 
     template <typename T>
-    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+    Status do_visit(const vectorized::FixedLengthColumn<T>& column) {
         get_buffer_data(column, &_buffers);
         return Status::OK();
     }
@@ -71,8 +72,8 @@ public:
             int buffers_idx = buffers.size();
             columns[i]->accept(&vistor);
             int buffers_sz = buffers.size() - buffers_idx;
-            input_cols[i] = ctx->impl()->udaf_ctxs()->udf_helper->create_boxed_array(type, num_rows, columns[i],
-                                                                                     &buffers[buffers_idx], buffers_sz);
+            input_cols[i] = ctx->impl()->udaf_ctxs()->udf_helper->create_boxed_array(
+                    type, num_rows, columns[i]->is_nullable(), &buffers[buffers_idx], buffers_sz);
         }
         ctx->impl()->udaf_ctxs()->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end,
                                                              frame_start, frame_end, num_args, input_cols);

@@ -133,6 +133,20 @@ Status S3RandomAccessFile::readv_at(uint64_t offset, const Slice* res, size_t re
     return Status::InternalError("S3RandomAccessFile::readv_at not implement");
 }
 
+StatusOr<std::unique_ptr<NumericStatistics>> HdfsRandomAccessFile::get_numeric_statistics() {
+    struct hdfsReadStatistics* hdfs_statistics = nullptr;
+    auto r = hdfsFileGetReadStatistics(_file, &hdfs_statistics);
+    if (r != 0) return Status::InternalError(fmt::format("hdfsFileGetReadStatistics failed: {}", r));
+    auto statistics = std::make_unique<NumericStatistics>();
+    statistics->reserve(4);
+    statistics->append("TotalBytesRead", hdfs_statistics->totalBytesRead);
+    statistics->append("TotalLocalBytesRead", hdfs_statistics->totalLocalBytesRead);
+    statistics->append("TotalShortCircuitBytesRead", hdfs_statistics->totalShortCircuitBytesRead);
+    statistics->append("TotalZeroCopyBytesRead", hdfs_statistics->totalZeroCopyBytesRead);
+    hdfsFileFreeReadStatistics(hdfs_statistics);
+    return std::move(statistics);
+}
+
 std::shared_ptr<RandomAccessFile> create_random_access_hdfs_file(const HdfsFsHandle& handle,
                                                                  const std::string& file_path, size_t file_size,
                                                                  bool usePread) {
