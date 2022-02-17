@@ -531,6 +531,7 @@ void FragmentMgr::cancel_worker() {
 }
 
 Status FragmentMgr::trigger_profile_report(const PTriggerProfileReportRequest* request) {
+    std::vector<std::shared_ptr<FragmentExecState>> need_report_exec_states;
     if (request->instance_ids_size() > 0) {
         for (int i = 0; i < request->instance_ids_size(); i++) {
             const PUniqueId& p_fragment_id = request->instance_ids(i);
@@ -541,7 +542,7 @@ Status FragmentMgr::trigger_profile_report(const PTriggerProfileReportRequest* r
                 std::lock_guard<std::mutex> lock(_lock);
                 auto iter = _fragment_map.find(id);
                 if (iter != _fragment_map.end()) {
-                    iter->second->executor()->report_profile_once();
+                    need_report_exec_states.emplace_back(iter->second->executor());
                 }
             }
         }
@@ -549,9 +550,14 @@ Status FragmentMgr::trigger_profile_report(const PTriggerProfileReportRequest* r
         std::lock_guard<std::mutex> lock(_lock);
         auto iter = _fragment_map.begin();
         for (; iter != _fragment_map.end(); iter++) {
-            iter->second->executor()->report_profile_once();
+            need_report_exec_states.emplace_back(iter->second->executor());
         }
     }
+
+    for (auto& exec_state : need_report_exec_states) {
+        exec_state->executor()->report_profile_once();
+    }
+
     return Status::OK();
 }
 
