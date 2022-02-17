@@ -38,6 +38,10 @@ public abstract class Relation implements ParseNode {
         return alias;
     }
 
+    public String toDigest() {
+        return toSql();
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitRelation(this, context);

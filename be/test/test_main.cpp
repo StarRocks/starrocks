@@ -18,6 +18,7 @@
 #include "util/disk_info.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/timezone_utils.h"
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
@@ -42,6 +43,7 @@ int main(int argc, char** argv) {
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
 
     starrocks::vectorized::date::init_date_cache();
+    starrocks::TimezoneUtils::init_time_zones();
 
     std::vector<starrocks::StorePath> paths;
     paths.emplace_back(starrocks::config::storage_root_path);

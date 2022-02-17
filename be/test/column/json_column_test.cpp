@@ -13,6 +13,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "runtime/mem_pool.h"
 #include "runtime/types.h"
 #include "testutil/parallel_test.h"
 #include "util/json.h"
@@ -123,22 +124,22 @@ PARALLEL_TEST(JsonColumnTest, test_compare) {
     // object
     column.push_back(JsonValue::parse(R"({"a": {"b": 1}})").value());
     column.push_back(JsonValue::parse(R"({"a": {"b": 2}})").value());
-    // double
-    column.push_back(JsonValue::parse(R"({"a": 1.0})").value());
-    column.push_back(JsonValue::parse(R"({"a": 2.0})").value());
-    // int
-    column.push_back(JsonValue::parse(R"({"a": 0})").value());
-    column.push_back(JsonValue::parse(R"({"a": 1})").value());
     // string
     column.push_back(JsonValue::parse(R"({"a": "a"})").value());
     column.push_back(JsonValue::parse(R"({"a": "b"})").value());
+    // double
+    column.push_back(JsonValue::parse(R"({"a": 1.0})").value());
+    column.push_back(JsonValue::parse(R"({"a": 2.0})").value());
+    // small int
+    column.push_back(JsonValue::parse(R"({"a": 3})").value());
+    column.push_back(JsonValue::parse(R"({"a": 4})").value());
+    // int
+    column.push_back(JsonValue::parse(R"({"a": 3046})").value());
+    column.push_back(JsonValue::parse(R"({"a": 4048})").value());
 
     // same type
     std::vector<std::pair<int, int>> same_type_cases = {
-            {0, 1},
-            {2, 3},
-            {4, 5},
-            {6, 7},
+            {0, 1}, {2, 3}, {4, 5}, {6, 7}, {8, 9}, {10, 11},
     };
     for (auto p : same_type_cases) {
         int lhs = p.first;
@@ -158,17 +159,26 @@ PARALLEL_TEST(JsonColumnTest, test_compare) {
     std::vector<std::pair<int, int>> diff_type_cases = {
             {0, 2},
             {2, 4},
-            {4, 6},
+            {6, 4},
     };
     for (auto p : diff_type_cases) {
         int lhs = p.first;
         int rhs = p.second;
-        ASSERT_LT(column[lhs].compare(column[rhs]), 0);
-        ASSERT_GT(column[rhs].compare(column[lhs]), 0);
+        EXPECT_LT(column[lhs].compare(column[rhs]), 0);
+        EXPECT_GT(column[rhs].compare(column[lhs]), 0);
 
         // operators
-        ASSERT_LT(column[lhs], column[rhs]);
-        ASSERT_GT(column[rhs], column[lhs]);
+        EXPECT_LT(column[lhs], column[rhs]);
+        EXPECT_GT(column[rhs], column[lhs]);
+    }
+
+    // numbers of different types
+    for (int i = 6; i <= 11; i++) {
+        for (int j = i + 1; j <= 11; j++) {
+            EXPECT_LT(column[i], column[j]);
+            EXPECT_GT(column[j], column[i]);
+            EXPECT_NE(column[i], column[j]);
+        }
     }
 }
 

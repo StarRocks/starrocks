@@ -3,12 +3,17 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateWorkGroupStmt;
+import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Catalog;
@@ -18,6 +23,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.common.MetaUtils;
@@ -50,6 +57,17 @@ public class Analyzer {
         if (node instanceof QueryStmt) {
             return new QueryAnalyzer(catalog, session)
                     .transformQueryStmt((QueryStmt) node, new Scope(RelationId.anonymous(), new RelationFields()));
+        } else if (node instanceof QueryStatement) {
+            QueryAnalyzerV2 analyzerV2 = new QueryAnalyzerV2(catalog, session);
+            analyzerV2.analyze(node);
+
+            QueryRelation queryRelation = ((QueryStatement) node).getQueryRelation();
+            long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
+            if (!queryRelation.hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
+                queryRelation.setLimit(new LimitElement(selectLimit));
+            }
+
+            return ((QueryStatement) node).getQueryRelation();
         } else if (node instanceof InsertStmt) {
             return new InsertAnalyzer(catalog, session).transformInsertStmt((InsertStmt) node);
         } else if (node instanceof AnalyzeStmt) {
@@ -63,15 +81,17 @@ public class Analyzer {
         } else if (node instanceof ShowStmt) {
             new ShowStmtAnalyzer(session).analyze((ShowStmt) node);
             return null;
+        } else if (node instanceof CreateWorkGroupStmt) {
+            return ((CreateWorkGroupStmt) node).analyze();
+        } else if (node instanceof AlterWorkGroupStmt) {
+            return ((AlterWorkGroupStmt) node).analyze();
+        } else if (node instanceof DropWorkGroupStmt) {
+            return ((DropWorkGroupStmt) node).analyze();
+        } else if (node instanceof ShowWorkGroupStmt) {
+            return ((ShowWorkGroupStmt) node).analyze();
         } else {
             throw unsupportedException("New Planner only support Query Statement");
         }
-    }
-
-    public Relation analyzeWithStatement(StatementBase statement) {
-        QueryAnalyzerV2 analyzerV2 = new QueryAnalyzerV2(catalog, session);
-        analyzerV2.analyze(statement);
-        return ((QueryStatement) statement).getQueryRelation();
     }
 
     private Relation analyzeAnalyzeStmt(AnalyzeStmt node) {

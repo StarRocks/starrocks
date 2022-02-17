@@ -40,12 +40,8 @@ public class StatementPlanner {
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
         com.starrocks.sql.analyzer.Analyzer analyzer =
                 new com.starrocks.sql.analyzer.Analyzer(session.getCatalog(), session);
-        Relation relation;
-        if (stmt instanceof QueryStatement) {
-            relation = analyzer.analyzeWithStatement(stmt);
-        } else {
-            relation = analyzer.analyze(stmt);
-        }
+        Relation relation = analyzer.analyze(stmt);
+
         PrivilegeChecker.check(stmt, session.getCatalog().getAuth(), session);
 
         if (stmt instanceof QueryStmt || stmt instanceof QueryStatement) {

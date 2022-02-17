@@ -156,7 +156,7 @@ public class AnalyzeTestUtil {
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt).get(0);
             Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            return (QueryRelation) analyzer.analyzeWithStatement(statementBase);
+            return (QueryRelation) analyzer.analyze(statementBase);
         } catch (Exception ex) {
             ex.printStackTrace();
             Assert.fail();
@@ -207,7 +207,7 @@ public class AnalyzeTestUtil {
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt).get(0);
             Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            analyzer.analyzeWithStatement(statementBase);
+            analyzer.analyze(statementBase);
             Assert.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {
             if (!exceptMessage.equals("")) {

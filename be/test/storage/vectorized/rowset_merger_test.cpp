@@ -275,7 +275,7 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
     cfg.chunk_size = 1000 + rand() % 2000;
-    cfg.algorithm = kVertical;
+    cfg.algorithm = VERTICAL_COMPACTION;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
@@ -386,7 +386,7 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
     cfg.chunk_size = 100 + rand() % 2000;
-    cfg.algorithm = kVertical;
+    cfg.algorithm = VERTICAL_COMPACTION;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {

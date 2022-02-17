@@ -53,6 +53,7 @@ import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
@@ -161,7 +162,7 @@ public class ConnectProcessor {
                 MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
                 if (elapseMs > Config.qe_slow_log_ms) {
                     MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
-                    ctx.getAuditEventBuilder().setDigest(computeStatementDigest((QueryStmt) parsedStmt));
+                    ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
                 }
             }
             ctx.getAuditEventBuilder().setIsQuery(true);
@@ -184,8 +185,13 @@ public class ConnectProcessor {
         Catalog.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
     }
 
-    public String computeStatementDigest(QueryStmt queryStmt) {
-        String digest = queryStmt.toDigest();
+    public String computeStatementDigest(StatementBase queryStmt) {
+        String digest;
+        if (queryStmt instanceof QueryStmt) {
+            digest = ((QueryStmt) queryStmt).toDigest();
+        } else {
+            digest = SqlDigestBuilder.build(queryStmt);
+        }
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();

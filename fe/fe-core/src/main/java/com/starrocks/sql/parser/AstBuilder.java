@@ -32,6 +32,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
@@ -57,6 +58,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
@@ -80,6 +82,7 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
+import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -770,7 +773,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Expr child = (Expr) visit(context.valueExpression());
         switch (context.operator.getType()) {
             case StarRocksLexer.MINUS:
-                return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, new IntLiteral(-1), child);
+                if (child.isLiteral() && child.getType().isNumericType()) {
+                    try {
+                        ((LiteralExpr) child).swapSign();
+                    } catch (NotImplementedException e) {
+                        throw new ParsingException(e.getMessage());
+                    }
+                    return child;
+                } else {
+                    return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, new IntLiteral(-1), child);
+                }
             case StarRocksLexer.PLUS:
                 return child;
             case StarRocksLexer.BITNOT:
@@ -1022,13 +1034,56 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitString(StarRocksParser.StringContext context) {
+        String quotedString;
         if (context.SINGLE_QUOTED_TEXT() != null) {
-            String singleQuotedString = context.SINGLE_QUOTED_TEXT().getText();
-            return new StringLiteral(singleQuotedString.substring(1, singleQuotedString.length() - 1));
+            quotedString = context.SINGLE_QUOTED_TEXT().getText();
         } else {
-            String doubleQuotedString = context.DOUBLE_QUOTED_TEXT().getText();
-            return new StringLiteral(doubleQuotedString.substring(1, doubleQuotedString.length() - 1));
+            quotedString = context.DOUBLE_QUOTED_TEXT().getText();
         }
+
+        return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1)));
+    }
+
+    private static String escapeBackSlash(String str) {
+        StringWriter writer = new StringWriter();
+        int strLen = str.length();
+        for (int i = 0; i < strLen; ++i) {
+            char c = str.charAt(i);
+            if (c == '\\' && (i + 1) < strLen) {
+                switch (str.charAt(i + 1)) {
+                    case 'n':
+                        writer.append('\n');
+                        break;
+                    case 't':
+                        writer.append('\t');
+                        break;
+                    case 'r':
+                        writer.append('\r');
+                        break;
+                    case 'b':
+                        writer.append('\b');
+                        break;
+                    case '0':
+                        writer.append('\0'); // Ascii null
+                        break;
+                    case 'Z': // ^Z must be escaped on Win32
+                        writer.append('\032');
+                        break;
+                    case '_':
+                    case '%':
+                        writer.append('\\'); // remember prefix for wildcard
+                        /* Fall through */
+                    default:
+                        writer.append(str.charAt(i + 1));
+                        break;
+                }
+                i++;
+            } else {
+                writer.append(c);
+            }
+        }
+
+        return writer.toString();
     }
 
     @Override

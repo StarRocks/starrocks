@@ -118,6 +118,8 @@ public:
         return size;
     }
 
+    const std::vector<Slice>& get_keys() const { return _keys; }
+
 private:
     bool _parsed{false};
 
@@ -128,14 +130,18 @@ private:
 
 class IndexPageIterator {
 public:
-    explicit IndexPageIterator(const IndexPageReader* reader) : _reader(reader), _pos(0) {}
+    explicit IndexPageIterator(const IndexPageReader* reader) : _reader(reader) {}
 
     // Find the largest index entry whose key is <= search_key.
     // Return OK status when such entry exists.
     // Return NotFound when no such entry is found (all keys > search_key).
-    // Return other error status otherwise.
+    // Index entry is the start key of page
+    // All the key in page is unique
     Status seek_at_or_before(const Slice& search_key);
 
+    // Find the smallest index entry whose key is >= search_key.
+    // Index entry is the start key of page
+    // All the key in page is unique
     Status seek_at_or_after(const Slice& search_key);
 
     // Move to the next index entry.
@@ -155,7 +161,7 @@ public:
 private:
     const IndexPageReader* _reader;
 
-    size_t _pos;
+    size_t _pos = 0;
 };
 
 } // namespace starrocks

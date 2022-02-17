@@ -16,6 +16,7 @@
 #include "rocksdb/write_batch.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -986,13 +987,13 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
         }
     }
 
-    uint32_t max_rows_per_segment = vectorized::Compaction::get_segment_max_rows(config::max_segment_file_size,
-                                                                                 input_row_num, input_rowsets_size);
+    uint32_t max_rows_per_segment =
+            CompactionUtils::get_segment_max_rows(config::max_segment_file_size, input_row_num, input_rowsets_size);
 
     int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
     size_t num_columns = _tablet.num_columns();
-    vectorized::CompactionAlgorithm algorithm = vectorized::Compaction::choose_compaction_algorithm(
-            num_columns, max_columns_per_group, input_rowsets.size());
+    CompactionAlgorithm algorithm =
+            CompactionUtils::choose_compaction_algorithm(num_columns, max_columns_per_group, input_rowsets.size());
 
     // create rowset writer
     RowsetWriterContext context(kDataFormatV2, config::storage_format_version);
@@ -1008,7 +1009,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
     context.segments_overlap = NONOVERLAPPING;
     context.max_rows_per_segment = max_rows_per_segment;
     context.writer_type =
-            (algorithm == vectorized::kVertical ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
+            (algorithm == VERTICAL_COMPACTION ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
     std::unique_ptr<RowsetWriter> rowset_writer;
     Status st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
     if (!st.ok()) {

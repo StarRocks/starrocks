@@ -198,6 +198,11 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDate(datetime);
     }
 
+    @FEFunction(name = "timestamp", argTypes = {"DATETIME"}, returnType = "DATETIME")
+    public static ConstantOperator timestamp(ConstantOperator arg) throws AnalysisException {
+        return arg;
+    }
+
     @FEFunction(name = "unix_timestamp", argTypes = {}, returnType = "INT")
     public static ConstantOperator unixTimestampNow() {
         return unixTimestamp(now());
@@ -443,5 +448,4 @@ public class ScalarOperatorFunctions {
 
         return ConstantOperator.createDecimal(result, type);
     }
-
 }

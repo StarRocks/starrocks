@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <ostream>
 #include <string>
 
@@ -8,6 +9,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
+#include "glog/logging.h"
 #include "simdjson.h"
 #include "util/coding.h"
 #include "velocypack/vpack.h"
@@ -53,7 +55,6 @@ public:
     explicit JsonValue(const VSlice& slice) { assign(Slice(slice.start(), slice.byteSize())); }
 
     void assign(const Slice& src) { binary_.assign(src.get_data(), src.get_size()); }
-
     void assign(const vpack::Builder& b) { binary_.assign((const char*)b.data(), (size_t)b.size()); }
 
     ////////////////// builder  //////////////////////
@@ -97,6 +98,7 @@ public:
     StatusOr<std::string> to_string() const;
     std::string to_string_uncheck() const;
     int compare(const JsonValue& rhs) const;
+    static int compare(const Slice& lhs, const Slice& rhs);
     int64_t hash() const;
 
 private:
@@ -171,6 +173,9 @@ std::ostream& operator<<(std::ostream& os, const JsonValue& json);
 inline bool operator==(const JsonValue& lhs, const JsonValue& rhs) {
     return lhs.compare(rhs) == 0;
 }
+inline bool operator!=(const JsonValue& lhs, const JsonValue& rhs) {
+    return lhs.compare(rhs) != 0;
+}
 inline bool operator<(const JsonValue& lhs, const JsonValue& rhs) {
     return lhs.compare(rhs) < 0;
 }
@@ -196,3 +201,109 @@ struct formatter<starrocks::JsonValue> : formatter<std::string> {
     }
 };
 } // namespace fmt
+
+namespace std {
+
+inline std::string to_string(const starrocks::JsonValue& value) {
+    return value.to_string_uncheck();
+}
+
+template <>
+struct less<starrocks::JsonValue> {
+    bool operator()(const starrocks::JsonValue& lhs, const starrocks::JsonValue& rhs) const {
+        return lhs.compare(rhs) < 0;
+    }
+
+    bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
+        DCHECK_NOTNULL(lhs);
+        DCHECK_NOTNULL(rhs);
+        return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) < 0;
+    }
+
+    bool operator()(const starrocks::Slice& lhs, const starrocks::Slice& rhs) const {
+        return starrocks::JsonValue::compare(lhs, rhs) < 0;
+    }
+};
+
+template <>
+struct less_equal<starrocks::JsonValue> {
+    bool operator()(const starrocks::JsonValue& lhs, const starrocks::JsonValue& rhs) const {
+        return lhs.compare(rhs) <= 0;
+    }
+
+    bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
+        DCHECK_NOTNULL(lhs);
+        DCHECK_NOTNULL(rhs);
+        return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) <= 0;
+    }
+
+    bool operator()(const starrocks::Slice& lhs, const starrocks::Slice& rhs) const {
+        return starrocks::JsonValue::compare(lhs, rhs) <= 0;
+    }
+};
+
+template <>
+struct greater<starrocks::JsonValue> {
+    bool operator()(const starrocks::JsonValue& lhs, const starrocks::JsonValue& rhs) const {
+        return lhs.compare(rhs) > 0;
+    }
+    bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
+        DCHECK_NOTNULL(lhs);
+        DCHECK_NOTNULL(rhs);
+        return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) > 0;
+    }
+
+    bool operator()(const starrocks::Slice& lhs, const starrocks::Slice& rhs) const {
+        return starrocks::JsonValue::compare(lhs, rhs) > 0;
+    }
+};
+template <>
+struct greater_equal<starrocks::JsonValue> {
+    bool operator()(const starrocks::JsonValue& lhs, const starrocks::JsonValue& rhs) const {
+        return lhs.compare(rhs) >= 0;
+    }
+
+    bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
+        DCHECK_NOTNULL(lhs);
+        DCHECK_NOTNULL(rhs);
+        return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) >= 0;
+    }
+
+    bool operator()(const starrocks::Slice& lhs, const starrocks::Slice& rhs) const {
+        return starrocks::JsonValue::compare(lhs, rhs) >= 0;
+    }
+};
+template <>
+struct equal_to<starrocks::JsonValue> {
+    bool operator()(const starrocks::JsonValue& lhs, const starrocks::JsonValue& rhs) const {
+        return lhs.compare(rhs) == 0;
+    }
+
+    bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
+        DCHECK_NOTNULL(lhs);
+        DCHECK_NOTNULL(rhs);
+        return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) == 0;
+    }
+
+    bool operator()(const starrocks::Slice& lhs, const starrocks::Slice& rhs) const {
+        return starrocks::JsonValue::compare(lhs, rhs) == 0;
+    }
+};
+template <>
+struct not_equal_to<starrocks::JsonValue> {
+    bool operator()(const starrocks::JsonValue& lhs, const starrocks::JsonValue& rhs) const {
+        return lhs.compare(rhs) != 0;
+    }
+
+    bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
+        DCHECK_NOTNULL(lhs);
+        DCHECK_NOTNULL(rhs);
+        return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) != 0;
+    }
+
+    bool operator()(const starrocks::Slice& lhs, const starrocks::Slice& rhs) const {
+        return starrocks::JsonValue::compare(lhs, rhs) != 0;
+    }
+};
+
+} // namespace std

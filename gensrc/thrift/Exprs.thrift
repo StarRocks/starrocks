@@ -99,6 +99,7 @@ struct TFloatLiteral {
 
 struct TDecimalLiteral {
   1: required string value
+  2: optional binary integer_value
 }
 
 struct TIntLiteral {

@@ -114,7 +114,7 @@ public class QueryAnalyzerV2 {
 
             for (CTERelation withQuery : stmt.getCteRelations()) {
                 QueryRelation query = withQuery.getCteQuery();
-                process(withQuery.getCteQuery(), cteScope);
+                process(new QueryStatement(withQuery.getCteQuery()), cteScope);
 
                 /*
                  *  Because the analysis of CTE is sensitive to order

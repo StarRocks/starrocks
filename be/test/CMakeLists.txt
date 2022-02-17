@@ -150,6 +150,7 @@ set(EXEC_FILES
         ./storage/rowset/segment_iterator_test.cpp
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
+        ./storage/rowset/index_page_test.cpp
         ./storage/selection_vector_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
@@ -158,6 +159,7 @@ set(EXEC_FILES
         ./storage/tablet_meta_manager_test.cpp
         ./storage/tablet_updates_test.cpp
         ./storage/update_manager_test.cpp
+        ./storage/compaction_utils_test.cpp
         ./storage/vectorized/aggregate_iterator_test.cpp
         ./storage/vectorized/chunk_aggregator_test.cpp
         ./storage/vectorized/chunk_helper_test.cpp
@@ -270,6 +272,10 @@ endif()
 
 if (WITH_HDFS)
     set(EXEC_FILES ${EXEC_FILES} ./exec/vectorized/hdfs_scan_node_test.cpp)
+endif ()
+
+if (WITH_AWS)
+    set(EXEC_FILES ${EXEC_FILES} ./object_store/s3_client_test.cpp)
 endif ()
 
 add_executable(starrocks_test ${EXEC_FILES})
