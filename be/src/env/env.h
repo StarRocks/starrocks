@@ -17,6 +17,7 @@
 
 namespace starrocks {
 
+class NumericStatistics;
 class RandomAccessFile;
 class RandomRWFile;
 class WritableFile;
@@ -203,6 +204,11 @@ public:
 
     // Returns the filename provided when the SequentialFile was constructed.
     virtual const std::string& filename() const = 0;
+
+    // Get statistics about the reads which this SequentialFile has done.
+    // If the SequentialFile implementation doesn't support statistics, a null pointer or
+    // an empty statistics is returned.
+    virtual StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() { return nullptr; }
 };
 
 class RandomAccessFile {
@@ -246,6 +252,11 @@ public:
 
     // Return name of this file
     virtual const std::string& file_name() const = 0;
+
+    // Get statistics about the reads which this RandomAccessFile has done.
+    // If the RandomAccessFile implementation doesn't support statistics, a null pointer or
+    // an empty statistics is returned.
+    virtual StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() { return nullptr; }
 };
 
 // A file abstraction for sequential writing.  The implementation
@@ -327,5 +338,54 @@ public:
     virtual Status size(uint64_t* size) const = 0;
     virtual const std::string& filename() const = 0;
 };
+
+class NumericStatistics {
+public:
+    NumericStatistics() = default;
+    ~NumericStatistics() = default;
+
+    NumericStatistics(const NumericStatistics&) = default;
+    NumericStatistics& operator=(const NumericStatistics&) = default;
+    NumericStatistics(NumericStatistics&&) = default;
+    NumericStatistics& operator=(NumericStatistics&&) = default;
+
+    void append(std::string_view name, int64_t value);
+
+    int64_t size() const;
+
+    const std::string& name(int64_t idx) const;
+
+    int64_t value(int64_t idx) const;
+
+    void reserve(int64_t size);
+
+private:
+    std::vector<std::string> _names;
+    std::vector<int64_t> _values;
+};
+
+inline void NumericStatistics::append(std::string_view name, int64_t value) {
+    _names.emplace_back(name);
+    _values.emplace_back(value);
+}
+
+inline int64_t NumericStatistics::size() const {
+    return static_cast<int64_t>(_names.size());
+}
+
+inline const std::string& NumericStatistics::name(int64_t idx) const {
+    assert(idx >= 0 && idx < size());
+    return _names[idx];
+}
+
+inline int64_t NumericStatistics::value(int64_t idx) const {
+    assert(idx >= 0 && idx < size());
+    return _values[idx];
+}
+
+inline void NumericStatistics::reserve(int64_t size) {
+    _names.reserve(size);
+    _values.reserve(size);
+}
 
 } // namespace starrocks

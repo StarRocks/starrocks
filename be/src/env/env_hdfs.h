@@ -37,6 +37,8 @@ public:
 
     hdfsFile hdfs_file() const { return _file; }
 
+    StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override;
+
 private:
     Status _read_at(int64_t offset, char* data, size_t size, size_t* read_size) const;
     bool _opened;
