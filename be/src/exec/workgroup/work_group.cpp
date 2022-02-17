@@ -68,7 +68,7 @@ void WorkGroup::init() {
     int64_t limit = ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
     _mem_tracker =
             std::make_shared<starrocks::MemTracker>(limit, _name, ExecEnv::GetInstance()->query_pool_mem_tracker());
-    _driver_queue = std::make_unique<starrocks::pipeline::QuerySharedDriverQueue>();
+    _driver_queue = std::make_unique<starrocks::pipeline::QuerySharedDriverQueueWithoutLock>();
 }
 
 double WorkGroup::get_cpu_expected_use_ratio() const {

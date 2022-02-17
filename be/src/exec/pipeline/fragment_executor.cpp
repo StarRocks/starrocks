@@ -114,14 +114,16 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id) << " backend_num=" << backend_num;
-    WorkGroupPtr wg;
-    if (request.__isset.workgroup && request.workgroup.id != WorkGroup::DEFAULT_WG_ID) {
-        wg = std::make_shared<WorkGroup>(request.workgroup);
-        wg = WorkGroupManager::instance()->add_workgroup(wg);
-    } else {
-        wg = WorkGroupManager::instance()->get_default_workgroup();
+    WorkGroupPtr wg = nullptr;
+    if (request.__isset.enable_resource_group && request.enable_resource_group) {
+        _fragment_ctx->set_enable_resource_group();
+        if (request.__isset.workgroup && request.workgroup.id != WorkGroup::DEFAULT_WG_ID) {
+            wg = std::make_shared<WorkGroup>(request.workgroup);
+            wg = WorkGroupManager::instance()->add_workgroup(wg);
+        } else {
+            wg = WorkGroupManager::instance()->get_default_workgroup();
+        }
     }
-    DCHECK(wg != nullptr);
 
     int32_t degree_of_parallelism = 1;
     if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
@@ -142,7 +144,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->set_chunk_size(query_options.batch_size);
-    runtime_state->init_mem_trackers(query_id, wg->mem_tracker());
+    runtime_state->init_mem_trackers(query_id, wg != nullptr ? wg->mem_tracker() : nullptr);
     runtime_state->set_be_number(backend_num);
 
     // RuntimeFilterWorker::open_query is idempotent
@@ -245,7 +247,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                                                                     driver_id++, is_root);
                 driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
-                scan_operator->set_workgroup(wg);
+                if (wg != nullptr) {
+                    // Workgroup uses io_dispatcher instead of pipeline_scan_io_thread_pool.
+                    scan_operator->set_workgroup(wg);
+                } else {
+                    scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                }
                 setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }
@@ -269,9 +276,13 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_drivers(std::move(drivers));
 
     _query_ctx->fragment_mgr()->register_ctx(fragment_instance_id, std::move(fragment_ctx));
-    for (auto& driver : _fragment_ctx->drivers()) {
-        driver->set_workgroup(wg.get());
+
+    if (wg != nullptr) {
+        for (auto& driver : _fragment_ctx->drivers()) {
+            driver->set_workgroup(wg.get());
+        }
     }
+
     return Status::OK();
 }
 
@@ -279,9 +290,17 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     for (const auto& driver : _fragment_ctx->drivers()) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
     }
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        exec_env->driver_dispatcher()->dispatch(driver.get());
+
+    if (_fragment_ctx->enable_resource_group()) {
+        for (const auto& driver : _fragment_ctx->drivers()) {
+            exec_env->wg_driver_dispatcher()->dispatch(driver.get());
+        }
+    } else {
+        for (const auto& driver : _fragment_ctx->drivers()) {
+            exec_env->driver_dispatcher()->dispatch(driver.get());
+        }
     }
+
     return Status::OK();
 }
 

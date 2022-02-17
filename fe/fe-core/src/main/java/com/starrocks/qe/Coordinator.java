@@ -1936,16 +1936,21 @@ public class Coordinator {
                             params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
                         }
                         params.setPipeline_dop(fragment.getPipelineDop());
-                        // TODO (by satanson): just for verification of resource isolation.
-                        long workgroupId = ConnectContext.get().getSessionVariable().getWorkgroupId();
-                        if (workgroupId > 0) {
-                            TWorkGroup wg = new TWorkGroup();
-                            wg.setName("");
-                            wg.setId(ConnectContext.get().getSessionVariable().getWorkgroupId());
-                            wg.setVersion(0);
-                            params.setWorkgroup(wg);
-                        } else if (workgroup != null) {
-                            params.setWorkgroup(workgroup.toThrift());
+
+                        boolean enableResourceGroup = ConnectContext.get().getSessionVariable().isEnableResourceGroup();
+                        params.setEnable_resource_group(enableResourceGroup);
+                        if (enableResourceGroup) {
+                            // TODO (by satanson): just for verification of resource isolation.
+                            long workgroupId = ConnectContext.get().getSessionVariable().getWorkgroupId();
+                            if (workgroupId > 0) {
+                                TWorkGroup wg = new TWorkGroup();
+                                wg.setName("");
+                                wg.setId(ConnectContext.get().getSessionVariable().getWorkgroupId());
+                                wg.setVersion(0);
+                                params.setWorkgroup(wg);
+                            } else if (workgroup != null) {
+                                params.setWorkgroup(workgroup.toThrift());
+                            }
                         }
                     }
 

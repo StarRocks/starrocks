@@ -55,7 +55,6 @@ private:
     std::atomic<int64_t> _accu_consume_time = 0;
 };
 
-// All the QuerySharedDriverQueue's methods MUST be guarded by the outside lock.
 class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriverQueue> {
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
 
@@ -71,6 +70,47 @@ public:
         }
     }
     ~QuerySharedDriverQueue() override = default;
+    void close() override;
+
+    static const size_t QUEUE_SIZE = 8;
+    // maybe other value for ratio.
+    static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
+    void put_back(const DriverRawPtr driver) override;
+    void put_back(const std::vector<DriverRawPtr>& drivers) override;
+
+    void put_back_from_dispatcher(const DriverRawPtr driver) override;
+    void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override;
+
+    void update_statistics(const DriverRawPtr driver) override;
+
+    // return nullptr if queue is closed;
+    StatusOr<DriverRawPtr> take() override;
+
+    size_t size() override { return 0; }
+
+private:
+    SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
+    std::mutex _global_mutex;
+    std::condition_variable _cv;
+    bool _is_closed = false;
+};
+
+// All the QuerySharedDriverQueueWithoutLock's methods MUST be guarded by the outside lock.
+class QuerySharedDriverQueueWithoutLock : public FactoryMethod<DriverQueue, QuerySharedDriverQueueWithoutLock> {
+    friend class FactoryMethod<DriverQueue, QuerySharedDriverQueueWithoutLock>;
+
+public:
+    QuerySharedDriverQueueWithoutLock() {
+        double factor = 1;
+        for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
+            // initialize factor for every sub queue,
+            // Higher priority queues have more execution time,
+            // so they have a larger factor.
+            _queues[i].factor_for_normal = factor;
+            factor *= RATIO_OF_ADJACENT_QUEUE;
+        }
+    }
+    ~QuerySharedDriverQueueWithoutLock() override = default;
     void close() override {}
 
     void put_back(const DriverRawPtr driver) override;
