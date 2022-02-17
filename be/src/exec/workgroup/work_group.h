@@ -27,6 +27,7 @@ using std::chrono::duration_cast;
 class WorkGroup;
 class WorkGroupManager;
 using WorkGroupPtr = std::shared_ptr<WorkGroup>;
+using WorkGroupPtrSet = std::unordered_set<WorkGroupPtr>;
 
 class WorkGroupQueue {
 public:
@@ -160,6 +161,32 @@ private:
     int64_t _vacuum_ttl = std::numeric_limits<int64_t>::max();
 };
 
+class DispatcherOwnerManager {
+public:
+    explicit DispatcherOwnerManager(int num_total_dispatchers);
+    ~DispatcherOwnerManager() = default;
+
+    // Disable copy/move ctor and assignment.
+    DispatcherOwnerManager(const DispatcherOwnerManager&) = delete;
+    DispatcherOwnerManager& operator=(const DispatcherOwnerManager&) = delete;
+    DispatcherOwnerManager(DispatcherOwnerManager&&) = delete;
+    DispatcherOwnerManager& operator=(DispatcherOwnerManager&&) = delete;
+
+    std::shared_ptr<WorkGroupPtrSet> get_owners(int dispatcher_id) const {
+        return _dispatcher_id2owner_wgs[_index % 2][dispatcher_id];
+    }
+
+    void reassign_to_wgs(const std::unordered_map<int128_t, WorkGroupPtr>& workgroups, int sum_cpu_limit);
+
+    bool should_yield(int dispatcher_id, const WorkGroupPtr& running_wg) const;
+
+private:
+    const int _num_total_dispatchers;
+    // Use two _dispatcher_id2owner_wgs and _index to insulate read and write.
+    std::vector<std::shared_ptr<WorkGroupPtrSet>> _dispatcher_id2owner_wgs[2]{};
+    std::atomic<size_t> _index = 0;
+};
+
 // WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
 // pick next workgroup for computation and launching io tasks.
 class WorkGroupManager {
@@ -186,6 +213,10 @@ public:
     std::vector<TWorkGroup> list_workgroups();
     std::vector<TWorkGroup> list_all_workgroups();
 
+    std::shared_ptr<WorkGroupPtrSet> get_owners_of_driver_dispatcher(int dispatcher_id);
+    bool should_yield_driver_dispatcher(int dispatcher_id, WorkGroupPtr running_wg);
+
+    std::shared_ptr<WorkGroupPtrSet> get_owners_of_io_dispatcher(int dispatcher_id);
     bool should_yield_io_dispatcher(int dispatcher_id, WorkGroupPtr running_wg);
 
 private:
@@ -194,6 +225,11 @@ private:
     void create_workgroup_unlocked(const WorkGroupPtr& wg);
     void alter_workgroup_unlocked(const WorkGroupPtr& wg);
     void delete_workgroup_unlocked(const WorkGroupPtr& wg);
+
+    // Label each dispatcher thread to a specific workgroup by cpu limit.
+    // WorkGroupManager::_mutex is held when invoking this method.
+    void reassign_dispatcher_to_wgs();
+
     std::shared_mutex _mutex;
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
@@ -202,6 +238,9 @@ private:
 
     std::atomic<size_t> _sum_cpu_limit = 0;
     std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
+
+    std::unique_ptr<DispatcherOwnerManager> _driver_dispatcher_owner_manager;
+    std::unique_ptr<DispatcherOwnerManager> _io_dispatcher_owner_manager;
 };
 
 class DefaultWorkGroupInitialization {
