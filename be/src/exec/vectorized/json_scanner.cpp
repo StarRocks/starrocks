@@ -312,15 +312,26 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
                     if (slot_descs[i] == nullptr) {
                         continue;
                     }
+                    const char* column_name = slot_descs[i]->col_name().c_str();
                     ColumnPtr& column = chunk->get_column_by_slot_id(slot_descs[i]->id());
                     if (i >= jsonpath_size) {
-                        column->append_nulls(1);
+                        if (strcmp(column_name, "__op") == 0) {
+                            // special treatment for __op column, fill default value '0' rather than null
+                            column->append_strings(literal_0_slice_vector);
+                        } else {
+                            column->append_nulls(1);
+                        }
                         continue;
                     }
                     rapidjson::Value* json_values = JsonFunctions::get_json_object_from_parsed_json(
                             _scanner->_json_paths[i], objectValue, _origin_json_doc.GetAllocator());
                     if (json_values == nullptr) {
-                        column->append_nulls(1);
+                        if (strcmp(column_name, "__op") == 0) {
+                            // special treatment for __op column, fill default value '0' rather than null
+                            column->append_strings(literal_0_slice_vector);
+                        } else {
+                            column->append_nulls(1);
+                        }
                     } else {
                         _construct_column(*json_values, column.get(), slot_descs[i]->type());
                     }
