@@ -134,12 +134,11 @@ public class IcebergTableStatisticCalculator {
             Long nullCount = icebergFileStats.getNullCounts().get(fieldId);
             if (nullCount != null) {
                 columnBuilder.setNullsFraction(nullCount / recordCount);
-            } else {
-                columnBuilder.setNullsFraction(-1L / recordCount);
             }
 
             // avg row size
             if (icebergFileStats.getColumnSizes() != null) {
+                // Notice that columnSize here is column * row count which updated in updateColumnSizes below
                 Long columnSize = icebergFileStats.getColumnSizes().get(fieldId);
                 if (columnSize != null) {
                     columnBuilder.setAverageRowSize(columnSize / recordCount);
