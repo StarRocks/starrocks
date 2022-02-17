@@ -286,9 +286,17 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     for (const auto& driver : _fragment_ctx->drivers()) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
     }
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        exec_env->driver_dispatcher()->dispatch(driver.get());
+
+    if (_fragment_ctx->enable_resource_group()) {
+        for (const auto& driver : _fragment_ctx->drivers()) {
+            exec_env->wg_driver_dispatcher()->dispatch(driver.get());
+        }
+    } else {
+        for (const auto& driver : _fragment_ctx->drivers()) {
+            exec_env->driver_dispatcher()->dispatch(driver.get());
+        }
     }
+
     return Status::OK();
 }
 
