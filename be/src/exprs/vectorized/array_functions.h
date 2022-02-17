@@ -40,6 +40,64 @@ public:
 
 #undef DEFINE_ARRAY_DISTINCT_FN
 
+#define DEFINE_ARRAY_DIFFERENCE_FN(NAME, PT)                                                     \
+    static ColumnPtr array_difference_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayDifference<PT>::process(context, columns);                                   \
+    }
+
+    DEFINE_ARRAY_DIFFERENCE_FN(tinyint, PrimitiveType::TYPE_SMALLINT);
+    DEFINE_ARRAY_DIFFERENCE_FN(smallint, PrimitiveType::TYPE_INT);
+    DEFINE_ARRAY_DIFFERENCE_FN(int, PrimitiveType::TYPE_BIGINT);
+    DEFINE_ARRAY_DIFFERENCE_FN(bigint, PrimitiveType::TYPE_BIGINT);
+    DEFINE_ARRAY_DIFFERENCE_FN(largeint, PrimitiveType::TYPE_LARGEINT);
+    DEFINE_ARRAY_DIFFERENCE_FN(float, PrimitiveType::TYPE_DOUBLE);
+    DEFINE_ARRAY_DIFFERENCE_FN(double, PrimitiveType::TYPE_DOUBLE);
+    DEFINE_ARRAY_DIFFERENCE_FN(decimalv2, PrimitiveType::TYPE_DECIMALV2);
+
+#undef DEFINE_ARRAY_DIFFERENCE_FN
+
+#define DEFINE_ARRAY_SLICE_FN(NAME, PT)                                                     \
+    static ColumnPtr array_slice_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArraySlice<PT>::process(context, columns);                                   \
+    }
+
+    DEFINE_ARRAY_SLICE_FN(boolean, PrimitiveType::TYPE_BOOLEAN);
+    DEFINE_ARRAY_SLICE_FN(tinyint, PrimitiveType::TYPE_TINYINT);
+    DEFINE_ARRAY_SLICE_FN(smallint, PrimitiveType::TYPE_SMALLINT);
+    DEFINE_ARRAY_SLICE_FN(int, PrimitiveType::TYPE_INT);
+    DEFINE_ARRAY_SLICE_FN(bigint, PrimitiveType::TYPE_BIGINT);
+    DEFINE_ARRAY_SLICE_FN(largeint, PrimitiveType::TYPE_LARGEINT);
+    DEFINE_ARRAY_SLICE_FN(float, PrimitiveType::TYPE_FLOAT);
+    DEFINE_ARRAY_SLICE_FN(double, PrimitiveType::TYPE_DOUBLE);
+    DEFINE_ARRAY_SLICE_FN(varchar, PrimitiveType::TYPE_VARCHAR);
+    DEFINE_ARRAY_SLICE_FN(char, PrimitiveType::TYPE_CHAR);
+    DEFINE_ARRAY_SLICE_FN(decimalv2, PrimitiveType::TYPE_DECIMALV2);
+    DEFINE_ARRAY_SLICE_FN(datetime, PrimitiveType::TYPE_DATETIME);
+    DEFINE_ARRAY_SLICE_FN(date, PrimitiveType::TYPE_DATE);
+
+#undef DEFINE_ARRAY_SLICE_FN
+
+#define DEFINE_ARRAY_CONCAT_FN(NAME, PT)                                                     \
+    static ColumnPtr array_concat_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayConcat<PT>::process(context, columns);                                   \
+    }
+
+    DEFINE_ARRAY_CONCAT_FN(boolean, PrimitiveType::TYPE_BOOLEAN);
+    DEFINE_ARRAY_CONCAT_FN(tinyint, PrimitiveType::TYPE_TINYINT);
+    DEFINE_ARRAY_CONCAT_FN(smallint, PrimitiveType::TYPE_SMALLINT);
+    DEFINE_ARRAY_CONCAT_FN(int, PrimitiveType::TYPE_INT);
+    DEFINE_ARRAY_CONCAT_FN(bigint, PrimitiveType::TYPE_BIGINT);
+    DEFINE_ARRAY_CONCAT_FN(largeint, PrimitiveType::TYPE_LARGEINT);
+    DEFINE_ARRAY_CONCAT_FN(float, PrimitiveType::TYPE_FLOAT);
+    DEFINE_ARRAY_CONCAT_FN(double, PrimitiveType::TYPE_DOUBLE);
+    DEFINE_ARRAY_CONCAT_FN(varchar, PrimitiveType::TYPE_VARCHAR);
+    DEFINE_ARRAY_CONCAT_FN(char, PrimitiveType::TYPE_CHAR);
+    DEFINE_ARRAY_CONCAT_FN(decimalv2, PrimitiveType::TYPE_DECIMALV2);
+    DEFINE_ARRAY_CONCAT_FN(datetime, PrimitiveType::TYPE_DATETIME);
+    DEFINE_ARRAY_CONCAT_FN(date, PrimitiveType::TYPE_DATE);
+
+#undef DEFINE_ARRAY_CONCAT_FN
+
 #define DEFINE_ARRAY_SORT_FN(NAME, PT)                                                     \
     static ColumnPtr array_sort_##NAME(FunctionContext* context, const Columns& columns) { \
         return ArraySort<PT>::process(context, columns);                                   \
