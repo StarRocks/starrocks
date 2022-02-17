@@ -302,6 +302,16 @@ std::string Chunk::debug_row(uint32_t index) const {
     return os.str();
 }
 
+void Chunk::merge(Chunk* src) {
+    DCHECK_EQ(src->num_rows(), num_rows());
+    for (auto& it : src->_slot_id_to_index) {
+        SlotId slot_id = it.first;
+        size_t index = it.second;
+        ColumnPtr& c = _columns[index];
+        append_column(c, slot_id);
+    }
+}
+
 void Chunk::append(const Chunk& src, size_t offset, size_t count) {
     DCHECK_EQ(num_columns(), src.num_columns());
     const size_t n = src.num_columns();

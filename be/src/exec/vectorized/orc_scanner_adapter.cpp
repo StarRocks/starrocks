@@ -995,7 +995,8 @@ OrcScannerAdapter::OrcScannerAdapter(RuntimeState* state, const std::vector<Slot
           _strict_mode(true),
           _broker_load_filter(nullptr),
           _num_rows_filtered(0),
-          _error_message_counter(0) {
+          _error_message_counter(0),
+          _lazy_load_ctx(nullptr) {
     if (_read_chunk_size == 0) {
         _read_chunk_size = 4096;
     }

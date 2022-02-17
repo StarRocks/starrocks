@@ -126,6 +126,7 @@ public:
     ChunkUniquePtr clone_unique() const;
 
     void append(const Chunk& src) { append(src, 0, src.num_rows()); }
+    void merge(Chunk* src);
 
     // Append |count| rows from |src|, started from |offset|, to the |this| chunk.
     void append(const Chunk& src, size_t offset, size_t count);

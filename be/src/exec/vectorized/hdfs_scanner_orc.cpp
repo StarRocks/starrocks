@@ -356,10 +356,12 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
 
     // create orc adapter for further reading.
     int src_slot_index = 0;
+    bool has_conjunct_ctxs_by_slot = (_conjunct_ctxs_by_slot.size() != 0);
     for (const auto& it : _scanner_params.materialize_slots) {
         const std::string& name = it->col_name();
         if (known_column_names.find(name) == known_column_names.end()) continue;
-        if (_conjunct_ctxs_by_slot.find(it->id()) == _conjunct_ctxs_by_slot.end()) {
+        if (has_conjunct_ctxs_by_slot && _conjunct_ctxs_by_slot.find(it->id()) == _conjunct_ctxs_by_slot.end()) {
+            VLOG_FILE << "[ORC] lazy load field = " << it->col_name();
             _lazy_load_ctx.lazy_load_slots.emplace_back(it);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
         } else {
@@ -389,7 +391,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _orc_adapter->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector);
     }
     _orc_adapter->set_hive_column_names(_scanner_params.hive_column_names);
-    if (_lazy_load_ctx.lazy_load_slots.size() != 0) {
+    if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0) {
         _orc_adapter->set_lazy_load_context(&_lazy_load_ctx);
     }
     RETURN_IF_ERROR(_orc_adapter->init(std::move(reader)));
@@ -417,12 +419,19 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         (*chunk)->set_num_rows(0);
         return Status::OK();
     }
+
     {
+        StatusOr<ChunkPtr> ret;
         SCOPED_RAW_TIMER(&_stats.column_convert_ns);
-        StatusOr<ChunkPtr> ret = _orc_adapter->load_chunk();
+        if (!_orc_adapter->has_lazy_load_context()) {
+            ret = _orc_adapter->load_chunk();
+        } else {
+            ret = _orc_adapter->load_active_chunk();
+        }
         RETURN_IF_ERROR(ret);
         *chunk = std::move(ret.value());
     }
+
     ChunkPtr ck = *chunk;
     // important to add columns before evaluation
     // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
@@ -430,16 +439,42 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     _file_read_param.append_partition_column_to_chunk(chunk, ck->num_rows());
     // do stats before we filter rows which does not match.
     _stats.raw_rows_read += ck->num_rows();
-    for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
-        // do evaluation.
+
+    size_t chunk_size = ck->num_rows();
+    Filter filter(chunk_size, 1);
+    {
         SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
-        if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
-            continue;
+        for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
+            // do evaluation.
+            if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
+                continue;
+            }
+            chunk_size = ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &filter);
+            if (chunk_size == 0) {
+                break;
+            }
         }
-        ExecNode::eval_conjuncts(it.second, ck.get());
-        if (ck->num_rows() == 0) {
-            return Status::OK();
-        }
+    }
+    (*chunk)->set_num_rows(chunk_size);
+    if (!_orc_adapter->has_lazy_load_context()) {
+        return Status::OK();
+    }
+    // if has lazy load fields, skip it if chunk_size ==0
+    // read lazy chunk, do filtering, and merge with active chunk.
+    if (chunk_size == 0) {
+        _orc_adapter->lazy_skip_next();
+        return Status::OK();
+    }
+    {
+        SCOPED_RAW_TIMER(&_stats.column_read_ns);
+        _orc_adapter->lazy_read_next();
+    }
+    {
+        SCOPED_RAW_TIMER(&_stats.column_convert_ns);
+        StatusOr<ChunkPtr> ret = _orc_adapter->load_lazy_chunk();
+        RETURN_IF_ERROR(ret);
+        ret.value()->filter(filter);
+        (*chunk)->merge(ret.value().get());
     }
     return Status::OK();
 }
