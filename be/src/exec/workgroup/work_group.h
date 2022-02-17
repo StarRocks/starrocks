@@ -23,6 +23,7 @@ using seconds = std::chrono::seconds;
 using milliseconds = std::chrono::microseconds;
 using steady_clock = std::chrono::steady_clock;
 using std::chrono::duration_cast;
+
 class WorkGroup;
 class WorkGroupManager;
 using WorkGroupPtr = std::shared_ptr<WorkGroup>;
@@ -55,7 +56,6 @@ public:
     void close() override;
 };
 
-class WorkGroupManager;
 using WorkGroupType = TWorkGroupType::type;
 // WorkGroup is the unit of resource isolation, it has {CPU, Memory, Concurrency} quotas which limit the
 // resource usage of the queries belonging to the WorkGroup. Each user has be bound to a WorkGroup, when
@@ -80,6 +80,18 @@ public:
 
     const std::string& name() const { return _name; }
 
+    size_t cpu_limit() const { return _cpu_limit; }
+
+    int64_t vruntime_ns() const { return _vruntime_ns; }
+    int64_t real_runtime_ns() const { return _vruntime_ns * _cpu_limit; }
+    // Accumulate virtual runtime divided by _cpu_limit, so that the larger _cpu_limit,
+    // the more cpu time can be consumed proportionally.
+    void increment_real_runtime_ns(int64_t real_runtime_ns) { _vruntime_ns += real_runtime_ns / _cpu_limit; }
+    void set_vruntime_ns(int64_t vruntime_ns) { _vruntime_ns = vruntime_ns; }
+
+    double get_cpu_expected_use_ratio() const;
+    double get_cpu_actual_use_ratio() const;
+
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_VERSION = 0;
     bool try_offer_io_task(IoWorkGroupQueue::Task task);
@@ -90,7 +102,6 @@ public:
     // should be call while comsume chunk from calculate thread
     void decrease_chunk_num(int32_t chunk_num){};
 
-public:
     // increase num_driver when the driver is attached to the workgroup
     void increase_num_drivers() {
         ++_num_drivers;
@@ -98,6 +109,8 @@ public:
     }
     // decrease num_driver when the driver is detached from the workgroup
     void decrease_num_drivers() { --_num_drivers; }
+
+    int num_drivers() const { return _num_drivers; }
 
     // mark the workgroup is deleted, but at the present, it can not be removed from WorkGroupManager, because
     // 1. there exists pending drivers
@@ -139,6 +152,7 @@ private:
     std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
 
     pipeline::DriverQueuePtr _driver_queue = nullptr;
+    int64_t _vruntime_ns = 0;
 
     std::atomic<bool> _is_marked_del = false;
     std::atomic<size_t> _num_drivers = 0;
@@ -164,6 +178,10 @@ public:
     StatusOr<IoWorkGroupQueue::Task> pick_next_task_for_io(int dispatcher_id);
     bool try_offer_io_task(WorkGroupPtr wg, IoWorkGroupQueue::Task task);
 
+    size_t sum_cpu_limit() const { return _sum_cpu_limit; }
+    void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
+    int64_t sum_cpu_runtime_ns() const { return _sum_cpu_runtime_ns; }
+
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
     std::vector<TWorkGroup> list_all_workgroups();
@@ -181,6 +199,9 @@ private:
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;
     IoWorkGroupQueue _wg_io_queue;
+
+    std::atomic<size_t> _sum_cpu_limit = 0;
+    std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
 };
 
 class DefaultWorkGroupInitialization {

@@ -72,6 +72,18 @@ void WorkGroup::init() {
     _driver_queue = std::make_unique<starrocks::pipeline::QuerySharedDriverQueue>();
 }
 
+double WorkGroup::get_cpu_expected_use_ratio() const {
+    return static_cast<double>(_cpu_limit) / WorkGroupManager::instance()->sum_cpu_limit();
+}
+
+double WorkGroup::get_cpu_actual_use_ratio() const {
+    int64_t sum_cpu_runtime_ns = WorkGroupManager::instance()->sum_cpu_runtime_ns();
+    if (sum_cpu_runtime_ns == 0) {
+        return 0;
+    }
+    return static_cast<double>(real_runtime_ns()) / sum_cpu_runtime_ns;
+}
+
 WorkGroupManager::WorkGroupManager() {}
 WorkGroupManager::~WorkGroupManager() {}
 void WorkGroupManager::destroy() {
@@ -118,6 +130,7 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
         if (wg_it->second->is_removable()) {
             _wg_io_queue.remove(wg_it->second);
             _workgroups.erase(wg_it);
+            _sum_cpu_limit -= wg_it->second->cpu_limit();
             _workgroup_expired_versions.erase(it++);
         } else {
             ++it;
@@ -149,6 +162,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg) {
     }
     wg->init();
     _workgroups[unique_id] = wg;
+    _sum_cpu_limit += wg->cpu_limit();
 
     // old version exists, so mark the stale version delete
     if (_workgroup_versions.count(wg->id())) {
