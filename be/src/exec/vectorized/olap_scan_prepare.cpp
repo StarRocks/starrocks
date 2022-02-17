@@ -487,24 +487,26 @@ struct ColumnRangeBuilder {
             return nullptr;
         } else {
             // Treat tinyint and boolean as int
-            constexpr PrimitiveType real_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
-            using value_type = typename RunTimeTypeLimits<real_type>::value_type;
+            constexpr PrimitiveType limit_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
+            // Map TYPE_CHAR to TYPE_VARCHAR
+            constexpr PrimitiveType mapping_type = ptype == TYPE_CHAR ? TYPE_VARCHAR : ptype;
+            using value_type = typename RunTimeTypeLimits<limit_type>::value_type;
             using RangeType = ColumnValueRange<value_type>;
 
             const std::string& col_name = slot->col_name();
             RangeType full_range(col_name, ptype, RunTimeTypeLimits<ptype>::min_value(),
                                  RunTimeTypeLimits<ptype>::max_value());
-            if constexpr (pt_is_decimal<real_type>) {
+            if constexpr (pt_is_decimal<limit_type>) {
                 full_range.set_precision(slot->type().precision);
                 full_range.set_scale(slot->type().scale);
             }
             ColumnValueRangeType& v = LookupOrInsert(column_value_ranges, col_name, full_range);
             RangeType& range = boost::get<ColumnValueRange<value_type>>(v);
-            if constexpr (pt_is_decimal<real_type>) {
+            if constexpr (pt_is_decimal<limit_type>) {
                 range.set_precision(slot->type().precision);
                 range.set_scale(slot->type().scale);
             }
-            cm->normalize_predicate<ptype, value_type>(*slot, &range);
+            cm->normalize_predicate<mapping_type, value_type>(*slot, &range);
             return nullptr;
         }
     }
