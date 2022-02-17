@@ -350,11 +350,11 @@ std::string PipelineDriver::to_readable_string() const {
 
 starrocks::workgroup::WorkGroup* PipelineDriver::workgroup() {
     DCHECK(_workgroup != nullptr);
-    return _workgroup;
+    return _workgroup.get();
 }
 
-void PipelineDriver::set_workgroup(starrocks::workgroup::WorkGroup* wg) {
-    this->_workgroup = wg;
+void PipelineDriver::set_workgroup(workgroup::WorkGroupPtr wg) {
+    this->_workgroup = std::move(wg);
 }
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
