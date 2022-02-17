@@ -1952,7 +1952,7 @@ public class Coordinator {
                         }
                         params.setPipeline_dop(fragment.getPipelineDop());
 
-                        boolean enableResourceGroup = ConnectContext.get().getSessionVariable().isEnableResourceGroup();
+                        boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                         params.setEnable_resource_group(enableResourceGroup);
                         // TODO: set params.workgroup, when enableResourceGroup is true.
                     }
