@@ -103,7 +103,6 @@ public class ExpressionAnalyzer {
         private final ConnectContext session;
         private final Catalog catalog;
 
-
         public Visitor(AnalyzeState analyzeState, Catalog catalog, ConnectContext session) {
             this.analyzeState = analyzeState;
             this.session = session;
@@ -267,7 +266,7 @@ public class ExpressionAnalyzer {
                     // (both precision and and scale are -1, only used in function instance resolution), it's
                     // illegal for a function and expression to has a wildcard decimal type as its type in BE,
                     // so here substitute wildcard decimal types with real decimal types.
-                    Function newFn = new Function(fn.getFunctionName(), args, resultType, fn.hasVarArgs());
+                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, resultType, fn.hasVarArgs());
                     node.setType(resultType);
                     node.setFn(newFn);
                     return null;
@@ -603,7 +602,6 @@ public class ExpressionAnalyzer {
             }
             return fn;
         }
-
 
         @Override
         public Void visitGroupingFunctionCall(GroupingFunctionCallExpr node, Scope scope) {
