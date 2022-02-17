@@ -7,8 +7,12 @@
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
-GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool)
-        : _driver_queue(new QuerySharedDriverQueue()),
+
+GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group)
+        : _enable_resource_group(enable_resource_group),
+          _driver_queue(enable_resource_group
+                                ? std::unique_ptr<DriverQueue>(std::make_unique<DriverQueueWithWorkGroup>())
+                                : std::make_unique<QuerySharedDriverQueue>()),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
           _exec_state_reporter(new ExecStateReporter()) {}
@@ -46,13 +50,13 @@ void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* 
 }
 
 void GlobalDriverDispatcher::run() {
+    const int dispatcher_id = _next_id++;
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
 
-        size_t queue_index;
-        auto maybe_driver = this->_driver_queue->take(&queue_index);
+        auto maybe_driver = this->_driver_queue->take(dispatcher_id);
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
@@ -86,8 +90,8 @@ void GlobalDriverDispatcher::run() {
 
             // query context has ready drivers to run, so extend its lifetime.
             query_ctx->extend_lifetime();
-            auto status = driver->process(runtime_state);
-            this->_driver_queue->get_sub_queue(queue_index)->update_accu_time(driver);
+            auto status = driver->process(runtime_state, dispatcher_id);
+            this->_driver_queue->update_statistics(driver);
 
             if (!status.ok()) {
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
@@ -107,7 +111,7 @@ void GlobalDriverDispatcher::run() {
             switch (driver_state) {
             case READY:
             case RUNNING: {
-                this->_driver_queue->put_back(driver);
+                this->_driver_queue->put_back_from_dispatcher(driver);
                 break;
             }
             case FINISH:
@@ -214,4 +218,5 @@ void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ct
         pipeline_profile->add_info_string("ContainsAllPipelineDrivers", "false");
     }
 }
+
 } // namespace starrocks::pipeline
