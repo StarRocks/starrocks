@@ -34,6 +34,7 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
@@ -54,6 +55,7 @@ import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropAnalyzeJobStmt;
@@ -67,6 +69,7 @@ import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropUserStmt;
+import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.LoadStmt;
@@ -230,6 +233,12 @@ public class DdlExecutor {
             catalog.getAnalyzeManager().removeAnalyzeJob(((DropAnalyzeJobStmt) ddlStmt).getId());
         } else if (ddlStmt instanceof RefreshExternalTableStmt) {
             catalog.refreshExternalTable((RefreshExternalTableStmt) ddlStmt);
+        } else if (ddlStmt instanceof CreateWorkGroupStmt) {
+            // TODO: Not implemented
+        } else if (ddlStmt instanceof DropWorkGroupStmt) {
+            // TODO: Not implemented
+        } else if (ddlStmt instanceof AlterWorkGroupStmt) {
+            // TODO: Not implemented
         } else {
             throw new DdlException("Unknown statement.");
         }
