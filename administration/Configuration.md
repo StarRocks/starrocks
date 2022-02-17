@@ -209,6 +209,10 @@
 |max_runnings_transactions|2000|存储引擎支持的最大事务数|
 |tablet_map_shard_size|1|Tablet分组数|
 |enable_bitmap_union_disk_format_with_set | False |Bitmap新存储格式，可以优化bitmap_union性能|
+|aws_access_key_id|""|AWS Access Key Id|
+|aws_secret_access_key|""|AWS Secret Access Key|
+|aws_s3_endpoint|""|访问AWS S3或者是Aliyun OSS的Endpoint|
+|aws_s3_max_connection|102400|访问AWS S3的最大连接数量|
   
 ## Broker配置项
 
