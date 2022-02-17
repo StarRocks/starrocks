@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "env/env_hdfs.h"
+#include "env/env_s3.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exec/vectorized/hdfs_scanner_text.h"
 #include "exprs/expr.h"
@@ -13,6 +14,7 @@
 #include "exprs/vectorized/runtime_filter.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
+#include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -25,6 +27,32 @@
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::vectorized {
+
+// FIXME: this class is append-only, the memory usage will keep growing
+class OpenLimitAllocator {
+public:
+    OpenLimitAllocator() = default;
+    ~OpenLimitAllocator() = default;
+
+    OpenLimitAllocator(const OpenLimitAllocator&) = delete;
+    void operator=(const OpenLimitAllocator&) = delete;
+
+    static OpenLimitAllocator& instance() {
+        static OpenLimitAllocator obj;
+        return obj;
+    }
+
+    std::atomic<int32_t>* allocate(const std::string& key);
+
+private:
+    std::mutex _lock;
+    std::unordered_map<std::string, std::atomic<int32_t>*> _data;
+};
+
+std::atomic<int32_t>* OpenLimitAllocator::allocate(const std::string& key) {
+    std::lock_guard l(_lock);
+    return LookupOrInsertNew(&_data, key, 0);
+}
 
 HdfsScanNode::HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {}
@@ -204,8 +232,8 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = &_runtime_filter_collector;
     scanner_params.scan_ranges = hdfs_file_desc.splits;
-    scanner_params.fs = hdfs_file_desc.fs;
-    scanner_params.fs_handle_type = hdfs_file_desc.fs_handle_type;
+    scanner_params.env = hdfs_file_desc.env;
+    scanner_params.path = hdfs_file_desc.path;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -532,9 +560,6 @@ Status HdfsScanNode::close(RuntimeState* state) {
     }
 
     _close_pending_scanners();
-    for (auto* hdfsFile : _hdfs_files) {
-        hdfsFile->fs.reset();
-    }
 
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
@@ -637,41 +662,29 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         file_path /= scan_range.relative_path;
         native_file_path = file_path.native();
     }
-    std::string namenode;
-    RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &namenode));
-    bool usePread = starrocks::config::use_hdfs_pread || is_object_storage_path(namenode.c_str());
 
-    if (namenode.compare("default") == 0) {
-        // local file, current only for test
-        auto* env = Env::Default();
-        ASSIGN_OR_RETURN(auto file, env->new_random_access_file(native_file_path));
-        auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
-        hdfs_file_desc->fs = std::move(file);
-        hdfs_file_desc->fs_handle_type = HdfsFsHandle::Type::LOCAL;
-        hdfs_file_desc->partition_id = scan_range.partition_id;
-        hdfs_file_desc->scan_range_path = scan_range_path;
-        hdfs_file_desc->file_length = scan_range.file_length;
-        hdfs_file_desc->splits.emplace_back(&scan_range);
-        hdfs_file_desc->hdfs_file_format = scan_range.file_format;
-        hdfs_file_desc->open_limit = nullptr;
-        _hdfs_files.emplace_back(hdfs_file_desc);
+    Env* env = nullptr;
+    if (is_hdfs_path(native_file_path.c_str())) {
+        env = _pool->add(new EnvHdfs());
+    } else if (is_object_storage_path(native_file_path.c_str())) {
+        env = _pool->add(new EnvHdfs());
     } else {
-        HdfsFsHandle handle;
-        std::atomic<int32_t>* open_limit = nullptr;
-        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, &open_limit));
-        auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
-        size_t file_size = scan_range.file_length;
-        hdfs_file_desc->fs_handle_type = handle.type;
-        hdfs_file_desc->fs = create_random_access_hdfs_file(handle, native_file_path, file_size, usePread);
-        hdfs_file_desc->partition_id = scan_range.partition_id;
-        hdfs_file_desc->scan_range_path = scan_range_path;
-        hdfs_file_desc->file_length = scan_range.file_length;
-        hdfs_file_desc->splits.emplace_back(&scan_range);
-        hdfs_file_desc->hdfs_file_format = scan_range.file_format;
-        hdfs_file_desc->open_limit = open_limit;
-        _hdfs_files.emplace_back(hdfs_file_desc);
+        env = Env::Default();
     }
 
+    std::string nn;
+    RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &nn));
+
+    auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
+    hdfs_file_desc->env = env;
+    hdfs_file_desc->path = native_file_path;
+    hdfs_file_desc->partition_id = scan_range.partition_id;
+    hdfs_file_desc->scan_range_path = scan_range_path;
+    hdfs_file_desc->file_length = scan_range.file_length;
+    hdfs_file_desc->splits.emplace_back(&scan_range);
+    hdfs_file_desc->hdfs_file_format = scan_range.file_format;
+    hdfs_file_desc->open_limit = OpenLimitAllocator::instance().allocate(nn);
+    _hdfs_files.emplace_back(hdfs_file_desc);
     return Status::OK();
 }
 
