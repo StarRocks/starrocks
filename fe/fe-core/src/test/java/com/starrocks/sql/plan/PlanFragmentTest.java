@@ -5765,4 +5765,11 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: t1a | 12: sum | 12: sum"));
     }
+
+    @Test
+    public void testBitmapHashRewrite() throws Exception {
+        String sql = "select bitmap_hash(NULL)";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("bitmap_hash(NULL)"));
+    }
 }
