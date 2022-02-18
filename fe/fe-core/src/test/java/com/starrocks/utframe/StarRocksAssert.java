@@ -28,8 +28,13 @@ import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.ShowWorkGroupStmt;
+import com.starrocks.analysis.SqlParser;
+import com.starrocks.analysis.SqlScanner;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -37,15 +42,21 @@ import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DdlExecutor;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.StringUtils;
 import org.junit.Assert;
 
 import java.io.IOException;
+import java.io.StringReader;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class StarRocksAssert {
@@ -148,6 +159,34 @@ public class StarRocksAssert {
         Catalog.getCurrentCatalog().alterTable(alterTableStmt);
         checkAlterJob();
         return this;
+    }
+
+    public void executeWorkGroupDdlSql(String sql) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
+        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
+        SqlParser parser = new SqlParser(input);
+        com.starrocks.sql.analyzer.Analyzer analyzer =
+                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
+        List<StatementBase> statements = SqlParserUtils.getMultiStmts(parser);
+        for (StatementBase stmt : statements) {
+            analyzer.analyze(stmt);
+            Assert.assertTrue(stmt.getClass().getSimpleName().contains("WorkGroupStmt"));
+            DdlExecutor.execute(Catalog.getCurrentCatalog(), (DdlStmt) stmt);
+        }
+    }
+
+    public List<List<String>> executeWorkGroupShowSql(String sql) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
+        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
+        SqlParser parser = new SqlParser(input);
+        com.starrocks.sql.analyzer.Analyzer analyzer =
+                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
+        StatementBase statement = SqlParserUtils.getFirstStmt(parser);
+        analyzer.analyze(statement);
+        Assert.assertTrue(statement instanceof ShowWorkGroupStmt);
+        return Catalog.getCurrentCatalog().getWorkGroupMgr().showWorkGroup((ShowWorkGroupStmt) statement);
     }
 
     private void checkAlterJob() throws InterruptedException {
