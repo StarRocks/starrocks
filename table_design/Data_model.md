@@ -288,11 +288,11 @@ PROPERTIES("replication_num" = "3");
 
 注意:
 
-1. 主键列仅支持类型: boolean, tinyint, smallint, int, bigint, largeint, string/varchar, date, datetime, 不允许NULL
-2. 分区列(partition)、分桶列(bucket)必须在主键列中
-3. 和更新模型不同，主键模型允许为非主键列创建bitmap等索引，注意需要建表时指定
-4. 由于其列值可能会更新，主键模型目前还不支持rollup index和物化视图
-5. Alter table目前仅支持添加/删除列，还不支持更改列类型和添加删除索引等操作
+1. 主键列仅支持类型: boolean, tinyint, smallint, int, bigint, largeint, string/varchar, date, datetime, 不允许NULL。
+2. 分区列(partition)、分桶列(bucket)必须在主键列中。
+3. 和更新模型不同，主键模型允许为非主键列创建bitmap等索引，注意需要建表时指定。
+4. 由于其列值可能会更新，主键模型目前还不支持rollup index和物化视图。
+5. 暂不支持使用`ALTER TABLE`修改列类型。 `ALTER TABLE`的相关语法说明和示例，请参见[ALTER TABLE](~~https://docs.starrocks.com/zh-cn/main/sql-reference/sql-statements/data-definition/ALTER%20TABLE~~)。
 6. 在设计表时应尽量减少主键的列数和大小以节约内存，建议使用int/bigint等占用空间少的类型。暂时不建议使用varchar。建议提前根据表的行数和主键列类型来预估内存使用量，避免出现OOM。内存估算举例：  
   a. 假设表的主键为:  `dt date (4byte), id bigint(8byte) = 12byte`  
   b. 假设热数据有1000W行, 存储3副本  
