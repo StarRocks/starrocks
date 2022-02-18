@@ -7,6 +7,7 @@
 #include "exec/pipeline/crossjoin/cross_join_context.h"
 #include "exec/pipeline/crossjoin/cross_join_left_operator.h"
 #include "exec/pipeline/crossjoin/cross_join_right_sink_operator.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr_context.h"
@@ -551,7 +552,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // communication with CrossJoinLeft through shared_datas.
     auto* right_source = down_cast<SourceOperatorFactory*>(right_ops[0].get());
-    auto cross_join_context = std::make_shared<pipeline::CrossJoinContext>(right_source->degree_of_parallelism());
+    auto cross_join_context = std::make_shared<CrossJoinContext>(right_source->degree_of_parallelism());
 
     // cross_join_right as sink operator
     auto right_factory =
@@ -571,6 +572,9 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     left_ops.emplace_back(std::move(left_factory));
+    if (limit() != -1) {
+        left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
 
     // return as the following pipeline
     return left_ops;
