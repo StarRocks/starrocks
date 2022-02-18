@@ -267,14 +267,14 @@ Status PersistentIndex::load(PersistentIndexMetaPB& index_meta) {
     if (!index_meta.has_l0_meta()) {
         return Status::OK();
     }
-    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    int n = l0_meta->wals_size();
+    MutableIndexMetaPB l0_meta = index_meta.l0_meta();
+    int n = l0_meta.wals_size();
     // read wals and build l0
     for (int i = 0; i < n; i++) {
-        auto* wal_pb = l0_meta->mutable_wals(i);
-        auto* page_pb = wal_pb->mutable_data();
-        size_t offset = page_pb->offset();
-        size_t size = page_pb->size();
+        auto wal_pb = l0_meta.wals(i);
+        auto page_pb = wal_pb.data();
+        size_t offset = page_pb.offset();
+        size_t size = page_pb.size();
         _offset = offset + size;
         size_t kv_size = key_size + sizeof(IndexValue);
         size_t nums = size / kv_size;
