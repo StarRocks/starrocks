@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "runtime/mem_pool.h"
+#include "testutil/parallel_test.h"
 
 namespace starrocks {
 class PhmapTest : public testing::Test {};
@@ -43,7 +44,7 @@ public:
     void swap(CheckedAlloc& that) { using std::swap; }
 };
 
-TEST_F(PhmapTest, resize_fail) {
+PARALLEL_TEST(PhmapTest, resize_fail) {
     using phmap_hash = phmap::priv::hash_default_hash<int32_t>;
     using phmap_equal = phmap::priv::hash_default_eq<int32_t>;
     using phmap_alloc = CheckedAlloc<int32_t>;
@@ -84,7 +85,7 @@ private:
     int* _ptr = nullptr;
 };
 
-TEST_F(PhmapTest, lazy_emplace_fail) {
+PARALLEL_TEST(PhmapTest, lazy_emplace_fail) {
     using phmap_hash = phmap::priv::hash_default_hash<int32_t>;
     using phmap_equal = phmap::priv::hash_default_eq<int32_t>;
     using phmap_alloc = CheckedAlloc<int32_t>;
