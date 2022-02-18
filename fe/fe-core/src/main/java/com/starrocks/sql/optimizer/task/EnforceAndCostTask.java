@@ -257,7 +257,6 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         setPropertyWithCost(groupExpression, outputProperty, inputProperties);
         // groupExpression can satisfy the ANY type output property
         setPropertyWithCost(groupExpression, outputProperty, PhysicalPropertySet.EMPTY, inputProperties);
-
     }
 
     private void recordCostsAndEnforce(PhysicalPropertySet outputProperty, List<PhysicalPropertySet> inputProperties) {
@@ -404,9 +403,6 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         } else if (!satisfyDistributionProperty) {
             enforcedProperty = enforceSortAndDistribute(outputProperty, requiredProperty);
         }
-
-        groupExpression.getGroup().getBestExpression(enforcedProperty).
-                setOutputPropertySatisfyRequiredProperty(enforcedProperty, requiredProperty);
         return enforcedProperty;
     }
 
@@ -454,7 +450,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 insertEnforceExpression(enforcer, groupExpression.getGroup());
         curTotalCost += CostModel.calculateCost(enforcer);
 
-        enforcer.setPropertyWithCost(newOutputProperty, Lists.newArrayList(oldOutputProperty), curTotalCost);
+        if (enforcer.setPropertyWithCost(newOutputProperty, Lists.newArrayList(oldOutputProperty), curTotalCost)) {
+            enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, context.getRequiredProperty());
+        }
         groupExpression.getGroup().setBestExpression(enforcer, curTotalCost, newOutputProperty);
         if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
             enforcer.addValidOutputInputProperties(newOutputProperty, Lists.newArrayList(PhysicalPropertySet.EMPTY));
