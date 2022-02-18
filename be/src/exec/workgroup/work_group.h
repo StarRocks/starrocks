@@ -41,6 +41,8 @@ public:
 
 class IoWorkGroupQueue final : public WorkGroupQueue {
 public:
+    using Task = std::function<void(int)>;
+
     IoWorkGroupQueue() = default;
     ~IoWorkGroupQueue() override = default;
 
@@ -49,7 +51,7 @@ public:
     WorkGroupPtr pick_next() override { return nullptr; };
 
     StatusOr<PriorityThreadPool::Task> pick_next_task();
-    bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
+    bool try_offer_io_task(WorkGroupPtr wg, Task task);
     void close() override;
 };
 
@@ -80,7 +82,13 @@ public:
 
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_VERSION = 0;
-    bool try_offer_io_task(const PriorityThreadPool::Task& task);
+    bool try_offer_io_task(IoWorkGroupQueue::Task task);
+
+    // should be call read chunk from disk
+    void increase_chunk_num(int32_t chunk_num){};
+
+    // should be call while comsume chunk from calculate thread
+    void decrease_chunk_num(int32_t chunk_num){};
 
 public:
     // increase num_driver when the driver is attached to the workgroup
@@ -153,12 +161,14 @@ public:
     void close();
 
     // get next workgroup for io
-    StatusOr<PriorityThreadPool::Task> pick_next_task_for_io();
-    bool try_offer_io_task(WorkGroupPtr wg, const PriorityThreadPool::Task& task);
+    StatusOr<IoWorkGroupQueue::Task> pick_next_task_for_io(int dispatcher_id);
+    bool try_offer_io_task(WorkGroupPtr wg, IoWorkGroupQueue::Task task);
 
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
     std::vector<TWorkGroup> list_all_workgroups();
+
+    bool should_yield_io_dispatcher(int dispatcher_id, WorkGroupPtr running_wg);
 
 private:
     // {create, alter,delete}_workgroup_unlocked is used to replay WorkGroupOps.

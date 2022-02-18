@@ -25,6 +25,7 @@
 #include <memory>
 
 #include "common/status.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "storage/options.h"
 
 namespace starrocks {
@@ -138,6 +139,8 @@ public:
     LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
 
+    starrocks::workgroup::ScanWorker* scan_worker() { return _scan_worker; }
+
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
     void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
     StorageEngine* storage_engine() { return _storage_engine; }
@@ -208,6 +211,8 @@ private:
     starrocks::pipeline::DriverDispatcher* _driver_dispatcher = nullptr;
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
+
+    starrocks::workgroup::ScanWorker* _scan_worker = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;
