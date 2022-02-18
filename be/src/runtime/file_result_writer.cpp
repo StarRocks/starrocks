@@ -44,7 +44,8 @@ FileResultWriter::FileResultWriter(const ResultFileOptions* file_opts,
         _env = Env::Default();
     } else {
         // TODO(@c1oudman) Do you only need first element of broker addresses?
-        _env = new EnvBroker(*_file_opts->broker_addresses.begin(), _file_opts->broker_properties);
+        _env = new EnvBroker(*_file_opts->broker_addresses.begin(), _file_opts->broker_properties,
+                             config::broker_write_timeout_seconds * 1000);
         _owned_env.reset(_env);
     }
 }
@@ -113,7 +114,7 @@ std::string FileResultWriter::_file_format_to_name() {
 
 Status FileResultWriter::append_chunk(vectorized::Chunk* chunk) {
     assert(_file_builder != nullptr);
-    _file_builder->add_chunk(chunk);
+    RETURN_IF_ERROR(_file_builder->add_chunk(chunk));
 
     // split file if exceed limit
     RETURN_IF_ERROR(_create_new_file_if_exceed_size());
