@@ -64,7 +64,8 @@ public:
     // to decode min and max value from column stats.
     static Status decode_min_max_value(SlotDescriptor* slot, const orc::proto::ColumnStatistics&, ColumnPtr min_col,
                                        ColumnPtr max_col);
-    Status apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache);
+    Status apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache,
+                                        Filter* filter);
     size_t get_cvb_size();
     int64_t tzoffset_in_seconds() { return _tzoffset_in_seconds; }
     const cctz::time_zone& tzinfo() { return _tzinfo; }
@@ -107,7 +108,7 @@ public:
     StatusOr<ChunkPtr> load_active_chunk();
     void lazy_read_next();
     void lazy_skip_next();
-    StatusOr<ChunkPtr> load_lazy_chunk();
+    StatusOr<ChunkPtr> load_lazy_chunk(Filter* filter, size_t chunk_size);
 
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);

@@ -411,7 +411,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     {
         SCOPED_RAW_TIMER(&_stats.column_read_ns);
         RETURN_IF_ERROR(_orc_adapter->read_next());
-        RETURN_IF_ERROR(_orc_adapter->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache));
+        RETURN_IF_ERROR(_orc_adapter->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
+                                                                   &_chunk_filter));
     }
     // if there is no rows returned from orc, we just returned.
     // but we have to set num rows to 0, otherwise user may see old data.
@@ -441,7 +442,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     _stats.raw_rows_read += ck->num_rows();
 
     size_t chunk_size = ck->num_rows();
-    Filter filter(chunk_size, 1);
+    Filter& filter = _chunk_filter;
+    filter.assign(chunk_size, 1);
     {
         SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
         for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
@@ -474,9 +476,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     }
     {
         SCOPED_RAW_TIMER(&_stats.column_convert_ns);
-        StatusOr<ChunkPtr> ret = _orc_adapter->load_lazy_chunk();
+        StatusOr<ChunkPtr> ret = _orc_adapter->load_lazy_chunk(&filter, chunk_size);
         RETURN_IF_ERROR(ret);
-        ret.value()->filter(filter);
         (*chunk)->merge(ret.value().get());
     }
     return Status::OK();

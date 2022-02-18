@@ -1453,7 +1453,10 @@ StatusOr<ChunkPtr> OrcScannerAdapter::load_active_chunk() {
     return ret;
 }
 
-StatusOr<ChunkPtr> OrcScannerAdapter::load_lazy_chunk() {
+StatusOr<ChunkPtr> OrcScannerAdapter::load_lazy_chunk(Filter* filter, size_t chunk_size) {
+    if (chunk_size != filter->size()) {
+        _batch->filter(filter->data(), filter->size(), chunk_size);
+    }
     ChunkPtr ptr = _create_chunk(_lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
     RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices));
     ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
@@ -2078,13 +2081,13 @@ Status OrcScannerAdapter::decode_min_max_value(SlotDescriptor* slot, const orc::
 }
 
 Status OrcScannerAdapter::apply_dict_filter_eval_cache(
-        const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache) {
+        const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache, Filter* filter) {
     if (dict_filter_eval_cache.size() == 0) {
         return Status::OK();
     }
 
     const uint32_t size = _batch->numElements;
-    Filter filter(size, 1);
+    filter->assign(size, 1);
     const auto& batch_vec = down_cast<orc::StructVectorBatch*>(_batch.get())->fields;
     bool filter_all = false;
 
@@ -2103,7 +2106,7 @@ Status OrcScannerAdapter::apply_dict_filter_eval_cache(
         }
 
         bool all_zero = false;
-        ColumnHelper::merge_two_filters(data_filter, &filter, &all_zero);
+        ColumnHelper::merge_two_filters(data_filter, filter, &all_zero);
         if (all_zero) {
             filter_all = true;
             break;
@@ -2111,9 +2114,9 @@ Status OrcScannerAdapter::apply_dict_filter_eval_cache(
     }
 
     if (!filter_all) {
-        uint32_t one_count = filter.size() - SIMD::count_zero(filter);
-        if (one_count != filter.size()) {
-            _batch->filter(filter.data(), filter.size(), one_count);
+        uint32_t one_count = filter->size() - SIMD::count_zero(*filter);
+        if (one_count != filter->size()) {
+            _batch->filter(filter->data(), filter->size(), one_count);
         }
     } else {
         _batch->numElements = 0;
