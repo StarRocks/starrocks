@@ -45,8 +45,6 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
-    void set_workgroup(starrocks::workgroup::WorkGroupPtr wg);
-
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
 private:

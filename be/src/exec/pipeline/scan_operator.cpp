@@ -254,10 +254,6 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     return Status::OK();
 }
 
-void ScanOperator::set_workgroup(workgroup::WorkGroupPtr wg) {
-    _workgroup = std::move(wg);
-}
-
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
