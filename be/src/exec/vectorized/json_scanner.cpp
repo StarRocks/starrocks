@@ -530,11 +530,17 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             if (slot_descs[i] == nullptr) {
                 continue;
             }
+            const char* column_name = slot_descs[i]->col_name().c_str();
 
             // The columns in JsonReader's chunk are all in NullableColumn type;
             auto column = down_cast<NullableColumn*>(chunk->get_column_by_slot_id(slot_descs[i]->id()).get());
             if (i >= jsonpath_size) {
-                column->append_nulls(1);
+                if (strcmp(column_name, "__op") == 0) {
+                    // special treatment for __op column, fill default value '0' rather than null
+                    column->append_strings(std::vector{Slice{"0"}});
+                } else {
+                    column->append_nulls(1);
+                }
                 continue;
             }
 
@@ -548,7 +554,12 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                 RETURN_IF_ERROR(add_nullable_column(column, slot_descs[i]->type(), slot_descs[i]->col_name(), row,
                                                     !_strict_mode));
             } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], val)) {
-                column->append_nulls(1);
+                if (strcmp(column_name, "__op") == 0) {
+                    // special treatment for __op column, fill default value '0' rather than null
+                    column->append_strings(std::vector{Slice{"0"}});
+                } else {
+                    column->append_nulls(1);
+                }
             } else {
                 RETURN_IF_ERROR(_construct_column(val, column, slot_descs[i]->type(), slot_descs[i]->col_name()));
             }

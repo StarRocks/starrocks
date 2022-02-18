@@ -68,7 +68,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("colocate: false"));
-        Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (REPLICATED)"));
+        Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (BROADCAST)"));
 
         sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1 and colocate1.k2=colocate2.k2;";
         plan = getFragmentPlan(sql);
@@ -530,7 +530,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testWindowLimitPushdown() throws Exception {
         String sql = "select lag(v1, 1,1) OVER () from t0 limit 1";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING\n" +
                 "  |  limit: 1"));
     }
@@ -1153,7 +1152,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testWindowFunctionTest() throws Exception {
         String sql = "select sum(id_decimal - ifnull(id_decimal, 0)) over (partition by t1c) from test_all_type";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("decimal_literal:TDecimalLiteral(value:0)"));
+        Assert.assertTrue(plan.contains("decimal_literal:TDecimalLiteral(value:0, integer_value:00 00 00 00 00 00 00 00)"));
     }
 
     @Test
@@ -4016,7 +4015,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  0:OlapScanNode"));
     }
 
-    @Test
+    // todo(ywb) disable replicate join temporarily
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select * from join1 join join2 on join1.id = join2.id;";
@@ -4068,7 +4067,7 @@ public class PlanFragmentTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 
-    @Test
+    // todo(ywb) disable replicate join temporarily
     public void testReplicationJoinWithEmptyNode() throws Exception {
         // check replicate join without exception
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
@@ -4840,7 +4839,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "WHERE l1.tc < s0.t1c";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
@@ -5348,7 +5346,7 @@ public class PlanFragmentTest extends PlanTestBase {
                         "and cast(cast(id_datetime as date) as datetime) <= '1970-01-01 18:00:00'";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "CAST(CAST(8: id_datetime AS DATE) AS DATETIME) >= '1970-01-01 12:00:00', CAST(CAST(8: id_datetime AS DATE) AS DATETIME) <= '1970-01-01 18:00:00'"));
+                "CAST(8: id_datetime AS DATE) >= '1970-01-02', CAST(8: id_datetime AS DATE) <= '1970-01-01'"));
     }
 
     @Test
@@ -5372,7 +5370,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEqStringCast() throws Exception {
         String sql = "select 'a' = v1 from t0";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) = 'a'\n"));
     }
 
@@ -5436,7 +5433,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEqDoubleCast() throws Exception {
         String sql = "select 'a' = t1e from test_all_type";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("CAST(5: t1e AS DOUBLE) = CAST('a' AS DOUBLE)\n"));
     }
 
@@ -5644,7 +5640,8 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
 
-        sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank  FROM t0 group BY v1, v2";
+        sql =
+                "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS rank  FROM t0 group BY v1, v2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
     }
@@ -5714,5 +5711,58 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |----2:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode"));
+    }
+
+    @Test
+    public void testUnionDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(2);
+        String sql = "select * from t0 union all select * from t0;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       limit: 2\n" +
+                "  |    \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 2"));
+    }
+
+    @Test
+    public void testValuesDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(1);
+        String sql = "select * from (values (1,2,3), (4,5,6)) x";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1 | 2 | 3\n" +
+                "         4 | 5 | 6\n" +
+                "     limit: 1"));
+    }
+
+    @Test
+    public void testUnionSubqueryDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(2);
+        String sql = "select * from (select * from t0 union all select * from t0) xx limit 10;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       limit: 10\n" +
+                "  |    \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 10"));
+    }
+
+    @Test
+    public void testArithmeticDecimalReuse() throws Exception {
+        String sql = "select t1a, sum(id_decimal * t1f), sum(id_decimal * t1f)" +
+                "from test_all_type group by t1a";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: t1a | 12: sum | 12: sum"));
     }
 }

@@ -15,11 +15,11 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "util/phmap/phmap.h"
+
 namespace starrocks {
-namespace workgroup {
-class WorkGroup;
-}
+
 namespace pipeline {
 
 class PipelineDriver;
@@ -338,9 +338,9 @@ public:
 
     std::string to_readable_string() const;
 
-    starrocks::workgroup::WorkGroup* workgroup();
+    workgroup::WorkGroup* workgroup();
 
-    void set_workgroup(starrocks::workgroup::WorkGroup* wg);
+    void set_workgroup(workgroup::WorkGroupPtr wg);
 
 private:
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
@@ -385,7 +385,7 @@ private:
 
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
-    starrocks::workgroup::WorkGroup* _workgroup = nullptr;
+    workgroup::WorkGroupPtr _workgroup = nullptr;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

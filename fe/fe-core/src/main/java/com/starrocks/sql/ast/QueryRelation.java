@@ -24,8 +24,6 @@ public abstract class QueryRelation extends Relation {
     protected LimitElement limit;
     private final List<CTERelation> cteRelations = new ArrayList<>();
 
-
-
     public QueryRelation(List<String> columnOutputNames) {
         this.columnOutputNames = columnOutputNames;
     }
@@ -46,8 +44,16 @@ public abstract class QueryRelation extends Relation {
         return sortClause;
     }
 
-    public void setLimitElement(LimitElement limit) {
+    public LimitElement getLimit() {
+        return limit;
+    }
+
+    public void setLimit(LimitElement limit) {
         this.limit = limit;
+    }
+
+    public boolean hasLimit() {
+        return limit != null;
     }
 
     public void addCTERelation(CTERelation cteRelation) {

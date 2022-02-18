@@ -492,38 +492,36 @@ class PosixEnv : public Env {
 public:
     ~PosixEnv() override = default;
 
-    Status new_sequential_file(const string& fname, std::unique_ptr<SequentialFile>* result) override {
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const string& fname) override {
         FILE* f;
         POINTER_RETRY_ON_EINTR(f, fopen(fname.c_str(), "r"));
         if (f == nullptr) {
             return io_error(fname, errno);
         }
-        *result = std::make_unique<PosixSequentialFile>(fname, f);
-        return Status::OK();
+        return std::make_unique<PosixSequentialFile>(fname, f);
     }
 
     // get a RandomAccessFile pointer without file cache
-    Status new_random_access_file(const std::string& fname, std::unique_ptr<RandomAccessFile>* result) override {
-        return new_random_access_file(RandomAccessFileOptions(), fname, result);
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& fname) override {
+        return new_random_access_file(RandomAccessFileOptions(), fname);
     }
 
-    Status new_random_access_file(const RandomAccessFileOptions& opts, const std::string& fname,
-                                  std::unique_ptr<RandomAccessFile>* result) override {
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& fname) override {
         int fd;
         RETRY_ON_EINTR(fd, open(fname.c_str(), O_RDONLY));
         if (fd < 0) {
             return io_error(fname, errno);
         }
-        *result = std::make_unique<PosixRandomAccessFile>(fname, fd);
-        return Status::OK();
+        return std::make_unique<PosixRandomAccessFile>(fname, fd);
     }
 
-    Status new_writable_file(const string& fname, std::unique_ptr<WritableFile>* result) override {
-        return new_writable_file(WritableFileOptions(), fname, result);
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const string& fname) override {
+        return new_writable_file(WritableFileOptions(), fname);
     }
 
-    Status new_writable_file(const WritableFileOptions& opts, const string& fname,
-                             std::unique_ptr<WritableFile>* result) override {
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
+                                                              const string& fname) override {
         int fd;
         RETURN_IF_ERROR(do_open(fname, opts.mode, &fd));
 
@@ -531,20 +529,18 @@ public:
         if (opts.mode == MUST_EXIST) {
             RETURN_IF_ERROR(get_file_size(fname, &file_size));
         }
-        *result = std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
-        return Status::OK();
+        return std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
     }
 
-    Status new_random_rw_file(const string& fname, std::unique_ptr<RandomRWFile>* result) override {
-        return new_random_rw_file(RandomRWFileOptions(), fname, result);
+    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const string& fname) override {
+        return new_random_rw_file(RandomRWFileOptions(), fname);
     }
 
-    Status new_random_rw_file(const RandomRWFileOptions& opts, const string& fname,
-                              std::unique_ptr<RandomRWFile>* result) override {
+    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
+                                                               const string& fname) override {
         int fd;
         RETURN_IF_ERROR(do_open(fname, opts.mode, &fd));
-        *result = std::make_unique<PosixRandomRWFile>(fname, fd, opts.sync_on_close);
-        return Status::OK();
+        return std::make_unique<PosixRandomRWFile>(fname, fd, opts.sync_on_close);
     }
 
     Status path_exists(const std::string& fname) override {

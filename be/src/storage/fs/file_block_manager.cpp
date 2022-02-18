@@ -401,8 +401,7 @@ Status FileBlockManager::open_block(const std::string& path, std::unique_ptr<Rea
     std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle(new OpenedFileHandle<RandomAccessFile>());
     bool found = _file_cache->lookup(path, file_handle.get());
     if (!found) {
-        std::unique_ptr<RandomAccessFile> file;
-        RETURN_IF_ERROR(_env->new_random_access_file(path, &file));
+        ASSIGN_OR_RETURN(auto file, _env->new_random_access_file(path));
         _file_cache->insert(path, file.release(), file_handle.get());
     }
 

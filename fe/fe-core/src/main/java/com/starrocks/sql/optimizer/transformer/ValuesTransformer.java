@@ -32,15 +32,16 @@ import java.util.Map;
 public class ValuesTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
-    Map<Integer, ExpressionMapping> cteContex;
+    Map<Integer, ExpressionMapping> cteContext;
 
     private final BitSet subqueriesIndex = new BitSet();
     private final List<ColumnRefOperator> outputColumns = Lists.newArrayList();
 
-    ValuesTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, Map<Integer, ExpressionMapping> cteContex) {
+    ValuesTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
+                      Map<Integer, ExpressionMapping> cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
-        this.cteContex = cteContex;
+        this.cteContext = cteContext;
     }
 
     public LogicalPlan plan(ValuesRelation node) {
@@ -114,6 +115,10 @@ public class ValuesTransformer {
             values.add(valuesRow);
         }
 
+        if (node.hasLimit()) {
+            values = values.subList((int) node.getLimit().getOffset(),
+                    (int) (node.getLimit().getOffset() + node.getLimit().getLimit()));
+        }
         return new OptExprBuilder(new LogicalValuesOperator(valuesOutputColumns, values), Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), valuesOutputColumns));
     }
@@ -134,7 +139,7 @@ public class ValuesTransformer {
             }
 
             Expr output = node.getOutputExpr().get(i);
-            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, output, cteContex);
+            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, output, cteContext);
             ColumnRefOperator columnRef = SqlToScalarOperatorTranslator
                     .findOrCreateColumnRefForExpr(node.getOutputExpr().get(i), subOpt.getExpressionMapping(),
                             projections, columnRefFactory);

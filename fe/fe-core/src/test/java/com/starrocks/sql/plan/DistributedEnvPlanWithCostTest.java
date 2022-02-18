@@ -1100,7 +1100,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "and cast(id_date as datetime) <= '1970-01-01'";
         plan = getFragmentPlan(sql);
         // check not prune tablet
-        Assert.assertTrue(plan.contains("tabletRatio=3/3"));
+        Assert.assertTrue(plan.contains("tabletRatio=1/3"));
 
         sql = "select * from test_all_type_distributed_by_date where cast(id_date as date) >= '1970-01-01' " +
                 "and cast(id_date as date) <= '1970-01-01'";
@@ -1120,6 +1120,33 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "and cast(id_date as datetime) < '1992-01-01 12:00:00'";
         plan = getFragmentPlan(sql);
         // check not prune partition
-        Assert.assertTrue(plan.contains("partitions=3/3"));
+        Assert.assertTrue(plan.contains("partitions=2/3"));
+    }
+
+    @Test
+    public void testTimestampPartitionPruneOptimize() throws Exception {
+        String sql =
+                "select * from test_partition_prune_optimize_by_date where dt >= timestamp('2021-12-27 00:00:00.123456') " +
+                        "and dt <= timestamp('2021-12-29 00:00:00.123456')";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("partitions=2/4"));
+
+        sql =
+                "select * from test_partition_prune_optimize_by_date where dt > timestamp('2021-12-27 00:00:00.123456') " +
+                        "and dt < timestamp('2021-12-29 00:00:00.123456')";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("partitions=2/4"));
+
+        sql =
+                "select * from test_partition_prune_optimize_by_date where dt >= timestamp('2021-12-27 00:00:00.0') " +
+                        "and dt <= timestamp('2021-12-29 00:00:00.0')";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("partitions=3/4"));
+
+        sql =
+                "select * from test_partition_prune_optimize_by_date where dt > timestamp('2021-12-27 00:00:00.0') " +
+                        "and dt < timestamp('2021-12-29 00:00:00.0')";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("partitions=1/4"));
     }
 }

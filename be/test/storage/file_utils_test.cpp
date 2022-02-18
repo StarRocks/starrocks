@@ -65,8 +65,7 @@ void save_string_file(const std::filesystem::path& p, const std::string& str) {
 
 TEST_F(FileUtilsTest, TestCopyFile) {
     std::string src_file_name = _s_test_data_path + "/abcd12345.txt";
-    std::unique_ptr<WritableFile> src_file;
-    ASSERT_TRUE(Env::Default()->new_writable_file(src_file_name, &src_file).ok());
+    std::unique_ptr<WritableFile> src_file = *Env::Default()->new_writable_file(src_file_name);
 
     char large_bytes2[(1 << 12)];
     memset(large_bytes2, 0, sizeof(char) * ((1 << 12)));

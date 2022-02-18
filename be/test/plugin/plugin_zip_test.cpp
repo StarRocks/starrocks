@@ -101,8 +101,7 @@ TEST_F(PluginZipTest, local_normal) {
     ASSERT_TRUE(FileUtils::check_exist(_path + "/plugin_test/target/test"));
     ASSERT_TRUE(FileUtils::check_exist(_path + "/plugin_test/target/test/test.txt"));
 
-    std::unique_ptr<RandomAccessFile> file;
-    Env::Default()->new_random_access_file(_path + "/plugin_test/target/test/test.txt", &file);
+    auto file = *Env::Default()->new_random_access_file(_path + "/plugin_test/target/test/test.txt");
 
     char f[11];
     Slice s(f, 11);
@@ -124,8 +123,7 @@ TEST_F(PluginZipTest, http_normal) {
     ASSERT_TRUE(FileUtils::check_exist(_path + "/plugin_test/target/test"));
     ASSERT_TRUE(FileUtils::check_exist(_path + "/plugin_test/target/test/test.txt"));
 
-    std::unique_ptr<RandomAccessFile> file;
-    Env::Default()->new_random_access_file(_path + "/plugin_test/target/test/test.txt", &file);
+    auto file = *Env::Default()->new_random_access_file(_path + "/plugin_test/target/test/test.txt");
 
     char f[11];
     Slice s(f, 11);

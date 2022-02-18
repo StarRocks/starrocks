@@ -2,18 +2,23 @@
 
 package com.starrocks.external.iceberg;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.external.hive.HdfsFileFormat;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
-import org.apache.iceberg.expressions.UnboundPredicate;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Expressions;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class IcebergUtil {
@@ -94,17 +99,19 @@ public class IcebergUtil {
      */
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
-                                         List<UnboundPredicate> icebergPredicates,
+                                         List<Expression> icebergPredicates,
                                          boolean refresh) {
         if (refresh) {
             refreshTable(table);
         }
 
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
-        for (UnboundPredicate predicate : icebergPredicates) {
-            tableScan = tableScan.filter(predicate);
+        Expression filterExpressions = Expressions.alwaysTrue();
+        if (!icebergPredicates.isEmpty()) {
+            filterExpressions = icebergPredicates.stream().reduce(Expressions.alwaysTrue(), Expressions::and);
         }
-        return tableScan;
+
+        return tableScan.filter(filterExpressions);
     }
 
     private static void refreshTable(Table table) {
@@ -126,8 +133,25 @@ public class IcebergUtil {
             throw new StarRocksIcebergException(String.format("No such table  %s", table.name()));
         } catch (IllegalStateException ei) {
             throw new StarRocksIcebergException(String.format("Refresh table %s with failure, the table under hood" +
-                    " may have been dropped. You should re-create the external table. cause %s",
+                            " may have been dropped. You should re-create the external table. cause %s",
                     table.name(), ei.getMessage()));
         }
+    }
+
+    /**
+     *
+     * @param partitionSpec
+     * @return
+     */
+    public static Map<PartitionField, Integer> getIdentityPartitions(PartitionSpec partitionSpec) {
+        // TODO: expose transform information in Iceberg library
+        ImmutableMap.Builder<PartitionField, Integer> columns = ImmutableMap.builder();
+        for (int i = 0; i < partitionSpec.fields().size(); i++) {
+            PartitionField field = partitionSpec.fields().get(i);
+            if (field.transform().toString().equals("identity")) {
+                columns.put(field, i);
+            }
+        }
+        return columns.build();
     }
 }

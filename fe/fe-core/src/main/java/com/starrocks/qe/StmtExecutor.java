@@ -26,13 +26,16 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
+import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.EnterStmt;
 import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
@@ -44,6 +47,7 @@ import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
@@ -993,8 +997,13 @@ public class StmtExecutor {
     }
 
     private boolean supportedByNewPlanner(StatementBase statement, ConnectContext context) {
-        return statement instanceof QueryStmt || statement instanceof InsertStmt ||
-                statement instanceof CreateTableAsSelectStmt;
+        return statement instanceof QueryStmt
+                || statement instanceof InsertStmt
+                || statement instanceof CreateTableAsSelectStmt
+                || statement instanceof CreateWorkGroupStmt
+                || statement instanceof AlterWorkGroupStmt
+                || statement instanceof DropWorkGroupStmt
+                || statement instanceof ShowWorkGroupStmt;
     }
 
     public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {
@@ -1102,8 +1111,8 @@ public class StmtExecutor {
             }
 
             if (loadedRows == 0 && filteredRows == 0) {
-                if (stmt.getTargetTable() instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable) (stmt.getTargetTable());
+                if (targetTable instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                     Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
@@ -1140,9 +1149,9 @@ public class StmtExecutor {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                     // collect table-level metrics
-                    if (null != stmt.getTargetTable()) {
+                    if (null != targetTable) {
                         TableMetricsEntity entity =
-                                TableMetricsRegistry.getInstance().getMetricsEntity(stmt.getTargetTable().getId());
+                                TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
                         entity.counterInsertLoadFinishedTotal.increase(1L);
                         entity.counterInsertLoadRowsTotal.increase(loadedRows);
                         entity.counterInsertLoadBytesTotal
@@ -1156,8 +1165,8 @@ public class StmtExecutor {
             // if any throwable being thrown during insert operation, first we should abort this txn
             LOG.warn("handle insert stmt fail: {}", label, t);
             try {
-                if (stmt.getTargetTable() instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable) (stmt.getTargetTable());
+                if (targetTable instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                     Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
                             externalTable.getSourceTableDbId(), stmt.getTransactionId(),
                             externalTable.getSourceTableHost(),

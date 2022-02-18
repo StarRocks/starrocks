@@ -1,6 +1,7 @@
 package com.starrocks.udf;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -83,7 +84,7 @@ public class UDFHelper {
 
     public static Object[] createBoxedIntegerArray(int numRows, ByteBuffer nullBuffer, ByteBuffer dataBuffer) {
         int[] dataArr = new int[numRows];
-        dataBuffer.asIntBuffer().get(dataArr);
+        dataBuffer.order(ByteOrder.LITTLE_ENDIAN).asIntBuffer().get(dataArr);
         if (nullBuffer != null) {
             byte[] nullArr = getNullData(nullBuffer, numRows);
             Integer[] result = new Integer[numRows];
@@ -144,7 +145,7 @@ public class UDFHelper {
 
     public static Object[] createBoxedShortArray(int numRows, ByteBuffer nullBuffer, ByteBuffer dataBuffer) {
         short[] dataArr = new short[numRows];
-        dataBuffer.asShortBuffer().get(dataArr);
+        dataBuffer.order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(dataArr);
         if (nullBuffer != null) {
             byte[] nullArr = new byte[numRows];
             nullBuffer.get(nullArr);
@@ -166,7 +167,7 @@ public class UDFHelper {
 
     public static Object[] createBoxedLongArray(int numRows, ByteBuffer nullBuffer, ByteBuffer dataBuffer) {
         long[] dataArr = new long[numRows];
-        dataBuffer.asLongBuffer().get(dataArr);
+        dataBuffer.order(ByteOrder.LITTLE_ENDIAN).asLongBuffer().get(dataArr);
         if (nullBuffer != null) {
             byte[] nullArr = new byte[numRows];
             nullBuffer.get(nullArr);
@@ -184,7 +185,7 @@ public class UDFHelper {
 
     public static Object[] createBoxedFloatArray(int numRows, ByteBuffer nullBuffer, ByteBuffer dataBuffer) {
         float[] dataArr = new float[numRows];
-        dataBuffer.asFloatBuffer().get(dataArr);
+        dataBuffer.order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(dataArr);
         if (nullBuffer != null) {
             byte[] nullArr = new byte[numRows];
             nullBuffer.get(nullArr);
@@ -206,7 +207,7 @@ public class UDFHelper {
 
     public static Object[] createBoxedDoubleArray(int numRows, ByteBuffer nullBuffer, ByteBuffer dataBuffer) {
         double[] dataArr = new double[numRows];
-        dataBuffer.asDoubleBuffer().get(dataArr);
+        dataBuffer.order(ByteOrder.LITTLE_ENDIAN).asDoubleBuffer().get(dataArr);
         if (nullBuffer != null) {
             byte[] nullBytes = getNullData(nullBuffer, numRows);
             Double[] res = new Double[numRows];
