@@ -31,7 +31,8 @@ set(EXEC_FILES
     env_util.cpp
     env_stream_pipe.cpp
     env_broker.cpp
-    env_memory.cpp)
+    env_memory.cpp
+    env_s3.cpp)
 
 if (WITH_HDFS)
     set(EXEC_FILES ${EXEC_FILES}

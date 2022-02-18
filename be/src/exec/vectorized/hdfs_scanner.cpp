@@ -106,7 +106,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     } else if (status.is_end_of_file()) {
         // do nothing.
     } else {
-        LOG(ERROR) << "failed to read file: " << _scanner_params.fs->file_name();
+        LOG(ERROR) << "failed to read file: " << _scanner_params.path;
     }
     return status;
 }
@@ -115,20 +115,16 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_is_open) {
         return Status::OK();
     }
-#ifndef BE_TEST
-    if (_scanner_params.fs_handle_type == HdfsFsHandle::Type::HDFS) {
-        auto* file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get());
-        RETURN_IF_ERROR(file->open());
-    }
-#endif
+    CHECK(_file == nullptr) << "File has already been opened";
+    ASSIGN_OR_RETURN(_file, _scanner_params.env->new_random_access_file(_scanner_params.path));
     _build_file_read_param();
     auto status = do_open(runtime_state);
     if (status.ok()) {
         _is_open = true;
-#ifndef BE_TEST
-        (*_scanner_params.open_limit)++;
-#endif
-        LOG(INFO) << "open file success: " << _scanner_params.fs->file_name();
+        if (_scanner_params.open_limit != nullptr) {
+            _scanner_params.open_limit->fetch_add(1, std::memory_order_relaxed);
+        }
+        LOG(INFO) << "open file success: " << _scanner_params.path;
     }
     return status;
 }
@@ -144,17 +140,11 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
         Expr::close(it.second, runtime_state);
     }
     do_close(runtime_state);
-#ifndef BE_TEST
-    if (_scanner_params.fs_handle_type == HdfsFsHandle::Type::HDFS) {
-        auto* file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get());
-        file->close();
-    }
-    if (_is_open) {
-        (*_scanner_params.open_limit)--;
-    }
-#endif
-    _scanner_params.fs.reset();
+    _file.reset(nullptr);
     _is_closed = true;
+    if (_is_open && _scanner_params.open_limit != nullptr) {
+        _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
+    }
 }
 
 void HdfsScanner::enter_pending_queue() {
@@ -167,9 +157,9 @@ uint64_t HdfsScanner::exit_pending_queue() {
 
 void HdfsScanner::update_counter() {
     static const char* const kHdfsIOProfileSectionPrefix = "HdfsIO";
-    if (_scanner_params.fs == nullptr) return;
+    if (_file == nullptr) return;
 
-    auto res = _scanner_params.fs->get_numeric_statistics();
+    auto res = _file->get_numeric_statistics();
     if (!res.ok()) return;
 
     std::unique_ptr<NumericStatistics> statistics = std::move(res).value();

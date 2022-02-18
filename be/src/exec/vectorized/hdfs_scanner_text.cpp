@@ -11,8 +11,9 @@ namespace starrocks::vectorized {
 
 class HdfsScannerCSVReader : public CSVReader {
 public:
-    HdfsScannerCSVReader(std::shared_ptr<RandomAccessFile> file, char record_delimiter, string field_delimiter,
-                         size_t offset, size_t remain_length, size_t file_length)
+    // |file| must outlive HdfsScannerCSVReader
+    HdfsScannerCSVReader(RandomAccessFile* file, char record_delimiter, string field_delimiter, size_t offset,
+                         size_t remain_length, size_t file_length)
             : CSVReader(record_delimiter, field_delimiter) {
         _file = file;
         _offset = offset;
@@ -28,7 +29,7 @@ protected:
     Status _fill_buffer() override;
 
 private:
-    std::shared_ptr<RandomAccessFile> _file;
+    RandomAccessFile* _file;
     size_t _offset = 0;
     int32_t _remain_length = 0;
     size_t _file_length = 0;
@@ -243,7 +244,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     const THdfsScanRange* scan_range = _scanner_params.scan_ranges[_current_range_index];
     if (_current_range_index == 0) {
         _reader =
-                std::make_unique<HdfsScannerCSVReader>(_scanner_params.fs, _record_delimiter, _field_delimiter,
+                std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter,
                                                        scan_range->offset, scan_range->length, scan_range->file_length);
     } else {
         down_cast<HdfsScannerCSVReader*>(_reader.get())->reset(scan_range->offset, scan_range->length);
