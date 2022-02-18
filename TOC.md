@@ -132,7 +132,7 @@
       + [LOAD](/sql-reference/sql-statements/data-manipulation/LOAD.md)
       + [PAUSE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/PAUSE%20ROUTINE%20LOAD.md)
       + [RESUME ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md)
-      + [ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)
+      + [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)
       + [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md)
       + [SHOW ALTER](/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md)
       + [SHOW BACKUP](/sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md)
