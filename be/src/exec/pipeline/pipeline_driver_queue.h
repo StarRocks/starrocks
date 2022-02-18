@@ -82,7 +82,7 @@ public:
     // return nullptr if queue is closed;
     StatusOr<DriverRawPtr> take(int dispatcher_id) override;
 
-    size_t size() override { return 0; }
+    size_t size() override;
 
 private:
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];

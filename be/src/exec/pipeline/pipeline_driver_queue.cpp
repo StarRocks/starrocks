@@ -88,6 +88,14 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(int dispatcher_id) {
     return driver_ptr;
 }
 
+size_t QuerySharedDriverQueue::size() {
+    size_t size = 0;
+    for (const auto& sub_queue : _queues) {
+        size += sub_queue.queue.size();
+    }
+    return size;
+}
+
 void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
     _queues[driver->get_dispatch_queue_index()].update_accu_time(driver);
 }
