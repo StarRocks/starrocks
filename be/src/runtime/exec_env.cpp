@@ -143,7 +143,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new PriorityThreadPool("pip_scan_io", // pipeline scan io
                                    num_io_threads, config::pipeline_scan_thread_pool_queue_size);
     std::unique_ptr<ThreadPool> scan_worker_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("io_dispatcher") // io dispatcher
+    RETURN_IF_ERROR(ThreadPoolBuilder("scan_worker") // scan_worker
                             .set_min_threads(0)
                             .set_max_threads(num_io_threads)
                             .set_max_queue_size(1000)
