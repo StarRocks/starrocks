@@ -1951,6 +1951,10 @@ public class Coordinator {
                             params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
                         }
                         params.setPipeline_dop(fragment.getPipelineDop());
+
+                        boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
+                        params.setEnable_resource_group(enableResourceGroup);
+                        // TODO: set params.workgroup, when enableResourceGroup is true.
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {
