@@ -113,7 +113,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id) << " backend_num=" << backend_num;
-    WorkGroupPtr wg = nullptr;
 
     // wg is always non-nullable, when request.enable_resource_group is true.
     WorkGroupPtr wg = nullptr;
