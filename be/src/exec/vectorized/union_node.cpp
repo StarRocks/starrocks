@@ -4,6 +4,7 @@
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
 #include "exec/pipeline/set/union_const_source_operator.h"
@@ -106,6 +107,11 @@ Status UnionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
 
+    if (reached_limit()) {
+        *eos = true;
+        return Status::OK();
+    }
+
     while (true) {
         //@TODO: There seems to be no difference between passthrough and materialize, can be
         // remove the passthrough handle
@@ -135,6 +141,13 @@ Status UnionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     } else {
         _num_rows_returned += (*chunk)->num_rows();
+    }
+
+    if (reached_limit()) {
+        int64_t num_rows_over = _num_rows_returned - _limit;
+        DCHECK_GE((*chunk)->num_rows(), num_rows_over);
+        (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
+        COUNTER_SET(_rows_returned_counter, _limit);
     }
 
     DCHECK_CHUNK(*chunk);
@@ -387,7 +400,13 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
-    return context->maybe_gather_pipelines_to_one(runtime_state(), operators_list);
+    OpFactories output = context->maybe_gather_pipelines_to_one(runtime_state(), operators_list);
+    if (limit() != -1) {
+        output.emplace_back(
+                std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
+    return output;
 }
 
 } // namespace starrocks::vectorized
