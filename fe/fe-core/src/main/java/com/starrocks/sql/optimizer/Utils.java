@@ -380,7 +380,7 @@ public class Utils {
                     LOG.warn("hive table {} get column failed. error : {}", hiveTable.getName(), e);
                     return true;
                 }
-            } else if(operator instanceof LogicalIcebergScanOperator) {
+            } else if (operator instanceof LogicalIcebergScanOperator) {
                 IcebergTable table = (IcebergTable) scanOperator.getTable();
                 try {
                     List<ColumnStatistic> columnStatisticList = IcebergTableStatisticCalculator.getColumnStatistics(
