@@ -60,13 +60,11 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(int dispatcher_id) {
                 return Status::Cancelled("Shutdown");
             }
 
+            // Find the queue with the smallest execution time.
             for (int i = 0; i < QUEUE_SIZE; ++i) {
                 // we just search for queue has element
                 if (!_queues[i].queue.empty()) {
                     double local_target_time = _queues[i].accu_time_after_divisor();
-                    // if this is first queue that has element, we select it;
-                    // else we choose queue that the execution time is less sufficient,
-                    // and record time.
                     if (queue_idx < 0 || local_target_time < target_accu_time) {
                         target_accu_time = local_target_time;
                         queue_idx = i;
@@ -126,13 +124,11 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take(int dispatcher_id
     double target_accu_time = 0;
     DriverRawPtr driver_ptr;
 
+    // Find the queue with the smallest execution time.
     for (int i = 0; i < QUEUE_SIZE; ++i) {
         // we just search for queue has element
         if (!_queues[i].queue.empty()) {
             double local_target_time = _queues[i].accu_time_after_divisor();
-            // if this is first queue that has element, we select it;
-            // else we choose queue that the execution time is less sufficient,
-            // and record time.
             if (queue_idx < 0 || local_target_time < target_accu_time) {
                 target_accu_time = local_target_time;
                 queue_idx = i;
@@ -214,7 +210,10 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(int dispatcher_id) {
         // All the owner workgroups don't have ready drivers, so select the other workgroup.
         wg = _find_min_wg();
     }
+    DCHECK_NOTNULL(wg);
 
+    // If wg only contains one ready driver, it will be not ready anymore after taking away
+    // the only one driver.
     if (wg->driver_queue()->size() == 1) {
         _sum_cpu_limit -= wg->cpu_limit();
         _ready_wgs.erase(wg);
@@ -249,14 +248,21 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
     auto* wg = driver->workgroup();
     if (_ready_wgs.find(wg) == _ready_wgs.end()) {
         _sum_cpu_limit += wg->cpu_limit();
+        // The runtime needn't be adjusted for the workgroup put back from dispatcher,
+        // because it has updated before dispatcher put the workgroup back by update_statistics().
         if constexpr (!from_dispatcher) {
             auto* min_wg = _find_min_wg();
             if (min_wg != nullptr) {
                 int64_t origin_real_runtime_ns = wg->real_runtime_ns();
-                int64_t new_vruntime_ns =
-                        std::min(min_wg->vruntime_ns() - _ideal_runtime_ns(wg) / 2,
-                                 min_wg->vruntime_ns() * int64_t(min_wg->cpu_limit()) / int64_t(wg->cpu_limit()));
+
+                // The workgroup maybe leaves for a long time, which results in that the runtime of it
+                // may be much smaller than the other workgroups. If the runtime isn't adjusted, the others
+                // will starve. Therefore, the runtime is adjusted according the minimum vruntime in _ready_wgs,
+                // and give it half of ideal runtime in a schedule period as compensation.
+                int64_t new_vruntime_ns = std::min(min_wg->vruntime_ns() - _ideal_runtime_ns(wg) / 2,
+                                                   min_wg->real_runtime_ns() / int64_t(wg->cpu_limit()));
                 wg->set_vruntime_ns(std::max(wg->vruntime_ns(), new_vruntime_ns));
+
                 int64_t diff_real_runtime_ns = wg->real_runtime_ns() - origin_real_runtime_ns;
                 workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(diff_real_runtime_ns);
             }

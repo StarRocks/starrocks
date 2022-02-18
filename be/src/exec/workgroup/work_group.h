@@ -176,8 +176,11 @@ public:
         return _dispatcher_id2owner_wgs[_index % 2][dispatcher_id];
     }
 
+    // Labels which workgroups each dispatcher belongs to based on the cpu limit of each workgroup.
     void reassign_to_wgs(const std::unordered_map<int128_t, WorkGroupPtr>& workgroups, int sum_cpu_limit);
 
+    // Return true, when the dispatcher is running the workgroup which it doesn't belong to,
+    // and any owner workgroups of it has running drivers.
     bool should_yield(int dispatcher_id, const WorkGroupPtr& running_wg) const;
 
 private:
