@@ -463,9 +463,11 @@ public class ScalarType extends Type implements Cloneable {
             return t1;
         }
 
-        if (t1.isOnlyMetricType() || t2.isOnlyMetricType()) {
-            if (t1.type == t2.type) {
-                return t1;
+        boolean t1IsHLL = t1.type == PrimitiveType.HLL;
+        boolean t2IsHLL = t2.type == PrimitiveType.HLL;
+        if (t1IsHLL || t2IsHLL) {
+            if (t1IsHLL && t2IsHLL) {
+                return createHllType();
             }
             return INVALID;
         }
