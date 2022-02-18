@@ -4,7 +4,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.WorkGroup;
-import com.starrocks.catalog.WorkGroupAnalyzer;
+import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.Relation;

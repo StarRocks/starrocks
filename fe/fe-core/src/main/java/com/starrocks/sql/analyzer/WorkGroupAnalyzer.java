@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.catalog;
+package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
@@ -8,6 +8,8 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TWorkGroupType;
