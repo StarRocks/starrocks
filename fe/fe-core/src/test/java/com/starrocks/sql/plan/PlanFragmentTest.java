@@ -1153,7 +1153,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testWindowFunctionTest() throws Exception {
         String sql = "select sum(id_decimal - ifnull(id_decimal, 0)) over (partition by t1c) from test_all_type";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("decimal_literal:TDecimalLiteral(value:0)"));
+        Assert.assertTrue(plan.contains("decimal_literal:TDecimalLiteral(value:0, integer_value:00 00 00 00 00 00 00 00)"));
     }
 
     @Test

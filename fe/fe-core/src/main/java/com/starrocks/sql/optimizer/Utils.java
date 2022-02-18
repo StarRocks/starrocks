@@ -439,7 +439,7 @@ public class Utils {
                 return Optional.of(ConstantOperator.createNull(descType));
             }
 
-            ConstantOperator result = ((ConstantOperator) op).castTo(descType);
+            ConstantOperator result = ((ConstantOperator) op).castToStrictly(descType);
             if (result.toString().equalsIgnoreCase(op.toString())) {
                 return Optional.of(result);
             } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {

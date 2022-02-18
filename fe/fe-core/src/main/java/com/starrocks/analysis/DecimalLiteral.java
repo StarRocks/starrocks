@@ -39,6 +39,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -236,6 +237,40 @@ public class DecimalLiteral extends LiteralExpr {
         }
     }
 
+    // pack an int32/64/128 value into ByteBuffer in little endian
+    ByteBuffer packDecimal() {
+        ByteBuffer buffer = ByteBuffer.allocate(type.getTypeSize());
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+        int scale = ((ScalarType) type).getScalarScale();
+        BigDecimal scaledValue = value.multiply(SCALE_FACTOR[scale]);
+        switch (type.getPrimitiveType()) {
+            case DECIMAL32:
+                buffer.putInt(scaledValue.intValue());
+                break;
+            case DECIMAL64:
+                buffer.putLong(scaledValue.longValue());
+                break;
+            case DECIMAL128:
+            case DECIMALV2:
+                // BigInteger::toByteArray returns a big-endian byte[], so copy in reverse order one by one byte.
+                byte[] bytes = scaledValue.toBigInteger().toByteArray();
+                for (int i = bytes.length - 1; i >= 0; --i) {
+                    buffer.put(bytes[i]);
+                }
+                // pad with sign bits
+                byte prefixByte = scaledValue.signum() >= 0 ? (byte) 0 : (byte) 0xff;
+                int numPaddingBytes = 16 - bytes.length;
+                for (int i = 0; i < numPaddingBytes; ++i) {
+                    buffer.put(prefixByte);
+                }
+                break;
+            default:
+                Preconditions.checkArgument(false, "Type bust be decimal type");
+        }
+        buffer.flip();
+        return buffer;
+    }
+
     @Override
     public ByteBuffer getHashValue(Type type) {
         ByteBuffer buffer;
@@ -342,9 +377,11 @@ public class DecimalLiteral extends LiteralExpr {
     @Override
     protected void toThrift(TExprNode msg) {
         // TODO(hujie01) deal with loss information
-        msg.node_type = TExprNodeType.DECIMAL_LITERAL;
-        BigDecimal v = new BigDecimal(value.toBigInteger());
-        msg.decimal_literal = new TDecimalLiteral(value.toPlainString());
+        msg.setNode_type(TExprNodeType.DECIMAL_LITERAL);
+        TDecimalLiteral decimalLiteral = new TDecimalLiteral();
+        decimalLiteral.setValue(value.toPlainString());
+        decimalLiteral.setInteger_value(packDecimal());
+        msg.setDecimal_literal(decimalLiteral);
     }
 
     @Override
@@ -381,15 +418,44 @@ public class DecimalLiteral extends LiteralExpr {
         return fracPart.intValue();
     }
 
-    public static void checkLiteralOverflow(BigDecimal value, ScalarType scalarType) throws AnalysisException {
+    // check decimal overflow in binary style, used in ArithmeticExpr and CastExpr.
+    // binary-style overflow checking is high-performance, because it just check ALU flags
+    // after computation.
+    public static void checkLiteralOverflowInBinaryStyle(BigDecimal value, ScalarType scalarType) throws AnalysisException {
         int realPrecision = getRealPrecision(value);
         int realScale = getRealScale(value);
-        int realIntegerPartWidth = realPrecision - realScale;
-        int precision = scalarType.getScalarPrecision();
-        int scale = scalarType.getScalarScale();
-        int maxIntegerPartWidth = precision - scale;
-        // integer part of decimal literal should not exceed precision - scale
-        if (realIntegerPartWidth > maxIntegerPartWidth) {
+        BigInteger underlyingInt = value.setScale(scalarType.getScalarScale(), RoundingMode.HALF_UP).unscaledValue();
+        int numBytes = scalarType.getPrimitiveType().getTypeSize();
+        // In BE, Overflow checking uses maximum/minimum binary values instead of maximum/minimum decimal values.
+        // for instance: if PrimitiveType is decimal32, then 2147483647/-2147483648 is used instead of
+        // 999999999/-999999999.
+        BigInteger maxBinary = BigInteger.ONE.shiftLeft(numBytes * 8 - 1).subtract(BigInteger.ONE);
+        BigInteger minBinary = BigInteger.ONE.shiftLeft(numBytes * 8 - 1).negate();
+        if (underlyingInt.compareTo(minBinary) < 0 || underlyingInt.compareTo(maxBinary) > 0) {
+            String errMsg = String.format(
+                    "Typed decimal literal(%s) is overflow, value='%s' (precision=%d, scale=%d)",
+                    scalarType.toString(), value.toPlainString(), realPrecision, realScale);
+            throw new AnalysisException(errMsg);
+        }
+    }
+
+    // check overflow overflow in decimal style, used in Predicates processing or Predicates reducing. it
+    // is less efficient that its binary-style counterpart(cost 2.5X ~ 3.X).
+    // for Predicates that contain constant operators of decimal type, the constant value is transferred to
+    // to BE in string type, and in BE, an corresponding VectorizedLiteral is constructed after string value
+    // is converted to decimal via the string-to-decimal casting function who checks decimal overflowing in
+    // decimal style. but in FE, checking decimal overflow in binary style instead of decimal style would
+    // given an incorrect result that overflow checking should fail(in decimal style) expectedly but succeeds
+    // (in decimal style)actually. When checkLiteralOverflowInDecimalStyle fails, proper cast exprs are interpolated
+    // into Predicates to cast the type of decimal constant value to a type wider enough to holds the value.
+    public static void checkLiteralOverflowInDecimalStyle(BigDecimal value, ScalarType scalarType) throws AnalysisException {
+        int realPrecision = getRealPrecision(value);
+        int realScale = getRealScale(value);
+        BigInteger underlyingInt = value.setScale(scalarType.getScalarScale(), RoundingMode.HALF_UP).unscaledValue();
+        BigInteger maxDecimal = BigInteger.TEN.pow(scalarType.decimalPrecision());
+        BigInteger minDecimal = BigInteger.TEN.pow(scalarType.decimalPrecision()).negate();
+
+        if (underlyingInt.compareTo(minDecimal) <= 0 || underlyingInt.compareTo(maxDecimal) >= 0) {
             String errMsg = String.format(
                     "Typed decimal literal(%s) is overflow, value='%s' (precision=%d, scale=%d)",
                     scalarType.toString(), value.toPlainString(), realPrecision, realScale);
@@ -401,7 +467,7 @@ public class DecimalLiteral extends LiteralExpr {
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
         if (targetType.getPrimitiveType().isDecimalV3Type()) {
             this.type = targetType;
-            checkLiteralOverflow(this.value, (ScalarType) targetType);
+            checkLiteralOverflowInBinaryStyle(this.value, (ScalarType) targetType);
             // round
             int realScale = getRealScale(value);
             int scale = ((ScalarType) targetType).getScalarScale();
