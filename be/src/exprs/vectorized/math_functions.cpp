@@ -88,6 +88,12 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
                                                                                                VECTORIZED_FN_ARGS(1)); \
     }
 
+#define DEFINE_MATH_BINARY_FN_WITH_NAN_CHECK(NAME, LTYPE, RTYPE, RESULT_TYPE)                                 \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) {  \
+        return VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>::evaluate<LTYPE, RTYPE, RESULT_TYPE>( \
+                VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                                                \
+    }
+
 #define DEFINE_MATH_BINARY_FN_WITH_IMPL(NAME, LTYPE, RTYPE, RESULT_TYPE, FN) \
     DEFINE_BINARY_FUNCTION(NAME##Impl, FN);                                  \
     DEFINE_MATH_BINARY_FN(NAME, LTYPE, RTYPE, RESULT_TYPE);
@@ -240,7 +246,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(round_up_toImpl, l, r) {
 }
 
 // binary math
-DEFINE_MATH_BINARY_FN(truncate, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBLE);
+DEFINE_MATH_BINARY_FN_WITH_NAN_CHECK(truncate, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBLE);
 DEFINE_MATH_BINARY_FN(round_up_to, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBLE);
 DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(pow, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE, std::pow);
 DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan2, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE, std::atan2);
