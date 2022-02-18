@@ -5,15 +5,18 @@
 #include <optional>
 
 #include "exec/pipeline/source_operator.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "runtime/global_dicts.h"
 #include "util/blocking_queue.hpp"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
+
 namespace vectorized {
 class RuntimeFilterProbeCollector;
 }
+
 namespace pipeline {
 
 class ScanOperator final : public SourceOperator {
@@ -44,6 +47,8 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
 
+    void set_workgroup(workgroup::WorkGroupPtr wg);
+
 private:
     const size_t _buffer_size = config::pipeline_io_buffer_size;
     const int _max_io_tasks_per_op = config::pipeline_scan_max_tasks_per_operator;
@@ -71,6 +76,8 @@ private:
     std::atomic<int> _num_running_io_tasks = 0;
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+
+    workgroup::WorkGroupPtr _workgroup = nullptr;
 };
 
 class ScanOperatorFactory final : public SourceOperatorFactory {
