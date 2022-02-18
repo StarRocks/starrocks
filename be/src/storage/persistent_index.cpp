@@ -4,14 +4,13 @@
 
 #include "gutil/strings/substitute.h"
 #include "storage/fs/fs_util.h"
-#include "storage/tablet.h"
-#include "storage/tablet_meta_manager.h"
 #include "util/coding.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/faststring.h"
 #include "util/filesystem_util.h"
 #include "util/murmur_hash3.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
 

@@ -115,7 +115,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     // insert
     vector<Key> keys;
     vector<IndexValue> values;
-    int N = 1000;
+    int N = 10000;
     for (int i = 0; i < N; i++) {
         keys.emplace_back(i);
         values.emplace_back(i * 2);
