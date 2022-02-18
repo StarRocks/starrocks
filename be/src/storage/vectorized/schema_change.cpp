@@ -1007,7 +1007,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     {
         std::lock_guard l1(base_tablet->get_push_lock());
         std::lock_guard l2(new_tablet->get_push_lock());
-        std::lock_guard l3(base_tablet->get_header_lock());
+        std::shared_lock l3(base_tablet->get_header_lock());
         std::lock_guard l4(new_tablet->get_header_lock());
 
         std::vector<Version> versions_to_be_changed;
