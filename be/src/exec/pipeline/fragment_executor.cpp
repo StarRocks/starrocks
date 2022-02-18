@@ -140,7 +140,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
     }
     auto* runtime_state = _fragment_ctx->runtime_state();
-    runtime_state->init_mem_trackers(query_id);
+    runtime_state->init_mem_trackers(query_id, wg != nullptr ? wg->mem_tracker() : nullptr);
     runtime_state->set_be_number(backend_num);
 
     // RuntimeFilterWorker::open_query is idempotent
