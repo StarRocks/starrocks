@@ -117,6 +117,13 @@ void ColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>
     }
 }
 
+void ColumnReader::lazyLoadSkip(uint64_t numValues) {
+    throw ParseError("ColumnReader::lazyLoadSkip not implemented");
+}
+void ColumnReader::lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    throw ParseError("ColumnReader::lazyLoadNext not implemented");
+}
+
 /**
    * Expand an array of bytes in place to the corresponding array of longs.
    * Has to work backwards so that they data isn't clobbered during the
@@ -954,6 +961,9 @@ void StringDirectColumnReader::seekToRowGroup(std::unordered_map<uint64_t, Posit
 class StructColumnReader : public ColumnReader {
 private:
     std::vector<std::unique_ptr<ColumnReader>> children;
+    std::vector<uint64_t> fieldIndex;
+    std::vector<std::unique_ptr<ColumnReader>> lazyLoadChildren;
+    std::vector<uint64_t> lazyLoadFieldIndex;
 
 public:
     StructColumnReader(const Type& type, StripeStreams& stipe);
@@ -969,23 +979,39 @@ public:
     const size_t size() { return children.size(); }
     ColumnReader* childReaderAt(size_t idx) { return children[idx].get(); }
 
+    void lazyLoadSkip(uint64_t numValues) override;
+    void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+
 private:
-    template <bool encoded>
-    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
+    template <bool encoded, bool lazyLoad>
+    void nextInternal(const std::vector<std::unique_ptr<ColumnReader>>& children,
+                      const std::vector<uint64_t>& fieldIndex, ColumnVectorBatch& rowBatch, uint64_t numValues,
+                      char* notNull);
 };
 
 StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
     // count the number of selected sub-columns
     const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
+    const std::vector<bool> lazyLoadColumns = stripe.getLazyLoadColumns();
     switch (static_cast<int64_t>(stripe.getEncoding(columnId).kind())) {
-    case proto::ColumnEncoding_Kind_DIRECT:
+    case proto::ColumnEncoding_Kind_DIRECT: {
+        uint64_t fi = 0;
         for (unsigned int i = 0; i < type.getSubtypeCount(); ++i) {
             const Type& child = *type.getSubtype(i);
-            if (selectedColumns[static_cast<uint64_t>(child.getColumnId())]) {
-                children.push_back(buildReader(child, stripe));
+            uint64_t columnId = static_cast<uint64_t>(child.getColumnId());
+            if (selectedColumns[columnId]) {
+                if (lazyLoadColumns[columnId]) {
+                    lazyLoadChildren.push_back(buildReader(child, stripe));
+                    lazyLoadFieldIndex.push_back(fi);
+                } else {
+                    children.push_back(buildReader(child, stripe));
+                    fieldIndex.push_back(fi);
+                }
+                fi++;
             }
         }
-        break;
+    } break;
     case proto::ColumnEncoding_Kind_DIRECT_V2:
     case proto::ColumnEncoding_Kind_DICTIONARY:
     case proto::ColumnEncoding_Kind_DICTIONARY_V2:
@@ -1003,33 +1029,50 @@ uint64_t StructColumnReader::skip(uint64_t numValues) {
 }
 
 void StructColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<false>(rowBatch, numValues, notNull);
+    nextInternal<false, false>(children, fieldIndex, rowBatch, numValues, notNull);
 }
 
 void StructColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<true>(rowBatch, numValues, notNull);
+    nextInternal<true, false>(children, fieldIndex, rowBatch, numValues, notNull);
 }
 
-template <bool encoded>
-void StructColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+template <bool encoded, bool lazyLoad>
+void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnReader>>& children,
+                                      const std::vector<uint64_t>& fieldIndex, ColumnVectorBatch& rowBatch,
+                                      uint64_t numValues, char* notNull) {
+    if (!lazyLoad) {
+        ColumnReader::next(rowBatch, numValues, notNull);
+    }
     uint64_t i = 0;
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     for (auto iter = children.begin(); iter != children.end(); ++iter, ++i) {
+        uint64_t fi = fieldIndex[i];
         if (encoded) {
-            (*iter)->nextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[i]), numValues, notNull);
+            (*iter)->nextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
         } else {
-            (*iter)->next(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[i]), numValues, notNull);
+            (*iter)->next(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
         }
     }
 }
 
 void StructColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) {
     ColumnReader::seekToRowGroup(positions);
-
     for (auto& ptr : children) {
         ptr->seekToRowGroup(positions);
     }
+}
+
+void StructColumnReader::lazyLoadSkip(uint64_t numValues) {
+    for (auto& ptr : lazyLoadChildren) {
+        ptr->skip(numValues);
+    }
+}
+void StructColumnReader::lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    nextInternal<false, true>(lazyLoadChildren, lazyLoadFieldIndex, rowBatch, numValues, notNull);
+}
+
+void StructColumnReader::lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    nextInternal<true, true>(lazyLoadChildren, lazyLoadFieldIndex, rowBatch, numValues, notNull);
 }
 
 class ListColumnReader : public ColumnReader {
