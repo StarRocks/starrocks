@@ -120,6 +120,7 @@ public:
 
     void prepare_pass_through_chunk_buffer();
     void destroy_pass_through_chunk_buffer();
+
     void set_enable_resource_group() { _enable_resource_group = true; }
 
     bool enable_resource_group() const { return _enable_resource_group; }
