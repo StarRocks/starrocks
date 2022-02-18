@@ -89,9 +89,6 @@ public:
 
     std::string to_string() const;
 
-    // TODO: return PersistentIndexMetaPB if use persistent index
-    PersistentIndexMetaPB* index_meta() { return nullptr; }
-
 private:
     void _set_schema(const vectorized::Schema& pk_schema);
 

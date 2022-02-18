@@ -89,6 +89,10 @@ public:
     virtual Status upsert(size_t n, const void* keys, const IndexValue* values, KeysInfo* not_found,
                           size_t* num_found) = 0;
 
+    // this function is upsert key/value to mutable index and don't care key exist or not
+    // just update mutable index, usually used in function load()
+    virtual Status upsert(size_t n, const void* keys, const IndexValue* values) = 0;
+
     // batch insert
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -163,7 +167,7 @@ public:
     Status create(size_t key_size, const EditVersion& version);
 
     // load required states from underlying file
-    Status load(Tablet* tablet);
+    Status load(PersistentIndexMetaPB& index_meta);
 
     // start modification with intended version
     Status prepare(const EditVersion& version);

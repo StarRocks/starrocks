@@ -95,42 +95,11 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
     ASSERT_EQ(upsert_not_found.key_idxes.size(), expect_not_found);
 }
 
-TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
-    TCreateTabletReq request;
-    request.tablet_id = tablet_id;
-    request.__set_version(1);
-    request.__set_version_hash(0);
-    request.tablet_schema.schema_hash = schema_hash;
-    request.tablet_schema.short_key_column_count = 6;
-    request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
-    request.tablet_schema.storage_type = TStorageType::COLUMN;
-
-    TColumn k1;
-    k1.column_name = "pk";
-    k1.__set_is_key(true);
-    k1.column_type.type = TPrimitiveType::BIGINT;
-    request.tablet_schema.columns.push_back(k1);
-
-    TColumn k2;
-    k2.column_name = "v1";
-    k2.__set_is_key(false);
-    k2.column_type.type = TPrimitiveType::SMALLINT;
-    request.tablet_schema.columns.push_back(k2);
-
-    TColumn k3;
-    k3.column_name = "v2";
-    k3.__set_is_key(false);
-    k3.column_type.type = TPrimitiveType::INT;
-    request.tablet_schema.columns.push_back(k3);
-    auto st = StorageEngine::instance()->create_tablet(request);
-    CHECK(st.ok()) << st.to_string();
-    return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
-}
-
 PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     Env* env = Env::Default();
     const std::string kPersistentIndexDir = "./ut_dir/persistent_index_test";
     const std::string kIndexFile = "./ut_dir/persistent_index_test/index_file";
+    const std::string kIndexMetaFile = "./ut_dir/persistent_index_test/index_meta";
     ASSERT_TRUE(env->create_dir(kPersistentIndexDir).ok());
 
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
@@ -142,7 +111,6 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     EditVersion version(0, 0);
     PersistentIndex index(kIndexFile);
     ASSERT_TRUE(index.create(sizeof(Key), version).ok());
-    TabletSharedPtr tablet = create_tablet(rand(), rand());
 
     // insert
     vector<Key> keys;
@@ -154,38 +122,51 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     }
     ASSERT_TRUE(index.insert(keys.size(), keys.data(), values.data(), false).ok());
     ASSERT_TRUE(index.commit().ok());
-    ASSERT_TRUE(TabletMetaManager::write_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(),
-                                                               *(index.index_meta()))
-                        .ok());
+
     // erase
     vector<Key> erase_keys;
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < N / 2; i++) {
         erase_keys.emplace_back(i);
     }
     vector<IndexValue> erase_old_values(erase_keys.size());
     ASSERT_TRUE(index.erase(erase_keys.size(), erase_keys.data(), erase_old_values.data()).ok());
     // update PersistentMetaPB in memory
     ASSERT_TRUE(index.commit().ok());
-    ASSERT_TRUE(TabletMetaManager::write_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(),
-                                                               *(index.index_meta()))
-                        .ok());
+
+    // write persistent index meta to meta file
+    std::unique_ptr<fs::WritableBlock> meta_block;
+    fs::CreateBlockOptions meta_block_opts({kIndexMetaFile});
+    ASSERT_TRUE((block_mgr->create_block(meta_block_opts, &meta_block)).ok());
+    PersistentIndexMetaPB* meta = index.index_meta();
+    auto value = meta->SerializeAsString();
+    ASSERT_TRUE(meta_block->append(value).ok());
 
     // generate persistent_index from index_meta
     PersistentIndex new_index(kIndexFile);
     ASSERT_TRUE(new_index.create(sizeof(Key), version).ok());
-    ASSERT_TRUE(new_index.load(tablet.get()).ok());
+    std::unique_ptr<fs::ReadableBlock> rblock;
+    ASSERT_TRUE(block_mgr->open_block(kIndexMetaFile, &rblock).ok());
+    std::string buff;
+    raw::stl_string_resize_uninitialized(&buff, value.length());
+    PersistentIndexMetaPB new_index_meta;
+    ASSERT_TRUE(rblock->read(0, buff).ok());
+    new_index_meta.ParseFromString(buff);
+
+    ASSERT_TRUE(new_index.load(new_index_meta).ok());
     std::vector<IndexValue> get_values(keys.size());
 
     ASSERT_TRUE(new_index.get(keys.size(), keys.data(), get_values.data()).ok());
     ASSERT_EQ(keys.size(), get_values.size());
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < N / 2; i++) {
         ASSERT_EQ(NullIndexValue, get_values[i]);
     }
-    for (int i = 100; i < values.size(); i++) {
+    for (int i = N / 2; i < values.size(); i++) {
         ASSERT_EQ(values[i], get_values[i]);
     }
-    ASSERT_TRUE(FileUtils::remove_all(kPersistentIndexDir).ok());
+    rblock->close();
+    meta_block->close();
     wblock->close();
+    FileUtils::remove_all(kPersistentIndexDir);
 }
 
 } // namespace starrocks

@@ -106,6 +106,21 @@ public:
         return Status::OK();
     }
 
+    Status upsert(size_t n, const void* keys, const IndexValue* values) {
+        const FixedKey<KeySize>* fkeys = reinterpret_cast<const FixedKey<KeySize>*>(keys);
+        for (size_t i = 0; i < n; i++) {
+            const auto& key = fkeys[i];
+            const auto v = values[i];
+            uint64_t hash = FixedKeyHash<KeySize>()(key);
+            auto p = _map.emplace_with_hash(hash, key, v);
+            // key exist
+            if (!p.second) {
+                p.first->second = v;
+            }
+        }
+        return Status::OK();
+    }
+
     Status insert(size_t n, const void* keys, const IndexValue* values) override {
         const FixedKey<KeySize>* fkeys = reinterpret_cast<const FixedKey<KeySize>*>(keys);
         for (size_t i = 0; i < n; i++) {
@@ -241,21 +256,19 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
     return Status::OK();
 }
 
-Status PersistentIndex::load(Tablet* tablet) {
-    RETURN_IF_ERROR(
-            TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &_index_meta));
-    size_t key_size = _index_meta.key_size();
-    _size = _index_meta.size();
+Status PersistentIndex::load(PersistentIndexMetaPB& index_meta) {
+    size_t key_size = index_meta.key_size();
+    _size = index_meta.size();
     DCHECK_EQ(key_size, _key_size);
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
     std::unique_ptr<fs::ReadableBlock> rblock;
     DeferOp close_block([&rblock] { rblock->close(); });
     RETURN_IF_ERROR(block_mgr->open_block(_path, &rblock));
     // TODO: load snapshot first
-    if (!_index_meta.has_l0_meta()) {
+    if (!index_meta.has_l0_meta()) {
         return Status::OK();
     }
-    MutableIndexMetaPB* l0_meta = _index_meta.mutable_l0_meta();
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
     int n = l0_meta->wals_size();
     // read wals and build l0
     for (int i = 0; i < n; i++) {
@@ -264,27 +277,28 @@ Status PersistentIndex::load(Tablet* tablet) {
         size_t offset = page_pb->offset();
         size_t size = page_pb->size();
         _offset = offset + size;
-        std::string buff;
-        raw::stl_string_resize_uninitialized(&buff, size);
-        RETURN_IF_ERROR(rblock->read(offset, buff));
-
-        size_t nums = (size / (key_size + sizeof(IndexValue)));
-        uint8_t keys[key_size * nums];
-        std::vector<IndexValue> values;
-        values.reserve(nums);
-        size_t buf_offset = 0;
-        for (size_t j = 0; j < nums; ++j) {
-            memcpy(keys + j * key_size, buff.data() + buf_offset, key_size);
-            IndexValue val = UNALIGNED_LOAD64(buff.data() + buf_offset + key_size);
-            values.emplace_back(val);
-            buf_offset += key_size + sizeof(IndexValue);
+        size_t kv_size = key_size + sizeof(IndexValue);
+        size_t nums = size / kv_size;
+        while (nums > 0) {
+            size_t batch_num = (nums > 4096) ? 4096 : nums;
+            std::string buff;
+            raw::stl_string_resize_uninitialized(&buff, batch_num * kv_size);
+            RETURN_IF_ERROR(rblock->read(offset, buff));
+            uint8_t keys[key_size * batch_num];
+            std::vector<IndexValue> values;
+            values.reserve(batch_num);
+            size_t buf_offset = 0;
+            for (size_t j = 0; j < batch_num; ++j) {
+                memcpy(keys + j * key_size, buff.data() + buf_offset, key_size);
+                IndexValue val = UNALIGNED_LOAD64(buff.data() + buf_offset + key_size);
+                values.emplace_back(val);
+                buf_offset += kv_size;
+            }
+            RETURN_IF_ERROR(_l0->upsert(batch_num, keys, values.data()));
+            offset += batch_num * kv_size;
+            nums -= batch_num;
+            buff.clear();
         }
-        DCHECK_EQ(buf_offset, size);
-        std::vector<IndexValue> old_values(nums);
-        KeysInfo upsert_not_found;
-        size_t upsert_num_found = 0;
-        RETURN_IF_ERROR(
-                _l0->upsert(nums, keys, values.data(), old_values.data(), &upsert_not_found, &upsert_num_found));
     }
     // the data in the end maybe invalid
     // so we need to reopen the index file after truncated
