@@ -79,7 +79,7 @@ public:
 
     void update_statistics(const DriverRawPtr driver) override;
 
-    // return nullptr if queue is closed;
+    // Return cancelled status, if the queue is closed.
     StatusOr<DriverRawPtr> take(int dispatcher_id) override;
 
     size_t size() override;
@@ -114,7 +114,7 @@ public:
     void put_back_from_dispatcher(const DriverRawPtr driver) override;
     void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override;
 
-    // return nullptr if queue is closed;
+    // Always return non-nullable value.
     StatusOr<DriverRawPtr> take(int dispatcher_id) override;
 
     void update_statistics(const DriverRawPtr driver) override;
@@ -150,6 +150,7 @@ public:
     void put_back_from_dispatcher(const DriverRawPtr driver) override;
     void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override;
 
+    // Return cancelled status, if the queue is closed.
     // Firstly, select the work group with the minimum vruntime.
     // Secondly, select the proper driver from the driver queue of this work group.
     StatusOr<DriverRawPtr> take(int dispatcher_id) override;
