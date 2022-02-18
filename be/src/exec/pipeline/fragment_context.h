@@ -120,9 +120,13 @@ public:
 
     void prepare_pass_through_chunk_buffer();
     void destroy_pass_through_chunk_buffer();
+<<<<<<< HEAD
     void set_enable_resource_group() { _enable_resource_group = true; }
 
     bool enable_resource_group() const { return _enable_resource_group; }
+=======
+
+>>>>>>> 1443355c (clang-format)
 private:
     // Id of this query
     TUniqueId _query_id;
