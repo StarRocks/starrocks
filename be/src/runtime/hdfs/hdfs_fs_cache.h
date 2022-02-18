@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <hdfs/hdfs.h>
+
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -11,14 +13,23 @@
 
 #include "common/status.h"
 #include "env/env_hdfs.h"
+
 namespace starrocks {
+
+class S3Client;
+
+struct HdfsFsHandle {
+    enum class Type { LOCAL, HDFS, S3 };
+    Type type;
+    std::string namenode;
+    hdfsFS hdfs_fs;
+    S3Client* s3_client;
+};
 
 // Cache for HDFS file system
 class HdfsFsCache {
 public:
-    using FileOpenLimit = std::atomic<int32_t>;
-    using FileOpenLimitPtr = FileOpenLimit*;
-    using HdfsFsMap = std::unordered_map<std::string, std::pair<HdfsFsHandle, std::unique_ptr<FileOpenLimit>>>;
+    using HdfsFsMap = std::unordered_map<std::string, HdfsFsHandle>;
 
     static HdfsFsCache* instance() {
         static HdfsFsCache s_instance;
@@ -26,7 +37,7 @@ public:
     }
 
     // This function is thread-safe
-    Status get_connection(const std::string& namenode, HdfsFsHandle* handle, FileOpenLimitPtr* semaphore);
+    Status get_connection(const std::string& namenode, HdfsFsHandle* handle);
 
 private:
     std::mutex _lock;

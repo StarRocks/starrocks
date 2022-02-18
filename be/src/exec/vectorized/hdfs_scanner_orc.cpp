@@ -13,7 +13,8 @@
 namespace starrocks::vectorized {
 class ORCHdfsFileStream : public orc::InputStream {
 public:
-    ORCHdfsFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t length, HdfsScanStats* stats)
+    // |file| must outlive ORCHdfsFileStream
+    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, HdfsScanStats* stats)
             : _file(std::move(file)), _length(length), _stats(stats) {}
 
     ~ORCHdfsFileStream() override = default;
@@ -40,7 +41,7 @@ public:
     const std::string& getName() const override { return _file->file_name(); }
 
 private:
-    std::shared_ptr<RandomAccessFile> _file;
+    RandomAccessFile* _file;
     uint64_t _length;
     HdfsScanStats* _stats;
 };
@@ -329,8 +330,8 @@ void HdfsOrcScanner::update_counter() {
 }
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
-    auto input_stream = std::make_unique<ORCHdfsFileStream>(_scanner_params.fs,
-                                                            _scanner_params.scan_ranges[0]->file_length, &_stats);
+    auto input_stream =
+            std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length, &_stats);
 #ifndef BE_TEST
     SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
 #endif
