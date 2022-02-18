@@ -9,7 +9,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LimitElement;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
@@ -113,16 +112,24 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         this.outer = outer;
     }
 
-    public LogicalPlan transform(Relation relation) {
+    // transform relation to plan with session variable sql_select_limit
+    // only top relation need set limit, transform method used by CTE/Subquery/Insert
+    public LogicalPlan transformWithSelectLimit(Relation relation) {
+        LogicalPlan plan = transform(relation);
+        OptExprBuilder root = plan.getRootBuilder();
         // Set limit if user set sql_select_limit.
-        if (relation instanceof QueryRelation) {
-            QueryRelation selectRelation = (QueryRelation) relation;
-            long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
-            if (!selectRelation.hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
-                selectRelation.setLimit(new LimitElement(selectLimit));
-            }
+        long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
+        if (!root.getRoot().getOp().hasLimit() &&
+                selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
+            LogicalLimitOperator limitOperator = new LogicalLimitOperator(selectLimit);
+            root = root.withNewRoot(limitOperator);
+            return new LogicalPlan(root, plan.getOutputColumn(), plan.getCorrelation());
         }
 
+        return plan;
+    }
+
+    public LogicalPlan transform(Relation relation) {
         OptExprBuilder optExprBuilder;
         if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()) {
             Pair<OptExprBuilder, OptExprBuilder> cteRootAndMostDeepAnchor =
@@ -292,12 +299,6 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             subOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
         } else {
             throw unsupportedException("New Planner only support Query Statement");
-        }
-
-        if (setOperationRelation.hasLimit()) {
-            LogicalLimitOperator limitOperator = new LogicalLimitOperator(setOperationRelation.getLimit().getLimit(),
-                    setOperationRelation.getLimit().getOffset());
-            subOpt = subOpt.withNewRoot(limitOperator);
         }
 
         return new LogicalPlan(subOpt, outputColumns, null);
