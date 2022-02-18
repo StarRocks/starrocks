@@ -28,6 +28,8 @@
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_dispatcher.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/workgroup/scan_worker.h"
+#include "exec/workgroup/work_group.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -132,11 +134,24 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _thread_pool = new PriorityThreadPool("olap_scan_io", // olap scan io
                                           config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
-    _pipeline_scan_io_thread_pool = new PriorityThreadPool("pip_scan_io", // pipeline scan io
-                                                           config::pipeline_scan_thread_pool_thread_num <= 0
-                                                                   ? std::thread::hardware_concurrency()
-                                                                   : config::pipeline_scan_thread_pool_thread_num,
-                                                           config::pipeline_scan_thread_pool_queue_size);
+
+    int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
+                                 ? std::thread::hardware_concurrency()
+                                 : config::pipeline_scan_thread_pool_thread_num;
+
+    _pipeline_scan_io_thread_pool =
+            new PriorityThreadPool("pip_scan_io", // pipeline scan io
+                                   num_io_threads, config::pipeline_scan_thread_pool_queue_size);
+    std::unique_ptr<ThreadPool> scan_worker_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("scan_worker") // scan_worker
+                            .set_min_threads(0)
+                            .set_max_threads(num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&scan_worker_thread_pool));
+    _scan_worker = new workgroup::ScanWorker(std::move(scan_worker_thread_pool));
+    _scan_worker->initialize(num_io_threads);
+
     _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool("elt", config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _fragment_mgr = new FragmentMgr(this);
@@ -346,6 +361,10 @@ void ExecEnv::_destroy() {
         delete _pipeline_scan_io_thread_pool;
         _pipeline_scan_io_thread_pool = nullptr;
     }
+    if (_scan_worker) {
+        delete _scan_worker;
+        _scan_worker = nullptr;
+    }
     if (_thread_pool) {
         delete _thread_pool;
         _thread_pool = nullptr;
@@ -394,6 +413,8 @@ void ExecEnv::_destroy() {
         delete _load_mem_tracker;
         _load_mem_tracker = nullptr;
     }
+    // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
+    starrocks::workgroup::WorkGroupManager::instance()->destroy();
     if (_query_pool_mem_tracker) {
         delete _query_pool_mem_tracker;
         _query_pool_mem_tracker = nullptr;

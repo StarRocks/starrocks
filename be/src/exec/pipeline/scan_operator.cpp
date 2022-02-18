@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "exec/pipeline/olap_chunk_source.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -12,18 +13,21 @@
 
 namespace starrocks::pipeline {
 
+using starrocks::workgroup::WorkGroupManager;
+
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
-    DCHECK(_io_threads != nullptr);
-
     _state = state;
-    auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
-    if (num_scan_operators > _io_threads->get_queue_capacity()) {
-        state->exec_env()->decrement_num_scan_operators(1);
-        return Status::TooManyTasks(
-                strings::Substitute("num_scan_operators exceeds queue capacity($0) of pipeline_pool_thread",
-                                    _io_threads->get_queue_capacity()));
+    if (_workgroup == nullptr) {
+        DCHECK(_io_threads != nullptr);
+        auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
+        if (num_scan_operators > _io_threads->get_queue_capacity()) {
+            state->exec_env()->decrement_num_scan_operators(1);
+            return Status::TooManyTasks(
+                    strings::Substitute("num_scan_operators exceeds queue capacity($0) of pipeline_pool_thread",
+                                        _io_threads->get_queue_capacity()));
+        }
     }
 
     // init filtered_ouput_columns
@@ -37,7 +41,9 @@ Status ScanOperator::prepare(RuntimeState* state) {
 Status ScanOperator::close(RuntimeState* state) {
     DCHECK(_num_running_io_tasks == 0);
 
-    state->exec_env()->decrement_num_scan_operators(1);
+    if (_workgroup == nullptr) {
+        state->exec_env()->decrement_num_scan_operators(1);
+    }
     for (auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr) {
             chunk_source->close(_state);
@@ -115,6 +121,9 @@ void ScanOperator::set_finishing(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
+    if (_workgroup != nullptr) {
+        _workgroup->decrease_chunk_num(1);
+    }
 
     for (auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr && chunk_source->has_output()) {
@@ -136,7 +145,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // Firstly, find the picked-up morsel, whose can commit an io task.
     for (int i = 0; i < _max_io_tasks_per_op; ++i) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
-            return _trigger_next_scan(state, i);
+            RETURN_IF_ERROR(_trigger_next_scan(state, i));
         }
     }
 
@@ -144,7 +153,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (!_morsel_queue->empty()) {
         for (int i = 0; i < _max_io_tasks_per_op; ++i) {
             if (_chunk_sources[i] == nullptr || (!_is_io_task_running[i] && !_chunk_sources[i]->has_output())) {
-                return _pickup_morsel(state, i);
+                RETURN_IF_ERROR(_pickup_morsel(state, i));
             }
         }
     }
@@ -156,20 +165,42 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
-    PriorityThreadPool::Task task;
-    task.work_function = [this, state, chunk_source_index]() {
-        {
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-            _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
-        }
+    bool offer_task_success = false;
+    if (_workgroup != nullptr) {
+        auto task = [this, state, chunk_source_index](int dispatcher_id) {
+            {
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
-        _num_running_io_tasks--;
-        _is_io_task_running[chunk_source_index] = false;
-    };
-    // TODO(by satanson): set a proper priority
-    task.priority = 20;
+                size_t num_read_chunks = 0;
+                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
+                        _buffer_size, _is_finished, &num_read_chunks, dispatcher_id, _workgroup);
+                // TODO (by laotan332): More detailed information is needed
+                _workgroup->increase_chunk_num(num_read_chunks);
+            }
 
-    if (_io_threads->try_offer(task)) {
+            _num_running_io_tasks--;
+            _is_io_task_running[chunk_source_index] = false;
+        };
+
+        offer_task_success = WorkGroupManager::instance()->try_offer_io_task(_workgroup, task);
+    } else {
+        PriorityThreadPool::Task task;
+        task.work_function = [this, state, chunk_source_index]() {
+            {
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
+            }
+
+            _num_running_io_tasks--;
+            _is_io_task_running[chunk_source_index] = false;
+        };
+        // TODO(by satanson): set a proper priority
+        task.priority = 20;
+
+        offer_task_success = _io_threads->try_offer(task);
+    }
+
+    if (offer_task_success) {
         _io_task_retry_cnt = 0;
     } else {
         _num_running_io_tasks--;
@@ -183,6 +214,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     }
 
     return Status::OK();
+}
+
+void ScanOperator::set_workgroup(starrocks::workgroup::WorkGroupPtr wg) {
+    _workgroup = wg;
 }
 
 Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
@@ -217,10 +252,6 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     }
 
     return Status::OK();
-}
-
-void ScanOperator::set_workgroup(workgroup::WorkGroupPtr wg) {
-    _workgroup = std::move(wg);
 }
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
