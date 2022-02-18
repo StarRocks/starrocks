@@ -123,11 +123,6 @@ public:
     void set_enable_resource_group() { _enable_resource_group = true; }
 
     bool enable_resource_group() const { return _enable_resource_group; }
-
-    void set_enable_resource_group() { _enable_resource_group = true; }
-
-    bool enable_resource_group() const { return _enable_resource_group; }
-
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -165,8 +160,6 @@ private:
     std::atomic<Status*> _final_status;
     std::atomic<bool> _cancel_flag;
     Status _s_status;
-
-    bool _enable_resource_group = false;
 };
 
 class FragmentContextManager {

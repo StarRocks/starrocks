@@ -220,7 +220,10 @@ void WorkGroupManager::close() {
 
 StatusOr<IoWorkGroupQueue::Task> WorkGroupManager::pick_next_task_for_io(int dispatcher_id) {
     // TODO: Not Implemented
-    return Status::OK();
+    auto fake_task = [](int dispatcher_id) {
+        sleep(1);
+    };
+    return fake_task;
 }
 
 bool WorkGroupManager::try_offer_io_task(WorkGroupPtr wg, IoWorkGroupQueue::Task task) {
