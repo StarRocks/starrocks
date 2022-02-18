@@ -7,15 +7,11 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/morsel.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "util/exclusive_ptr.h"
 
 namespace starrocks {
 class RuntimeState;
-
-namespace workgroup {
-class WorkGroup;
-using WorkGroupPtr = std::shared_ptr<WorkGroup>;
-} // namespace workgroup
 
 namespace pipeline {
 

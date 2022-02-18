@@ -25,6 +25,7 @@
 #include <memory>
 
 #include "common/status.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "storage/options.h"
 
 namespace starrocks {
@@ -65,10 +66,6 @@ class HeartbeatFlags;
 
 namespace pipeline {
 class DriverDispatcher;
-}
-
-namespace workgroup {
-class ScanWorker;
 }
 
 // Execution environment for queries/plan fragments.
