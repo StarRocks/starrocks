@@ -115,6 +115,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // them do the real work on core.
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
+    // Use resource group. It will influence the CPU schedule, I/O scheduler, and
+    // memory limit etc. in BE.
+    public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
+
     public static final String PIPELINE_DOP = "pipeline_dop";
 
     public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
@@ -181,6 +185,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
+    private boolean enableResourceGroup = false;
 
     // max memory used on every backend.
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
@@ -758,6 +765,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {
         this.enablePipelineEngine = enablePipelineEngine;
+    }
+
+    public boolean isEnableResourceGroup() {
+        return enableResourceGroup;
+    }
+
+    public void setEnableResourceGroup(boolean enableResourceGroup) {
+        this.enableResourceGroup = enableResourceGroup;
     }
 
     public int getPipelineDop() {

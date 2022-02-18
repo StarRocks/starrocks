@@ -297,7 +297,9 @@ struct TExecPlanFragmentParams {
   50: optional bool is_pipeline
   51: optional i32 pipeline_dop
   52: optional map<Types.TPlanNodeId, i32> per_scan_node_dop
+
   53: optional WorkGroup.TWorkGroup workgroup
+  54: optional bool enable_resource_group
 }
 
 struct TExecPlanFragmentResult {
