@@ -278,9 +278,9 @@ Status PersistentIndex::load(PersistentIndexMetaPB& index_meta) {
         _offset = offset + size;
         size_t kv_size = key_size + sizeof(IndexValue);
         size_t nums = size / kv_size;
+        std::string buff;
         while (nums > 0) {
             size_t batch_num = (nums > 4096) ? 4096 : nums;
-            std::string buff;
             raw::stl_string_resize_uninitialized(&buff, batch_num * kv_size);
             RETURN_IF_ERROR(rblock->read(offset, buff));
             uint8_t keys[key_size * batch_num];
@@ -296,7 +296,6 @@ Status PersistentIndex::load(PersistentIndexMetaPB& index_meta) {
             RETURN_IF_ERROR(_l0->upsert(batch_num, keys, values.data()));
             offset += batch_num * kv_size;
             nums -= batch_num;
-            buff.clear();
         }
     }
     // the data in the end maybe invalid
