@@ -168,8 +168,18 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&driver_dispatcher_thread_pool));
-    _driver_dispatcher = new pipeline::GlobalDriverDispatcher(std::move(driver_dispatcher_thread_pool));
+    _driver_dispatcher = new pipeline::GlobalDriverDispatcher(std::move(driver_dispatcher_thread_pool), false);
     _driver_dispatcher->initialize(max_thread_num);
+
+    std::unique_ptr<ThreadPool> wg_driver_dispatcher_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_dispatcher") // pipeline dispatcher
+                            .set_min_threads(0)
+                            .set_max_threads(max_thread_num)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&wg_driver_dispatcher_thread_pool));
+    _wg_driver_dispatcher = new pipeline::GlobalDriverDispatcher(std::move(wg_driver_dispatcher_thread_pool), true);
+    _wg_driver_dispatcher->initialize(max_thread_num);
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
@@ -349,6 +359,10 @@ void ExecEnv::_destroy() {
         delete _driver_dispatcher;
         _driver_dispatcher = nullptr;
     }
+    if (_wg_driver_dispatcher) {
+        delete _wg_driver_dispatcher;
+        _wg_driver_dispatcher = nullptr;
+    }
     if (_fragment_mgr) {
         delete _fragment_mgr;
         _fragment_mgr = nullptr;
@@ -414,7 +428,7 @@ void ExecEnv::_destroy() {
         _load_mem_tracker = nullptr;
     }
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
-    starrocks::workgroup::WorkGroupManager::instance()->destroy();
+    workgroup::WorkGroupManager::instance()->destroy();
     if (_query_pool_mem_tracker) {
         delete _query_pool_mem_tracker;
         _query_pool_mem_tracker = nullptr;

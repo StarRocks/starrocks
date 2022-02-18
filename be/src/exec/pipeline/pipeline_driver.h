@@ -74,9 +74,7 @@ static inline std::string ds_to_string(DriverState ds) {
 // for schedule.
 class DriverAcct {
 public:
-    DriverAcct()
-
-    {}
+    DriverAcct() {}
     //TODO:
     // get_level return a non-negative value that is a hint used by DriverQueue to choose
     // the target internal queue for put_back.
@@ -91,7 +89,7 @@ public:
     }
     void update_last_chunks_moved(int64_t chunks_moved) {
         this->last_chunks_moved = chunks_moved;
-        this->accumulated_chunk_moved += chunks_moved;
+        this->accumulated_chunks_moved += chunks_moved;
         this->schedule_effective_times += (chunks_moved > 0) ? 1 : 0;
     }
     void update_accumulated_rows_moved(int64_t rows_moved) { this->accumulated_rows_moved += rows_moved; }
@@ -102,14 +100,14 @@ public:
     int64_t get_schedule_effective_times() { return schedule_effective_times; }
 
     int64_t get_rows_per_chunk() {
-        if (accumulated_chunk_moved > 0) {
-            return accumulated_rows_moved / accumulated_chunk_moved;
+        if (accumulated_chunks_moved > 0) {
+            return accumulated_rows_moved / accumulated_chunks_moved;
         } else {
             return 0;
         }
     }
 
-    int64_t get_accumulated_chunk_moved() { return accumulated_chunk_moved; }
+    int64_t get_accumulated_chunks_moved() { return accumulated_chunks_moved; }
 
 private:
     int64_t schedule_times{0};
@@ -117,7 +115,7 @@ private:
     int64_t last_time_spent{0};
     int64_t last_chunks_moved{0};
     int64_t accumulated_time_spent{0};
-    int64_t accumulated_chunk_moved{0};
+    int64_t accumulated_chunks_moved{0};
     int64_t accumulated_rows_moved{0};
 };
 
@@ -160,6 +158,8 @@ public:
             : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id,
                              driver._is_root) {}
 
+    ~PipelineDriver();
+
     QueryContext* query_ctx() { return _query_ctx; }
     FragmentContext* fragment_ctx() { return _fragment_ctx; }
     int32_t source_node_id() { return _source_node_id; }
@@ -167,7 +167,7 @@ public:
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
     void set_morsel_queue(MorselQueuePtr morsel_queue) { _morsel_queue = std::move(morsel_queue); }
     Status prepare(RuntimeState* runtime_state);
-    StatusOr<DriverState> process(RuntimeState* runtime_state);
+    StatusOr<DriverState> process(RuntimeState* runtime_state, int dispatcher_id);
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
@@ -339,10 +339,14 @@ public:
     std::string to_readable_string() const;
 
     workgroup::WorkGroup* workgroup();
-
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
+    size_t get_dispatch_queue_index() const { return _dispatch_queue_index; }
+    void set_dispatch_queue_index(size_t dispatch_queue_index) { _dispatch_queue_index = dispatch_queue_index; }
+
 private:
+    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000;
+
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
     void _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
@@ -350,6 +354,14 @@ private:
     void _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
     void _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
+
+    // Update metrics when the driver yields.
+    void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+        driver_acct().increment_schedule_times();
+        driver_acct().update_last_chunks_moved(total_chunks_moved);
+        driver_acct().update_accumulated_rows_moved(total_rows_moved);
+        driver_acct().update_last_time_spent(time_spent);
+    }
 
     RuntimeState* _runtime_state = nullptr;
     void _update_overhead_timer();
@@ -386,6 +398,8 @@ private:
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
+    // The index of QuerySharedDriverQueue{WithoutLock}._queues which this driver belongs to.
+    size_t _dispatch_queue_index = 0;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
@@ -403,7 +417,7 @@ private:
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _schedule_effective_counter = nullptr;
     RuntimeProfile::Counter* _schedule_rows_per_chunk = nullptr;
-    RuntimeProfile::Counter* _schedule_accumulated_chunk_moved = nullptr;
+    RuntimeProfile::Counter* _schedule_accumulated_chunks_moved = nullptr;
 
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;
