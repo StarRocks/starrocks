@@ -99,6 +99,8 @@ struct AggHashMapWithOneNumberKey {
 
     AggHashMapWithOneNumberKey(int32_t chunk_size) {}
 
+    AggDataPtr get_null_key_data() { return nullptr; }
+
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
@@ -160,6 +162,8 @@ struct AggHashMapWithOneNullableNumberKey {
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
     AggHashMapWithOneNullableNumberKey(int32_t chunk_size) {}
+
+    AggDataPtr get_null_key_data() { return null_key_data; }
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -287,6 +291,8 @@ struct AggHashMapWithOneStringKey {
 
     AggHashMapWithOneStringKey(int32_t chunk_size) {}
 
+    AggDataPtr get_null_key_data() { return nullptr; }
+
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
@@ -348,6 +354,8 @@ struct AggHashMapWithOneNullableStringKey {
     HashMap hash_map;
 
     AggHashMapWithOneNullableStringKey(int32_t chunk_size) {}
+
+    AggDataPtr get_null_key_data() { return null_key_data; }
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -484,6 +492,8 @@ struct AggHashMapWithSerializedKey {
               buffer(mem_pool->allocate(max_one_row_size * chunk_size)),
               _chunk_size(chunk_size) {}
 
+    AggDataPtr get_null_key_data() { return nullptr; }
+
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
@@ -611,6 +621,8 @@ struct AggHashMapWithSerializedKeyFixedSize {
         uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
         memset(buffer, 0x0, max_fixed_size * _chunk_size);
     }
+
+    AggDataPtr get_null_key_data() { return nullptr; }
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
