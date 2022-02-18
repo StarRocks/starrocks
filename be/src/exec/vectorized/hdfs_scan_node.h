@@ -17,8 +17,8 @@ namespace starrocks::vectorized {
 
 struct HdfsFileDesc {
     THdfsFileFormat::type hdfs_file_format;
-    HdfsFsHandle::Type fs_handle_type;
-    std::shared_ptr<RandomAccessFile> fs;
+    Env* env; // The Env used to open |path|
+    std::string path;
 
     int partition_id = 0;
     std::string scan_range_path;
