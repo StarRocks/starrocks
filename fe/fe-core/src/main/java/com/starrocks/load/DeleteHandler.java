@@ -182,7 +182,8 @@ public class DeleteHandler implements Writable {
                     if (olapTable.getPartitionInfo().getType() == PartitionType.RANGE) {
                         partitionNames = extractPartitionNamesByCondition(stmt, olapTable);
                         if (partitionNames.isEmpty()) {
-                            LOG.info("delete stmt [{}] pruned all partitions", stmt.getOrigStmt().originStmt);
+                            LOG.info("The delete statement [{}] prunes all partitions",
+                                    stmt.getOrigStmt().originStmt);
                             return;
                         }
                     } else if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
