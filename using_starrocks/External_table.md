@@ -247,7 +247,7 @@ PROPERTIES (
 
 * 外表列：
   * 列名需要与Hive表一一对应。
-  * 列的顺序**不需要**与Hive表一致。
+  * 列顺序与Hive表的关系。如果Hive表的存储格式为Parquet或ORC，则列的顺序**不需要**与Hive表一致。如果Hive表的存储格式为CSV，则列的顺序**需要**与Hive表一致。
   * 可以只选择Hive表中的**部分列**，但**分区列**必须要全部包含。
   * 外表的分区列无需通过partition by语句指定，需要与普通列一样定义到描述列表中。不需要指定分区信息，StarRocks会自动从Hive同步。
   * ENGINE指定为HIVE。
@@ -272,8 +272,9 @@ PROPERTIES (
     说明：
 
   * Hive表Schema变更**不会自动同步**，需要在StarRocks中重建Hive外表。
-  * 当前Hive的存储格式仅支持Parquet和ORC类型
-  * 压缩格式支持snappy，lz4
+  * 支持Hive的存储格式为Parquet，ORC和CSV格式。
+    > 如果为CSV格式，则暂不支持引号为转义字符。
+  * 压缩格式支持snappy，lz4。
 
 <br/>
 
