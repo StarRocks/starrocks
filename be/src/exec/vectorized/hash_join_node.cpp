@@ -382,6 +382,7 @@ Status HashJoinNode::close(RuntimeState* state) {
 }
 
 pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
     auto rhs_operators = child(1)->decompose_to_pipeline(context);
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
     size_t num_partitions;
@@ -414,7 +415,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
             // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
             TPartitionType::type part_type = TPartitionType::type::HASH_PARTITIONED;
             bool rhs_need_local_shuffle = true;
-            if (auto* exchange_op = dynamic_cast<pipeline::ExchangeSourceOperatorFactory*>(rhs_operators[0].get());
+            if (auto* exchange_op = dynamic_cast<ExchangeSourceOperatorFactory*>(rhs_operators[0].get());
                 exchange_op != nullptr) {
                 auto& texchange_node = exchange_op->texchange_node();
                 DCHECK(texchange_node.__isset.partition_type);
@@ -425,7 +426,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                 }
             }
             bool lhs_need_local_shuffle = true;
-            if (auto* exchange_op = dynamic_cast<pipeline::ExchangeSourceOperatorFactory*>(lhs_operators[0].get());
+            if (auto* exchange_op = dynamic_cast<ExchangeSourceOperatorFactory*>(lhs_operators[0].get());
                 exchange_op != nullptr) {
                 auto& texchange_node = exchange_op->texchange_node();
                 DCHECK(texchange_node.__isset.partition_type);
@@ -475,23 +476,22 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // In default query engine, we only build one hash table for join right child.
     // But for pipeline query engine, we will build `num_partitions` hash tables, so we need to enlarge the limit
-    std::unique_ptr<pipeline::PartialRuntimeFilterMerger> partial_rf_merger;
+    std::unique_ptr<PartialRuntimeFilterMerger> partial_rf_merger;
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
-        partial_rf_merger =
-                std::make_unique<pipeline::PartialRuntimeFilterMerger>(pool, _runtime_join_filter_pushdown_limit, 1);
+        partial_rf_merger = std::make_unique<PartialRuntimeFilterMerger>(pool, _runtime_join_filter_pushdown_limit, 1);
     } else {
-        partial_rf_merger = std::make_unique<pipeline::PartialRuntimeFilterMerger>(
+        partial_rf_merger = std::make_unique<PartialRuntimeFilterMerger>(
                 pool, _runtime_join_filter_pushdown_limit * num_partitions, num_partitions);
     }
-    auto build_op = std::make_shared<pipeline::HashJoinBuildOperatorFactory>(
+    auto build_op = std::make_shared<HashJoinBuildOperatorFactory>(
             context->next_operator_id(), id(), hash_joiner_factory, std::move(partial_rf_merger), _distribution_mode);
 
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(build_op.get(), context, rc_rf_probe_collector);
 
     // HashJoinProbeOperatorFactory holds the ownership of HashJoiner object.
-    auto probe_op = std::make_shared<pipeline::HashJoinProbeOperatorFactory>(context->next_operator_id(), id(),
-                                                                             hash_joiner_factory);
+    auto probe_op =
+            std::make_shared<HashJoinProbeOperatorFactory>(context->next_operator_id(), id(), hash_joiner_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(probe_op.get(), context, rc_rf_probe_collector);
 
@@ -502,8 +502,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     lhs_operators.emplace_back(std::move(probe_op));
 
     if (limit() != -1) {
-        lhs_operators.emplace_back(
-                std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+        lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
     return lhs_operators;
