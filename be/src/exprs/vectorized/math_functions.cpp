@@ -98,10 +98,10 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
                                                                                                VECTORIZED_FN_ARGS(1)); \
     }
 
-#define DEFINE_MATH_BINARY_FN_WITH_NAN_CHECK(NAME, LTYPE, RTYPE, RESULT_TYPE)                                                         \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) {           \
-        return VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),  \
-                                                                                               VECTORIZED_FN_ARGS(1)); \
+#define DEFINE_MATH_BINARY_FN_WITH_NAN_CHECK(NAME, LTYPE, RTYPE, RESULT_TYPE)                                 \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) {  \
+        return VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>::evaluate<LTYPE, RTYPE, RESULT_TYPE>( \
+                VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                                                \
     }
 
 #define DEFINE_MATH_BINARY_FN_WITH_IMPL(NAME, LTYPE, RTYPE, RESULT_TYPE, FN) \
