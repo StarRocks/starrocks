@@ -4,6 +4,7 @@
 
 #include "column/column_helper.h"
 #include "exec/vectorized/olap_scan_prepare.h"
+#include "exec/workgroup/work_group.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter.h"
 #include "gutil/map_util.h"
@@ -313,6 +314,48 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
         }
         _chunk_buffer.put(std::move(chunk));
     }
+    return _status;
+}
+
+Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, bool& can_finish,
+                                                                        size_t* num_read_chunks, int dispatcher_id,
+                                                                        workgroup::WorkGroupPtr running_wg) {
+    if (!_status.ok()) {
+        return _status;
+    }
+
+    using namespace vectorized;
+    int64_t time_spent = 0;
+    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+        {
+            SCOPED_RAW_TIMER(&time_spent);
+
+            ChunkUniquePtr chunk(
+                    ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
+            _status = _read_chunk_from_storage(_runtime_state, chunk.get());
+            if (!_status.ok()) {
+                // end of file is normal case, need process chunk
+                if (_status.is_end_of_file()) {
+                    ++(*num_read_chunks);
+                    _chunk_buffer.put(std::move(chunk));
+                }
+                break;
+            }
+
+            ++(*num_read_chunks);
+            _chunk_buffer.put(std::move(chunk));
+        }
+
+        if (time_spent >= config::pipeline_scan_task_yield_max_tims_spent) {
+            break;
+        }
+
+        if (time_spent >= config::pipeline_scan_task_yield_preempt_max_time_spent &&
+            workgroup::WorkGroupManager::instance()->should_yield_io_dispatcher(dispatcher_id, running_wg)) {
+            break;
+        }
+    }
+
     return _status;
 }
 
