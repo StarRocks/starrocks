@@ -2,6 +2,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.WorkGroup;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.Relation;
 
@@ -26,16 +27,16 @@ public class ShowWorkGroupStmt extends ShowStmt {
         return listAll;
     }
 
+    @Override
+    public ShowResultSetMetaData getMetaData() {
+        return WorkGroup.META_DATA;
+    }
+
     public String getName() {
         return name;
     }
 
     public Relation analyze() {
-        return null;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
         return null;
     }
 }
