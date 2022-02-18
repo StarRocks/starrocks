@@ -23,9 +23,11 @@ using seconds = std::chrono::seconds;
 using milliseconds = std::chrono::microseconds;
 using steady_clock = std::chrono::steady_clock;
 using std::chrono::duration_cast;
+
 class WorkGroup;
 class WorkGroupManager;
 using WorkGroupPtr = std::shared_ptr<WorkGroup>;
+using WorkGroupPtrSet = std::unordered_set<WorkGroupPtr>;
 
 class WorkGroupQueue {
 public:
@@ -55,7 +57,6 @@ public:
     void close() override;
 };
 
-class WorkGroupManager;
 using WorkGroupType = TWorkGroupType::type;
 // WorkGroup is the unit of resource isolation, it has {CPU, Memory, Concurrency} quotas which limit the
 // resource usage of the queries belonging to the WorkGroup. Each user has be bound to a WorkGroup, when
@@ -80,6 +81,18 @@ public:
 
     const std::string& name() const { return _name; }
 
+    size_t cpu_limit() const { return _cpu_limit; }
+
+    int64_t vruntime_ns() const { return _vruntime_ns; }
+    int64_t real_runtime_ns() const { return _vruntime_ns * _cpu_limit; }
+    // Accumulate virtual runtime divided by _cpu_limit, so that the larger _cpu_limit,
+    // the more cpu time can be consumed proportionally.
+    void increment_real_runtime_ns(int64_t real_runtime_ns) { _vruntime_ns += real_runtime_ns / _cpu_limit; }
+    void set_vruntime_ns(int64_t vruntime_ns) { _vruntime_ns = vruntime_ns; }
+
+    double get_cpu_expected_use_ratio() const;
+    double get_cpu_actual_use_ratio() const;
+
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_VERSION = 0;
     bool try_offer_io_task(IoWorkGroupQueue::Task task);
@@ -90,7 +103,6 @@ public:
     // should be call while comsume chunk from calculate thread
     void decrease_chunk_num(int32_t chunk_num){};
 
-public:
     // increase num_driver when the driver is attached to the workgroup
     void increase_num_drivers() {
         ++_num_drivers;
@@ -98,6 +110,8 @@ public:
     }
     // decrease num_driver when the driver is detached from the workgroup
     void decrease_num_drivers() { --_num_drivers; }
+
+    int num_drivers() const { return _num_drivers; }
 
     // mark the workgroup is deleted, but at the present, it can not be removed from WorkGroupManager, because
     // 1. there exists pending drivers
@@ -139,11 +153,43 @@ private:
     std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
 
     pipeline::DriverQueuePtr _driver_queue = nullptr;
+    int64_t _vruntime_ns = 0;
 
     std::atomic<bool> _is_marked_del = false;
     std::atomic<size_t> _num_drivers = 0;
     std::atomic<size_t> _acc_num_drivers = 0;
     int64_t _vacuum_ttl = std::numeric_limits<int64_t>::max();
+};
+
+class DispatcherOwnerManager {
+public:
+    explicit DispatcherOwnerManager(int num_total_dispatchers);
+    ~DispatcherOwnerManager() = default;
+
+    // Disable copy/move ctor and assignment.
+    DispatcherOwnerManager(const DispatcherOwnerManager&) = delete;
+    DispatcherOwnerManager& operator=(const DispatcherOwnerManager&) = delete;
+    DispatcherOwnerManager(DispatcherOwnerManager&&) = delete;
+    DispatcherOwnerManager& operator=(DispatcherOwnerManager&&) = delete;
+
+    int num_total_dispatchers() const { return _num_total_dispatchers; }
+
+    std::shared_ptr<WorkGroupPtrSet> get_owners(int dispatcher_id) const {
+        return _dispatcher_id2owner_wgs[_index % 2][dispatcher_id];
+    }
+
+    // Labels which workgroups each dispatcher belongs to based on the cpu limit of each workgroup.
+    void reassign_to_wgs(const std::unordered_map<int128_t, WorkGroupPtr>& workgroups, int sum_cpu_limit);
+
+    // Return true, when the dispatcher is running the workgroup which it doesn't belong to,
+    // and any owner workgroups of it has running drivers.
+    bool should_yield(int dispatcher_id, const WorkGroupPtr& running_wg) const;
+
+private:
+    const int _num_total_dispatchers;
+    // Use two _dispatcher_id2owner_wgs and _index to insulate read and write.
+    std::vector<std::shared_ptr<WorkGroupPtrSet>> _dispatcher_id2owner_wgs[2]{};
+    std::atomic<size_t> _index = 0;
 };
 
 // WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
@@ -164,11 +210,21 @@ public:
     StatusOr<IoWorkGroupQueue::Task> pick_next_task_for_io(int dispatcher_id);
     bool try_offer_io_task(WorkGroupPtr wg, IoWorkGroupQueue::Task task);
 
+    size_t sum_cpu_limit() const { return _sum_cpu_limit; }
+    void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
+    int64_t sum_cpu_runtime_ns() const { return _sum_cpu_runtime_ns; }
+
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
     std::vector<TWorkGroup> list_all_workgroups();
 
+    std::shared_ptr<WorkGroupPtrSet> get_owners_of_driver_dispatcher(int dispatcher_id);
+    bool should_yield_driver_dispatcher(int dispatcher_id, WorkGroupPtr running_wg);
+
+    std::shared_ptr<WorkGroupPtrSet> get_owners_of_io_dispatcher(int dispatcher_id);
     bool should_yield_io_dispatcher(int dispatcher_id, WorkGroupPtr running_wg);
+
+    int num_total_driver_dispatchers() const { return _driver_dispatcher_owner_manager->num_total_dispatchers(); }
 
 private:
     // {create, alter,delete}_workgroup_unlocked is used to replay WorkGroupOps.
@@ -176,11 +232,22 @@ private:
     void create_workgroup_unlocked(const WorkGroupPtr& wg);
     void alter_workgroup_unlocked(const WorkGroupPtr& wg);
     void delete_workgroup_unlocked(const WorkGroupPtr& wg);
+
+    // Label each dispatcher thread to a specific workgroup by cpu limit.
+    // WorkGroupManager::_mutex is held when invoking this method.
+    void reassign_dispatcher_to_wgs();
+
     std::shared_mutex _mutex;
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;
     IoWorkGroupQueue _wg_io_queue;
+
+    std::atomic<size_t> _sum_cpu_limit = 0;
+    std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
+
+    std::unique_ptr<DispatcherOwnerManager> _driver_dispatcher_owner_manager;
+    std::unique_ptr<DispatcherOwnerManager> _io_dispatcher_owner_manager;
 };
 
 class DefaultWorkGroupInitialization {
