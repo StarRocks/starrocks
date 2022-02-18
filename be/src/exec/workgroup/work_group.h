@@ -172,6 +172,8 @@ public:
     DispatcherOwnerManager(DispatcherOwnerManager&&) = delete;
     DispatcherOwnerManager& operator=(DispatcherOwnerManager&&) = delete;
 
+    int num_total_dispatchers() const { return _num_total_dispatchers; }
+
     std::shared_ptr<WorkGroupPtrSet> get_owners(int dispatcher_id) const {
         return _dispatcher_id2owner_wgs[_index % 2][dispatcher_id];
     }
@@ -221,6 +223,8 @@ public:
 
     std::shared_ptr<WorkGroupPtrSet> get_owners_of_io_dispatcher(int dispatcher_id);
     bool should_yield_io_dispatcher(int dispatcher_id, WorkGroupPtr running_wg);
+
+    int num_total_driver_dispatchers() const { return _driver_dispatcher_owner_manager->num_total_dispatchers(); }
 
 private:
     // {create, alter,delete}_workgroup_unlocked is used to replay WorkGroupOps.
