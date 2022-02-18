@@ -2,7 +2,8 @@
 
 性能优化是StarRocks集群管理员经常遇到的问题，慢查询不仅影响用户体验，而且影响整个集群的服务能力，所以定期针对慢查询进行分析并优化是一项非常重要的工作。
 
-我们可以在fe/log/fe.audit.log中看到所有查询和慢查询信息，每个查询对应一个QueryID，我们可以在页面或者日志中查找到查询对应的QueryPlan和Profile，QueryPlan是FE通过解析SQL生成的执行计划，而Profile是BE执行后的结果，包含了每一步的耗时和数据处理量等数据，可以通过StarRocksManager的图形界面看到可视化的Profile执行树。
+我们可以在fe/log/fe.audit.log中看到所有查询和慢查询信息，每个查询对应一个QueryID，我们可以在页面或者日志中查找到查询对应的QueryPlan和Profile，QueryPlan是FE通过解析SQL生成的执行计划，而Profile是BE执行后的结果，包含了每一步的耗时和数据处理量等数据，可以通过StarRocksManager的图形界面看到可视化的Profile执行树。<br>
+同时，StarRocks还支持对慢查询中的SQL语句进行归类，并为各类SQL语句计算出SQL指纹（即MD5哈希值，对应字段为`Digest`）。
 
 ## Plan分析
 
@@ -292,4 +293,32 @@ HASH_JOIN_NODE (id=2):(Active: 996.337ms, % non-child: 52.05%)
 - PushDownExprNum: 0
 - RowsReturned: 438.502K (438502)
 - RowsReturnedRate: 440.114K /sec
+~~~
+
+## SQL指纹
+
+StarRocks支持规范化慢查询（ 路径`fe.audit.log.slow_query` ）中 SQL 语句，并进行归类。然后针对各个类型的SQL语句，计算出其的MD5 哈希值，对应字段为 `Digest`。
+
+~~~test
+2021-12-27 15:13:39,108 [slow_query] |Client=172.26.xx.xxx:54956|User=root|Db=default_cluster:test|State=EOF|Time=2469|ScanBytes=0|ScanRows=0|ReturnRows=6|StmtId=3|QueryId=824d8dc0-66e4-11ec-9fdc-00163e04d4c2|IsQuery=true|feIp=172.26.92.195|Stmt=select count(*) from test_basic group by id_bigint|Digest=51390da6b57461f571f0712d527320f4
+~~~
+
+SQL语句规范化仅保留重要的语法结构：
+
+* 保留对象标识符，如数据库和表的名称。
+* 转换常量为?。
+* 删除注释并调整空格。
+
+如下两个SQL语句，规范化后属于同一类SQL。
+
+~~~sql
+SELECT * FROM orders WHERE customer_id=10 AND quantity>20
+
+SELECT * FROM orders WHERE customer_id = 20 AND quantity > 100
+~~~
+
+规范化后如下类型的SQL。
+
+~~~sql
+SELECT * FROM orders WHERE customer_id=? AND quantity>?
 ~~~
