@@ -87,6 +87,7 @@ import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.WorkGroupOpEntry;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.statistic.AnalyzeJob;
@@ -494,7 +495,7 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_WORKGROUP: {
-                Text.readString(in);
+                data = WorkGroupOpEntry.read(in);
                 isRead = true;
                 break;
             }
