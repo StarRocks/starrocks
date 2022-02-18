@@ -103,10 +103,8 @@ public:
     ColumnSelector(const FileContents* contents);
 
     // Select the columns from the RowReaderoptions object
-    void updateSelected(std::vector<bool>& selectedColumns, const RowReaderOptions& options);
-
-    // Select the columns from the Readeroptions object
-    void updateSelected(std::vector<bool>& selectedColumns, const ReaderOptions& options);
+    void updateSelected(std::vector<bool>& selectedColumns, std::vector<bool>& lazyLoadColumns,
+                        const RowReaderOptions& options);
 };
 
 class RowReaderImpl : public RowReader {
@@ -120,6 +118,7 @@ private:
 
     // inputs
     std::vector<bool> selectedColumns;
+    std::vector<bool> lazyLoadColumns;
 
     // footer
     proto::Footer* footer;
@@ -190,13 +189,16 @@ public:
     RowReaderImpl(const std::shared_ptr<FileContents>& contents, const RowReaderOptions& options);
 
     // Select the columns from the options object
-    const std::vector<bool> getSelectedColumns() const override;
+    const std::vector<bool>& getSelectedColumns() const override;
+    const std::vector<bool>& getLazyLoadColumns() const override;
 
     const Type& getSelectedType() const override;
 
     std::unique_ptr<ColumnVectorBatch> createRowBatch(uint64_t size) const override;
 
     bool next(ColumnVectorBatch& data) override;
+    void lazyLoadSkip(uint64_t numValues) override;
+    void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) override;
 
     CompressionKind getCompression() const;
 

@@ -47,11 +47,12 @@ using ::testing::Values;
 class MockStripeStreams : public StripeStreams {
 public:
     ~MockStripeStreams() override;
+    MockStripeStreams() : lazyLoadColumns(100, false) {}
 
     std::unique_ptr<SeekableInputStream> getStream(uint64_t columnId, proto::Stream_Kind kind,
                                                    bool stream) const override;
 
-    MOCK_CONST_METHOD0(getSelectedColumns, const std::vector<bool>());
+    MOCK_CONST_METHOD0(getSelectedColumns, const std::vector<bool>&());
     MOCK_CONST_METHOD1(getEncoding, proto::ColumnEncoding(uint64_t));
     MOCK_CONST_METHOD3(getStreamProxy, SeekableInputStream*(uint64_t, proto::Stream_Kind, bool));
     MOCK_CONST_METHOD0(getErrorStream, std::ostream*());
@@ -63,7 +64,14 @@ public:
     const Timezone& getWriterTimezone() const override { return getTimezoneByName("America/Los_Angeles"); }
 
     const Timezone& getReaderTimezone() const override { return getTimezoneByName("GMT"); }
-};
+
+    const std::vector<bool>& getLazyLoadColumns() const { return lazyLoadColumns; }
+
+private:
+    // large enough.
+    std::vector<bool> lazyLoadColumns;
+
+}; // namespace orc
 
 MockStripeStreams::~MockStripeStreams() {
     // PASS
@@ -94,7 +102,7 @@ TEST(TestColumnReader, testBooleanWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -142,7 +150,7 @@ TEST(TestColumnReader, testBooleanSkipsWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -192,7 +200,7 @@ TEST(TestColumnReader, testByteWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -248,7 +256,7 @@ TEST(TestColumnReader, testByteSkipsWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -308,7 +316,7 @@ TEST(TestColumnReader, testIntegerWithNulls) {
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
 
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -353,7 +361,7 @@ TEST_P(TestColumnReaderEncoded, testDictionaryWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -444,7 +452,7 @@ TEST_P(TestColumnReaderEncoded, testVarcharDictionaryWithNulls) {
     std::vector<bool> selectedColumns(3, true);
     selectedColumns.push_back(false);
 
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -553,7 +561,7 @@ TEST(TestColumnReader, testSubstructsWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(4, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -638,7 +646,7 @@ TEST(TestColumnReader, testSkipWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(3, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -722,7 +730,7 @@ TEST(TestColumnReader, testBinaryDirect) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -776,7 +784,7 @@ TEST(TestColumnReader, testBinaryDirectWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -837,7 +845,7 @@ TEST(TestColumnReader, testShortBlobError) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -874,7 +882,7 @@ TEST_P(TestColumnReaderEncoded, testStringDirectShortBuffer) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -932,7 +940,7 @@ TEST_P(TestColumnReaderEncoded, testStringDirectShortBufferWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -1004,7 +1012,7 @@ TEST(TestColumnReader, testStringDirectNullAcrossWindow) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -1057,7 +1065,7 @@ TEST(TestColumnReader, testStringDirectSkip) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -1139,7 +1147,7 @@ TEST(TestColumnReader, testStringDirectSkipWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -1223,7 +1231,7 @@ TEST_P(TestColumnReaderEncoded, testList) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(3, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -1282,7 +1290,7 @@ TEST(TestColumnReader, testListPropagateNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(4, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     std::unique_ptr<Type> innerType = createStructType();
     innerType->addStructField("col0_0", createListType(createPrimitiveType(LONG)));
@@ -1338,7 +1346,7 @@ TEST(TestColumnReader, testListWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(3, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -1471,7 +1479,7 @@ TEST(TestColumnReader, testListSkipWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(3, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -1564,7 +1572,7 @@ TEST(TestColumnReader, testListSkipWithNullsNoData) {
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
     selectedColumns.push_back(false);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -1636,7 +1644,7 @@ TEST_P(TestColumnReaderEncoded, testMap) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(4, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -1707,7 +1715,7 @@ TEST(TestColumnReader, testMapWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(4, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -1878,7 +1886,7 @@ TEST(TestColumnReader, testMapSkipWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(4, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -1991,7 +1999,7 @@ TEST(TestColumnReader, testMapSkipWithNullsNoData) {
     std::vector<bool> selectedColumns(2, true);
     selectedColumns.push_back(false);
     selectedColumns.push_back(false);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2060,7 +2068,7 @@ TEST(TestColumnReader, testFloatWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2128,7 +2136,7 @@ TEST(TestColumnReader, testFloatSkipWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2201,7 +2209,7 @@ TEST(TestColumnReader, testDoubleWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2272,7 +2280,7 @@ TEST(TestColumnReader, testDoubleSkipWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2345,7 +2353,7 @@ TEST(TestColumnReader, testTimestampSkipWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2435,7 +2443,7 @@ TEST(TestColumnReader, testTimestamp) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2500,7 +2508,7 @@ TEST(DecimalColumnReader, testDecimal64) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2568,7 +2576,7 @@ TEST(DecimalColumnReader, testDecimal64Skip) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2634,7 +2642,7 @@ TEST(DecimalColumnReader, testDecimal128) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2702,7 +2710,7 @@ TEST(DecimalColumnReader, testDecimal128Skip) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2781,7 +2789,7 @@ TEST(DecimalColumnReader, testDecimalHive11) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
     EXPECT_CALL(streams, getThrowOnHive11DecimalOverflow()).WillRepeatedly(testing::Return(true));
     EXPECT_CALL(streams, getForcedScaleOnHive11Decimal()).WillRepeatedly(testing::Return(6));
 
@@ -2853,7 +2861,7 @@ TEST(DecimalColumnReader, testDecimalHive11Skip) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2934,7 +2942,7 @@ TEST(DecimalColumnReader, testDecimalHive11ScaleUp) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -2991,7 +2999,7 @@ TEST(DecimalColumnReader, testDecimalHive11ScaleDown) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -3060,7 +3068,7 @@ TEST(DecimalColumnReader, testDecimalHive11OverflowException) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -3106,7 +3114,7 @@ TEST(DecimalColumnReader, testDecimalHive11OverflowExceptionNull) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -3155,7 +3163,7 @@ TEST(DecimalColumnReader, testDecimalHive11OverflowNull) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -3230,7 +3238,7 @@ TEST(DecimalColumnReader, testDecimalHive11BigBatches) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -3285,7 +3293,7 @@ TEST(TestColumnReader, testUnion) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(4, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -3417,7 +3425,7 @@ TEST(TestColumnReader, testUnionWithNulls) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(4, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -3501,7 +3509,7 @@ TEST(TestColumnReader, testUnionSkips) {
     std::vector<bool> selectedColumns(2, true);
     selectedColumns.push_back(false);
     selectedColumns.push_back(true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -3589,7 +3597,7 @@ TEST(TestColumnReader, testUnionLongSkip) {
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(3, true);
     selectedColumns.push_back(false);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -3662,7 +3670,7 @@ TEST(TestColumnReader, testUnionWithManyVariants) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(132, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
@@ -3763,7 +3771,7 @@ TEST(TestColumnReader, testStringDictinoryIndexOverflow) {
 
     // set getSelectedColumns()
     std::vector<bool> selectedColumns(2, true);
-    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::Return(selectedColumns));
+    EXPECT_CALL(streams, getSelectedColumns()).WillRepeatedly(testing::ReturnRef(selectedColumns));
 
     // set getEncoding
     proto::ColumnEncoding directEncoding;
