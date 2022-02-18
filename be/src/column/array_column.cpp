@@ -384,6 +384,13 @@ void ArrayColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     }
 }
 
+int64_t ArrayColumn::xor_checksum() const {
+    // The XOR of ArrayColumn
+    // XOR the offsets column and elements column
+    int64_t xor_checksum = _offsets->xor_checksum();
+    return (xor_checksum ^ _elements->xor_checksum());
+}
+
 void ArrayColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     DCHECK_LT(idx, size());
     const size_t offset = _offsets->get_data()[idx];

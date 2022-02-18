@@ -102,10 +102,8 @@ Status EngineChecksumTask::_compute_checksum() {
         return st;
     }
 
-    uint32_t checksum = 0;
     uint32_t num_rows = 0;
-    uint32_t hash_codes[config::vector_chunk_size];
-    memset(hash_codes, 0, sizeof(uint32_t) * config::vector_chunk_size);
+    int64_t checksum = 0;
 
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, reader_params.chunk_size);
     st = reader.get_next(chunk.get());
@@ -122,10 +120,7 @@ Status EngineChecksumTask::_compute_checksum() {
 
         num_rows = chunk->num_rows();
         for (auto& column : chunk->columns()) {
-            column->crc32_hash(hash_codes, 0, num_rows);
-            for (int i = 0; i < num_rows; ++i) {
-                checksum ^= hash_codes[i];
-            }
+            checksum ^= column->xor_checksum();
         }
         chunk->reset();
         st = reader.get_next(chunk.get());

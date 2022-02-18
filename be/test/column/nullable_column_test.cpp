@@ -249,4 +249,18 @@ PARALLEL_TEST(NullableColumnTest, test_update_rows) {
     ASSERT_EQ("jk", column1->get(4).get_slice().to_string());
 }
 
+PARALLEL_TEST(NullableColumnTest, test_xor_checksum) {
+    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+
+    c0->append_datum({}); // NULL
+    for (int i = 0; i <= 1000; i++) {
+        c0->append_datum((int32_t)i);
+    }
+
+    int64_t checksum = c0->xor_checksum();
+    int64_t expected_checksum = 1001;
+
+    ASSERT_EQ(checksum, expected_checksum);
+}
+
 } // namespace starrocks::vectorized
