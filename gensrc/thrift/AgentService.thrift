@@ -231,7 +231,7 @@ struct TPublishVersionRequest {
     1: required Types.TTransactionId transaction_id
     2: required list<TPartitionVersionInfo> partition_version_infos
     // strict mode means BE will check tablet missing version
-    3: optional bool strict_mode = false
+    3: optional bool strict_mode = false // Deprecated
 }
 
 struct TClearAlterTaskRequest {
