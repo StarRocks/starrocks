@@ -11,7 +11,7 @@ set(EXEC_FILES placeholder.cpp)
 
 if (WITH_AWS)
 set(EXEC_FILES ${EXEC_FILES}
-    s3_client.cpp)
+        s3_object_store.cpp)
 endif()
 
 add_library(ObjectStore STATIC

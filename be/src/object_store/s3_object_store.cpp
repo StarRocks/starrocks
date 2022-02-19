@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "object_store/s3_client.h"
+#include "object_store/s3_object_store.h"
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
@@ -27,7 +27,8 @@ static inline Aws::String to_aws_string(const std::string& s) {
     return Aws::String(s.data(), s.size());
 }
 
-S3Client::S3Client(const Aws::Client::ClientConfiguration& config, const S3Credential* cred, bool use_transfer_manager)
+S3ObjectStore::S3ObjectStore(const Aws::Client::ClientConfiguration& config, const S3Credential* cred,
+                             bool use_transfer_manager)
         : _config(config) {
     const char* access_key_id = (cred == nullptr || cred->access_key_id.empty()) ? getenv("AWS_ACCESS_KEY_ID")
                                                                                  : cred->access_key_id.c_str();
@@ -49,7 +50,7 @@ S3Client::S3Client(const Aws::Client::ClientConfiguration& config, const S3Crede
     }
 }
 
-Status S3Client::create_bucket(const std::string& bucket_name) {
+Status S3ObjectStore::create_bucket(const std::string& bucket_name) {
     Aws::S3::Model::BucketLocationConstraint constraint =
             Aws::S3::Model::BucketLocationConstraintMapper::GetBucketLocationConstraintForName(_config.region);
     Aws::S3::Model::CreateBucketConfiguration bucket_config;
@@ -71,7 +72,7 @@ Status S3Client::create_bucket(const std::string& bucket_name) {
     }
 }
 
-Status S3Client::delete_bucket(const std::string& bucket_name) {
+Status S3ObjectStore::delete_bucket(const std::string& bucket_name) {
     Aws::S3::Model::DeleteBucketRequest request;
     request.SetBucket(to_aws_string(bucket_name));
 
@@ -87,8 +88,8 @@ Status S3Client::delete_bucket(const std::string& bucket_name) {
     }
 }
 
-Status S3Client::put_object(const std::string& bucket_name, const std::string& object_key,
-                            const std::string& object_path) {
+Status S3ObjectStore::put_object(const std::string& bucket_name, const std::string& object_key,
+                                 const std::string& object_path) {
     if (_transfer_manager) {
         auto handle = _transfer_manager->UploadFile(to_aws_string(object_path), to_aws_string(bucket_name),
                                                     to_aws_string(object_key), Aws::DEFAULT_CONTENT_TYPE,
@@ -126,8 +127,8 @@ Status S3Client::put_object(const std::string& bucket_name, const std::string& o
     }
 }
 
-Status S3Client::put_string_object(const std::string& bucket_name, const std::string& object_key,
-                                   const std::string& object_value) {
+Status S3ObjectStore::put_string_object(const std::string& bucket_name, const std::string& object_key,
+                                        const std::string& object_value) {
     std::shared_ptr<Aws::IOStream> stream = Aws::MakeShared<Aws::StringStream>("", object_value);
 
     Aws::S3::Model::PutObjectRequest request;
@@ -147,14 +148,14 @@ Status S3Client::put_string_object(const std::string& bucket_name, const std::st
     }
 }
 
-Status S3Client::get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
-                                  size_t length, std::string* object_value, size_t* read_bytes) {
+Status S3ObjectStore::get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
+                                       size_t length, std::string* object_value, size_t* read_bytes) {
     object_value->resize(length);
     return get_object_range(bucket_name, object_key, offset, length, (char*)object_value->data(), read_bytes);
 }
 
-Status S3Client::get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
-                                  size_t length, char* object_value, size_t* read_bytes) {
+Status S3ObjectStore::get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
+                                       size_t length, char* object_value, size_t* read_bytes) {
     *read_bytes = 0;
     length = (length ? length : 1);
     char buffer[128];
@@ -194,8 +195,8 @@ Status S3Client::get_object_range(const std::string& bucket_name, const std::str
     }
 }
 
-Status S3Client::get_object(const std::string& bucket_name, const std::string& object_key,
-                            const std::string& object_path) {
+Status S3ObjectStore::get_object(const std::string& bucket_name, const std::string& object_key,
+                                 const std::string& object_path) {
     if (object_path.empty()) {
         return Status::IOError(strings::Substitute("Get Object $0 failed, path empty.", object_key));
     }
@@ -244,7 +245,7 @@ Status S3Client::get_object(const std::string& bucket_name, const std::string& o
     }
 }
 
-Status S3Client::_head_object(const std::string& bucket_name, const std::string& object_key, size_t* size) {
+Status S3ObjectStore::_head_object(const std::string& bucket_name, const std::string& object_key, size_t* size) {
     Aws::S3::Model::HeadObjectRequest request;
     request.SetBucket(to_aws_string(bucket_name));
     request.SetKey(to_aws_string(object_key));
@@ -267,15 +268,15 @@ Status S3Client::_head_object(const std::string& bucket_name, const std::string&
     }
 }
 
-Status S3Client::exist_object(const std::string& bucket_name, const std::string& object_key) {
+Status S3ObjectStore::exist_object(const std::string& bucket_name, const std::string& object_key) {
     return _head_object(bucket_name, object_key, nullptr /* size */);
 }
 
-Status S3Client::get_object_size(const std::string& bucket_name, const std::string& object_key, size_t* size) {
+Status S3ObjectStore::get_object_size(const std::string& bucket_name, const std::string& object_key, size_t* size) {
     return _head_object(bucket_name, object_key, size);
 }
 
-Status S3Client::delete_object(const std::string& bucket_name, const std::string& object_key) {
+Status S3ObjectStore::delete_object(const std::string& bucket_name, const std::string& object_key) {
     Aws::S3::Model::DeleteObjectRequest request;
     request.SetBucket(to_aws_string(bucket_name));
     request.SetKey(to_aws_string(object_key));
@@ -292,8 +293,8 @@ Status S3Client::delete_object(const std::string& bucket_name, const std::string
     }
 }
 
-Status S3Client::list_objects(const std::string& bucket_name, const std::string& object_prefix,
-                              std::vector<std::string>* result) {
+Status S3ObjectStore::list_objects(const std::string& bucket_name, const std::string& object_prefix,
+                                   std::vector<std::string>* result) {
     result->clear();
     // S3 paths don't start with '/'
     std::string prefix = StripPrefixString(object_prefix, "/");
