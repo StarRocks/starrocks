@@ -2123,6 +2123,8 @@ public class PlanFragmentBuilder {
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
             consume.getCteOutputColumnRefMap().forEach(projectMap::put);
             consumeFragment = buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
+            consumeFragment.setQueryGlobalDicts(cteFragment.getQueryGlobalDicts());
+            consumeFragment.setLoadGlobalDicts(cteFragment.getLoadGlobalDicts());
 
             // add filter node
             if (consume.getPredicate() != null) {
