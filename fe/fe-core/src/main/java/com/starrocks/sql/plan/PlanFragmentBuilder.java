@@ -268,6 +268,15 @@ public class PlanFragmentBuilder {
                             projectUsedColumnIds.add(cid);
                         }
                     }
+                    
+                    Map<ColumnRefOperator, ScalarOperator> projectCommonSubColumnRefMap =
+                            node.getProjection().getCommonSubOperatorMap();
+                    for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectCommonSubColumnRefMap.entrySet()) {
+                        ColumnRefSet usedColumns = entry.getValue().getUsedColumns();
+                        for (int cid : usedColumns.getColumnIds()) {
+                            projectUsedColumnIds.add(cid);
+                        }
+                    }
                 }
 
                 // we only support single pred like: a = xx, single pre can push down to scan node
