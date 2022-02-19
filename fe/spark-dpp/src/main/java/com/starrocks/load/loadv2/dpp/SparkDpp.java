@@ -42,6 +42,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.VoidFunction;
+import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -59,6 +60,7 @@ import org.apache.spark.util.LongAccumulator;
 import org.apache.spark.util.SerializableConfiguration;
 import org.apache.spark.util.SizeEstimator;
 import scala.Tuple2;
+import scala.collection.JavaConverters;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -549,8 +551,9 @@ public final class SparkDpp implements java.io.Serializable {
             mappingColumns = columnMappings.keySet();
         }
         List<String> dstColumnNames = new ArrayList<>();
+        List<Column> dstColumns = new ArrayList<>();
         for (StructField dstField : dstTableSchema.fields()) {
-            dstColumnNames.add(dstField.name());
+            Column dstColumn = null;
             EtlJobConfig.EtlColumn column = baseIndex.getColumn(dstField.name());
             if (!srcColumnNames.contains(dstField.name())) {
                 if (mappingColumns != null && mappingColumns.contains(dstField.name())) {
@@ -559,55 +562,63 @@ public final class SparkDpp implements java.io.Serializable {
                 }
                 if (column.defaultValue != null) {
                     if (column.defaultValue.equals(NULL_FLAG)) {
-                        dataframe = dataframe.withColumn(dstField.name(), functions.lit(null));
+                        dstColumn = functions.lit(null);
                     } else {
-                        dataframe = dataframe.withColumn(dstField.name(), functions.lit(column.defaultValue));
+                        dstColumn = functions.lit(column.defaultValue);
                     }
                 } else if (column.isAllowNull) {
-                    dataframe = dataframe.withColumn(dstField.name(), functions.lit(null));
+                    dstColumn = functions.lit(null);
                 } else {
                     throw new SparkDppException("Reason: no data for column:" + dstField.name());
                 }
+            } else {
+                dstColumn = dataframe.col(dstField.name());
             }
+
             if (column.columnType.equalsIgnoreCase("DATE")) {
-                dataframe =
-                        dataframe.withColumn(dstField.name(), dataframe.col(dstField.name()).cast(DataTypes.DateType));
+                dstColumn = dstColumn.cast(DataTypes.DateType);
             } else if (column.columnType.equalsIgnoreCase("DATETIME")) {
-                dataframe = dataframe
-                        .withColumn(dstField.name(), dataframe.col(dstField.name()).cast(DataTypes.TimestampType));
+                dstColumn = dstColumn.cast(DataTypes.TimestampType);
             } else if (column.columnType.equalsIgnoreCase("BOOLEAN")) {
-                dataframe = dataframe.withColumn(dstField.name(),
-                        functions.when(functions.lower(dataframe.col(dstField.name()))
-                                .equalTo("true"), "1")
-                                .when(dataframe.col(dstField.name()).equalTo("1"), "1")
-                                .otherwise("0"));
+                dstColumn = functions.when(functions.lower(dstColumn).equalTo("true"), "1")
+                        .when(dstColumn.equalTo("1"), "1")
+                        .when(dstColumn.isNull(), null)
+                        .otherwise("0");
             } else if (column.columnType.equalsIgnoreCase("LARGEINT")) {
                 // largeint to string
-                dataframe =
-                        dataframe.withColumn(dstField.name(), dataframe.col(dstField.name()).cast(dstField.dataType()));
+                dstColumn = dstColumn.cast(dstField.dataType());
             } else if (!column.columnType.equalsIgnoreCase(BITMAP_TYPE) &&
                     !dstField.dataType().equals(DataTypes.StringType)) {
-                dataframe =
-                        dataframe.withColumn(dstField.name(), dataframe.col(dstField.name()).cast(dstField.dataType()));
+                dstColumn = dstColumn.cast(dstField.dataType());
             }
             if (fileGroup.isNegative && !column.isKey) {
                 // negative load
-                // value will be convert te -1 * value
-                dataframe = dataframe.withColumn(dstField.name(), functions.expr("-1 *" + dstField.name()));
+                // value will be convert to -1 * value
+                dstColumn = dstColumn.multiply(-1).cast(dstField.dataType());
             }
+
+            dstColumnNames.add(dstField.name());
+            dstColumns.add(dstColumn);
         }
+        dataframe = dataframe.withColumns(
+                JavaConverters.asScalaIteratorConverter(dstColumnNames.iterator()).asScala().toSeq(),
+                JavaConverters.asScalaIteratorConverter(dstColumns.iterator()).asScala().toSeq());
+
         // 2. process the mapping columns
+        dstColumnNames.clear();
+        dstColumns.clear();
         for (String mappingColumn : mappingColumns) {
             String mappingDescription = columnMappings.get(mappingColumn).toDescription();
             if (mappingDescription.toLowerCase().contains("hll_hash")) {
                 continue;
             }
             // here should cast data type to dst column type
-            dataframe = dataframe.withColumn(mappingColumn,
-                    functions.expr(mappingDescription)
-                            .cast(dstTableSchema.apply(mappingColumn).dataType()));
+            dstColumnNames.add(mappingColumn);
+            dstColumns.add(functions.expr(mappingDescription).cast(dstTableSchema.apply(mappingColumn).dataType()));
         }
-        return dataframe;
+        return dataframe.withColumns(
+                JavaConverters.asScalaIteratorConverter(dstColumnNames.iterator()).asScala().toSeq(),
+                JavaConverters.asScalaIteratorConverter(dstColumns.iterator()).asScala().toSeq());
     }
 
     private StructType constructSrcSchema(EtlJobConfig.EtlFileGroup fileGroup, EtlJobConfig.EtlIndex baseIndex) {
