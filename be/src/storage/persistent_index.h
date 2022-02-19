@@ -200,15 +200,15 @@ public:
     // |old_values|: return old values if key exist, or set to NullValue if not
     Status erase(size_t n, const void* keys, IndexValue* old_values);
 
+private:
+    std::string _get_l0_index_file_name(std::string& dir, const EditVersion& version);
+
     // batch append wal
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array, if operation is erase, |values| is nullptr
-    Status append_wal(size_t n, const void* key, const IndexValue* values);
+    Status _append_wal(size_t n, const void* key, const IndexValue* values);
 
-    std::string get_l0_index_file_name(std::string& dir, const EditVersion& version);
-
-private:
     // index storage directory
     std::string _path;
     size_t _key_size = 0;

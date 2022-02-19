@@ -215,7 +215,7 @@ PersistentIndex::~PersistentIndex() {
     }
 }
 
-std::string PersistentIndex::get_l0_index_file_name(std::string& dir, const EditVersion& version) {
+std::string PersistentIndex::_get_l0_index_file_name(std::string& dir, const EditVersion& version) {
     return strings::Substitute("$0/index.l0.$1.$2", dir, version.major(), version.minor());
 }
 
@@ -258,7 +258,7 @@ Status PersistentIndex::load(PersistentIndexMetaPB& index_meta) {
             rblock->close();
         }
     });
-    std::string l0_index_file_name = get_l0_index_file_name(_path, start_version);
+    std::string l0_index_file_name = _get_l0_index_file_name(_path, start_version);
     RETURN_IF_ERROR(block_mgr->open_block(l0_index_file_name, &rblock));
     // TODO: load snapshot first
     int n = l0_meta.wals_size();
@@ -341,7 +341,7 @@ Status PersistentIndex::get(size_t n, const void* keys, IndexValue* values) {
 Status PersistentIndex::upsert(size_t n, const void* keys, const IndexValue* values, IndexValue* old_values) {
     KeysInfo l1_checks;
     size_t num_found = 0;
-    RETURN_IF_ERROR(append_wal(n, keys, values));
+    RETURN_IF_ERROR(_append_wal(n, keys, values));
     RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &l1_checks, &num_found));
     if (_l1) {
         RETURN_IF_ERROR(_l1->get(n, keys, l1_checks, old_values, &num_found));
@@ -351,7 +351,7 @@ Status PersistentIndex::upsert(size_t n, const void* keys, const IndexValue* val
 }
 
 Status PersistentIndex::insert(size_t n, const void* keys, const IndexValue* values, bool check_l1) {
-    RETURN_IF_ERROR(append_wal(n, keys, values));
+    RETURN_IF_ERROR(_append_wal(n, keys, values));
     RETURN_IF_ERROR(_l0->insert(n, keys, values));
     if (_l1 && check_l1) {
         RETURN_IF_ERROR(_l1->check_not_exist(n, keys));
@@ -363,7 +363,7 @@ Status PersistentIndex::insert(size_t n, const void* keys, const IndexValue* val
 Status PersistentIndex::erase(size_t n, const void* keys, IndexValue* old_values) {
     KeysInfo l1_checks;
     size_t num_erased = 0;
-    RETURN_IF_ERROR(append_wal(n, keys, nullptr));
+    RETURN_IF_ERROR(_append_wal(n, keys, nullptr));
     RETURN_IF_ERROR(_l0->erase(n, keys, old_values, &l1_checks, &num_erased));
     if (_l1) {
         RETURN_IF_ERROR(_l1->get(n, keys, l1_checks, old_values, &num_erased));
@@ -373,7 +373,7 @@ Status PersistentIndex::erase(size_t n, const void* keys, IndexValue* old_values
     return Status::OK();
 }
 
-Status PersistentIndex::append_wal(size_t n, const void* keys, const IndexValue* values) {
+Status PersistentIndex::_append_wal(size_t n, const void* keys, const IndexValue* values) {
     const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
     faststring fixed_buf;
     fixed_buf.reserve(n * (_key_size + sizeof(IndexValue)));
