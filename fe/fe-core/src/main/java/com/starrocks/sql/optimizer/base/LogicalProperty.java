@@ -5,10 +5,8 @@ package com.starrocks.sql.optimizer.base;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.ExpressionContext;
-import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
@@ -30,8 +28,6 @@ public class LogicalProperty implements Property {
     private int leftMostScanTabletsNum;
     // The flag for execute upon less than or equal one tablet
     private boolean isExecuteInOneTablet;
-    // The flag for gather data to one instance
-    private boolean isGatherToOneInstance;
 
     public ColumnRefSet getOutputColumns() {
         return outputColumns;
@@ -43,10 +39,6 @@ public class LogicalProperty implements Property {
 
     public boolean isExecuteInOneTablet() {
         return isExecuteInOneTablet;
-    }
-
-    public boolean isGatherToOneInstance() {
-        return isGatherToOneInstance;
     }
 
     public void setLeftMostScanTabletsNum(int leftMostScanTabletsNum) {
@@ -66,7 +58,6 @@ public class LogicalProperty implements Property {
         outputColumns = op.getOutputColumns(expressionContext);
         leftMostScanTabletsNum = op.accept(new LeftMostScanTabletsNumVisitor(), expressionContext);
         isExecuteInOneTablet = op.accept(new OneTabletExecutorVisitor(), expressionContext);
-        isGatherToOneInstance = op.accept(new GatherInstanceVisitor(), expressionContext);
     }
 
     static class LeftMostScanTabletsNumVisitor extends OperatorVisitor<Integer, ExpressionContext> {
@@ -175,24 +166,6 @@ public class LogicalProperty implements Property {
 
         @Override
         public Boolean visitLogicalCTEConsume(LogicalCTEConsumeOperator node, ExpressionContext context) {
-            return false;
-        }
-    }
-
-    // At present, only the case of second phase aggregation is handled.
-    // Satisfying nodes can be added according to the situation in the future
-    static class GatherInstanceVisitor extends OperatorVisitor<Boolean, ExpressionContext> {
-        @Override
-        public Boolean visitOperator(Operator node, ExpressionContext context) {
-            return false;
-        }
-
-        @Override
-        public Boolean visitLogicalAggregation(LogicalAggregationOperator node, ExpressionContext context) {
-            // no partitions by columns, will gather data to one instance
-            if (node.getType().equals(AggType.GLOBAL) && node.getPartitionByColumns().isEmpty()) {
-                return true;
-            }
             return false;
         }
     }
