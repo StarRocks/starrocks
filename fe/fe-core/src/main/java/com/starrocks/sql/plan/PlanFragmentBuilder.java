@@ -259,6 +259,17 @@ public class PlanFragmentBuilder {
                     outputColumnIds.add(colref.getId());
                 }
 
+                Set<Integer> projectUsedColumnIds = new HashSet<Integer>();
+                if (node.getProjection() != null) {
+                    Map<ColumnRefOperator, ScalarOperator> projectColumnRefMap = node.getProjection().getColumnRefMap();
+                    for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectColumnRefMap.entrySet()) {
+                        ColumnRefSet usedColumns = entry.getValue().getUsedColumns();
+                        for (int cid : usedColumns.getColumnIds()) {
+                            projectUsedColumnIds.add(cid);
+                        }
+                    }
+                }
+
                 // we only support single pred like: a = xx, single pre can push down to scan node
                 // complex pred like: a + b = xx, can push down to scan node yet
                 // so the columns in complex pred, it useful for the stage after scan
@@ -284,7 +295,8 @@ public class PlanFragmentBuilder {
                     if (dictStringIdToIntIds.containsKey(cid)) {
                         newCid = dictStringIdToIntIds.get(cid);
                     }
-                    if (!complexPredColumnIds.contains(newCid) && !outputColumnIds.contains(newCid)) {
+                    if (!complexPredColumnIds.contains(newCid) && !outputColumnIds.contains(newCid) && 
+                            !projectUsedColumnIds.contains(newCid)) {
                         unUsedOutputColumnIds.add(newCid);
                     }
                 }
