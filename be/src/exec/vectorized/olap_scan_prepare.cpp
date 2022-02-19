@@ -20,6 +20,15 @@ static bool ignore_cast(const SlotDescriptor& slot, const Expr& expr) {
 }
 
 template <typename ValueType>
+static bool check_decimal_overflow(int precision, const ValueType& value) {
+    if constexpr (is_decimal<ValueType>) {
+        return -get_scale_factor<ValueType>(precision) < value && value < get_scale_factor<ValueType>(precision);
+    } else {
+        return false;
+    }
+}
+
+template <typename ValueType>
 static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot, const Expr* expr, ExprContext* ctx,
                                 ValueType* value, SQLFilterOp* op, Status* status) {
     if (expr->get_num_children() != 2) {
@@ -127,6 +136,9 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
         *value = *str;
     } else {
         *value = *reinterpret_cast<const ValueType*>(data->raw_data());
+        if (r->type().is_decimalv3_type()) {
+            return check_decimal_overflow<ValueType>(r->type().precision, *value);
+        }
     }
     return true;
 }
