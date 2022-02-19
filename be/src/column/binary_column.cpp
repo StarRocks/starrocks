@@ -25,7 +25,8 @@ void BinaryColumn::check_or_die() const {
     }
     if (_slices_cache) {
         for (int32_t i = 0; i < size(); i++) {
-            CHECK_EQ(_slices[i], get_slice(i));
+            CHECK_EQ(_slices[i].data, get_slice(i).data);
+            CHECK_EQ(_slices[i].size, get_slice(i).size);
         }
     }
 }
