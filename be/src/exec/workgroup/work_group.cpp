@@ -492,6 +492,7 @@ bool WorkGroupManager::should_yield_io_dispatcher(int dispatcher_id, WorkGroupPt
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     auto default_wg = std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION, 1,
                                                   0.5, 10, WorkGroupType::WG_DEFAULT);
+    // TODO(by satanson): wg1 and wg2 is just used for test
     auto wg1 = std::make_shared<WorkGroup>("wg1", 1, WorkGroup::DEFAULT_VERSION, 2, 0.5, 10, WorkGroupType::WG_NORMAL);
     auto wg2 = std::make_shared<WorkGroup>("wg2", 2, WorkGroup::DEFAULT_VERSION, 4, 0.5, 10, WorkGroupType::WG_NORMAL);
     WorkGroupManager::instance()->add_workgroup(default_wg);
