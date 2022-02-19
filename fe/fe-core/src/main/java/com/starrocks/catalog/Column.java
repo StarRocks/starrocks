@@ -333,30 +333,9 @@ public class Column implements Writable {
             throw new DdlException("Can not change from nullable to non-nullable");
         }
 
-        DefaultValueType thisDefaultValueType = this.getDefaultValueType();
-        DefaultValueType otherDefaultValueType = other.getDefaultValueType();
         // Adding a default value to a column without a default value is not supported
-        if (thisDefaultValueType != otherDefaultValueType) {
+        if (!this.isSameDefaultValue(other)) {
             throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
-        }
-
-        // default value should same
-        if (thisDefaultValueType == DefaultValueType.VARY) {
-            if (!this.getDefaultExpr().getExpr().equalsIgnoreCase(other.getDefaultExpr().getExpr())) {
-                throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
-            }
-        } else if (this.getDefaultValueType() == DefaultValueType.CONST) {
-            if (this.getDefaultValue() != null && other.getDefaultValue() != null) {
-                if (!this.getDefaultValue().equals(other.getDefaultValue())) {
-                    throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
-                }
-            } else if (this.getDefaultExpr() != null && other.getDefaultExpr() != null) {
-                if (!this.getDefaultExpr().getExpr().equalsIgnoreCase(other.getDefaultExpr().getExpr())) {
-                    throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
-                }
-            } else {
-                throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
-            }
         }
 
         if ((getPrimitiveType() == PrimitiveType.VARCHAR && other.getPrimitiveType() == PrimitiveType.VARCHAR)
@@ -366,11 +345,29 @@ public class Column implements Writable {
                 throw new DdlException("Cannot shorten string length");
             }
         }
+    }
 
-        // now we support convert decimal to varchar type
-        if ((getPrimitiveType().isDecimalOfAnyVersion() && other.getPrimitiveType() == PrimitiveType.VARCHAR)) {
-            return;
+    private boolean isSameDefaultValue(Column other) {
+
+        DefaultValueType thisDefaultValueType = this.getDefaultValueType();
+        DefaultValueType otherDefaultValueType = other.getDefaultValueType();
+
+        if (thisDefaultValueType != otherDefaultValueType) {
+            return false;
         }
+
+        if (thisDefaultValueType == DefaultValueType.VARY) {
+            return this.getDefaultExpr().getExpr().equalsIgnoreCase(other.getDefaultExpr().getExpr());
+        } else if (this.getDefaultValueType() == DefaultValueType.CONST) {
+            if (this.getDefaultValue() != null && other.getDefaultValue() != null) {
+                return this.getDefaultValue().equals(other.getDefaultValue());
+            } else if (this.getDefaultExpr() != null && other.getDefaultExpr() != null) {
+                return this.getDefaultExpr().getExpr().equalsIgnoreCase(other.getDefaultExpr().getExpr());
+            } else {
+                return false;
+            }
+        }
+        return true;
     }
 
     public boolean nameEquals(String otherColName, boolean ignorePrefix) {
@@ -578,14 +575,8 @@ public class Column implements Writable {
         if (this.isAllowNull != other.isAllowNull) {
             return false;
         }
-        if (this.getDefaultValue() == null) {
-            if (other.getDefaultValue() != null) {
-                return false;
-            }
-        } else {
-            if (!this.getDefaultValue().equals(other.getDefaultValue())) {
-                return false;
-            }
+        if (!this.isSameDefaultValue(other)) {
+            return false;
         }
 
         if (this.getStrLen() != other.getStrLen()) {
