@@ -29,6 +29,7 @@
 #include "exec/file_reader.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/descriptors.h"
@@ -88,19 +89,23 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
         }
         _rows_of_group = _file_metadata->RowGroup(0)->num_rows();
 
-        // map
-        auto* schemaDescriptor = _file_metadata->schema();
-        for (int i = 0; i < _file_metadata->num_columns(); ++i) {
-            // Get the Column Reader for the boolean column
-            _map_column.emplace(schemaDescriptor->Column(i)->name(), i);
+        {
+            // Initialize _map_column, map column name to it's index
+            // For nested type, it has multiple column, we need to map field_name to multiple indices
+            auto parquet_schema = _file_metadata->schema();
+            for (int i = 0; i < parquet_schema->num_columns(); i++) {
+                auto column_desc = parquet_schema->Column(i);
+                std::string field_name = column_desc->path()->ToDotVector()[0];
+                _map_column_nested[field_name].push_back(i);
+            }
         }
 
         _timezone = timezone;
 
         if (_current_line_of_group == 0) { // the first read
             RETURN_IF_ERROR(column_indices(tuple_slot_descs));
-            // read batch
             arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
+
             if (!status.ok()) {
                 LOG(WARNING) << "Get RecordBatch Failed. " << status.ToString();
                 return Status::InternalError(status.ToString());
@@ -127,6 +132,7 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
                 return Status::EndOfFile("Unexpected nullptr RecordBatch");
             }
             for (int i = 0; i < _parquet_column_ids.size(); i++) {
+                DCHECK_LT(i, field_schema->num_fields());
                 std::shared_ptr<arrow::Field> field = field_schema->field(i);
                 if (!field) {
                     LOG(WARNING) << "Get field schema failed. Column order:" << i;
@@ -164,10 +170,14 @@ Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tup
         if (slot_desc == nullptr) {
             continue;
         }
-        // Get the Column Reader for the boolean column
-        auto iter = _map_column.find(slot_desc->col_name());
-        if (iter != _map_column.end()) {
-            _parquet_column_ids.emplace_back(iter->second);
+        std::string col_name = slot_desc->col_name();
+
+        auto iter = _map_column_nested.find(col_name);
+        if (iter != _map_column_nested.end()) {
+            for (auto index : iter->second) {
+                _parquet_column_ids.emplace_back(index);
+            }
+            continue;
         } else {
             std::stringstream str_error;
             str_error << "Invalid Column Name:" << slot_desc->col_name();

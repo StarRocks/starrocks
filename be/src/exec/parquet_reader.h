@@ -96,7 +96,7 @@ private:
     std::shared_ptr<arrow::RecordBatch> _batch;
     std::unique_ptr<parquet::arrow::FileReader> _reader;
     std::shared_ptr<parquet::FileMetaData> _file_metadata;
-    std::map<std::string, int> _map_column; // column-name <---> column-index
+    std::map<std::string, std::vector<int>> _map_column_nested;
     std::vector<int> _parquet_column_ids;
     std::vector<std::shared_ptr<arrow::DataType>> _parquet_column_type;
     int _total_groups; // groups in a parquet file
