@@ -13,6 +13,13 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+
+PipelineDriver::~PipelineDriver() noexcept {
+    if (_workgroup != nullptr) {
+        _workgroup->decrease_num_drivers();
+    }
+}
+
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _runtime_state = runtime_state;
 
@@ -32,7 +39,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
     _schedule_effective_counter = ADD_COUNTER(_runtime_profile, "ScheduleEffectiveCounter", TUnit::UNIT);
     _schedule_rows_per_chunk = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedRowsPerChunk", TUnit::UNIT);
-    _schedule_accumulated_chunk_moved = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedChunkMoved", TUnit::UNIT);
+    _schedule_accumulated_chunks_moved = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedChunkMoved", TUnit::UNIT);
 
     DCHECK(_state == DriverState::NOT_READY);
     // fill OperatorWithDependency instances into _dependencies from _operators.
@@ -88,7 +95,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
+StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int dispatcher_id) {
     SCOPED_TIMER(_active_timer);
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
@@ -97,7 +104,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     while (true) {
         RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");
 
-        size_t num_chunk_moved = 0;
+        size_t num_chunks_moved = 0;
         bool should_yield = false;
         size_t num_operators = _operators.size();
         size_t new_first_unfinished = _first_unfinished;
@@ -124,6 +131,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 }
 
                 if (_check_fragment_is_canceled(runtime_state)) {
+                    _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
                     return _state;
                 }
 
@@ -141,6 +149,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 }
 
                 if (_check_fragment_is_canceled(runtime_state)) {
+                    _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
                     return _state;
                 }
 
@@ -163,7 +172,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                         COUNTER_UPDATE(next_op->_push_chunk_num_counter, 1);
                         COUNTER_UPDATE(next_op->_push_row_num_counter, row_num);
                     }
-                    num_chunk_moved += 1;
+                    num_chunks_moved += 1;
                     total_chunks_moved += 1;
                 }
 
@@ -184,6 +193,12 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 should_yield = true;
                 break;
             }
+
+            if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+                workgroup::WorkGroupManager::instance()->should_yield_driver_dispatcher(dispatcher_id, _workgroup)) {
+                should_yield = true;
+                break;
+            }
         }
         // close finished operators and update _first_unfinished index
         for (auto i = _first_unfinished; i < new_first_unfinished; ++i) {
@@ -194,6 +209,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         if (sink_operator()->is_finished()) {
             finish_operators(runtime_state);
             set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
+            _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
             return _state;
         }
 
@@ -201,11 +217,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         // should yield means that the CPU core is occupied the driver for a
         // very long time so that the driver should switch off the core and
         // give chance for another ready driver to run.
-        if (num_chunk_moved == 0 || should_yield) {
-            driver_acct().increment_schedule_times();
-            driver_acct().update_last_chunks_moved(total_chunks_moved);
-            driver_acct().update_accumulated_rows_moved(total_rows_moved);
-            driver_acct().update_last_time_spent(time_spent);
+        if (num_chunks_moved == 0 || should_yield) {
             if (is_precondition_block()) {
                 set_driver_state(DriverState::PRECONDITION_BLOCK);
             } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
@@ -215,6 +227,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             } else {
                 set_driver_state(DriverState::READY);
             }
+            _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
             return _state;
         }
     }
@@ -294,7 +307,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     COUNTER_UPDATE(_schedule_counter, driver_acct().get_schedule_times());
     COUNTER_UPDATE(_schedule_effective_counter, driver_acct().get_schedule_effective_times());
     COUNTER_UPDATE(_schedule_rows_per_chunk, driver_acct().get_rows_per_chunk());
-    COUNTER_UPDATE(_schedule_accumulated_chunk_moved, driver_acct().get_accumulated_chunk_moved());
+    COUNTER_UPDATE(_schedule_accumulated_chunks_moved, driver_acct().get_accumulated_chunks_moved());
     _update_overhead_timer();
 
     // last root driver cancel the all drivers' execution and notify FE the
@@ -348,13 +361,14 @@ std::string PipelineDriver::to_readable_string() const {
     return ss.str();
 }
 
-starrocks::workgroup::WorkGroup* PipelineDriver::workgroup() {
+workgroup::WorkGroup* PipelineDriver::workgroup() {
     DCHECK(_workgroup != nullptr);
-    return _workgroup;
+    return _workgroup.get();
 }
 
-void PipelineDriver::set_workgroup(starrocks::workgroup::WorkGroup* wg) {
-    this->_workgroup = wg;
+void PipelineDriver::set_workgroup(workgroup::WorkGroupPtr wg) {
+    this->_workgroup = std::move(wg);
+    this->_workgroup->increase_num_drivers();
 }
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {

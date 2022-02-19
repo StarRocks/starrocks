@@ -187,6 +187,10 @@ public class Auth implements Writable {
         dbPrivTable.revoke(entry, errOnNonExist, true /* delete entry when empty */);
     }
 
+    public String getRoleName(UserIdentity userIdentity) {
+        return roleManager.getRoleName(userIdentity);
+    }
+
     private void grantTblPrivs(UserIdentity userIdentity, String db, String tbl, boolean errOnExist,
                                boolean errOnNonExist, PrivBitSet privs) throws DdlException {
         TablePrivEntry entry;

@@ -41,6 +41,7 @@ set(EXEC_FILES
         ./exec/vectorized/orc_scanner_adapter_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
+        ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/parquet/parquet_schema_test.cpp
         ./exec/parquet/encoding_test.cpp
         ./exec/parquet/page_reader_test.cpp
@@ -208,6 +209,7 @@ set(EXEC_FILES
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
+        ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/bitmap_test.cpp
         ./util/bitmap_value_test.cpp

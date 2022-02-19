@@ -382,7 +382,7 @@ public class AnalyzeSingleTest {
 
 
     @Test
-    public void testNewParser() {
+    public void testDual() {
         analyzeSuccess("select 1,2,3 from dual");
         analyzeFail("select * from dual", "No tables used");
     }

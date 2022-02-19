@@ -43,6 +43,7 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
@@ -106,7 +107,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowDatabases(StarRocksParser.ShowDatabasesContext context) {
         if (context.pattern != null) {
-            return new ShowDbStmt(unquote(context.pattern.getText()));
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new ShowDbStmt(stringLiteral.getValue());
         } else if (context.expression() != null) {
             return new ShowDbStmt(null, (Expr) visit(context.expression()));
         } else {
@@ -123,7 +125,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.pattern != null) {
-            return new ShowTableStmt(database, isVerbose, unquote(context.pattern.getText()));
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new ShowTableStmt(database, isVerbose, stringLiteral.getValue());
         } else if (context.expression() != null) {
             return new ShowTableStmt(database, isVerbose, null, (Expr) visit(context.expression()));
         } else {
@@ -141,6 +144,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitQueryStatement(StarRocksParser.QueryStatementContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(context.query());
         return new QueryStatement(queryRelation);
+    }
+
+    @Override
+    public ParseNode visitExplain(StarRocksParser.ExplainContext context) {
+        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+        StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
+        if (context.LOGICAL() != null) {
+            explainLevel = StatementBase.ExplainLevel.LOGICAL;
+        } else if (context.VERBOSE() != null) {
+            explainLevel = StatementBase.ExplainLevel.VERBOSE;
+        } else if (context.COSTS() != null) {
+            explainLevel = StatementBase.ExplainLevel.COST;
+        }
+        queryStatement.setIsExplain(true, explainLevel);
+        return queryStatement;
     }
 
     // ------------------------------------------- Query Relation -------------------------------------------
@@ -1187,9 +1205,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------
-    private static String unquote(String value) {
-        return value.replace("'", "").replace("\"", "");
-    }
 
     private <T> List<T> visit(List<? extends ParserRuleContext> contexts, Class<T> clazz) {
         return contexts.stream()

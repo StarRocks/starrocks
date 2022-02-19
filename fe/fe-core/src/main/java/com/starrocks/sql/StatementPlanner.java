@@ -60,7 +60,11 @@ public class StatementPlanner {
                 session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
                 ExecPlan plan = createQueryPlan(relation, session);
 
-                //setOutfileSink(queryStmt, plan);
+                if (stmt instanceof QueryStmt) {
+                    setOutfileSink((QueryStmt) stmt, plan);
+                } else {
+                    setOutfileSink((QueryStatement) stmt, plan);
+                }
 
                 return plan;
             } finally {
@@ -87,7 +91,7 @@ public class StatementPlanner {
 
         //1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
 
         //2. Optimize logical plan and build physical plan
         Optimizer optimizer = new Optimizer();
@@ -140,6 +144,21 @@ public class StatementPlanner {
     // if query stmt has OUTFILE clause, set info into ResultSink.
     // this should be done after fragments are generated.
     private void setOutfileSink(QueryStmt queryStmt, ExecPlan plan) {
+        if (!queryStmt.hasOutFileClause()) {
+            return;
+        }
+        PlanFragment topFragment = plan.getFragments().get(0);
+        if (!(topFragment.getSink() instanceof ResultSink)) {
+            return;
+        }
+
+        ResultSink resultSink = (ResultSink) topFragment.getSink();
+        resultSink.setOutfileInfo(queryStmt.getOutFileClause());
+    }
+
+    // if query stmt has OUTFILE clause, set info into ResultSink.
+    // this should be done after fragments are generated.
+    private void setOutfileSink(QueryStatement queryStmt, ExecPlan plan) {
         if (!queryStmt.hasOutFileClause()) {
             return;
         }

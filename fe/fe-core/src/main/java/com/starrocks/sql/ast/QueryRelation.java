@@ -105,23 +105,4 @@ public abstract class QueryRelation extends Relation {
         }
         return sqlBuilder.toString();
     }
-
-    public String toDigest() {
-        StringBuilder sqlBuilder = new StringBuilder();
-
-        if (hasOrderByClause()) {
-            sqlBuilder.append(" order by ");
-            for (int i = 0; i < sortClause.size(); ++i) {
-                sqlBuilder.append(sortClause.get(i).getExpr().toDigest());
-                sqlBuilder.append((sortClause.get(i).getIsAsc()) ? " asc" : " desc");
-                sqlBuilder.append((i + 1 != sortClause.size()) ? ", " : "");
-            }
-        }
-
-        // Limit clause.
-        if (limit != null) {
-            sqlBuilder.append(limit.toDigest());
-        }
-        return sqlBuilder.toString();
-    }
 }

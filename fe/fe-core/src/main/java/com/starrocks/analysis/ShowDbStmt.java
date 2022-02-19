@@ -32,6 +32,10 @@ import com.starrocks.sql.ast.AstVisitor;
 public class ShowDbStmt extends ShowStmt {
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "schemata");
     private static final String DB_COL = "Database";
+    private static final ShowResultSetMetaData META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column(DB_COL, ScalarType.createVarchar(20)))
+                    .build();
     private final String pattern;
     private Expr where;
 
@@ -85,8 +89,6 @@ public class ShowDbStmt extends ShowStmt {
         return toSql();
     }
 
-    private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column(DB_COL, ScalarType.createVarchar(20))).build();
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;

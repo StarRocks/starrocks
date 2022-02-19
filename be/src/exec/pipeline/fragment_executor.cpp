@@ -16,6 +16,7 @@
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/scan_node.h"
+#include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
@@ -29,6 +30,10 @@
 #include "util/uid_util.h"
 
 namespace starrocks::pipeline {
+
+using WorkGroupManager = workgroup::WorkGroupManager;
+using WorkGroup = workgroup::WorkGroup;
+using WorkGroupPtr = workgroup::WorkGroupPtr;
 
 static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelinePtr& pipeline) {
     runtime_state->runtime_profile()->add_child(pipeline->runtime_profile(), true, nullptr);
@@ -110,6 +115,19 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id) << " backend_num=" << backend_num;
 
+    // wg is always non-nullable, when request.enable_resource_group is true.
+    WorkGroupPtr wg = nullptr;
+    if (request.__isset.enable_resource_group && request.enable_resource_group) {
+        _fragment_ctx->set_enable_resource_group();
+        if (request.__isset.workgroup && request.workgroup.id != WorkGroup::DEFAULT_WG_ID) {
+            wg = std::make_shared<WorkGroup>(request.workgroup);
+            wg = WorkGroupManager::instance()->add_workgroup(wg);
+        } else {
+            wg = WorkGroupManager::instance()->get_default_workgroup();
+        }
+        DCHECK(wg != nullptr);
+    }
+
     int32_t degree_of_parallelism = 1;
     if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
         degree_of_parallelism = request.pipeline_dop;
@@ -128,7 +146,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
     }
     auto* runtime_state = _fragment_ctx->runtime_state();
-    runtime_state->init_mem_trackers(query_id);
+    runtime_state->init_mem_trackers(query_id, wg != nullptr ? wg->mem_tracker() : nullptr);
     runtime_state->set_be_number(backend_num);
 
     // RuntimeFilterWorker::open_query is idempotent
@@ -231,7 +249,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                                                                     driver_id++, is_root);
                 driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
-                scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                if (wg != nullptr) {
+                    // Workgroup uses io_dispatcher instead of pipeline_scan_io_thread_pool.
+                    scan_operator->set_workgroup(wg);
+                } else {
+                    scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                }
                 setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }
@@ -254,6 +277,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_num_root_drivers(num_root_drivers);
     _fragment_ctx->set_drivers(std::move(drivers));
 
+    if (wg != nullptr) {
+        for (auto& driver : _fragment_ctx->drivers()) {
+            driver->set_workgroup(wg);
+        }
+    }
+
     _query_ctx->fragment_mgr()->register_ctx(fragment_instance_id, std::move(fragment_ctx));
 
     return Status::OK();
@@ -263,9 +292,17 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     for (const auto& driver : _fragment_ctx->drivers()) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
     }
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        exec_env->driver_dispatcher()->dispatch(driver.get());
+
+    if (_fragment_ctx->enable_resource_group()) {
+        for (const auto& driver : _fragment_ctx->drivers()) {
+            exec_env->wg_driver_dispatcher()->dispatch(driver.get());
+        }
+    } else {
+        for (const auto& driver : _fragment_ctx->drivers()) {
+            exec_env->driver_dispatcher()->dispatch(driver.get());
+        }
     }
+
     return Status::OK();
 }
 

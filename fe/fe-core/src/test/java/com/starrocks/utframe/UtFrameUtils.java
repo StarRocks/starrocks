@@ -349,12 +349,6 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
-        /*
-        SqlScanner input =
-                new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-         */
 
         List<StatementBase> statements = com.starrocks.sql.parser.SqlParser.parse(originStmt);
         connectContext.getDumpInfo().setOriginStmt(originStmt);

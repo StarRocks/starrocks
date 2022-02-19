@@ -74,6 +74,7 @@ private:
     std::unique_ptr<TaskWorkerPool> _report_task_workers;
     std::unique_ptr<TaskWorkerPool> _report_disk_state_workers;
     std::unique_ptr<TaskWorkerPool> _report_tablet_workers;
+    std::unique_ptr<TaskWorkerPool> _report_workgroup_workers;
 
     std::unique_ptr<TaskWorkerPool> _upload_workers;
     std::unique_ptr<TaskWorkerPool> _download_workers;

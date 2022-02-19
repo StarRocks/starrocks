@@ -25,6 +25,7 @@
 #include <memory>
 
 #include "common/status.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "storage/options.h"
 
 namespace starrocks {
@@ -129,6 +130,7 @@ public:
     PriorityThreadPool* etl_thread_pool() { return _etl_thread_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverDispatcher* driver_dispatcher() { return _driver_dispatcher; }
+    starrocks::pipeline::DriverDispatcher* wg_driver_dispatcher() { return _wg_driver_dispatcher; }
     TMasterInfo* master_info() { return _master_info; }
     LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
@@ -137,6 +139,8 @@ public:
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
     LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
+
+    starrocks::workgroup::ScanWorker* scan_worker() { return _scan_worker; }
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
     void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
@@ -206,8 +210,11 @@ private:
     PriorityThreadPool* _etl_thread_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     starrocks::pipeline::DriverDispatcher* _driver_dispatcher = nullptr;
+    pipeline::DriverDispatcher* _wg_driver_dispatcher = nullptr;
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
+
+    starrocks::workgroup::ScanWorker* _scan_worker = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;

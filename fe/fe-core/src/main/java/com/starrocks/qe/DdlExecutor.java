@@ -234,11 +234,11 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof RefreshExternalTableStmt) {
             catalog.refreshExternalTable((RefreshExternalTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateWorkGroupStmt) {
-            // TODO: Not implemented
+            catalog.getWorkGroupMgr().createWorkGroup((CreateWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof DropWorkGroupStmt) {
-            // TODO: Not implemented
+            catalog.getWorkGroupMgr().dropWorkGroup((DropWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterWorkGroupStmt) {
-            // TODO: Not implemented
+            catalog.getWorkGroupMgr().alterWorkGroup((AlterWorkGroupStmt) ddlStmt);
         } else {
             throw new DdlException("Unknown statement.");
         }

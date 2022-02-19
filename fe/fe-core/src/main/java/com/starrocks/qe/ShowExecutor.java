@@ -1520,6 +1520,7 @@ public class ShowExecutor {
 
     private void handleShowWorkGroup() {
         ShowWorkGroupStmt showWorkGroupStmt = (ShowWorkGroupStmt) stmt;
-        // TODO: Not implemented
+        List<List<String>> rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
+        resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);
     }
 }

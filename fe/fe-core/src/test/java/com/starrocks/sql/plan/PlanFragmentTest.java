@@ -219,9 +219,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testExpression4() throws Exception {
-        String sql1 = "select v1 from t0 where !(v1 = 1 and v2 = 2 or v3 =3)";
-        System.out.println(getFragmentPlan(sql1));
-
         String sql =
                 "select v1 * v1 / v1 % v1 + v1 - v1 DIV v1, v2&~v1|v3^1 from t0 where v1 >= 1 and v1 <=10 and v2 > 1 "
                         + "and v2 < 10 and v3 != 10 and v3 <=> 10 and !(v1 = 1 and v2 = 2 or v3 =3) and v1 between 1 "
@@ -233,7 +230,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "  |  <slot 5> : 2: v2 & ~ 1: v1 | 3: v3 ^ 1\n"
                 + "  |  common expressions:\n"
                 + "  |  <slot 6> : CAST(1: v1 AS DOUBLE)\n"));
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 >= 1, 1: v1 <= 10, 2: v2 > 1, 2: v2 < 10, 3: "
                 + "v3 != 10, 3: v3 <=> 10, (1: v1 != 1) OR (2: v2 != 2), 3: v3 != 3, 1: v1 <= 2\n"));
     }
@@ -557,7 +553,6 @@ public class PlanFragmentTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select * from t0 join t1 on t0.v2 = t1.v4 limit 2";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("3:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
@@ -1430,7 +1425,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select v1, v2 from t0 union all " +
                 "select v1, v2 from t0 limit 1 ";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("    EXCHANGE ID: 02\n" +
                 "    UNPARTITIONED"));
         Assert.assertTrue(plan.contains("    EXCHANGE ID: 05\n" +
@@ -1688,7 +1682,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testUsingJoin() throws Exception {
         String sql = "select * from t0 as x0 join t0 as x1 using(v1);";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  2:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (COLOCATE)\n"
                 + "  |  hash predicates:\n"
@@ -2808,7 +2801,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 " union select join2.id from join1 RIGHT ANTI JOIN join2 on join1.id = join2.id " +
                 " and 1 > 2 WHERE (NOT (true)) group by join2.id ";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
@@ -3277,7 +3269,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "case when date_format(now(),'%H%i')  < 123 then 1 else 0 end as col "
                 + "from test.baseall "
                 +
-                "where k11 = case when date_format(now(),'%H%i')  < 123 then date_format(date_sub(now(),interval 2 day),'%Y%m%d') else date_format(date_sub(now(), interval 1 day),'%Y%m%d') end";
+                "where k11 = case when date_format(now(),'%H%i') < 123 then date_format(date_sub(now(),2),'%Y%m%d') else date_format(date_sub(now(),1),'%Y%m%d') end";
         Assert.assertFalse(StringUtils.containsIgnoreCase(getFragmentPlan(caseWhenSql), "CASE WHEN"));
 
         // test 1: case when then
@@ -4290,11 +4282,11 @@ public class PlanFragmentTest extends PlanTestBase {
         planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("PREDICATES: 2 / CAST(5: k5 AS DECIMAL128(38,3)) <= 3"));
 
-        sql = "select t1a from test_all_type where date_add(id_datetime, interval 2 day) = '2020-12-21'";
+        sql = "select t1a from test_all_type where date_add(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2020-12-19 00:00:00'"));
 
-        sql = "select t1a from test_all_type where date_sub(id_datetime, interval 2 day) = '2020-12-21'";
+        sql = "select t1a from test_all_type where date_sub(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2020-12-23 00:00:00'"));
 
@@ -4705,7 +4697,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEmptyProjectCountStar() throws Exception {
         String sql = "select count(*) from test_all_type a, test_all_type b where a.t1a is not null";
         String plan = getCostExplain(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  3:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
@@ -4954,7 +4945,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "WHERE\n" +
                 "        ref_2.t1a >= ref_1.t1a";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
     }
 
     @Test
@@ -5133,7 +5123,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "limit \n" +
                 "  155;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("6:Project\n" +
                 "  |  <slot 2> : 2: v2"));
     }
@@ -5753,6 +5742,22 @@ public class PlanFragmentTest extends PlanTestBase {
                 "         1 | 2 | 3\n" +
                 "         4 | 5 | 6\n" +
                 "     limit: 1"));
+    }
+
+    @Test
+    public void testUnionSubqueryDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(2);
+        String sql = "select * from (select * from t0 union all select * from t0) xx limit 10;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       limit: 10\n" +
+                "  |    \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 10"));
     }
 
     @Test

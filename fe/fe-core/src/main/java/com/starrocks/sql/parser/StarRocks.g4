@@ -13,6 +13,7 @@ singleStatement
 
 statement
     : queryStatement                                                    #statementDefault
+    | EXPLAIN (LOGICAL | VERBOSE | COSTS) queryStatement                #explain
     | USE schema=identifier                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                   #showTables
@@ -336,14 +337,14 @@ number
 
 nonReserved
     : ARRAY
-    | CAST | CONNECTION_ID| CURRENT
+    | CAST | CONNECTION_ID| CURRENT | COSTS
     | DATA | DATE | DATETIME | DAY
     | END | EXTRACT
     | FILTER | FIRST | FOLLOWING
     | GLOBAL
     | HOUR
     | INTERVAL
-    | LAST | LOCAL
+    | LAST | LOCAL | LOGICAL
     | MINUTE | MONTH
     | NONE | NULLS
     | OFFSET
@@ -352,6 +353,6 @@ nonReserved
     | SECOND | SESSION | SETS
     | TABLES | TIME | TYPE
     | UNBOUNDED | USER
-    | VIEW
+    | VIEW | VERBOSE
     | YEAR
     ;

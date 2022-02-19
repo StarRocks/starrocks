@@ -113,6 +113,8 @@ CONF_mInt32(report_task_interval_seconds, "10");
 CONF_mInt32(report_disk_state_interval_seconds, "60");
 // the interval time(seconds) for agent report olap table to FE
 CONF_mInt32(report_tablet_interval_seconds, "60");
+// the interval time(seconds) for agent report workgroup to FE
+CONF_mInt32(report_workgroup_interval_seconds, "5");
 // the interval time(seconds) for agent report plugin status to FE
 // CONF_Int32(report_plugin_interval_seconds, "120");
 // the timeout(seconds) for alter table
@@ -656,7 +658,15 @@ CONF_Int64(pipeline_sink_buffer_size, "64");
 // the degree of parallelism of brpc
 CONF_Int64(pipeline_sink_brpc_dop, "8");
 
+// The max number of io tasks for each scan operator.
 CONF_Int64(pipeline_scan_max_tasks_per_operator, "4");
+// yield scan io task when maximum time in nano-seconds has spent in current execution round,
+// if it runs in the dispatcher owned by other workgroup, which has running drivers.
+CONF_Int64(pipeline_scan_task_yield_max_tims_spent, "100000000");
+// The max schedule period for adjusting io weight of each workgroup.
+CONF_Int64(pipeline_scan_task_yield_preempt_max_time_spent, "20000000");
+// The max schedule period for adjusting io weight of each workgroup.
+CONF_Int32(pipeline_max_io_schedule_num_period, "512");
 
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");

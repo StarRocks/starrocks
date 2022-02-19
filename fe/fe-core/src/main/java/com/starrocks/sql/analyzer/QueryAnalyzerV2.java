@@ -246,7 +246,6 @@ public class QueryAnalyzerV2 {
             } else {
                 return relation;
             }
-            //throw unsupportedException("unsupported scan table type: " + relation.getAlias());
         }
 
         @Override

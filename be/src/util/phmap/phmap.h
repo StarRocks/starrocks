@@ -1847,7 +1847,12 @@ private:
         auto* old_slots = slots_;
         const size_t old_capacity = capacity_;
         capacity_ = new_capacity;
-        initialize_slots();
+        try {
+            initialize_slots();
+        } catch (std::bad_alloc const& e) {
+            capacity_ = old_capacity;
+            throw e;
+        }
 
         for (size_t i = 0; i != old_capacity; ++i) {
             if (IsFull(old_ctrl[i])) {

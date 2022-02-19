@@ -7,6 +7,7 @@
 
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
+#include "object_store/s3_client.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {
@@ -42,19 +43,16 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
     return Status::OK();
 }
 
-Status HdfsFsCache::get_connection(const std::string& namenode, HdfsFsHandle* handle, FileOpenLimitPtr* res) {
+Status HdfsFsCache::get_connection(const std::string& namenode, HdfsFsHandle* handle) {
     {
         std::lock_guard<std::mutex> l(_lock);
         auto it = _cache.find(namenode);
         if (it != _cache.end()) {
-            *handle = it->second.first;
-            *res = it->second.second.get();
+            *handle = it->second;
         } else {
             handle->namenode = namenode;
             RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, handle));
-            auto semaphore = std::make_unique<FileOpenLimit>(0);
-            *res = semaphore.get();
-            _cache[namenode] = std::make_pair(*handle, std::move(semaphore));
+            _cache[namenode] = *handle;
         }
     }
     return Status::OK();
