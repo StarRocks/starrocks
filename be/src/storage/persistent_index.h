@@ -89,9 +89,11 @@ public:
     virtual Status upsert(size_t n, const void* keys, const IndexValue* values, KeysInfo* not_found,
                           size_t* num_found) = 0;
 
-    // this function is upsert key/value to mutable index and don't care key exist or not
-    // just update mutable index, usually used in function load()
-    virtual Status upsert(size_t n, const void* keys, const IndexValue* values) = 0;
+    // load wals
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    virtual Status load_wals(size_t n, const void* keys, const IndexValue* values) = 0;
 
     // batch insert
     // |n|: size of key/value array
@@ -107,14 +109,6 @@ public:
     // |num_found|: add the number of keys found to this argument
     virtual Status erase(size_t n, const void* keys, IndexValue* old_values, KeysInfo* not_found,
                          size_t* num_found) = 0;
-
-    // batch append wal
-    // |n|: size of key/value array
-    // |keys|: key array as raw buffer
-    // |values|: value array, if operation is erase, |values| is nullptr
-    // |page_size|: size of wal recode page
-    virtual Status append_wal(size_t n, const void* keys, const IndexValue* values, fs::WritableBlock* wblock,
-                              uint32_t* page_size) = 0;
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 };
@@ -176,7 +170,7 @@ public:
     Status abort();
 
     // commit modification
-    Status commit();
+    Status commit(PersistentIndexMetaPB* index_meta);
 
     // batch index operations
 
@@ -206,7 +200,13 @@ public:
     // |old_values|: return old values if key exist, or set to NullValue if not
     Status erase(size_t n, const void* keys, IndexValue* old_values);
 
-    PersistentIndexMetaPB* index_meta() { return &_index_meta; }
+    // batch append wal
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array, if operation is erase, |values| is nullptr
+    Status append_wal(size_t n, const void* key, const IndexValue* values);
+
+    std::string get_l0_index_file_name(std::string& dir, const EditVersion& version);
 
 private:
     // index storage directory
@@ -216,7 +216,6 @@ private:
     EditVersion _version;
     std::unique_ptr<MutableIndex> _l0;
     std::unique_ptr<ImmutableIndex> _l1;
-    PersistentIndexMetaPB _index_meta;
     // |_offset|: the start offset of last wal in index file
     // |_page_size|: the size of last wal in index file
     uint64_t _offset = 0;

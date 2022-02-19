@@ -11,6 +11,8 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "testutil/parallel_test.h"
+#include "util/coding.h"
+#include "util/faststring.h"
 #include "util/file_utils.h"
 
 namespace starrocks {
@@ -98,8 +100,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
 PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     Env* env = Env::Default();
     const std::string kPersistentIndexDir = "./ut_dir/persistent_index_test";
-    const std::string kIndexFile = "./ut_dir/persistent_index_test/index_file";
-    const std::string kIndexMetaFile = "./ut_dir/persistent_index_test/index_meta";
+    const std::string kIndexFile = "./ut_dir/persistent_index_test/index.l0.0.0";
     ASSERT_TRUE(env->create_dir(kPersistentIndexDir).ok());
 
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
@@ -109,8 +110,16 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
 
     using Key = uint64_t;
     EditVersion version(0, 0);
-    PersistentIndex index(kIndexFile);
+    PersistentIndexMetaPB index_meta;
+    index_meta.set_key_size(sizeof(Key));
+    index_meta.set_size(0);
+    version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot_meta->mutable_version());
+    PersistentIndex index(kPersistentIndexDir);
     ASSERT_TRUE(index.create(sizeof(Key), version).ok());
+    ASSERT_TRUE(index.load(index_meta).ok());
 
     // insert
     vector<Key> keys;
@@ -121,7 +130,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
         values.emplace_back(i * 2);
     }
     ASSERT_TRUE(index.insert(keys.size(), keys.data(), values.data(), false).ok());
-    ASSERT_TRUE(index.commit().ok());
+    ASSERT_TRUE(index.commit(&index_meta).ok());
 
     // erase
     vector<Key> erase_keys;
@@ -131,28 +140,27 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     vector<IndexValue> erase_old_values(erase_keys.size());
     ASSERT_TRUE(index.erase(erase_keys.size(), erase_keys.data(), erase_old_values.data()).ok());
     // update PersistentMetaPB in memory
-    ASSERT_TRUE(index.commit().ok());
+    ASSERT_TRUE(index.commit(&index_meta).ok());
 
-    // write persistent index meta to meta file
-    std::unique_ptr<fs::WritableBlock> meta_block;
-    fs::CreateBlockOptions meta_block_opts({kIndexMetaFile});
-    ASSERT_TRUE((block_mgr->create_block(meta_block_opts, &meta_block)).ok());
-    PersistentIndexMetaPB* meta = index.index_meta();
-    auto value = meta->SerializeAsString();
-    ASSERT_TRUE(meta_block->append(value).ok());
+    // append invalid wal
+    std::vector<Key> invalid_keys;
+    std::vector<IndexValue> invalid_values;
+    faststring fixed_buf;
+    for (int i = 0; i < N / 2; i++) {
+        invalid_keys.emplace_back(i);
+        invalid_values.emplace_back(i * 2);
+    }
+    const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(invalid_keys.data());
+    for (int i = 0; i < N / 2; i++) {
+        fixed_buf.append(fkeys + i * sizeof(Key), sizeof(Key));
+        put_fixed64_le(&fixed_buf, invalid_values[i]);
+    }
+    ASSERT_TRUE(wblock->append(fixed_buf).ok());
 
-    // generate persistent_index from index_meta
-    PersistentIndex new_index(kIndexFile);
+    // rebuild mutableindex according PersistentIndexMetaPB
+    PersistentIndex new_index(kPersistentIndexDir);
     ASSERT_TRUE(new_index.create(sizeof(Key), version).ok());
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    ASSERT_TRUE(block_mgr->open_block(kIndexMetaFile, &rblock).ok());
-    std::string buff;
-    raw::stl_string_resize_uninitialized(&buff, value.length());
-    PersistentIndexMetaPB new_index_meta;
-    ASSERT_TRUE(rblock->read(0, buff).ok());
-    new_index_meta.ParseFromString(buff);
-
-    ASSERT_TRUE(new_index.load(new_index_meta).ok());
+    ASSERT_TRUE(new_index.load(index_meta).ok());
     std::vector<IndexValue> get_values(keys.size());
 
     ASSERT_TRUE(new_index.get(keys.size(), keys.data(), get_values.data()).ok());
@@ -163,8 +171,27 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     for (int i = N / 2; i < values.size(); i++) {
         ASSERT_EQ(values[i], get_values[i]);
     }
-    rblock->close();
-    meta_block->close();
+
+    // upsert key/value to new_index
+    vector<IndexValue> old_values(invalid_keys.size());
+    ASSERT_TRUE(
+            new_index.upsert(invalid_keys.size(), invalid_keys.data(), invalid_values.data(), old_values.data()).ok());
+    ASSERT_TRUE(new_index.commit(&index_meta).ok());
+
+    // rebuild mutableindex according to PersistentIndexMetaPB
+    {
+        PersistentIndex index(kPersistentIndexDir);
+        ASSERT_TRUE(index.create(sizeof(Key), version).ok());
+        ASSERT_TRUE(index.load(index_meta).ok());
+        std::vector<IndexValue> get_values(keys.size());
+
+        ASSERT_TRUE(index.get(keys.size(), keys.data(), get_values.data()).ok());
+        ASSERT_EQ(keys.size(), get_values.size());
+        for (int i = 0; i < values.size(); i++) {
+            ASSERT_EQ(values[i], get_values[i]);
+        }
+    }
+
     wblock->close();
     FileUtils::remove_all(kPersistentIndexDir);
 }

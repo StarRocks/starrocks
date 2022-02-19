@@ -105,7 +105,7 @@ public:
         return Status::OK();
     }
 
-    Status upsert(size_t n, const void* keys, const IndexValue* values) {
+    Status load_wals(size_t n, const void* keys, const IndexValue* values) {
         const FixedKey<KeySize>* fkeys = reinterpret_cast<const FixedKey<KeySize>*>(keys);
         for (size_t i = 0; i < n; i++) {
             const auto& key = fkeys[i];
@@ -157,21 +157,6 @@ public:
             }
         }
         *num_found = nfound;
-        return Status::OK();
-    }
-
-    Status append_wal(size_t n, const void* keys, const IndexValue* values, fs::WritableBlock* wblock,
-                      uint32_t* page_size) {
-        const FixedKey<KeySize>* fkeys = reinterpret_cast<const FixedKey<KeySize>*>(keys);
-        faststring fixed_buf;
-        fixed_buf.reserve(n * (KeySize + sizeof(IndexValue)));
-        for (size_t i = 0; i < n; i++) {
-            const auto v = (values != nullptr) ? values[i] : NullIndexValue;
-            fixed_buf.append(fkeys[i].data, KeySize);
-            put_fixed64_le(&fixed_buf, v);
-        }
-        RETURN_IF_ERROR(wblock->append(fixed_buf));
-        *page_size += fixed_buf.size();
         return Status::OK();
     }
 };
@@ -230,19 +215,20 @@ PersistentIndex::~PersistentIndex() {
     }
 }
 
+std::string PersistentIndex::get_l0_index_file_name(std::string& dir, const EditVersion& version) {
+    return strings::Substitute("$0/index.l0.$1.$2", dir, version.major(), version.minor());
+}
+
 Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
     if (loaded()) {
         return Status::InternalError("PersistentIndex already loaded");
     }
-    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-    fs::CreateBlockOptions wblock_opts({_path});
-    wblock_opts.mode = Env::MUST_EXIST;
-    RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &_index_block));
 
-    _index_meta.set_key_size(key_size);
-    version.to_pb(_index_meta.mutable_version());
-    _index_meta.set_size(0);
-    _index_meta.mutable_l0_meta();
+    PersistentIndexMetaPB meta;
+    meta.set_key_size(key_size);
+    version.to_pb(meta.mutable_version());
+    meta.set_size(0);
+    meta.mutable_l0_meta();
     // TODO: write to index file
     _key_size = key_size;
     _size = 0;
@@ -259,20 +245,27 @@ Status PersistentIndex::load(PersistentIndexMetaPB& index_meta) {
     size_t key_size = index_meta.key_size();
     _size = index_meta.size();
     DCHECK_EQ(key_size, _key_size);
-    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    DeferOp close_block([&rblock] { rblock->close(); });
-    RETURN_IF_ERROR(block_mgr->open_block(_path, &rblock));
-    // TODO: load snapshot first
     if (!index_meta.has_l0_meta()) {
-        return Status::OK();
+        return Status::InternalError("invalid PersistentIndexMetaPB");
     }
     MutableIndexMetaPB l0_meta = index_meta.l0_meta();
+    IndexSnapshotMetaPB snapshot_meta = l0_meta.snapshot();
+    EditVersion start_version = snapshot_meta.version();
+    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    std::unique_ptr<fs::ReadableBlock> rblock;
+    DeferOp close_block([&rblock] {
+        if (rblock) {
+            rblock->close();
+        }
+    });
+    std::string l0_index_file_name = get_l0_index_file_name(_path, start_version);
+    RETURN_IF_ERROR(block_mgr->open_block(l0_index_file_name, &rblock));
+    // TODO: load snapshot first
     int n = l0_meta.wals_size();
     // read wals and build l0
     for (int i = 0; i < n; i++) {
-        auto wal_pb = l0_meta.wals(i);
-        auto page_pb = wal_pb.data();
+        const auto& wal_pb = l0_meta.wals(i);
+        const auto& page_pb = wal_pb.data();
         size_t offset = page_pb.offset();
         size_t size = page_pb.size();
         _offset = offset + size;
@@ -293,20 +286,17 @@ Status PersistentIndex::load(PersistentIndexMetaPB& index_meta) {
                 values.emplace_back(val);
                 buf_offset += kv_size;
             }
-            RETURN_IF_ERROR(_l0->upsert(batch_num, keys, values.data()));
+            RETURN_IF_ERROR(_l0->load_wals(batch_num, keys, values.data()));
             offset += batch_num * kv_size;
             nums -= batch_num;
         }
     }
     // the data in the end maybe invalid
-    // so we need to reopen the index file after truncated
-    RETURN_IF_ERROR(_index_block->close());
-    RETURN_IF_ERROR(FileSystemUtil::resize_file(_path, _offset));
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({_path});
+    // so we need to truncate file first
+    RETURN_IF_ERROR(FileSystemUtil::resize_file(l0_index_file_name, _offset));
+    fs::CreateBlockOptions wblock_opts({l0_index_file_name});
     wblock_opts.mode = Env::MUST_EXIST;
-    RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
-    _index_block = std::move(wblock);
+    RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &_index_block));
 
     return Status::OK();
 }
@@ -320,9 +310,9 @@ Status PersistentIndex::abort() {
     return Status::NotSupported("TODO");
 }
 
-Status PersistentIndex::commit() {
+Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     // TODO: l0 may be need to flush
-    MutableIndexMetaPB* l0_meta = _index_meta.mutable_l0_meta();
+    MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
     IndexWalMetaPB* wal_pb = l0_meta->add_wals();
     _version.to_pb(wal_pb->mutable_version());
 
@@ -330,8 +320,8 @@ Status PersistentIndex::commit() {
     data->set_offset(_offset);
     data->set_size(_page_size);
 
-    _version.to_pb(_index_meta.mutable_version());
-    _index_meta.set_size(_size);
+    _version.to_pb(index_meta->mutable_version());
+    index_meta->set_size(_size);
 
     _offset += _page_size;
     _page_size = 0;
@@ -351,7 +341,7 @@ Status PersistentIndex::get(size_t n, const void* keys, IndexValue* values) {
 Status PersistentIndex::upsert(size_t n, const void* keys, const IndexValue* values, IndexValue* old_values) {
     KeysInfo l1_checks;
     size_t num_found = 0;
-    RETURN_IF_ERROR(_l0->append_wal(n, keys, values, _index_block.get(), &_page_size));
+    RETURN_IF_ERROR(append_wal(n, keys, values));
     RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &l1_checks, &num_found));
     if (_l1) {
         RETURN_IF_ERROR(_l1->get(n, keys, l1_checks, old_values, &num_found));
@@ -361,7 +351,7 @@ Status PersistentIndex::upsert(size_t n, const void* keys, const IndexValue* val
 }
 
 Status PersistentIndex::insert(size_t n, const void* keys, const IndexValue* values, bool check_l1) {
-    RETURN_IF_ERROR(_l0->append_wal(n, keys, values, _index_block.get(), &_page_size));
+    RETURN_IF_ERROR(append_wal(n, keys, values));
     RETURN_IF_ERROR(_l0->insert(n, keys, values));
     if (_l1 && check_l1) {
         RETURN_IF_ERROR(_l1->check_not_exist(n, keys));
@@ -373,13 +363,27 @@ Status PersistentIndex::insert(size_t n, const void* keys, const IndexValue* val
 Status PersistentIndex::erase(size_t n, const void* keys, IndexValue* old_values) {
     KeysInfo l1_checks;
     size_t num_erased = 0;
-    RETURN_IF_ERROR(_l0->append_wal(n, keys, nullptr, _index_block.get(), &_page_size));
+    RETURN_IF_ERROR(append_wal(n, keys, nullptr));
     RETURN_IF_ERROR(_l0->erase(n, keys, old_values, &l1_checks, &num_erased));
     if (_l1) {
         RETURN_IF_ERROR(_l1->get(n, keys, l1_checks, old_values, &num_erased));
     }
     CHECK(_size >= num_erased) << strings::Substitute("_size($0) < num_erased($1)", _size, num_erased);
     _size -= num_erased;
+    return Status::OK();
+}
+
+Status PersistentIndex::append_wal(size_t n, const void* keys, const IndexValue* values) {
+    const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
+    faststring fixed_buf;
+    fixed_buf.reserve(n * (_key_size + sizeof(IndexValue)));
+    for (size_t i = 0; i < n; i++) {
+        const auto v = (values != nullptr) ? values[i] : NullIndexValue;
+        fixed_buf.append(fkeys + i * _key_size, _key_size);
+        put_fixed64_le(&fixed_buf, v);
+    }
+    RETURN_IF_ERROR(_index_block->append(fixed_buf));
+    _page_size += fixed_buf.size();
     return Status::OK();
 }
 
