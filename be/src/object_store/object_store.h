@@ -8,22 +8,15 @@
 
 namespace starrocks {
 
-// base class for object store client
-class ObjectStoreClient {
+class ObjectStore {
 public:
-    ObjectStoreClient() = default;
-    virtual ~ObjectStoreClient() = default;
+    ObjectStore() = default;
+    virtual ~ObjectStore() = default;
 
-    /*
-     *  Bucket Operation
-     */
     virtual Status create_bucket(const std::string& bucket_name) = 0;
 
     virtual Status delete_bucket(const std::string& bucket_name) = 0;
 
-    /*
-     *  Object Operation
-     */
     virtual Status put_object(const std::string& bucket_name, const std::string& object_key,
                               const std::string& object_path) = 0;
 
