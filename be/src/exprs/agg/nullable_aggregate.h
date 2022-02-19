@@ -118,6 +118,7 @@ public:
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
             if (nullable_column->has_null()) {
+                dst_nullable_column->set_has_null(true);
                 const NullData& src_null_data = nullable_column->immutable_null_column_data();
                 size_t null_size = SIMD::count_nonzero(src_null_data);
                 if (null_size == chunk_size) {
