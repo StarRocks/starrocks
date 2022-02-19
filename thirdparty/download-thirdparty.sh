@@ -341,6 +341,15 @@ fi
 cd -
 echo "Finished patching $GPERFTOOLS_SOURCE"
 
+# patch librdkafka
+cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-1.7.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/librdkafka.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $LIBRDKAFKA_SOURCE"
+
 # patch mariadb-connector-c-3.2.5
 cd $TP_SOURCE_DIR/$MARIADB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; then
