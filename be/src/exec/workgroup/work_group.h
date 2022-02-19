@@ -114,6 +114,7 @@ public:
     bool try_offer_io_task(IoWorkGroupQueue::Task task);
 
     IoWorkGroupQueue::Task pick_io_task();
+
 public:
     // Return current io task queue size
     // need be lock when invoking
