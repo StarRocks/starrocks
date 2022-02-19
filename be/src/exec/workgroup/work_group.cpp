@@ -170,7 +170,7 @@ void WorkGroup::update_cur_select_factor(double value) {
 void WorkGroup::estimate_trend_factor_period() {
     // As an example
     // During the execution period, This WorkGroup actually consumes 70 chunks and uses 80% of the cpu resources
-    // But in reality, the WorkGroup's cpu resources are limited to 70% of
+    // But in reality, the WorkGroup's cpu resources are limited to 70%
     // At the same time, the WorkGroup reads 200 chunks from io_threads
     // Therefore, we calculate the correlation factor as follows
     // decrease_factor = 70 / 0.8 * (0.7 / 0.8)
@@ -225,7 +225,7 @@ void IoWorkGroupQueue::_maybe_adjust_weight() {
         }
     }
 
-    // If positive_total_diff_factor <= 0, it This means that all WorkGs have no excess resources
+    // If positive_total_diff_factor <= 0, This means that all WorkGs have no excess resources
     // So we don't need to adjust it and keep the original limit
     if (positive_total_diff_factor <= 0) {
         for (auto& wg : _ready_wgs) {
