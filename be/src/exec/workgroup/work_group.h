@@ -52,9 +52,25 @@ public:
     void remove(const WorkGroupPtr& wg) override {}
     WorkGroupPtr pick_next() override { return nullptr; };
 
-    StatusOr<PriorityThreadPool::Task> pick_next_task();
+    StatusOr<Task> pick_next_task(int dispatcher_id);
     bool try_offer_io_task(WorkGroupPtr wg, Task task);
     void close() override;
+
+private:
+    void _maybe_adjust_weight();
+    WorkGroupPtr _select_next_wg(int dispatcher_id);
+
+    std::mutex _global_io_mutex;
+    std::condition_variable _cv;
+
+    bool _is_closed = false;
+
+    std::unordered_set<WorkGroupPtr> _ready_wgs;
+    std::atomic<size_t> _total_task_num = 0;
+
+    const int _max_schedule_num_period = config::pipeline_max_io_schedule_num_period;
+    // Adjust select factor of each wg after every `min(_max_schedule_num_period, num_tasks)` schedule times.
+    int _remaining_schedule_num_period = 0;
 };
 
 using WorkGroupType = TWorkGroupType::type;
@@ -97,11 +113,28 @@ public:
     static constexpr int64 DEFAULT_VERSION = 0;
     bool try_offer_io_task(IoWorkGroupQueue::Task task);
 
-    // should be call read chunk from disk
-    void increase_chunk_num(int32_t chunk_num){};
+    IoWorkGroupQueue::Task pick_io_task();
 
-    // should be call while comsume chunk from calculate thread
-    void decrease_chunk_num(int32_t chunk_num){};
+public:
+    // Return current io task queue size
+    // need be lock when invoking
+    size_t io_task_queue_size();
+
+    // If the scan layer generates data, then this interface should be called
+    void incr_period_scaned_chunk_num(int32_t chunk_num);
+
+    // This interface should be called if a request for a chunk is made
+    // Whether successful or not
+    void incr_period_ask_chunk_num(int32_t chunk_num);
+
+    void estimate_trend_factor_period();
+    double get_expect_factor() const;
+    double get_diff_factor() const;
+    double get_select_factor() const;
+    void set_select_factor(double value);
+    void update_select_factor(double value);
+    double get_cur_select_factor() const;
+    void update_cur_select_factor(double value);
 
     // increase num_driver when the driver is attached to the workgroup
     void increase_num_drivers() {
@@ -159,6 +192,20 @@ private:
     std::atomic<size_t> _num_drivers = 0;
     std::atomic<size_t> _acc_num_drivers = 0;
     int64_t _vacuum_ttl = std::numeric_limits<int64_t>::max();
+
+    // Queue on which work items are held until a thread is available to process them in
+    // FIFO order.
+    // BlockingPriorityQueue<Task> _io_work_queue;
+    std::queue<IoWorkGroupQueue::Task> _io_work_queue;
+
+    //  some variables for io schedule
+    std::atomic<size_t> _period_scaned_chunk_num = 1;
+    std::atomic<size_t> _period_ask_chunk_num = 1;
+
+    double _expect_factor = 0; // the factor which should be selected to run by scheduler
+    double _diff_factor = 0;
+    double _select_factor = 0;
+    double _cur_select_factor = 0;
 };
 
 class DispatcherOwnerManager {

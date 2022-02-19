@@ -122,7 +122,7 @@ void ScanOperator::set_finishing(RuntimeState* state) {
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     if (_workgroup != nullptr) {
-        _workgroup->decrease_chunk_num(1);
+        _workgroup->incr_period_ask_chunk_num(1);
     }
 
     for (auto& chunk_source : _chunk_sources) {
@@ -175,7 +175,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
                         _buffer_size, _is_finished, &num_read_chunks, dispatcher_id, _workgroup);
                 // TODO (by laotan332): More detailed information is needed
-                _workgroup->increase_chunk_num(num_read_chunks);
+                _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
             }
 
             _num_running_io_tasks--;
