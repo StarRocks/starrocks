@@ -284,9 +284,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     _query_ctx->fragment_mgr()->register_ctx(fragment_instance_id, std::move(fragment_ctx));
-    for (auto& driver : _fragment_ctx->drivers()) {
-        driver->set_workgroup(wg);
-    }
+
     return Status::OK();
 }
 
