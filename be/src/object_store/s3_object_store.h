@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "object_store/object_store_client.h"
+#include "object_store/object_store.h"
 
 namespace starrocks {
 
@@ -17,11 +17,11 @@ public:
     std::string secret_access_key;
 };
 
-class S3Client final : public ObjectStoreClient {
+class S3ObjectStore final : public ObjectStore {
 public:
-    S3Client(const Aws::Client::ClientConfiguration& config, const S3Credential* cred = nullptr,
-             bool use_transfer_manager = false);
-    ~S3Client() = default;
+    S3ObjectStore(const Aws::Client::ClientConfiguration& config, const S3Credential* cred = nullptr,
+                  bool use_transfer_manager = false);
+    ~S3ObjectStore() = default;
 
     /*
      *  Bucket Operation

@@ -12,7 +12,9 @@ import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.QueryStmt;
+import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
@@ -78,15 +80,15 @@ public class Analyzer {
             // this phrase do not analyze insertStmt, insertStmt will analyze in
             // StmtExecutor.handleCreateTableAsSelectStmt because planner will not do meta operations
             return new CTASAnalyzer(catalog, session).transformCTASStmt((CreateTableAsSelectStmt) node);
-        } else if (node instanceof ShowStmt) {
-            new ShowStmtAnalyzer(session).analyze((ShowStmt) node);
-            return null;
         } else if (node instanceof CreateWorkGroupStmt) {
             return ((CreateWorkGroupStmt) node).analyze();
         } else if (node instanceof AlterWorkGroupStmt) {
             return ((AlterWorkGroupStmt) node).analyze();
         } else if (node instanceof DropWorkGroupStmt) {
             return ((DropWorkGroupStmt) node).analyze();
+        } else if (node instanceof ShowDbStmt || node instanceof ShowTableStmt) {
+            new ShowStmtAnalyzer(session).analyze((ShowStmt) node);
+            return null;
         } else if (node instanceof ShowWorkGroupStmt) {
             return ((ShowWorkGroupStmt) node).analyze();
         } else {

@@ -151,26 +151,33 @@ public class BDBJEJournal implements Journal {
         LOG.debug("opCode = {}, journal size = {}", op, theData.getSize());
         // Write the key value pair to bdb.
         boolean writeSuccessed = false;
-        for (int i = 0; i < RETRY_TIME; i++) {
-            try {
-                // Parameter null means auto commit
-                if (currentJournalDB.put(null, theKey, theData) == OperationStatus.SUCCESS) {
-                    writeSuccessed = true;
-                    LOG.debug("master write journal {} finished. db name {}, current time {}",
-                            id, currentJournalDB.getDb().getDatabaseName(), System.currentTimeMillis());
-                    break;
-                }
-            } catch (ReplicaWriteException e) {
-                LOG.error("non-master nodes should not write editLog. journal id {}", id, e);
-                throw e;
-            } catch (DatabaseException e) {
-                LOG.error("catch an exception when writing to database. sleep and retry. journal id {}", id, e);
+        try {
+            for (int i = 0; i < RETRY_TIME; i++) {
                 try {
-                    Thread.sleep(5 * 1000);
-                } catch (InterruptedException e1) {
-                    e1.printStackTrace();
+                    // Parameter null means auto commit
+                    if (currentJournalDB.put(null, theKey, theData) == OperationStatus.SUCCESS) {
+                        writeSuccessed = true;
+                        LOG.debug("master write journal {} finished. db name {}, current time {}",
+                                id, currentJournalDB.getDb().getDatabaseName(), System.currentTimeMillis());
+                        break;
+                    }
+                } catch (ReplicaWriteException e) {
+                    LOG.error("non-master nodes should not write editLog. journal id {}", id, e);
+                    throw e;
+                } catch (DatabaseException e) {
+                    LOG.error("catch an exception when writing to database. sleep and retry. journal id {}", id, e);
+                    try {
+                        Thread.sleep(5 * 1000);
+                    } catch (InterruptedException e1) {
+                        e1.printStackTrace();
+                    }
+                    continue;
                 }
-                continue;
+            }
+        } finally {
+            // If write failed, set nextJournalId to the origin value.
+            if (!writeSuccessed) {
+                nextJournalId.set(id);
             }
         }
 
@@ -181,7 +188,6 @@ public class BDBJEJournal implements Journal {
                  * If all the followers exit except master, master should continue provide query service.
                  * To prevent master exit, we should exempt OP_TIMESTAMP write
                  */
-                nextJournalId.set(id);
                 LOG.warn("master can not achieve quorum. write timestamp fail. but will not exit.");
                 return;
             }
