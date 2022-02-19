@@ -476,7 +476,7 @@ private:
             auto null_data_ptr = hash_map_with_key->get_null_key_data();
             if (null_data_ptr != nullptr) {
                 for (int i = 0; i < _agg_functions.size(); i++) {
-                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], null_data_ptr + _agg_states_offsets[i]);
+                    _agg_functions[i]->destroy(null_data_ptr + _agg_states_offsets[i]);
                 }
             }
 
