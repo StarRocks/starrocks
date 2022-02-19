@@ -277,7 +277,7 @@ Status ExecEnv::init_mem_tracker() {
     GlobalTabletSchemaMap::Instance()->set_mem_tracker(_tablet_meta_mem_tracker);
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
-
+    starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
     return Status::OK();
 }
 

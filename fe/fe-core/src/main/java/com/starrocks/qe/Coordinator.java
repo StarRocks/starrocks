@@ -32,6 +32,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -95,6 +97,7 @@ import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -1869,6 +1872,16 @@ public class Coordinator {
                 fileNamePrefix = exportSink.getFileNamePrefix();
             }
 
+            WorkGroup workgroup = null;
+            if (ConnectContext.get() != null) {
+                String user = ConnectContext.get().getCurrentUserIdentity().getQualifiedUser();
+                String roleName = Catalog.getCurrentCatalog().getAuth()
+                        .getRoleName(ConnectContext.get().getCurrentUserIdentity());
+                String remoteIp = ConnectContext.get().getRemoteIP();
+                workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
+                        user, roleName, WorkGroupClassifier.QueryType.SELECT, remoteIp);
+            }
+
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
             for (int i = 0; i < instanceExecParams.size(); ++i) {
                 final FInstanceExecParam instanceExecParam = instanceExecParams.get(i);
@@ -1950,11 +1963,24 @@ public class Coordinator {
                         if (isPipeline) {
                             params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
                         }
+
                         params.setPipeline_dop(fragment.getPipelineDop());
 
                         boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                         params.setEnable_resource_group(enableResourceGroup);
-                        // TODO: set params.workgroup, when enableResourceGroup is true.
+                        if (enableResourceGroup) {
+                            // session variable workgroup_id is just for verification of resource isolation.
+                            long workgroupId = ConnectContext.get().getSessionVariable().getWorkGroupId();
+                            if (workgroupId > 0) {
+                                TWorkGroup wg = new TWorkGroup();
+                                wg.setName("");
+                                wg.setId(ConnectContext.get().getSessionVariable().getWorkGroupId());
+                                wg.setVersion(0);
+                                params.setWorkgroup(wg);
+                            } else if (workgroup != null) {
+                                params.setWorkgroup(workgroup.toThrift());
+                            }
+                        }
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {

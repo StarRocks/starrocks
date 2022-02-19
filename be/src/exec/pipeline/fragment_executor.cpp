@@ -119,7 +119,13 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     WorkGroupPtr wg = nullptr;
     if (request.__isset.enable_resource_group && request.enable_resource_group) {
         _fragment_ctx->set_enable_resource_group();
-        // TODO: set wg from request.workgroup.
+        if (request.__isset.workgroup && request.workgroup.id != WorkGroup::DEFAULT_WG_ID) {
+            wg = std::make_shared<WorkGroup>(request.workgroup);
+            wg = WorkGroupManager::instance()->add_workgroup(wg);
+        } else {
+            wg = WorkGroupManager::instance()->get_default_workgroup();
+        }
+        DCHECK(wg != nullptr);
     }
 
     int32_t degree_of_parallelism = 1;
