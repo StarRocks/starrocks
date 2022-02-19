@@ -213,6 +213,8 @@ public:
 
     bool reach_capacity_limit() const override { return _data->reach_capacity_limit(); }
 
+    void check_or_die() const override;
+
 private:
     ColumnPtr _data;
     uint64_t _size;

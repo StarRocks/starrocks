@@ -61,4 +61,11 @@ int ConstColumn::compare_at(size_t left, size_t right, const Column& rhs, int na
     return _data->compare_at(0, 0, *rhs_data, nan_direction_hint);
 }
 
+void ConstColumn::check_or_die() const {
+    if (_size > 0) {
+        CHECK_EQ(_data->size(), 1);
+    }
+    _data->check_or_die();
+}
+
 } // namespace starrocks::vectorized

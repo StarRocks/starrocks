@@ -92,6 +92,8 @@ public:
         return Slice(_bytes.data() + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
     }
 
+    void check_or_die() const override;
+
     // For n value, the offsets size is n + 1
     // For example, for string "I","love","you"
     // the _bytes array is "Iloveyou"
