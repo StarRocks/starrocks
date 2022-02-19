@@ -388,14 +388,14 @@ public class ReportHandler extends Daemon {
     }
 
     private static void workgroupReport(long backendId, List<TWorkGroup> workGroups) {
-        LOG.info("begin to handle workgroup report from backend{}", backendId);
+        LOG.debug("begin to handle workgroup report from backend{}", backendId);
         long start = System.currentTimeMillis();
         Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend does't exist. id: " + backendId);
         }
         Catalog.getCurrentCatalog().getWorkGroupMgr().saveActiveWorkGroupsForBe(backendId, workGroups);
-        LOG.info("finished to handle workgroup report from backend{}, cost: {} ms, num: {}",
+        LOG.debug("finished to handle workgroup report from backend{}, cost: {} ms, num: {}",
                 backendId, System.currentTimeMillis() - start, workGroups.size());
     }
 
