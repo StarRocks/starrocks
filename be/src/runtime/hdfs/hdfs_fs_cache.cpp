@@ -7,7 +7,7 @@
 
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
-#include "object_store/s3_client.h"
+#include "object_store/s3_object_store.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {
@@ -35,8 +35,8 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
         cred.access_key_id = config::aws_access_key_id;
         cred.secret_access_key = config::aws_secret_access_key;
 
-        S3Client* s3_client = new S3Client(config, &cred, false);
-        handle->s3_client = s3_client;
+        auto* store = new S3ObjectStore(config, &cred, false);
+        handle->object_store = store;
     } else {
         return Status::InternalError(strings::Substitute("failed to make client, namenode=$0", namenode));
     }
