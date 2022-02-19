@@ -343,7 +343,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
     private String pipelineProfileMode = "brief";
 
-    @VariableMgr.VarAttr(name = WORKGROUP_ID)
+    @VariableMgr.VarAttr(name = WORKGROUP_ID, flag = VariableMgr.INVISIBLE)
     private int workgroupId = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
