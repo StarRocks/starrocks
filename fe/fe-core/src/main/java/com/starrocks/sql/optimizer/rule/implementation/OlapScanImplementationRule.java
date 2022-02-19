@@ -24,7 +24,6 @@ public class OlapScanImplementationRule extends ImplementationRule {
         LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getOp();
         PhysicalOlapScanOperator physicalOlapScan = new PhysicalOlapScanOperator(
                 scan.getTable(),
-                scan.getOutputColumns(),
                 scan.getColRefToColumnMetaMap(),
                 scan.getDistributionSpec(),
                 scan.getLimit(),
