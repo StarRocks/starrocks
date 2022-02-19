@@ -339,3 +339,12 @@ if [ ! -f $PATCHED_MARK ] && [ $GPERFTOOLS_SOURCE = "gperftools-gperftools-2.7" 
 fi
 cd -
 echo "Finished patching $GPERFTOOLS_SOURCE"
+
+# patch librdkafka
+cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-1.7.0" ]; then
+    patch -p0 < $TP_PATCH_DIR/librdkafka.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $LIBRDKAFKA_SOURCE"
