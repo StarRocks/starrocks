@@ -7,7 +7,7 @@ namespace starrocks::io {
 Status Readable::read_fully(void* data, int64_t count) {
     int64_t nread = 0;
     while (nread < count) {
-        ASSIGN_OR_RETURN(auto n, read(data + nread, count - nread));
+        ASSIGN_OR_RETURN(auto n, read(static_cast<uint8_t*>(data) + nread, count - nread));
         nread += n;
         if (n == 0) {
             return Status::IOError("cannot read fully");
