@@ -200,6 +200,15 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
         if (!status.ok()) {
             return Status::InternalError("Read Batch Error With Libarrow.");
         }
+
+        // arrow::RecordBatchReader::ReadNext returns null at end of stream.
+        // Since we count the batches read, EOF implies reader source failure.
+        if (_batch == nullptr) {
+            LOG(WARNING) << "Unexpected EOF. Row groups less than expected. expected: " << _total_groups
+                         << " got: " << _current_group;
+            return Status::InternalError("Unexpected EOF");
+        }
+
         _current_line_of_batch = 0;
     } else if (_current_line_of_batch >= _batch->num_rows()) {
         VLOG(7) << "read_record_batch, current group id:" << _current_group
@@ -209,6 +218,15 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
         if (!status.ok()) {
             return Status::InternalError("Read Batch Error With Libarrow.");
         }
+
+        // arrow::RecordBatchReader::ReadNext returns null at end of stream.
+        // Since we count the batches read, EOF implies reader source failure.
+        if (_batch == nullptr) {
+            LOG(WARNING) << "Unexpected EOF. Row groups less than expected. expected: " << _total_groups
+                         << " got: " << _current_group;
+            return Status::InternalError("Unexpected EOF");
+        }
+
         _current_line_of_batch = 0;
     }
     return Status::OK();
