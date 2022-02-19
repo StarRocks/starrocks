@@ -95,7 +95,6 @@ struct AggHashMapWithOneNumberKey {
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
-
     AggDataPtr get_null_key_data() { return nullptr; }
 
     template <typename Func>
