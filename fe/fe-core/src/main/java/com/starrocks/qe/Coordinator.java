@@ -1963,23 +1963,24 @@ public class Coordinator {
                         if (isPipeline) {
                             params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
                         }
-                        // TODO (by satanson): just for verification of resource isolation.
-                        long workgroupId = ConnectContext.get().getSessionVariable().getWorkGroupId();
-                        if (workgroupId > 0) {
-                            TWorkGroup wg = new TWorkGroup();
-                            wg.setName("");
-                            wg.setId(ConnectContext.get().getSessionVariable().getWorkGroupId());
-                            wg.setVersion(0);
-                            params.setWorkgroup(wg);
-                        } else if (workgroup != null) {
-                            params.setWorkgroup(workgroup.toThrift());
-                        }
 
                         params.setPipeline_dop(fragment.getPipelineDop());
 
                         boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                         params.setEnable_resource_group(enableResourceGroup);
-                        // TODO: set params.workgroup, when enableResourceGroup is true.
+                        if (enableResourceGroup) {
+                            // session variable workgroup_id is just for verification of resource isolation.
+                            long workgroupId = ConnectContext.get().getSessionVariable().getWorkGroupId();
+                            if (workgroupId > 0) {
+                                TWorkGroup wg = new TWorkGroup();
+                                wg.setName("");
+                                wg.setId(ConnectContext.get().getSessionVariable().getWorkGroupId());
+                                wg.setVersion(0);
+                                params.setWorkgroup(wg);
+                            } else if (workgroup != null) {
+                                params.setWorkgroup(workgroup.toThrift());
+                            }
+                        }
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {
