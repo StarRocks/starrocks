@@ -20,6 +20,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/hll.h"
 #include "util/date_func.h"
+#include "util/json.h"
 
 namespace starrocks::vectorized {
 
@@ -151,14 +152,26 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 builder.append_null();
             }
         } else if constexpr (pt_is_binary<ToType>) {
-            auto res = json->get_string();
-            if (res.ok()) {
-                builder.append(res.value());
+            // if the json already a string value, get the string directly
+            // else cast it to string representation
+            if (json->get_type() == JsonType::JSON_STRING) {
+                auto res = json->get_string();
+                if (res.ok()) {
+                    builder.append(res.value());
+                } else {
+                    builder.append_null();
+                }
             } else {
-                builder.append_null();
+                auto res = json->to_string();
+                if (res.ok()) {
+                    builder.append(res.value());
+                } else {
+                    builder.append_null();
+                }
             }
         } else {
-            CHECK(false) << "not supported type " << ToType;
+            DCHECK(false) << "not supported type " << ToType;
+            builder->append_null();
         }
     }
 
