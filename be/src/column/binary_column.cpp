@@ -21,7 +21,7 @@ namespace starrocks::vectorized {
 void BinaryColumn::check_or_die() const {
     CHECK_EQ(_bytes.size(), _offsets.back());
     for (uint32_t i = 1; i < _offsets.size(); i++) {
-        CHECK_GE(_offsets[i], _offsets[i-1]);
+        CHECK_GE(_offsets[i], _offsets[i - 1]);
     }
     if (_slices_cache) {
         for (int32_t i = 0; i < size(); i++) {
