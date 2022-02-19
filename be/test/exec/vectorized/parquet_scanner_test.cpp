@@ -214,12 +214,9 @@ class ParquetScannerTest : public ::testing::Test {
     void test_column_from_path(const std::vector<std::string>& columns_from_file,
                                const std::vector<std::string>& columns_from_path,
                                const std::vector<std::string>& column_values,
-                               const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
-                               std::string specific_file = "") {
+                               const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs) {
         std::vector<std::string> file_names;
-        if (!specific_file.empty()) {
-            file_names.push_back(specific_file);
-        } else if constexpr (is_nullable) {
+        if constexpr (is_nullable) {
             file_names = _nullable_file_names;
         } else {
             file_names = _file_names;
@@ -446,19 +443,21 @@ TEST_F(ParquetScannerTest, test_to_json) {
               R"( {"s0": 2, "s1": "string2"}                                                     )",
               R"({ "s0": 3, "s1": "string3" }                                                    )"}},
             {"col_json_list_list",
-             {"[[1,2,3], [7,8,9], [10,11,12]]", "[[4,5,6], [7,8,9], [12,13,14]]", "[[4,5,6], [7,8,9], [12,13,14]]"}},
+             {"[[1,2,3], [7,8,9], [10,11,12]]                                                    ",
+              "[[4,5,6], [7,8,9], [12,13,14]]                                                    ",
+              "[[4,5,6], [7,8,9], [12,13,14]]                                                    "}},
             {"col_json_list_struct",
-             {R"([{"s0": 1, "s1": "string1"}, {"s0": 2, "s1": "string2" } ])",
-              R"( [{"s0": 1, "s1": "string1"} ]                     )",
-              R"( [{"s0": 1, "s1": "string3"} ]                    )"}},
+             {R"([{"s0": 1, "s1": "string1"}, {"s0": 2, "s1": "string2" } ]                     )",
+              R"( [{"s0": 1, "s1": "string1"} ]                                                 )",
+              R"( [{"s0": 1, "s1": "string3"} ]                                                 )"}},
             {"col_json_map_list",
-             {R"({"s1": [1,2], "s2": [3,4]}                                 )",
-              R"({"s1": [5,6]}                                               )",
-              R"({"s1": [5,6]}                                          )"}},
+             {R"({"s1": [1,2], "s2": [3,4]}                                                     )",
+              R"({"s1": [5,6]}                                                                  )",
+              R"({"s1": [5,6]}                                                                  )"}},
             {"col_json_struct_struct",
-             {R"({"s0": 1, "s1": {"s2": 3}}                            )",
-              R"({"s0": 2, "s1": {"s2": 4}}                              )",
-              R"({ "s0": 3, "s1": {"s2": 5}}                             )"}},
+             {R"({"s0": 1, "s1": {"s2": 3}}                                                     )",
+              R"({"s0": 2, "s1": {"s2": 4}}                                                     )",
+              R"({ "s0": 3, "s1": {"s2": 5}}                                                    )"}},
     };
     std::vector<std::string> columns_from_path;
     std::vector<std::string> path_values;

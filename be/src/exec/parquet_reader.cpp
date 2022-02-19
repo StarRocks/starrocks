@@ -131,15 +131,6 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
                 LOG(INFO) << "Ignore the parquet file because of an expected nullptr Schema";
                 return Status::EndOfFile("Unexpected nullptr RecordBatch");
             }
-            for (int i = 0; i < _parquet_column_ids.size(); i++) {
-                DCHECK_LT(i, field_schema->num_fields());
-                std::shared_ptr<arrow::Field> field = field_schema->field(i);
-                if (!field) {
-                    LOG(WARNING) << "Get field schema failed. Column order:" << i;
-                    return Status::InternalError(status.ToString());
-                }
-                _parquet_column_type.emplace_back(field->type());
-            }
         }
         return Status::OK();
     } catch (parquet::ParquetException& e) {
@@ -177,7 +168,6 @@ Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tup
             for (auto index : iter->second) {
                 _parquet_column_ids.emplace_back(index);
             }
-            continue;
         } else {
             std::stringstream str_error;
             str_error << "Invalid Column Name:" << slot_desc->col_name();
@@ -246,10 +236,6 @@ const std::shared_ptr<arrow::RecordBatch>& ParquetReaderWrap::get_batch() {
     _current_line_of_batch += _batch->num_rows();
     _current_line_of_group += _batch->num_rows();
     return _batch;
-}
-
-const std::vector<std::shared_ptr<arrow::DataType>>& ParquetReaderWrap::get_column_types() {
-    return _parquet_column_type;
 }
 
 Status ParquetReaderWrap::handle_timestamp(const std::shared_ptr<arrow::TimestampArray>& ts_array, uint8_t* buf,

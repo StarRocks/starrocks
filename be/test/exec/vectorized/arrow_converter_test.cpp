@@ -699,32 +699,6 @@ void add_arrow_to_datetime_column(std::shared_ptr<ArrowType> type, Column* colum
 
 template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType,
           typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType, typename CppType = RunTimeCppType<PT>>
-void add_arrow_to_json_column(std::shared_ptr<ArrowType> type, Column* column, size_t num_elements,
-                              ArrowCppType arrow_datetime, CppType datetime, size_t& counter, bool fail) {
-    ASSERT_EQ(column->size(), counter);
-    using ColumnType = RunTimeColumnType<PT>;
-    auto array = create_constant_datetime_array<ArrowType, false>(num_elements, arrow_datetime, type, counter);
-    auto conv_func = get_arrow_converter(AT, PT, false, false);
-    ASSERT_TRUE(conv_func != nullptr);
-    Column::Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr);
-    if (fail) {
-        ASSERT_FALSE(status.ok());
-        return;
-    }
-    ASSERT_EQ(column->size(), counter);
-    auto* datetime_column = down_cast<ColumnType*>(column);
-    auto* datetime_data = &datetime_column->get_data().front();
-    for (auto i = 0; i < num_elements; ++i) {
-        auto idx = counter - num_elements + i;
-        ASSERT_EQ(datetime_data[idx], datetime);
-    }
-}
-
-template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType,
-          typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType, typename CppType = RunTimeCppType<PT>>
 void add_arrow_to_nullable_datetime_column(std::shared_ptr<ArrowType> type, Column* column, size_t num_elements,
                                            ArrowCppType arrow_datetime, CppType datetime, size_t& counter, bool fail) {
     ASSERT_EQ(column->size(), counter);

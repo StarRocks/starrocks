@@ -1,6 +1,10 @@
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 from pyarrow import json
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+# Generate parquet file for testing
 
 # input = './data_json.json'
 # table = json.read_json(input)
