@@ -47,56 +47,6 @@ static inline std::shared_ptr<arrow::Array> create_constant_array(int64_t num_el
     return array;
 }
 
-static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, const std::map<std::string, int>& value,
-                                                      size_t& counter) {
-    auto key_builder = std::make_shared<arrow::StringBuilder>();
-    auto item_builder = std::make_shared<arrow::Int32Builder>();
-    arrow::TypeTraits<arrow::MapType>::BuilderType builder(arrow::default_memory_pool(), key_builder, item_builder);
-
-    for (auto& entry : value) {
-        builder.Append();
-        key_builder->Append(entry.first);
-        item_builder->Append(entry.second);
-    }
-    counter += value.size();
-    return builder.Finish().ValueOrDie();
-}
-
-static std::string map_to_json(const std::map<std::string, int>& m) {
-    std::ostringstream oss;
-    oss << "{";
-    bool first = true;
-    for (auto& entry : m) {
-        oss << entry.first << ": " << entry.second;
-        if (!first) {
-            oss << ",";
-        }
-        first = false;
-    }
-    oss << "}";
-    return oss.str();
-}
-
-void add_arrow_map_to_json_column(Column* column, size_t num_elements, const std::map<std::string, int>& value,
-                                  size_t& counter) {
-    ASSERT_EQ(column->size(), counter);
-    auto array = create_map_array(num_elements, value, counter);
-    auto conv_func = get_arrow_converter(ArrowTypeId::MAP, TYPE_JSON, false, false);
-    ASSERT_TRUE(conv_func != nullptr);
-
-    Column::Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr));
-    ASSERT_EQ(column->size(), counter);
-    for (auto i = 0; i < num_elements; ++i) {
-        const JsonValue* json = column->get(i).get_json();
-        std::string json_str = json->to_string_uncheck();
-
-        ASSERT_EQ(json_str, map_to_json(value));
-    }
-}
-
 template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType,
           typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType>
 void add_arrow_to_column(Column* column, size_t num_elements, ArrowCppType value, size_t& counter) {
@@ -148,17 +98,6 @@ void add_arrow_to_nullable_column(Column* column, size_t num_elements, ArrowCppT
             ASSERT_EQ(data[idx], CppType(value));
         }
     }
-}
-
-TEST_F(ArrowConverterTest, test_map_to_json) {
-    auto json_column = JsonColumn::create();
-    json_column->reserve(4096);
-    size_t counter = 0;
-    std::map<std::string, int> map_value = {
-            {"hehe", 1},
-            {"haha", 2},
-    };
-    add_arrow_map_to_json_column(json_column.get(), 10, map_value, counter);
 }
 
 TEST_F(ArrowConverterTest, test_copyable_converter_int8) {
@@ -1253,7 +1192,71 @@ TEST_F(ArrowConverterTest, test_decimal128) {
     }
 }
 
-TEST_F(ArrowConverterTest, test_json) {}
+static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, const std::map<std::string, int>& value,
+                                                      size_t& counter) {
+    auto key_builder = std::make_shared<arrow::StringBuilder>();
+    auto item_builder = std::make_shared<arrow::Int32Builder>();
+    arrow::TypeTraits<arrow::MapType>::BuilderType builder(arrow::default_memory_pool(), key_builder, item_builder);
+
+    for (int i = 0; i < num_elements; i++) {
+        builder.Append();
+        for (auto& [key, value] : value) {
+            key_builder->Append(key);
+            item_builder->Append(value);
+        }
+        counter += 1;
+    }
+    return builder.Finish().ValueOrDie();
+}
+
+static std::string map_to_json(const std::map<std::string, int>& m) {
+    std::ostringstream oss;
+    oss << "{";
+    bool first = true;
+    for (auto& [key, value] : m) {
+        if (!first) {
+            oss << ", ";
+        }
+        oss << "\"" << key << "\""
+            << ": " << value;
+        first = false;
+    }
+    oss << "}";
+    return oss.str();
+}
+
+void add_arrow_map_to_json_column(Column* column, size_t num_elements, const std::map<std::string, int>& value,
+                                  size_t& counter) {
+    ASSERT_EQ(column->size(), counter);
+    auto array = create_map_array(num_elements, value, counter);
+    auto conv_func = get_arrow_converter(ArrowTypeId::MAP, TYPE_JSON, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+
+    Column::Filter filter;
+    filter.resize(array->length(), 1);
+    auto* filter_data = &filter.front();
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr));
+    ASSERT_EQ(column->size(), counter);
+    for (auto i = 0; i < num_elements; ++i) {
+        const JsonValue* json = column->get(i).get_json();
+        std::string json_str = json->to_string_uncheck();
+
+        ASSERT_EQ(map_to_json(value), json_str);
+    }
+}
+
+TEST_F(ArrowConverterTest, test_map_to_json) {
+    auto json_column = JsonColumn::create();
+    json_column->reserve(4096);
+    size_t counter = 0;
+    std::map<std::string, int> map_value = {
+            {"hehe", 1},
+            {"haha", 2},
+    };
+    for (int i = 1; i < 10; i++) {
+        add_arrow_map_to_json_column(json_column.get(), i, map_value, counter);
+    }
+}
 
 } // namespace starrocks::vectorized
 
