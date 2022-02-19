@@ -95,6 +95,8 @@ struct AggHashMapWithOneNumberKey {
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
+    AggDataPtr get_null_key_data() { return nullptr; }
+
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
@@ -154,6 +156,8 @@ struct AggHashMapWithOneNullableNumberKey {
     HashMap hash_map;
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
+
+    AggDataPtr get_null_key_data() { return null_key_data; }
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -279,6 +283,8 @@ struct AggHashMapWithOneStringKey {
     using ResultVector = typename std::vector<Slice>;
     HashMap hash_map;
 
+    AggDataPtr get_null_key_data() { return nullptr; }
+
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
@@ -338,6 +344,8 @@ struct AggHashMapWithOneNullableStringKey {
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
     HashMap hash_map;
+
+    AggDataPtr get_null_key_data() { return null_key_data; }
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -473,6 +481,8 @@ struct AggHashMapWithSerializedKey {
             : mem_pool(std::make_unique<MemPool>()),
               buffer(mem_pool->allocate(max_one_row_size * config::vector_chunk_size)) {}
 
+    AggDataPtr get_null_key_data() { return nullptr; }
+
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
@@ -597,6 +607,8 @@ struct AggHashMapWithSerializedKeyFixedSize {
         uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
         memset(buffer, 0x0, max_fixed_size * config::vector_chunk_size);
     }
+
+    AggDataPtr get_null_key_data() { return nullptr; }
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
