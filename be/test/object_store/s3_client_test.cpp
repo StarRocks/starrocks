@@ -1,12 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "object_store/s3_client.h"
-
 #include <aws/core/Aws.h>
 #include <gtest/gtest.h>
 
 #include <fstream>
 
+#include "object_store/s3_object_store.h"
 #include "util/file_utils.h"
 
 namespace starrocks {
@@ -28,7 +27,7 @@ TEST_F(S3Test, bucket_operation) {
     Aws::Client::ClientConfiguration config;
     config.region = Aws::Region::AP_SOUTHEAST_1;
 
-    S3Client client(config);
+    S3ObjectStore client(config);
 
     // create bucket
     ASSERT_TRUE(client.create_bucket(bucket_name).ok());
@@ -41,7 +40,7 @@ TEST_F(S3Test, object_operation) {
     Aws::Client::ClientConfiguration config;
     config.region = Aws::Region::AP_SOUTHEAST_1;
 
-    S3Client client(config);
+    S3ObjectStore client(config);
 
     // create bucket
     ASSERT_TRUE(client.create_bucket(bucket_name).ok());

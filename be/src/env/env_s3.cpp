@@ -6,7 +6,7 @@
 
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
-#include "object_store/s3_client.h"
+#include "object_store/s3_object_store.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {
@@ -17,7 +17,7 @@ namespace starrocks {
 // Now this is not thread-safe.
 class S3RandomAccessFile : public RandomAccessFile {
 public:
-    S3RandomAccessFile(std::unique_ptr<ObjectStoreClient> client, std::string bucket, std::string object)
+    S3RandomAccessFile(std::unique_ptr<ObjectStore> client, std::string bucket, std::string object)
             : _client(std::move(client)),
               _bucket(std::move(bucket)),
               _object(std::move(object)),
@@ -33,7 +33,7 @@ public:
     const std::string& file_name() const override { return _object_path; }
 
 private:
-    std::unique_ptr<ObjectStoreClient> _client;
+    std::unique_ptr<ObjectStore> _client;
     std::string _bucket;
     std::string _object;
     std::string _object_path;
@@ -93,8 +93,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
     S3Credential cred;
     cred.access_key_id = config::aws_access_key_id;
     cred.secret_access_key = config::aws_secret_access_key;
-    auto s3_client = std::make_unique<S3Client>(config, &cred, false);
-    return std::make_unique<S3RandomAccessFile>(std::move(s3_client), std::move(bucket), std::move(object));
+    auto store = std::make_unique<S3ObjectStore>(config, &cred, false);
+    return std::make_unique<S3RandomAccessFile>(std::move(store), std::move(bucket), std::move(object));
 }
 
 } // namespace starrocks
