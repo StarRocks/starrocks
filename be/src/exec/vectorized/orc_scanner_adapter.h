@@ -45,7 +45,7 @@ public:
     ~OrcScannerAdapter();
     Status init(std::unique_ptr<orc::InputStream> input_stream);
     Status init(std::unique_ptr<orc::Reader> reader);
-    Status read_next();
+    Status read_next(orc::RowReader::ReadPosition* pos = nullptr);
     // create sample chunk
     ChunkPtr create_chunk();
     // copy from cvb to chunk
@@ -106,8 +106,8 @@ public:
     bool has_lazy_load_context() { return _lazy_load_ctx != nullptr; }
     StatusOr<ChunkPtr> load_chunk();
     StatusOr<ChunkPtr> load_active_chunk();
-    void lazy_read_next();
-    void lazy_skip_next();
+    void lazy_read_next(size_t numValues);
+    void lazy_skip_next(size_t numValues);
     StatusOr<ChunkPtr> load_lazy_chunk(Filter* filter, size_t chunk_size);
 
 private:

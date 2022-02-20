@@ -1060,6 +1060,9 @@ void StructColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionPro
     for (auto& ptr : children) {
         ptr->seekToRowGroup(positions);
     }
+    for (auto& ptr : lazyLoadChildren) {
+        ptr->seekToRowGroup(positions);
+    }
 }
 
 void StructColumnReader::lazyLoadSkip(uint64_t numValues) {

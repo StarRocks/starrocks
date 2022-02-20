@@ -965,7 +965,7 @@ void RowReaderImpl::startNextStripe() {
     }
 }
 
-bool RowReaderImpl::next(ColumnVectorBatch& data) {
+bool RowReaderImpl::next(ColumnVectorBatch& data, ReadPosition* pos) {
     if (currentStripe >= lastStripe) {
         data.numElements = 0;
         if (lastStripe > 0) {
@@ -977,6 +977,9 @@ bool RowReaderImpl::next(ColumnVectorBatch& data) {
         return false;
     }
     if (currentRowInStripe == 0) {
+        if (pos != nullptr) {
+            pos->start_new_stripe = true;
+        }
         startNextStripe();
     }
     uint64_t rowsToRead = std::min(static_cast<uint64_t>(data.capacity), rowsInCurrentStripe - currentRowInStripe);
@@ -998,6 +1001,11 @@ bool RowReaderImpl::next(ColumnVectorBatch& data) {
     } else {
         reader->next(data, rowsToRead, nullptr);
     }
+    if (pos != nullptr) {
+        pos->strip_index = currentStripe;
+        pos->num_values = rowsToRead;
+    }
+
     // update row number
     previousRow = firstRowOfStripe[currentStripe] + currentRowInStripe;
     currentRowInStripe += rowsToRead;
@@ -1011,6 +1019,9 @@ bool RowReaderImpl::next(ColumnVectorBatch& data) {
             currentRowInStripe = nextRowToRead;
             if (currentRowInStripe < rowsInCurrentStripe) {
                 seekToRowGroup(static_cast<uint32_t>(currentRowInStripe / footer->rowindexstride()));
+                if (pos != nullptr) {
+                    pos->seek_to_row_group = true;
+                }
             }
         }
     }

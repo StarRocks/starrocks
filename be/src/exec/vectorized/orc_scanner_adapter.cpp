@@ -1308,12 +1308,12 @@ OrcScannerAdapter::~OrcScannerAdapter() {
     _fill_functions.clear();
 }
 
-Status OrcScannerAdapter::read_next() {
+Status OrcScannerAdapter::read_next(orc::RowReader::ReadPosition* pos) {
     if (_batch == nullptr) {
         _batch = _row_reader->createRowBatch(_read_chunk_size);
     }
     try {
-        if (!_row_reader->next(*_batch)) {
+        if (!_row_reader->next(*_batch, pos)) {
             return Status::EndOfFile("");
         }
     } catch (std::exception& e) {
@@ -1463,11 +1463,12 @@ StatusOr<ChunkPtr> OrcScannerAdapter::load_lazy_chunk(Filter* filter, size_t chu
     return ret;
 }
 
-void OrcScannerAdapter::lazy_read_next() {
-    _row_reader->lazyLoadNext(*_batch, _batch->numElements);
+void OrcScannerAdapter::lazy_read_next(size_t numValues) {
+    _row_reader->lazyLoadNext(*_batch, numValues);
 }
-void OrcScannerAdapter::lazy_skip_next() {
-    _row_reader->lazyLoadSkip(_batch->numElements);
+
+void OrcScannerAdapter::lazy_skip_next(size_t numValues) {
+    _row_reader->lazyLoadSkip(numValues);
 }
 
 void OrcScannerAdapter::set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter) {
