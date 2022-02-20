@@ -161,7 +161,7 @@ public:
     Status create(size_t key_size, const EditVersion& version);
 
     // load required states from underlying file
-    Status load(PersistentIndexMetaPB& index_meta);
+    Status load(const PersistentIndexMetaPB& index_meta);
 
     // start modification with intended version
     Status prepare(const EditVersion& version);

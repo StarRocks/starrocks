@@ -241,7 +241,7 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
     return Status::OK();
 }
 
-Status PersistentIndex::load(PersistentIndexMetaPB& index_meta) {
+Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     size_t key_size = index_meta.key_size();
     _size = index_meta.size();
     DCHECK_EQ(key_size, _key_size);
