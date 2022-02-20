@@ -126,13 +126,13 @@ private:
     }
 
     static Status convert(so::object obj, std::string_view field_name, vpack::Builder* builder) {
-        if (field_name.empty()) {
-            builder->add(vpack::Value(vpack::ValueType::Object));
-        } else {
+        if (!field_name.empty()) {
             builder->add(toStringRef(field_name), vpack::Value(vpack::ValueType::Object));
+        } else {
+            builder->add(vpack::Value(vpack::ValueType::Object));
         }
         for (auto field : obj) {
-            std::string_view key(field.key().raw());
+            std::string_view key = field.unescaped_key();
             auto value = field.value().value();
             RETURN_IF_ERROR(convert(value, key, builder));
         }
@@ -141,10 +141,10 @@ private:
     }
 
     static Status convert(so::array arr, std::string_view field_name, vpack::Builder* builder) {
-        if (field_name.empty()) {
-            builder->add(vpack::Value(vpack::ValueType::Array));
-        } else {
+        if (!field_name.empty()) {
             builder->add(toStringRef(field_name), vpack::Value(vpack::ValueType::Array));
+        } else {
+            builder->add(vpack::Value(vpack::ValueType::Array));
         }
         for (auto element : arr) {
             convert(element.value(), {}, builder);
@@ -156,26 +156,26 @@ private:
     static inline Status convert(so::number num, std::string_view field_name, vpack::Builder* builder) {
         switch (num.get_number_type()) {
         case so::number_type::floating_point_number: {
-            if (field_name.empty()) {
-                builder->add(vpack::Value((num.get_double())));
-            } else {
+            if (!field_name.empty()) {
                 builder->add(toStringRef(field_name), vpack::Value((num.get_double())));
+            } else {
+                builder->add(vpack::Value((num.get_double())));
             }
             break;
         }
         case so::number_type::signed_integer: {
-            if (field_name.empty()) {
-                builder->add(vpack::Value((num.get_int64())));
-            } else {
+            if (!field_name.empty()) {
                 builder->add(toStringRef(field_name), vpack::Value((num.get_int64())));
+            } else {
+                builder->add(vpack::Value((num.get_int64())));
             }
             break;
         }
         case so::number_type::unsigned_integer: {
-            if (field_name.empty()) {
-                builder->add(vpack::Value((num.get_uint64())));
-            } else {
+            if (!field_name.empty()) {
                 builder->add(toStringRef(field_name), vpack::Value((num.get_uint64())));
+            } else {
+                builder->add(vpack::Value((num.get_uint64())));
             }
             break;
         }
@@ -186,7 +186,7 @@ private:
     }
 
     static inline Status convert(std::string_view str, std::string_view field_name, vpack::Builder* builder) {
-        if (field_name.empty()) {
+        if (!field_name.empty()) {
             builder->add(toStringRef(field_name), vpack::Value(str));
         } else {
             builder->add(vpack::Value(str));
@@ -195,7 +195,7 @@ private:
     }
 
     static inline Status convert(bool value, std::string_view field_name, vpack::Builder* builder) {
-        if (field_name.empty()) {
+        if (!field_name.empty()) {
             builder->add(toStringRef(field_name), vpack::Value(value));
         } else {
             builder->add(vpack::Value(value));
@@ -204,7 +204,7 @@ private:
     }
 
     static inline Status convert_null(std::string_view field_name, vpack::Builder* builder) {
-        if (field_name.empty()) {
+        if (!field_name.empty()) {
             builder->add(toStringRef(field_name), vpack::Value(vpack::ValueType::Null));
         } else {
             builder->add(vpack::Value(vpack::ValueType::Null));
