@@ -617,7 +617,7 @@ public:
         }
         JsonValue json;
         RETURN_IF_ERROR(JsonValue::parse(source, &json));
-        dst.set<JsonValue>(json);
+        dst.move_in(std::move(json));
 
         return Status::OK();
     }

@@ -242,6 +242,10 @@ using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 template <PrimitiveType Type>
 using RunTimeColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
 
+// Movable: rvalue reference type
+template <PrimitiveType Type>
+using RunTimeCppMovableType = std::add_rvalue_reference_t<std::remove_pointer_t<RunTimeCppType<Type>>>;
+
 template <typename T>
 struct ColumnTraits {};
 

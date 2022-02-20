@@ -109,7 +109,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             CHECK(false) << "not supported type " << FromType;
         }
         if (!value.is_null()) {
-            builder.append(&value);
+            builder.append(std::move(value));
         } else {
             builder.append_null();
         }
