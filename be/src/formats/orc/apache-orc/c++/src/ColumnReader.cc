@@ -964,8 +964,8 @@ private:
     std::vector<uint64_t> fieldIndex;
     std::vector<std::unique_ptr<ColumnReader>> lazyLoadChildren;
     std::vector<uint64_t> lazyLoadFieldIndex;
-    PositionProviderMap lastSkipRequest;
-    bool hasLastSkipRequest = false;
+    PositionProviderMap lastSeekToRowGroupRequest;
+    bool hasLastSeekToRowGroupRequest = false;
 
 public:
     StructColumnReader(const Type& type, StripeStreams& stipe);
@@ -981,6 +981,7 @@ public:
     const size_t size() { return children.size(); }
     ColumnReader* childReaderAt(size_t idx) { return children[idx].get(); }
 
+    void applyLastSeekToRowGroupRequest();
     void lazyLoadSkip(uint64_t numValues) override;
     void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
     void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
@@ -1057,26 +1058,42 @@ void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnRe
     }
 }
 
+void StructColumnReader::applyLastSeekToRowGroupRequest() {
+    if (hasLastSeekToRowGroupRequest) {
+        hasLastSeekToRowGroupRequest = false;
+        for (auto& ptr : lazyLoadChildren) {
+            ptr->seekToRowGroup(lastSeekToRowGroupRequest);
+        }
+    }
+}
+
 void StructColumnReader::seekToRowGroup(PositionProviderMap& positions) {
     ColumnReader::seekToRowGroup(positions);
     for (auto& ptr : children) {
         ptr->seekToRowGroup(positions);
     }
-    for (auto& ptr : lazyLoadChildren) {
-        ptr->seekToRowGroup(positions);
+    if (lazyLoadChildren.size() != 0) {
+        lastSeekToRowGroupRequest.copy(positions);
+        hasLastSeekToRowGroupRequest = true;
     }
+    // for (auto& ptr : lazyLoadChildren) {
+    //     ptr->seekToRowGroup(positions);
+    // }
 }
 
 void StructColumnReader::lazyLoadSkip(uint64_t numValues) {
+    applyLastSeekToRowGroupRequest();
     for (auto& ptr : lazyLoadChildren) {
         ptr->skip(numValues);
     }
 }
 void StructColumnReader::lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    applyLastSeekToRowGroupRequest();
     nextInternal<false, true>(lazyLoadChildren, lazyLoadFieldIndex, rowBatch, numValues, notNull);
 }
 
 void StructColumnReader::lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    applyLastSeekToRowGroupRequest();
     nextInternal<true, true>(lazyLoadChildren, lazyLoadFieldIndex, rowBatch, numValues, notNull);
 }
 
