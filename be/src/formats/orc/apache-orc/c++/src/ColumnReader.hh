@@ -27,6 +27,7 @@
 #include "ByteRLE.hh"
 #include "Compression.hh"
 #include "Timezone.hh"
+#include "io/InputStream.hh"
 #include "orc/Vector.hh"
 #include "wrap/orc-proto-wrapper.hh"
 
@@ -154,7 +155,7 @@ public:
      * Seek to beginning of a row group in the current stripe
      * @param positions a list of PositionProviders storing the positions
      */
-    virtual void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions);
+    virtual void seekToRowGroup(PositionProviderMap& providers);
 
     uint64_t getColumnId() { return columnId; }
 };

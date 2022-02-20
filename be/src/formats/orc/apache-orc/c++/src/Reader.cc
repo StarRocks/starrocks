@@ -375,25 +375,23 @@ void RowReaderImpl::loadStripeIndex() {
 }
 
 void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
-    // store positions for selected columns
-    std::vector<std::list<uint64_t>> positions;
-    // store position providers for selected colimns
-    std::unordered_map<uint64_t, PositionProvider> positionProviders;
-
+    PositionProviderMap map;
     for (const auto& rowIndexe : rowIndexes) {
         uint64_t colId = rowIndexe.first;
         const proto::RowIndexEntry& entry = rowIndexe.second.entry(static_cast<int32_t>(rowGroupEntryId));
 
         // copy index positions for a specific column
-        positions.emplace_back();
-        auto& position = positions.back();
+        size_t positionIndex = map.positions.size();
+        map.columnIdToPositionIndex[colId] = positionIndex;
+        map.positions.emplace_back();
+        auto& position = map.positions.back();
         for (int pos = 0; pos != entry.positions_size(); ++pos) {
             position.push_back(entry.positions(pos));
         }
-        positionProviders.insert(std::make_pair(colId, PositionProvider(position)));
+        map.providers.insert(std::make_pair(colId, PositionProvider(position)));
     }
 
-    reader->seekToRowGroup(positionProviders);
+    reader->seekToRowGroup(map);
 }
 
 const FileContents& RowReaderImpl::getFileContents() const {
