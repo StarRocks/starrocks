@@ -61,7 +61,7 @@ PositionProvider& PositionProviderMap::at(uint64_t columnId) {
     return providers.at(columnId);
 }
 
-void PositionProviderMap::copy(const PositionProviderMap& map) {
+void PositionProviderMap::copyFrom(const PositionProviderMap& map) {
     positions = map.positions;
     columnIdToPositionIndex = map.columnIdToPositionIndex;
     providers.clear();

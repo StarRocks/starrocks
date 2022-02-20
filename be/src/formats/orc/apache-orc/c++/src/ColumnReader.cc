@@ -964,8 +964,8 @@ private:
     std::vector<uint64_t> fieldIndex;
     std::vector<std::unique_ptr<ColumnReader>> lazyLoadChildren;
     std::vector<uint64_t> lazyLoadFieldIndex;
-    PositionProviderMap lastSeekToRowGroupRequest;
-    bool hasLastSeekToRowGroupRequest = false;
+    PositionProviderMap pendingSeekToRowGroupRequest;
+    bool hasPendingSeekToRowGroupRequest = false;
 
 public:
     StructColumnReader(const Type& type, StripeStreams& stipe);
@@ -1059,10 +1059,10 @@ void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnRe
 }
 
 void StructColumnReader::applyLastSeekToRowGroupRequest() {
-    if (hasLastSeekToRowGroupRequest) {
-        hasLastSeekToRowGroupRequest = false;
+    if (hasPendingSeekToRowGroupRequest) {
+        hasPendingSeekToRowGroupRequest = false;
         for (auto& ptr : lazyLoadChildren) {
-            ptr->seekToRowGroup(lastSeekToRowGroupRequest);
+            ptr->seekToRowGroup(pendingSeekToRowGroupRequest);
         }
     }
 }
@@ -1073,8 +1073,8 @@ void StructColumnReader::seekToRowGroup(PositionProviderMap& positions) {
         ptr->seekToRowGroup(positions);
     }
     if (lazyLoadChildren.size() != 0) {
-        lastSeekToRowGroupRequest.copy(positions);
-        hasLastSeekToRowGroupRequest = true;
+        pendingSeekToRowGroupRequest.copyFrom(positions);
+        hasPendingSeekToRowGroupRequest = true;
     }
     // for (auto& ptr : lazyLoadChildren) {
     //     ptr->seekToRowGroup(positions);
