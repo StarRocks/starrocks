@@ -17,6 +17,7 @@ static const char* FIELD_SCROLL_ID = "_scroll_id";
 static const char* FIELD_HITS = "hits";
 static const char* FIELD_INNER_HITS = "hits";
 static const char* FIELD_SOURCE = "_source";
+static const char* FIELD_FIELDS = "fields";
 static const char* FIELD_ID = "_id";
 
 const char* json_type_to_raw_str(rapidjson::Type type) {
@@ -174,7 +175,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
         const rapidjson::Value& obj = _inner_hits_node[_cur_line + i];
         bool pure_doc_value = _pure_doc_value(obj);
         bool has_source = obj.HasMember(FIELD_SOURCE);
-        bool has_fields = obj.HasMember("fields");
+        bool has_fields = obj.HasMember(FIELD_FIELDS);
 
         if (!has_source && !has_fields) {
             for (auto column : (*chunk)->columns()) {
@@ -183,7 +184,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
             continue;
         }
         DCHECK(has_source ^ has_fields);
-        const rapidjson::Value& line = has_source ? obj[FIELD_SOURCE] : obj["fields"];
+        const rapidjson::Value& line = has_source ? obj[FIELD_SOURCE] : obj[FIELD_FIELDS];
 
         for (size_t col_idx = 0; col_idx < slots.size(); ++col_idx) {
             SlotDescriptor* slot_desc = slot_descs[col_idx];
