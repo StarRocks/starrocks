@@ -674,6 +674,10 @@ class StringDictionaryColumnReader : public ColumnReader {
 private:
     std::shared_ptr<StringDictionary> dictionary;
     std::unique_ptr<RleDecoder> rle;
+    std::unique_ptr<RleDecoder> lengthDecoder;
+    std::unique_ptr<SeekableInputStream> blobStream;
+    uint32_t dictSize = 0;
+    bool dictionaryLoaded = false;
 
 public:
     StringDictionaryColumnReader(const Type& type, StripeStreams& stipe);
@@ -688,23 +692,34 @@ public:
     void seekToRowGroup(PositionProviderMap& positions) override;
 
     StringDictionary* getDictionary() { return dictionary.get(); }
+
+    void loadDictionary();
 };
 
 StringDictionaryColumnReader::StringDictionaryColumnReader(const Type& type, StripeStreams& stripe)
         : ColumnReader(type, stripe), dictionary(new StringDictionary(stripe.getMemoryPool())) {
     RleVersion rleVersion = convertRleVersion(stripe.getEncoding(columnId).kind());
-    uint32_t dictSize = stripe.getEncoding(columnId).dictionarysize();
+    dictSize = stripe.getEncoding(columnId).dictionarysize();
+
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
     if (stream == nullptr) {
         throw ParseError("DATA stream not found in StringDictionaryColumn");
     }
     rle = createRleDecoder(std::move(stream), false, rleVersion, memoryPool, stripe.getSharedBuffer());
+
     stream = stripe.getStream(columnId, proto::Stream_Kind_LENGTH, false);
     if (dictSize > 0 && stream == nullptr) {
         throw ParseError("LENGTH stream not found in StringDictionaryColumn");
     }
-    std::unique_ptr<RleDecoder> lengthDecoder =
-            createRleDecoder(std::move(stream), false, rleVersion, memoryPool, stripe.getSharedBuffer());
+    lengthDecoder = createRleDecoder(std::move(stream), false, rleVersion, memoryPool, stripe.getSharedBuffer());
+    blobStream = stripe.getStream(columnId, proto::Stream_Kind_DICTIONARY_DATA, false);
+    dictionaryLoaded = false;
+}
+
+void StringDictionaryColumnReader::loadDictionary() {
+    if (dictionaryLoaded) return;
+    dictionaryLoaded = true;
+
     dictionary->dictionaryOffset.resize(dictSize + 1);
     int64_t* lengthArray = dictionary->dictionaryOffset.data();
     lengthDecoder->next(lengthArray + 1, dictSize, nullptr);
@@ -717,8 +732,7 @@ StringDictionaryColumnReader::StringDictionaryColumnReader(const Type& type, Str
     }
     int64_t blobSize = lengthArray[dictSize];
     dictionary->dictionaryBlob.resize(static_cast<uint64_t>(blobSize));
-    std::unique_ptr<SeekableInputStream> blobStream =
-            stripe.getStream(columnId, proto::Stream_Kind_DICTIONARY_DATA, false);
+
     if (blobSize > 0 && blobStream == nullptr) {
         throw ParseError("DICTIONARY_DATA stream not found in StringDictionaryColumn");
     }
@@ -736,6 +750,7 @@ uint64_t StringDictionaryColumnReader::skip(uint64_t numValues) {
 }
 
 void StringDictionaryColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    loadDictionary();
     ColumnReader::next(rowBatch, numValues, notNull);
     // update the notNull from the parent class
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
@@ -782,6 +797,7 @@ void StringDictionaryColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t nu
 }
 
 void StringDictionaryColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    loadDictionary();
     ColumnReader::next(rowBatch, numValues, notNull);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     rowBatch.isEncoded = true;
