@@ -1,4 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+#include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
 #include <random>
@@ -543,7 +544,10 @@ struct PadNullableStrConstLenFillTestCase {
               lpad_expected_nulls(lpad_expected_nulls) {}
 };
 
-void test_pad_nullable_str_const_len_fill(const PadNullableStrConstLenFillTestCase& c) {
+class PadNullableStrConstLenFillTestFixture : public ::testing::TestWithParam<PadNullableStrConstLenFillTestCase> {};
+
+TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
+    const auto& c = GetParam();
     int num_rows = c.strs.size();
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -606,69 +610,35 @@ void test_pad_nullable_str_const_len_fill(const PadNullableStrConstLenFillTestCa
     }
 }
 
-TEST_F(StringFunctionPadTest, padNullableStrConstLenFillTest) {
-    std::vector<PadNullableStrConstLenFillTestCase> cases = {
-            {// Input str, len, fill.
-             {"<NULL>", "<NULL>"},
-             {true, true},
-             0,
-             "123",
-             // rpad expected results.
-             true,
-             {"<NULL>", "<NULL>"},
-             {true, true},
-             // lpad expected results.
-             true,
-             {"<NULL>", "<NULL>"},
-             {true, true}},
-
-            {// Input str, len, fill.
-             {"abc", "<NULL>"},
-             {false, true},
-             0,
-             "123",
-             // rpad expected results.
-             true,
-             {"", "<NULL>"},
-             {false, true},
-             // lpad expected results.
-             true,
-             {"", "<NULL>"},
-             {false, true}},
-
-            {// Input str, len, fill.
-             {"abc", "<NULL>"},
-             {false, true},
-             7,
-             "123",
-             // rpad expected results.
-             true,
-             {"abc1231", "<NULL>"},
-             {false, true},
-             // lpad expected results.
-             true,
-             {"1231abc", "<NULL>"},
-             {false, true}},
-
-            {// Input str, len, fill.
-             {"abc", "edf", "abcdef"},
-             {false, false, false},
-             7,
-             "123",
-             // rpad expected results.
-             false,
-             {"abc1231", "edf1231", "abcdef1"},
-             {false, false, false},
-             // lpad expected results.
-             false,
-             {"1231abc", "1231edf", "1abcdef"},
-             {false, false, false}},
-    };
-
-    for (const auto& c : cases) {
-        test_pad_nullable_str_const_len_fill(c);
-    }
-}
+INSTANTIATE_TEST_SUITE_P(StringFunctionPadTest, PadNullableStrConstLenFillTestFixture,
+                         ::testing::Values(PadNullableStrConstLenFillTestCase(
+                                                   // Input str, len, fill.
+                                                   {"<NULL>", "<NULL>"}, {true, true}, 0, "123",
+                                                   // rpad expected results.
+                                                   true, {"<NULL>", "<NULL>"}, {true, true},
+                                                   // lpad expected results.
+                                                   true, {"<NULL>", "<NULL>"}, {true, true}),
+                                           PadNullableStrConstLenFillTestCase(
+                                                   // Input str, len, fill.
+                                                   {"abc", "<NULL>"}, {false, true}, 0, "123",
+                                                   // rpad expected results.
+                                                   true, {"", "<NULL>"}, {false, true},
+                                                   // lpad expected results.
+                                                   true, {"", "<NULL>"}, {false, true}),
+                                           PadNullableStrConstLenFillTestCase(
+                                                   // Input str, len, fill.
+                                                   {"abc", "<NULL>"}, {false, true}, 7, "123",
+                                                   // rpad expected results.
+                                                   true, {"abc1231", "<NULL>"}, {false, true},
+                                                   // lpad expected results.
+                                                   true, {"1231abc", "<NULL>"}, {false, true}),
+                                           PadNullableStrConstLenFillTestCase(
+                                                   // Input str, len, fill.
+                                                   {"abc", "edf", "abcdef"}, {false, false, false}, 7, "123",
+                                                   // rpad expected results.
+                                                   false, {"abc1231", "edf1231", "abcdef1"}, {false, false, false},
+                                                   // lpad expected results.
+                                                   false, {"1231abc", "1231edf", "1abcdef"}, {false, false, false})));
 
 } // namespace vectorized
 } // namespace starrocks
