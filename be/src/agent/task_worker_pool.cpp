@@ -206,6 +206,7 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
     DCHECK(!tasks->empty());
     std::string type_str;
     const TTaskType::type task_type = (*tasks)[0].task_type;
+    std::vector<TAgentTaskRequest> failed_task_vec;
     EnumToString(TTaskType, task_type, type_str);
     {
         std::lock_guard task_signatures_lock(_s_task_signatures_lock);
@@ -213,7 +214,6 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
         for (auto it = tasks->begin(); it != tasks->end();) {
             TAgentTaskRequest& task_req = *it;
             int64_t signature = task_req.signature;
-            LOG(INFO) << "submitting task. type=" << type_str << ", signature=" << signature;
 
             // batch register task info
             std::set<int64_t>& signature_set = _s_task_signatures[task_type];
@@ -222,9 +222,20 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
                 ++it;
             } else {
                 it = tasks->erase(it);
-                LOG(INFO) << "fail to register task. type=" << type_str << ", signature=" << signature;
+                failed_task_vec.push_back(*it);
             }
         }
+    }
+
+    if (!failed_task_vec.empty()) {
+        std::stringstream ss;
+        for (int i = 0; i < failed_task_vec.size(); ++i) {
+            if (i != 0) {
+                ss << ",";
+            }
+            ss << failed_task_vec[i].signature;
+        }
+        LOG(INFO) << "fail to register task. type=" << type_str << ", signatures=[" << ss.str() << "]";
     }
 
     {
@@ -241,12 +252,15 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
         }
         _worker_thread_condition_variable->notify_all();
     }
-    for (auto const& task : *tasks) {
-        int64_t signature = task.signature;
-
-        LOG(INFO) << "success to submit task. type=" << type_str << ", signature=" << signature
-                  << ", task_count_in_queue=" << _tasks.size();
+    std::stringstream ss;
+    for (int i = 0; i < (*tasks).size(); ++i) {
+        if (i != 0) {
+            ss << ",";
+        }
+        ss << (*tasks)[i].signature;
     }
+    LOG(INFO) << "success to submit task. type=" << type_str << ", signature=[" << ss.str()
+              << "], task_count_in_queue=" << _tasks.size();
 }
 
 bool TaskWorkerPool::_register_task_info(const TTaskType::type task_type, int64_t signature) {
