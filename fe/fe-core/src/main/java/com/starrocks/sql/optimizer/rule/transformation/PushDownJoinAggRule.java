@@ -135,7 +135,7 @@ public class PushDownJoinAggRule extends TransformationRule {
         }
 
         List<ScalarOperator> requiredOutput =
-                Arrays.stream(context.getTaskContext().get(0).getRequiredColumns().getColumnIds())
+                Arrays.stream(context.getTaskContext().getRequiredColumns().getColumnIds())
                         .mapToObj(factory::getColumnRef).collect(Collectors.toList());
 
         ScalarEquivalenceExtractor equivalenceExtractor = new ScalarEquivalenceExtractor();

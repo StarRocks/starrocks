@@ -42,7 +42,7 @@ public class PruneScanColumnRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getOp();
-        ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
+        ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
 
         // The `outputColumns`s are some columns required but not specified by `requiredOutputColumns`.
         // including columns in predicate or some specialized columns defined by scan operator.
