@@ -36,7 +36,7 @@ public:
     // when the last running related operator is closed.
     // - ref is called by operator::constructor() at the preparation stage.
     // - unref is called by operator::close() at the close stage.
-    // It is the guaranteed by the dispatcher queue that the increment operations
+    // It is the guaranteed by the driver queue that the increment operations
     // by ref() are visible to unref(), so we needn't barrier here.
     void ref() { _num_running_operators.fetch_add(1, std::memory_order_relaxed); }
 

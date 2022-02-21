@@ -2,19 +2,22 @@
 #include "util/limit_setter.h"
 #include "util/threadpool.h"
 #include "work_group.h"
+
 namespace starrocks {
 namespace workgroup {
-class ScanWorker;
+
+class ScanExecutor;
 class WorkGroupManager;
-class ScanWorker {
+
+class ScanExecutor {
 public:
-    explicit ScanWorker(std::unique_ptr<ThreadPool> thread_pool);
-    virtual ~ScanWorker();
+    explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool);
+    virtual ~ScanExecutor();
     void initialize(int32_t num_threads);
     void change_num_threads(int32_t num_threads);
 
 private:
-    void run();
+    void worker_thread();
 
 private:
     LimitSetter _num_threads_setter;

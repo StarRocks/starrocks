@@ -6,7 +6,7 @@
 #include <sstream>
 
 #include "column/chunk.h"
-#include "exec/pipeline/pipeline_driver_dispatcher.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
@@ -95,7 +95,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int dispatcher_id) {
+StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     SCOPED_TIMER(_active_timer);
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
@@ -195,7 +195,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int d
             }
 
             if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-                workgroup::WorkGroupManager::instance()->should_yield_driver_dispatcher(dispatcher_id, _workgroup)) {
+                workgroup::WorkGroupManager::instance()->should_yield_driver_worker(worker_id, _workgroup)) {
                 should_yield = true;
                 break;
             }
@@ -266,11 +266,11 @@ void PipelineDriver::mark_precondition_not_ready() {
 void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
         op->set_precondition_ready(runtime_state);
-        dispatch_operators();
+        submit_operators();
     }
 }
 
-void PipelineDriver::dispatch_operators() {
+void PipelineDriver::submit_operators() {
     for (auto& op : _operators) {
         _operator_stages[op->get_id()] = OperatorStage::PROCESSING;
     }
@@ -318,8 +318,8 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         if (_fragment_ctx->count_down_root_drivers()) {
             _fragment_ctx->finish();
             auto status = _fragment_ctx->final_status();
-            _fragment_ctx->runtime_state()->exec_env()->driver_dispatcher()->report_exec_state(_fragment_ctx, status,
-                                                                                               true);
+            _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status,
+                                                                                             true);
         }
     }
     // last finished driver notify FE the fragment's completion again and
