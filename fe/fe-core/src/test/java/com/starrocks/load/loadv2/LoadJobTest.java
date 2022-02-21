@@ -29,10 +29,14 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
@@ -46,11 +50,22 @@ import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
+import org.apache.thrift.TDeserializer;
+import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class LoadJobTest {
 
@@ -210,5 +225,35 @@ public class LoadJobTest {
         Assert.assertNotEquals(-1, (long) Deencapsulation.getField(loadJob, "finishTimestamp"));
         Assert.assertEquals(100, (int) Deencapsulation.getField(loadJob, "progress"));
         Assert.assertEquals(0, loadJob.idToTasks.size());
+    }
+
+    @Test
+    public void testLoadStatistic() throws IOException {
+        LoadJob.LoadStatistic loadStatistic = new LoadJob.LoadStatistic();
+        TUniqueId id = new TUniqueId();
+        id.setHi(5473980334493552256L);
+        id.setLo(-6506655974145473273L);
+        Set<TUniqueId> set = new HashSet<>();
+        set.add(id);
+        List<Long> list = new ArrayList<>();
+        list.add(10003L);
+        loadStatistic.initLoad(id, set, list);
+        loadStatistic.fileNum = 1;
+        loadStatistic.totalFileSizeB = 296522199L;
+        loadStatistic.updateLoadProgress(10003L, id, id, 2112223,true);
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        loadStatistic.write(buffer);
+
+        if (MetaContext.get() != null) {
+            int version = MetaContext.get().getMetaVersion();
+            MetaContext.get().setMetaVersion(FeMetaVersion.VERSION_93);
+            LoadJob.LoadStatistic statistic = new LoadJob.LoadStatistic();
+            Assert.assertNotEquals(loadStatistic, statistic);
+            ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(buffer.getData());
+            DataInputStream dataInputStream = new DataInputStream(byteArrayInputStream);
+            statistic.readFields(dataInputStream);
+            Assert.assertEquals(loadStatistic, statistic);
+            MetaContext.get().setMetaVersion(version);
+        }
     }
 }

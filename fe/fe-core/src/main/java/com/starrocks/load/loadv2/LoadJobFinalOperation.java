@@ -39,6 +39,7 @@ import java.io.IOException;
 public class LoadJobFinalOperation extends TxnCommitAttachment implements Writable {
     private long id;
     private EtlStatus loadingStatus = new EtlStatus();
+    private LoadJob.LoadStatistic loadStatistic = new LoadJob.LoadStatistic();
     private int progress;
     private long loadStartTimestamp;
     private long finishTimestamp;
@@ -51,7 +52,8 @@ public class LoadJobFinalOperation extends TxnCommitAttachment implements Writab
     }
 
     public LoadJobFinalOperation(long id, EtlStatus loadingStatus, int progress, long loadStartTimestamp,
-                                 long finishTimestamp, JobState jobState, FailMsg failMsg) {
+                                 long finishTimestamp, JobState jobState, FailMsg failMsg,
+                                 LoadJob.LoadStatistic loadStatistic) {
         super(TransactionState.LoadJobSourceType.BATCH_LOAD_JOB);
         this.id = id;
         this.loadingStatus = loadingStatus;
@@ -60,6 +62,7 @@ public class LoadJobFinalOperation extends TxnCommitAttachment implements Writab
         this.finishTimestamp = finishTimestamp;
         this.jobState = jobState;
         this.failMsg = failMsg;
+        this.loadStatistic = loadStatistic;
     }
 
     public long getId() {
@@ -68,6 +71,10 @@ public class LoadJobFinalOperation extends TxnCommitAttachment implements Writab
 
     public EtlStatus getLoadingStatus() {
         return loadingStatus;
+    }
+
+    public LoadJob.LoadStatistic getLoadStatistic() {
+        return loadStatistic;
     }
 
     public int getProgress() {
@@ -95,6 +102,7 @@ public class LoadJobFinalOperation extends TxnCommitAttachment implements Writab
         super.write(out);
         out.writeLong(id);
         loadingStatus.write(out);
+        loadStatistic.write(out);
         out.writeInt(progress);
         out.writeLong(loadStartTimestamp);
         out.writeLong(finishTimestamp);
@@ -111,6 +119,7 @@ public class LoadJobFinalOperation extends TxnCommitAttachment implements Writab
         super.readFields(in);
         id = in.readLong();
         loadingStatus.readFields(in);
+        loadStatistic.readFields(in);
         progress = in.readInt();
         loadStartTimestamp = in.readLong();
         finishTimestamp = in.readLong();

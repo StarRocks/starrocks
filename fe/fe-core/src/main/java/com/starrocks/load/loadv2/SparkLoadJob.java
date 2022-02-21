@@ -644,7 +644,7 @@ public class SparkLoadJob extends BulkLoadJob {
             Catalog.getCurrentGlobalTransactionMgr().commitTransaction(
                     dbId, transactionId, commitInfos,
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
-                            finishTimestamp, state, failMsg));
+                            finishTimestamp, state, failMsg, loadStatistic));
         } catch (TabletQuorumFailedException e) {
             // retry in next loop
         } finally {

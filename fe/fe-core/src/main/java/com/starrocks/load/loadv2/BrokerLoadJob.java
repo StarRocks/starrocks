@@ -293,7 +293,7 @@ public class BrokerLoadJob extends BulkLoadJob {
             Catalog.getCurrentGlobalTransactionMgr().commitTransaction(
                     dbId, transactionId, commitInfos,
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
-                            finishTimestamp, state, failMsg));
+                            finishTimestamp, state, failMsg, loadStatistic));
             MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
             // collect table-level metrics
             loadingStatus.travelTableCounters(kv -> {

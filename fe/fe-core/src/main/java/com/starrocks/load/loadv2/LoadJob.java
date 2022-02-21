@@ -70,12 +70,17 @@ import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TDeserializer;
+import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -143,7 +148,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // only for persistence param. see readFields() for usage
     private boolean isJobTypeRead = false;
 
-    public static class LoadStatistic {
+    public static class LoadStatistic implements Writable {
         // number of rows processed on BE, this number will be updated periodically by query report.
         // A load job may has several load tasks(queries), and each task has several fragments.
         // each fragment will report independently.
@@ -210,6 +215,155 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 newMap.put(DebugUtil.printId(entry.getKey()), entry.getValue());
             }
             return newMap;
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            out.writeLong(totalFileSizeB);
+            out.writeInt(fileNum);
+            TSerializer serializer = new TSerializer();
+            try {
+                // allBackendIds
+                out.writeInt(allBackendIds.size());
+                for (Map.Entry<TUniqueId, List<Long>> entry : allBackendIds.entrySet()) {
+                    serializerTUniqueId(out, serializer, entry.getKey());
+
+                    out.writeInt(entry.getValue().size());
+                    for (Long l : entry.getValue()) {
+                        out.writeLong(l);
+                    }
+                }
+                // unfinishedBackendIds
+                out.writeInt(unfinishedBackendIds.size());
+                for (Map.Entry<TUniqueId, List<Long>> entry : unfinishedBackendIds.entrySet()) {
+                    serializerTUniqueId(out, serializer, entry.getKey());
+
+                    out.writeInt(entry.getValue().size());
+                    for (Long l : entry.getValue()) {
+                        out.writeLong(l);
+                    }
+                }
+
+                // counterTbl
+                out.writeInt(counterTbl.size());
+                for (Table.Cell<TUniqueId, TUniqueId, Long> entry : counterTbl.cellSet()) {
+                    serializerTUniqueId(out, serializer, entry.getRowKey());
+                    serializerTUniqueId(out, serializer, entry.getColumnKey());
+                    out.writeLong(entry.getValue() == null ? 0L : entry.getValue());
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to serialize LoadStatistic.", e);
+                throw new IOException(e);
+            }
+        }
+
+        public static void serializerTUniqueId(
+                DataOutput out,
+                TSerializer serializer,
+                TUniqueId id) throws TException, IOException {
+            byte[] bytes = serializer.serialize(id);
+            out.writeInt(bytes.length);
+            out.write(bytes, 0, bytes.length);
+        }
+
+        @SuppressWarnings("unchecked")
+        public void readFields(DataInput in) throws IOException {
+            if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_93) {
+                return;
+            }
+            totalFileSizeB = in.readLong();
+            fileNum = in.readInt();
+            TDeserializer deserializer = new TDeserializer();
+            try {
+                // allBackendIds
+                int allBackendCount = in.readInt();
+                for (int i = 0; i < allBackendCount; i++) {
+                    TUniqueId id = deserializeTUniqueId(in, deserializer);
+
+                    int size = in.readInt();
+                    List<Long> list = new ArrayList<>(size);
+                    for (int j = 0; j < size; j++) {
+                        list.add(in.readLong());
+                    }
+                    allBackendIds.put(id, list);
+                }
+                // unfinishedBackendIds
+                int unfinishedBackendCount = in.readInt();
+                for (int i = 0; i < unfinishedBackendCount; i++) {
+                    TUniqueId id = deserializeTUniqueId(in, deserializer);
+
+                    int size = in.readInt();
+                    List<Long> list = new ArrayList<>(size);
+                    for (int j = 0; j < size; j++) {
+                        list.add(in.readLong());
+                    }
+                    unfinishedBackendIds.put(id, list);
+                }
+
+                // counterTbl
+                int counterTblCount = in.readInt();
+                for (int i = 0; i < counterTblCount; i++) {
+                    TUniqueId id1 = deserializeTUniqueId(in, deserializer);
+                    TUniqueId id2 = deserializeTUniqueId(in, deserializer);
+                    long value = in.readLong();
+                    counterTbl.put(id1, id2, value);
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to deserialize LoadStatistic.", e);
+                throw new IOException(e);
+            }
+        }
+
+        public static TUniqueId deserializeTUniqueId(DataInput in, TDeserializer deserializer) throws IOException, TException {
+            int length = in.readInt();
+            byte[] bytes = new byte[length];
+            in.readFully(bytes, 0, length);
+            TUniqueId id = new TUniqueId();
+            deserializer.deserialize(id, bytes);
+            return id;
+        }
+
+        public boolean equals(Object obj) {
+            if (obj == this) {
+                return true;
+            }
+
+            if (!(obj instanceof LoadStatistic)) {
+                return false;
+            }
+
+            LoadStatistic statistic = (LoadStatistic) obj;
+
+            if (totalFileSizeB != statistic.totalFileSizeB || fileNum != statistic.fileNum) {
+                return false;
+            }
+
+            if (allBackendIds.size() != statistic.allBackendIds.size()) {
+                return false;
+            }
+            for (Map.Entry<TUniqueId, List<Long>> entry : allBackendIds.entrySet()) {
+                if (!statistic.allBackendIds.containsKey(entry.getKey())) {
+                    return false;
+                }
+                if (!CollectionUtils.isEqualCollection(entry.getValue(),
+                        statistic.allBackendIds.get(entry.getKey()))) {
+                    return false;
+                }
+            }
+
+            if (unfinishedBackendIds.size() != statistic.unfinishedBackendIds.size()) {
+                return false;
+            }
+            for (Map.Entry<TUniqueId, List<Long>> entry : unfinishedBackendIds.entrySet()) {
+                if (!statistic.unfinishedBackendIds.containsKey(entry.getKey())) {
+                    return false;
+                }
+                if (!CollectionUtils.isEqualCollection(entry.getValue(),
+                        statistic.unfinishedBackendIds.get(entry.getKey()))) {
+                    return false;
+                }
+            }
+            return counterTbl.equals(statistic.counterTbl);
         }
     }
 
@@ -711,11 +865,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected void logFinalOperation() {
         Catalog.getCurrentCatalog().getEditLog().logEndLoadJob(
                 new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp, finishTimestamp,
-                        state, failMsg));
+                        state, failMsg, loadStatistic));
     }
 
     public void unprotectReadEndOperation(LoadJobFinalOperation loadJobFinalOperation) {
         loadingStatus = loadJobFinalOperation.getLoadingStatus();
+        loadStatistic = loadJobFinalOperation.getLoadStatistic();
         progress = loadJobFinalOperation.getProgress();
         loadStartTimestamp = loadJobFinalOperation.getLoadStartTimestamp();
         finishTimestamp = loadJobFinalOperation.getFinishTimestamp();
@@ -1024,6 +1179,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             authorizationInfo.write(out);
         }
         Text.writeString(out, timezone);
+        loadStatistic.write(out);
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -1068,6 +1224,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_61) {
             timezone = Text.readString(in);
         }
+        loadStatistic.readFields(in);
     }
 
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {
