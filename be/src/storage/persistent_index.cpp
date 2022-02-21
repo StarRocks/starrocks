@@ -256,10 +256,13 @@ static void remove_packs_from_dests(std::vector<MoveDest>& dests, int idx, int n
     if (d.npack == 0) {
         dests.erase(dests.begin() + idx);
     } else {
-        for (int c = idx; c > 0; c--) {
-            if (dests[c] < dests[c - 1]) {
-                std::swap(dests[c], dests[c - 1]);
+        auto mv_start = std::upper_bound(dests.begin(), dests.begin() + idx, dests[idx]) - dests.begin();
+        if (mv_start < idx) {
+            MoveDest tmp = dests[idx];
+            for (long cur = idx; cur > mv_start; cur--) {
+                dests[cur] = dests[cur - 1];
             }
+            dests[mv_start] = tmp;
         }
     }
 }
