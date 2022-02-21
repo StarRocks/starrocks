@@ -1,13 +1,17 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present StarRocks Limited.
 
-#include "scan_executor.h"
+#include "exec/workgroup/scan_executor.h"
+
+#include "exec/workgroup/scan_task_queue.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {
 
-ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool) : _thread_pool(std::move(thread_pool)) {}
+ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool)
+        : _thread_pool(std::move(thread_pool)), _task_queue(std::make_unique<ScanTaskQueueWithWorkGroup>()) {}
 
 ScanExecutor::~ScanExecutor() {
-    workgroup::WorkGroupManager::instance()->close();
+    _task_queue->close();
 }
 
 void ScanExecutor::initialize(int num_threads) {
@@ -34,13 +38,17 @@ void ScanExecutor::worker_thread() {
             break;
         }
 
-        auto maybe_task = WorkGroupManager::instance()->pick_next_task_for_io(worker_id);
+        auto maybe_task = _task_queue->take(worker_id);
         if (maybe_task.status().is_cancelled()) {
             return;
         }
 
-        maybe_task.value()(worker_id);
+        maybe_task.value().work_function(worker_id);
     }
+}
+
+bool ScanExecutor::submit(ScanTask task) {
+    return _task_queue->try_offer(std::move(task));
 }
 
 } // namespace starrocks::workgroup

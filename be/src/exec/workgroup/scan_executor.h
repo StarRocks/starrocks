@@ -8,13 +8,18 @@ namespace workgroup {
 
 class ScanExecutor;
 class WorkGroupManager;
+class ScanTask;
+class ScanTaskQueue;
 
 class ScanExecutor {
 public:
     explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool);
     virtual ~ScanExecutor();
+
     void initialize(int32_t num_threads);
     void change_num_threads(int32_t num_threads);
+
+    bool submit(ScanTask task);
 
 private:
     void worker_thread();
@@ -22,6 +27,7 @@ private:
 private:
     LimitSetter _num_threads_setter;
     std::unique_ptr<ThreadPool> _thread_pool;
+    std::unique_ptr<ScanTaskQueue> _task_queue;
     std::atomic<int> _next_id = 0;
 };
 

@@ -188,6 +188,7 @@ set(EXEC_FILES
     pipeline/set/intersect_output_source_operator.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
+    workgroup/scan_task_queue.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
