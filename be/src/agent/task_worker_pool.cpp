@@ -239,7 +239,7 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
                 _tasks.push_back(task);
             }
         }
-        _worker_thread_condition_variable->notify_one();
+        _worker_thread_condition_variable->notify_all();
     }
     for (auto const& task : *tasks) {
         int64_t signature = task.signature;
