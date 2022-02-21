@@ -35,10 +35,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -75,6 +77,8 @@ public class StreamLoadTask {
     private long execMemLimit = 0;
     private long loadMemLimit = 0;
     private boolean partialUpdate = false;
+    private TCompressionType compressionType;
+    private int loadParallelRequestNum = 0;
 
     public StreamLoadTask(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -174,6 +178,14 @@ public class StreamLoadTask {
         this.partialUpdate = partialUpdate;
     }
 
+    public TCompressionType getTransmisionCompressionType() {
+        return compressionType;
+    }
+
+    public int getLoadParallelRequestNum() {
+        return loadParallelRequestNum;
+    }
+
     public static StreamLoadTask fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
             throws UserException {
         StreamLoadTask streamLoadTask = new StreamLoadTask(request.getLoadId(), request.getTxnId(),
@@ -236,6 +248,12 @@ public class StreamLoadTask {
         }
         if (request.isSetPartial_update()) {
             partialUpdate = request.isPartial_update();
+        }
+        if (request.isSetTransmission_compression_type()) {
+            compressionType = CompressionUtils.findTCompressionByName(request.getTransmission_compression_type());
+        }
+        if (request.isSetLoad_parallel_request_num()) {
+            loadParallelRequestNum = request.getLoad_parallel_request_num();
         }
     }
 

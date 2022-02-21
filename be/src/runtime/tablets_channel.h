@@ -107,8 +107,6 @@ private:
 
     struct Sender {
         std::mutex lock;
-        int64_t next_seq = 0;
-        bool closed = false;
     };
 
     class WriteContext : public RefCountedThreadSafe<WriteContext> {
@@ -181,7 +179,9 @@ private:
                                                                 PTabletWriterAddBatchResult* response,
                                                                 google::protobuf::Closure* done);
 
-    int _close_sender(Sender* sender, const int64_t* partitions, size_t partitions_size);
+    int _close_sender(const int64_t* partitions, size_t partitions_size);
+
+    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk, faststring* uncompressed_buffer);
 
     LoadChannel* _load_channel;
 

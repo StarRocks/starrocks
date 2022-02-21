@@ -33,6 +33,8 @@
 #include "serde/protobuf_serde.h"
 #include "storage/vectorized/delta_writer.h"
 #include "storage/vectorized/memtable.h"
+#include "util/block_compression.h"
+#include "util/faststring.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -102,24 +104,6 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
         return;
     }
 
-    Sender& sender = _senders[request.sender_id()];
-    std::lock_guard l(sender.lock);
-
-    if (request.packet_seq() == sender.next_seq) {
-        sender.next_seq++;
-    } else if (request.packet_seq() < sender.next_seq) {
-        LOG(INFO) << "Ignore outdated request from " << cntl->remote_side() << ". seq=" << request.packet_seq()
-                  << " expect=" << sender.next_seq << " load_id=" << _load_channel->load_id();
-        response->mutable_status()->set_status_code(TStatusCode::OK);
-        return;
-    } else {
-        LOG(WARNING) << "Out-of-order request from " << cntl->remote_side() << ". seq=" << request.packet_seq()
-                     << " expect=" << sender.next_seq << " load_id=" << _load_channel->load_id();
-        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
-        response->mutable_status()->add_error_msgs("out-of-order request");
-        return;
-    }
-
     auto res = _create_write_context(request, response, done);
     if (!res.ok()) {
         res.status().to_protobuf(response->mutable_status());
@@ -172,7 +156,7 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
 
     // NOTE: Must close sender *AFTER* the write requests submitted, otherwise a delta writer commit request may
     // be executed ahead of the write requests submitted by other senders.
-    if (request.eos() && _close_sender(&sender, request.partition_ids().data(), request.partition_ids_size()) == 0) {
+    if (request.eos() && _close_sender(request.partition_ids().data(), request.partition_ids_size()) == 0) {
         close_channel = true;
         std::lock_guard l1(_partitions_ids_lock);
         for (auto& [_, delta_writer] : _delta_writers) {
@@ -218,10 +202,7 @@ Status TabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
     return Status::OK();
 }
 
-// NOTE: Assume sender->lock has been acquired.
-int TabletsChannel::_close_sender(Sender* sender, const int64_t* partitions, size_t partitions_size) {
-    DCHECK(!sender->closed);
-    sender->closed = true;
+int TabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
     int n = _num_remaining_senders.fetch_sub(1);
     DCHECK_GE(n, 1);
     std::lock_guard l(_partitions_ids_lock);
@@ -296,6 +277,38 @@ void TabletsChannel::cancel() {
     }
 }
 
+Status TabletsChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk,
+                                          faststring* uncompressed_buffer) {
+    if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
+        TRY_CATCH_BAD_ALLOC({
+            serde::ProtobufChunkDeserializer des(_chunk_meta);
+            StatusOr<vectorized::Chunk> res = des.deserialize(pchunk.data());
+            if (!res.ok()) return res.status();
+            chunk = std::move(res).value();
+        });
+    } else {
+        size_t uncompressed_size = 0;
+        {
+            const BlockCompressionCodec* codec = nullptr;
+            RETURN_IF_ERROR(get_block_compression_codec(pchunk.compress_type(), &codec));
+            uncompressed_size = pchunk.uncompressed_size();
+            TRY_CATCH_BAD_ALLOC(uncompressed_buffer->resize(uncompressed_size));
+            Slice output{uncompressed_buffer->data(), uncompressed_size};
+            RETURN_IF_ERROR(codec->decompress(pchunk.data(), &output));
+        }
+        {
+            TRY_CATCH_BAD_ALLOC({
+                std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
+                serde::ProtobufChunkDeserializer des(_chunk_meta);
+                StatusOr<vectorized::Chunk> res = des.deserialize(buff);
+                if (!res.ok()) return res.status();
+                chunk = std::move(res).value();
+            });
+        }
+    }
+    return Status::OK();
+}
+
 StatusOr<scoped_refptr<TabletsChannel::WriteContext>> TabletsChannel::_create_write_context(
         const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
         google::protobuf::Closure* done) {
@@ -313,10 +326,10 @@ StatusOr<scoped_refptr<TabletsChannel::WriteContext>> TabletsChannel::_create_wr
     RETURN_IF_ERROR(_build_chunk_meta(pchunk));
 
     vectorized::Chunk& chunk = context->_chunk;
-    serde::ProtobufChunkDeserializer des(_chunk_meta);
-    StatusOr<vectorized::Chunk> res = des.deserialize(pchunk.data());
-    if (!res.ok()) return res.status();
-    chunk = std::move(res).value();
+
+    faststring uncompressed_buffer;
+    RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk, &uncompressed_buffer));
+
     if (UNLIKELY(request.tablet_ids_size() != chunk.num_rows())) {
         return Status::InvalidArgument("request.tablet_ids_size() != chunk.num_rows()");
     }
