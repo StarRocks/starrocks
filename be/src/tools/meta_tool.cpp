@@ -371,7 +371,7 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
     }
 
     uint8_t fixed_buf[12];
-    RETURN_IF_ERROR(input_file->read_at(file_size - 12, Slice(fixed_buf, 12)));
+    RETURN_IF_ERROR(input_file->read_at_fully(file_size - 12, fixed_buf, 12));
 
     // validate magic number
     const char* k_segment_magic = "D0R1";
@@ -388,7 +388,7 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
     }
     std::string footer_buf;
     footer_buf.resize(footer_length);
-    RETURN_IF_ERROR(input_file->read_at(file_size - 12 - footer_length, footer_buf));
+    RETURN_IF_ERROR(input_file->read_at_fully(file_size - 12 - footer_length, footer_buf.data(), footer_buf.size()));
 
     // validate footer PB's checksum
     uint32_t expect_checksum = starrocks::decode_fixed32_le(fixed_buf + 4);

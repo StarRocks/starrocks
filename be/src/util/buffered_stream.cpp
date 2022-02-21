@@ -60,11 +60,7 @@ void BufferedInputStream::_reserve(size_t nbytes) {
 Status BufferedInputStream::_read_data() {
     size_t bytes_read = std::min(left_capactiy(), _end_offset - _file_offset);
     Slice slice(_buf.get() + _buf_written, bytes_read);
-    auto st = _file->read(_file_offset, &slice);
-    if (!st.ok() && !st.is_end_of_file()) {
-        return st;
-    }
-
+    ASSIGN_OR_RETURN(slice.size, _file->read_at(_file_offset, slice.data, slice.size));
     _file_offset += slice.size;
     _buf_written += slice.size;
     return Status::OK();
