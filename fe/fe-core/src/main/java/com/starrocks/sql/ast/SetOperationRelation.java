@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Expr;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 
 import java.util.ArrayList;
@@ -33,8 +34,13 @@ public abstract class SetOperationRelation extends QueryRelation {
         this.relations = relations;
     }
 
+    @Override
+    public List<Expr> getOutputExpression() {
+        return relations.get(0).getOutputExpression();
+    }
+
+    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitSetOp(this, context);
     }
-
 }

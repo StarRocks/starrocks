@@ -58,7 +58,7 @@ public class PrivilegeCheckerTest {
     public void testTableAs() throws Exception {
         ConnectContext ctx = UtFrameUtils.createTestUserCtx(testUser);
         String sql = "select count(*) from db1.tbl1 as a";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewAnalyzer(sql, ctx);
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         PrivilegeChecker.check(statementBase, auth, ctx);
     }
 
@@ -66,7 +66,7 @@ public class PrivilegeCheckerTest {
     public void testInlineView() throws Exception {
         ConnectContext ctx = UtFrameUtils.createTestUserCtx(testUser);
         String sql = "select count(*) from (select count(*) from db1.tbl1) as a";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewAnalyzer(sql, ctx);
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         PrivilegeChecker.check(statementBase, auth, ctx);
 
     }
@@ -75,7 +75,7 @@ public class PrivilegeCheckerTest {
     public void testWithNormal() throws Exception {
         ConnectContext ctx = UtFrameUtils.createTestUserCtx(testUser);
         String sql = "with tmp as (select * from db1.tbl1) select count(*) from tmp;";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewAnalyzer(sql, ctx);
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         PrivilegeChecker.check(statementBase, auth, ctx);
     }
 
@@ -85,7 +85,7 @@ public class PrivilegeCheckerTest {
         String sql = "with tmp as (select * from db1.tbl1) " +
                 "select a.k1, b.k2, b.k1 from (select k1, k2 from tmp) a " +
                 "left join (select k1, k2 from tmp) b on a.k1 = b.k1;";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewAnalyzer(sql, ctx);
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         PrivilegeChecker.check(statementBase, auth, ctx);
     }
 

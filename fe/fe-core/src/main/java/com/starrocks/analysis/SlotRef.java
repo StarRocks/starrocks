@@ -67,6 +67,13 @@ public class SlotRef extends Expr {
         this.label = "`" + col + "`";
     }
 
+    public SlotRef(TableName tblName, String col, String label) {
+        super();
+        this.tblName = tblName;
+        this.col = col;
+        this.label = label;
+    }
+
     // C'tor for a "pre-analyzed" ref to slot that doesn't correspond to
     // a table's column.
     public SlotRef(SlotDescriptor desc) {
@@ -175,7 +182,7 @@ public class SlotRef extends Expr {
     public String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
         if (tblName != null) {
-            return tblName.toSql() + "." + label + sb.toString();
+            return tblName.toSql() + "." + "`" + col + "`";
         } else if (label != null) {
             return label + sb.toString();
         } else if (desc.getSourceExprs() != null) {
@@ -227,8 +234,7 @@ public class SlotRef extends Expr {
 
     @Override
     public String toColumnLabel() {
-        // return tblName == null ? col : tblName.getTbl() + "." + col;
-        return col;
+        return label;
     }
 
     @Override

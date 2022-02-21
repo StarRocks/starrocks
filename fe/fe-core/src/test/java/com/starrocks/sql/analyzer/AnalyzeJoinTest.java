@@ -65,7 +65,7 @@ public class AnalyzeJoinTest {
 
         QueryRelation query = analyzeSuccess(
                 "select * from (select sum(v1) as v, sum(v2) from t0) a left semi join (select v1,v2 from t0 order by v3) b on a.v = b.v2");
-        Assert.assertEquals("v,sum(`v2`)", String.join(",", query.getColumnOutputNames()));
+        Assert.assertEquals("v,sum(v2)", String.join(",", query.getColumnOutputNames()));
     }
 
     @Test

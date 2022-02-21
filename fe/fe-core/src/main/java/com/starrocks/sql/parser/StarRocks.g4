@@ -14,12 +14,20 @@ singleStatement
 statement
     : queryStatement                                                    #statementDefault
     | EXPLAIN (LOGICAL | VERBOSE | COSTS) queryStatement                #explain
+    | CREATE VIEW (IF NOT EXISTS)? qualifiedName
+        ('(' columnNameWithComment (',' columnNameWithComment)* ')')? comment=string? AS queryStatement                               #createView
+    | ALTER VIEW qualifiedName ('(' columnNameWithComment (',' columnNameWithComment)* ')')?  AS queryStatement         #alterView
     | USE schema=identifier                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                   #showTables
     | SHOW DATABASES
         ((LIKE pattern=string) | (WHERE expression))?                   #showDatabases
     ;
+
+columnNameWithComment
+    : identifier string?
+    ;
+
 
 queryStatement
     : query;

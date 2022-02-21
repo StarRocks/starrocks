@@ -26,7 +26,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -53,6 +52,7 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.OperatorStrings;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -144,6 +144,14 @@ public class UtFrameUtils {
         ctx.setCatalog(Catalog.getCurrentCatalog());
         ctx.setThreadLocalInfo();
         return ctx;
+    }
+
+    public static StatementBase parseStmtWithNewParser(String originStmt, ConnectContext ctx) {
+        com.starrocks.sql.analyzer.Analyzer analyzer =
+                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt).get(0);
+        Relation relation = analyzer.analyze(statementBase);
+        return statementBase;
     }
 
     // Parse an origin stmt . Return a StatementBase instance.
@@ -380,13 +388,10 @@ public class UtFrameUtils {
     }
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
-        SqlScanner input =
-                new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-        Preconditions.checkState(statementBase instanceof QueryStmt);
-        QueryStmt queryStmt = (QueryStmt) statementBase;
-        String digest = queryStmt.toDigest();
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt).get(0);
+        Preconditions.checkState(statementBase instanceof QueryStatement);
+        QueryStatement queryStmt = (QueryStatement) statementBase;
+        String digest = SqlDigestBuilder.build(queryStmt);
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
@@ -463,11 +468,7 @@ public class UtFrameUtils {
             }
         }
 
-        SqlScanner input =
-                new SqlScanner(new StringReader(replaySql), replayDumpInfo.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql).get(0);
         com.starrocks.sql.analyzer.Analyzer analyzer =
                 new com.starrocks.sql.analyzer.Analyzer(Catalog.getCurrentCatalog(), connectContext);
         Relation relation = analyzer.analyze(statementBase);

@@ -3,6 +3,7 @@ package com.starrocks.sql.parser;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -15,7 +16,9 @@ import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.ExistsPredicate;
@@ -62,6 +65,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.SQLLabelBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -160,6 +164,46 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         queryStatement.setIsExplain(true, explainLevel);
         return queryStatement;
+    }
+
+    @Override
+    public ParseNode visitCreateView(StarRocksParser.CreateViewContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+
+        List<ColWithComment> colWithComments = null;
+        if (context.columnNameWithComment().size() > 0) {
+            colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
+        }
+        return new CreateViewStmt(
+                context.IF() != null,
+                targetTableName,
+                colWithComments,
+                context.comment == null ? null : visit(context.comment).toString(),
+                (QueryStatement) visit(context.queryStatement()));
+    }
+
+    @Override
+    public ParseNode visitAlterView(StarRocksParser.AlterViewContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+
+        List<ColWithComment> colWithComments = null;
+        if (context.columnNameWithComment().size() > 0) {
+            colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
+        }
+
+        return new AlterViewStmt(targetTableName, colWithComments, (QueryStatement) visit(context.queryStatement()));
+    }
+
+    @Override
+    public ParseNode visitColumnNameWithComment(StarRocksParser.ColumnNameWithCommentContext context) {
+        String comment = null;
+        if (context.string() != null) {
+            comment = visit(context.string()).toString();
+        }
+
+        return new ColWithComment(visit(context.identifier()).toString(), comment);
     }
 
     // ------------------------------------------- Query Relation -------------------------------------------
@@ -288,10 +332,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 String name;
                 if (selectListItem.getAlias() != null) {
                     name = selectListItem.getAlias();
-                } else if (selectListItem.getExpr() instanceof SlotRef) {
-                    name = ((SlotRef) selectListItem.getExpr()).getColumnName();
                 } else {
-                    name = selectListItem.getExpr().toColumnLabel();
+                    name = SQLLabelBuilder.toSQL(selectListItem.getExpr());
                 }
                 columnNames.add(name);
             }
@@ -817,7 +859,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Expr right = (Expr) visit(context.right);
         if (left instanceof IntervalLiteral) {
             return new TimestampArithmeticExpr(getArithmeticBinaryOperator(context.operator), right,
-                    ((IntervalLiteral) left).getValue(), ((IntervalLiteral) left).getTimeUnitIdent(), false);
+                    ((IntervalLiteral) left).getValue(), ((IntervalLiteral) left).getTimeUnitIdent(), true);
         }
 
         if (right instanceof IntervalLiteral) {
@@ -1147,14 +1189,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitColumnReference(StarRocksParser.ColumnReferenceContext context) {
         if (context.identifier() != null) {
             Identifier identifier = (Identifier) visit(context.identifier());
-            return new SlotRef(null, identifier.getValue());
+            return new SlotRef(null, identifier.getValue(), identifier.getValue());
         } else {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
             if (qualifiedName.getParts().size() == 3) {
                 return new SlotRef(new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1)),
+                        qualifiedName.getParts().get(2),
                         qualifiedName.getParts().get(2));
             } else if (qualifiedName.getParts().size() == 2) {
                 return new SlotRef(new TableName(null, qualifiedName.getParts().get(0)),
+                        qualifiedName.getParts().get(1),
                         qualifiedName.getParts().get(1));
             } else {
                 throw new SemanticException("Unqualified column reference " + qualifiedName);
