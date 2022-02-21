@@ -204,20 +204,36 @@ void GlobalDriverExecutor::update_profile_by_mode(FragmentContext* fragment_ctx,
             continue;
         }
 
+        // Calculate extremums of timestamps
+        // and remove these counters from driver's profile
+        std::map<std::string, std::pair<std::int64_t, std::int64_t>> timestamp_extremums;
+        RuntimeProfile::get_extremum_of(driver_profiles, std::vector<std::string>{"StartTimestamp", "StopTimestamp"},
+                                        &timestamp_extremums);
+        for (auto* driver_profile : driver_profiles) {
+            driver_profile->remove_counter("StartTimestamp");
+            driver_profile->remove_counter("StopTimestamp");
+        }
+
         remove_non_core_metrics(fragment_ctx, driver_profiles);
 
         RuntimeProfile::merge_isomorphic_profiles(driver_profiles);
-        // all the isomorphic profiles will merged into the first profile
+        // All the isomorphic profiles will merged into the first profile
         auto* merged_driver_profile = driver_profiles[0];
 
-        // use the name of pipeline' profile as pipeline driver's
+        // Use the name of pipeline' profile as pipeline driver's
         merged_driver_profile->set_name(pipeline_profile->name());
         merged_driver_profiles.push_back(merged_driver_profile);
 
-        // add all the info string and counters of the pipeline's profile
+        // Add all the info string and counters of the pipeline's profile
         // to the pipeline driver's profile
         merged_driver_profile->copy_all_counters_from(pipeline_profile);
         merged_driver_profile->copy_all_info_strings_from(pipeline_profile);
+
+        // Re-add timestamps to fragment instance's profile
+        auto* start_timestamp = profile->add_counter("StartTimestamp", TUnit::type::TIME_MS);
+        start_timestamp->set(timestamp_extremums["StartTimestamp"].first);
+        auto* stop_timestamp = profile->add_counter("StopTimestamp", TUnit::type::TIME_MS);
+        stop_timestamp->set(timestamp_extremums["StopTimestamp"].second);
     }
 
     // remove pipeline's profile from the hierarchy

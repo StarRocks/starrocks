@@ -347,6 +347,9 @@ public:
 private:
     static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000;
 
+    void _set_start_timestamp();
+    void _set_stop_timestamp();
+
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
     void _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
@@ -413,6 +416,9 @@ private:
     RuntimeProfile::Counter* _followup_input_empty_timer = nullptr;
     RuntimeProfile::Counter* _output_full_timer = nullptr;
     RuntimeProfile::Counter* _local_rf_waiting_set_counter = nullptr;
+
+    RuntimeProfile::Counter* _start_timestamp = nullptr;
+    RuntimeProfile::Counter* _stop_timestamp = nullptr;
 
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _schedule_effective_counter = nullptr;

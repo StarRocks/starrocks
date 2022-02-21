@@ -1609,8 +1609,8 @@ public class Coordinator {
             }
             RuntimeProfile pipelineProfile0 = instanceProfile0.getChildList().get(0).first;
 
-            // pipeline engine must have a counter named DegreeOfParallelism
-            // some fragment may still execute in non-pipeline mode
+            // Pipeline engine must have a counter named DegreeOfParallelism
+            // Some fragment may still execute in non-pipeline mode
             if (pipelineProfile0.getCounter("DegreeOfParallelism") == null) {
                 continue;
             }
@@ -1620,6 +1620,15 @@ public class Coordinator {
                     .collect(Collectors.toList());
             Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT, "");
             counter.setValue(instanceProfiles.size());
+
+            // Calculate extremums of timestamps
+            // and remove these counters from driver's profile
+            Map<String, Pair<Long, Long>> timestampExtremums = RuntimeProfile.getExtremumOf(instanceProfiles,
+                    Lists.newArrayList("StartTimestamp", "StopTimestamp"));
+            instanceProfiles.forEach((profile) -> {
+                profile.removeCounter("StartTimestamp");
+                profile.removeCounter("StopTimestamp");
+            });
 
             // After merge, all merged metrics will gather into the first profile
             // which is instanceProfile0
@@ -1634,6 +1643,12 @@ public class Coordinator {
                 RuntimeProfile pipelineProfile = pair.first;
                 fragmentProfile.addChild(pipelineProfile);
             });
+
+            // Re-add timestamps to fragment's profile
+            Counter startTimestamp = fragmentProfile.addCounter("StartTimestamp", TUnit.TIME_MS, "");
+            startTimestamp.setValue(timestampExtremums.get("StartTimestamp").first);
+            Counter stopTimestamp = fragmentProfile.addCounter("StopTimestamp", TUnit.TIME_MS, "");
+            stopTimestamp.setValue(timestampExtremums.get("StopTimestamp").second);
         }
     }
 

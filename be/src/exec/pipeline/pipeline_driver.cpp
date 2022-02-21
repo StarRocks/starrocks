@@ -36,6 +36,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
     _local_rf_waiting_set_counter = ADD_COUNTER(_runtime_profile, "LocalRfWaitingSet", TUnit::UNIT);
 
+    _start_timestamp = ADD_COUNTER(_runtime_profile, "StartTimestamp", TUnit::TIME_MS);
+    _stop_timestamp = ADD_COUNTER(_runtime_profile, "StopTimestamp", TUnit::TIME_MS);
+
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
     _schedule_effective_counter = ADD_COUNTER(_runtime_profile, "ScheduleEffectiveCounter", TUnit::UNIT);
     _schedule_rows_per_chunk = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedRowsPerChunk", TUnit::UNIT);
@@ -97,6 +100,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     SCOPED_TIMER(_active_timer);
+    _set_start_timestamp();
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
@@ -288,6 +292,19 @@ void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
     }
 }
 
+void PipelineDriver::_set_start_timestamp() {
+    if (_start_timestamp->value() == 0) {
+        auto now = std::chrono::system_clock::now();
+        _start_timestamp->set(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
+    }
+}
+void PipelineDriver::_set_stop_timestamp() {
+    if (_stop_timestamp->value() == 0) {
+        auto now = std::chrono::system_clock::now();
+        _stop_timestamp->set(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
+    }
+}
+
 void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
         _mark_operator_closed(op, runtime_state);
@@ -296,6 +313,7 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     VLOG_ROW << "[Driver] finalize, driver=" << this;
+    _set_stop_timestamp();
     DCHECK(state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR);
 
     _close_operators(runtime_state);

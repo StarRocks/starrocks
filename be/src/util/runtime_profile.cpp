@@ -486,7 +486,23 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile) {
     }
 }
 
-void RuntimeProfile::remove_counters(const std::set<std::string>& saved_counter_names) {
+void RuntimeProfile::remove_counter(const std::string& name) {
+    std::lock_guard<std::mutex> l(_counter_lock);
+
+    for (auto& [parent_name, child_names] : _child_counter_map) {
+        auto it = child_names.find(name);
+        if (it != child_names.end()) {
+            child_names.erase(it);
+        }
+    }
+
+    auto it = _counter_map.find(name);
+    if (it != _counter_map.end()) {
+        _counter_map.erase(it);
+    }
+}
+
+void RuntimeProfile::remove_counters(const std::set<std::string>& saved_names) {
     std::lock_guard<std::mutex> l(_counter_lock);
 
     // remove all the non-root child counters
@@ -500,7 +516,7 @@ void RuntimeProfile::remove_counters(const std::set<std::string>& saved_counter_
                 auto name_it = counter_set.begin();
                 while (name_it != counter_set.end()) {
                     const auto name = *name_it;
-                    if (saved_counter_names.find(name) == saved_counter_names.end()) {
+                    if (saved_names.find(name) == saved_names.end()) {
                         name_it = counter_set.erase(name_it);
                     } else {
                         name_it++;
@@ -518,7 +534,7 @@ void RuntimeProfile::remove_counters(const std::set<std::string>& saved_counter_
         auto it = _counter_map.begin();
         while (it != _counter_map.end()) {
             const auto name = it->first;
-            if (saved_counter_names.find(name) == saved_counter_names.end()) {
+            if (saved_names.find(name) == saved_names.end()) {
                 it = _counter_map.erase(it);
             } else {
                 it++;
@@ -1025,6 +1041,28 @@ RuntimeProfile::MergedInfo RuntimeProfile::merge_isomorphic_counters(TUnit::type
     }
 
     return std::make_tuple(merged_value, min_value, max_value);
+}
+
+void RuntimeProfile::get_extremum_of(const std::vector<RuntimeProfile*>& profiles,
+                                     const std::vector<std::string>& names,
+                                     std::map<std::string, std::pair<int64_t, int64_t>>* res) {
+    for (auto& name : names) {
+        (*res)[name] = std::make_pair(std::numeric_limits<int64_t>::max(), std::numeric_limits<int64_t>::min());
+    }
+    for (auto& profile : profiles) {
+        for (auto& name : names) {
+            auto* counter = profile->get_counter(name);
+            if (counter == nullptr) {
+                continue;
+            }
+            if (counter->value() < (*res)[name].first) {
+                (*res)[name].first = counter->value();
+            }
+            if (counter->value() > (*res)[name].second) {
+                (*res)[name].second = counter->value();
+            }
+        }
+    }
 }
 
 void RuntimeProfile::print_child_counters(const std::string& prefix, const std::string& counter_name,

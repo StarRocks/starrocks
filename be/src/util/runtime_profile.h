@@ -334,8 +334,11 @@ public:
     // Copy all but the bucket counters from src profile
     void copy_all_counters_from(RuntimeProfile* src_profile);
 
-    // Clean all the counters except saved_counter_names
-    void remove_counters(const std::set<std::string>& saved_counter_names);
+    // Remove the counter with specified name
+    void remove_counter(const std::string& name);
+
+    // Clean all the counters except saved_names
+    void remove_counters(const std::set<std::string>& saved_names);
 
     // Helper to append to the "ExecOption" info string.
     void append_exec_option(const std::string& option) { add_info_string("ExecOption", option); }
@@ -460,7 +463,7 @@ public:
 
 private:
     // vector of (profile, indentation flag)
-    typedef std::vector<std::pair<RuntimeProfile*, bool> > ChildVector;
+    typedef std::vector<std::pair<RuntimeProfile*, bool>> ChildVector;
 
     void add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos);
 
@@ -490,7 +493,7 @@ private:
 
     // Map from parent counter name to a set of child counter name.
     // All top level counters are the child of "" (root).
-    typedef std::map<std::string, std::set<std::string> > ChildCounterMap;
+    typedef std::map<std::string, std::set<std::string>> ChildCounterMap;
     ChildCounterMap _child_counter_map;
 
     // A set of bucket counters registered in this runtime profile.
@@ -617,6 +620,10 @@ public:
     // that all the children are isomorphic, otherwise, the behavior is undefined
     // The merged result will be stored in the first profile
     static void merge_isomorphic_profiles(std::vector<RuntimeProfile*>& profiles);
+
+    // get extremum (min and max value) of profiles for given counter names
+    static void get_extremum_of(const std::vector<RuntimeProfile*>& profiles, const std::vector<std::string>& names,
+                                std::map<std::string, std::pair<int64_t, int64_t>>* res);
 
 private:
     // Merge all the isomorphic counters

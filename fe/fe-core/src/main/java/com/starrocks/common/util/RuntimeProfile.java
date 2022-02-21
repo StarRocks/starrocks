@@ -131,6 +131,10 @@ public class RuntimeProfile {
         });
     }
 
+    public void removeCounter(String name) {
+        counterMap.remove(name);
+    }
+
     public void update(final TRuntimeProfileTree thriftProfile) {
         Reference<Integer> idx = new Reference<Integer>(0);
         update(thriftProfile.nodes, idx);
@@ -275,6 +279,10 @@ public class RuntimeProfile {
                     builder.append(pair.first).append(pair.second)
                             .append(" (").append(tmpValue).append(")");
                 }
+                break;
+            }
+            case TIME_MS: {
+                builder.append(tmpValue).append("ms");
                 break;
             }
             case TIME_NS: {
@@ -557,6 +565,29 @@ public class RuntimeProfile {
             }
             mergeIsomorphicProfiles(subProfiles);
         }
+    }
+
+    public static Map<String, Pair<Long, Long>> getExtremumOf(List<RuntimeProfile> profiles, List<String> names) {
+        Map<String, Pair<Long, Long>> res = Maps.newHashMap();
+
+        for (String name : names) {
+            res.put(name, new Pair<Long, Long>(Long.MAX_VALUE, Long.MIN_VALUE));
+        }
+        for (RuntimeProfile profile : profiles) {
+            for (String name : names) {
+                Counter counter = profile.getCounter(name);
+                if (counter == null) {
+                    continue;
+                }
+                if (counter.getValue() < res.get(name).first) {
+                    res.get(name).first = counter.getValue();
+                }
+                if (counter.getValue() > res.get(name).second) {
+                    res.get(name).second = counter.getValue();
+                }
+            }
+        }
+        return res;
     }
 }
 
