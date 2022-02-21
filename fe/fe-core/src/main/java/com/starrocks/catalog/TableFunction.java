@@ -48,10 +48,14 @@ public class TableFunction extends Function {
     }
 
     public static void initBuiltins(FunctionSet functionSet) {
-        TableFunction tableFunction = new TableFunction(new FunctionName("unnest"), Lists.newArrayList("unnest"),
+        TableFunction unnestFunction = new TableFunction(new FunctionName("unnest"), Lists.newArrayList("unnest"),
                 Lists.newArrayList(Type.ANY_ARRAY), Lists.newArrayList(Type.ANY_ELEMENT));
 
-        functionSet.addBuiltin(tableFunction);
+        functionSet.addBuiltin(unnestFunction);
+        
+        TableFunction jsonEachFunction = new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
+                Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
+        functionSet.addBuiltin(jsonEachFunction);
     }
 
     public List<Type> getTableFnReturnTypes() {
