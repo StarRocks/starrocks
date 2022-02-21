@@ -32,7 +32,7 @@ public class PruneAggregateColumnsRule extends TransformationRule {
 
         ColumnRefSet requiredInputColumns = new ColumnRefSet(aggOperator.getGroupingKeys());
 
-        ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
+        ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
 
         // Agg required input provide the having used columns
         if (aggOperator.getPredicate() != null) {
