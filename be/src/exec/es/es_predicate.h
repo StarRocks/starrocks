@@ -24,11 +24,14 @@
 #include <utility>
 #include <vector>
 
+#include "cctz/time_zone.h"
 #include "column/column.h"
 #include "column/column_viewer.h"
-#include "exprs/slot_ref.h"
+#include "column/const_column.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
+#include "runtime/date_value.h"
+#include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 
@@ -44,38 +47,10 @@ public:
     virtual ~ExtLiteral() = default;
 };
 
-// for scalar call
-class SExtLiteral : public ExtLiteral {
-public:
-    SExtLiteral(PrimitiveType type, void* value) : _type(type), _value(value) { _str = value_to_string(); }
-    ~SExtLiteral() override;
-    const std::string& to_string() const override { return _str; }
-
-private:
-    int8_t get_byte();
-    int16_t get_short();
-    int32_t get_int();
-    int64_t get_long();
-    float get_float();
-    double get_double();
-    std::string get_string();
-    std::string get_date_string();
-    bool get_bool();
-    std::string get_decimal_string();
-    std::string get_decimalv2_string();
-    std::string get_largeint_string();
-
-    std::string value_to_string();
-
-    PrimitiveType _type;
-    void* _value;
-    std::string _str;
-};
-
 // for vectorized call
 class VExtLiteral : public ExtLiteral {
 public:
-    VExtLiteral(PrimitiveType type, ColumnPtr column) {
+    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column) {
         DCHECK(!column->empty());
         // We need to convert the predicate column into the corresponding string.
         // Some types require special handling, because the default behavior of Datum may not match the behavior of ES.
@@ -86,7 +61,25 @@ public:
         } else if (type == TYPE_DATETIME) {
             vectorized::ColumnViewer<TYPE_DATETIME> viewer(column);
             DCHECK(!viewer.is_null(0));
-            _value = viewer.value(0).to_string();
+            vectorized::TimestampValue datetime_value = viewer.value(0);
+
+            // convert convert default timezone to UTC;
+
+            int year, month, day, hour, minute, second, usec;
+            datetime_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+
+            int64_t timestamp;
+            DateTimeValue ts_value(TIME_DATETIME, year, month, day, hour, minute, second, usec);
+            ts_value.unix_timestamp(&timestamp, TimezoneUtils::default_time_zone);
+
+            DateTimeValue ts_value2;
+            ts_value2.from_unixtime(timestamp, cctz::utc_time_zone());
+
+            vectorized::TimestampValue ts;
+            ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(),
+                              ts_value2.minute(), ts_value2.second(), 0);
+
+            _value = std::to_string(ts.to_unix_second() * 1000);
         } else if (type == TYPE_BOOLEAN) {
             vectorized::ColumnViewer<TYPE_BOOLEAN> viewer(column);
             if (viewer.value(0)) {
@@ -102,7 +95,7 @@ public:
     const std::string& to_string() const override { return _value; }
 
 private:
-    static std::string _value_to_string(ColumnPtr& column);
+    static std::string _value_to_string(vectorized::ColumnPtr& column);
     std::string _value;
 };
 
@@ -202,7 +195,6 @@ private:
     Status _build_in_predicate(const Expr* conjunct, bool* handled);
     Status _build_compound_predicate(const Expr* conjunct, bool* handled);
 
-    const SlotDescriptor* get_slot_desc(const SlotRef* slotRef);
     const SlotDescriptor* get_slot_desc(SlotId slot_id);
 
     ExprContext* _context;

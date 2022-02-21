@@ -259,7 +259,7 @@ void ScrollParser::set_params(const TupleDescriptor* descs,
 }
 
 bool ScrollParser::_pure_doc_value(const rapidjson::Value& obj) {
-    if (obj.HasMember("fields")) {
+    if (obj.HasMember(FIELD_FIELDS)) {
         return true;
     }
     return false;
@@ -501,7 +501,7 @@ template <PrimitiveType type, typename T>
 Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value) {
     auto append_timestamp = [](auto& col, Column* column) {
         TimestampValue value;
-        value.from_unixtime(col.GetInt64() / 1000, "+08:00");
+        value.from_unixtime(col.GetInt64() / 1000, TimezoneUtils::default_time_zone);
         if constexpr (type == TYPE_DATE) {
             DateValue date_val = DateValue(value);
             _append_data<TYPE_DATE>(column, date_val);
@@ -524,6 +524,10 @@ Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* colum
             TimestampValue value;
             if (!value.from_string(raw_str, val_size)) {
                 RETURN_ERROR_IF_CAST_FORMAT_ERROR(col, type);
+            }
+            // https://en.wikipedia.org/wiki/ISO_8601
+            if (raw_str[val_size - 1] == 'Z') {
+                value.from_unixtime(value.to_unix_second(), TimezoneUtils::default_time_zone);
             }
             _append_data<TYPE_DATETIME>(column, value);
         }
