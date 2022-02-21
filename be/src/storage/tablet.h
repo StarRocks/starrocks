@@ -35,7 +35,6 @@
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/base_tablet.h"
-#include "storage/compaction_context.h"
 #include "storage/data_dir.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset.h"
@@ -53,6 +52,8 @@ class TabletMeta;
 class TabletUpdateState;
 class TabletUpdates;
 class CompactionTask;
+class CompactionContext;
+class CompactionCandidate;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
@@ -251,28 +252,23 @@ public:
 
     // if there is _compaction_task running
     // do not do compaction
-    bool need_compaction() const {
+    bool need_compaction(uint8_t level) const {
         std::unique_lock wrlock(_meta_lock);
-        return need_compaction_unlock();
+        return _need_compaction_unlock(level);
     }
 
     // for ut
-    void set_compaction_context(std::unique_ptr<CompactionContext>& compaction_context) {
-        _compaction_context = std::move(compaction_context);
-    }
+    void set_compaction_context(std::unique_ptr<CompactionContext>& compaction_context);
 
-    bool need_compaction_unlock() const { return _compaction_context && !_compaction_task; }
+    std::vector<CompactionCandidate> get_compaction_candidates(bool need_update_context);
 
-    // protected by _meta_lock
-    void update_tablet_compaction_context();
+    double compaction_score(uint8_t level) const;
 
-    double compaction_score() const;
-
-    std::shared_ptr<CompactionTask> get_compaction(bool create_if_not_exist);
+    std::shared_ptr<CompactionTask> get_compaction(int8_t level, bool create_if_not_exist);
 
     void stop_compaction();
 
-    void reset_compaction();
+    void reset_compaction(uint8_t level);
 
 protected:
     void on_shutdown() override;
@@ -296,6 +292,12 @@ private:
     std::unique_ptr<CompactionContext> _get_compaction_context();
 
     bool _is_compacted_singleton(Rowset* rowset);
+
+    // protected by _meta_lock
+    void _update_tablet_compaction_context();
+    std::vector<CompactionCandidate> _get_compaction_candidates();
+    bool _need_compaction_unlock() const;
+    bool _need_compaction_unlock(uint8_t level) const;
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -338,7 +340,7 @@ private:
 
     // compaction related
     std::unique_ptr<CompactionContext> _compaction_context;
-    std::shared_ptr<CompactionTask> _compaction_task;
+    std::shared_ptr<CompactionTask> _compaction_tasks[2];
 
     // if this tablet is broken, set to true. default is false
     // timestamp of last cumu compaction failure

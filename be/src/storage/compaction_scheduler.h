@@ -9,13 +9,14 @@
 
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
+#include "storage/tablet.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
-class Tablet;
 class DataDir;
 class CompactionTask;
+class CompactionCandidate;
 
 // to schedule tablet to run compaction task
 class CompactionScheduler {
@@ -33,12 +34,13 @@ private:
 
     bool _can_schedule_next();
 
-    Tablet* _try_get_next_tablet();
+    std::shared_ptr<CompactionTask> _try_get_next_compaction_task();
 
-    bool _can_do_compaction(Tablet* tablet, bool* need_reschedule);
+    bool _can_do_compaction(const CompactionCandidate& candidate, bool* need_reschedule,
+                            std::shared_ptr<CompactionTask>* compaction_task);
 
     // if check fails, should not reschedule the tablet
-    bool _check_precondition(Tablet* tablet);
+    bool _check_precondition(const CompactionCandidate& candidate);
 
     bool _can_do_compaction_task(Tablet* tablet, CompactionTask* compaction_task);
 

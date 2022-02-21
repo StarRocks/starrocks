@@ -33,6 +33,8 @@
 
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "storage/compaction_candidate.h"
+#include "storage/compaction_context.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_policy.h"
 #include "storage/compaction_task.h"
@@ -192,10 +194,8 @@ Status Tablet::revise_tablet_meta(MemTracker* mem_tracker, const std::vector<Row
     }
 
     if (config::enable_new_compaction_framework) {
-        update_tablet_compaction_context();
-        if (need_compaction_unlock()) {
-            CompactionManager::instance()->update_candidate_async(this);
-        }
+        CompactionManager::instance()->update_tablet_async(std::static_pointer_cast<Tablet>(shared_from_this()), true,
+                                                           false);
     }
 
     // reconstruct from tablet meta
@@ -274,10 +274,8 @@ void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const st
 
     // must be put after modify_rs_metas
     if (config::enable_new_compaction_framework) {
-        update_tablet_compaction_context();
-        if (need_compaction_unlock()) {
-            CompactionManager::instance()->update_candidate_async(this);
-        }
+        CompactionManager::instance()->update_tablet_async(std::static_pointer_cast<Tablet>(shared_from_this()), true,
+                                                           false);
     }
 
     // add rs_metas_to_delete to tracker
@@ -356,10 +354,8 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
 
     _timestamped_version_tracker.add_version(rowset->version());
     if (config::enable_new_compaction_framework) {
-        update_tablet_compaction_context();
-        if (need_compaction_unlock()) {
-            CompactionManager::instance()->update_candidate_async(this);
-        }
+        CompactionManager::instance()->update_tablet_async(std::static_pointer_cast<Tablet>(shared_from_this()), true,
+                                                           false);
     }
 
     RETURN_IF_ERROR(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));
@@ -1198,13 +1194,17 @@ Version Tablet::max_version() const {
     }
 }
 
-void Tablet::update_tablet_compaction_context() {
+void Tablet::_update_tablet_compaction_context() {
     if (_updates || _state == TABLET_NOTREADY || !is_used() || !init_succeeded()) {
-        _compaction_context.reset();
+        if (_compaction_context) {
+            _compaction_context.reset();
+        }
         return;
     }
     if (!_check_versions_completeness()) {
-        _compaction_context.reset();
+        if (_compaction_context) {
+            _compaction_context.reset();
+        }
         // when versions are not complete, just return
         return;
     }
@@ -1213,6 +1213,7 @@ void Tablet::update_tablet_compaction_context() {
             CompactionUtils::create_compaction_policy(compaction_context.get());
     if (compaction_policy->need_compaction()) {
         _compaction_context.swap(compaction_context);
+        VLOG(2) << "need compaction is true. compaction context:" << _compaction_context->to_string();
     } else {
         _compaction_context.reset();
     }
@@ -1227,6 +1228,7 @@ bool Tablet::_is_compacted_singleton(Rowset* rowset) {
 std::unique_ptr<CompactionContext> Tablet::_get_compaction_context() {
     // construct compaction context from tablet
     std::unique_ptr<CompactionContext> compaction_context(new CompactionContext());
+
     for (auto& it : _rs_version_map) {
         if (it.second->start_version() == it.second->end_version()) {
             // level 0
@@ -1239,7 +1241,7 @@ std::unique_ptr<CompactionContext> Tablet::_get_compaction_context() {
             compaction_context->rowset_levels[2].insert(it.second.get());
         }
     }
-    compaction_context->tablet = this;
+    compaction_context->tablet = std::static_pointer_cast<Tablet>(shared_from_this());
 
     // For leading 'delete' or 'compacted' rowset in level 0, move it to level 1
     // because they should be compacted by base compaction
@@ -1275,45 +1277,101 @@ std::unique_ptr<CompactionContext> Tablet::_get_compaction_context() {
             break;
         }
     }
+    compaction_context->compaction_scores[0] = 0;
+    compaction_context->compaction_scores[1] = 0;
     return compaction_context;
 }
 
-double Tablet::compaction_score() const {
+double Tablet::compaction_score(uint8_t level) const {
     std::unique_lock wrlock(_meta_lock);
     if (!_compaction_context) {
         return 0;
     }
-    return _compaction_context->get_score();
+    if (level < 0 && level >= LEVEL_NUMBER - 1) {
+        return 0;
+    }
+    return _compaction_context->compaction_scores[level];
 }
 
-std::shared_ptr<CompactionTask> Tablet::get_compaction(bool create_if_not_exist) {
+std::shared_ptr<CompactionTask> Tablet::get_compaction(int8_t level, bool create_if_not_exist) {
     std::shared_lock wrlock(_meta_lock);
     if (!_compaction_context) {
+        LOG(WARNING) << "_compaction_context is null. tablet:" << tablet_id();
         return nullptr;
     }
-
-    if (!_compaction_task && create_if_not_exist) {
-        std::unique_ptr<CompactionContext> compaction_context =
-                std::make_unique<CompactionContext>(*_compaction_context);
-        std::unique_ptr<CompactionPolicy> compaction_policy =
-                CompactionUtils::create_compaction_policy(compaction_context.get());
-        _compaction_task = compaction_policy->create_compaction();
+    if (_compaction_context->need_compaction(level)) {
+        if (!_compaction_tasks[level] && create_if_not_exist) {
+            std::unique_ptr<CompactionContext> compaction_context =
+                    std::make_unique<CompactionContext>(*_compaction_context);
+            compaction_context->current_level = level;
+            std::unique_ptr<CompactionPolicy> compaction_policy =
+                    CompactionUtils::create_compaction_policy(compaction_context.get());
+            _compaction_tasks[level] = compaction_policy->create_compaction();
+        }
+        return _compaction_tasks[level];
+    } else {
+        LOG(WARNING) << "no need to compact for level:" << level;
+        return nullptr;
     }
-    return _compaction_task;
+}
+
+std::vector<CompactionCandidate> Tablet::_get_compaction_candidates() {
+    std::vector<CompactionCandidate> candidates;
+    for (int i = 0; i < 2; i++) {
+        if (_need_compaction_unlock(i)) {
+            CompactionCandidate candidate;
+            candidate.tablet = std::static_pointer_cast<Tablet>(shared_from_this());
+            candidate.level = i;
+            candidates.emplace_back(std::move(candidate));
+        }
+    }
+    return candidates;
+}
+
+std::vector<CompactionCandidate> Tablet::get_compaction_candidates(bool need_update_context) {
+    std::unique_lock wrlock(_meta_lock);
+    if (need_update_context) {
+        VLOG(2) << "need_update_context is true";
+        _update_tablet_compaction_context();
+    }
+    if (_need_compaction_unlock()) {
+        std::vector<CompactionCandidate> candidates = _get_compaction_candidates();
+        VLOG(2) << "need compaction is true, start to update compaction candidates, size:" << candidates.size();
+        return candidates;
+    }
+    return {};
+}
+
+bool Tablet::_need_compaction_unlock(uint8_t level) const {
+    return _compaction_context && ((_compaction_context->need_compaction(level) && !_compaction_tasks[level]));
+}
+
+bool Tablet::_need_compaction_unlock() const {
+    return _need_compaction_unlock(0) || _need_compaction_unlock(1);
 }
 
 void Tablet::stop_compaction() {
     std::unique_lock wrlock(_meta_lock);
-    if (!_compaction_task) {
-        return;
+    for (int i = 0; i < 2; i++) {
+        if (_compaction_tasks[i]) {
+            _compaction_tasks[i]->stop();
+            _compaction_tasks[i].reset();
+        }
     }
-    _compaction_task->stop();
-    _compaction_task.reset();
+    _compaction_context.reset();
 }
 
-void Tablet::reset_compaction() {
+void Tablet::reset_compaction(uint8_t level) {
+    DCHECK(0 <= level);
+    DCHECK(level <= 1);
     std::unique_lock wrlock(_meta_lock);
-    _compaction_task.reset();
+    LOG(INFO) << "reset compaction level:" << (uint32_t)level << ", tablet_id:" << tablet_id();
+    _compaction_tasks[level].reset();
+}
+
+// for ut
+void Tablet::set_compaction_context(std::unique_ptr<CompactionContext>& compaction_context) {
+    _compaction_context = std::move(compaction_context);
 }
 
 } // namespace starrocks

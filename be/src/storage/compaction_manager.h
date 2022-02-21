@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "storage/compaction_candidate.h"
 #include "storage/compaction_task.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
@@ -27,16 +28,17 @@ public:
 
     size_t candidates_size() {
         std::lock_guard lg(_candidates_mutex);
-        return _candidate_tablets.size();
+        return _compaction_candidates.size();
     }
 
-    void update_candidate_async(Tablet* tablet);
+    void update_candidates(std::vector<CompactionCandidate> candidates);
 
-    void update_candidate(Tablet* tablet);
+    void insert_candidates(std::vector<CompactionCandidate> candidates);
 
-    void insert_candidates(const std::vector<Tablet*>& tablets);
+    CompactionCandidate pick_candidate();
 
-    Tablet* pick_candidate();
+    void update_tablet_async(TabletSharedPtr tablet, bool need_update_context, bool is_compaction = false);
+    void update_tablet(TabletSharedPtr tablet, bool need_update_context, bool is_compaction);
 
     void register_scheduler(CompactionScheduler* scheduler) {
         std::lock_guard lg(_scheduler_mutex);
@@ -51,7 +53,7 @@ public:
 
     uint16_t running_tasks_num() {
         std::lock_guard lg(_tasks_mutex);
-        return _running_tasks_num;
+        return _running_tasks.size();
     }
 
     uint16_t running_tasks_num_for_dir(DataDir* data_dir) {
@@ -67,7 +69,7 @@ public:
     uint64_t next_compaction_task_id() { return ++_next_task_id; }
 
 private:
-    CompactionManager() : _next_task_id(0), _running_tasks_num(0), _update_candidate_pool("up_candidates", 1, 100000) {}
+    CompactionManager() : _next_task_id(0), _update_candidate_pool("up_candidates", 1, 100000) {}
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;
     CompactionManager& operator=(const CompactionManager& compaction_manager) = delete;
@@ -75,23 +77,12 @@ private:
 
     void _notify_schedulers();
 
-    // Comparator should compare tablet by compaction score in descending order
-    // When compaction scores are equal, use tablet id(to be unique) instead(ascending)
-    struct TabletCompactionComparator {
-        bool operator()(const Tablet* left, const Tablet* right) const {
-            int32_t left_score = static_cast<int32_t>(left->compaction_score() * 100);
-            int32_t right_score = static_cast<int32_t>(right->compaction_score() * 100);
-            return left_score > right_score || (left_score == right_score && left->tablet_id() < right->tablet_id());
-        }
-    };
-
     std::mutex _candidates_mutex;
     // protect by _mutex
-    std::set<Tablet*, TabletCompactionComparator> _candidate_tablets;
+    std::set<CompactionCandidate, CompactionCandidateComparator> _compaction_candidates;
 
     std::mutex _tasks_mutex;
     std::atomic<uint64_t> _next_task_id;
-    std::atomic<uint16_t> _running_tasks_num;
     std::unordered_set<CompactionTask*> _running_tasks;
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_task_num_map;
     std::unordered_map<uint8_t, uint16_t> _level_to_task_num_map;

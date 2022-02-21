@@ -123,30 +123,30 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
     CompactionManager::instance()->clear_tasks();
     ASSERT_EQ(0, CompactionManager::instance()->running_tasks_num());
 
-    config::max_level_0_compaction_task = 1;
-    for (int i = 0; i < config::max_level_0_compaction_task; i++) {
+    config::max_cumulative_compaction_task = 1;
+    for (int i = 0; i < config::max_cumulative_compaction_task; i++) {
         bool ret = CompactionManager::instance()->register_task(tasks[i].get());
         ASSERT_TRUE(ret);
     }
 
-    ret = CompactionManager::instance()->register_task(tasks[config::max_level_0_compaction_task].get());
+    ret = CompactionManager::instance()->register_task(tasks[config::max_cumulative_compaction_task].get());
     ASSERT_FALSE(ret);
 
-    ASSERT_EQ(config::max_level_0_compaction_task, CompactionManager::instance()->running_tasks_num());
+    ASSERT_EQ(config::max_cumulative_compaction_task, CompactionManager::instance()->running_tasks_num());
     ASSERT_EQ(1, CompactionManager::instance()->running_tasks_num_for_level(0));
     CompactionManager::instance()->clear_tasks();
 
-    config::max_level_1_compaction_task = 1;
-    for (int i = 0; i < config::max_level_1_compaction_task + 1; i++) {
+    config::max_base_compaction_task = 1;
+    for (int i = 0; i < config::max_base_compaction_task + 1; i++) {
         tasks[i]->set_compaction_level(1);
         bool ret = CompactionManager::instance()->register_task(tasks[i].get());
-        if (i < config::max_level_1_compaction_task) {
+        if (i < config::max_base_compaction_task) {
             ASSERT_TRUE(ret);
         } else {
             ASSERT_FALSE(ret);
         }
     }
-    ASSERT_EQ(config::max_level_1_compaction_task, CompactionManager::instance()->running_tasks_num());
+    ASSERT_EQ(config::max_base_compaction_task, CompactionManager::instance()->running_tasks_num());
     ASSERT_EQ(1, CompactionManager::instance()->running_tasks_num_for_level(1));
 }
 

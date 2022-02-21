@@ -10,6 +10,8 @@
 
 namespace starrocks {
 
+class CompactionPolicy;
+class CompactionContext;
 class RowsetWriter;
 class Tablet;
 

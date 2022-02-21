@@ -6,15 +6,18 @@
 #include <vector>
 
 #include "storage/rowset/rowset.h"
+#include "storage/tablet.h"
 
 namespace starrocks {
 
-class Tablet;
 class RowsetReleaseGuard;
+class CompactionTask;
 
 #ifndef LEVEL_NUMBER
 #define LEVEL_NUMBER 3
 #endif
+
+const double COMPACTION_SCORE_THRESHOLD = 0.999;
 
 struct RowsetComparator {
     bool operator()(const Rowset* left, const Rowset* right) const {
@@ -25,15 +28,18 @@ struct CompactionContext {
     // sort rowsets by version
     std::set<Rowset*, RowsetComparator> rowset_levels[LEVEL_NUMBER];
     double compaction_scores[LEVEL_NUMBER - 1];
-    Tablet* tablet;
+    TabletSharedPtr tablet;
     int8_t current_level = -1;
 
+    /*
     double get_score() {
         if (current_level < 0 || current_level > 1) {
             return 0;
         }
         return compaction_scores[current_level];
-    }
+    }*/
+
+    bool need_compaction(uint8_t level) { return compaction_scores[level] > COMPACTION_SCORE_THRESHOLD; }
 
     std::string to_string() const;
 };

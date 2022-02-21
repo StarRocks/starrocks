@@ -70,7 +70,7 @@ struct CompactionTaskInfo {
     size_t merged_rows;
     size_t filtered_rows;
     size_t output_num_rows;
-    uint8_t compaction_level;
+    int8_t compaction_level;
 
     // for vertical compaction
     size_t column_group_size;
@@ -148,6 +148,10 @@ public:
 
     void set_compaction_task_state(CompactionTaskState state) { _task_info.state = state; }
 
+    bool is_compaction_finished() const {
+        return _task_info.state == COMPACTION_FAILED || _task_info.state == COMPACTION_SUCCESS;
+    }
+
     const std::vector<RowsetSharedPtr>& input_rowsets() const { return _input_rowsets; }
 
     void set_output_version(const Version& version) { _task_info.output_version = version; }
@@ -162,16 +166,16 @@ public:
 
     size_t input_rowsets_size() const { return _task_info.input_rowsets_size; }
 
-    void set_compaction_level(uint8_t compaction_level) { _task_info.compaction_level = compaction_level; }
+    void set_compaction_level(int8_t compaction_level) { _task_info.compaction_level = compaction_level; }
 
-    uint8_t compaction_level() const { return _task_info.compaction_level; }
+    int8_t compaction_level() const { return _task_info.compaction_level; }
 
-    void set_tablet(Tablet* tablet) {
+    void set_tablet(const TabletSharedPtr& tablet) {
         _tablet = tablet;
         _task_info.tablet_id = _tablet->tablet_id();
     }
 
-    Tablet* tablet() { return _tablet; }
+    TabletSharedPtr& tablet() { return _tablet; }
 
     void set_task_id(uint64_t task_id) { _task_info.task_id = task_id; }
 
@@ -264,7 +268,7 @@ protected:
     CompactionTaskInfo _task_info;
     RuntimeProfile _runtime_profile;
     std::vector<RowsetSharedPtr> _input_rowsets;
-    Tablet* _tablet;
+    TabletSharedPtr _tablet;
     RowsetSharedPtr _output_rowset;
     std::unique_lock<std::mutex> _compaction_lock;
     MonotonicStopWatch _watch;

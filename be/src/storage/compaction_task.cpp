@@ -33,7 +33,7 @@ void CompactionTask::run() {
           CompactionUtils::compaction_algorithm_to_string(_task_info.algorithm), (int)_task_info.compaction_level,
           _task_info.compaction_score);
     std::stringstream ss;
-    ss << "output version:" << _task_info.output_version << ", input rowsets size:" << _input_rowsets.size()
+    ss << "output version:" << _task_info.output_version << ", input versions size:" << _input_rowsets.size()
        << ", input versions:";
 
     for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
@@ -56,21 +56,19 @@ void CompactionTask::run() {
             set_compaction_task_state(COMPACTION_FAILED);
         }
         // reset compaction before judge need_compaction again
-        // because if there is a compaction task in a tablet, it will not be able to run another one
-        _tablet->reset_compaction();
+        // because if there is a compaction task for one level in a tablet,
+        // it will not be able to run another one for that level
+        _tablet->reset_compaction(compaction_level());
         _task_info.end_time = UnixMillis();
         CompactionManager::instance()->unregister_task(this);
-        if (_tablet->need_compaction()) {
-            LOG(INFO) << "tablet:" << _tablet->tablet_id() << " compaction finished. and should do compaction again";
-            TRACE("[Compaction] compaction task finished. and will do compaction again.");
-            CompactionManager::instance()->update_candidate(_tablet);
-        }
+        // compaction context has been updated when commit
+        // so do not update context here
+        CompactionManager::instance()->update_tablet_async(_tablet, false, true);
         // must be put after unregister_task
         _scheduler->notify();
         TRACE("[Compaction] $0", _task_info.to_string());
     });
     if (should_stop()) {
-        // should add task id to log
         LOG(INFO) << "compaction task" << _task_info.task_id << " is stopped.";
         return;
     }

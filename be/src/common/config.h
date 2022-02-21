@@ -298,15 +298,15 @@ CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 CONF_mBool(enable_compaction, "true");
 CONF_Bool(enable_new_compaction_framework, "false");
-CONF_mInt32(max_compaction_task_num, "2");
-CONF_mInt32(max_compaction_task_per_disk, "1");
+CONF_mInt32(max_compaction_task_num, "4");
+CONF_mInt32(max_compaction_task_per_disk, "2");
 // < 0 means no limit
-CONF_mInt32(max_level_0_compaction_task, "-1");
-CONF_mInt32(max_level_1_compaction_task, "1");
+CONF_mInt32(max_cumulative_compaction_task, "-1");
+CONF_mInt32(max_base_compaction_task, "1");
 // 5GB
-CONF_mInt64(min_level_0_compaction_size, "5368709120");
+CONF_mInt64(min_cumulative_compaction_size, "5368709120");
 // 20GB
-CONF_mInt64(min_level_1_compaction_size, "21474836480");
+CONF_mInt64(min_base_compaction_size, "21474836480");
 
 // Max row source mask memory bytes, default is 200M.
 // Should be smaller than compaction_mem_limit.

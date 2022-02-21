@@ -7,16 +7,17 @@
 #include "common/statusor.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
+#include "storage/tablet.h"
 
 namespace starrocks {
 
-class Tablet;
 class CompactionTask;
 
 class CompactionTaskFactory {
 public:
-    CompactionTaskFactory(Version output_version, Tablet* tablet, std::vector<RowsetSharedPtr>&& input_rowsets,
-                          double compaction_score, uint8_t compaction_level)
+    CompactionTaskFactory(Version output_version, const TabletSharedPtr& tablet,
+                          std::vector<RowsetSharedPtr>&& input_rowsets, double compaction_score,
+                          uint8_t compaction_level)
             : _output_version(output_version),
               _tablet(tablet),
               _input_rowsets(std::move(input_rowsets)),
@@ -28,7 +29,7 @@ public:
 
 private:
     Version _output_version;
-    Tablet* _tablet;
+    TabletSharedPtr _tablet;
     std::vector<RowsetSharedPtr> _input_rowsets;
     double _compaction_score;
     uint8_t _compaction_level;

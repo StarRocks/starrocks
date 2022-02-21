@@ -13,6 +13,8 @@ std::string CompactionContext::to_string() const {
     std::stringstream ss;
     ss << "tablet id:" << tablet->tablet_id() << "\n";
     ss << "current level:" << (int32_t)current_level << "\n";
+    ss << "level 0 score:" << compaction_scores[0] << "\n";
+    ss << "level 1 score:" << compaction_scores[1] << "\n";
     ss << "level 0:";
     for (auto& rowset : rowset_levels[0]) {
         ss << rowset->version() << ";";

@@ -738,10 +738,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
     // no concurrent access here
     if (config::enable_new_compaction_framework) {
-        tablet->update_tablet_compaction_context();
-        if (tablet->need_compaction_unlock()) {
-            CompactionManager::instance()->update_candidate_async(tablet.get());
-        }
+        CompactionManager::instance()->update_tablet_async(tablet, true, false);
     }
 
     return st;
