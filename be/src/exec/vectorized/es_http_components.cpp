@@ -16,6 +16,7 @@ static const char* FIELD_SCROLL_ID = "_scroll_id";
 static const char* FIELD_HITS = "hits";
 static const char* FIELD_INNER_HITS = "hits";
 static const char* FIELD_SOURCE = "_source";
+static const char* FIELD_FIELDS = "fields";
 static const char* FIELD_ID = "_id";
 
 const char* json_type_to_raw_str(rapidjson::Type type) {
@@ -157,31 +158,36 @@ Status ScrollParser::fill_chunk(ChunkPtr* chunk, bool* line_eos) {
     *chunk = std::make_shared<Chunk>();
     std::vector<SlotDescriptor*> slot_descs = _tuple_desc->slots();
 
+    size_t left_sz = _size - _cur_line;
+    size_t fill_sz = std::min<size_t>(left_sz, config::vector_chunk_size);
+
     // init column information
     for (auto& slot_desc : slot_descs) {
         ColumnPtr column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        column->reserve(fill_sz);
         (*chunk)->append_column(std::move(column), slot_desc->id());
     }
 
-    size_t left_sz = _size - _cur_line;
-    size_t fill_sz = std::min(left_sz, (size_t)config::vector_chunk_size);
-
     auto slots = _tuple_desc->slots();
-
     // TODO: we could fill chunk by column rather than row
     for (size_t i = 0; i < fill_sz; ++i) {
         const rapidjson::Value& obj = _inner_hits_node[_cur_line + i];
         bool pure_doc_value = _pure_doc_value(obj);
-        const rapidjson::Value& line = obj.HasMember(FIELD_SOURCE) ? obj[FIELD_SOURCE] : obj["fields"];
+        bool has_source = obj.HasMember(FIELD_SOURCE);
+        bool has_fields = obj.HasMember(FIELD_FIELDS);
+
+        if (!has_source && !has_fields) {
+            for (auto column : (*chunk)->columns()) {
+                column->append_default();
+            }
+            continue;
+        }
+        DCHECK(has_source ^ has_fields);
+        const rapidjson::Value& line = has_source ? obj[FIELD_SOURCE] : obj[FIELD_FIELDS];
 
         for (size_t col_idx = 0; col_idx < slots.size(); ++col_idx) {
             SlotDescriptor* slot_desc = slot_descs[col_idx];
             ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
-
-            // because the fe planner filter the non_materialize column
-            if (!slot_desc->is_materialized()) {
-                continue;
-            }
 
             // _id field must exists in every document, this is guaranteed by ES
             // if _id was found in tuple, we would get `_id` value from inner-hit node
