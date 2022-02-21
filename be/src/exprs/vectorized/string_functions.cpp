@@ -543,10 +543,10 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
             // - if binary is non-null ConstColumn, unfold it and wrap with src_null.
             // - if binary is NullableColumn, then the null column inside the binary should
             //   be merged with the null column inside of columns[0].
+            if (binary->only_null()) {
+                return binary;
+            }
             if (binary->is_constant()) {
-                if (binary->only_null()) {
-                    return binary;
-                }
                 ConstColumn* dst_const = down_cast<ConstColumn*>(binary.get());
                 dst_const->data_column()->assign(dst_const->size(), 0);
                 return NullableColumn::create(dst_const->data_column(), src_null);
