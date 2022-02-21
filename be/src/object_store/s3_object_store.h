@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#ifdef STARROCKS_WITH_AWS
+
 #pragma once
 
 #include <aws/s3/S3Client.h>
@@ -85,3 +87,5 @@ private:
 };
 
 } // namespace starrocks
+
+#endif

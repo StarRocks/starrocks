@@ -1,11 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#ifdef STARROCKS_WITH_AWS
+
+#include "object_store/s3_object_store.h"
+
 #include <aws/core/Aws.h>
 #include <gtest/gtest.h>
 
 #include <fstream>
 
-#include "object_store/s3_object_store.h"
 #include "util/file_utils.h"
 
 namespace starrocks {
@@ -100,3 +103,5 @@ TEST_F(S3Test, object_operation) {
 }
 
 } // namespace starrocks
+
+#endif

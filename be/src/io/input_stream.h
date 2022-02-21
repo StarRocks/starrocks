@@ -21,7 +21,7 @@ public:
     virtual Status skip(int64_t count) = 0;
 
     // Returns true if InputStream support `peak()`
-    virtual bool allows_peak() const = 0;
+    virtual bool allows_peak() const { return false; }
 
     // Return zero-copy string_view to upcoming bytes.
     //
@@ -31,7 +31,7 @@ public:
     //
     // May return NotSupported on streams that don't support it.
     //
-    virtual StatusOr<std::string_view> peak(int64_t nbytes) = 0;
+    virtual StatusOr<std::string_view> peak(int64_t nbytes) { return Status::NotSupported("InputStream::peak"); }
 };
 
 } // namespace starrocks::io
