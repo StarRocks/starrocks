@@ -26,8 +26,8 @@ public:
               _olap_scan_node(olap_scan_node),
               _conjunct_ctxs(conjunct_ctxs),
               _limit(limit),
-              _is_io_task_running(_max_io_tasks_per_op),
-              _chunk_sources(_max_io_tasks_per_op) {}
+              _is_io_task_running(MAX_IO_TASKS_PER_OP),
+              _chunk_sources(MAX_IO_TASKS_PER_OP) {}
 
     ~ScanOperator() override = default;
 
@@ -48,8 +48,9 @@ public:
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
 private:
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+
     const size_t _buffer_size = config::pipeline_io_buffer_size;
-    const int _max_io_tasks_per_op = config::pipeline_scan_max_tasks_per_operator;
 
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out

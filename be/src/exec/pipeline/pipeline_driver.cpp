@@ -189,7 +189,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             }
             // yield when total chunks moved or time spent on-core for evaluation
             // exceed the designated thresholds.
-            if (total_chunks_moved >= _yield_max_chunks_moved || time_spent >= _yield_max_time_spent) {
+            if (total_chunks_moved >= YIELD_MAX_CHUNKS_MOVED || time_spent >= YIELD_MAX_TIME_SPENT) {
                 should_yield = true;
                 break;
             }
