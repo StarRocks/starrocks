@@ -603,7 +603,7 @@ public class DeleteHandler implements Writable {
                     updatePredicate(binaryPredicate, column, 1);
                 } catch (AnalysisException e) {
                     // ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_VALUE, value);
-                    throw new DdlException("Invalid column value[" + value + "] for column " + columnName);
+                    throw new DdlException("Invalid value for column " + columnName + ": " + e.getMessage());
                 }
             } else if (condition instanceof InPredicate) {
                 String value = null;
