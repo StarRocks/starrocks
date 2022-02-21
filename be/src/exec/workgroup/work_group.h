@@ -52,13 +52,13 @@ public:
     void remove(const WorkGroupPtr& wg) override {}
     WorkGroupPtr pick_next() override { return nullptr; };
 
-    StatusOr<Task> pick_next_task(int dispatcher_id);
+    StatusOr<Task> pick_next_task(int worker_id);
     bool try_offer_io_task(WorkGroupPtr wg, Task task);
     void close() override;
 
 private:
     void _maybe_adjust_weight();
-    WorkGroupPtr _select_next_wg(int dispatcher_id);
+    WorkGroupPtr _select_next_wg(int worker_id);
 
     std::mutex _global_io_mutex;
     std::condition_variable _cv;
@@ -208,34 +208,34 @@ private:
     double _cur_select_factor = 0;
 };
 
-class DispatcherOwnerManager {
+class WorkerOwnerManager {
 public:
-    explicit DispatcherOwnerManager(int num_total_dispatchers);
-    ~DispatcherOwnerManager() = default;
+    explicit WorkerOwnerManager(int num_total_workers);
+    ~WorkerOwnerManager() = default;
 
     // Disable copy/move ctor and assignment.
-    DispatcherOwnerManager(const DispatcherOwnerManager&) = delete;
-    DispatcherOwnerManager& operator=(const DispatcherOwnerManager&) = delete;
-    DispatcherOwnerManager(DispatcherOwnerManager&&) = delete;
-    DispatcherOwnerManager& operator=(DispatcherOwnerManager&&) = delete;
+    WorkerOwnerManager(const WorkerOwnerManager&) = delete;
+    WorkerOwnerManager& operator=(const WorkerOwnerManager&) = delete;
+    WorkerOwnerManager(WorkerOwnerManager&&) = delete;
+    WorkerOwnerManager& operator=(WorkerOwnerManager&&) = delete;
 
-    int num_total_dispatchers() const { return _num_total_dispatchers; }
+    int num_total_workers() const { return _num_total_workers; }
 
-    std::shared_ptr<WorkGroupPtrSet> get_owners(int dispatcher_id) const {
-        return _dispatcher_id2owner_wgs[_index % 2][dispatcher_id];
+    std::shared_ptr<WorkGroupPtrSet> get_owners(int worker_id) const {
+        return _worker_id2owner_wgs[_index % 2][worker_id];
     }
 
-    // Labels which workgroups each dispatcher belongs to based on the cpu limit of each workgroup.
+    // Labels which workgroups each worker thread belongs to based on the cpu limit of each workgroup.
     void reassign_to_wgs(const std::unordered_map<int128_t, WorkGroupPtr>& workgroups, int sum_cpu_limit);
 
-    // Return true, when the dispatcher is running the workgroup which it doesn't belong to,
+    // Return true, when the worker thread is running the workgroup which it doesn't belong to,
     // and any owner workgroups of it has running drivers.
-    bool should_yield(int dispatcher_id, const WorkGroupPtr& running_wg) const;
+    bool should_yield(int worker_id, const WorkGroupPtr& running_wg) const;
 
 private:
-    const int _num_total_dispatchers;
-    // Use two _dispatcher_id2owner_wgs and _index to insulate read and write.
-    std::vector<std::shared_ptr<WorkGroupPtrSet>> _dispatcher_id2owner_wgs[2]{};
+    const int _num_total_workers;
+    // Use two _worker_id2owner_wgs and _index to insulate read and write.
+    std::vector<std::shared_ptr<WorkGroupPtrSet>> _worker_id2owner_wgs[2]{};
     std::atomic<size_t> _index = 0;
 };
 
@@ -254,7 +254,7 @@ public:
     void close();
 
     // get next workgroup for io
-    StatusOr<IoWorkGroupQueue::Task> pick_next_task_for_io(int dispatcher_id);
+    StatusOr<IoWorkGroupQueue::Task> pick_next_task_for_io(int worker_id);
     bool try_offer_io_task(WorkGroupPtr wg, IoWorkGroupQueue::Task task);
 
     size_t sum_cpu_limit() const { return _sum_cpu_limit; }
@@ -265,13 +265,13 @@ public:
     std::vector<TWorkGroup> list_workgroups();
     std::vector<TWorkGroup> list_all_workgroups();
 
-    std::shared_ptr<WorkGroupPtrSet> get_owners_of_driver_dispatcher(int dispatcher_id);
-    bool should_yield_driver_dispatcher(int dispatcher_id, WorkGroupPtr running_wg);
+    std::shared_ptr<WorkGroupPtrSet> get_owners_of_driver_worker(int worker_id);
+    bool should_yield_driver_worker(int worker_id, WorkGroupPtr running_wg);
 
-    std::shared_ptr<WorkGroupPtrSet> get_owners_of_io_dispatcher(int dispatcher_id);
-    bool should_yield_io_dispatcher(int dispatcher_id, WorkGroupPtr running_wg);
+    std::shared_ptr<WorkGroupPtrSet> get_owners_of_scan_worker(int worker_id);
+    bool get_owners_of_scan_worker(int worker_id, WorkGroupPtr running_wg);
 
-    int num_total_driver_dispatchers() const { return _driver_dispatcher_owner_manager->num_total_dispatchers(); }
+    int num_total_driver_workers() const { return _driver_worker_owner_manager->num_total_workers(); }
 
 private:
     // {create, alter,delete}_workgroup_unlocked is used to replay WorkGroupOps.
@@ -280,9 +280,9 @@ private:
     void alter_workgroup_unlocked(const WorkGroupPtr& wg);
     void delete_workgroup_unlocked(const WorkGroupPtr& wg);
 
-    // Label each dispatcher thread to a specific workgroup by cpu limit.
+    // Label each executor thread to a specific workgroup by cpu limit.
     // WorkGroupManager::_mutex is held when invoking this method.
-    void reassign_dispatcher_to_wgs();
+    void reassign_worker_to_wgs();
 
     std::shared_mutex _mutex;
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
@@ -293,8 +293,8 @@ private:
     std::atomic<size_t> _sum_cpu_limit = 0;
     std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
 
-    std::unique_ptr<DispatcherOwnerManager> _driver_dispatcher_owner_manager;
-    std::unique_ptr<DispatcherOwnerManager> _io_dispatcher_owner_manager;
+    std::unique_ptr<WorkerOwnerManager> _driver_worker_owner_manager;
+    std::unique_ptr<WorkerOwnerManager> _scan_worker_owner_manager;
 };
 
 class DefaultWorkGroupInitialization {

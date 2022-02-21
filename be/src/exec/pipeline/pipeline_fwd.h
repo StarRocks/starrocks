@@ -29,8 +29,8 @@ using OpFactories = std::vector<OpFactoryPtr>;
 class Operator;
 using OperatorPtr = std::shared_ptr<Operator>;
 using Operators = std::vector<OperatorPtr>;
-class DriverDispatcher;
-using DriverDispatcherPtr = std::shared_ptr<DriverDispatcher>;
-class GlobalDriverDispatcher;
+class DriverExecutor;
+using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
+class GlobalDriverExecutor;
 class ExecStateReporter;
 } // namespace starrocks::pipeline

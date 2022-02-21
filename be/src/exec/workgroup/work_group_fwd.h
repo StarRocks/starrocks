@@ -6,7 +6,7 @@ namespace starrocks::workgroup {
 
 class WorkGroup;
 class WorkGroupManager;
-class ScanWorker;
+class ScanExecutor;
 
 using WorkGroupPtr = std::shared_ptr<WorkGroup>;
 
