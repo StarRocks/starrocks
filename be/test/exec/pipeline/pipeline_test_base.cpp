@@ -6,7 +6,7 @@
 
 #include "column/nullable_column.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_driver_dispatcher.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "runtime/date_value.h"
 #include "runtime/timestamp_value.h"
 #include "storage/vectorized/chunk_helper.h"
@@ -123,7 +123,7 @@ void PipelineTestBase::_execute() {
         ASSERT_TRUE(driver->prepare(_fragment_ctx->runtime_state()).ok());
     }
     for (const auto& driver : _fragment_ctx->drivers()) {
-        _exec_env->driver_dispatcher()->dispatch(driver.get());
+        _exec_env->driver_executor()->submit(driver.get());
     }
 }
 

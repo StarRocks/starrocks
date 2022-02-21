@@ -34,7 +34,7 @@ Operators _gen_operators() {
 }
 
 void _set_driver_level(DriverRawPtr driver, int level) {
-    driver->set_dispatch_queue_index(level % QuerySharedDriverQueue::QUEUE_SIZE);
+    driver->set_driver_queue_index(level % QuerySharedDriverQueue::QUEUE_SIZE);
     while (driver->driver_acct().get_level() < level) {
         driver->driver_acct().increment_schedule_times();
     }
@@ -131,9 +131,9 @@ protected:
     workgroup::WorkGroupPtr _wg2 = nullptr;
     workgroup::WorkGroupPtr _wg3 = nullptr;
 
-    int _get_any_dispatcher_from_owner(const workgroup::WorkGroupPtr& wg) {
-        for (int i = 0; i < workgroup::WorkGroupManager::instance()->num_total_driver_dispatchers(); ++i) {
-            auto wgs = workgroup::WorkGroupManager::instance()->get_owners_of_driver_dispatcher(i);
+    int _get_any_worker_from_owner(const workgroup::WorkGroupPtr& wg) {
+        for (int i = 0; i < workgroup::WorkGroupManager::instance()->num_total_driver_workers(); ++i) {
+            auto wgs = workgroup::WorkGroupManager::instance()->get_owners_of_driver_worker(i);
             if (wgs != nullptr && wgs->find(wg) != wgs->end()) {
                 return i;
             }
@@ -145,8 +145,8 @@ protected:
 TEST_F(DriverQueueWithWorkGroupTest, test_basic) {
     DriverQueueWithWorkGroup queue;
 
-    int dispatcher_id = _get_any_dispatcher_from_owner(_wg3);
-    ASSERT_GE(dispatcher_id, 0);
+    int worker_id = _get_any_worker_from_owner(_wg3);
+    ASSERT_GE(worker_id, 0);
 
     // Prepare drivers for _wg2.
     int64_t sum_wg2_time_spent = 0;
@@ -203,7 +203,7 @@ TEST_F(DriverQueueWithWorkGroupTest, test_basic) {
 
     // Take drivers from queue.
     for (auto* out_driver : out_drivers) {
-        auto maybe_driver = queue.take(dispatcher_id);
+        auto maybe_driver = queue.take(worker_id);
         ASSERT_TRUE(maybe_driver.ok());
         ASSERT_EQ(out_driver, maybe_driver.value());
     }

@@ -66,8 +66,7 @@ public:
 
     Status buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) override;
     Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, bool& can_finish, size_t* num_read_chunks,
-                                                           int dispatcher_id,
-                                                           workgroup::WorkGroupPtr running_wg) override;
+                                                           int worker_id, workgroup::WorkGroupPtr running_wg) override;
 
 private:
     Status _get_tablet(const TInternalScanRange* scan_range);

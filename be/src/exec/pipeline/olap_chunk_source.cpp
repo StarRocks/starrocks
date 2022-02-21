@@ -318,7 +318,7 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
 }
 
 Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, bool& can_finish,
-                                                                        size_t* num_read_chunks, int dispatcher_id,
+                                                                        size_t* num_read_chunks, int worker_id,
                                                                         workgroup::WorkGroupPtr running_wg) {
     if (!_status.ok()) {
         return _status;
@@ -351,7 +351,7 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
         }
 
         if (time_spent >= config::pipeline_scan_task_yield_preempt_max_time_spent &&
-            workgroup::WorkGroupManager::instance()->should_yield_io_dispatcher(dispatcher_id, running_wg)) {
+            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id, running_wg)) {
             break;
         }
     }

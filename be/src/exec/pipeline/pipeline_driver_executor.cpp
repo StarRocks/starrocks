@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/pipeline/pipeline_driver_dispatcher.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -8,7 +8,7 @@
 
 namespace starrocks::pipeline {
 
-GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group)
+GlobalDriverExecutor::GlobalDriverExecutor(std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group)
         : _enable_resource_group(enable_resource_group),
           _driver_queue(enable_resource_group
                                 ? std::unique_ptr<DriverQueue>(std::make_unique<DriverQueueWithWorkGroup>())
@@ -17,29 +17,29 @@ GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> threa
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
           _exec_state_reporter(new ExecStateReporter()) {}
 
-GlobalDriverDispatcher::~GlobalDriverDispatcher() {
+GlobalDriverExecutor::~GlobalDriverExecutor() {
     _driver_queue->close();
 }
 
-void GlobalDriverDispatcher::initialize(int num_threads) {
+void GlobalDriverExecutor::initialize(int num_threads) {
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->run(); });
+        _thread_pool->submit_func([this]() { this->worker_thread(); });
     }
 }
 
-void GlobalDriverDispatcher::change_num_threads(int32_t num_threads) {
+void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
     int32_t old_num_threads = 0;
     if (!_num_threads_setter.adjust_expect_num(num_threads, &old_num_threads)) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->run(); });
+        _thread_pool->submit_func([this]() { this->worker_thread(); });
     }
 }
 
-void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
+void GlobalDriverExecutor::finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
     driver->finalize(runtime_state, state);
     if (driver->query_ctx()->is_finished()) {
@@ -49,14 +49,14 @@ void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* 
     }
 }
 
-void GlobalDriverDispatcher::run() {
-    const int dispatcher_id = _next_id++;
+void GlobalDriverExecutor::worker_thread() {
+    const int worker_id = _next_id++;
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
 
-        auto maybe_driver = this->_driver_queue->take(dispatcher_id);
+        auto maybe_driver = this->_driver_queue->take(worker_id);
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
@@ -90,7 +90,7 @@ void GlobalDriverDispatcher::run() {
 
             // query context has ready drivers to run, so extend its lifetime.
             query_ctx->extend_lifetime();
-            auto status = driver->process(runtime_state, dispatcher_id);
+            auto status = driver->process(runtime_state, worker_id);
             this->_driver_queue->update_statistics(driver);
 
             if (!status.ok()) {
@@ -111,7 +111,7 @@ void GlobalDriverDispatcher::run() {
             switch (driver_state) {
             case READY:
             case RUNNING: {
-                this->_driver_queue->put_back_from_dispatcher(driver);
+                this->_driver_queue->put_back_from_executor(driver);
                 break;
             }
             case FINISH:
@@ -134,13 +134,13 @@ void GlobalDriverDispatcher::run() {
     }
 }
 
-void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
+void GlobalDriverExecutor::submit(DriverRawPtr driver) {
     if (driver->is_precondition_block()) {
         driver->set_driver_state(DriverState::PRECONDITION_BLOCK);
         driver->mark_precondition_not_ready();
         this->_blocked_driver_poller->add_blocked_driver(driver);
     } else {
-        driver->dispatch_operators();
+        driver->submit_operators();
 
         // Try to add the driver to poller first.
         if (!driver->source_operator()->is_finished() && !driver->source_operator()->has_output()) {
@@ -152,7 +152,7 @@ void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
     }
 }
 
-void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
+void GlobalDriverExecutor::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
     update_profile_by_mode(fragment_ctx, done);
     auto params = ExecStateReporter::create_report_exec_status_params(fragment_ctx, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
@@ -177,7 +177,7 @@ void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, co
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
-void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ctx, bool done) {
+void GlobalDriverExecutor::update_profile_by_mode(FragmentContext* fragment_ctx, bool done) {
     if (!done) {
         return;
     }
@@ -227,8 +227,8 @@ void GlobalDriverDispatcher::update_profile_by_mode(FragmentContext* fragment_ct
     }
 }
 
-void GlobalDriverDispatcher::remove_non_core_metrics(FragmentContext* fragment_ctx,
-                                                     std::vector<RuntimeProfile*>& driver_profiles) {
+void GlobalDriverExecutor::remove_non_core_metrics(FragmentContext* fragment_ctx,
+                                                   std::vector<RuntimeProfile*>& driver_profiles) {
     if (fragment_ctx->profile_mode() > TPipelineProfileMode::CORE_METRICS) {
         return;
     }

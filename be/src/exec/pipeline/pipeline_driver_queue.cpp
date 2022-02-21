@@ -15,7 +15,7 @@ void QuerySharedDriverQueue::close() {
 
 void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     int level = driver->driver_acct().get_level() % QUEUE_SIZE;
-    driver->set_dispatch_queue_index(level);
+    driver->set_driver_queue_index(level);
     {
         std::lock_guard<std::mutex> lock(_global_mutex);
         _queues[level].queue.emplace(driver);
@@ -27,7 +27,7 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
     std::vector<int> levels(drivers.size());
     for (int i = 0; i < drivers.size(); i++) {
         levels[i] = drivers[i]->driver_acct().get_level() % QUEUE_SIZE;
-        drivers[i]->set_dispatch_queue_index(levels[i]);
+        drivers[i]->set_driver_queue_index(levels[i]);
     }
 
     std::lock_guard<std::mutex> lock(_global_mutex);
@@ -37,17 +37,17 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
     }
 }
 
-void QuerySharedDriverQueue::put_back_from_dispatcher(const DriverRawPtr driver) {
-    // QuerySharedDriverQueue::put_back_from_dispatcher is identical to put_back.
+void QuerySharedDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
+    // QuerySharedDriverQueue::put_back_from_executor is identical to put_back.
     put_back(driver);
 }
 
-void QuerySharedDriverQueue::put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) {
-    // QuerySharedDriverQueue::put_back_from_dispatcher is identical to put_back.
+void QuerySharedDriverQueue::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
+    // QuerySharedDriverQueue::put_back_from_executor is identical to put_back.
     put_back(drivers);
 }
 
-StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(int dispatcher_id) {
+StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(int worker_id) {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
@@ -95,7 +95,7 @@ size_t QuerySharedDriverQueue::size() {
 }
 
 void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
-    _queues[driver->get_dispatch_queue_index()].update_accu_time(driver);
+    _queues[driver->get_driver_queue_index()].update_accu_time(driver);
 }
 
 void QuerySharedDriverQueueWithoutLock::put_back(const DriverRawPtr driver) {
@@ -108,17 +108,17 @@ void QuerySharedDriverQueueWithoutLock::put_back(const std::vector<DriverRawPtr>
     }
 }
 
-void QuerySharedDriverQueueWithoutLock::put_back_from_dispatcher(const DriverRawPtr driver) {
-    // QuerySharedDriverQueueWithoutLock::put_back_from_dispatcher is identical to put_back.
+void QuerySharedDriverQueueWithoutLock::put_back_from_executor(const DriverRawPtr driver) {
+    // QuerySharedDriverQueueWithoutLock::put_back_from_executor is identical to put_back.
     put_back(driver);
 }
 
-void QuerySharedDriverQueueWithoutLock::put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) {
-    // QuerySharedDriverQueueWithoutLock::put_back_from_dispatcher is identical to put_back.
+void QuerySharedDriverQueueWithoutLock::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
+    // QuerySharedDriverQueueWithoutLock::put_back_from_executor is identical to put_back.
     put_back(drivers);
 }
 
-StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take(int dispatcher_id) {
+StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take(int worker_id) {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
@@ -148,12 +148,12 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take(int dispatcher_id
 }
 
 void QuerySharedDriverQueueWithoutLock::update_statistics(const DriverRawPtr driver) {
-    _queues[driver->get_dispatch_queue_index()].update_accu_time(driver);
+    _queues[driver->get_driver_queue_index()].update_accu_time(driver);
 }
 
 void QuerySharedDriverQueueWithoutLock::_put_back(const DriverRawPtr driver) {
     int level = driver->driver_acct().get_level() % QUEUE_SIZE;
-    driver->set_dispatch_queue_index(level);
+    driver->set_driver_queue_index(level);
     _queues[level].queue.emplace(driver);
     ++_size;
 }
@@ -177,12 +177,12 @@ void DriverQueueWithWorkGroup::put_back(const std::vector<DriverRawPtr>& drivers
     }
 }
 
-void DriverQueueWithWorkGroup::put_back_from_dispatcher(const DriverRawPtr driver) {
+void DriverQueueWithWorkGroup::put_back_from_executor(const DriverRawPtr driver) {
     std::lock_guard<std::mutex> lock(_global_mutex);
     _put_back<true>(driver);
 }
 
-void DriverQueueWithWorkGroup::put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) {
+void DriverQueueWithWorkGroup::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
     for (const auto driver : drivers) {
@@ -190,7 +190,7 @@ void DriverQueueWithWorkGroup::put_back_from_dispatcher(const std::vector<Driver
     }
 }
 
-StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(int dispatcher_id) {
+StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(int worker_id) {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
     if (_is_closed) {
@@ -205,7 +205,7 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(int dispatcher_id) {
     }
 
     // Try to take driver from any owner workgroup first.
-    auto wg = _find_min_owner_wg(dispatcher_id);
+    auto wg = _find_min_owner_wg(worker_id);
     if (wg == nullptr) {
         // All the owner workgroups don't have ready drivers, so select the other workgroup.
         wg = _find_min_wg();
@@ -219,7 +219,7 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(int dispatcher_id) {
         _ready_wgs.erase(wg);
     }
 
-    return wg->driver_queue()->take(dispatcher_id);
+    return wg->driver_queue()->take(worker_id);
 }
 
 void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
@@ -243,14 +243,14 @@ size_t DriverQueueWithWorkGroup::size() {
     return size;
 }
 
-template <bool from_dispatcher>
+template <bool from_executor>
 void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
     auto* wg = driver->workgroup();
     if (_ready_wgs.find(wg) == _ready_wgs.end()) {
         _sum_cpu_limit += wg->cpu_limit();
-        // The runtime needn't be adjusted for the workgroup put back from dispatcher,
-        // because it has updated before dispatcher put the workgroup back by update_statistics().
-        if constexpr (!from_dispatcher) {
+        // The runtime needn't be adjusted for the workgroup put back from executor thread,
+        // because it has updated before executor thread put the workgroup back by update_statistics().
+        if constexpr (!from_executor) {
             auto* min_wg = _find_min_wg();
             if (min_wg != nullptr) {
                 int64_t origin_real_runtime_ns = wg->real_runtime_ns();
@@ -273,11 +273,11 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
     _cv.notify_one();
 }
 
-workgroup::WorkGroup* DriverQueueWithWorkGroup::_find_min_owner_wg(int dispatcher_id) {
+workgroup::WorkGroup* DriverQueueWithWorkGroup::_find_min_owner_wg(int worker_id) {
     workgroup::WorkGroup* min_wg = nullptr;
     int64_t min_vruntime_ns = 0;
 
-    auto owner_wgs = workgroup::WorkGroupManager::instance()->get_owners_of_driver_dispatcher(dispatcher_id);
+    auto owner_wgs = workgroup::WorkGroupManager::instance()->get_owners_of_driver_worker(worker_id);
     if (owner_wgs != nullptr) {
         for (const auto& wg : *owner_wgs) {
             if (_ready_wgs.find(wg.get()) != _ready_wgs.end() &&
@@ -305,7 +305,7 @@ workgroup::WorkGroup* DriverQueueWithWorkGroup::_find_min_wg() {
 }
 
 int64_t DriverQueueWithWorkGroup::_ideal_runtime_ns(workgroup::WorkGroup* wg) {
-    return DISPATCH_PERIOD_PER_WG_NS * _ready_wgs.size() * wg->cpu_limit() / _sum_cpu_limit;
+    return SCHEDULE_PERIOD_PER_WG_NS * _ready_wgs.size() * wg->cpu_limit() / _sum_cpu_limit;
 }
 
 } // namespace starrocks::pipeline
