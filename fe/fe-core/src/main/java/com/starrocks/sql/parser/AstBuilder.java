@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.parser;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -936,16 +937,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 visitIfPresent(context.over().windowFrame(), AnalyticWindow.class).orElse(null));
     }
 
+    public static final ImmutableSet<String> WindowFunctionSet = ImmutableSet.of(
+            "row_number", "rank", "dense_rank", "lead", "lag", "first_value", "last_value");
+
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
-        if (context.name.getText().equalsIgnoreCase("row_number")
-                || context.name.getText().equalsIgnoreCase("rank")
-                || context.name.getText().equalsIgnoreCase("dense_rank")
-                || context.name.getText().equalsIgnoreCase("lead")
-                || context.name.getText().equalsIgnoreCase("lag")
-                || context.name.getText().equalsIgnoreCase("first_value")
-                || context.name.getText().equalsIgnoreCase("last_value")) {
-            return new FunctionCallExpr(context.name.getText().toUpperCase(),
+        if (WindowFunctionSet.contains(context.name.getText().toLowerCase())) {
+            return new FunctionCallExpr(context.name.getText().toLowerCase(),
                     new FunctionParams(false, visit(context.expression(), Expr.class)));
         }
         throw new ParsingException("Unknown window function " + context.name.getText());
@@ -1165,11 +1163,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitJsonPath(StarRocksParser.JsonPathContext context) {
-        Expr jsonExpr = (Expr) visit(context.primaryExpression());
-        StringLiteral stringLiteral = (StringLiteral) visit(context.jsonOperator().string());
+    public ParseNode visitArrowExpression(StarRocksParser.ArrowExpressionContext context) {
+        Expr expr = (Expr) visit(context.primaryExpression());
+        StringLiteral stringLiteral = (StringLiteral) visit(context.string());
 
-        return new ArrowExpr(jsonExpr, stringLiteral);
+        return new ArrowExpr(expr, stringLiteral);
     }
 
     @Override

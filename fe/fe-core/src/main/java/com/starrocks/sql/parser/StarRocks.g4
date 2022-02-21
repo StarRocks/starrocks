@@ -203,9 +203,8 @@ primaryExpression
     | EXISTS '(' query ')'                                                                #exists
     | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END              #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
-
     | columnReference                                                                     #columnRef
-    | primaryExpression jsonOperator                                                      #jsonPath
+    | primaryExpression ARROW string                                                      #arrowExpression
     | EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | '(' expression ')'                                                                  #parenthesizedExpression
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
@@ -225,10 +224,6 @@ variable
 columnReference
     : identifier
     | qualifiedName
-    ;
-
-jsonOperator
-    : ARROW string
     ;
 
 informationFunctionExpression
