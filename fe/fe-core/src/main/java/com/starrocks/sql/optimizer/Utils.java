@@ -384,7 +384,6 @@ public class Utils {
                 IcebergTable table = (IcebergTable) scanOperator.getTable();
                 try {
                     List<ColumnStatistic> columnStatisticList = IcebergTableStatisticCalculator.getColumnStatistics(
-                            // TODO: pass predicate to get column statistics
                             new ArrayList<>(), table.getIcebergTable(),
                             scanOperator.getColRefToColumnMetaMap());
                     return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);

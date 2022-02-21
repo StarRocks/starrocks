@@ -84,13 +84,7 @@ public class IcebergTableStatisticCalculator {
                 }
 
                 int fieldId = idColumn.getKey();
-                ColumnStatistic.Builder columnBuilder = ColumnStatistic.builder();
-                if (!generateColumnStatistic(icebergFileStats, columnBuilder, fieldId, recordCount, columnList)) {
-                    columnStatistics.add(ColumnStatistic.unknown());
-                    break;
-                } else {
-                    columnStatistics.add(columnBuilder.build());
-                }
+                columnStatistics.add(generateColumnStatistic(icebergFileStats, fieldId, recordCount, columnList));
             }
         }
         return columnStatistics;
@@ -121,9 +115,8 @@ public class IcebergTableStatisticCalculator {
             }
 
             int fieldId = idColumn.getKey();
-            ColumnStatistic.Builder columnBuilder = ColumnStatistic.builder();
-            generateColumnStatistic(icebergFileStats, columnBuilder, fieldId, recordCount, columnList);
-            statisticsBuilder.addColumnStatistic(columnList.get(0), columnBuilder.build());
+            ColumnStatistic columnStatistic = generateColumnStatistic(icebergFileStats, fieldId, recordCount, columnList);
+            statisticsBuilder.addColumnStatistic(columnList.get(0), columnStatistic);
         }
         statisticsBuilder.setOutputRowCount(recordCount);
         LOG.debug("Finish make iceberg table statistics!");
@@ -257,11 +250,11 @@ public class IcebergTableStatisticCalculator {
         return icebergFileStats;
     }
 
-    private boolean generateColumnStatistic(IcebergFileStats icebergFileStats,
-                                            ColumnStatistic.Builder columnBuilder,
+    private ColumnStatistic generateColumnStatistic(IcebergFileStats icebergFileStats,
                                             int fieldId,
                                             double recordCount,
                                             List<ColumnRefOperator> columnList) {
+        ColumnStatistic.Builder columnBuilder = ColumnStatistic.builder();
         boolean isEstimated = true;
         // nulls fraction
         Long nullCount = icebergFileStats.getNullCounts().get(fieldId);
@@ -297,6 +290,10 @@ public class IcebergTableStatisticCalculator {
         // TODO: get num distinct value count from file stats
         columnBuilder.setDistinctValuesCount(1);
 
-        return isEstimated;
+        if (isEstimated) {
+            return columnBuilder.build();
+        } else {
+            return ColumnStatistic.unknown();
+        }
     }
 }
