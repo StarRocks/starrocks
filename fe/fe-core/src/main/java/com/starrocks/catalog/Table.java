@@ -59,6 +59,7 @@ public class Table extends MetaObject implements Writable {
         ELASTICSEARCH,
         HIVE,
         ICEBERG,
+        HUDI,
         ODBC
     }
 
@@ -192,6 +193,8 @@ public class Table extends MetaObject implements Writable {
             table = new EsTable();
         } else if (type == TableType.HIVE) {
             table = new HiveTable();
+        } else if (type == TableType.HUDI) {
+            table = new HudiTable();
         } else if (type == TableType.ODBC) {
             table = new OdbcTable();
         } else if (type == TableType.OLAP_EXTERNAL) {

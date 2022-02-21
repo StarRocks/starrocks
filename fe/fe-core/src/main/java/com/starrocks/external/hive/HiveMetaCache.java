@@ -118,7 +118,11 @@ public class HiveMetaCache {
     }
 
     private HivePartition loadPartition(HivePartitionKey key) throws DdlException {
-        return client.getPartition(key.getDatabaseName(), key.getTableName(), key.getPartitionValues());
+        if (key.isHudiTable()) {
+            return client.getHudiPartition(key.getDatabaseName(), key.getTableName(), key.getPartitionValues());
+        } else {
+            return client.getPartition(key.getDatabaseName(), key.getTableName(), key.getPartitionValues());
+        }
     }
 
     private HiveTableStats loadTableStats(HiveTableKey key) throws DdlException {
@@ -170,6 +174,15 @@ public class HiveMetaCache {
         List<String> partitionValues = Utils.getPartitionValues(partitionKey);
         try {
             return partitionsCache.get(new HivePartitionKey(dbName, tableName, partitionValues));
+        } catch (ExecutionException e) {
+            throw new DdlException("get partition detail failed: " + e.getMessage());
+        }
+    }
+
+    public HivePartition getHudiPartition(String dbName, String tableName, PartitionKey partitionKey) throws DdlException {
+        List<String> partitionValues = Utils.getPartitionValues(partitionKey);
+        try {
+            return partitionsCache.get(new HivePartitionKey(dbName, tableName, partitionValues, true));
         } catch (ExecutionException e) {
             throw new DdlException("get partition detail failed: " + e.getMessage());
         }

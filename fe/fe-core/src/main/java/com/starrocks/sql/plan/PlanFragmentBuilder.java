@@ -42,6 +42,7 @@ import com.starrocks.planner.ExceptNode;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IntersectNode;
 import com.starrocks.planner.MetaScanNode;
@@ -86,6 +87,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
@@ -606,6 +608,91 @@ public class PlanFragmentBuilder {
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalHudiScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalHudiScanOperator node = (PhysicalHudiScanOperator) optExpression.getOp();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+            }
+
+            HudiScanNode hudiScanNode =
+                    new HudiScanNode(context.getNextNodeId(), tupleDescriptor, "HudiScanNode");
+            hudiScanNode.computeStatistics(optExpression.getStatistics());
+            try {
+                hudiScanNode.setSelectedPartitionIds(node.getSelectedPartitionIds());
+                hudiScanNode.setIdToPartitionKey(node.getIdToPartitionKey());
+                hudiScanNode.getScanRangeLocations(context.getDescTbl());
+                // set predicate
+                List<ScalarOperator> noEvalPartitionConjuncts = node.getNoEvalPartitionConjuncts();
+                List<ScalarOperator> nonPartitionConjuncts = node.getNonPartitionConjuncts();
+                List<ScalarOperator> minMaxConjuncts = node.getMinMaxConjuncts();
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+
+                for (ScalarOperator noEvalPartitionConjunct : noEvalPartitionConjuncts) {
+                    hudiScanNode.getNoEvalPartitionConjuncts().
+                            add(ScalarOperatorToExpr.buildExecExpression(noEvalPartitionConjunct, formatterContext));
+                }
+                for (ScalarOperator nonPartitionConjunct : nonPartitionConjuncts) {
+                    hudiScanNode.getNonPartitionConjuncts().
+                            add(ScalarOperatorToExpr.buildExecExpression(nonPartitionConjunct, formatterContext));
+                }
+
+                /*
+                 * populates 'minMaxTuple' with slots for statistics values,
+                 * and populates 'minMaxConjuncts' with conjuncts pointing into the 'minMaxTuple'
+                 */
+                TupleDescriptor minMaxTuple = context.getDescTbl().createTupleDescriptor();
+                for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
+                    for (ColumnRefOperator columnRefOperator : Utils.extractColumnRef(minMaxConjunct)) {
+                        SlotDescriptor slotDescriptor =
+                                context.getDescTbl()
+                                        .addSlotDescriptor(minMaxTuple, new SlotId(columnRefOperator.getId()));
+                        Column column = node.getMinMaxColumnRefMap().get(columnRefOperator);
+                        slotDescriptor.setColumn(column);
+                        slotDescriptor.setIsNullable(column.isAllowNull());
+                        slotDescriptor.setIsMaterialized(true);
+                        context.getColRefToExpr()
+                                .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
+                    }
+                }
+                minMaxTuple.computeMemLayout();
+                hudiScanNode.setMinMaxTuple(minMaxTuple);
+                ScalarOperatorToExpr.FormatterContext minMaxFormatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
+                    hudiScanNode.getMinMaxConjuncts().
+                            add(ScalarOperatorToExpr.buildExecExpression(minMaxConjunct, minMaxFormatterContext));
+                }
+            } catch (Exception e) {
+                LOG.warn("Hudi scan node get scan range locations failed : " + e);
+                e.printStackTrace();
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            hudiScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(hudiScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), hudiScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }

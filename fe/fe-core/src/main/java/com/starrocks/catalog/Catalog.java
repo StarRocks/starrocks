@@ -3100,6 +3100,9 @@ public class Catalog {
         } else if (engineName.equalsIgnoreCase("iceberg")) {
             createIcebergTable(db, stmt);
             return;
+        } else if (engineName.equalsIgnoreCase("hudi")) {
+            createHudiTable(db, stmt);
+            return;
         } else {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
         }
@@ -4341,6 +4344,42 @@ public class Catalog {
         }
 
         LOG.info("successfully create table[{}-{}]", tableName, tableId);
+    }
+
+    private void createHudiTable(Database db, CreateTableStmt stmt) throws DdlException {
+        String tableName = stmt.getTableName();
+        List<Column> columns = stmt.getColumns();
+        long tableId = getNextId();
+        HudiTable hudiTable = new HudiTable(tableId, tableName, columns, stmt.getProperties());
+        // partition key, commented for show partition key
+        String partitionCmt = "PARTITION BY (" + String.join(", ", hudiTable.getPartitionColumnNames()) + ")";
+        if (Strings.isNullOrEmpty(stmt.getComment())) {
+            hudiTable.setComment(partitionCmt);
+        } else {
+            hudiTable.setComment(stmt.getComment());
+        }
+
+        // check database exists again, because database can be dropped when creating table
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire catalog lock. Try again");
+        }
+        try {
+            if (getDb(db.getFullName()) == null) {
+                throw new DdlException("Database has been dropped when creating table");
+            }
+            if (!db.createTableWithLock(hudiTable, false)) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("Create table[{}] which already exists", tableName);
+                    return;
+                }
+            }
+        } finally {
+            unlock();
+        }
+
+        LOG.info("Successfully create table[{}-{}]", tableName, tableId);
     }
 
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
