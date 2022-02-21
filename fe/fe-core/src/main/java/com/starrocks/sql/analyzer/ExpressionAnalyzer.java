@@ -514,6 +514,17 @@ public class ExpressionAnalyzer {
                 throw unsupportedException("Table function cannot be used in expression");
             }
 
+            // check params type, don't check var args type
+            for (int i = 0; i < fn.getNumArgs(); i++) {
+                if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
+                        !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
+                    throw new SemanticException("No matching function with signature: %s(%s).",
+                            node.getFnName().getFunction(),
+                            node.getParams().isStar() ? "*" : Joiner.on(", ")
+                                    .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                }
+            }
+
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
