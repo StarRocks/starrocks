@@ -20,9 +20,6 @@ CrossJoinNode::CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const Des
 
 Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
-    if (tnode.__isset.need_create_tuple_columns) {
-        _need_create_tuple_columns = tnode.need_create_tuple_columns;
-    }
     return Status::OK();
 }
 
@@ -88,31 +85,6 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_probe(ChunkPtr& chunk, siz
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_probe(dest_col, src_col, build_index, row_count);
     }
-
-    for (int tuple_id : _output_probe_tuple_ids) {
-        if (_probe_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr& src_col = _probe_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = ColumnHelper::as_raw_column<BooleanColumn>(src_col)->get_data();
-            ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = ColumnHelper::as_raw_column<BooleanColumn>(dest_col)->get_data();
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[probe_index]);
-            }
-        }
-    }
-
-    for (int tuple_id : _output_build_tuple_ids) {
-        if (_build_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr& src_col = _build_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = ColumnHelper::as_raw_column<BooleanColumn>(src_col)->get_data();
-            ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = ColumnHelper::as_raw_column<BooleanColumn>(dest_col)->get_data();
-
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[build_index + i]);
-            }
-        }
-    }
 }
 
 void CrossJoinNode::_copy_joined_rows_with_index_base_build(ChunkPtr& chunk, size_t row_count, size_t probe_index,
@@ -129,31 +101,6 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_build(ChunkPtr& chunk, siz
         ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_build(dest_col, src_col, build_index, row_count);
-    }
-
-    for (int tuple_id : _output_probe_tuple_ids) {
-        if (_probe_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr& src_col = _probe_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = ColumnHelper::as_raw_column<BooleanColumn>(src_col)->get_data();
-            ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = ColumnHelper::as_raw_column<BooleanColumn>(dest_col)->get_data();
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[probe_index + i]);
-            }
-        }
-    }
-
-    for (int tuple_id : _output_build_tuple_ids) {
-        if (_build_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr& src_col = _build_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = ColumnHelper::as_raw_column<BooleanColumn>(src_col)->get_data();
-            ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
-            auto& dest_data = ColumnHelper::as_raw_column<BooleanColumn>(dest_col)->get_data();
-
-            for (size_t i = 0; i < row_count; i++) {
-                dest_data.emplace_back(src_data[build_index]);
-            }
-        }
     }
 }
 
@@ -448,21 +395,11 @@ void CrossJoinNode::_init_row_desc() {
             _col_types.emplace_back(slot);
             _probe_column_count++;
         }
-        if (_need_create_tuple_columns) {
-            if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-                _output_probe_tuple_ids.emplace_back(tuple_desc->id());
-            }
-        }
     }
     for (auto& tuple_desc : child(1)->row_desc().tuple_descriptors()) {
         for (auto& slot : tuple_desc->slots()) {
             _col_types.emplace_back(slot);
             _build_column_count++;
-        }
-        if (_need_create_tuple_columns) {
-            if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-                _output_build_tuple_ids.emplace_back(tuple_desc->id());
-            }
         }
     }
 }
@@ -523,19 +460,6 @@ void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         ColumnPtr new_col = ColumnHelper::create_column(slot->type(), src_col->is_nullable());
         new_chunk->append_column(std::move(new_col), slot->id());
-    }
-
-    for (int tuple_id : _output_probe_tuple_ids) {
-        if (_probe_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr dest_col = BooleanColumn::create();
-            new_chunk->append_tuple_column(dest_col, tuple_id);
-        }
-    }
-    for (int tuple_id : _output_build_tuple_ids) {
-        if (_build_chunk->is_tuple_exist(tuple_id)) {
-            ColumnPtr dest_col = BooleanColumn::create();
-            new_chunk->append_tuple_column(dest_col, tuple_id);
-        }
     }
 
     *chunk = std::move(new_chunk);

@@ -103,8 +103,6 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
 }
 
 void HashJoiner::_init_hash_table_param(HashTableParam* param) {
-    // Pipeline query engine always needn't create tuple columns
-    param->need_create_tuple_columns = false;
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
@@ -113,7 +111,6 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->search_ht_timer = _search_ht_timer;
     param->output_build_column_timer = _output_build_column_timer;
     param->output_probe_column_timer = _output_probe_column_timer;
-    param->output_tuple_column_timer = _output_tuple_column_timer;
 
     param->output_slots = _output_slots;
     std::set<SlotId> predicate_slots;

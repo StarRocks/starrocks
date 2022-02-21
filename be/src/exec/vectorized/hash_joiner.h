@@ -33,9 +33,7 @@ using HashJoinerPtr = std::shared_ptr<HashJoiner>;
 //   indicates that building ht should be finalized.
 // 2.PROBE: building ht is done, and probe operations can be conducted as chunks is pulled one by one from left child.
 //   EOS from left child indicates that PROBE phase is done.
-// 3.POST_PROBE: for RIGHT ANTI-JOIN, RIGHT SEMI-JOIN, FULL OUTER-JOIN, probe-missing/probe-hitting tuples should be
-//   processed.
-// 4.DONE: all input streams have been processed.
+// 3.DONE: all input streams have been processed.
 //
 enum HashJoinPhase {
     BUILD = 0,

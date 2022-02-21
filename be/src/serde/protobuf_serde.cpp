@@ -24,19 +24,12 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk) 
     if (!res.ok()) return res.status();
 
     const auto& slot_id_to_index = chunk.get_slot_id_to_index_map();
-    const auto& tuple_id_to_index = chunk.get_tuple_id_to_index_map();
     const auto& columns = chunk.columns();
 
     res->mutable_slot_id_map()->Reserve(static_cast<int>(slot_id_to_index.size()) * 2);
     for (const auto& kv : slot_id_to_index) {
         res->mutable_slot_id_map()->Add(kv.first);
         res->mutable_slot_id_map()->Add(static_cast<int>(kv.second));
-    }
-
-    res->mutable_tuple_id_map()->Reserve(static_cast<int>(tuple_id_to_index.size()) * 2);
-    for (const auto& kv : tuple_id_to_index) {
-        res->mutable_tuple_id_map()->Add(kv.first);
-        res->mutable_tuple_id_map()->Add(static_cast<int>(kv.second));
     }
 
     res->mutable_is_nulls()->Reserve(static_cast<int>(columns.size()));
@@ -49,7 +42,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk) 
         res->mutable_is_consts()->Add(column->is_constant());
     }
 
-    DCHECK_EQ(columns.size(), tuple_id_to_index.size() + slot_id_to_index.size());
+    DCHECK_EQ(columns.size(), slot_id_to_index.size());
     return res;
 }
 
@@ -124,7 +117,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
     cur += 4;
 
     std::vector<vectorized::ColumnPtr> columns;
-    columns.resize(_meta.slot_id_to_index.size() + _meta.tuple_id_to_index.size());
+    columns.resize(_meta.slot_id_to_index.size());
     for (size_t i = 0, sz = _meta.is_nulls.size(); i < sz; ++i) {
         columns[i] = ColumnHelper::create_column(_meta.types[i], _meta.is_nulls[i], _meta.is_consts[i], rows);
     }
@@ -139,7 +132,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
         }
     }
     if (deserialized_bytes != nullptr) *deserialized_bytes = cur - reinterpret_cast<const uint8_t*>(buff.data());
-    return Chunk(std::move(columns), _meta.slot_id_to_index, _meta.tuple_id_to_index);
+    return Chunk(std::move(columns), _meta.slot_id_to_index);
 }
 
 StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_desc, const ChunkPB& chunk_pb) {

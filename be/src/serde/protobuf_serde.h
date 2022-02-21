@@ -26,14 +26,12 @@ public:
 
     // Like `serialize()` but leave the following fields of ChunkPB unfilled:
     //  - slot_id_map()
-    //  - tuple_id_map()
     //  - is_nulls()
     //  - is_consts()
     static StatusOr<ChunkPB> serialize_without_meta(const vectorized::Chunk& chunk);
 
     // REQUIRE: the following fields of |chunk_pb| must be non-empty:
     //  - slot_id_map()
-    //  - tuple_id_map()
     //  - is_nulls()
     //  - is_consts()
     static StatusOr<vectorized::Chunk> deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb);
@@ -44,7 +42,6 @@ struct ProtobufChunkMeta {
     std::vector<bool> is_nulls;
     std::vector<bool> is_consts;
     vectorized::Chunk::SlotHashMap slot_id_to_index;
-    vectorized::Chunk::TupleHashMap tuple_id_to_index;
 };
 
 class ProtobufChunkDeserializer {

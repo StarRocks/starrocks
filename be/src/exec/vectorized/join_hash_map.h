@@ -99,7 +99,6 @@ struct JoinHashTableItems {
     size_t build_column_count = 0;
     size_t probe_column_count = 0;
     bool with_other_conjunct = false;
-    bool need_create_tuple_columns = true;
     bool left_to_nullable = false;
     bool right_to_nullable = false;
 
@@ -137,10 +136,6 @@ struct HashTableProbeState {
     // 0: normal
     // 1: all match one
     JoinMatchFlag match_flag = JoinMatchFlag::NORMAL; // all match one
-
-    // true: generated chunk has null build tuple.
-    // e.g. left join and there is not matched row in build table
-    bool has_null_build_tuple = false;
 
     bool has_remain = false;
     // When one-to-many, one probe may not be able to probe all the data,
@@ -192,7 +187,6 @@ struct HashTableProbeState {
 
 struct HashTableParam {
     bool with_other_conjunct = false;
-    bool need_create_tuple_columns = true;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
@@ -448,11 +442,9 @@ public:
 
 private:
     Status _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
-    void _probe_tuple_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
     Status _probe_null_output(ChunkPtr* chunk, size_t count);
 
     Status _build_output(ChunkPtr* chunk);
-    void _build_tuple_output(ChunkPtr* chunk);
     Status _build_default_output(ChunkPtr* chunk, size_t count);
 
     void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);

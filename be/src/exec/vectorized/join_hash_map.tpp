@@ -417,12 +417,6 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
             SCOPED_TIMER(_table_items->output_build_column_timer);
             RETURN_IF_ERROR(_build_output(chunk));
         }
-        {
-            SCOPED_TIMER(_probe_state->output_tuple_column_timer);
-            if (_table_items->need_create_tuple_columns) {
-                _build_tuple_output(chunk);
-            }
-        }
     } else if (_table_items->join_type == TJoinOp::LEFT_SEMI_JOIN ||
                _table_items->join_type == TJoinOp::LEFT_ANTI_JOIN ||
                _table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
@@ -442,12 +436,6 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
                 RETURN_IF_ERROR(_build_output(chunk));
             }
         }
-        {
-            SCOPED_TIMER(_probe_state->output_tuple_column_timer);
-            if (_table_items->need_create_tuple_columns) {
-                _probe_tuple_output(probe_chunk, chunk);
-            }
-        }
     } else {
         {
             SCOPED_TIMER(_probe_state->output_probe_column_timer);
@@ -456,13 +444,6 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
         {
             SCOPED_TIMER(_table_items->output_build_column_timer);
             RETURN_IF_ERROR(_build_output(chunk));
-        }
-        {
-            SCOPED_TIMER(_probe_state->output_tuple_column_timer);
-            if (_table_items->need_create_tuple_columns) {
-                _probe_tuple_output(probe_chunk, chunk);
-                _build_tuple_output(chunk);
-            }
         }
     }
 
@@ -482,22 +463,10 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe_remain(RuntimeState* state, 
         // right anti/semi join without other conjunct output default value of probe-columns as placeholder.
         RETURN_IF_ERROR(_probe_null_output(chunk, _probe_state->count));
         RETURN_IF_ERROR(_build_output(chunk));
-
-        if (_table_items->need_create_tuple_columns) {
-            _build_tuple_output(chunk);
-        }
     } else {
         // RIGHT_OUTER_JOIN || FULL_OUTER_JOIN
         RETURN_IF_ERROR(_probe_null_output(chunk, _probe_state->count));
         RETURN_IF_ERROR(_build_output(chunk));
-
-        if (_table_items->need_create_tuple_columns) {
-            for (int tuple_id : _table_items->output_probe_tuple_ids) {
-                ColumnPtr column = BooleanColumn::create(_probe_state->count, 0);
-                (*chunk)->append_tuple_column(column, tuple_id);
-            }
-            _build_tuple_output(chunk);
-        }
     }
     return Status::OK();
 }
@@ -524,39 +493,6 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chun
     }
 
     return Status::OK();
-}
-
-template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_tuple_output(ChunkPtr* probe_chunk, ChunkPtr* chunk) {
-    bool to_nullable = _table_items->left_to_nullable;
-
-    for (int tuple_id : _table_items->output_probe_tuple_ids) {
-        //TODO: only calc one time
-        if ((*probe_chunk)->is_tuple_exist(tuple_id)) {
-            ColumnPtr& src_column = (*probe_chunk)->get_tuple_column_by_id(tuple_id);
-            if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
-                (*chunk)->append_tuple_column(src_column, tuple_id);
-            } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
-                src_column->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
-                (*chunk)->append_tuple_column(src_column, tuple_id);
-            } else {
-                ColumnPtr dest_column = BooleanColumn::create(_probe_state->count);
-                auto& src_data = ColumnHelper::as_raw_column<BooleanColumn>(src_column)->get_data();
-                auto& dest_data = ColumnHelper::as_raw_column<BooleanColumn>(dest_column)->get_data();
-
-                size_t end = _probe_state->count;
-                for (size_t i = 0; i < end; i++) {
-                    dest_data[i] = src_data[_probe_state->probe_index[i]];
-                }
-                (*chunk)->append_tuple_column(dest_column, tuple_id);
-            }
-        } else {
-            if (to_nullable) {
-                ColumnPtr dest_column = BooleanColumn::create(_probe_state->count, 1);
-                (*chunk)->append_tuple_column(dest_column, tuple_id);
-            }
-        }
-    }
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
@@ -592,54 +528,6 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
     }
 
     return Status::OK();
-}
-
-template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-void JoinHashMap<PT, BuildFunc, ProbeFunc>::_build_tuple_output(ChunkPtr* chunk) {
-    // TODO: performance
-    // The function will be deleted when IfTupleIsNull is removed
-    bool to_nullable = _table_items->right_to_nullable;
-
-    for (int tuple_id : _table_items->output_build_tuple_ids) {
-        if (_table_items->build_chunk->is_tuple_exist(tuple_id)) {
-            // tuple column exist
-            ColumnPtr& src_column = _table_items->build_chunk->get_tuple_column_by_id(tuple_id);
-            auto& src_data = ColumnHelper::as_raw_column<BooleanColumn>(src_column)->get_data();
-            ColumnPtr dest_column = BooleanColumn::create(_probe_state->count);
-            auto& dest_data = ColumnHelper::as_raw_column<BooleanColumn>(dest_column)->get_data();
-            size_t row_count = _probe_state->count;
-
-            if (!_probe_state->has_null_build_tuple) {
-                // all match
-                for (size_t i = 0; i < row_count; i++) {
-                    dest_data[i] = src_data[_probe_state->build_index[i]];
-                }
-            } else {
-                for (size_t i = 0; i < row_count; i++) {
-                    dest_data[i] = (_probe_state->build_index[i] != 0) & src_data[_probe_state->build_index[i]];
-                }
-            }
-            (*chunk)->append_tuple_column(dest_column, tuple_id);
-        } else {
-            // tuple column not exist
-            if (to_nullable) {
-                if (!_probe_state->has_null_build_tuple) {
-                    // all match
-                    ColumnPtr dest_column = BooleanColumn::create(_probe_state->count, 1);
-                    (*chunk)->append_tuple_column(dest_column, tuple_id);
-                } else {
-                    ColumnPtr dest_column = BooleanColumn::create(_probe_state->count);
-                    auto& dest_data = ColumnHelper::as_raw_column<BooleanColumn>(dest_column)->get_data();
-
-                    size_t end = _probe_state->count;
-                    for (size_t i = 0; i < end; i++) {
-                        dest_data[i] = _probe_state->build_index[i] != 0;
-                    }
-                    (*chunk)->append_tuple_column(dest_column, tuple_id);
-                }
-            }
-        }
-    }
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
@@ -989,7 +877,6 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(R
             _probe_state->probe_index[match_count] = i;
             _probe_state->build_index[match_count] = 0;
             match_count++;
-            _probe_state->has_null_build_tuple = true;
 
             RETURN_IF_CHUNK_FULL()
         } else {
@@ -1009,7 +896,6 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(R
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = 0;
                 match_count++;
-                _probe_state->has_null_build_tuple = true;
 
                 RETURN_IF_CHUNK_FULL()
             } else if (_probe_state->cur_row_match_count > 1) {
@@ -1052,7 +938,6 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join(Ru
     }
 
     PROBE_OVER()
-    _probe_state->has_null_build_tuple = true;
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
@@ -1115,7 +1000,6 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
     }
 
     PROBE_OVER()
-    _probe_state->has_null_build_tuple = true;
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
@@ -1332,7 +1216,6 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join_w
         _probe_state->cur_row_match_count = 0;
     }
 
-    _probe_state->has_null_build_tuple = true;
     PROBE_OVER()
 }
 
@@ -1376,7 +1259,6 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_wi
         }
     }
 
-    _probe_state->has_null_build_tuple = true;
     PROBE_OVER()
 }
 
@@ -1436,7 +1318,6 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_wi
         _probe_state->cur_row_match_count = 0;
     }
 
-    _probe_state->has_null_build_tuple = true;
     PROBE_OVER()
 }
 
@@ -1587,8 +1468,6 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_w
         }
         _probe_state->cur_row_match_count = 0;
     }
-
-    _probe_state->has_null_build_tuple = true;
 
     PROBE_OVER()
 }
