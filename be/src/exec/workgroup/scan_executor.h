@@ -24,10 +24,10 @@ public:
 private:
     void worker_thread();
 
-private:
     LimitSetter _num_threads_setter;
-    std::unique_ptr<ThreadPool> _thread_pool;
     std::unique_ptr<ScanTaskQueue> _task_queue;
+    // _thread_pool must be placed after _task_queue, because worker threads in _thread_pool use _task_queue.
+    std::unique_ptr<ThreadPool> _thread_pool;
     std::atomic<int> _next_id = 0;
 };
 
