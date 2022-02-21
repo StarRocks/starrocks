@@ -24,7 +24,6 @@ Status AggregateBlockingSourceOperator::close(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
 
     int32_t chunk_size = state->chunk_size();

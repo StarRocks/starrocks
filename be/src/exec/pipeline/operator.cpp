@@ -28,21 +28,27 @@ Operator::Operator(OperatorFactory* factory, int32_t id, const std::string& name
     }
     _runtime_profile = std::make_shared<RuntimeProfile>(profile_name);
     _runtime_profile->set_metadata(_id);
+
+    _common_metrics = std::make_shared<RuntimeProfile>("CommonMetrics");
+    _runtime_profile->add_child(_common_metrics.get(), true, nullptr);
+
+    _unique_metrics = std::make_shared<RuntimeProfile>("UniqueMetrics");
+    _runtime_profile->add_child(_unique_metrics.get(), true, nullptr);
 }
 
 Status Operator::prepare(RuntimeState* state) {
     _mem_tracker = state->instance_mem_tracker();
-    _total_timer = ADD_TIMER(_runtime_profile, "OperatorTotalTime");
-    _push_timer = ADD_TIMER(_runtime_profile, "PushTotalTime");
-    _pull_timer = ADD_TIMER(_runtime_profile, "PullTotalTime");
-    _finishing_timer = ADD_TIMER(_runtime_profile, "SetFinishingTime");
-    _finished_timer = ADD_TIMER(_runtime_profile, "SetFinishedTime");
-    _close_timer = ADD_TIMER(_runtime_profile, "CloseTime");
+    _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
+    _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
+    _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
+    _finishing_timer = ADD_TIMER(_common_metrics, "SetFinishingTime");
+    _finished_timer = ADD_TIMER(_common_metrics, "SetFinishedTime");
+    _close_timer = ADD_TIMER(_common_metrics, "CloseTime");
 
-    _push_chunk_num_counter = ADD_COUNTER(_runtime_profile, "PushChunkNum", TUnit::UNIT);
-    _push_row_num_counter = ADD_COUNTER(_runtime_profile, "PushRowNum", TUnit::UNIT);
-    _pull_chunk_num_counter = ADD_COUNTER(_runtime_profile, "PullChunkNum", TUnit::UNIT);
-    _pull_row_num_counter = ADD_COUNTER(_runtime_profile, "PullRowNum", TUnit::UNIT);
+    _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
+    _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
+    _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
+    _pull_row_num_counter = ADD_COUNTER(_common_metrics, "PullRowNum", TUnit::UNIT);
     return Status::OK();
 }
 
@@ -65,6 +71,11 @@ Status Operator::close(RuntimeState* state) {
         _runtime_in_filter_num_counter->set((int64_t)runtime_in_filters().size());
         _runtime_bloom_filter_num_counter->set((int64_t)rf_bloom_filters->size());
     }
+    // Pipeline do not need the built in total time counter
+    // Reset here to discard assignments from Analytor, Aggregator, etc.
+    _runtime_profile->total_time_counter()->set(0L);
+    _common_metrics->total_time_counter()->set(0L);
+    _unique_metrics->total_time_counter()->set(0L);
     return Status::OK();
 }
 
@@ -119,26 +130,26 @@ void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
 
 void Operator::_init_rf_counters(bool init_bloom) {
     if (_runtime_in_filter_num_counter == nullptr) {
-        _runtime_in_filter_num_counter = ADD_COUNTER(_runtime_profile, "RuntimeInFilterNum", TUnit::UNIT);
-        _runtime_bloom_filter_num_counter = ADD_COUNTER(_runtime_profile, "RuntimeBloomFilterNum", TUnit::UNIT);
+        _runtime_in_filter_num_counter = ADD_COUNTER(_common_metrics, "RuntimeInFilterNum", TUnit::UNIT);
+        _runtime_bloom_filter_num_counter = ADD_COUNTER(_common_metrics, "RuntimeBloomFilterNum", TUnit::UNIT);
     }
     if (init_bloom && _bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
-        _bloom_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_runtime_profile, "JoinRuntimeFilterTime");
+        _bloom_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_common_metrics, "JoinRuntimeFilterTime");
         _bloom_filter_eval_context.join_runtime_filter_input_counter =
-                ADD_COUNTER(_runtime_profile, "JoinRuntimeFilterInputRows", TUnit::UNIT);
+                ADD_COUNTER(_common_metrics, "JoinRuntimeFilterInputRows", TUnit::UNIT);
         _bloom_filter_eval_context.join_runtime_filter_output_counter =
-                ADD_COUNTER(_runtime_profile, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
+                ADD_COUNTER(_common_metrics, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
         _bloom_filter_eval_context.join_runtime_filter_eval_counter =
-                ADD_COUNTER(_runtime_profile, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
+                ADD_COUNTER(_common_metrics, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
     }
 }
 
 void Operator::_init_conjuct_counters() {
     if (_conjuncts_timer == nullptr) {
-        _conjuncts_timer = ADD_TIMER(_runtime_profile, "JoinRuntimeFilterTime");
-        _conjuncts_input_counter = ADD_COUNTER(_runtime_profile, "ConjunctsInputRows", TUnit::UNIT);
-        _conjuncts_output_counter = ADD_COUNTER(_runtime_profile, "ConjunctsOutputRows", TUnit::UNIT);
-        _conjuncts_eval_counter = ADD_COUNTER(_runtime_profile, "ConjunctsEvaluate", TUnit::UNIT);
+        _conjuncts_timer = ADD_TIMER(_common_metrics, "JoinRuntimeFilterTime");
+        _conjuncts_input_counter = ADD_COUNTER(_common_metrics, "ConjunctsInputRows", TUnit::UNIT);
+        _conjuncts_output_counter = ADD_COUNTER(_common_metrics, "ConjunctsOutputRows", TUnit::UNIT);
+        _conjuncts_eval_counter = ADD_COUNTER(_common_metrics, "ConjunctsEvaluate", TUnit::UNIT);
     }
 }
 OperatorFactory::OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id)
@@ -153,6 +164,7 @@ OperatorFactory::OperatorFactory(int32_t id, const std::string& name, int32_t pl
 Status OperatorFactory::prepare(RuntimeState* state) {
     _state = state;
     if (_runtime_filter_collector) {
+        // TODO(hcf) no proper profile for rf_filter_collector attached to
         RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _row_desc, _runtime_profile.get()));
     }
     return Status::OK();

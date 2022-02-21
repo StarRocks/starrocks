@@ -140,7 +140,14 @@ protected:
     const std::string _name;
     // Which plan node this operator belongs to
     const int32_t _plan_node_id;
+    // _common_metrics and _unique_metrics are the only children of _runtime_profile
+    // _common_metrics contains the common metrics of Operator, including counters and sub profiles,
+    // e.g. OperatorTotalTime/PushChunkNum/PullChunkNum etc.
+    // _unique_metrics contains the unique metrics, incluing counters and sub profiles,
+    // e.g. ExchangeSinkOperator have some counters to describe the transmission' speed and throughput.
     std::shared_ptr<RuntimeProfile> _runtime_profile;
+    std::shared_ptr<RuntimeProfile> _common_metrics;
+    std::shared_ptr<RuntimeProfile> _unique_metrics;
     MemTracker* _mem_tracker = nullptr;
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;

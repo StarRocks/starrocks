@@ -40,6 +40,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.RuntimeProfile;
@@ -82,6 +83,7 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLoadErrorHubInfo;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPipelineProfileMode;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
@@ -97,6 +99,7 @@ import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TUnit;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -121,6 +124,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
@@ -156,7 +160,7 @@ public class Coordinator {
     // Once this is set to true, errors from remote fragments are ignored.
     private boolean returnedAllResults;
     private RuntimeProfile queryProfile;
-    private List<RuntimeProfile> fragmentProfile;
+    private List<RuntimeProfile> fragmentProfiles;
     // populated in computeFragmentExecParams()
     private final Map<PlanFragmentId, FragmentExecParams> fragmentExecParamsMap = Maps.newHashMap();
     private final List<PlanFragment> fragments;
@@ -338,10 +342,10 @@ public class Coordinator {
         int fragmentSize = fragments.size();
         queryProfile = new RuntimeProfile("Execution Profile " + DebugUtil.printId(queryId));
 
-        fragmentProfile = new ArrayList<>();
+        fragmentProfiles = new ArrayList<>();
         for (int i = 0; i < fragmentSize; i++) {
-            fragmentProfile.add(new RuntimeProfile("Fragment " + i));
-            queryProfile.addChild(fragmentProfile.get(i));
+            fragmentProfiles.add(new RuntimeProfile("Fragment " + i));
+            queryProfile.addChild(fragmentProfiles.get(i));
         }
 
         this.idToBackend = Catalog.getCurrentSystemInfo().getIdToBackend();
@@ -1531,8 +1535,8 @@ public class Coordinator {
         }
         lock();
         try {
-            for (int i = 1; i < fragmentProfile.size(); ++i) {
-                fragmentProfile.get(i).sortChildren();
+            for (int i = 1; i < fragmentProfiles.size(); ++i) {
+                fragmentProfiles.get(i).sortChildren();
             }
         } finally {
             unlock();
@@ -1578,6 +1582,61 @@ public class Coordinator {
         return false;
     }
 
+    public void mergeIsomorphicProfiles() {
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+
+        if (!sessionVariable.isReportSucc()) {
+            return;
+        }
+
+        if (!sessionVariable.isEnablePipelineEngine()) {
+            return;
+        }
+
+        int profileMode = sessionVariable.getPipelineProfileMode();
+        if (profileMode >= TPipelineProfileMode.DETAIL.getValue()) {
+            return;
+        }
+
+        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            if (fragmentProfile.getChildList().isEmpty()) {
+                continue;
+            }
+
+            RuntimeProfile instanceProfile0 = fragmentProfile.getChildList().get(0).first;
+            if (instanceProfile0.getChildList().isEmpty()) {
+                continue;
+            }
+            RuntimeProfile pipelineProfile0 = instanceProfile0.getChildList().get(0).first;
+
+            // pipeline engine must have a counter named DegreeOfParallelism
+            // some fragment may still execute in non-pipeline mode
+            if (pipelineProfile0.getCounter("DegreeOfParallelism") == null) {
+                continue;
+            }
+
+            List<RuntimeProfile> instanceProfiles = fragmentProfile.getChildList().stream()
+                    .map(pair -> pair.first)
+                    .collect(Collectors.toList());
+            Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT, "");
+            counter.setValue(instanceProfiles.size());
+
+            // After merge, all merged metrics will gather into the first profile
+            // which is instanceProfile0
+            RuntimeProfile.mergeIsomorphicProfiles(instanceProfiles);
+
+            fragmentProfile.copyAllInfoStringsFrom(instanceProfile0);
+            fragmentProfile.copyAllCountersFrom(instanceProfile0);
+
+            // Remove the instance profile from the hierarchy
+            fragmentProfile.removeAllChildren();
+            instanceProfile0.getChildList().forEach(pair -> {
+                RuntimeProfile pipelineProfile = pair.first;
+                fragmentProfile.addChild(pipelineProfile);
+            });
+        }
+    }
+
     /*
      * Check the state of backends in needCheckBackendExecStates.
      * return true if all of them are OK. Otherwise, return false.
@@ -1615,10 +1674,10 @@ public class Coordinator {
 
     private void attachInstanceProfileToFragmentProfile() {
         for (BackendExecState backendExecState : backendExecStates) {
-            if (!backendExecState.computeTimeInProfile(fragmentProfile.size())) {
+            if (!backendExecState.computeTimeInProfile(fragmentProfiles.size())) {
                 return;
             }
-            fragmentProfile.get(backendExecState.profileFragmentId).addChild(backendExecState.profile);
+            fragmentProfiles.get(backendExecState.profileFragmentId).addChild(backendExecState.profile);
         }
     }
 

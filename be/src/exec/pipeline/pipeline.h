@@ -19,7 +19,6 @@ public:
     Pipeline() = delete;
     Pipeline(uint32_t id, const OpFactories& op_factories) : _id(id), _op_factories(op_factories) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("Pipeline (id=$0)", _id));
-        _runtime_profile->add_info_string("ContainsAllPipelineDrivers", "true");
     }
 
     uint32_t get_id() const { return _id; }

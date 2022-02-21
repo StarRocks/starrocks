@@ -210,7 +210,7 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(int dispatcher_id) {
         // All the owner workgroups don't have ready drivers, so select the other workgroup.
         wg = _find_min_wg();
     }
-    DCHECK_NOTNULL(wg);
+    DCHECK(wg != nullptr);
 
     // If wg only contains one ready driver, it will be not ready anymore after taking away
     // the only one driver.

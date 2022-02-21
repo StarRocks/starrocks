@@ -82,7 +82,8 @@ struct TLoadErrorHubInfo {
 }
 
 enum TPipelineProfileMode {
-  BRIEF,
+  CORE_METRICS,
+  ALL_METRICS,
   DETAIL
 }
 
