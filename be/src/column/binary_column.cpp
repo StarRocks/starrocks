@@ -18,6 +18,19 @@
 
 namespace starrocks::vectorized {
 
+void BinaryColumn::check_or_die() const {
+    CHECK_EQ(_bytes.size(), _offsets.back());
+    for (uint32_t i = 1; i < _offsets.size(); i++) {
+        CHECK_GE(_offsets[i], _offsets[i - 1]);
+    }
+    if (_slices_cache) {
+        for (int32_t i = 0; i < size(); i++) {
+            CHECK_EQ(_slices[i].data, get_slice(i).data);
+            CHECK_EQ(_slices[i].size, get_slice(i).size);
+        }
+    }
+}
+
 void BinaryColumn::append(const Column& src, size_t offset, size_t count) {
     const auto& b = down_cast<const BinaryColumn&>(src);
     const unsigned char* p = &b._bytes[b._offsets[offset]];
