@@ -691,7 +691,10 @@ public:
 
     void seekToRowGroup(PositionProviderMap& positions) override;
 
-    StringDictionary* getDictionary() { return dictionary.get(); }
+    StringDictionary* getDictionary() {
+        loadDictionary();
+        return dictionary.get();
+    }
 
     void loadDictionary();
 };
