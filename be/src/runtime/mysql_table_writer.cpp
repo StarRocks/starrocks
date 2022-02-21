@@ -27,6 +27,7 @@
 #include <variant>
 
 #include "column/column_helper.h"
+#include "column/json_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "fmt/compile.h"
@@ -165,6 +166,8 @@ Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* s
                             _stmt_buffer.push_back('"');
                         } else if constexpr (type == TYPE_TINYINT || type == TYPE_BOOLEAN) {
                             fmt::format_to(_stmt_buffer, "{}", (int32_t)viewer.value(i));
+                        } else if constexpr (type == TYPE_JSON) {
+                            fmt::format_to(_stmt_buffer, "{}", *viewer.value(i));
                         } else {
                             fmt::format_to(_stmt_buffer, "{}", viewer.value(i));
                         }

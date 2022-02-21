@@ -7,10 +7,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
-import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
@@ -63,6 +61,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -113,17 +112,24 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         this.outer = outer;
     }
 
-    public LogicalPlan transform(Relation relation) {
+    // transform relation to plan with session variable sql_select_limit
+    // only top relation need set limit, transform method used by CTE/Subquery/Insert
+    public LogicalPlan transformWithSelectLimit(Relation relation) {
+        LogicalPlan plan = transform(relation);
+        OptExprBuilder root = plan.getRootBuilder();
         // Set limit if user set sql_select_limit.
-        if (relation instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) relation;
-            long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
-            if (!selectRelation.hasLimit() &&
-                    selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
-                selectRelation.setLimit(new LimitElement(selectLimit));
-            }
+        long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
+        if (!root.getRoot().getOp().hasLimit() &&
+                selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
+            LogicalLimitOperator limitOperator = new LogicalLimitOperator(selectLimit);
+            root = root.withNewRoot(limitOperator);
+            return new LogicalPlan(root, plan.getOutputColumn(), plan.getCorrelation());
         }
 
+        return plan;
+    }
+
+    public LogicalPlan transform(Relation relation) {
         OptExprBuilder optExprBuilder;
         if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()) {
             Pair<OptExprBuilder, OptExprBuilder> cteRootAndMostDeepAnchor =
@@ -265,6 +271,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         ExpressionMapping expressionMapping = new ExpressionMapping(outputScope, outputColumns);
 
         LogicalOperator setOperator;
+        OptExprBuilder subOpt;
         if (setOperationRelation instanceof UnionRelation) {
             setOperator = new LogicalUnionOperator.Builder()
                     .setOutputColumnRefOp(outputColumns)
@@ -274,24 +281,27 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
             if (setOperationRelation.getQualifier().equals(SetQualifier.DISTINCT)) {
                 OptExprBuilder unionOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
-                return new LogicalPlan(new OptExprBuilder(
+                subOpt = new OptExprBuilder(
                         new LogicalAggregationOperator(AggType.GLOBAL, outputColumns, Maps.newHashMap()),
-                        Lists.newArrayList(unionOpt), expressionMapping), outputColumns, null);
+                        Lists.newArrayList(unionOpt), expressionMapping);
+            } else {
+                subOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
             }
         } else if (setOperationRelation instanceof ExceptRelation) {
             setOperator = new LogicalExceptOperator.Builder()
                     .setOutputColumnRefOp(outputColumns)
                     .setChildOutputColumns(childOutputColumnList).build();
-
+            subOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
         } else if (setOperationRelation instanceof IntersectRelation) {
             setOperator = new LogicalIntersectOperator.Builder()
                     .setOutputColumnRefOp(outputColumns)
                     .setChildOutputColumns(childOutputColumnList).build();
+            subOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
         } else {
             throw unsupportedException("New Planner only support Query Statement");
         }
 
-        return new LogicalPlan(new OptExprBuilder(setOperator, childPlan, expressionMapping), outputColumns, null);
+        return new LogicalPlan(subOpt, outputColumns, null);
     }
 
     @Override
@@ -538,15 +548,18 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     true));
         }
 
+        FunctionCallExpr expr = new FunctionCallExpr(tableFunction.getFunctionName(), node.getChildExpressions());
+        expr.setFn(tableFunction);
+        ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context);
+
         Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
-        for (Expr e : node.getChildExpressions()) {
-            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(e, context);
-            if (e instanceof SlotRef) {
+        for (ScalarOperator scalarOperator : operator.getChildren()) {
+            if (scalarOperator instanceof ColumnRefOperator) {
                 projectMap.put((ColumnRefOperator) scalarOperator, scalarOperator);
             } else {
-                ColumnRefOperator columnRefOperator = columnRefFactory.create(e, e.getType(), e.isNullable());
+                ColumnRefOperator columnRefOperator =
+                        columnRefFactory.create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
                 projectMap.put(columnRefOperator, scalarOperator);
-                context.put(e, columnRefOperator);
             }
         }
 

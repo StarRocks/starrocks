@@ -22,7 +22,7 @@ namespace starrocks::vectorized {
 //};
 
 template <typename T>
-class ObjectColumn final : public ColumnFactory<Column, ObjectColumn<T>> {
+class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
     friend class ColumnFactory<Column, ObjectColumn>;
 
 public:
@@ -215,6 +215,8 @@ private:
 
     // Currently, only for data loading
     void _build_slices() const;
+
+    void check_or_die() const override {}
 
 private:
     std::vector<T> _pool;

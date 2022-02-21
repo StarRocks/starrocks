@@ -409,17 +409,17 @@ inline static int get_byte_size_of_primitive_type(PrimitiveType type) {
     return 0;
 }
 
-Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state, const RowDescriptor& row_desc) {
+Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
     for (auto ctx : ctxs) {
-        RETURN_IF_ERROR(ctx->prepare(state, row_desc));
+        RETURN_IF_ERROR(ctx->prepare(state));
     }
     return Status::OK();
 }
 
-Status Expr::prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) {
+Status Expr::prepare(RuntimeState* state, ExprContext* context) {
     DCHECK(_type.type != INVALID_TYPE);
     for (auto& i : _children) {
-        RETURN_IF_ERROR(i->prepare(state, row_desc, context));
+        RETURN_IF_ERROR(i->prepare(state, context));
     }
     return Status::OK();
 }

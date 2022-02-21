@@ -7,10 +7,12 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/morsel.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "util/exclusive_ptr.h"
 
 namespace starrocks {
 class RuntimeState;
+
 namespace pipeline {
 
 class ChunkSource {
@@ -35,6 +37,9 @@ public:
     virtual StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() = 0;
 
     virtual Status buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) = 0;
+    virtual Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, bool& can_finish,
+                                                                   size_t* num_read_chunks, int worker_id,
+                                                                   workgroup::WorkGroupPtr running_wg) = 0;
 
 protected:
     // The morsel will own by pipeline driver

@@ -32,12 +32,15 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.RuntimeProfile;
@@ -80,6 +83,7 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLoadErrorHubInfo;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPipelineProfileMode;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
@@ -95,6 +99,8 @@ import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TUnit;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -107,7 +113,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -119,6 +124,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
@@ -154,7 +160,7 @@ public class Coordinator {
     // Once this is set to true, errors from remote fragments are ignored.
     private boolean returnedAllResults;
     private RuntimeProfile queryProfile;
-    private List<RuntimeProfile> fragmentProfile;
+    private List<RuntimeProfile> fragmentProfiles;
     // populated in computeFragmentExecParams()
     private final Map<PlanFragmentId, FragmentExecParams> fragmentExecParamsMap = Maps.newHashMap();
     private final List<PlanFragment> fragments;
@@ -336,10 +342,10 @@ public class Coordinator {
         int fragmentSize = fragments.size();
         queryProfile = new RuntimeProfile("Execution Profile " + DebugUtil.printId(queryId));
 
-        fragmentProfile = new ArrayList<>();
+        fragmentProfiles = new ArrayList<>();
         for (int i = 0; i < fragmentSize; i++) {
-            fragmentProfile.add(new RuntimeProfile("Fragment " + i));
-            queryProfile.addChild(fragmentProfile.get(i));
+            fragmentProfiles.add(new RuntimeProfile("Fragment " + i));
+            queryProfile.addChild(fragmentProfiles.get(i));
         }
 
         this.idToBackend = Catalog.getCurrentSystemInfo().getIdToBackend();
@@ -404,8 +410,6 @@ public class Coordinator {
         computeScanRangeAssignment();
 
         computeFragmentExecParams();
-
-        computeScanDop();
 
         traceInstance();
 
@@ -600,7 +604,12 @@ public class Coordinator {
             }
             fragment.setRuntimeFilterMergeNodeAddresses(fragment.getPlanRoot(), mergeHost);
         }
-        topParams.runtimeFilterParams.setRuntime_filter_max_size(RuntimeFilterDescription.BuildMaxSize);
+
+        if (ConnectContext.get() != null) {
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+            topParams.runtimeFilterParams.setRuntime_filter_max_size(
+                    sessionVariable.getGlobalRuntimeFilterBuildMaxSize());
+        }
     }
 
     public List<String> getExportFiles() {
@@ -874,11 +883,12 @@ public class Coordinator {
             }
 
             PlanNodeId exchId = sink.getExchNodeId();
-            // we might have multiple fragments sending to this exchange node
-            // (distributed MERGE), which is why we need to add up the #senders
             if (destParams.perExchNumSenders.get(exchId.asInt()) == null) {
                 destParams.perExchNumSenders.put(exchId.asInt(), params.instanceExecParams.size());
             } else {
+                // we might have multiple fragments sending to this exchange node
+                // (distributed MERGE), which is why we need to add up the #senders
+                // e.g. sort-merge
                 destParams.perExchNumSenders.put(exchId.asInt(),
                         params.instanceExecParams.size() + destParams.perExchNumSenders.get(exchId.asInt()));
             }
@@ -922,36 +932,6 @@ public class Coordinator {
 
     }
 
-    // compute degree of parallelism(dop) for each OlapScanNode in a fragment instance.
-    // the maxScanOperators is numRows of ScanNode divided by session variable pipelineMaxRowCountPerScanOperator,
-    // then each fragment instance take the share of itself own numScanRanges divided by totalNumScanRanges, and
-    // the dop of OlapScanNode is at least 1 and at most minimum(itself own numScanRanges, half the avg number of be cores).
-    private void computeScanDop() {
-        // only take effect in pipeline engine
-        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
-            return;
-        }
-        int dop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
-        for (FragmentExecParams params : fragmentExecParamsMap.values()) {
-            if (!params.fragment.getPlanRoot().canUsePipeLine()) {
-                continue;
-            }
-            List<PlanNode> scanNodes = new LinkedList<>();
-            params.fragment.getOlapScanNodes(params.fragment.getPlanRoot(), scanNodes);
-            for (PlanNode node : scanNodes) {
-                OlapScanNode scanNode = (OlapScanNode) node;
-                for (FInstanceExecParam instanceExecParam : params.instanceExecParams) {
-                    int numScanRanges = 0;
-                    if (instanceExecParam.perNodeScanRanges.containsKey(scanNode.getId().asInt())) {
-                        numScanRanges = instanceExecParam.perNodeScanRanges.get(scanNode.getId().asInt()).size();
-                    }
-                    int scanDopLimit = Math.max(1, Math.min(dop, numScanRanges));
-                    instanceExecParam.perScanNodeDop.put(scanNode.getId().asInt(), scanDopLimit);
-                }
-            }
-        }
-    }
-
     private void handleMultiCastFragmentParams() throws Exception {
         for (FragmentExecParams params : fragmentExecParamsMap.values()) {
             if (!(params.fragment instanceof MultiCastPlanFragment)) {
@@ -973,14 +953,10 @@ public class Coordinator {
                 FragmentExecParams destParams = fragmentExecParamsMap.get(destFragment.getFragmentId());
 
                 PlanNodeId exchId = sink.getExchNodeId();
-                // we might have multiple fragments sending to this exchange node
-                // (distributed MERGE), which is why we need to add up the #senders
-                if (destParams.perExchNumSenders.get(exchId.asInt()) == null) {
-                    destParams.perExchNumSenders.put(exchId.asInt(), params.instanceExecParams.size());
-                } else {
-                    destParams.perExchNumSenders.put(exchId.asInt(),
-                            params.instanceExecParams.size() + destParams.perExchNumSenders.get(exchId.asInt()));
-                }
+                // MultiCastSink only send to itself, destination exchange only one senders
+                // and it's don't support sort-merge
+                Preconditions.checkState(!destParams.perExchNumSenders.containsKey(exchId.asInt()));
+                destParams.perExchNumSenders.put(exchId.asInt(), 1);
 
                 if (needScheduleByShuffleJoin(destFragment.getFragmentId().asInt(), sink)) {
                     int bucketSeq = 0;
@@ -1066,6 +1042,16 @@ public class Coordinator {
             boolean dopAdaptionEnabled = ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
                     fragment.getPlanRoot().canUsePipeLine();
+
+            // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
+            if (fragment.getChildren().size() > 0 && fragment.getChild(0) instanceof MultiCastPlanFragment) {
+                FragmentExecParams childFragmentParams =
+                        fragmentExecParamsMap.get(fragment.getChild(0).getFragmentId());
+                for (FInstanceExecParam childInstanceParam : childFragmentParams.instanceExecParams) {
+                    params.instanceExecParams.add(new FInstanceExecParam(null, childInstanceParam.host, 0, params));
+                }
+                continue;
+            }
 
             if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
                 Reference<Long> backendIdRef = new Reference<>();
@@ -1218,31 +1204,9 @@ public class Coordinator {
                     int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
                     FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
                     int numBackends = param.scanRangeAssignment.size();
-                    // param.instanceExecParams.size() maybe zero
-                    int numInstances = Math.max(1, param.instanceExecParams.size());
-                    OlapScanNode scanNode = (OlapScanNode) leftMostNode;
-                    int numScanRangesPerInstance = scanNode.getScanRangeLocations(0).size() / numInstances;
-                    numScanRangesPerInstance = Math.max(1, numScanRangesPerInstance);
-                    long numRows = scanNode.getCardinality();
-                    if (scanNode.hasLimit()) {
-                        numRows = Math.min(numRows, scanNode.getLimit());
-                    }
-
-                    float inputBytes = numRows * scanNode.getAvgRowSize();
-                    long maxBytesPerOperator =
-                            ConnectContext.get().getSessionVariable().getPipelineMaxInputBytesPerOperator();
-                    int numOperatorsPerInstance = Math.max(1, (int) (inputBytes / maxBytesPerOperator / numInstances));
+                    int numInstances = param.instanceExecParams.size();
                     int pipelineDop =
                             Math.max(1, degreeOfParallelism / Math.max(1, numInstances / Math.max(1, numBackends)));
-
-                    // Although 0 may be returned by scanNode.getCardinality(), scanNode still can produce rows for its
-                    // following operator.
-                    if (numRows > 0 && numScanRangesPerInstance < pipelineDop) {
-                        pipelineDop = Math.min(pipelineDop, numOperatorsPerInstance);
-                    } else {
-                        pipelineDop = Math.min(pipelineDop, numScanRangesPerInstance);
-                    }
-                    pipelineDop = Math.max(1, pipelineDop);
                     param.fragment.setPipelineDop(pipelineDop);
                 }
             }
@@ -1571,8 +1535,8 @@ public class Coordinator {
         }
         lock();
         try {
-            for (int i = 1; i < fragmentProfile.size(); ++i) {
-                fragmentProfile.get(i).sortChildren();
+            for (int i = 1; i < fragmentProfiles.size(); ++i) {
+                fragmentProfiles.get(i).sortChildren();
             }
         } finally {
             unlock();
@@ -1618,6 +1582,61 @@ public class Coordinator {
         return false;
     }
 
+    public void mergeIsomorphicProfiles() {
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+
+        if (!sessionVariable.isReportSucc()) {
+            return;
+        }
+
+        if (!sessionVariable.isEnablePipelineEngine()) {
+            return;
+        }
+
+        int profileMode = sessionVariable.getPipelineProfileMode();
+        if (profileMode >= TPipelineProfileMode.DETAIL.getValue()) {
+            return;
+        }
+
+        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            if (fragmentProfile.getChildList().isEmpty()) {
+                continue;
+            }
+
+            RuntimeProfile instanceProfile0 = fragmentProfile.getChildList().get(0).first;
+            if (instanceProfile0.getChildList().isEmpty()) {
+                continue;
+            }
+            RuntimeProfile pipelineProfile0 = instanceProfile0.getChildList().get(0).first;
+
+            // pipeline engine must have a counter named DegreeOfParallelism
+            // some fragment may still execute in non-pipeline mode
+            if (pipelineProfile0.getCounter("DegreeOfParallelism") == null) {
+                continue;
+            }
+
+            List<RuntimeProfile> instanceProfiles = fragmentProfile.getChildList().stream()
+                    .map(pair -> pair.first)
+                    .collect(Collectors.toList());
+            Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT, "");
+            counter.setValue(instanceProfiles.size());
+
+            // After merge, all merged metrics will gather into the first profile
+            // which is instanceProfile0
+            RuntimeProfile.mergeIsomorphicProfiles(instanceProfiles);
+
+            fragmentProfile.copyAllInfoStringsFrom(instanceProfile0);
+            fragmentProfile.copyAllCountersFrom(instanceProfile0);
+
+            // Remove the instance profile from the hierarchy
+            fragmentProfile.removeAllChildren();
+            instanceProfile0.getChildList().forEach(pair -> {
+                RuntimeProfile pipelineProfile = pair.first;
+                fragmentProfile.addChild(pipelineProfile);
+            });
+        }
+    }
+
     /*
      * Check the state of backends in needCheckBackendExecStates.
      * return true if all of them are OK. Otherwise, return false.
@@ -1655,10 +1674,10 @@ public class Coordinator {
 
     private void attachInstanceProfileToFragmentProfile() {
         for (BackendExecState backendExecState : backendExecStates) {
-            if (!backendExecState.computeTimeInProfile(fragmentProfile.size())) {
+            if (!backendExecState.computeTimeInProfile(fragmentProfiles.size())) {
                 return;
             }
-            fragmentProfile.get(backendExecState.profileFragmentId).addChild(backendExecState.profile);
+            fragmentProfiles.get(backendExecState.profileFragmentId).addChild(backendExecState.profile);
         }
     }
 
@@ -1679,7 +1698,6 @@ public class Coordinator {
         TUniqueId instanceId;
         TNetworkAddress host;
         Map<Integer, List<TScanRangeParams>> perNodeScanRanges = Maps.newHashMap();
-        Map<Integer, Integer> perScanNodeDop = Maps.newHashMap();
 
         int perFragmentInstanceIdx;
 
@@ -1903,7 +1921,7 @@ public class Coordinator {
             this.fragment = fragment;
         }
 
-        List<TExecPlanFragmentParams> toThrift(int backendNum, boolean isEnablePipelineEngine) {
+        List<TExecPlanFragmentParams> toThrift(int backendNum, boolean isEnablePipelineEngine) throws Exception {
             // add instance number in file name prefix when export job
             DataSink sink = fragment.getSink();
             ExportSink exportSink = null;
@@ -1911,6 +1929,16 @@ public class Coordinator {
             if (sink instanceof ExportSink) {
                 exportSink = (ExportSink) sink;
                 fileNamePrefix = exportSink.getFileNamePrefix();
+            }
+
+            WorkGroup workgroup = null;
+            if (ConnectContext.get() != null) {
+                String user = ConnectContext.get().getCurrentUserIdentity().getQualifiedUser();
+                String roleName = Catalog.getCurrentCatalog().getAuth()
+                        .getRoleName(ConnectContext.get().getCurrentUserIdentity());
+                String remoteIp = ConnectContext.get().getRemoteIP();
+                workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
+                        user, roleName, WorkGroupClassifier.QueryType.SELECT, remoteIp);
             }
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
@@ -1924,6 +1952,25 @@ public class Coordinator {
 
                 params.setProtocol_version(InternalServiceVersion.V1);
                 params.setFragment(fragment.toThrift());
+
+                /*
+                 * For MultiCastDataFragment, output only send to local, and the instance is keep
+                 * same with MultiCastDataFragment
+                 * */
+                if (fragment instanceof MultiCastPlanFragment) {
+                    List<List<TPlanFragmentDestination>> multiFragmentDestinations =
+                            params.getFragment().getOutput_sink().getMulti_cast_stream_sink().getDestinations();
+                    List<List<TPlanFragmentDestination>> newDestinations = Lists.newArrayList();
+                    for (List<TPlanFragmentDestination> destinations : multiFragmentDestinations) {
+                        Preconditions.checkState(instanceExecParams.size() == destinations.size());
+                        TPlanFragmentDestination ndes = destinations.get(i);
+
+                        Preconditions.checkState(ndes.getServer().equals(toRpcHost(instanceExecParam.host)));
+                        newDestinations.add(Lists.newArrayList(ndes));
+                    }
+                    params.getFragment().getOutput_sink().getMulti_cast_stream_sink().setDestinations(newDestinations);
+                }
+
                 params.setDesc_tbl(descTable);
                 params.setParams(new TPlanFragmentExecParams());
                 params.setResource_info(tResourceInfo);
@@ -1975,8 +2022,24 @@ public class Coordinator {
                         if (isPipeline) {
                             params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
                         }
+
                         params.setPipeline_dop(fragment.getPipelineDop());
-                        params.setPer_scan_node_dop(instanceExecParam.perScanNodeDop);
+
+                        boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
+                        params.setEnable_resource_group(enableResourceGroup);
+                        if (enableResourceGroup) {
+                            // session variable workgroup_id is just for verification of resource isolation.
+                            long workgroupId = ConnectContext.get().getSessionVariable().getWorkGroupId();
+                            if (workgroupId > 0) {
+                                TWorkGroup wg = new TWorkGroup();
+                                wg.setName("");
+                                wg.setId(ConnectContext.get().getSessionVariable().getWorkGroupId());
+                                wg.setVersion(0);
+                                params.setWorkgroup(wg);
+                            } else if (workgroup != null) {
+                                params.setWorkgroup(workgroup.toThrift());
+                            }
+                        }
                     }
 
                     if (sessionVariable.isEnableExchangePassThrough()) {

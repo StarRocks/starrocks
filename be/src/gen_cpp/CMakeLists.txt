@@ -38,6 +38,8 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/TFileBrokerService.cpp
     ${GEN_CPP_DIR}/HeartbeatService_constants.cpp
     ${GEN_CPP_DIR}/HeartbeatService.cpp
+    ${GEN_CPP_DIR}/WorkGroup_types.cpp
+    ${GEN_CPP_DIR}/WorkGroup_constants.cpp
     ${GEN_CPP_DIR}/HeartbeatService_types.cpp
     ${GEN_CPP_DIR}/InternalService_constants.cpp
     ${GEN_CPP_DIR}/InternalService_types.cpp
@@ -83,6 +85,7 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/snapshot.pb.cc
     ${GEN_CPP_DIR}/status.pb.cc
     ${GEN_CPP_DIR}/segment.pb.cc
+    ${GEN_CPP_DIR}/persistent_index.pb.cc
     #$${GEN_CPP_DIR}/opcode/functions.cc
     #$${GEN_CPP_DIR}/opcode/vector-functions.cc
     #$${GEN_CPP_DIR}/opcode/opcode-registry-init.cc

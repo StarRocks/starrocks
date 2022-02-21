@@ -7,6 +7,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -18,6 +19,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.temporal.TemporalAccessor;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -49,8 +51,12 @@ import static java.util.Collections.emptyList;
  * TYPE_PERCENTILE |    NOT_SUPPORT
  */
 public final class ConstantOperator extends ScalarOperator implements Comparable<ConstantOperator> {
+
     private static final LocalDateTime MAX_DATETIME = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
     private static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
+
+    private static java.time.format.DateTimeFormatter DATE_TIME_FORMATTER_MS
+            = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
 
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
         if (null == dateTime || dateTime.isBefore(MIN_DATETIME) || dateTime.isAfter(MAX_DATETIME)) {
@@ -327,6 +333,30 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return type.equals(Type.NULL) || isNull;
     }
 
+    public ConstantOperator castToStrictly(Type type) throws Exception {
+        if (!type.isDecimalV3()) {
+            return castTo(type);
+        }
+
+        BigDecimal decimal = new BigDecimal(value.toString());
+        ScalarType scalarType = (ScalarType) type;
+        try {
+            DecimalLiteral.checkLiteralOverflowInDecimalStyle(decimal, scalarType);
+        } catch (AnalysisException ignored) {
+            return ConstantOperator.createNull(type);
+        }
+        int realScale = DecimalLiteral.getRealScale(decimal);
+        int scale = scalarType.getScalarScale();
+        if (scale <= realScale) {
+            decimal = decimal.setScale(scale, RoundingMode.HALF_UP);
+        }
+
+        if (scalarType.getScalarScale() == 0 && scalarType.getScalarPrecision() == 0) {
+            throw new SemanticException("Forbidden cast to decimal(precision=0, scale=0)");
+        }
+        return ConstantOperator.createDecimal(decimal, type);
+    }
+
     public ConstantOperator castTo(Type desc) throws Exception {
         if (type.isTime() || desc.isTime()) {
             // Don't support constant time cast in FE
@@ -364,7 +394,15 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             try {
                 // DateLiteral will throw Exception if cast failed
                 // 1.try cast by format "yyyy-MM-dd HH:mm:ss"
-                literal = new DateLiteral(childString, Type.DATETIME);
+                if (childString.length() <= "yyyy-MM-dd HH:mm:ss".length()) {
+                    literal = new DateLiteral(childString, Type.DATETIME);
+                } else {
+                    // try cast by format "yyyy-MM-dd HH:mm:ss.SSS"
+                    TemporalAccessor parse = DATE_TIME_FORMATTER_MS.parse(childString);
+                    LocalDateTime localDateTime = LocalDateTime.from(parse);
+                    ConstantOperator datetime = ConstantOperator.createDatetime(localDateTime, desc);
+                    return datetime;
+                }
             } catch (Exception e) {
                 // 2.try cast by format "yyyy-MM-dd", will original operator if failed
                 literal = new DateLiteral(childString, Type.DATE);
@@ -381,7 +419,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             BigDecimal decimal = new BigDecimal(childString);
             ScalarType scalarType = (ScalarType) desc;
             try {
-                DecimalLiteral.checkLiteralOverflow(decimal, scalarType);
+                DecimalLiteral.checkLiteralOverflowInBinaryStyle(decimal, scalarType);
             } catch (AnalysisException ignored) {
                 return ConstantOperator.createNull(desc);
             }

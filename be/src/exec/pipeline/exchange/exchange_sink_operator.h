@@ -115,11 +115,6 @@ private:
     CompressionTypePB _compress_type = CompressionTypePB::NO_COMPRESSION;
     const BlockCompressionCodec* _compress_codec = nullptr;
 
-    // Because we should close all channels even if fail to close some channel.
-    // We use a global _close_status to record the error close status.
-    // Only sender will change this value, so no need to use lock to protect it.
-    Status _close_status;
-
     RuntimeProfile::Counter* _serialize_batch_timer = nullptr;
     RuntimeProfile::Counter* _shuffle_hash_timer = nullptr;
     RuntimeProfile::Counter* _compress_timer = nullptr;

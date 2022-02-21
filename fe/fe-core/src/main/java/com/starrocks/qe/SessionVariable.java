@@ -32,6 +32,8 @@ import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileMode;
 import com.starrocks.thrift.TQueryOptions;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 
 import java.io.DataInput;
@@ -42,6 +44,8 @@ import java.lang.reflect.Field;
 
 // System variable
 public class SessionVariable implements Serializable, Writable, Cloneable {
+    private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
+
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
     public static final String QUERY_TIMEOUT = "query_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
@@ -115,11 +119,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // them do the real work on core.
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
+    // Use resource group. It will influence the CPU schedule, I/O scheduler, and
+    // memory limit etc. in BE.
+    public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
+
     public static final String PIPELINE_DOP = "pipeline_dop";
 
-    public static final String PIPELINE_MAX_INPUT_BYTES_PER_OPERATOR = "pipeline_max_input_bytes_per_operator";
-
     public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
+
+    public static final String WORKGROUP_ID = "workgroup_id";
 
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
@@ -160,6 +168,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
+    public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -170,6 +179,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
+    public static final String GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE = "global_runtime_filter_build_max_size";
+    public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
+    public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
+            "global_runtime_filter_probe_min_selectivity";
+
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
 
@@ -177,6 +191,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
+    private boolean enableResourceGroup = false;
 
     // max memory used on every backend.
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
@@ -314,6 +331,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_REUSE)
     private boolean cboCteReuse = false;
 
+    @VarAttr(name = CBO_CTE_REUSE_RATE, flag = VariableMgr.INVISIBLE)
+    private double cboCTERuseRatio = 1.2;
+
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -324,11 +344,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
-    @VariableMgr.VarAttr(name = PIPELINE_MAX_INPUT_BYTES_PER_OPERATOR, flag = VariableMgr.INVISIBLE)
-    private long pipelineMaxInputBytesPerOperator = 100000000;
-
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
-    private String pipelineProfileMode = "brief";
+    private int pipelineProfileMode = 0;
+
+    @VariableMgr.VarAttr(name = WORKGROUP_ID, flag = VariableMgr.INVISIBLE)
+    private int workgroupId = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
@@ -414,6 +434,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_GLOBAL_RUNTIME_FILTER)
     private boolean enableGlobalRuntimeFilter = true;
+
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterBuildMaxSize = 64 * 1024 * 1024;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterProbeMinSize = 100 * 1024;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
+    private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
 
     //In order to be compatible with the logic of the old planner,
     //When the column name is the same as the alias name,
@@ -634,11 +661,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void disableTrimOnlyFilteredColumnsInScanStage() {
-        this.enableFilterUnusedColumnsInScanStage = true;
+        this.enableFilterUnusedColumnsInScanStage = false;
     }
 
     public void enableTrimOnlyFilteredColumnsInScanStage() {
-        this.enableFilterUnusedColumnsInScanStage = false;
+        this.enableFilterUnusedColumnsInScanStage = true;
     }
 
     public boolean isCboEnableDPJoinReorder() {
@@ -725,6 +752,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableGlobalRuntimeFilter = value;
     }
 
+    public long getGlobalRuntimeFilterBuildMaxSize() {
+        return globalRuntimeFilterBuildMaxSize;
+    }
+
+    public long getGlobalRuntimeFilterProbeMinSize() {
+        return globalRuntimeFilterProbeMinSize;
+    }
+
+    public float getGlobalRuntimeFilterProbeMinSelectivity() {
+        return globalRuntimeFilterProbeMinSelectivity;
+    }
+
     public boolean isEnablePipelineEngine() {
         return enablePipelineEngine;
     }
@@ -737,16 +776,32 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePipelineEngine = enablePipelineEngine;
     }
 
+    public boolean isEnableResourceGroup() {
+        return enableResourceGroup;
+    }
+
+    public void setEnableResourceGroup(boolean enableResourceGroup) {
+        this.enableResourceGroup = enableResourceGroup;
+    }
+
     public int getPipelineDop() {
         return this.pipelineDop;
     }
 
-    public long getPipelineMaxInputBytesPerOperator() {
-        return pipelineMaxInputBytesPerOperator;
+    public int getWorkGroupId() {
+        return workgroupId;
+    }
+
+    public int getPipelineProfileMode() {
+        return pipelineProfileMode;
+    }
+
+    public void setPipelineProfileMode(int pipelineProfileMode) {
+        this.pipelineProfileMode = pipelineProfileMode;
     }
 
     public boolean isEnableReplicationJoin() {
-        return enableReplicationJoin;
+        return false;
     }
 
     public boolean isSetUseNthExecPlan() {
@@ -808,6 +863,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return singleNodeExecPlan;
     }
 
+    public double getCboCTERuseRatio() {
+        return cboCTERuseRatio;
+    }
+
+    public void setCboCTERuseRatio(double cboCTERuseRatio) {
+        this.cboCTERuseRatio = cboCTERuseRatio;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -846,10 +909,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setPipeline_dop(pipelineDop);
-        if ("brief".equalsIgnoreCase(pipelineProfileMode)) {
-            tResult.setPipeline_profile_mode(TPipelineProfileMode.BRIEF);
-        } else {
-            tResult.setPipeline_profile_mode(TPipelineProfileMode.DETAIL);
+        switch (pipelineProfileMode) {
+            case 0:
+                tResult.setPipeline_profile_mode(TPipelineProfileMode.CORE_METRICS);
+                break;
+            case 1:
+                tResult.setPipeline_profile_mode(TPipelineProfileMode.ALL_METRICS);
+                break;
+            case 2:
+                tResult.setPipeline_profile_mode(TPipelineProfileMode.DETAIL);
+                break;
+            default:
+                tResult.setPipeline_profile_mode(TPipelineProfileMode.CORE_METRICS);
+                break;
         }
         return tResult;
     }
@@ -980,7 +1052,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 }
             }
         } catch (Exception e) {
-            throw new IOException("failed to read session variable: " + e.getMessage());
+            LOG.warn("failed to read session variable: {}", e.getMessage());
         }
     }
 

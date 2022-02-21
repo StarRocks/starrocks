@@ -144,7 +144,11 @@ class SchemaChangeTest : public testing::Test {
         Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), dst_datum, mem_pool.get());
         ASSERT_TRUE(st.ok());
 
-        EXPECT_EQ(expect_val, dst_datum.get<T>());
+        if constexpr (std::is_same_v<T, JsonValue*>) {
+            EXPECT_EQ(*expect_val, dst_datum.get<JsonValue>());
+        } else {
+            EXPECT_EQ(expect_val, dst_datum.get<T>());
+        }
     }
 
     SchemaChange* _sc_procedure;
@@ -526,6 +530,20 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1003);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1004);
+}
+
+TEST_F(SchemaChangeTest, convert_varchar_to_json) {
+    std::vector<std::string> test_cases = {"{\"a\": 1}", "null", "[1,2,3]"};
+    for (auto json_str : test_cases) {
+        JsonValue json = JsonValue::parse(json_str).value();
+        test_convert_from_varchar(OLAP_FIELD_TYPE_JSON, 16, json_str, &json);
+    }
+}
+
+TEST_F(SchemaChangeTest, convert_json_to_varchar) {
+    std::string json_str = "{\"a\": 1}";
+    JsonValue json = JsonValue::parse(json_str).value();
+    test_convert_to_varchar(OLAP_FIELD_TYPE_JSON, 16, &json, json_str);
 }
 
 } // namespace starrocks::vectorized

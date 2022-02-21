@@ -871,6 +871,10 @@ void Tablet::pick_candicate_rowsets_to_base_compaction(vector<RowsetSharedPtr>* 
 
 // For http compaction action
 void Tablet::get_compaction_status(std::string* json_result) {
+    if (keys_type() == PRIMARY_KEYS) {
+        return _updates->get_compaction_status(json_result);
+    }
+
     rapidjson::Document root;
     root.SetObject();
 

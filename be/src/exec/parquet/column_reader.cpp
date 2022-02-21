@@ -650,7 +650,7 @@ public:
 
         if (_field->is_nullable) {
             DCHECK(dst->is_nullable());
-            DCHECK_NOTNULL(nullable_column);
+            DCHECK(nullable_column != nullptr);
             nullable_column->mutable_null_column()->append_numbers(&is_nulls[0], num_offsets);
         }
 

@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "env/env_hdfs.h"
+#include "env/env_s3.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exec/vectorized/hdfs_scanner_text.h"
 #include "exprs/expr.h"
@@ -13,6 +14,8 @@
 #include "exprs/vectorized/runtime_filter.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
+#include "gutil/map_util.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
@@ -24,6 +27,32 @@
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::vectorized {
+
+// NOTE: this class is append-only
+class OpenLimitAllocator {
+public:
+    OpenLimitAllocator() = default;
+    ~OpenLimitAllocator() = default;
+
+    OpenLimitAllocator(const OpenLimitAllocator&) = delete;
+    void operator=(const OpenLimitAllocator&) = delete;
+
+    static OpenLimitAllocator& instance() {
+        static OpenLimitAllocator obj;
+        return obj;
+    }
+
+    std::atomic<int32_t>* allocate(const std::string& key);
+
+private:
+    std::mutex _lock;
+    std::unordered_map<std::string, std::atomic<int32_t>*> _data;
+};
+
+std::atomic<int32_t>* OpenLimitAllocator::allocate(const std::string& key) {
+    std::lock_guard l(_lock);
+    return LookupOrInsertNew(&_data, key, 0);
+}
 
 HdfsScanNode::HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {}
@@ -59,8 +88,6 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (hdfs_scan_node.__isset.min_max_tuple_id) {
         _min_max_tuple_id = hdfs_scan_node.min_max_tuple_id;
         _min_max_tuple_desc = state->desc_tbl().get_tuple_descriptor(_min_max_tuple_id);
-        _min_max_row_desc = _pool->add(new RowDescriptor(state->desc_tbl(), std::vector<TTupleId>{_min_max_tuple_id},
-                                                         std::vector<bool>{true}));
     }
 
     const auto& slots = _tuple_desc->slots();
@@ -97,7 +124,6 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     _scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
-    _hdfs_io_profile.init(_runtime_profile.get());
 
     _mem_pool = std::make_unique<MemPool>();
 
@@ -114,8 +140,8 @@ Status HdfsScanNode::prepare(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(ScanNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state, *_min_max_row_desc));
-    RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state, row_desc()));
+    RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state));
     _init_counter(state);
     _runtime_state = state;
     return Status::OK();
@@ -206,7 +232,8 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = &_runtime_filter_collector;
     scanner_params.scan_ranges = hdfs_file_desc.splits;
-    scanner_params.fs = hdfs_file_desc.fs;
+    scanner_params.env = hdfs_file_desc.env;
+    scanner_params.path = hdfs_file_desc.path;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -533,9 +560,6 @@ Status HdfsScanNode::close(RuntimeState* state) {
     }
 
     _close_pending_scanners();
-    for (auto* hdfsFile : _hdfs_files) {
-        hdfsFile->fs.reset();
-    }
 
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
@@ -621,7 +645,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
     // if found, add file splits to hdfs file desc
     // if not found, create
     for (auto& item : _hdfs_files) {
-        if (item->partition_id == scan_range.partition_id && item->path == scan_range_path) {
+        if (item->partition_id == scan_range.partition_id && item->scan_range_path == scan_range_path) {
             item->splits.emplace_back(&scan_range);
             return Status::OK();
         }
@@ -638,43 +662,29 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         file_path /= scan_range.relative_path;
         native_file_path = file_path.native();
     }
-    std::string namenode;
-    RETURN_IF_ERROR(get_name_node_from_path(native_file_path, &namenode));
-    _is_hdfs_fs = is_hdfs_path(namenode.c_str());
-    bool usePread = starrocks::config::use_hdfs_pread || is_object_storage_path(namenode.c_str());
 
-    if (namenode.compare("default") == 0) {
-        // local file, current only for test
-        auto* env = Env::Default();
-        std::unique_ptr<RandomAccessFile> file;
-        env->new_random_access_file(native_file_path, &file);
-
-        auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
-        hdfs_file_desc->hdfs_fs = nullptr;
-        hdfs_file_desc->fs = std::move(file);
-        hdfs_file_desc->partition_id = scan_range.partition_id;
-        hdfs_file_desc->path = scan_range_path;
-        hdfs_file_desc->file_length = scan_range.file_length;
-        hdfs_file_desc->splits.emplace_back(&scan_range);
-        hdfs_file_desc->hdfs_file_format = scan_range.file_format;
-        hdfs_file_desc->open_limit = nullptr;
-        _hdfs_files.emplace_back(hdfs_file_desc);
+    Env* env = nullptr;
+    if (is_hdfs_path(native_file_path.c_str())) {
+        env = _pool->add(new EnvHdfs());
+    } else if (is_object_storage_path(native_file_path.c_str())) {
+        env = _pool->add(new EnvS3());
     } else {
-        hdfsFS hdfs;
-        std::atomic<int32_t>* open_limit = nullptr;
-        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &hdfs, &open_limit));
-        auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
-        hdfs_file_desc->hdfs_fs = hdfs;
-        hdfs_file_desc->fs = std::make_shared<HdfsRandomAccessFile>(hdfs, native_file_path, usePread);
-        hdfs_file_desc->partition_id = scan_range.partition_id;
-        hdfs_file_desc->path = scan_range_path;
-        hdfs_file_desc->file_length = scan_range.file_length;
-        hdfs_file_desc->splits.emplace_back(&scan_range);
-        hdfs_file_desc->hdfs_file_format = scan_range.file_format;
-        hdfs_file_desc->open_limit = open_limit;
-        _hdfs_files.emplace_back(hdfs_file_desc);
+        env = Env::Default();
     }
 
+    std::string name_node;
+    RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &name_node));
+
+    auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
+    hdfs_file_desc->env = env;
+    hdfs_file_desc->path = native_file_path;
+    hdfs_file_desc->partition_id = scan_range.partition_id;
+    hdfs_file_desc->scan_range_path = scan_range_path;
+    hdfs_file_desc->file_length = scan_range.file_length;
+    hdfs_file_desc->splits.emplace_back(&scan_range);
+    hdfs_file_desc->hdfs_file_format = scan_range.file_format;
+    hdfs_file_desc->open_limit = OpenLimitAllocator::instance().allocate(name_node);
+    _hdfs_files.emplace_back(hdfs_file_desc);
     return Status::OK();
 }
 

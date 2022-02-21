@@ -240,6 +240,7 @@ Status BloomFilterIndexWriter::create(const BloomFilterOptions& bf_options, cons
     case OLAP_FIELD_TYPE_BOOL:
     case OLAP_FIELD_TYPE_OBJECT:
     case OLAP_FIELD_TYPE_PERCENTILE:
+    case OLAP_FIELD_TYPE_JSON:
     case OLAP_FIELD_TYPE_MAX_VALUE:
         return Status::NotSupported("unsupported type for bloom filter: " + std::to_string(type));
     }

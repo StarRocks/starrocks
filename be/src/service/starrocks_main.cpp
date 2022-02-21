@@ -19,6 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <aws/core/Aws.h>
 #include <gperftools/malloc_extension.h>
 #include <sys/file.h>
 #include <unistd.h>
@@ -209,7 +210,7 @@ int main(int argc, char** argv) {
     }
 
     // init exec env
-    starrocks::ExecEnv::init(exec_env, paths);
+    EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths));
     exec_env->set_storage_engine(engine);
     engine->set_heartbeat_flags(exec_env->heartbeat_flags());
 
@@ -271,13 +272,20 @@ int main(int argc, char** argv) {
         LOG(INFO) << "StarRocks BE HeartBeat Service started correctly.";
     }
 
+#ifdef STARROCKS_WITH_AWS
+    Aws::SDKOptions aws_sdk_options;
+    Aws::InitAPI(aws_sdk_options);
+#endif
+
     while (!starrocks::k_starrocks_exit) {
         sleep(10);
     }
-
     daemon->stop();
     daemon.reset();
 
+#ifdef STARROCKS_WITH_AWS
+    Aws::ShutdownAPI(aws_sdk_options);
+#endif
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
     delete heartbeat_thrift_server;

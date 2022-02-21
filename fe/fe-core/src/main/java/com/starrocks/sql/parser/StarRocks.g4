@@ -14,22 +14,21 @@ singleStatement
 statement
     : queryStatement                                                    #statementDefault
     | USE schema=identifier                                             #use
-    | USE catalog=identifier '.' schema=identifier                      #use
-    | SHOW TABLES ((FROM | IN) qualifiedName)?
-        (LIKE pattern=string)?                                          #showTables
-    | SHOW DATABASES ((FROM | IN) identifier)?
-        (LIKE pattern=string)?                                          #showDatabases
+    | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
+        ((LIKE pattern=string) | (WHERE expression))?                   #showTables
+    | SHOW DATABASES
+        ((LIKE pattern=string) | (WHERE expression))?                   #showDatabases
     ;
 
 queryStatement
     : query;
 
 query
-    :  with? queryNoWith
+    :  withClause? queryNoWith
     ;
 
-with
-    : WITH namedQuery (',' namedQuery)*
+withClause
+    : WITH commonTableExpression (',' commonTableExpression)*
     ;
 
 queryNoWith
@@ -45,7 +44,11 @@ queryTerm
 queryPrimary
     : querySpecification                           #queryPrimaryDefault
     | VALUES rowConstructor (',' rowConstructor)*  #inlineTable
-    | '(' queryNoWith  ')'                         #subquery
+    | subquery                                     #subqueryPrimary
+    ;
+
+subquery
+    : '(' query  ')'
     ;
 
 rowConstructor
@@ -62,7 +65,7 @@ limitElement
     ;
 
 querySpecification
-    : SELECT setQuantifier? selectItem (',' selectItem)*
+    : SELECT hint? setQuantifier? selectItem (',' selectItem)*
       fromClause
       (WHERE where=expression)?
       (GROUP BY groupingElement)?
@@ -75,17 +78,17 @@ fromClause
     ;
 
 groupingElement
-    : groupingSet                                                                       #singleGroupingSet
-    | ROLLUP '(' (expression (',' expression)*)? ')'                                    #rollup
+    : ROLLUP '(' (expression (',' expression)*)? ')'                                    #rollup
     | CUBE '(' (expression (',' expression)*)? ')'                                      #cube
-    | GROUPING SETS '(' '(' groupingSet ')' (',' '(' groupingSet? ')' )* ')'            #multipleGroupingSets
+    | GROUPING SETS '(' groupingSet (',' groupingSet)* ')'                              #multipleGroupingSets
+    | expression (',' expression)*                                                      #singleGroupingSet
     ;
 
 groupingSet
-    : expression (',' expression)*
+    : '(' expression? (',' expression)* ')'
     ;
 
-namedQuery
+commonTableExpression
     : name=identifier (columnAliases)? AS '(' query ')'
     ;
 
@@ -101,20 +104,28 @@ selectItem
     ;
 
 relation
-    : left=relation( CROSS JOIN joinHint? LATERAL?
-        right=aliasedRelation | joinType? JOIN joinHint? LATERAL?
-        rightRelation=relation joinCriteria?)                                            #joinRelation
+    : left=relation(
+        CROSS JOIN hint? LATERAL? right=aliasedRelation
+        | joinType hint? LATERAL? rightRelation=relation joinCriteria?)                  #joinRelation
     | aliasedRelation                                                                    #relationDefault
     ;
 
 joinType
-    : INNER | LEFT | RIGHT | FULL
-    | LEFT OUTER | RIGHT OUTER | FULL OUTER
-    | LEFT SEMI | RIGHT SEMI | LEFT ANTI | RIGHT ANTI
+    : JOIN | INNER JOIN
+    | LEFT JOIN | RIGHT JOIN | FULL JOIN
+    | LEFT OUTER JOIN | RIGHT OUTER JOIN
+    | FULL OUTER JOIN
+    | LEFT SEMI JOIN | RIGHT SEMI JOIN
+    | LEFT ANTI JOIN | RIGHT ANTI JOIN
     ;
 
-joinHint
-    : '[' hint=IDENTIFIER ']'
+hint
+    : '[' IDENTIFIER (',' IDENTIFIER)* ']'
+    | '/*+' SET_VAR '(' hintMap (',' hintMap)* ')' '*/'
+    ;
+
+hintMap
+    : k=IDENTIFIER '=' v=primaryExpression
     ;
 
 joinCriteria
@@ -131,15 +142,15 @@ columnAliases
     ;
 
 relationPrimary
-    : qualifiedName                                                                       #tableName
-    | '(' query ')'                                                                       #subqueryRelation
+    : qualifiedName hint?                                                                 #tableName
+    | subquery                                                                            #subqueryRelation
     | UNNEST '(' expression (',' expression)* ')'                                         #unnest
     | '(' relation ')'                                                                    #parenthesizedRelation
     ;
 
 expression
     : booleanExpression                                                                   #expressionDefault
-    | NOT expression                                                                      #logicalNot
+    | (NOT | LOGICAL_NOT) expression                                                      #logicalNot
     | left=expression operator=AND right=expression                                       #logicalBinary
     | left=expression operator=OR right=expression                                        #logicalBinary
     ;
@@ -180,11 +191,8 @@ primaryExpression
     | string                                                                              #stringLiteral
     | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
-    | qualifiedName '(' ASTERISK ')' over?                                                #functionCall
-    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
     | operator = (MINUS | PLUS | BITNOT) valueExpression                                  #arithmeticUnary
-    | LOGICAL_NOT primaryExpression                                                       #simpleExprNot
-    | '(' query ')'                                                                       #subqueryExpression
+    | subquery                                                                            #subqueryExpression
     | EXISTS '(' query ')'                                                                #exists
     | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END              #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
@@ -195,15 +203,33 @@ primaryExpression
     | '(' expression ')'                                                                  #parenthesizedExpression
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
-    | name=DATABASE '(' ')'                                                               #specialFunction
-    | name=SCHEMA '(' ')'                                                                 #specialFunction
-    | name=USER '(' ')'                                                                   #specialFunction
-    | name=CONNECTION_ID '(' ')'                                                          #specialFunction
-    | name=CURRENT_USER '(' ')'                                                           #specialFunction
+    | informationFunctionExpression                                                       #informationFunction
+    | IF '(' (expression (',' expression)*)? ')'                                          #functionCall
+    | qualifiedName '(' ASTERISK ')' over?                                                #functionCall
+    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
+    | windowFunction over                                                                 #windowFunctionCall
+    ;
+
+informationFunctionExpression
+    : name = DATABASE '(' ')'
+    | name = SCHEMA '(' ')'
+    | name = USER '(' ')'
+    | name = CONNECTION_ID '(' ')'
+    | name = CURRENT_USER '(' ')'
+    ;
+
+windowFunction
+    : name = ROW_NUMBER '(' ')'
+    | name = RANK '(' ')'
+    | name = DENSE_RANK '(' ')'
+    | name = LEAD  '(' (expression (',' expression)*)? ')'
+    | name = LAG '(' (expression (',' expression)*)? ')'
+    | name = FIRST_VALUE '(' (expression (',' expression)*)? ')'
+    | name = LAST_VALUE '(' (expression (',' expression)*)? ')'
     ;
 
 string
-    : STRING                                #basicStringLiteral
+    : STRING
     ;
 
 comparisonOperator
@@ -215,7 +241,7 @@ booleanValue
     ;
 
 interval
-    : INTERVAL sign=(PLUS | MINUS)? value=expression from=intervalField
+    : INTERVAL value=expression from=intervalField
     ;
 
 intervalField
@@ -292,7 +318,7 @@ nonReserved
     | CAST | CONNECTION_ID| CURRENT
     | DATA | DATE | DATETIME | DAY
     | END | EXTRACT
-    | FILTER | FIRST | FOLLOWING | FULL
+    | FILTER | FIRST | FOLLOWING
     | HOUR
     | INTERVAL
     | LAST

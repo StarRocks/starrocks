@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -15,12 +14,12 @@ public class TPCDSCTETest extends TPCDSPlanTestBase {
         TPCDSPlanTestBase.beforeClass();
         connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        StatisticsEstimateCoefficient.DEFAULT_CTE_INLINE_COST_RATE = 0;
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 
     @AfterClass
     public static void afterClass() {
-        StatisticsEstimateCoefficient.DEFAULT_CTE_INLINE_COST_RATE = 1.5;
+        connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
     }
 
     public void testCTE(String sql) throws Exception {

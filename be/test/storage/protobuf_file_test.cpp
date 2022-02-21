@@ -56,8 +56,7 @@ TEST(ProtobufFileTest, test_corruption) {
 
     std::unique_ptr<WritableFile> f;
     WritableFileOptions opts{.sync_on_close = false, .mode = Env::CREATE_OR_OPEN};
-    st = Env::Default()->new_writable_file(opts, "ProtobufFileTest_test_corruption.bin", &f);
-    ASSERT_TRUE(st.ok()) << st;
+    f = *Env::Default()->new_writable_file(opts, "ProtobufFileTest_test_corruption.bin");
 
     f->append("xx");
     TabletMetaPB tablet_meta_2;

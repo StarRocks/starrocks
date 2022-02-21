@@ -66,5 +66,6 @@ template class BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>;
 template class BinaryPlainPageDecoder<OLAP_FIELD_TYPE_HLL>;
 template class BinaryPlainPageDecoder<OLAP_FIELD_TYPE_OBJECT>;
 template class BinaryPlainPageDecoder<OLAP_FIELD_TYPE_PERCENTILE>;
+template class BinaryPlainPageDecoder<OLAP_FIELD_TYPE_JSON>;
 
 } // namespace starrocks

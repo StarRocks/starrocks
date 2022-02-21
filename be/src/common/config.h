@@ -84,7 +84,9 @@ CONF_Int32(push_worker_count_normal_priority, "3");
 // the count of thread to high priority batch load
 CONF_Int32(push_worker_count_high_priority, "3");
 // the count of thread to publish version
-CONF_Int32(publish_version_worker_count, "8");
+CONF_Int32(publish_version_worker_count, "2");
+// the count of thread to publish version per partition
+CONF_Int32(partition_publish_version_worker_count, "8");
 // the count of thread to clear transaction task
 CONF_Int32(clear_transaction_task_worker_count, "1");
 // the count of thread to delete
@@ -111,6 +113,8 @@ CONF_mInt32(report_task_interval_seconds, "10");
 CONF_mInt32(report_disk_state_interval_seconds, "60");
 // the interval time(seconds) for agent report olap table to FE
 CONF_mInt32(report_tablet_interval_seconds, "60");
+// the interval time(seconds) for agent report workgroup to FE
+CONF_mInt32(report_workgroup_interval_seconds, "5");
 // the interval time(seconds) for agent report plugin status to FE
 // CONF_Int32(report_plugin_interval_seconds, "120");
 // the timeout(seconds) for alter table
@@ -653,6 +657,17 @@ CONF_Int64(pipeline_io_buffer_size, "64");
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // the degree of parallelism of brpc
 CONF_Int64(pipeline_sink_brpc_dop, "8");
+
+// The max number of io tasks for each scan operator.
+CONF_Int64(pipeline_scan_max_tasks_per_operator, "4");
+// yield scan io task when maximum time in nano-seconds has spent in current execution round,
+// if it runs in the worker thread owned by other workgroup, which has running drivers.
+CONF_Int64(pipeline_scan_task_yield_max_tims_spent, "100000000");
+// The max schedule period for adjusting io weight of each workgroup.
+CONF_Int64(pipeline_scan_task_yield_preempt_max_time_spent, "20000000");
+// The max schedule period for adjusting io weight of each workgroup.
+CONF_Int32(pipeline_max_io_schedule_num_period, "512");
+
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
 // max hdfs file handle
@@ -675,6 +690,12 @@ CONF_Bool(use_hdfs_pread, "true");
 // we may need the both implementations for perf test for now, so use it to decide which implementations to use
 // default: true
 CONF_Bool(rewrite_partial_segment, "true");
+
+// properties to access aws s3
+CONF_String(aws_access_key_id, "");
+CONF_String(aws_secret_access_key, "");
+CONF_String(aws_s3_endpoint, "");
+CONF_Int64(aws_s3_max_connection, "102400");
 
 } // namespace config
 

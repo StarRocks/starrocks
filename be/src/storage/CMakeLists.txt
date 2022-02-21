@@ -42,6 +42,7 @@ add_library(Storage STATIC
     olap_server.cpp
     options.cpp
     page_cache.cpp
+    persistent_index.cpp
     primary_index.cpp
     primary_key_encoder.cpp
     protobuf_file.cpp
@@ -66,6 +67,7 @@ add_library(Storage STATIC
     update_manager.cpp
     utils.cpp
     wrapper_field.cpp
+    compaction_utils.cpp
     rowset/array_column_iterator.cpp
     rowset/binary_plain_page.cpp
     rowset/bitmap_index_reader.cpp
@@ -111,13 +113,9 @@ add_library(Storage STATIC
     vectorized/aggregate_iterator.cpp
     vectorized/async_delta_writer.cpp
     vectorized/chunk_helper.cpp
-    vectorized/column_eq_predicate.cpp
-    vectorized/column_ge_predicate.cpp
-    vectorized/column_gt_predicate.cpp
+    vectorized/column_predicate_cmp.cpp
+    vectorized/column_predicate.cpp
     vectorized/column_in_predicate.cpp
-    vectorized/column_le_predicate.cpp
-    vectorized/column_lt_predicate.cpp
-    vectorized/column_ne_predicate.cpp
     vectorized/column_not_in_predicate.cpp
     vectorized/column_null_predicate.cpp
     vectorized/column_or_predicate.cpp

@@ -39,7 +39,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getOp();
-        ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
+        ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
 
         Set<ColumnRefOperator> scanColumns =
                 scanOperator.getColRefToColumnMetaMap().keySet().stream().filter(requiredOutputColumns::contains)
@@ -126,7 +126,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
             return scanColumns.size() != 0 && !((LogicalHiveScanOperator) scanOperator).getPartitionColumns().containsAll(
                     scanColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
         }
-        return scanColumns.size() == 0;
+        return scanColumns.size() != 0;
     }
 
     private boolean isPartitionColumn(LogicalScanOperator scanOperator, String columnName) {

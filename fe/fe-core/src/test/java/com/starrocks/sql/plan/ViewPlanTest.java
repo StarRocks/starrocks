@@ -1650,4 +1650,18 @@ public class ViewPlanTest extends PlanTestBase {
 
         starRocksAssert.dropView("test_view16");
     }
+
+    @Test
+    public void testWith() throws Exception {
+        String sql = "With x0 AS (SELECT DISTINCT v1, v2 FROM t0)\n" +
+                " SELECT v1, v2 from x0";
+        testView(sql);
+    }
+
+    @Test
+    public void testWithMore() throws Exception {
+        String sql = "With x0 AS (SELECT DISTINCT v1, v2 FROM t0)\n" +
+                " SELECT v1, v2 from x0";
+        testView(sql);
+    }
 }

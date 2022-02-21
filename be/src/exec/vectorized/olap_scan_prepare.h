@@ -38,7 +38,7 @@ private:
 public:
     static void eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status);
 
-    void get_column_predicates(PredicateParser* parser, std::vector<std::unique_ptr<ColumnPredicate>>* preds);
+    Status get_column_predicates(PredicateParser* parser, std::vector<std::unique_ptr<ColumnPredicate>>* preds);
 
     Status get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges);
 
@@ -48,6 +48,9 @@ public:
                            bool enable_column_expr_predicate = false);
 
 private:
+    friend struct ColumnRangeBuilder;
+    friend class ConjunctiveTestFixture;
+
     Status normalize_conjuncts();
     Status build_olap_filters();
     Status build_scan_keys(bool unlimited, int32_t max_scan_key_num);

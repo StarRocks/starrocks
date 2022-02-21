@@ -68,7 +68,7 @@ Status ExportSink::prepare(RuntimeState* state) {
     SCOPED_TIMER(_profile->total_time_counter());
 
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
 
     // TODO(lingbin): add some Counter
     _bytes_written_counter = ADD_COUNTER(profile(), "BytesExported", TUnit::BYTES);
@@ -107,13 +107,14 @@ Status ExportSink::open_file_writer(int timeout_ms) {
 
     const auto& file_type = _t_export_sink.file_type;
     switch (file_type) {
-    case TFileType::FILE_LOCAL:
-        RETURN_IF_ERROR(Env::Default()->new_writable_file(options, file_path, &output_file));
+    case TFileType::FILE_LOCAL: {
+        ASSIGN_OR_RETURN(output_file, Env::Default()->new_writable_file(options, file_path));
         break;
+    }
     case TFileType::FILE_BROKER: {
         const TNetworkAddress& broker_addr = _t_export_sink.broker_addresses[0];
         EnvBroker env_broker(broker_addr, _t_export_sink.properties, timeout_ms);
-        RETURN_IF_ERROR(env_broker.new_writable_file(options, file_path, &output_file));
+        ASSIGN_OR_RETURN(output_file, env_broker.new_writable_file(options, file_path));
         break;
     }
     case TFileType::FILE_STREAM:

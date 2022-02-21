@@ -1,11 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.transformer;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FieldReference;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -109,5 +110,9 @@ public class ExpressionMapping {
 
     public ColumnRefOperator get(Expr expression) {
         return expressionToColumns.get(expression);
+    }
+
+    public List<Expr> getAllExpressions() {
+        return Lists.newArrayList(expressionToColumns.keySet());
     }
 }

@@ -40,6 +40,57 @@ public:
 
 #undef DEFINE_ARRAY_DISTINCT_FN
 
+#define DEFINE_ARRAY_SORT_FN(NAME, PT)                                                     \
+    static ColumnPtr array_sort_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArraySort<PT>::process(context, columns);                                   \
+    }
+
+    DEFINE_ARRAY_SORT_FN(boolean, PrimitiveType::TYPE_BOOLEAN);
+    DEFINE_ARRAY_SORT_FN(tinyint, PrimitiveType::TYPE_TINYINT);
+    DEFINE_ARRAY_SORT_FN(smallint, PrimitiveType::TYPE_SMALLINT);
+    DEFINE_ARRAY_SORT_FN(int, PrimitiveType::TYPE_INT);
+    DEFINE_ARRAY_SORT_FN(bigint, PrimitiveType::TYPE_BIGINT);
+    DEFINE_ARRAY_SORT_FN(largeint, PrimitiveType::TYPE_LARGEINT);
+    DEFINE_ARRAY_SORT_FN(float, PrimitiveType::TYPE_FLOAT);
+    DEFINE_ARRAY_SORT_FN(double, PrimitiveType::TYPE_DOUBLE);
+    DEFINE_ARRAY_SORT_FN(varchar, PrimitiveType::TYPE_VARCHAR);
+    DEFINE_ARRAY_SORT_FN(char, PrimitiveType::TYPE_CHAR);
+    DEFINE_ARRAY_SORT_FN(decimalv2, PrimitiveType::TYPE_DECIMALV2);
+    DEFINE_ARRAY_SORT_FN(datetime, PrimitiveType::TYPE_DATETIME);
+    DEFINE_ARRAY_SORT_FN(date, PrimitiveType::TYPE_DATE);
+
+#undef DEFINE_ARRAY_SORT_FN
+
+#define DEFINE_ARRAY_REVERSE_FN(NAME, PT)                                                     \
+    static ColumnPtr array_reverse_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayReverse<PT>::process(context, columns);                                   \
+    }
+
+    DEFINE_ARRAY_REVERSE_FN(boolean, PrimitiveType::TYPE_BOOLEAN);
+    DEFINE_ARRAY_REVERSE_FN(tinyint, PrimitiveType::TYPE_TINYINT);
+    DEFINE_ARRAY_REVERSE_FN(smallint, PrimitiveType::TYPE_SMALLINT);
+    DEFINE_ARRAY_REVERSE_FN(int, PrimitiveType::TYPE_INT);
+    DEFINE_ARRAY_REVERSE_FN(bigint, PrimitiveType::TYPE_BIGINT);
+    DEFINE_ARRAY_REVERSE_FN(largeint, PrimitiveType::TYPE_LARGEINT);
+    DEFINE_ARRAY_REVERSE_FN(float, PrimitiveType::TYPE_FLOAT);
+    DEFINE_ARRAY_REVERSE_FN(double, PrimitiveType::TYPE_DOUBLE);
+    DEFINE_ARRAY_REVERSE_FN(varchar, PrimitiveType::TYPE_VARCHAR);
+    DEFINE_ARRAY_REVERSE_FN(char, PrimitiveType::TYPE_CHAR);
+    DEFINE_ARRAY_REVERSE_FN(decimalv2, PrimitiveType::TYPE_DECIMALV2);
+    DEFINE_ARRAY_REVERSE_FN(datetime, PrimitiveType::TYPE_DATETIME);
+    DEFINE_ARRAY_REVERSE_FN(date, PrimitiveType::TYPE_DATE);
+
+#undef DEFINE_ARRAY_REVERSE_FN
+
+#define DEFINE_ARRAY_JOIN_FN(NAME)                                                         \
+    static ColumnPtr array_join_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayJoin::process(context, columns);                                       \
+    }
+
+    DEFINE_ARRAY_JOIN_FN(varchar);
+
+#undef DEFINE_ARRAY_JOIN_FN
+
     DEFINE_VECTORIZED_FN(array_sum_boolean);
     DEFINE_VECTORIZED_FN(array_sum_tinyint);
     DEFINE_VECTORIZED_FN(array_sum_smallint);

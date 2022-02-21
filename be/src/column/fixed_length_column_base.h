@@ -189,6 +189,8 @@ public:
 
     bool reach_capacity_limit() const override { return _data.size() >= Column::MAX_CAPACITY_LIMIT; }
 
+    void check_or_die() const override {}
+
 protected:
     Container _data;
 };

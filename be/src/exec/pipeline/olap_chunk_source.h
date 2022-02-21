@@ -8,6 +8,7 @@
 #include "exec/olap_utils.h"
 #include "exec/pipeline/chunk_source.h"
 #include "exec/vectorized/olap_scan_prepare.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
@@ -17,10 +18,13 @@
 #include "storage/vectorized/tablet_reader.h"
 
 namespace starrocks {
+
 class SlotDescriptor;
+
 namespace vectorized {
 class RuntimeFilterProbeCollector;
 }
+
 namespace pipeline {
 
 class OlapChunkSource final : public ChunkSource {
@@ -61,6 +65,8 @@ public:
     StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() override;
 
     Status buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) override;
+    Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, bool& can_finish, size_t* num_read_chunks,
+                                                           int worker_id, workgroup::WorkGroupPtr running_wg) override;
 
 private:
     Status _get_tablet(const TInternalScanRange* scan_range);

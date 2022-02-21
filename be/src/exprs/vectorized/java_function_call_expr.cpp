@@ -184,7 +184,7 @@ struct UDFFunctionCallHelper {
         const auto& result_data = std::get<std::vector<jobject>>(result);        \
         for (int i = 0; i < num_rows; ++i) {                                     \
             if (result_data[i] != nullptr) {                                     \
-                container[i] = helper.valint8_t(result_data[i]);                 \
+                container[i] = helper.val##cxx_type(result_data[i]);             \
             } else {                                                             \
                 null_data[i] = true;                                             \
             }                                                                    \
@@ -240,7 +240,7 @@ struct UDFFunctionCallHelper {
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
         jmethodID methodID = env->GetMethodID(fn_desc->udf_class.clazz(), fn_desc->evaluate->name.c_str(),
-                                              fn_desc->evaluate->sign.c_str());
+                                              fn_desc->evaluate->signature.c_str());
         DCHECK(methodID != nullptr);
         if (!call_desc->method_desc[0].is_box) {
             switch (call_desc->method_desc[0].type) {
@@ -267,6 +267,9 @@ struct UDFFunctionCallHelper {
 
     void combine_inputs(std::vector<jvalue>* res, VariantContainer& data, Column* col, int col_idx, int num_cols,
                         int num_rows) {
+        if (col->only_null()) {
+            return;
+        }
         if (col->is_nullable()) {
             std::visit(
                     [&](auto&& container) {
@@ -406,9 +409,9 @@ ColumnPtr JavaFunctionCallExpr::evaluate(ExprContext* context, vectorized::Chunk
 JavaFunctionCallExpr::~JavaFunctionCallExpr() = default;
 
 // TODO support prepare
-Status JavaFunctionCallExpr::prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) {
+Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) {
     // init Expr::prepare
-    RETURN_IF_ERROR(Expr::prepare(state, row_desc, context));
+    RETURN_IF_ERROR(Expr::prepare(state, context));
 
     if (!_fn.__isset.fid) {
         return Status::InternalError("Not Found function id for " + _fn.name.function_name);
@@ -467,15 +470,16 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     auto add_method = [&](const std::string& name, std::unique_ptr<JavaMethodDescriptor>* res) {
         bool has_method = false;
         std::string method_name = name;
-        std::string sign;
+        std::string signature;
         std::vector<MethodTypeDescriptor> mtdesc;
         RETURN_IF_ERROR(_func_desc->analyzer->has_method(_func_desc->udf_class.clazz(), method_name, &has_method));
         if (has_method) {
-            RETURN_IF_ERROR(_func_desc->analyzer->get_signature(_func_desc->udf_class.clazz(), method_name, &sign));
-            RETURN_IF_ERROR(_func_desc->analyzer->get_method_desc(sign, &mtdesc));
+            RETURN_IF_ERROR(
+                    _func_desc->analyzer->get_signature(_func_desc->udf_class.clazz(), method_name, &signature));
+            RETURN_IF_ERROR(_func_desc->analyzer->get_method_desc(signature, &mtdesc));
             *res = std::make_unique<JavaMethodDescriptor>();
             (*res)->name = std::move(method_name);
-            (*res)->sign = std::move(sign);
+            (*res)->signature = std::move(signature);
             (*res)->method_desc = std::move(mtdesc);
         }
         return Status::OK();
@@ -522,7 +526,7 @@ void JavaFunctionCallExpr::_call_udf_close() {
     auto& helper = JVMFunctionHelper::getInstance();
     JNIEnv* env = helper.getEnv();
     jmethodID methodID = env->GetMethodID(_func_desc->udf_class.clazz(), _func_desc->close->name.c_str(),
-                                          _func_desc->close->sign.c_str());
+                                          _func_desc->close->signature.c_str());
     env->CallVoidMethod(_func_desc->udf_handle, methodID);
     if (jthrowable jthr = env->ExceptionOccurred(); jthr) {
         LOG(WARNING) << "Exception occur:" << helper.dumpExceptionString(jthr);

@@ -222,11 +222,6 @@ enum TabletTypePB {
     TABLET_TYPE_MEMORY = 1;
 }
 
-message EditVersionPB {
-    optional int64 major = 1;
-    optional int64 minor = 2;
-}
-
 message CompactionInfoPB {
     optional EditVersionPB start_version = 1;
     repeated uint32 inputs = 2;

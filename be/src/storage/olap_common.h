@@ -83,6 +83,7 @@ struct DataDirInfo {
 struct TabletInfo {
     TabletInfo(TTabletId in_tablet_id, TSchemaHash in_schema_hash, const UniqueId& in_uid)
             : tablet_id(in_tablet_id), schema_hash(in_schema_hash), tablet_uid(in_uid) {}
+    TabletInfo(const TabletInfo& other) = default;
 
     bool operator<(const TabletInfo& right) const {
         if (tablet_id != right.tablet_id) {
@@ -160,9 +161,11 @@ enum FieldType {
     OLAP_FIELD_TYPE_DECIMAL_V2 = 52,
     OLAP_FIELD_TYPE_PERCENTILE = 53,
 
+    OLAP_FIELD_TYPE_JSON = 54,
+
     // max value of FieldType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
-    OLAP_FIELD_TYPE_MAX_VALUE = 54
+    OLAP_FIELD_TYPE_MAX_VALUE = 55
 };
 
 inline const char* field_type_to_string(FieldType type) {
@@ -231,6 +234,8 @@ inline const char* field_type_to_string(FieldType type) {
         return "DECIMAL V2";
     case OLAP_FIELD_TYPE_PERCENTILE:
         return "PERCENTILE";
+    case OLAP_FIELD_TYPE_JSON:
+        return "JSON";
     case OLAP_FIELD_TYPE_MAX_VALUE:
         return "MAX VALUE";
     }

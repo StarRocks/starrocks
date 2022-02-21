@@ -22,6 +22,7 @@ public:
 private:
     // create a reader or re init reader
     Status _create_or_reinit_reader();
+    Status _get_hive_column_index(const std::string& column_name);
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;
     char _record_delimiter;
@@ -30,5 +31,6 @@ private:
     std::vector<ConverterPtr> _converters;
     std::shared_ptr<CSVReader> _reader = nullptr;
     size_t _current_range_index = 0;
+    std::unordered_map<std::string, int> _columns_index;
 };
 } // namespace starrocks::vectorized

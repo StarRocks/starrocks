@@ -45,6 +45,7 @@ namespace starrocks {
 // These types should be synced with FieldType in olap_common.h
 #define APPLY_FOR_BASIC_OLAP_FIELD_TYPE(M) \
     APPLY_FOR_BITMAP_INDEX_TYPE(M)         \
+    M(OLAP_FIELD_TYPE_JSON)                \
     M(OLAP_FIELD_TYPE_DECIMAL32)           \
     M(OLAP_FIELD_TYPE_DECIMAL64)           \
     M(OLAP_FIELD_TYPE_DECIMAL128)
@@ -88,6 +89,7 @@ namespace starrocks {
     APPLY_FOR_TYPE_DECIMAL(M)                  \
     M(OLAP_FIELD_TYPE_FLOAT)                   \
     M(OLAP_FIELD_TYPE_DOUBLE)                  \
+    M(OLAP_FIELD_TYPE_JSON)                    \
     M(OLAP_FIELD_TYPE_BOOL)
 
 #define APPLY_FOR_TYPE_CONVERT_TO_VARCHAR(M) \
@@ -95,6 +97,7 @@ namespace starrocks {
     APPLY_FOR_TYPE_TIME(M)                   \
     APPLY_FOR_TYPE_DECIMAL(M)                \
     M(OLAP_FIELD_TYPE_FLOAT)                 \
+    M(OLAP_FIELD_TYPE_JSON)                  \
     M(OLAP_FIELD_TYPE_DOUBLE)
 
 #define _TYPE_DISPATCH_CASE(type) \

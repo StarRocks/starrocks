@@ -123,6 +123,8 @@ public class ScalarType extends Type implements Cloneable {
                 return createVarcharType();
             case HLL:
                 return createHllType();
+            case JSON:
+                return JSON;
             case BITMAP:
                 return BITMAP;
             case PERCENTILE:
@@ -198,6 +200,8 @@ public class ScalarType extends Type implements Cloneable {
                 return DECIMAL64;
             case "DECIMAL128":
                 return DECIMAL128;
+            case "JSON":
+                return JSON;
             default:
                 LOG.warn("type={}", type);
                 Preconditions.checkState(false);
@@ -349,6 +353,10 @@ public class ScalarType extends Type implements Cloneable {
         return type;
     }
 
+    public static ScalarType createJsonType() {
+        return new ScalarType(PrimitiveType.JSON);
+    }
+
     // A common type for two decimal v3 types means that if t2 = getCommonTypeForDecimalV3(t0, t1),
     // two invariants following is always holds:
     // 1. t2's integer part is sufficient to hold both t0 and t1's counterparts: i.e.
@@ -371,7 +379,8 @@ public class ScalarType extends Type implements Cloneable {
         } else {
             // the common type's PrimitiveType of two decimal types should wide enough, i.e
             // the common type of (DECIMAL32, DECIMAL64) should be DECIMAL64
-            PrimitiveType primitiveType = PrimitiveType.getWiderDecimalV3Type(lhs.getPrimitiveType(), rhs.getPrimitiveType());
+            PrimitiveType primitiveType =
+                    PrimitiveType.getWiderDecimalV3Type(lhs.getPrimitiveType(), rhs.getPrimitiveType());
             // the narrowestType for specified precision and scale is just wide properly to hold a decimal value, i.e
             // DECIMAL128(7,4), DECIMAL64(7,4) and DECIMAL32(7,4) can all be held in a DECIMAL32(7,4) type without
             // precision loss.
@@ -488,7 +497,7 @@ public class ScalarType extends Type implements Cloneable {
         PrimitiveType largerType =
                 (t1.type.ordinal() > t2.type.ordinal() ? t1.type : t2.type);
         PrimitiveType result = compatibilityMatrix[smallerType.ordinal()][largerType.ordinal()];
-        Preconditions.checkNotNull(result);
+        Preconditions.checkNotNull(result, String.format("No assignment from %s to %s", t1, t2));
         return createType(result);
     }
 
@@ -569,6 +578,7 @@ public class ScalarType extends Type implements Cloneable {
             case HLL:
             case BITMAP:
             case PERCENTILE:
+            case JSON:
                 stringBuilder.append(type.toString().toLowerCase());
                 break;
             default:
@@ -774,6 +784,8 @@ public class ScalarType extends Type implements Cloneable {
                 return 16385;
             case BITMAP:
                 return 1024; // this is a estimated value
+            case JSON:
+                return 128; // estimated value
             default:
                 return 0;
         }

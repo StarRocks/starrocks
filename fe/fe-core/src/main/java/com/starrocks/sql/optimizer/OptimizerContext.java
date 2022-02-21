@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -14,24 +13,21 @@ import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 
-import java.util.List;
-
 public class OptimizerContext {
     private final Memo memo;
     private final RuleSet ruleSet;
     private final Catalog catalog;
-    private final List<TaskContext> taskContext;
     private final TaskScheduler taskScheduler;
     private final ColumnRefFactory columnRefFactory;
     private SessionVariable sessionVariable;
     private DumpInfo dumpInfo;
     private CTEContext cteContext;
+    private TaskContext currentTaskContext;
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
         this.ruleSet = new RuleSet();
         this.catalog = Catalog.getCurrentCatalog();
-        this.taskContext = Lists.newArrayList();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = VariableMgr.newSessionVariable();
@@ -41,7 +37,6 @@ public class OptimizerContext {
         this.memo = memo;
         this.ruleSet = new RuleSet();
         this.catalog = Catalog.getCurrentCatalog();
-        this.taskContext = Lists.newArrayList();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = connectContext.getSessionVariable();
@@ -49,6 +44,7 @@ public class OptimizerContext {
         this.cteContext = new CTEContext();
         cteContext.reset();
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
+        this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
     }
 
     public Memo getMemo() {
@@ -61,14 +57,6 @@ public class OptimizerContext {
 
     public Catalog getCatalog() {
         return catalog;
-    }
-
-    public List<TaskContext> getTaskContext() {
-        return taskContext;
-    }
-
-    public void addTaskContext(TaskContext context) {
-        taskContext.add(context);
     }
 
     public TaskScheduler getTaskScheduler() {
@@ -93,5 +81,13 @@ public class OptimizerContext {
 
     public CTEContext getCteContext() {
         return cteContext;
+    }
+
+    public void setTaskContext(TaskContext context) {
+        this.currentTaskContext = context;
+    }
+
+    public TaskContext getTaskContext() {
+        return currentTaskContext;
     }
 }

@@ -163,6 +163,10 @@ public class IcebergTable extends Table {
                 throw new DdlException("can not convert iceberg column type [" + icebergColumn.type() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName());
             }
+            if (!column.isAllowNull()) {
+                throw new DdlException(
+                        "iceberg extern table not support no-nullable column: [" + icebergColumn.name() + "]");
+            }
         }
 
         if (!copiedProps.isEmpty()) {
@@ -192,8 +196,6 @@ public class IcebergTable extends Table {
                 return primitiveType == PrimitiveType.INT ||
                         primitiveType == PrimitiveType.TINYINT ||
                         primitiveType == PrimitiveType.SMALLINT;
-            case TIME:
-            case TIMESTAMP:
             case LONG:
                 return primitiveType == PrimitiveType.BIGINT;
             case FLOAT:
@@ -201,8 +203,9 @@ public class IcebergTable extends Table {
             case DOUBLE:
                 return primitiveType == PrimitiveType.DOUBLE;
             case DATE:
-                return primitiveType == PrimitiveType.DATE ||
-                        primitiveType == PrimitiveType.DATETIME;
+                return primitiveType == PrimitiveType.DATE;
+            case TIMESTAMP:
+                return primitiveType == PrimitiveType.DATETIME;
             case STRING:
             case UUID:
                 return primitiveType == PrimitiveType.VARCHAR ||
@@ -212,6 +215,7 @@ public class IcebergTable extends Table {
                         primitiveType == PrimitiveType.DECIMAL32 ||
                         primitiveType == PrimitiveType.DECIMAL64 ||
                         primitiveType == PrimitiveType.DECIMAL128;
+            case TIME:
             case FIXED:
             case BINARY:
             case STRUCT:

@@ -126,8 +126,11 @@ void ColumnSelector::buildTypeNameIdMap(const Type* type) {
     }
 }
 
-void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, const RowReaderOptions& options) {
+void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, std::vector<bool>& lazyLoadColumns,
+                                    const RowReaderOptions& options) {
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
+    lazyLoadColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
+
     if (contents->schema->getKind() == STRUCT && options.getIndexesSet()) {
         for (unsigned long field : options.getInclude()) {
             updateSelectedByFieldId(selectedColumns, field);
@@ -135,6 +138,9 @@ void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, const Ro
     } else if (contents->schema->getKind() == STRUCT && options.getNamesSet()) {
         for (const auto& field : options.getIncludeNames()) {
             updateSelectedByName(selectedColumns, field);
+        }
+        for (const auto& field : options.getLazyLoadColumnNames()) {
+            updateSelectedByName(lazyLoadColumns, field);
         }
     } else if (options.getTypeIdsSet()) {
         for (unsigned long typeId : options.getInclude()) {
@@ -228,7 +234,7 @@ RowReaderImpl::RowReaderImpl(const std::shared_ptr<FileContents>& _contents, con
     }
 
     ColumnSelector column_selector(contents.get());
-    column_selector.updateSelected(selectedColumns, opts);
+    column_selector.updateSelected(selectedColumns, lazyLoadColumns, opts);
 
     // prepare SargsApplier if SearchArgument is available
     if (opts.getSearchArgument() && footer->rowindexstride() > 0) {
@@ -246,8 +252,12 @@ uint64_t RowReaderImpl::getCompressionSize() const {
     return contents->blockSize;
 }
 
-const std::vector<bool> RowReaderImpl::getSelectedColumns() const {
+const std::vector<bool>& RowReaderImpl::getSelectedColumns() const {
     return selectedColumns;
+}
+
+const std::vector<bool>& RowReaderImpl::getLazyLoadColumns() const {
+    return lazyLoadColumns;
 }
 
 const Type& RowReaderImpl::getSelectedType() const {
@@ -1010,6 +1020,18 @@ bool RowReaderImpl::next(ColumnVectorBatch& data) {
         currentRowInStripe = 0;
     }
     return rowsToRead != 0;
+}
+
+void RowReaderImpl::lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) {
+    if (enableEncodedBlock) {
+        reader->lazyLoadNextEncoded(data, numValues, nullptr);
+    } else {
+        reader->lazyLoadNext(data, numValues, nullptr);
+    }
+}
+
+void RowReaderImpl::lazyLoadSkip(uint64_t numValues) {
+    reader->lazyLoadSkip(numValues);
 }
 
 uint64_t RowReaderImpl::computeBatchSize(uint64_t requestedSize, uint64_t currentRowInStripe,

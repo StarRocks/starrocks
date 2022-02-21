@@ -16,12 +16,12 @@
 namespace starrocks::vectorized {
 
 struct HdfsFileDesc {
-    hdfsFS hdfs_fs;
     THdfsFileFormat::type hdfs_file_format;
-    std::shared_ptr<RandomAccessFile> fs;
+    Env* env; // The Env used to open |path|
+    std::string path;
 
     int partition_id = 0;
-    std::string path;
+    std::string scan_range_path;
     int64_t file_length = 0;
     std::vector<const THdfsScanRange*> splits;
 
@@ -106,7 +106,6 @@ private:
 
     int _min_max_tuple_id = 0;
     TupleDescriptor* _min_max_tuple_desc = nullptr;
-    RowDescriptor* _min_max_row_desc = nullptr;
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
 
     // complex conjuncts, such as contains multi slot, are evaled in scanner.
@@ -154,8 +153,6 @@ private:
     mutable SpinLock _status_mutex;
     Status _status;
     RuntimeState* _runtime_state = nullptr;
-    bool _is_hdfs_fs = true;
-
     std::atomic_bool _pending_token = true;
 
     std::atomic<int32_t> _scanner_submit_count = 0;
@@ -177,7 +174,6 @@ private:
     RuntimeProfile::Counter* _column_read_timer = nullptr;
     RuntimeProfile::Counter* _column_convert_timer = nullptr;
 
-    HdfsIOProfile _hdfs_io_profile;
     HdfsParquetProfile _parquet_profile;
 };
 } // namespace starrocks::vectorized

@@ -29,6 +29,7 @@
 #include "exprs/agg/variance.h"
 #include "exprs/agg/window.h"
 #include "percentile_union.h"
+#include "udf/java/java_function_fwd.h"
 
 namespace starrocks::vectorized {
 
@@ -833,9 +834,6 @@ AggregateFuncResolver::AggregateFuncResolver() {
 #undef ADD_ALL_TYPE
 
 AggregateFuncResolver::~AggregateFuncResolver() = default;
-
-const AggregateFunction* getJavaUDAFFunction(bool input_nullable);
-const AggregateFunction* getJavaWindowFunction();
 
 const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
                                                 PrimitiveType return_type, bool is_null,

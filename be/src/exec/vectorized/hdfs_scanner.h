@@ -7,9 +7,11 @@
 
 #include "column/chunk.h"
 #include "env/env.h"
+#include "env/env_hdfs.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
+
 namespace starrocks::parquet {
 class FileReader;
 }
@@ -17,20 +19,6 @@ namespace starrocks::vectorized {
 
 class HdfsScanNode;
 class RuntimeFilterProbeCollector;
-
-class HdfsIOProfile {
-public:
-    RuntimeProfile::Counter* bytes_total_read = nullptr;
-    RuntimeProfile::Counter* bytes_read_local = nullptr;
-    RuntimeProfile::Counter* bytes_read_short_circuit = nullptr;
-    RuntimeProfile::Counter* bytes_read_dn_cache = nullptr;
-    RuntimeProfile::Counter* bytes_read_remote = nullptr;
-
-    void init(RuntimeProfile* root);
-
-private:
-    RuntimeProfile::Counter* _toplev = nullptr;
-};
 
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
@@ -68,8 +56,10 @@ struct HdfsScannerParams {
     // excluded from conjunct_ctxs.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
-    // file fd (local file or hdfs file)
-    std::shared_ptr<RandomAccessFile> fs = nullptr;
+    // The Env used to open the file to be scanned
+    Env* env = nullptr;
+    // The file to scan
+    std::string path;
 
     const TupleDescriptor* tuple_desc;
 
@@ -177,7 +167,7 @@ public:
 
     RuntimeState* runtime_state() { return _runtime_state; }
 
-    int open_limit() { return *_scanner_params.open_limit; }
+    int32_t open_limit() { return _scanner_params.open_limit->load(std::memory_order_relaxed); }
 
     bool is_open() { return _is_open; }
 
@@ -228,6 +218,7 @@ protected:
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
     // predicate which havs min/max
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
+    std::unique_ptr<RandomAccessFile> _file;
 };
 
 } // namespace starrocks::vectorized

@@ -266,7 +266,6 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
                         _agg_functions[i]->create(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i]);
                     }
@@ -282,7 +281,6 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
                         _agg_functions[i]->create(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i]);
                     }
@@ -479,6 +477,13 @@ private:
     template <typename HashMapWithKey>
     void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
         if (hash_map_with_key != nullptr) {
+            auto null_data_ptr = hash_map_with_key->get_null_key_data();
+            if (null_data_ptr != nullptr) {
+                for (int i = 0; i < _agg_functions.size(); i++) {
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], null_data_ptr + _agg_states_offsets[i]);
+                }
+            }
+
             auto it = hash_map_with_key->hash_map.begin();
             auto end = hash_map_with_key->hash_map.end();
             while (it != end) {

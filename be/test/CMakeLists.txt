@@ -9,9 +9,10 @@ set(EXEC_FILES
         ./column/column_pool_test.cpp
         ./column/const_column_test.cpp
         ./column/date_value_test.cpp
+        ./column/decimalv3_column_test.cpp
         ./column/field_test.cpp
         ./column/fixed_length_column_test.cpp
-        ./column/decimalv3_column_test.cpp
+        ./column/json_column_test.cpp
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
@@ -40,6 +41,7 @@ set(EXEC_FILES
         ./exec/vectorized/orc_scanner_adapter_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
+        ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/parquet/parquet_schema_test.cpp
         ./exec/parquet/encoding_test.cpp
         ./exec/parquet/page_reader_test.cpp
@@ -52,6 +54,7 @@ set(EXEC_FILES
         ./exprs/vectorized/decimal_binary_function_test.cpp
         ./exprs/vectorized/array_expr_test.cpp
         ./exprs/vectorized/array_functions_test.cpp
+        ./exprs/vectorized/binary_functions_test.cpp
         ./exprs/vectorized/binary_predicate_test.cpp
         ./exprs/vectorized/bitmap_functions_test.cpp
         ./exprs/vectorized/case_expr_test.cpp
@@ -112,6 +115,7 @@ set(EXEC_FILES
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
         ./io/array_random_access_file_test.cpp
+        ./io/fd_random_access_file_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
@@ -124,6 +128,7 @@ set(EXEC_FILES
         ./storage/kv_store_test.cpp
         ./storage/protobuf_file_test.cpp
         ./storage/page_cache_test.cpp
+        ./storage/persistent_index_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
         ./storage/rowset_update_state_test.cpp
@@ -146,6 +151,7 @@ set(EXEC_FILES
         ./storage/rowset/segment_iterator_test.cpp
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
+        ./storage/rowset/index_page_test.cpp
         ./storage/selection_vector_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
@@ -154,6 +160,7 @@ set(EXEC_FILES
         ./storage/tablet_meta_manager_test.cpp
         ./storage/tablet_updates_test.cpp
         ./storage/update_manager_test.cpp
+        ./storage/compaction_utils_test.cpp
         ./storage/vectorized/aggregate_iterator_test.cpp
         ./storage/vectorized/chunk_aggregator_test.cpp
         ./storage/vectorized/chunk_helper_test.cpp
@@ -202,6 +209,7 @@ set(EXEC_FILES
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
+        ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/bitmap_test.cpp
         ./util/bitmap_value_test.cpp
@@ -266,6 +274,10 @@ endif()
 
 if (WITH_HDFS)
     set(EXEC_FILES ${EXEC_FILES} ./exec/vectorized/hdfs_scan_node_test.cpp)
+endif ()
+
+if (WITH_AWS)
+    set(EXEC_FILES ${EXEC_FILES} ./object_store/s3_client_test.cpp)
 endif ()
 
 add_executable(starrocks_test ${EXEC_FILES})

@@ -766,6 +766,26 @@ public class PlanTestBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE `test_partition_prune_optimize_by_date` (\n" +
+                "  `session_id` varchar(20) NULL COMMENT \"\",\n" +
+                "  `store_id` varchar(20) NULL COMMENT \"店铺id\",\n" +
+                "  `dt` date NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`session_id`, `store_id`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(PARTITION p_20211227 VALUES [('2021-12-27'), ('2021-12-28')),\n" +
+                "PARTITION p_20211228 VALUES [('2021-12-28'), ('2021-12-29')),\n" +
+                "PARTITION p_20211229 VALUES [('2021-12-29'), ('2021-12-30')),\n" +
+                "PARTITION p_20211230 VALUES [('2021-12-30'), ('2021-12-31'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`session_id`) BUCKETS 5 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
     }
 
     protected static void setTableStatistics(OlapTable table, long rowCount) {
@@ -789,8 +809,10 @@ public class PlanTestBase {
     }
 
     public String getFragmentPlan(String sql) throws Exception {
-        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
+        String s= UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
+        System.out.println(s);
+        return s;
     }
 
     public String getVerboseExplain(String sql) throws Exception {

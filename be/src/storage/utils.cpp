@@ -178,12 +178,7 @@ Status read_write_test_file(const string& test_file_path) {
                     fmt::format("Error to access file: {}, error:{} ", test_file_path, std::strerror(Errno::no())));
         }
     }
-    std::unique_ptr<RandomRWFile> file;
-    Status st = Env::Default()->new_random_rw_file(test_file_path, &file);
-    if (!st.ok()) {
-        return Status::IOError(
-                fmt::format("Error to create test file: {}, error:{} ", test_file_path, std::strerror(Errno::no())));
-    }
+    ASSIGN_OR_RETURN(auto file, Env::Default()->new_random_rw_file(test_file_path));
     const size_t TEST_FILE_BUF_SIZE = 4096;
     const size_t DIRECT_IO_ALIGNMENT = 512;
     char* write_test_buff = nullptr;
@@ -204,7 +199,7 @@ Status read_write_test_file(const string& test_file_path) {
         int32_t tmp_value = rand_r(&rand_seed);
         write_test_buff[i] = static_cast<char>(tmp_value);
     }
-    st = file->write_at(0, Slice(write_buff.get(), TEST_FILE_BUF_SIZE));
+    auto st = file->write_at(0, Slice(write_buff.get(), TEST_FILE_BUF_SIZE));
     if (!st.ok()) {
         LOG(WARNING) << "Error to write " << test_file_path << ", error: " << st;
         return Status::IOError(

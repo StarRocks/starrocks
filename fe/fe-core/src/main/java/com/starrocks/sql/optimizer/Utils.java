@@ -326,6 +326,36 @@ public class Utils {
         return count;
     }
 
+    public static boolean capableSemiReorder(OptExpression root, boolean hasSemi, int joinNum, int maxJoin) {
+        Operator operator = root.getOp();
+
+        if (operator instanceof LogicalJoinOperator) {
+            if (((LogicalJoinOperator) operator).getJoinType().isSemiAntiJoin()) {
+                hasSemi = true;
+            } else {
+                joinNum = joinNum + 1;
+            }
+
+            if (joinNum > maxJoin && hasSemi) {
+                return false;
+            }
+        }
+
+        for (OptExpression child : root.getInputs()) {
+            if (operator instanceof LogicalJoinOperator) {
+                if (!capableSemiReorder(child, hasSemi, joinNum, maxJoin)) {
+                    return false;
+                }
+            } else {
+                if (!capableSemiReorder(child, false, 0, maxJoin)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     public static boolean hasUnknownColumnsStats(OptExpression root) {
         Operator operator = root.getOp();
         if (operator instanceof LogicalScanOperator) {
@@ -439,7 +469,7 @@ public class Utils {
                 return Optional.of(ConstantOperator.createNull(descType));
             }
 
-            ConstantOperator result = ((ConstantOperator) op).castTo(descType);
+            ConstantOperator result = ((ConstantOperator) op).castToStrictly(descType);
             if (result.toString().equalsIgnoreCase(op.toString())) {
                 return Optional.of(result);
             } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {

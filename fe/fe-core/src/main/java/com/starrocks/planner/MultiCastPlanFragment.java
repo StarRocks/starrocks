@@ -30,7 +30,8 @@ public class MultiCastPlanFragment extends PlanFragment {
 
     public MultiCastPlanFragment(PlanFragment planFragment) {
         super(planFragment.fragmentId, planFragment.planRoot, planFragment.getDataPartition());
-        this.outputPartition = planFragment.getOutputPartition();
+        // Use random, only send to self
+        this.outputPartition = DataPartition.RANDOM;
         this.children.addAll(planFragment.getChildren());
     }
 
@@ -51,7 +52,7 @@ public class MultiCastPlanFragment extends PlanFragment {
 
         for (ExchangeNode f : destNodeList) {
             DataStreamSink streamSink = new DataStreamSink(f.getId());
-            streamSink.setPartition(f.getFragment().getOutputPartition());
+            streamSink.setPartition(DataPartition.RANDOM);
             streamSink.setFragment(this);
             multiCastDataSink.getDataStreamSinks().add(streamSink);
             multiCastDataSink.getDestinations().add(Lists.newArrayList());

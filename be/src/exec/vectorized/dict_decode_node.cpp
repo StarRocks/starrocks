@@ -10,6 +10,7 @@
 #include "column/column_helper.h"
 #include "common/logging.h"
 #include "exec/pipeline/dict_decode_operator.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
@@ -47,7 +48,7 @@ void DictDecodeNode::_init_counter() {
 Status DictDecodeNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc()));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -166,6 +167,9 @@ pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBu
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
+    if (limit() != -1) {
+        operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
     return operators;
 }
 

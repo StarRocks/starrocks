@@ -48,6 +48,7 @@
 #include "util/thread.h"
 #include "util/thrift_util.h"
 #include "util/time.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -263,6 +264,8 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     UserFunctionCache::instance()->init(config::user_function_dir);
 
     vectorized::date::init_date_cache();
+
+    TimezoneUtils::init_time_zones();
 
     std::thread tcmalloc_gc_thread(gc_tcmalloc_memory, this);
     Thread::set_thread_name(tcmalloc_gc_thread, "tcmalloc_daemon");

@@ -456,6 +456,29 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
+    public void testDecodeNodeRewrite15() throws Exception {
+        // Test Predicate dict columns both has support predicate and no-support predicate
+        String sql;
+        String plan;
+        {
+            sql = "select count(*) from " +
+                    "supplier where S_ADDRESS like '%A%' and S_ADDRESS not like '%B%'";
+            plan = getCostExplain(sql);
+            Assert.assertFalse(plan.contains(" dict_col=S_ADDRESS "));
+        }
+        {
+            sql = "select * from supplier l join supplier r on " +
+                    "l.S_NAME = r.S_NAME where upper(l.S_ADDRESS) like '%A%' and upper(l.S_ADDRESS) not like '%B%'";
+            plan = getCostExplain(sql);
+            Assert.assertTrue(plan.contains("  1:OlapScanNode\n" +
+                    "     table: supplier, rollup: supplier\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: upper(3: S_ADDRESS) LIKE '%A%', NOT (upper(3: S_ADDRESS) LIKE '%B%')\n" +
+                    "     dict_col=S_COMMENT"));
+        }
+    }
+
+    @Test
     public void testLeftJoinWithUnion() throws Exception {
         String sql;
         String plan;
@@ -623,6 +646,23 @@ public class DecodeRewriteTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("multi_distinct_count[([9: count, VARCHAR, false]);"));
         Assert.assertTrue(plan.contains("multi_distinct_count[([11: S_ADDRESS, INT, true]);"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testNestedExpressions() throws Exception {
+        String sql;
+        String plan;
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select upper(lower(S_ADDRESS)) from supplier group by lower(S_ADDRESS);";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 13> : <string id 10>"));
+        Assert.assertTrue(plan.contains("  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  13 <-> upper[([12: lower, INT, true]); args: VARCHAR; result: INT; args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains("  4:AGGREGATE (merge finalize)\n" +
+                "  |  group by: [12: lower, INT, true]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 

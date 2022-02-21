@@ -5,6 +5,7 @@ package com.starrocks.sql;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -21,6 +22,9 @@ import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
@@ -29,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -178,6 +183,22 @@ public class Explain {
 
             StringBuilder sb = new StringBuilder("- HIVE-SCAN [")
                     .append(((HiveTable) scan.getTable()).getHiveTable())
+                    .append("]")
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
+            buildCostEstimate(sb, optExpression, context.step);
+            buildCommonProperty(sb, scan, context.step);
+            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalIcebergScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+            PhysicalIcebergScanOperator scan = (PhysicalIcebergScanOperator) optExpression.getOp();
+
+            StringBuilder sb = new StringBuilder("- ICEBERG-SCAN [")
+                    .append(((IcebergTable) scan.getTable()).getTable())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
@@ -520,6 +541,39 @@ public class Explain {
             PhysicalLimitOperator limit = (PhysicalLimitOperator) optExpression.getOp();
 
             return new OperatorStr("- LIMIT [" + limit.getLimit() + "]", context.step,
+                    buildChildOperatorStr(optExpression, context.step));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalCTEAnchor(OptExpression optExpression, ExplainContext context) {
+            OperatorStr left = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
+            OperatorStr right = visit(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
+
+            PhysicalCTEAnchorOperator anchor = (PhysicalCTEAnchorOperator) optExpression.getOp();
+            return new OperatorStr("- CTEAnchor[" + anchor.getCteId() + "]", context.step,
+                    Arrays.asList(left, right));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalCTEProduce(OptExpression optExpression, ExplainContext context) {
+            PhysicalCTEProduceOperator produce = (PhysicalCTEProduceOperator) optExpression.getOp();
+            return new OperatorStr("- CTEProduce[" + produce.getCteId() + "]", context.step,
+                    buildChildOperatorStr(optExpression, context.step));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalCTEConsume(OptExpression optExpression, ExplainContext context) {
+            PhysicalCTEConsumeOperator consume = (PhysicalCTEConsumeOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("- CTEConsume[" + consume.getCteId() + "]");
+
+            ExpressionPrinter printer = new ExpressionPrinter();
+            for (Map.Entry<ColumnRefOperator, ColumnRefOperator> kv : consume.getCteOutputColumnRefMap().entrySet()) {
+                String expression = "" + printer.print(kv.getKey()) + " := " + printer.print(kv.getValue());
+                buildOperatorProperty(sb, expression, context.step);
+            }
+
+            buildCommonProperty(sb, consume, context.step);
+            return new OperatorStr("- CTEConsume[" + consume.getCteId() + "]", context.step,
                     buildChildOperatorStr(optExpression, context.step));
         }
     }

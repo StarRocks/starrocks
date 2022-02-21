@@ -5,6 +5,7 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
@@ -13,7 +14,6 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FieldReference;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
@@ -45,6 +45,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitStatement(StatementBase node, C context) {
         return visitNode(node, context);
+    }
+
+    public R visitQueryStatement(QueryStatement node, C context) {
+        return visitStatement(node, context);
     }
 
     // ----------------- Relation ---------------
@@ -120,6 +124,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitArrayElementExpr(ArrayElementExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitArrowExpr(ArrowExpr node, C context) {
         return visitExpression(node, context);
     }
 

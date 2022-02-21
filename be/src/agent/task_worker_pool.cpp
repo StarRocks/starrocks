@@ -34,6 +34,7 @@
 
 #include "common/status.h"
 #include "env/env.h"
+#include "exec/workgroup/work_group.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
@@ -62,6 +63,7 @@ namespace starrocks {
 
 const uint32_t TASK_FINISH_MAX_RETRY = 3;
 const uint32_t PUBLISH_VERSION_MAX_RETRY = 3;
+const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
 
 std::atomic_ulong TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
 std::mutex TaskWorkerPool::_s_task_signatures_lock;
@@ -130,6 +132,9 @@ void TaskWorkerPool::start() {
         break;
     case TaskWorkerType::REPORT_OLAP_TABLE:
         _callback_function = _report_tablet_worker_thread_callback;
+        break;
+    case TaskWorkerType::REPORT_WORKGROUP:
+        _callback_function = _report_workgroup_thread_callback;
         break;
     case TaskWorkerType::UPLOAD:
         _callback_function = _upload_worker_thread_callback;
@@ -234,7 +239,7 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
                 _tasks.push_back(task);
             }
         }
-        _worker_thread_condition_variable->notify_one();
+        _worker_thread_condition_variable->notify_all();
     }
     for (auto const& task : *tasks) {
         int64_t signature = task.signature;
@@ -687,8 +692,117 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
     return (void*)nullptr;
 }
 
+Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_ptr<ThreadPool>& threadpool,
+                                                    const TPublishVersionRequest publish_version_req, size_t* tablet_n,
+                                                    std::vector<TTabletId>* error_tablet_ids) {
+    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    int64_t transaction_id = publish_version_req.transaction_id;
+    Status error_status = Status::OK();
+
+    // each partition
+    for (auto& par_ver_info : publish_version_req.partition_version_infos) {
+        int64_t partition_id = par_ver_info.partition_id;
+        // get all partition related tablets and check whether the tablet have the related version
+
+        map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
+        StorageEngine::instance()->txn_manager()->get_txn_related_tablets(transaction_id, partition_id,
+                                                                          &tablet_related_rs);
+
+        TVersion version = par_ver_info.version;
+
+        // vector for tablet_info.
+        std::vector<TabletInfo> tablet_infos;
+        tablet_infos.reserve(tablet_related_rs.size());
+
+        // vector for tablet publishing version status, which collects the execution results of the correspoding tablet.
+        std::vector<Status> statuses(tablet_related_rs.size(), Status::OK());
+
+        size_t idx = 0;
+        // each tablet
+        for (auto& tablet_rs : tablet_related_rs) {
+            tablet_infos.push_back(tablet_rs.first);
+
+            uint32_t retry_time = 0;
+
+            Status st;
+            while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
+                // submit publishing tablet version task to the threadpool.
+                st = threadpool->submit_func([&worker_pool_this, &tablet_rs, &statuses, idx, &version, &transaction_id,
+                                              &partition_id]() {
+                    const TabletInfo& tablet_info = tablet_rs.first;
+                    const RowsetSharedPtr& rowset = tablet_rs.second;
+                    auto& status = statuses[idx];
+                    // if rowset is null, it means this be received write task, but failed during write
+                    // and receive fe's publish version task
+                    // this be must return as an error tablet
+                    if (rowset == nullptr) {
+                        LOG(WARNING) << "Not found rowset of tablet: " << tablet_info.tablet_id << ", txn_id "
+                                     << transaction_id;
+                        status = Status::NotFound(fmt::format("Not found rowset of tablet: {}, txn_id: {}",
+                                                              tablet_info.tablet_id, transaction_id));
+                        return;
+                    }
+                    EnginePublishVersionTask engine_task(transaction_id, partition_id, version, tablet_info, rowset);
+
+                    status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+                    if (!status.ok())
+                        LOG(WARNING) << "failed to publish version for tablet, tablet_id " << tablet_info.tablet_id
+                                     << ", txn_id " << transaction_id << ", err: " << status;
+                });
+
+                if (st.is_service_unavailable()) {
+                    // Status::ServiceUnavailable is returned when all of the threads of the pool are busy.
+                    LOG(WARNING) << "publish version threadpool is busy, retry later. [transaction_id="
+                                 << publish_version_req.transaction_id << ", tablet_id=" << tablet_rs.first.tablet_id;
+                    // In general, publish version is fast. A small sleep is needed here.
+                    SleepFor(MonoDelta::FromMilliseconds(50 * retry_time));
+                    continue;
+                }
+                break;
+            }
+
+            // error category:
+            // 1. ServiceUnavailable, which means that the threadpool is busy even in retry.
+            // 2. error that is not ServiceUnavailable.
+            if (!st.ok()) return st;
+
+            ++idx;
+        }
+
+        // wait until that all jobs in threadpool are done.
+        threadpool->wait();
+
+        // check status.
+        for (size_t i = 0; i < tablet_infos.size(); ++i) {
+            const auto& tablet_info = tablet_infos[i];
+            const auto& status = statuses[i];
+            if (!status.ok()) {
+                error_tablet_ids->push_back(tablet_info.tablet_id);
+                // Use the first non-ok status as error_status.
+                if (error_status.ok()) {
+                    error_status = status;
+                }
+            }
+        }
+        *tablet_n += tablet_infos.size();
+    }
+    return error_status;
+}
+
 void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+
+    std::unique_ptr<ThreadPool> threadpool;
+    auto st =
+            ThreadPoolBuilder("publish_version")
+                    .set_min_threads(config::partition_publish_version_worker_count)
+                    .set_max_threads(config::partition_publish_version_worker_count)
+                    // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
+                    // But it seems that there's no limit for the number of tablets of a partition.
+                    // Since a large queue size brings a little overhead, a big one is chosen here.
+                    .set_max_queue_size(256)
+                    .build(&threadpool);
+
     while (true) {
         TAgentTaskRequest agent_task_req;
         TPublishVersionRequest publish_version_req;
@@ -711,12 +825,14 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
 
         std::vector<TTabletId> error_tablet_ids;
         uint32_t retry_time = 0;
-        Status res = Status::OK();
+        Status status;
+
+        size_t tablet_n = 0;
         while (retry_time < PUBLISH_VERSION_MAX_RETRY) {
             error_tablet_ids.clear();
-            EnginePublishVersionTask engine_task(publish_version_req, &error_tablet_ids);
-            res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-            if (res.ok()) {
+            status = _publish_version_in_parallel(arg_this, threadpool, publish_version_req, &tablet_n,
+                                                  &error_tablet_ids);
+            if (status.ok()) {
                 break;
             } else {
                 LOG(WARNING) << "publish version error, retry. [transaction_id=" << publish_version_req.transaction_id
@@ -727,17 +843,19 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         }
 
         TFinishTaskRequest finish_task_request;
-        if (!res.ok()) {
+        if (!status.ok()) {
             StarRocksMetrics::instance()->publish_task_failed_total.increment(1);
             // if publish failed, return failed, FE will ignore this error and
             // check error tablet ids and FE will also republish this task
-            LOG(WARNING) << "Fail to publish version. signature:" << agent_task_req.signature;
+            LOG(WARNING) << "Fail to publish version. signature:" << agent_task_req.signature
+                         << " related tablet num: " << tablet_n;
             finish_task_request.__set_error_tablet_ids(error_tablet_ids);
         } else {
-            LOG(INFO) << "publish_version success. signature:" << agent_task_req.signature;
+            LOG(INFO) << "publish_version success. signature:" << agent_task_req.signature
+                      << " related tablet num: " << tablet_n;
         }
 
-        res.to_thrift(&finish_task_request.task_status);
+        status.to_thrift(&finish_task_request.task_status);
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -746,6 +864,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req.task_type, agent_task_req.signature);
     }
+    threadpool->shutdown();
     return (void*)nullptr;
 }
 
@@ -1260,6 +1379,43 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
 
         // wait for notifying until timeout
         StorageEngine::instance()->wait_for_report_notify(config::report_tablet_interval_seconds, true);
+    }
+
+    return (void*)nullptr;
+}
+
+void* TaskWorkerPool::_report_workgroup_thread_callback(void* arg_this) {
+    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+
+    TReportRequest request;
+    request.__set_backend(worker_pool_this->_backend);
+    AgentStatus status = STARROCKS_SUCCESS;
+
+    while ((!worker_pool_this->_stopped)) {
+        if (worker_pool_this->_master_info.network_address.port == 0) {
+            // port == 0 means not received heartbeat yet
+            // sleep a short time and try again
+            LOG(INFO) << "Waiting to receive first heartbeat from frontend";
+            sleep(config::sleep_one_second);
+            continue;
+        }
+
+        StarRocksMetrics::instance()->report_workgroup_requests_total.increment(1);
+        request.__set_report_version(_s_report_version);
+        auto workgroups = workgroup::WorkGroupManager::instance()->list_workgroups();
+        request.__set_active_workgroups(std::move(workgroups));
+        TMasterResult result;
+        status = worker_pool_this->_master_client->report(request, &result);
+
+        if (status != STARROCKS_SUCCESS) {
+            StarRocksMetrics::instance()->report_workgroup_requests_failed.increment(1);
+            LOG(WARNING) << "Fail to report workgroup to " << worker_pool_this->_master_info.network_address.hostname
+                         << ":" << worker_pool_this->_master_info.network_address.port << ", err=" << status;
+        }
+        if (result.__isset.workgroup_ops) {
+            workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
+        }
+        sleep(config::report_workgroup_interval_seconds);
     }
 
     return (void*)nullptr;

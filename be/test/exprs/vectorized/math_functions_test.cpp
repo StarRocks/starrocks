@@ -48,6 +48,26 @@ TEST_F(VecMathFunctionsTest, truncateTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, truncateNanTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        auto tc2 = Int32Column::create();
+
+        tc1->append(0);
+        tc2->append(1591994755);
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::truncate(ctx.get(), columns);
+
+        ASSERT_EQ(true, result->is_null(0));
+    }
+}
+
 TEST_F(VecMathFunctionsTest, Round_up_toTest) {
     {
         Columns columns;
@@ -548,6 +568,62 @@ TEST_F(VecMathFunctionsTest, LnTest) {
         ASSERT_EQ(true, result_ln->is_null(0));
         ASSERT_EQ(std::log(2), result_ln->get(1).get_double());
         ASSERT_EQ(true, result_ln->is_null(2));
+    }
+}
+
+TEST_F(VecMathFunctionsTest, ExpTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        tc1->append(0);
+        tc1->append(2.0);
+        columns.emplace_back(tc1);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result_exp = MathFunctions::exp(ctx.get(), columns);
+
+        ASSERT_EQ(false, result_exp->is_null(0));
+        ASSERT_EQ(std::exp(0), result_exp->get(0).get_double());
+        ASSERT_EQ(std::exp(2), result_exp->get(1).get_double());
+    }
+}
+
+TEST_F(VecMathFunctionsTest, ExpOverflowTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        tc1->append(2.47498282E8);
+        tc1->append(2.47498282E3);
+        columns.emplace_back(tc1);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result_exp = MathFunctions::exp(ctx.get(), columns);
+
+        ASSERT_EQ(true, result_exp->is_null(0));
+        ASSERT_EQ(true, result_exp->is_null(1));
+    }
+}
+
+TEST_F(VecMathFunctionsTest, squareTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        tc1->append(0);
+        tc1->append(2.0);
+        tc1->append(-1);
+        tc1->append(std::nan("not a double number"));
+        columns.emplace_back(tc1);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result_square = MathFunctions::square(ctx.get(), columns);
+
+        ASSERT_EQ(0, result_square->get(0).get_double());
+        ASSERT_EQ(4, result_square->get(1).get_double());
+        ASSERT_EQ(1, result_square->get(2).get_double());
+        ASSERT_EQ(true, result_square->is_null(3));
     }
 }
 

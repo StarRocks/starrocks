@@ -28,7 +28,7 @@ struct FilterBuilder {
 };
 
 JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, PrimitiveType type) {
-    JoinRuntimeFilter* filter = type_dispatch_filter(type, FilterBuilder());
+    JoinRuntimeFilter* filter = type_dispatch_filter(type, (JoinRuntimeFilter*)nullptr, FilterBuilder());
     if (pool != nullptr && filter != nullptr) {
         return pool->add(filter);
     } else {
@@ -84,7 +84,7 @@ JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* 
 
 struct FilterIniter {
     template <PrimitiveType ptype>
-    void operator()(const ColumnPtr& column, size_t column_offset, JoinRuntimeFilter* expr, bool eq_null) {
+    auto operator()(const ColumnPtr& column, size_t column_offset, JoinRuntimeFilter* expr, bool eq_null) {
         using ColumnType = typename RunTimeTypeTraits<ptype>::ColumnType;
         auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
 
@@ -107,12 +107,13 @@ struct FilterIniter {
                 filter->insert(&data_ptr[j]);
             }
         }
+        return nullptr;
     }
 };
 
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type,
                                                       JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
-    type_dispatch_filter(type, FilterIniter(), column, column_offset, filter, eq_null);
+    type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null);
     return Status::OK();
 }
 
@@ -164,7 +165,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
 
 Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
     if (_probe_expr_ctx != nullptr) {
-        RETURN_IF_ERROR(_probe_expr_ctx->prepare(state, row_desc));
+        RETURN_IF_ERROR(_probe_expr_ctx->prepare(state));
     }
     _open_timestamp = UnixMillis();
     _latency_timer = ADD_COUNTER(p, strings::Substitute("JoinRuntimeFilter/$0/latency", _filter_id), TUnit::TIME_NS);
@@ -192,7 +193,7 @@ void RuntimeFilterProbeDescriptor::replace_probe_expr_ctx(RuntimeState* state, c
     _probe_expr_ctx->close(state);
     // create new probe expr and open it.
     _probe_expr_ctx = state->obj_pool()->add(new ExprContext(new_probe_expr_ctx->root()));
-    _probe_expr_ctx->prepare(state, row_desc);
+    _probe_expr_ctx->prepare(state);
     _probe_expr_ctx->open(state);
 }
 

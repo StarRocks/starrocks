@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
+import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -70,7 +71,6 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, (ColumnRefSet) requiredColumns.clone(), Double.MAX_VALUE);
-        context.addTaskContext(rootTaskContext);
 
         // Note: root group of memo maybe change after rewrite,
         // so we should always get root group and root group expression
@@ -113,6 +113,9 @@ public class Optimizer {
                 new ReorderJoinRule().transform(tree, context);
                 context.getRuleSet().addJoinCommutativityWithOutInnerRule();
             } else {
+                if (Utils.capableSemiReorder(tree, false, 0, sessionVariable.getCboMaxReorderNodeUseExhaustive())) {
+                    context.getRuleSet().getTransformRules().add(new SemiReorderRule());
+                }
                 context.getRuleSet().addJoinTransformationRules();
             }
         }

@@ -194,17 +194,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return destNode;
     }
 
-    public void getOlapScanNodes(PlanNode root, List<PlanNode> scanNodes) {
-        if (root instanceof OlapScanNode) {
-            scanNodes.add(root);
-            return;
-        }
-
-        for (PlanNode child : root.getChildren()) {
-            getOlapScanNodes(child, scanNodes);
-        }
-    }
-
     public ArrayList<Expr> getOutputExprs() {
         return outputExprs;
     }

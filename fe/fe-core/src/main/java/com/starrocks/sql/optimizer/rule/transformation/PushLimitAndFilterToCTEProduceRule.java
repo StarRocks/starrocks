@@ -14,6 +14,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
@@ -64,7 +65,8 @@ public class PushLimitAndFilterToCTEProduceRule extends TransformationRule {
         OptExpression child = input.getInputs().get(0);
         if (consumeNums == predicates.size()) {
             ScalarOperator orPredicate = Utils.compoundOr(Lists.newArrayList(new LinkedHashSet<>(predicates)));
-            child = OptExpression.create(new LogicalFilterOperator(orPredicate), child);
+            ScalarRangePredicateExtractor extractor = new ScalarRangePredicateExtractor();
+            child = OptExpression.create(new LogicalFilterOperator(extractor.rewriteAll(orPredicate)), child);
         }
 
         if (consumeNums == limits.size()) {

@@ -14,9 +14,8 @@ namespace starrocks::vectorized {
 
 VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node), _fn_desc(nullptr) {}
 
-Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, const starrocks::RowDescriptor& row_desc,
-                                           starrocks::ExprContext* context) {
-    RETURN_IF_ERROR(Expr::prepare(state, row_desc, context));
+Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
+    RETURN_IF_ERROR(Expr::prepare(state, context));
 
     if (!_fn.__isset.fid) {
         return Status::InternalError("Vectorized engine doesn't implement function " + _fn.name.function_name);

@@ -228,6 +228,15 @@ class QueryTransformer {
                 projections.put(variable, expression);
                 fieldMappings.add(variable);
             }
+
+            // child output expressions
+            for (Expr expression : subOpt.getExpressionMapping().getAllExpressions()) {
+                ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
+                        subOpt.getExpressionMapping(), projections, columnRefFactory);
+                fieldMappings.add(columnRef);
+                outputTranslations.put(expression, columnRef);
+            }
+
             for (Expr expression : projectExpressions) {
                 ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
                         subOpt.getExpressionMapping(), projections, columnRefFactory);
@@ -249,8 +258,7 @@ class QueryTransformer {
         for (AnalyticExpr analyticExpr : window) {
             WindowTransformer.WindowOperator rewriteOperator = WindowTransformer.standardize(analyticExpr);
             if (windowOperators.contains(rewriteOperator)) {
-                windowOperators.get(windowOperators.indexOf(rewriteOperator))
-                        .addFunction(analyticExpr.getFnCall(), analyticExpr);
+                windowOperators.get(windowOperators.indexOf(rewriteOperator)).addFunction(analyticExpr);
             } else {
                 windowOperators.add(rewriteOperator);
             }
@@ -426,7 +434,7 @@ class QueryTransformer {
                 groupingTranslations.put(groupingFunction, grouping);
 
                 groupingIds.add(tempGroupingIdsBitSets.stream().map(bitset ->
-                                Utils.convertBitSetToLong(bitset, groupingFunction.getChildren().size()))
+                        Utils.convertBitSetToLong(bitset, groupingFunction.getChildren().size()))
                         .collect(Collectors.toList()));
                 groupByColumnRefs.add(grouping);
                 repeatOutput.add(grouping);

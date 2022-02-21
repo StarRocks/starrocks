@@ -41,7 +41,8 @@ public:
      * @return the address of an array which contains true at the index of
      *    each columnId is selected.
      */
-    virtual const std::vector<bool> getSelectedColumns() const = 0;
+    virtual const std::vector<bool>& getSelectedColumns() const = 0;
+    virtual const std::vector<bool>& getLazyLoadColumns() const = 0;
 
     /**
      * Get the encoding for the given column for this stripe.
@@ -139,6 +140,14 @@ public:
     virtual void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
         rowBatch.isEncoded = false;
         next(rowBatch, numValues, notNull);
+    }
+
+    // Functions for lazy load fields.
+    virtual void lazyLoadSkip(uint64_t numValues);
+    virtual void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
+    virtual void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+        rowBatch.isEncoded = false;
+        lazyLoadNext(rowBatch, numValues, notNull);
     }
 
     /**

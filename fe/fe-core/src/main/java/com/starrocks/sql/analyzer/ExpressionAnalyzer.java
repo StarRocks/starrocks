@@ -8,6 +8,7 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
@@ -16,7 +17,6 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FieldReference;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
@@ -56,6 +56,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -103,7 +104,6 @@ public class ExpressionAnalyzer {
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
         private final Catalog catalog;
-
 
         public Visitor(AnalyzeState analyzeState, Catalog catalog, ConnectContext session) {
             this.analyzeState = analyzeState;
@@ -193,6 +193,21 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visitArrowExpr(ArrowExpr node, Scope scope) {
+            Expr item = node.getChild(0);
+            Expr key = node.getChild(1);
+            if (!key.isLiteral() || !key.getType().isStringType()) {
+                throw new SemanticException("right operand of -> should be string literal, but got " + key);
+            }
+            if (!item.getType().isJsonType()) {
+                throw new SemanticException(
+                        "-> operator could only be used for json column, but got " + item.getType());
+            }
+            node.setType(Type.JSON);
+            return null;
+        }
+
+        @Override
         public Void visitCompoundPredicate(CompoundPredicate node, Scope scope) {
             for (int i = 0; i < node.getChildren().size(); i++) {
                 Type type = node.getChild(i).getType();
@@ -268,7 +283,7 @@ public class ExpressionAnalyzer {
                     // (both precision and and scale are -1, only used in function instance resolution), it's
                     // illegal for a function and expression to has a wildcard decimal type as its type in BE,
                     // so here substitute wildcard decimal types with real decimal types.
-                    Function newFn = new Function(fn.getFunctionName(), args, resultType, fn.hasVarArgs());
+                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, resultType, fn.hasVarArgs());
                     node.setType(resultType);
                     node.setFn(newFn);
                     return null;
@@ -499,6 +514,17 @@ public class ExpressionAnalyzer {
                 throw unsupportedException("Table function cannot be used in expression");
             }
 
+            // check params type, don't check var args type
+            for (int i = 0; i < fn.getNumArgs(); i++) {
+                if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
+                        !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
+                    throw new SemanticException("No matching function with signature: %s(%s).",
+                            node.getFnName().getFunction(),
+                            node.getParams().isStar() ? "*" : Joiner.on(", ")
+                                    .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                }
+            }
+
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
@@ -604,7 +630,6 @@ public class ExpressionAnalyzer {
             }
             return fn;
         }
-
 
         @Override
         public Void visitGroupingFunctionCall(GroupingFunctionCallExpr node, Scope scope) {

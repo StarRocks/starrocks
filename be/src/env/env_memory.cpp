@@ -211,33 +211,31 @@ public:
         _namespace["/"] = std::make_shared<Inode>(kDir, "");
     }
 
-    Status new_sequential_file(const butil::FilePath& path, std::unique_ptr<SequentialFile>* file) {
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const butil::FilePath& path) {
         auto iter = _namespace.find(path.value());
         if (iter == _namespace.end()) {
             return Status::NotFound(path.value());
         } else {
-            *file = std::make_unique<MemorySequentialFile>(path.value(), iter->second);
-            return Status::OK();
+            return std::make_unique<MemorySequentialFile>(path.value(), iter->second);
         }
     }
 
-    Status new_random_access_file(const butil::FilePath& path, std::unique_ptr<RandomAccessFile>* file) {
-        return new_random_access_file(RandomAccessFileOptions(), path, file);
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const butil::FilePath& path) {
+        return new_random_access_file(RandomAccessFileOptions(), path);
     }
 
-    Status new_random_access_file(const RandomAccessFileOptions& opts, const butil::FilePath& path,
-                                  std::unique_ptr<RandomAccessFile>* file) {
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const butil::FilePath& path) {
         auto iter = _namespace.find(path.value());
         if (iter == _namespace.end()) {
             return Status::NotFound(path.value());
         } else {
-            *file = std::make_unique<MemoryRandomAccessFile>(path.value(), iter->second);
-            return Status::OK();
+            return std::make_unique<MemoryRandomAccessFile>(path.value(), iter->second);
         }
     }
 
     template <typename DerivedType, typename BaseType>
-    Status new_writable_file(Env::OpenMode mode, const butil::FilePath& path, std::unique_ptr<BaseType>* file) {
+    StatusOr<std::unique_ptr<BaseType>> new_writable_file(Env::OpenMode mode, const butil::FilePath& path) {
         InodePtr inode = get_inode(path);
         if (mode == Env::MUST_EXIST && inode == nullptr) {
             return Status::NotFound(path.value());
@@ -258,8 +256,7 @@ public:
         } else if (inode->type != kNormal) {
             return Status::IOError(path.value() + " is a directory");
         }
-        *file = std::make_unique<DerivedType>(path.value(), std::move(inode));
-        return Status::OK();
+        return std::make_unique<DerivedType>(path.value(), std::move(inode));
     }
 
     Status path_exists(const butil::FilePath& path) {
@@ -460,45 +457,45 @@ EnvMemory::~EnvMemory() {
     delete _impl;
 }
 
-Status EnvMemory::new_sequential_file(const std::string& path, std::unique_ptr<SequentialFile>* file) {
+StatusOr<std::unique_ptr<SequentialFile>> EnvMemory::new_sequential_file(const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_sequential_file(butil::FilePath(new_path), file);
+    return _impl->new_sequential_file(butil::FilePath(new_path));
 }
 
-Status EnvMemory::new_random_access_file(const std::string& path, std::unique_ptr<RandomAccessFile>* file) {
+StatusOr<std::unique_ptr<RandomAccessFile>> EnvMemory::new_random_access_file(const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_random_access_file(butil::FilePath(new_path), file);
+    return _impl->new_random_access_file(butil::FilePath(new_path));
 }
 
-Status EnvMemory::new_random_access_file(const RandomAccessFileOptions& opts, const std::string& path,
-                                         std::unique_ptr<RandomAccessFile>* file) {
+StatusOr<std::unique_ptr<RandomAccessFile>> EnvMemory::new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                              const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_random_access_file(opts, butil::FilePath(new_path), file);
+    return _impl->new_random_access_file(opts, butil::FilePath(new_path));
 }
 
-Status EnvMemory::new_writable_file(const std::string& path, std::unique_ptr<WritableFile>* file) {
-    return new_writable_file(WritableFileOptions(), path, file);
+StatusOr<std::unique_ptr<WritableFile>> EnvMemory::new_writable_file(const std::string& path) {
+    return new_writable_file(WritableFileOptions(), path);
 }
 
-Status EnvMemory::new_writable_file(const WritableFileOptions& opts, const std::string& path,
-                                    std::unique_ptr<WritableFile>* file) {
+StatusOr<std::unique_ptr<WritableFile>> EnvMemory::new_writable_file(const WritableFileOptions& opts,
+                                                                     const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_writable_file<MemoryWritableFile>(opts.mode, butil::FilePath(new_path), file);
+    return _impl->new_writable_file<MemoryWritableFile, WritableFile>(opts.mode, butil::FilePath(new_path));
 }
 
-Status EnvMemory::new_random_rw_file(const std::string& path, std::unique_ptr<RandomRWFile>* file) {
-    return new_random_rw_file(RandomRWFileOptions(), path, file);
+StatusOr<std::unique_ptr<RandomRWFile>> EnvMemory::new_random_rw_file(const std::string& path) {
+    return new_random_rw_file(RandomRWFileOptions(), path);
 }
 
-Status EnvMemory::new_random_rw_file(const RandomRWFileOptions& opts, const std::string& path,
-                                     std::unique_ptr<RandomRWFile>* file) {
+StatusOr<std::unique_ptr<RandomRWFile>> EnvMemory::new_random_rw_file(const RandomRWFileOptions& opts,
+                                                                      const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_writable_file<MemoryRandomRWFile>(opts.mode, butil::FilePath(new_path), file);
+    return _impl->new_writable_file<MemoryRandomRWFile, RandomRWFile>(opts.mode, butil::FilePath(new_path));
 }
 
 Status EnvMemory::path_exists(const std::string& path) {
@@ -619,20 +616,17 @@ Status EnvMemory::link_file(const std::string& old_path, const std::string& new_
 
 Status EnvMemory::create_file(const std::string& path) {
     WritableFileOptions opts{.mode = CREATE_OR_OPEN};
-    std::unique_ptr<WritableFile> dummy;
-    return new_writable_file(opts, path, &dummy);
+    return new_writable_file(opts, path).status();
 }
 
 Status EnvMemory::append_file(const std::string& path, const Slice& content) {
     WritableFileOptions opts{.mode = CREATE_OR_OPEN};
-    std::unique_ptr<WritableFile> f;
-    RETURN_IF_ERROR(new_writable_file(opts, path, &f));
+    ASSIGN_OR_RETURN(auto f, new_writable_file(opts, path));
     return f->append(content);
 }
 
 Status EnvMemory::read_file(const std::string& path, std::string* content) {
-    std::unique_ptr<RandomAccessFile> f;
-    RETURN_IF_ERROR(new_random_access_file(path, &f));
+    ASSIGN_OR_RETURN(auto f, new_random_access_file(path));
     uint64_t size = 0;
     RETURN_IF_ERROR(f->size(&size));
     raw::make_room(content, size);

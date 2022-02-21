@@ -26,8 +26,10 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "exec/pipeline/pipeline_driver_dispatcher.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/work_group.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -132,29 +134,52 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _thread_pool = new PriorityThreadPool("olap_scan_io", // olap scan io
                                           config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
-    _pipeline_scan_io_thread_pool = new PriorityThreadPool("pip_scan_io", // pipeline scan io
-                                                           config::pipeline_scan_thread_pool_thread_num <= 0
-                                                                   ? std::thread::hardware_concurrency()
-                                                                   : config::pipeline_scan_thread_pool_thread_num,
-                                                           config::pipeline_scan_thread_pool_queue_size);
+
+    int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
+                                 ? std::thread::hardware_concurrency()
+                                 : config::pipeline_scan_thread_pool_thread_num;
+
+    _pipeline_scan_io_thread_pool =
+            new PriorityThreadPool("pip_scan_io", // pipeline scan io
+                                   num_io_threads, config::pipeline_scan_thread_pool_queue_size);
+    std::unique_ptr<ThreadPool> scan_worker_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("scan_executor") // scan io task executor
+                            .set_min_threads(0)
+                            .set_max_threads(num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&scan_worker_thread_pool));
+    _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool));
+    _scan_executor->initialize(num_io_threads);
+
     _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool("elt", config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _fragment_mgr = new FragmentMgr(this);
 
-    std::unique_ptr<ThreadPool> driver_dispatcher_thread_pool;
+    std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     auto max_thread_num = std::thread::hardware_concurrency();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
         max_thread_num = config::pipeline_exec_thread_pool_thread_num;
     }
     LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", max_thread_num);
-    RETURN_IF_ERROR(ThreadPoolBuilder("pip_dispatcher") // pipeline dispatcher
+    RETURN_IF_ERROR(ThreadPoolBuilder("pip_executor") // pipeline executor
                             .set_min_threads(0)
                             .set_max_threads(max_thread_num)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .build(&driver_dispatcher_thread_pool));
-    _driver_dispatcher = new pipeline::GlobalDriverDispatcher(std::move(driver_dispatcher_thread_pool));
-    _driver_dispatcher->initialize(max_thread_num);
+                            .build(&driver_executor_thread_pool));
+    _driver_executor = new pipeline::GlobalDriverExecutor(std::move(driver_executor_thread_pool), false);
+    _driver_executor->initialize(max_thread_num);
+
+    std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
+                            .set_min_threads(0)
+                            .set_max_threads(max_thread_num)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&wg_driver_executor_thread_pool));
+    _wg_driver_executor = new pipeline::GlobalDriverExecutor(std::move(wg_driver_executor_thread_pool), true);
+    _wg_driver_executor->initialize(max_thread_num);
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
@@ -252,7 +277,7 @@ Status ExecEnv::init_mem_tracker() {
     GlobalTabletSchemaMap::Instance()->set_mem_tracker(_tablet_meta_mem_tracker);
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
-
+    starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
     return Status::OK();
 }
 
@@ -330,9 +355,13 @@ void ExecEnv::_destroy() {
         delete _master_info;
         _master_info = nullptr;
     }
-    if (_driver_dispatcher) {
-        delete _driver_dispatcher;
-        _driver_dispatcher = nullptr;
+    if (_driver_executor) {
+        delete _driver_executor;
+        _driver_executor = nullptr;
+    }
+    if (_wg_driver_executor) {
+        delete _wg_driver_executor;
+        _wg_driver_executor = nullptr;
     }
     if (_fragment_mgr) {
         delete _fragment_mgr;
@@ -345,6 +374,10 @@ void ExecEnv::_destroy() {
     if (_pipeline_scan_io_thread_pool) {
         delete _pipeline_scan_io_thread_pool;
         _pipeline_scan_io_thread_pool = nullptr;
+    }
+    if (_scan_executor) {
+        delete _scan_executor;
+        _scan_executor = nullptr;
     }
     if (_thread_pool) {
         delete _thread_pool;
@@ -394,6 +427,8 @@ void ExecEnv::_destroy() {
         delete _load_mem_tracker;
         _load_mem_tracker = nullptr;
     }
+    // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
+    workgroup::WorkGroupManager::instance()->destroy();
     if (_query_pool_mem_tracker) {
         delete _query_pool_mem_tracker;
         _query_pool_mem_tracker = nullptr;

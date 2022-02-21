@@ -63,8 +63,12 @@ StreamInformationImpl::~StreamInformationImpl() {
     // PASS
 }
 
-const std::vector<bool> StripeStreamsImpl::getSelectedColumns() const {
+const std::vector<bool>& StripeStreamsImpl::getSelectedColumns() const {
     return reader.getSelectedColumns();
+}
+
+const std::vector<bool>& StripeStreamsImpl::getLazyLoadColumns() const {
+    return reader.getLazyLoadColumns();
 }
 
 proto::ColumnEncoding StripeStreamsImpl::getEncoding(uint64_t columnId) const {

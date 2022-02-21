@@ -63,6 +63,7 @@ public:
             case OLAP_FIELD_TYPE_TIMESTAMP:
             case OLAP_FIELD_TYPE_DECIMAL_V2:
             case OLAP_FIELD_TYPE_PERCENTILE:
+            case OLAP_FIELD_TYPE_JSON:
             case OLAP_FIELD_TYPE_MAX_VALUE:
                 return type;
                 // no default by intention.
@@ -104,6 +105,7 @@ public:
             case OLAP_FIELD_TYPE_HLL:
             case OLAP_FIELD_TYPE_BOOL:
             case OLAP_FIELD_TYPE_PERCENTILE:
+            case OLAP_FIELD_TYPE_JSON:
             case OLAP_FIELD_TYPE_MAX_VALUE:
             case OLAP_FIELD_TYPE_OBJECT:
                 return type;

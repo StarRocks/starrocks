@@ -57,6 +57,7 @@ set(EXPR_FILES
   vectorized/in_predicate.cpp
   vectorized/is_null_predicate.cpp
   vectorized/json_functions.cpp
+  vectorized/jsonpath.cpp
   vectorized/like_predicate.cpp
   vectorized/literal.cpp
   vectorized/locate.cpp
@@ -75,6 +76,7 @@ IF (WITH_HDFS)
     set(EXPR_FILES ${EXPR_FILES}
       agg/java_udaf_function.cpp
       agg/java_window_function.cpp
+      table_function/java_udtf_function.cpp
       vectorized/java_function_call_expr.cpp
     )
 endif()

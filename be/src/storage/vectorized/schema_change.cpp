@@ -209,6 +209,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
     add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_DECIMAL32>();
     add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_DECIMAL64>();
     add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_DECIMAL128>();
+    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_JSON>();
 
     // to varchar type
     add_convert_type_mapping<OLAP_FIELD_TYPE_TINYINT, OLAP_FIELD_TYPE_VARCHAR>();
@@ -224,6 +225,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_VARCHAR>();
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_VARCHAR>();
     add_convert_type_mapping<OLAP_FIELD_TYPE_CHAR, OLAP_FIELD_TYPE_VARCHAR>();
+    add_convert_type_mapping<OLAP_FIELD_TYPE_JSON, OLAP_FIELD_TYPE_VARCHAR>();
 
     add_convert_type_mapping<OLAP_FIELD_TYPE_DATE, OLAP_FIELD_TYPE_DATETIME>();
     add_convert_type_mapping<OLAP_FIELD_TYPE_DATE, OLAP_FIELD_TYPE_TIMESTAMP>();
@@ -1001,10 +1003,11 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     std::vector<RowsetSharedPtr> rowsets_to_change;
     int32_t end_version = -1;
     Status status;
+    std::vector<std::unique_ptr<vectorized::TabletReader>> readers;
     {
         std::lock_guard l1(base_tablet->get_push_lock());
         std::lock_guard l2(new_tablet->get_push_lock());
-        std::lock_guard l3(base_tablet->get_header_lock());
+        std::shared_lock l3(base_tablet->get_header_lock());
         std::lock_guard l4(new_tablet->get_header_lock());
 
         std::vector<Version> versions_to_be_changed;
@@ -1014,8 +1017,14 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
             return status;
         }
         LOG(INFO) << "versions to be changed size:" << versions_to_be_changed.size();
+        Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
+            // prepare tablet reader to prevent rowsets being compacted
+            std::unique_ptr<vectorized::TabletReader> tablet_reader =
+                    std::make_unique<TabletReader>(base_tablet, version, base_schema);
+            RETURN_IF_ERROR(tablet_reader->prepare());
+            readers.emplace_back(std::move(tablet_reader));
         }
         LOG(INFO) << "rowsets_to_change size is:" << rowsets_to_change.size();
 
@@ -1055,20 +1064,16 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         }
     }
 
-    Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
     Version delete_predicates_version(0, max_rowset->version().second);
     TabletReaderParams read_params;
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
 
-    std::vector<std::unique_ptr<vectorized::TabletReader>> readers;
-    for (auto rowset : rowsets_to_change) {
-        vectorized::TabletReader* tablet_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
+    // open tablet readers out of lock for open is heavy because of io
+    for (auto& tablet_reader : readers) {
         tablet_reader->set_delete_predicates_version(delete_predicates_version);
-        RETURN_IF_ERROR(tablet_reader->prepare());
         RETURN_IF_ERROR(tablet_reader->open(read_params));
-        readers.emplace_back(std::move(tablet_reader));
     }
 
     sc_params.rowset_readers = std::move(readers);
@@ -1146,7 +1151,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         sc_procedure = std::make_unique<LinkedSchemaChange>(chunk_changer);
     }
 
-    if (sc_procedure.get() == nullptr) {
+    if (sc_procedure == nullptr) {
         LOG(WARNING) << "failed to malloc SchemaChange. "
                      << "malloc_size=" << sizeof(SchemaChangeWithSorting);
         return Status::InternalError("failed to malloc SchemaChange");
@@ -1179,7 +1184,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
         if (!status.ok()) {
-            LOG(INFO) << "build rowset writer failed";
             return Status::InternalError("build rowset writer failed");
         }
 
@@ -1189,10 +1193,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                          << " version=" << sc_params.version.first << "-" << sc_params.version.second;
             return Status::InternalError("process failed");
         }
-        // Add the new version of the data to the header,
-        // To prevent deadlocks, be sure to lock the old table first and then the new one
-        sc_params.new_tablet->obtain_push_lock();
-        DeferOp new_tablet_release_lock([&] { sc_params.new_tablet->release_push_lock(); });
         auto new_rowset = rowset_writer->build();
         if (!new_rowset.ok()) {
             LOG(WARNING) << "failed to build rowset: " << new_rowset.status() << ". exit alter process";

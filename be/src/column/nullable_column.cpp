@@ -32,6 +32,13 @@ NullableColumn::NullableColumn(ColumnPtr data_column, NullColumnPtr null_column)
             << "nullable column's data must be single column";
 }
 
+size_t NullableColumn::null_count() const {
+    if (!_has_null) {
+        return 0;
+    }
+    return SIMD::count_nonzero(_null_column->get_data());
+}
+
 void NullableColumn::append_datum(const Datum& datum) {
     if (datum.is_null()) {
         append_nulls(1);
@@ -313,6 +320,17 @@ void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const
     } else {
         _data_column->put_mysql_row_buffer(buf, idx);
     }
+}
+
+void NullableColumn::check_or_die() const {
+    CHECK_EQ(_null_column->size(), _data_column->size());
+    if (_has_null) {
+        CHECK_GT(SIMD::count_nonzero(_null_column->get_data()), 0);
+    } else {
+        CHECK_EQ(SIMD::count_nonzero(_null_column->get_data()), 0);
+    }
+    _data_column->check_or_die();
+    _null_column->check_or_die();
 }
 
 } // namespace starrocks::vectorized

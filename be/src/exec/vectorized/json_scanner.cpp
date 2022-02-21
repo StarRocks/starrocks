@@ -24,6 +24,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -162,6 +163,11 @@ Status JsonScanner::_construct_json_types() {
             break;
         }
 
+        case TYPE_JSON: {
+            _json_types[column_pos] = TypeDescriptor::create_json_type();
+            break;
+        }
+
         // Treat other types as VARCHAR.
         default: {
             auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
@@ -207,7 +213,8 @@ Status JsonScanner::_construct_cast_exprs() {
     return Status::OK();
 }
 
-Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<std::vector<JsonPath>>* path_vecs) {
+Status JsonScanner::_parse_json_paths(const std::string& jsonpath,
+                                      std::vector<std::vector<SimpleJsonPath>>* path_vecs) {
     try {
         simdjson::dom::parser parser;
         simdjson::dom::element elem = parser.parse(jsonpath.c_str(), jsonpath.length());
@@ -219,7 +226,7 @@ Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<s
                 return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", jsonpath));
             }
 
-            std::vector<JsonPath> parsed_paths;
+            std::vector<SimpleJsonPath> parsed_paths;
             const char* cstr = path.get_c_str();
 
             JsonFunctions::parse_json_paths(std::string(cstr), &parsed_paths);
@@ -523,17 +530,36 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             if (slot_descs[i] == nullptr) {
                 continue;
             }
+            const char* column_name = slot_descs[i]->col_name().c_str();
 
             // The columns in JsonReader's chunk are all in NullableColumn type;
             auto column = down_cast<NullableColumn*>(chunk->get_column_by_slot_id(slot_descs[i]->id()).get());
             if (i >= jsonpath_size) {
-                column->append_nulls(1);
+                if (strcmp(column_name, "__op") == 0) {
+                    // special treatment for __op column, fill default value '0' rather than null
+                    column->append_strings(std::vector{Slice{"0"}});
+                } else {
+                    column->append_nulls(1);
+                }
                 continue;
             }
 
             simdjson::ondemand::value val;
-            if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], val)) {
-                column->append_nulls(1);
+            // NOTE
+            // Why not process this syntax in extract_from_object?
+            // simdjson's api is limited, which coult not convert ondemand::object to ondemand::value.
+            // As a workaround, extract procedure is duplicated, for both ondemand::object and ondemand::value
+            // TODO(mofei) make it more elegant
+            if (_scanner->_json_paths[i].size() == 1 && _scanner->_json_paths[i][0].key == "$") {
+                RETURN_IF_ERROR(add_nullable_column(column, slot_descs[i]->type(), slot_descs[i]->col_name(), row,
+                                                    !_strict_mode));
+            } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], val)) {
+                if (strcmp(column_name, "__op") == 0) {
+                    // special treatment for __op column, fill default value '0' rather than null
+                    column->append_strings(std::vector{Slice{"0"}});
+                } else {
+                    column->append_nulls(1);
+                }
             } else {
                 RETURN_IF_ERROR(_construct_column(val, column, slot_descs[i]->type(), slot_descs[i]->col_name()));
             }

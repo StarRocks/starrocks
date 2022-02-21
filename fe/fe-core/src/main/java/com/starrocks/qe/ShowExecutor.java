@@ -76,6 +76,7 @@ import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -257,6 +258,8 @@ public class ShowExecutor {
             handleShowSqlBlackListStmt();
         } else if (stmt instanceof ShowAnalyzeStmt) {
             handleShowAnalyze();
+        } else if (stmt instanceof ShowWorkGroupStmt) {
+            handleShowWorkGroup();
         } else {
             handleEmtpy();
         }
@@ -1513,5 +1516,11 @@ public class ShowExecutor {
             }
         }
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowWorkGroup() {
+        ShowWorkGroupStmt showWorkGroupStmt = (ShowWorkGroupStmt) stmt;
+        List<List<String>> rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
+        resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);
     }
 }

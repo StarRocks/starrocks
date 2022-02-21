@@ -126,15 +126,18 @@ template jvalue cast_to_jvalue<true>(MethodTypeDescriptor method_type_desc, cons
 template jvalue cast_to_jvalue<false>(MethodTypeDescriptor method_type_desc, const Column* col, int row_num);
 
 void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val) {
+    DCHECK(method_type_desc.is_box);
     auto& helper = JVMFunctionHelper::getInstance();
     Column* data_col = col;
     if (col->is_nullable() && method_type_desc.type != PrimitiveType::TYPE_VARCHAR &&
         method_type_desc.type != PrimitiveType::TYPE_CHAR) {
         auto* nullable_column = down_cast<NullableColumn*>(col);
-        nullable_column->set_null(row_num);
+        if (val.l == nullptr) {
+            nullable_column->set_null(row_num);
+            return;
+        }
         data_col = nullable_column->mutable_data_column();
     }
-    DCHECK(method_type_desc.is_box);
     switch (method_type_desc.type) {
 #define ASSIGN_BOX_TYPE(NAME, TYPE)                                                \
     case NAME: {                                                                   \
@@ -251,7 +254,7 @@ Status init_udaf_context(int id, const std::string& url, const std::string& chec
         RETURN_IF_ERROR(analyzer->get_udaf_method_desc(sign, &mtdesc));
         *res = std::make_unique<JavaMethodDescriptor>();
         (*res)->name = std::move(method_name);
-        (*res)->sign = std::move(sign);
+        (*res)->signature = std::move(sign);
         (*res)->method_desc = std::move(mtdesc);
         return Status::OK();
     };

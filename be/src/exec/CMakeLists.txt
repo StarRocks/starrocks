@@ -153,7 +153,7 @@ set(EXEC_FILES
     pipeline/sort/partition_sort_sink_operator.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
     pipeline/sort/sort_context.cpp
-    pipeline/pipeline_driver_dispatcher.cpp
+    pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp
@@ -187,6 +187,7 @@ set(EXEC_FILES
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
     workgroup/work_group.cpp
+    workgroup/scan_executor.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
