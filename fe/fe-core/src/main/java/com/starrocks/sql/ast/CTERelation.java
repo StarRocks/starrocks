@@ -7,7 +7,7 @@ import com.starrocks.analysis.TableName;
 import java.util.List;
 
 public class CTERelation extends Relation {
-    private int cteId;
+    private final int cteId;
     private final String name;
     private List<String> columnOutputNames;
     private final QueryRelation cteQuery;

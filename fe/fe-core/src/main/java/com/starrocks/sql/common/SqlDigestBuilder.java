@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.base.SetQualifier;
 import java.util.List;
 import java.util.stream.Collectors;
 
+//Used to build sql digests
 public class SqlDigestBuilder {
     public static String build(StatementBase statement) {
         return new SqlDigestBuilderVisitor().visit(statement);

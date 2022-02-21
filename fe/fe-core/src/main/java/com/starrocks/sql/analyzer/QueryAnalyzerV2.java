@@ -44,12 +44,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.SetQualifier;
-import com.starrocks.sql.parser.AstBuilder;
-import com.starrocks.sql.parser.CaseInsensitiveStream;
-import com.starrocks.sql.parser.StarRocksLexer;
-import com.starrocks.sql.parser.StarRocksParser;
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.CommonTokenStream;
+import com.starrocks.sql.parser.SqlParser;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -68,14 +63,12 @@ public class QueryAnalyzerV2 {
         this.session = session;
     }
 
-    public Relation analyze(StatementBase node) {
+    public void analyze(StatementBase node) {
         new Visitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
-        return null;
     }
 
-    public Relation analyze(StatementBase node, Scope parent) {
+    public void analyze(StatementBase node, Scope parent) {
         new Visitor().process(node, parent);
-        return null;
     }
 
     private class Visitor extends AstVisitor<Scope, Scope> {
@@ -222,16 +215,7 @@ public class QueryAnalyzerV2 {
                 if (table instanceof View) {
                     View view = (View) table;
                     String inlineViewDef = view.getInlineViewDef();
-
-                    StarRocksLexer lexer =
-                            new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(inlineViewDef)));
-                    CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-                    StarRocksParser parser = new StarRocksParser(tokenStream);
-
-                    StarRocksParser.SingleStatementContext singleStatementContext = parser.singleStatement();
-                    QueryStatement stmt =
-                            (QueryStatement) new AstBuilder().visitSingleStatement(singleStatementContext);
-
+                    QueryStatement stmt = (QueryStatement) SqlParser.parse(inlineViewDef).get(0);
                     SubqueryRelation viewRelation = new SubqueryRelation(tableName.getTbl(), stmt.getQueryRelation());
                     viewRelation.setAlias(tableName);
                     return viewRelation;

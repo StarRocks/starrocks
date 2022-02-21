@@ -52,7 +52,7 @@ public class StatementPlanner {
                 queryStmt.getDbs(session, dbs);
             }
             if (stmt instanceof QueryStatement) {
-                new DBLockCollector(dbs, session).visit(stmt);
+                new DBCollector(dbs, session).visit(stmt);
             }
 
             try {
@@ -171,11 +171,12 @@ public class StatementPlanner {
         resultSink.setOutfileInfo(queryStmt.getOutFileClause());
     }
 
-    class DBLockCollector extends AstVisitor<Void, Void> {
-        private Map<String, Database> dbs;
-        private ConnectContext session;
+    //Get all the db used, the query needs to add locks to them
+    static class DBCollector extends AstVisitor<Void, Void> {
+        private final Map<String, Database> dbs;
+        private final ConnectContext session;
 
-        public DBLockCollector(Map<String, Database> dbs, ConnectContext session) {
+        public DBCollector(Map<String, Database> dbs, ConnectContext session) {
             this.dbs = dbs;
             this.session = session;
         }
