@@ -353,6 +353,7 @@ enum TTableType {
     ES_TABLE,
     HDFS_TABLE,
     ICEBERG_TABLE,
+    HUDI_TABLE,
     VIEW = 20
 }
 

@@ -37,6 +37,15 @@ import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
+import org.apache.hudi.common.config.HoodieMetadataConfig;
+import org.apache.hudi.common.engine.HoodieEngineContext;
+import org.apache.hudi.common.engine.HoodieLocalEngineContext;
+import org.apache.hudi.common.fs.FSUtils;
+import org.apache.hudi.common.model.HoodieBaseFile;
+import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.table.view.FileSystemViewManager;
+import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
+import org.apache.hudi.hadoop.utils.HoodieInputFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,6 +53,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -211,6 +221,67 @@ public class HiveMetaClient {
             LOG.warn("get partition failed", e);
             throw new DdlException("get hive partition meta data failed: " + e.getMessage());
         }
+    }
+
+    public HivePartition getHudiPartition(String dbName, String tableName, List<String> partitionValues) throws DdlException {
+        try (AutoCloseClient client = getClient()) {
+            Table table = client.hiveClient.getTable(dbName, tableName);
+            StorageDescriptor sd = table.getSd();
+            String basePath = sd.getLocation();
+            String partName = "";
+            if (partitionValues.size() > 0) {
+                Partition partition = client.hiveClient.getPartition(dbName, tableName, partitionValues);
+                sd = partition.getSd();
+                partName = FSUtils.getRelativePartitionPath(new Path(basePath), new Path(sd.getLocation()));
+            }
+            HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
+            if (format == null) {
+                throw new DdlException("unsupported file format [" + sd.getInputFormat() + "]");
+            }
+            String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
+            List<HdfsFileDesc> fileDescs = getHudiFileDescs(sd, basePath, partName);
+            return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
+        } catch (NoSuchObjectException e) {
+            throw new DdlException("Get hudi partition meta data failed: "
+                    + "partition not exists, partitionValues: "
+                    + String.join(",", partitionValues));
+        } catch (Exception e) {
+            LOG.warn("Get partition failed", e);
+            throw new DdlException("Get hudi partition meta data failed: " + e.getMessage());
+        }
+    }
+
+    private List<HdfsFileDesc> getHudiFileDescs(StorageDescriptor sd, String basePath, String partName) throws Exception {
+        List<HdfsFileDesc> fileDescs = Lists.newArrayList();
+
+        FileSystem fileSystem = getFileSystem(new URI(basePath));
+        // get properties like 'field.delim' and 'line.delim' from StorageDescriptor
+        TextFileFormatDesc textFileFormatDesc = new TextFileFormatDesc(
+                sd.getSerdeInfo().getParameters().getOrDefault("field.delim", ","),
+                sd.getSerdeInfo().getParameters().getOrDefault("line.delim", "\n"));
+
+        Configuration conf = new Configuration();
+        HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder().setConf(conf).setBasePath(basePath).build();
+        HoodieEngineContext engineContext = new HoodieLocalEngineContext(conf);
+        HoodieMetadataConfig metadataConfig = HoodieMetadataConfig.newBuilder().build();
+        HoodieTableFileSystemView fileSystemView = FileSystemViewManager.createInMemoryFileSystemView(engineContext,
+                metaClient, metadataConfig);
+        Iterator<HoodieBaseFile> hoodieBaseFileIterator = fileSystemView.getLatestBaseFiles(partName).iterator();
+        while (hoodieBaseFileIterator.hasNext()) {
+            HoodieBaseFile baseFile = hoodieBaseFileIterator.next();
+
+            FileStatus fileStatus = HoodieInputFormatUtils.getFileStatus(baseFile);
+            BlockLocation[] blockLocations;
+            if (fileStatus instanceof LocatedFileStatus) {
+                blockLocations = ((LocatedFileStatus) fileStatus).getBlockLocations();
+            } else {
+                blockLocations = fileSystem.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
+            }
+            List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
+            fileDescs.add(new HdfsFileDesc(baseFile.getFileName(), "", fileStatus.getLen(),
+                    ImmutableList.copyOf(fileBlockDescs), HdfsFileFormat.isSplittable(sd.getInputFormat()), textFileFormatDesc));
+        }
+        return fileDescs;
     }
 
     public HiveTableStats getTableStats(String dbName, String tableName) throws DdlException {

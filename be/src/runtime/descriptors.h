@@ -165,6 +165,7 @@ private:
 class HdfsPartitionDescriptor {
 public:
     HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition);
+    HdfsPartitionDescriptor(const THudiTable& thrift_table, const THdfsPartition& thrift_partition);
 
     int64_t id() const { return _id; }
     THdfsFileFormat::type file_format() { return _file_format; }
@@ -218,6 +219,31 @@ public:
 private:
     std::string _table_location;
     std::vector<TColumn> _columns;
+};
+
+class HudiTableDescriptor : public TableDescriptor {
+public:
+    HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~HudiTableDescriptor() override = default;
+
+    bool is_partition_col(const SlotDescriptor* slot) const;
+    int get_partition_col_index(const SlotDescriptor* slot) const;
+    HdfsPartitionDescriptor* get_partition(int64_t partition_id) const;
+
+    const std::string& hdfs_base_dir() const { return _table_location; }
+
+    Status create_key_exprs(ObjectPool* pool, int32_t chunk_size) {
+        for (auto& part : _partition_id_to_desc_map) {
+            RETURN_IF_ERROR(part.second->create_part_key_exprs(pool, chunk_size));
+        }
+        return Status::OK();
+    }
+
+private:
+    std::string _table_location;
+    std::vector<TColumn> _columns;
+    std::vector<TColumn> _partition_columns;
+    std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
 };
 
 class OlapTableDescriptor : public TableDescriptor {

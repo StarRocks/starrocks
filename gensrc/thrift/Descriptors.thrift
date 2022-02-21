@@ -305,6 +305,23 @@ struct TIcebergTable {
     2: optional list<TColumn> columns
 }
 
+struct THudiTable {
+    // table location
+    1: optional string location
+
+    // Schema columns, except partition columns
+    2: optional list<TColumn> columns
+
+    // Partition columns
+    3: optional list<TColumn> partition_columns
+
+    // Map from partition id to partition metadata.
+    4: optional map<i64, THdfsPartition> partitions
+
+    // The prefixes of locations of partitions in this table
+    5: optional list<string> partition_prefixes
+}
+
 // "Union" of all table types.
 struct TTableDescriptor {
   1: required Types.TTableId id
@@ -328,6 +345,9 @@ struct TTableDescriptor {
 
   // Iceberg Table schema
   31: optional TIcebergTable icebergTable
+
+  // Hudi Table schema
+  32: optional THudiTable hudiTable
 }
 
 struct TDescriptorTable {
