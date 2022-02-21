@@ -13,6 +13,12 @@
 
 namespace starrocks::vectorized {
 
+void ArrayColumn::check_or_die() const {
+    CHECK_EQ(_offsets->get_data().back(), _elements->size());
+    _offsets->check_or_die();
+    _elements->check_or_die();
+}
+
 ArrayColumn::ArrayColumn(ColumnPtr elements, UInt32Column::Ptr offsets)
         : _elements(std::move(elements)), _offsets(std::move(offsets)) {
     if (_offsets->empty()) {

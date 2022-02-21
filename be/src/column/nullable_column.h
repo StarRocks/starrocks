@@ -279,6 +279,8 @@ public:
         return _data_column->reach_capacity_limit() || _null_column->reach_capacity_limit();
     }
 
+    void check_or_die() const override;
+
 private:
     ColumnPtr _data_column;
     NullColumnPtr _null_column;
