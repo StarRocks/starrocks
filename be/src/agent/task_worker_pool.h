@@ -146,7 +146,7 @@ private:
     static FrontendServiceClientCache _master_service_client_cache;
     static std::atomic_ulong _s_report_version;
 
-    static std::mutex _s_task_signatures_lock;
+    static std::mutex _s_task_signatures_lock[TTaskType::type::TASK_TYPE_COUNT];
     static std::map<TTaskType::type, std::set<int64_t>> _s_task_signatures;
 
     std::atomic<bool> _stopped{false};

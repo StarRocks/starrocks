@@ -66,7 +66,7 @@ const uint32_t PUBLISH_VERSION_MAX_RETRY = 3;
 const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
 
 std::atomic_ulong TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
-std::mutex TaskWorkerPool::_s_task_signatures_lock;
+std::mutex TaskWorkerPool::_s_task_signatures_lock[TTaskType::type::TASK_TYPE_COUNT];
 std::map<TTaskType::type, std::set<int64_t>> TaskWorkerPool::_s_task_signatures;
 FrontendServiceClientCache TaskWorkerPool::_master_service_client_cache;
 
@@ -208,7 +208,7 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
     const TTaskType::type task_type = (*tasks)[0].task_type;
     EnumToString(TTaskType, task_type, type_str);
     {
-        std::lock_guard task_signatures_lock(_s_task_signatures_lock);
+        std::lock_guard task_signatures_lock(_s_task_signatures_lock[task_type]);
         const auto recv_time = time(nullptr);
         for (auto it = tasks->begin(); it != tasks->end();) {
             TAgentTaskRequest& task_req = *it;
@@ -250,13 +250,13 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
 }
 
 bool TaskWorkerPool::_register_task_info(const TTaskType::type task_type, int64_t signature) {
-    std::lock_guard task_signatures_lock(_s_task_signatures_lock);
+    std::lock_guard task_signatures_lock(_s_task_signatures_lock[task_type]);
     std::set<int64_t>& signature_set = _s_task_signatures[task_type];
     return signature_set.insert(signature).second;
 }
 
 void TaskWorkerPool::_remove_task_info(const TTaskType::type task_type, int64_t signature) {
-    std::lock_guard task_signatures_lock(_s_task_signatures_lock);
+    std::lock_guard task_signatures_lock(_s_task_signatures_lock[task_type]);
     _s_task_signatures[task_type].erase(signature);
 }
 
@@ -1259,9 +1259,13 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
     request.__set_backend(worker_pool_this->_backend);
 
     while ((!worker_pool_this->_stopped)) {
-        {
-            std::lock_guard task_signatures_lock(_s_task_signatures_lock);
-            request.__set_tasks(_s_task_signatures);
+        for (auto& _s_task_signature : _s_task_signatures) {
+            {
+                std::lock_guard task_signatures_lock(_s_task_signatures_lock[_s_task_signature.first]);
+                std::map<TTaskType::type, std::set<int64_t>> one_type_task;
+                one_type_task[_s_task_signature.first] = _s_task_signature.second;
+                request.__set_tasks(one_type_task);
+            }
         }
 
         StarRocksMetrics::instance()->report_task_requests_total.increment(1);
