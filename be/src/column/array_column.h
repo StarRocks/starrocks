@@ -151,6 +151,8 @@ public:
         return _elements->reach_capacity_limit() || _offsets->reach_capacity_limit();
     }
 
+    void check_or_die() const override;
+
 private:
     ColumnPtr _elements;
     // Offsets column will store the start position of every array element.

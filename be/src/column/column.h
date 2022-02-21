@@ -345,6 +345,8 @@ public:
 
     virtual Status accept_mutable(ColumnVisitorMutable* visitor) = 0;
 
+    virtual void check_or_die() const = 0;
+
 protected:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };

@@ -276,6 +276,7 @@ void Chunk::check_or_die() {
     } else {
         for (const ColumnPtr& c : _columns) {
             CHECK_EQ(num_rows(), c->size());
+            c->check_or_die();
         }
     }
 
