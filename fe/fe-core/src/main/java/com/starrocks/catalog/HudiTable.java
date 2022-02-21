@@ -465,43 +465,41 @@ public class HudiTable extends Table {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
-        if (Catalog.getCurrentCatalogStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_CURRENT) {
-            String json = Text.readString(in);
-            JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
-            db = jsonObject.getAsJsonPrimitive(JSON_KEY_HUDI_DB).getAsString();
-            table = jsonObject.getAsJsonPrimitive(JSON_KEY_HUDI_TABLE).getAsString();
-            if (jsonObject.has(JSON_KEY_RESOURCE_NAME)) {
-                resourceName = jsonObject.getAsJsonPrimitive(JSON_KEY_RESOURCE_NAME).getAsString();
+        String json = Text.readString(in);
+        JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
+        db = jsonObject.getAsJsonPrimitive(JSON_KEY_HUDI_DB).getAsString();
+        table = jsonObject.getAsJsonPrimitive(JSON_KEY_HUDI_TABLE).getAsString();
+        if (jsonObject.has(JSON_KEY_RESOURCE_NAME)) {
+            resourceName = jsonObject.getAsJsonPrimitive(JSON_KEY_RESOURCE_NAME).getAsString();
+        }
+        if (jsonObject.has(JSON_KEY_PART_COLUMN_NAMES)) {
+            JsonArray jPartColumnNames = jsonObject.getAsJsonArray(JSON_KEY_PART_COLUMN_NAMES);
+            for (int i = 0; i < jPartColumnNames.size(); i++) {
+                partColumnNames.add(jPartColumnNames.get(i).getAsString());
             }
-            if (jsonObject.has(JSON_KEY_PART_COLUMN_NAMES)) {
-                JsonArray jPartColumnNames = jsonObject.getAsJsonArray(JSON_KEY_PART_COLUMN_NAMES);
-                for (int i = 0; i < jPartColumnNames.size(); i++) {
-                    partColumnNames.add(jPartColumnNames.get(i).getAsString());
-                }
+        }
+        if (jsonObject.has(JSON_KEY_HUDI_PROPERTIES)) {
+            JsonObject jHudiProperties = jsonObject.getAsJsonObject(JSON_KEY_HUDI_PROPERTIES);
+            for (Map.Entry<String, JsonElement> entry : jHudiProperties.entrySet()) {
+                hudiProperties.put(entry.getKey(), entry.getValue().getAsString());
             }
-            if (jsonObject.has(JSON_KEY_HUDI_PROPERTIES)) {
-                JsonObject jHudiProperties = jsonObject.getAsJsonObject(JSON_KEY_HUDI_PROPERTIES);
-                for (Map.Entry<String, JsonElement> entry : jHudiProperties.entrySet()) {
-                    hudiProperties.put(entry.getKey(), entry.getValue().getAsString());
-                }
+        }
+        if (jsonObject.has(JSON_KEY_DATA_COLUMN_NAMES)) {
+            JsonArray jDataColumnNames = jsonObject.getAsJsonArray(JSON_KEY_DATA_COLUMN_NAMES);
+            for (int i = 0; i < jDataColumnNames.size(); i++) {
+                dataColumnNames.add(jDataColumnNames.get(i).getAsString());
             }
-            if (jsonObject.has(JSON_KEY_DATA_COLUMN_NAMES)) {
-                JsonArray jDataColumnNames = jsonObject.getAsJsonArray(JSON_KEY_DATA_COLUMN_NAMES);
-                for (int i = 0; i < jDataColumnNames.size(); i++) {
-                    dataColumnNames.add(jDataColumnNames.get(i).getAsString());
-                }
-            } else {
-                // In order to be compatible with the case where JSON_KEY_DATA_COLUMN_NAMES does not exist.
-                // Just put (full schema - partition columns) to dataColumnNames.
-                // But there may be errors, because fullSchema may not store all the non-partition columns of the hive table
-                // and the order may be inconsistent with that in hive
+        } else {
+            // In order to be compatible with the case where JSON_KEY_DATA_COLUMN_NAMES does not exist.
+            // Just put (full schema - partition columns) to dataColumnNames.
+            // But there may be errors, because fullSchema may not store all the non-partition columns of the hive table
+            // and the order may be inconsistent with that in hive
 
-                // full schema - partition columns = data columns
-                HashSet<String> partColumnSet = new HashSet<>(partColumnNames);
-                for (Column col : fullSchema) {
-                    if (!partColumnSet.contains(col.getName())) {
-                        dataColumnNames.add(col.getName());
-                    }
+            // full schema - partition columns = data columns
+            HashSet<String> partColumnSet = new HashSet<>(partColumnNames);
+            for (Column col : fullSchema) {
+                if (!partColumnSet.contains(col.getName())) {
+                    dataColumnNames.add(col.getName());
                 }
             }
         }

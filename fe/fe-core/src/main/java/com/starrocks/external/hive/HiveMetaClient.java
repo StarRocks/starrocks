@@ -572,7 +572,6 @@ public class HiveMetaClient {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getCurrentNotificationEventId();
         } catch (Exception e) {
-            e.printStackTrace();
             throw new DdlException("Failed to get current notification event id. msg: " + e.getMessage());
         }
     }
