@@ -196,6 +196,7 @@ public class StmtExecutor {
         if (coord != null) {
             coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
             coord.endProfile();
+            coord.mergeIsomorphicProfiles();
             profile.addChild(coord.getQueryProfile());
             coord = null;
         }
@@ -274,7 +275,8 @@ public class StmtExecutor {
                 if (optHints != null) {
                     SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
                     for (String key : optHints.keySet()) {
-                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))),
+                                true);
                     }
                     context.setSessionVariable(sessionVariable);
                 }

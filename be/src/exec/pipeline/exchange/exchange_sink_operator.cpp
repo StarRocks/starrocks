@@ -316,8 +316,6 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-
     _be_number = state->be_number();
 
     // Set compression type according to query options
@@ -339,9 +337,9 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
             instances += channel->get_fragment_instance_id_str();
         }
     }
-    _runtime_profile->add_info_string("DestID", std::to_string(_dest_node_id));
-    _runtime_profile->add_info_string("DestFragments", instances);
-    _runtime_profile->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
+    _unique_metrics->add_info_string("DestID", std::to_string(_dest_node_id));
+    _unique_metrics->add_info_string("DestFragments", instances);
+    _unique_metrics->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
@@ -354,18 +352,18 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     srand(reinterpret_cast<uint64_t>(this));
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
-    _bytes_sent_counter = ADD_COUNTER(_runtime_profile, "BytesSent", TUnit::BYTES);
-    _bytes_pass_through_counter = ADD_COUNTER(_runtime_profile, "BytesPassThrough", TUnit::BYTES);
-    _uncompressed_bytes_counter = ADD_COUNTER(_runtime_profile, "UncompressedBytes", TUnit::BYTES);
-    _ignore_rows = ADD_COUNTER(_runtime_profile, "IgnoreRows", TUnit::UNIT);
-    _serialize_batch_timer = ADD_TIMER(_runtime_profile, "SerializeBatchTime");
-    _shuffle_hash_timer = ADD_TIMER(_runtime_profile, "ShuffleHashTimer");
-    _compress_timer = ADD_TIMER(_runtime_profile, "CompressTime");
-    _send_request_timer = ADD_TIMER(_runtime_profile, "SendRequestTime");
-    _wait_response_timer = ADD_TIMER(_runtime_profile, "WaitResponseTime");
-    _overall_throughput = _runtime_profile->add_derived_counter(
+    _bytes_sent_counter = ADD_COUNTER(_unique_metrics, "BytesSent", TUnit::BYTES);
+    _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
+    _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
+    _ignore_rows = ADD_COUNTER(_unique_metrics, "IgnoreRows", TUnit::UNIT);
+    _serialize_batch_timer = ADD_TIMER(_unique_metrics, "SerializeBatchTime");
+    _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTimer");
+    _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
+    _send_request_timer = ADD_TIMER(_unique_metrics, "SendRequestTime");
+    _wait_response_timer = ADD_TIMER(_unique_metrics, "WaitResponseTime");
+    _overall_throughput = _unique_metrics->add_derived_counter(
             "OverallThroughput", TUnit::BYTES_PER_SECOND,
-            [capture0 = _bytes_sent_counter, capture1 = _runtime_profile->total_time_counter()] {
+            [capture0 = _bytes_sent_counter, capture1 = _total_timer] {
                 return RuntimeProfile::units_per_second(capture0, capture1);
             },
             "");
@@ -401,7 +399,6 @@ StatusOr<vectorized::ChunkPtr> ExchangeSinkOperator::pull_chunk(RuntimeState* st
 }
 
 Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
     uint16_t num_rows = chunk->num_rows();
     if (num_rows == 0) {
         return Status::OK();
@@ -545,10 +542,7 @@ void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 Status ExchangeSinkOperator::close(RuntimeState* state) {
-    ScopedTimer<MonotonicStopWatch> close_timer(_runtime_profile != nullptr ? _runtime_profile->total_time_counter()
-                                                                            : nullptr);
-    Operator::close(state);
-    return _close_status;
+    return Operator::close(state);
 }
 
 Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst, bool* is_first_chunk,

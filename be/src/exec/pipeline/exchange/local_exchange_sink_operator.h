@@ -15,7 +15,7 @@ public:
             : Operator(factory, id, "local_exchange_sink", plan_node_id),
               _exchanger(exchanger),
               _driver_sequence(driver_sequence) {
-        _runtime_profile->add_info_string("Type", exchanger->name());
+        _unique_metrics->add_info_string("Type", exchanger->name());
     }
 
     ~LocalExchangeSinkOperator() override = default;
