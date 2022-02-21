@@ -49,6 +49,7 @@ under the License.
         <parquet.version>1.10.1</parquet.version>
         <hadoop.version>3.3.0</hadoop.version>
         <skip.plugin>false</skip.plugin>
+        <hudi.version>0.10.0</hudi.version>
     </properties>
 
     <profiles>
@@ -689,6 +690,20 @@ under the License.
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-aws</artifactId>
                 <version>${hadoop.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-common -->
+            <dependency>
+                <groupId>org.apache.hudi</groupId>
+                <artifactId>hudi-common</artifactId>
+                <version>${hudi.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-hadoop-mr -->
+            <dependency>
+                <groupId>org.apache.hudi</groupId>
+                <artifactId>hudi-hadoop-mr</artifactId>
+                <version>${hudi.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

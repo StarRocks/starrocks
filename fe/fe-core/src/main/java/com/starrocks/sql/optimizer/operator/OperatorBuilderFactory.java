@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -39,6 +40,8 @@ public class OperatorBuilderFactory {
             return new LogicalHiveScanOperator.Builder();
         } else if (operator instanceof LogicalIcebergScanOperator) {
             return new LogicalIcebergScanOperator.Builder();
+        } else if (operator instanceof LogicalHudiScanOperator) {
+            return new LogicalHudiScanOperator.Builder();
         } else if (operator instanceof LogicalEsScanOperator) {
             return new LogicalEsScanOperator.Builder();
         } else if (operator instanceof LogicalMysqlScanOperator) {

@@ -10,6 +10,7 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -50,6 +51,7 @@ public class AnalyzerUtils {
 
     public static boolean isSupportedTable(Table table) {
         return table instanceof OlapTable || table instanceof HiveTable || table instanceof SchemaTable ||
-                table instanceof MysqlTable || table instanceof EsTable || table instanceof IcebergTable;
+                table instanceof MysqlTable || table instanceof EsTable || table instanceof IcebergTable ||
+                table instanceof HudiTable;
     }
 }

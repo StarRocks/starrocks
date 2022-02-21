@@ -19,24 +19,19 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.external.PredicateUtils;
+import com.starrocks.external.RemoteScanRangeLocations;
 import com.starrocks.external.hive.HdfsFileBlockDesc;
 import com.starrocks.external.hive.HdfsFileDesc;
-import com.starrocks.external.hive.HdfsFileFormat;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
-import com.starrocks.thrift.THdfsScanRange;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
-import com.starrocks.thrift.TScanRange;
-import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -67,7 +62,7 @@ import java.util.TreeMap;
 public class HdfsScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(HdfsScanNode.class);
 
-    private List<TScanRangeLocations> result = new ArrayList<>();
+    private RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
 
     private HiveTable hiveTable = null;
     // partitionColumnName -> (LiteralExpr -> partition ids)
@@ -267,7 +262,7 @@ public class HdfsScanNode extends ScanNode {
             for (HdfsFileDesc fileDesc : hivePartitions.get(i).getFiles()) {
                 totalBytes += fileDesc.getLength();
                 for (HdfsFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
-                    addScanRangeLocations(partitionInfos.get(i).getId(), fileDesc, blockDesc,
+                    scanRangeLocations.addScanRangeLocations(partitionInfos.get(i).getId(), fileDesc, blockDesc,
                             hivePartitions.get(i).getFormat());
                     LOG.debug("add scan range success. partition: {}, file: {}, block: {}-{}",
                             hivePartitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
@@ -275,84 +270,8 @@ public class HdfsScanNode extends ScanNode {
                 }
             }
         }
-        LOG.debug("get {} scan range locations cost: {} ms", result.size(), (System.currentTimeMillis() - start));
-    }
-
-    private void addScanRangeLocations(long partitionId, HdfsFileDesc fileDesc, HdfsFileBlockDesc blockDesc,
-                                       HdfsFileFormat fileFormat) {
-        // NOTE: Config.hive_max_split_size should be extracted to a local variable,
-        // because it may be changed before calling 'splitScanRangeLocations'
-        // and after needSplit has been calculated.
-        long splitSize = Config.hive_max_split_size;
-        boolean needSplit = fileDesc.isSplittable() && blockDesc.getLength() > splitSize;
-        if (needSplit) {
-            splitScanRangeLocations(partitionId, fileDesc, blockDesc, fileFormat, splitSize);
-        } else {
-            createScanRangeLocationsForSplit(partitionId, fileDesc, blockDesc,
-                    fileFormat, blockDesc.getOffset(), blockDesc.getLength());
-        }
-    }
-
-    private void splitScanRangeLocations(long partitionId,
-                                         HdfsFileDesc fileDesc,
-                                         HdfsFileBlockDesc blockDesc,
-                                         HdfsFileFormat fileFormat,
-                                         long splitSize) {
-        long remainingBytes = blockDesc.getLength();
-        long length = blockDesc.getLength();
-        long offset = blockDesc.getOffset();
-        do {
-            if (remainingBytes <= splitSize) {
-                createScanRangeLocationsForSplit(partitionId, fileDesc,
-                        blockDesc, fileFormat, offset + length - remainingBytes,
-                        remainingBytes);
-                remainingBytes = 0;
-            } else if (remainingBytes <= 2 * splitSize) {
-                long mid = (remainingBytes + 1) / 2;
-                createScanRangeLocationsForSplit(partitionId, fileDesc,
-                        blockDesc, fileFormat, offset + length - remainingBytes, mid);
-                createScanRangeLocationsForSplit(partitionId, fileDesc,
-                        blockDesc, fileFormat, offset + length - remainingBytes + mid,
-                        remainingBytes - mid);
-                remainingBytes = 0;
-            } else {
-                createScanRangeLocationsForSplit(partitionId, fileDesc,
-                        blockDesc, fileFormat, offset + length - remainingBytes,
-                        splitSize);
-                remainingBytes -= splitSize;
-            }
-        } while (remainingBytes > 0);
-    }
-
-    private void createScanRangeLocationsForSplit(long partitionId,
-                                                  HdfsFileDesc fileDesc,
-                                                  HdfsFileBlockDesc blockDesc,
-                                                  HdfsFileFormat fileFormat,
-                                                  long offset, long length) {
-        TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
-
-        THdfsScanRange hdfsScanRange = new THdfsScanRange();
-        hdfsScanRange.setRelative_path(fileDesc.getFileName());
-        hdfsScanRange.setOffset(offset);
-        hdfsScanRange.setLength(length);
-        hdfsScanRange.setPartition_id(partitionId);
-        hdfsScanRange.setFile_length(fileDesc.getLength());
-        hdfsScanRange.setFile_format(fileFormat.toThrift());
-        hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
-        TScanRange scanRange = new TScanRange();
-        scanRange.setHdfs_scan_range(hdfsScanRange);
-        scanRangeLocations.setScan_range(scanRange);
-
-        for (long hostId : blockDesc.getReplicaHostIds()) {
-            String host = blockDesc.getDataNodeIp(hostId);
-            TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(host, -1));
-            scanRangeLocations.addToLocations(scanRangeLocation);
-            if (hostToBeId.containsKey(host)) {
-                localBackendIds.addAll(hostToBeId.get(host));
-            }
-        }
-
-        result.add(scanRangeLocations);
+        LOG.debug("Get {} scan range locations cost: {} ms",
+                scanRangeLocations.getScanRangeLocationsSize(), (System.currentTimeMillis() - start));
     }
 
     @Override
@@ -373,7 +292,7 @@ public class HdfsScanNode extends ScanNode {
                 cardinality = Math.min(cardinality, limit);
             }
 
-            numNodes = Math.min(scanBackendIds.size(), result.size());
+            numNodes = Math.min(scanBackendIds.size(), scanRangeLocations.getScanRangeLocationsSize());
         }
         // even current node scan has no data, at least one backend will be assigned when the fragment actually execute
         numNodes = numNodes <= 0 ? 1 : numNodes;
@@ -400,7 +319,7 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return result;
+        return scanRangeLocations.getScanRangeLocations(maxScanRangeLength);
     }
 
     @Override
@@ -470,7 +389,7 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public int getNumInstances() {
-        return result.size();
+        return scanRangeLocations.getScanRangeLocationsSize();
     }
 
     @Override
