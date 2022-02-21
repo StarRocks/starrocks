@@ -10,6 +10,7 @@
 #include "storage/edit_version.h"
 #include "storage/fs/block_manager.h"
 #include "util/phmap/phmap.h"
+#include "util/phmap/phmap_dump.h"
 
 namespace starrocks {
 
@@ -84,6 +85,19 @@ public:
     virtual Status erase(size_t n, const void* keys, IndexValue* old_values, KeysInfo* not_found,
                          size_t* num_found) = 0;
 
+    // get dump size of hashmap
+    virtual size_t dump_bound() = 0;
+
+    virtual bool dump(phmap::BinaryOutputArchive& ar_out) = 0;
+
+    virtual bool load_snapshot(phmap::BinaryInputArchive& ar_in) = 0;
+
+    // [not thread-safe]
+    virtual size_t size() = 0;
+
+    // [not thread-safe]
+    virtual size_t capacity() = 0;
+
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 };
 
@@ -112,7 +126,8 @@ public:
 //   if (pi.upsert(upsert_keys, values, old_values))
 //   pi.erase(delete_keys, old_values)
 //   pi.commit()
-// If any error occurred between prepare and commit, abort should be called, the
+//   pi.apply()
+// If any error occurred between prepare and apply, abort should be called, the
 // index maybe corrupted, currently for simplicity, the whole index is cleared and rebuilt.
 class PersistentIndex {
 public:
@@ -147,6 +162,9 @@ public:
     // commit modification
     Status commit(PersistentIndexMetaPB* index_meta);
 
+    // apply modification
+    Status apply();
+
     // batch index operations
 
     // batch get
@@ -175,8 +193,21 @@ public:
     // |old_values|: return old values if key exist, or set to NullValue if not
     Status erase(size_t n, const void* keys, IndexValue* old_values);
 
+    size_t mutable_index_size();
+
+    size_t mutable_index_capacity();
+
 private:
     std::string _get_l0_index_file_name(std::string& dir, const EditVersion& version);
+
+    size_t _dump_bound();
+
+    bool _dump(phmap::BinaryOutputArchive& ar_out);
+
+    // check _l0 should dump as snapshot or not
+    bool _can_dump_directly();
+
+    bool _load_snapshot(phmap::BinaryInputArchive& ar_in);
 
     // batch append wal
     // |n|: size of key/value array
@@ -198,6 +229,8 @@ private:
     uint64_t _offset = 0;
     uint32_t _page_size = 0;
     std::unique_ptr<fs::WritableBlock> _index_block;
+
+    bool _dump_snapshot = false;
 };
 
 } // namespace starrocks
