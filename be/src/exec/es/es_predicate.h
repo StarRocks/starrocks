@@ -62,24 +62,11 @@ public:
             vectorized::ColumnViewer<TYPE_DATETIME> viewer(column);
             DCHECK(!viewer.is_null(0));
             vectorized::TimestampValue datetime_value = viewer.value(0);
-
             // convert convert default timezone to UTC;
-
-            int year, month, day, hour, minute, second, usec;
-            datetime_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
-
-            int64_t timestamp;
-            DateTimeValue ts_value(TIME_DATETIME, year, month, day, hour, minute, second, usec);
-            ts_value.unix_timestamp(&timestamp, TimezoneUtils::default_time_zone);
-
-            DateTimeValue ts_value2;
-            ts_value2.from_unixtime(timestamp, cctz::utc_time_zone());
-
-            vectorized::TimestampValue ts;
-            ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(),
-                              ts_value2.minute(), ts_value2.second(), 0);
-
-            _value = std::to_string(ts.to_unix_second() * 1000);
+            cctz::time_zone defaut_timezone;
+            TimezoneUtils::find_cctz_time_zone(TimezoneUtils::default_time_zone, defaut_timezone);
+            int64_t offsets = TimezoneUtils::to_utc_offset(defaut_timezone);
+            _value = std::to_string((datetime_value.to_unix_second() - offsets) * 1000);
         } else if (type == TYPE_BOOLEAN) {
             vectorized::ColumnViewer<TYPE_BOOLEAN> viewer(column);
             if (viewer.value(0)) {

@@ -526,6 +526,7 @@ Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* colum
                 RETURN_ERROR_IF_CAST_FORMAT_ERROR(col, type);
             }
             // https://en.wikipedia.org/wiki/ISO_8601
+            // 2020-06-06T16:00:00.000Z was UTC time.
             if (raw_str[val_size - 1] == 'Z') {
                 value.from_unixtime(value.to_unix_second(), TimezoneUtils::default_time_zone);
             }
