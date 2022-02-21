@@ -6,6 +6,7 @@
 
 #include "column/column.h"
 #include "column/type_traits.h"
+#include "exprs/table_function/json_each.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
 #include "udf/java/java_function_fwd.h"

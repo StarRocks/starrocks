@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include "exprs/table_function/json_each.h"
+
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
