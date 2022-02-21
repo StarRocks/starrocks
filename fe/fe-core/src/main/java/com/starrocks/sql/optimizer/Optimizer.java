@@ -71,7 +71,6 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, (ColumnRefSet) requiredColumns.clone(), Double.MAX_VALUE);
-        context.addTaskContext(rootTaskContext);
 
         // Note: root group of memo maybe change after rewrite,
         // so we should always get root group and root group expression

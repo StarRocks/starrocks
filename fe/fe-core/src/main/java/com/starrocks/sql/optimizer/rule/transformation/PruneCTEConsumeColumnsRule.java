@@ -27,7 +27,7 @@ public class PruneCTEConsumeColumnsRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) input.getOp();
 
-        ColumnRefSet requiredConsumeOutput = context.getTaskContext().get(0).getRequiredColumns();
+        ColumnRefSet requiredConsumeOutput = context.getTaskContext().getRequiredColumns();
 
         // predicate
         if (null != consume.getPredicate()) {

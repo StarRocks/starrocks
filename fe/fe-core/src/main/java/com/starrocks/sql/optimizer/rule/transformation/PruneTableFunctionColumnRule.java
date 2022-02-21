@@ -26,7 +26,7 @@ public class PruneTableFunctionColumnRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalTableFunctionOperator logicalTableFunctionOperator = (LogicalTableFunctionOperator) input.getOp();
-        ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
+        ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
 
         ColumnRefSet newOuterColumnRefSet = new ColumnRefSet();
         for (int columnId : logicalTableFunctionOperator.getOuterColumnRefSet().getColumnIds()) {
