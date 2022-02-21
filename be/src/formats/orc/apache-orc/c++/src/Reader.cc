@@ -337,17 +337,40 @@ void RowReaderImpl::loadStripeIndex() {
 
     // obtain row indexes for selected columns
     uint64_t offset = currentStripeInfo.offset();
+
+    static const uint64_t MAX_ONE_READ_ROW_INDEX_SIZE = 1024 * 1024;
+    uint64_t rowIndexSize = currentStripeInfo.indexlength();
+    uint64_t startOffset = offset;
+    // rowIndexBufferData is allocated in rowIndexInputStream
+    std::unique_ptr<SeekableFileInputStream> rowIndexInputStream = nullptr;
+    const char* rowIndexBufferData = nullptr;
+    if (rowIndexSize < MAX_ONE_READ_ROW_INDEX_SIZE) {
+        rowIndexInputStream = std::unique_ptr<SeekableFileInputStream>(new SeekableFileInputStream(
+                contents->stream.get(), startOffset, rowIndexSize, *contents->pool, rowIndexSize));
+        int size = 0;
+        const void* data = nullptr;
+        if (!rowIndexInputStream->Next(&data, &size) || static_cast<uint64_t>(size) != rowIndexSize) {
+            throw ParseError("Failed to read the row index data");
+        }
+        rowIndexBufferData = static_cast<const char*>(data);
+    }
+
     for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {
         const proto::Stream& pbStream = currentStripeFooter.streams(i);
         uint64_t colId = pbStream.column();
         if (selectedColumns[colId] && pbStream.has_kind() &&
             (pbStream.kind() == proto::Stream_Kind_ROW_INDEX ||
              pbStream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
+            std::unique_ptr<SeekableInputStream> inputStream = nullptr;
+            if (rowIndexBufferData) {
+                inputStream = std::unique_ptr<SeekableInputStream>(
+                        new SeekableArrayInputStream(rowIndexBufferData + offset - startOffset, pbStream.length()));
+            } else {
+                inputStream = std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
+                        contents->stream.get(), offset, pbStream.length(), *contents->pool));
+            }
             std::unique_ptr<SeekableInputStream> inStream =
-                    createDecompressor(getCompression(),
-                                       std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
-                                               contents->stream.get(), offset, pbStream.length(), *contents->pool)),
-                                       getCompressionSize(), *contents->pool);
+                    createDecompressor(getCompression(), std::move(inputStream), getCompressionSize(), *contents->pool);
 
             if (pbStream.kind() == proto::Stream_Kind_ROW_INDEX) {
                 proto::RowIndex rowIndex;
