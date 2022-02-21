@@ -206,9 +206,8 @@ bool MultiCastLocalExchangeSourceOperator::has_output() const {
 Status MultiCastLocalExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _exchanger->open_sink_operator();
-    _peak_memory_usage_counter = _runtime_profile->AddHighWaterMarkCounter("ExchangerPeakMemoryUsage", TUnit::BYTES);
-    _peak_buffer_row_size_counter =
-            _runtime_profile->AddHighWaterMarkCounter("ExchangerPeakBufferRowSize", TUnit::UNIT);
+    _peak_memory_usage_counter = _unique_metrics->AddHighWaterMarkCounter("ExchangerPeakMemoryUsage", TUnit::BYTES);
+    _peak_buffer_row_size_counter = _unique_metrics->AddHighWaterMarkCounter("ExchangerPeakBufferRowSize", TUnit::UNIT);
     return Status::OK();
 }
 

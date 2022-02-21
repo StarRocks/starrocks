@@ -183,7 +183,7 @@ Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint,
 
 StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const vectorized::Schema& schema,
                                                   const vectorized::SegmentReadOptions& read_options) {
-    DCHECK_NOTNULL(read_options.stats);
+    DCHECK(read_options.stats != nullptr);
     // trying to prune the current segment by segment-level zone map
     for (const auto& pair : read_options.predicates) {
         ColumnId column_id = pair.first;

@@ -41,9 +41,8 @@ static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelineP
 
 static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr& driver) {
     pipeline->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
-    pipeline->runtime_profile()->add_info_string(
-            "DegreeOfParallelism",
-            strings::Substitute("$0", pipeline->source_operator_factory()->degree_of_parallelism()));
+    auto* counter = pipeline->runtime_profile()->add_counter("DegreeOfParallelism", TUnit::UNIT);
+    counter->set(static_cast<int64_t>(pipeline->source_operator_factory()->degree_of_parallelism()));
     auto& operators = driver->operators();
     for (int32_t i = operators.size() - 1; i >= 0; --i) {
         auto& curr_op = operators[i];

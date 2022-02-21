@@ -240,7 +240,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         _chunk_sources[chunk_source_index] = std::make_shared<OlapChunkSource>(
                 std::move(morsel), _olap_scan_node.tuple_id, _limit, enable_column_expr_predicate, _conjunct_ctxs,
                 runtime_in_filters(), runtime_bloom_filters(), _olap_scan_node.key_column_name,
-                _olap_scan_node.is_preaggregation, &_unused_output_columns, _runtime_profile.get());
+                _olap_scan_node.is_preaggregation, &_unused_output_columns, _unique_metrics.get());
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;

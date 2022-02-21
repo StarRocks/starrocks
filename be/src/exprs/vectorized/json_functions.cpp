@@ -566,7 +566,7 @@ ColumnPtr JsonFunctions::json_object(FunctionContext* context, const Columns& co
             for (int i = 0; i < viewers.size(); i += 2) {
                 JsonValue* field_name = viewers[i].value(row);
                 vpack::Slice field_name_slice = field_name->to_vslice();
-                DCHECK_NOTNULL(field_name);
+                DCHECK(field_name != nullptr);
 
                 if (!field_name_slice.isString()) {
                     VLOG(2) << "nonstring json field name" << field_name->to_string().value();
@@ -580,7 +580,7 @@ ColumnPtr JsonFunctions::json_object(FunctionContext* context, const Columns& co
                 }
                 if (i + 1 < viewers.size()) {
                     JsonValue* field_value = viewers[i + 1].value(row);
-                    DCHECK_NOTNULL(field_value);
+                    DCHECK(field_value != nullptr);
                     builder.add(field_name->to_vslice().stringRef(), field_value->to_vslice());
                 } else {
                     VLOG(2) << "field value not exists, patch a null value" << field_name->to_string().value();

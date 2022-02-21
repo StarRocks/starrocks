@@ -794,7 +794,7 @@ public:
         } else {
             result_column = cast_fn<FromType, ToType>(column);
         }
-        DCHECK_NOTNULL(result_column.get());
+        DCHECK(result_column.get() != nullptr);
         if (result_column->is_constant()) {
             result_column->resize(column->size());
         }

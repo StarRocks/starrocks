@@ -645,7 +645,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                 }
 
                 DCHECK_GT(_key_columns.size(), 0);
-                DCHECK_NOTNULL(_key_columns[0].get());
+                DCHECK(_key_columns[0].get() != nullptr);
                 if (!_key_columns[0]->empty()) {
                     break;
                 }
