@@ -37,7 +37,9 @@ public class SeriallyTaskScheduler implements TaskScheduler {
                 }
                 break;
             }
-            tasks.pop().execute();
+            OptimizerTask task = tasks.pop();
+            context.getOptimizerContext().setTaskContext(context);
+            task.execute();
         }
     }
 

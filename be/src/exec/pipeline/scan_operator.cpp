@@ -167,13 +167,13 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
     bool offer_task_success = false;
     if (_workgroup != nullptr) {
-        auto task = [this, state, chunk_source_index](int dispatcher_id) {
+        auto task = [this, state, chunk_source_index](int worker_id) {
             {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
                 size_t num_read_chunks = 0;
                 _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
-                        _buffer_size, _is_finished, &num_read_chunks, dispatcher_id, _workgroup);
+                        _buffer_size, _is_finished, &num_read_chunks, worker_id, _workgroup);
                 // TODO (by laotan332): More detailed information is needed
                 _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
             }
@@ -240,7 +240,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         _chunk_sources[chunk_source_index] = std::make_shared<OlapChunkSource>(
                 std::move(morsel), _olap_scan_node.tuple_id, _limit, enable_column_expr_predicate, _conjunct_ctxs,
                 runtime_in_filters(), runtime_bloom_filters(), _olap_scan_node.key_column_name,
-                _olap_scan_node.is_preaggregation, &_unused_output_columns, _runtime_profile.get());
+                _olap_scan_node.is_preaggregation, &_unused_output_columns, _unique_metrics.get());
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;

@@ -12,7 +12,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/morsel.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/pipeline_driver_dispatcher.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/scan_node.h"
@@ -41,9 +41,8 @@ static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelineP
 
 static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr& driver) {
     pipeline->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
-    pipeline->runtime_profile()->add_info_string(
-            "DegreeOfParallelism",
-            strings::Substitute("$0", pipeline->source_operator_factory()->degree_of_parallelism()));
+    auto* counter = pipeline->runtime_profile()->add_counter("DegreeOfParallelism", TUnit::UNIT);
+    counter->set(static_cast<int64_t>(pipeline->source_operator_factory()->degree_of_parallelism()));
     auto& operators = driver->operators();
     for (int32_t i = operators.size() - 1; i >= 0; --i) {
         auto& curr_op = operators[i];
@@ -250,7 +249,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 if (wg != nullptr) {
-                    // Workgroup uses io_dispatcher instead of pipeline_scan_io_thread_pool.
+                    // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
                     scan_operator->set_workgroup(wg);
                 } else {
                     scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
@@ -295,11 +294,11 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
 
     if (_fragment_ctx->enable_resource_group()) {
         for (const auto& driver : _fragment_ctx->drivers()) {
-            exec_env->wg_driver_dispatcher()->dispatch(driver.get());
+            exec_env->wg_driver_executor()->submit(driver.get());
         }
     } else {
         for (const auto& driver : _fragment_ctx->drivers()) {
-            exec_env->driver_dispatcher()->dispatch(driver.get());
+            exec_env->driver_executor()->submit(driver.get());
         }
     }
 

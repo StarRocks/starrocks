@@ -200,6 +200,7 @@ public class StmtExecutor {
         if (coord != null) {
             coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
             coord.endProfile();
+            coord.mergeIsomorphicProfiles();
             profile.addChild(coord.getQueryProfile());
             coord = null;
         }

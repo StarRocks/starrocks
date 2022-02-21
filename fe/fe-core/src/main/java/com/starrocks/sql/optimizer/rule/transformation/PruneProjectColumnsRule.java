@@ -29,7 +29,7 @@ public class PruneProjectColumnsRule extends TransformationRule {
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.getOp();
 
         ColumnRefSet requiredInputColumns = new ColumnRefSet();
-        ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
+        ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
 
         Map<ColumnRefOperator, ScalarOperator> newMap = Maps.newHashMap();
         projectOperator.getColumnRefMap().forEach(((columnRefOperator, operator) -> {

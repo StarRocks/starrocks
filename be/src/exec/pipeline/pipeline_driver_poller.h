@@ -11,14 +11,17 @@
 #include "pipeline_driver.h"
 #include "pipeline_driver_queue.h"
 #include "util/thread.h"
+
 namespace starrocks {
 namespace pipeline {
+
 class PipelineDriverPoller;
 using PipelineDriverPollerPtr = std::unique_ptr<PipelineDriverPoller>;
+
 class PipelineDriverPoller {
 public:
-    explicit PipelineDriverPoller(DriverQueue* dispatch_queue)
-            : _dispatch_queue(dispatch_queue),
+    explicit PipelineDriverPoller(DriverQueue* driver_queue)
+            : _driver_queue(driver_queue),
               _polling_thread(nullptr),
               _is_polling_thread_initialized(false),
               _is_shutdown(false) {}
@@ -43,7 +46,7 @@ private:
     std::mutex _mutex;
     std::condition_variable _cond;
     DriverList _blocked_drivers;
-    DriverQueue* _dispatch_queue;
+    DriverQueue* _driver_queue;
     scoped_refptr<Thread> _polling_thread;
     std::atomic<bool> _is_polling_thread_initialized;
     std::atomic<bool> _is_shutdown;

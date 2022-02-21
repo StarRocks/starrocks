@@ -216,6 +216,8 @@ private:
     // Currently, only for data loading
     void _build_slices() const;
 
+    void check_or_die() const override {}
+
 private:
     std::vector<T> _pool;
     mutable bool _cache_ok = false;

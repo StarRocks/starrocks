@@ -18,16 +18,17 @@
 
 namespace starrocks {
 namespace pipeline {
-class DriverDispatcher;
-using DriverDispatcherPtr = std::shared_ptr<DriverDispatcher>;
 
-class DriverDispatcher {
+class DriverExecutor;
+using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
+
+class DriverExecutor {
 public:
-    DriverDispatcher() = default;
-    virtual ~DriverDispatcher() = default;
+    DriverExecutor() = default;
+    virtual ~DriverExecutor() = default;
     virtual void initialize(int32_t num_threads) {}
     virtual void change_num_threads(int32_t num_threads) {}
-    virtual void dispatch(DriverRawPtr driver){};
+    virtual void submit(DriverRawPtr driver){};
 
     // When all the root drivers (the drivers have no successors in the same fragment) have finished,
     // just notify FE timely the completeness of fragment via invocation of report_exec_state, but
@@ -37,19 +38,20 @@ public:
     virtual void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) = 0;
 };
 
-class GlobalDriverDispatcher final : public FactoryMethod<DriverDispatcher, GlobalDriverDispatcher> {
+class GlobalDriverExecutor final : public FactoryMethod<DriverExecutor, GlobalDriverExecutor> {
 public:
-    GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group);
-    ~GlobalDriverDispatcher() override;
+    GlobalDriverExecutor(std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group);
+    ~GlobalDriverExecutor() override;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
-    void dispatch(DriverRawPtr driver) override;
+    void submit(DriverRawPtr driver) override;
     void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) override;
 
 private:
-    void run();
+    void worker_thread();
     void finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
     void update_profile_by_mode(FragmentContext* fragment_ctx, bool done);
+    void remove_non_core_metrics(FragmentContext* fragment_ctx, std::vector<RuntimeProfile*>& driver_profiles);
 
 private:
     LimitSetter _num_threads_setter;
