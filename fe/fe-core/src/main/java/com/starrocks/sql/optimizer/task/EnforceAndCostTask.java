@@ -188,7 +188,6 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         TaskContext taskContext = new TaskContext(context.getOptimizerContext(),
                 inputProperty, context.getRequiredColumns(), newUpperBound, context.getAllScanOperators());
         pushTask(new OptimizeGroupTask(taskContext, childGroup));
-        context.getOptimizerContext().addTaskContext(taskContext);
     }
 
     // Check if the broadcast table row count exceeds the broadcastRowCountLimit.
