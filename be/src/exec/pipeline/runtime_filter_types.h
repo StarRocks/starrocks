@@ -147,7 +147,7 @@ private:
 };
 
 // A ExecNode in non-pipeline engine can be decomposed into more than one OperatorFactories in pipeline engine.
-// Dispatcher framework do not care about that runtime filters take affects on which OperatorFactories, since
+// Pipeline framework do not care about that runtime filters take affects on which OperatorFactories, since
 // it depends on Operators' implementation. so each OperatorFactory from the same ExecNode shared a
 // RefCountedRuntimeFilterProbeCollector, in which refcount is introduced to guarantee that both prepare and
 // close method of the RuntimeFilterProbeCollector inside this wrapper object is called only exactly-once.

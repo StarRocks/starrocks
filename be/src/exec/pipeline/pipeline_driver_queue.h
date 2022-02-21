@@ -21,14 +21,14 @@ public:
 
     virtual void put_back(const DriverRawPtr driver) = 0;
     virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
-    // *from_dispatcher* means that the dispatcher thread puts the driver back to the queue.
-    virtual void put_back_from_dispatcher(const DriverRawPtr driver) = 0;
-    virtual void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) = 0;
+    // *from_executor* means that the executor thread puts the driver back to the queue.
+    virtual void put_back_from_executor(const DriverRawPtr driver) = 0;
+    virtual void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) = 0;
 
-    virtual StatusOr<DriverRawPtr> take(int dispatcher_id) = 0;
+    virtual StatusOr<DriverRawPtr> take(int worker_id) = 0;
 
     // Update statistics of the driver's workgroup,
-    // when yielding the driver in the dispatcher thread.
+    // when yielding the driver in the executor thread.
     virtual void update_statistics(const DriverRawPtr driver) = 0;
 
     virtual size_t size() = 0;
@@ -74,13 +74,13 @@ public:
     void put_back(const DriverRawPtr driver) override;
     void put_back(const std::vector<DriverRawPtr>& drivers) override;
 
-    void put_back_from_dispatcher(const DriverRawPtr driver) override;
-    void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override;
+    void put_back_from_executor(const DriverRawPtr driver) override;
+    void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) override;
 
     void update_statistics(const DriverRawPtr driver) override;
 
     // Return cancelled status, if the queue is closed.
-    StatusOr<DriverRawPtr> take(int dispatcher_id) override;
+    StatusOr<DriverRawPtr> take(int worker_id) override;
 
     size_t size() override;
 
@@ -111,11 +111,11 @@ public:
 
     void put_back(const DriverRawPtr driver) override;
     void put_back(const std::vector<DriverRawPtr>& drivers) override;
-    void put_back_from_dispatcher(const DriverRawPtr driver) override;
-    void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override;
+    void put_back_from_executor(const DriverRawPtr driver) override;
+    void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) override;
 
     // Always return non-nullable value.
-    StatusOr<DriverRawPtr> take(int dispatcher_id) override;
+    StatusOr<DriverRawPtr> take(int worker_id) override;
 
     void update_statistics(const DriverRawPtr driver) override;
 
@@ -144,30 +144,30 @@ public:
     void put_back(const DriverRawPtr driver) override;
     void put_back(const std::vector<DriverRawPtr>& drivers) override;
     // When the driver's workgroup is not in the workgroup queue
-    // and the driver isn't from a dispatcher thread (that is, from the poller or new driver),
+    // and the driver isn't from a executor thread (that is, from the poller or new driver),
     // the workgroup's vruntime is adjusted to workgroup_queue.min_vruntime-ideal_runtime/2,
     // to avoid sloping too much time to this workgroup.
-    void put_back_from_dispatcher(const DriverRawPtr driver) override;
-    void put_back_from_dispatcher(const std::vector<DriverRawPtr>& drivers) override;
+    void put_back_from_executor(const DriverRawPtr driver) override;
+    void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) override;
 
     // Return cancelled status, if the queue is closed.
     // Firstly, select the work group with the minimum vruntime.
     // Secondly, select the proper driver from the driver queue of this work group.
-    StatusOr<DriverRawPtr> take(int dispatcher_id) override;
+    StatusOr<DriverRawPtr> take(int worker_id) override;
 
     void update_statistics(const DriverRawPtr driver) override;
 
     size_t size() override;
 
 private:
-    // The schedule period is equal to DISPATCH_PERIOD_PER_WG_NS * num_workgroups.
-    static constexpr int64_t DISPATCH_PERIOD_PER_WG_NS = 200'1000'1000;
+    // The schedule period is equal to SCHEDULE_PERIOD_PER_WG_NS * num_workgroups.
+    static constexpr int64_t SCHEDULE_PERIOD_PER_WG_NS = 200'1000'1000;
 
     // This method should be guarded by the outside _global_mutex.
-    template <bool from_dispatcher>
+    template <bool from_executor>
     void _put_back(const DriverRawPtr driver);
     // This method should be guarded by the outside _global_mutex.
-    workgroup::WorkGroup* _find_min_owner_wg(int dispatcher_id);
+    workgroup::WorkGroup* _find_min_owner_wg(int worker_id);
     workgroup::WorkGroup* _find_min_wg();
     // The ideal runtime of a work group is the weighted average of the schedule period.
     int64_t _ideal_runtime_ns(workgroup::WorkGroup* wg);

@@ -192,8 +192,8 @@ void DataStreamRecvr::SenderQueue::short_circuit_for_pipeline(const int32_t driv
 
 bool DataStreamRecvr::SenderQueue::has_output_for_pipeline(const int32_t driver_sequence) {
     // First check without lock to avoid competition
-    // This method may be invoked by PipelineDriverPoller and GlobalDriverDispatcher simultaneously
-    // when some of the driver_sequences has no chunks to get but the others do, then GlobalDriverDispatcher
+    // This method may be invoked by PipelineDriverPoller and GlobalDriverExecutor simultaneously
+    // when some driver_sequences has no chunks to get but the others do, then GlobalDriverExecutor
     // may be starved because PipelineDriverPoller will call this method repeatedly with almost no interval
     // Both false positives and false negatives are allowed here
     {

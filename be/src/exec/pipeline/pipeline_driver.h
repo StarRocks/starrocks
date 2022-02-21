@@ -167,7 +167,7 @@ public:
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
     void set_morsel_queue(MorselQueuePtr morsel_queue) { _morsel_queue = std::move(morsel_queue); }
     Status prepare(RuntimeState* runtime_state);
-    StatusOr<DriverState> process(RuntimeState* runtime_state, int dispatcher_id);
+    StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
@@ -226,7 +226,7 @@ public:
     // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
     // are finished.
     void mark_precondition_ready(RuntimeState* runtime_state);
-    void dispatch_operators();
+    void submit_operators();
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
     void finish_operators(RuntimeState* runtime_state);
@@ -341,8 +341,8 @@ public:
     workgroup::WorkGroup* workgroup();
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
-    size_t get_dispatch_queue_index() const { return _dispatch_queue_index; }
-    void set_dispatch_queue_index(size_t dispatch_queue_index) { _dispatch_queue_index = dispatch_queue_index; }
+    size_t get_driver_queue_index() const { return _driver_queue_index; }
+    void set_driver_queue_index(size_t driver_queue_index) { _driver_queue_index = driver_queue_index; }
 
 private:
     static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000;
@@ -399,7 +399,7 @@ private:
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
     // The index of QuerySharedDriverQueue{WithoutLock}._queues which this driver belongs to.
-    size_t _dispatch_queue_index = 0;
+    size_t _driver_queue_index = 0;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

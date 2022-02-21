@@ -215,8 +215,8 @@ struct less<starrocks::JsonValue> {
     }
 
     bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
-        DCHECK_NOTNULL(lhs);
-        DCHECK_NOTNULL(rhs);
+        DCHECK(lhs != nullptr);
+        DCHECK(rhs != nullptr);
         return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) < 0;
     }
 
@@ -232,8 +232,8 @@ struct less_equal<starrocks::JsonValue> {
     }
 
     bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
-        DCHECK_NOTNULL(lhs);
-        DCHECK_NOTNULL(rhs);
+        DCHECK(lhs != nullptr);
+        DCHECK(rhs != nullptr);
         return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) <= 0;
     }
 
@@ -248,8 +248,8 @@ struct greater<starrocks::JsonValue> {
         return lhs.compare(rhs) > 0;
     }
     bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
-        DCHECK_NOTNULL(lhs);
-        DCHECK_NOTNULL(rhs);
+        DCHECK(lhs != nullptr);
+        DCHECK(rhs != nullptr);
         return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) > 0;
     }
 
@@ -264,8 +264,8 @@ struct greater_equal<starrocks::JsonValue> {
     }
 
     bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
-        DCHECK_NOTNULL(lhs);
-        DCHECK_NOTNULL(rhs);
+        DCHECK(lhs != nullptr);
+        DCHECK(rhs != nullptr);
         return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) >= 0;
     }
 
@@ -280,8 +280,8 @@ struct equal_to<starrocks::JsonValue> {
     }
 
     bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
-        DCHECK_NOTNULL(lhs);
-        DCHECK_NOTNULL(rhs);
+        DCHECK(lhs != nullptr);
+        DCHECK(rhs != nullptr);
         return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) == 0;
     }
 
@@ -296,8 +296,8 @@ struct not_equal_to<starrocks::JsonValue> {
     }
 
     bool operator()(const starrocks::JsonValue* lhs, const starrocks::JsonValue* rhs) const {
-        DCHECK_NOTNULL(lhs);
-        DCHECK_NOTNULL(rhs);
+        DCHECK(lhs != nullptr);
+        DCHECK(rhs != nullptr);
         return starrocks::JsonValue::compare(lhs->get_slice(), rhs->get_slice()) != 0;
     }
 
