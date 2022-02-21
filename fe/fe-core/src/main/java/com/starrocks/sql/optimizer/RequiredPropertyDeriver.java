@@ -39,14 +39,14 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
 
 public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionContext> {
-    private final PhysicalPropertySet requirements;
+    private final PhysicalPropertySet requirementsFromParent;
     private List<List<PhysicalPropertySet>> requiredProperties;
 
-    public RequiredPropertyDeriver(PhysicalPropertySet requirements) {
-        this.requirements = requirements;
+    public RequiredPropertyDeriver(PhysicalPropertySet requirementsFromParent) {
+        this.requirementsFromParent = requirementsFromParent;
     }
 
-    public List<List<PhysicalPropertySet>> getInputProps(GroupExpression groupExpression) {
+    public List<List<PhysicalPropertySet>> getRequiredProps(GroupExpression groupExpression) {
         requiredProperties = Lists.newArrayList();
         groupExpression.getOp().accept(this, new ExpressionContext(groupExpression));
         return requiredProperties;
@@ -54,11 +54,11 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
 
     @Override
     public Void visitOperator(Operator node, ExpressionContext context) {
-        List<PhysicalPropertySet> inputProps = new ArrayList<>();
+        List<PhysicalPropertySet> requiredProps = new ArrayList<>();
         for (int childIndex = 0; childIndex < context.arity(); ++childIndex) {
-            inputProps.add(PhysicalPropertySet.EMPTY);
+            requiredProps.add(PhysicalPropertySet.EMPTY);
         }
-        requiredProperties.add(inputProps);
+        requiredProperties.add(requiredProps);
         return null;
     }
 
@@ -97,10 +97,10 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
         HashDistributionSpec rightDistribution = DistributionSpec.createHashDistributionSpec(
                 new HashDistributionDesc(rightOnPredicateColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
 
-        PhysicalPropertySet leftInputProperty = createPropertySetByDistribution(leftDistribution);
-        PhysicalPropertySet rightInputProperty = createPropertySetByDistribution(rightDistribution);
+        PhysicalPropertySet leftRequiredPropertySet = createPropertySetByDistribution(leftDistribution);
+        PhysicalPropertySet rightRequiredPropertySet = createPropertySetByDistribution(rightDistribution);
 
-        requiredProperties.add(Lists.newArrayList(leftInputProperty, rightInputProperty));
+        requiredProperties.add(Lists.newArrayList(leftRequiredPropertySet, rightRequiredPropertySet));
         return null;
     }
 
@@ -150,8 +150,8 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
         LogicalOperator child = (LogicalOperator) context.getChildOperator(0);
         // If child has limit, we need to gather data to one instance
         if (child.hasLimit() && (topN.getSortPhase().isFinal() && !topN.isSplit())) {
-            PhysicalPropertySet inputProperty = createLimitGatherProperty(child.getLimit());
-            requiredProperties.add(Lists.newArrayList(inputProperty));
+            PhysicalPropertySet requiredProperty = createLimitGatherProperty(child.getLimit());
+            requiredProperties.add(Lists.newArrayList(requiredProperty));
         } else {
             requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
         }
@@ -162,9 +162,9 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
     @Override
     public Void visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
         DistributionSpec gather = DistributionSpec.createGatherDistributionSpec();
-        DistributionProperty inputProperty = new DistributionProperty(gather);
+        DistributionProperty requiredProperty = new DistributionProperty(gather);
 
-        requiredProperties.add(Lists.newArrayList(new PhysicalPropertySet(inputProperty)));
+        requiredProperties.add(Lists.newArrayList(new PhysicalPropertySet(requiredProperty)));
         return null;
     }
 
@@ -230,20 +230,19 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
 
     @Override
     public Void visitPhysicalLimit(PhysicalLimitOperator node, ExpressionContext context) {
-        requiredProperties.add(Lists
-                .newArrayList(createLimitGatherProperty(node.getLimit()), createLimitGatherProperty(node.getLimit())));
+        requiredProperties.add(Lists.newArrayList(createLimitGatherProperty(node.getLimit())));
         return null;
     }
 
     @Override
     public Void visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
-        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, requirements));
+        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, requirementsFromParent));
         return null;
     }
 
     @Override
     public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
-        requiredProperties.add(Lists.newArrayList(requirements));
+        requiredProperties.add(Lists.newArrayList(requirementsFromParent));
         return null;
     }
 

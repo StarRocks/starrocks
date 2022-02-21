@@ -100,8 +100,8 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
                                                                  HashDistributionSpec rightScanDistributionSpec,
                                                                  List<Integer> leftShuffleColumns,
                                                                  List<Integer> rightShuffleColumns) {
-        DistributionSpec.PropertyInfo leftInfo = leftScanDistributionSpec.getPhysicalPropertyInfo();
-        DistributionSpec.PropertyInfo rightInfo = rightScanDistributionSpec.getPhysicalPropertyInfo();
+        DistributionSpec.PropertyInfo leftInfo = leftScanDistributionSpec.getPropertyInfo();
+        DistributionSpec.PropertyInfo rightInfo = rightScanDistributionSpec.getPropertyInfo();
 
         ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
         long leftTableId = leftInfo.tableId;
@@ -117,8 +117,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
                 return createPropertySetByDistribution(leftScanDistributionSpec);
             }
 
-            DistributionSpec.PropertyInfo newPhysicalPropertyInfo =
-                    new DistributionSpec.PropertyInfo();
+            DistributionSpec.PropertyInfo newPhysicalPropertyInfo = new DistributionSpec.PropertyInfo();
 
             newPhysicalPropertyInfo.tableId = leftTableId;
             HashDistributionDesc outputDesc;
@@ -143,8 +142,8 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
             return false;
         }
 
-        DistributionSpec.PropertyInfo leftInfo = leftLocalDistributionSpec.getPhysicalPropertyInfo();
-        DistributionSpec.PropertyInfo rightInfo = rightLocalDistributionSpec.getPhysicalPropertyInfo();
+        DistributionSpec.PropertyInfo leftInfo = leftLocalDistributionSpec.getPropertyInfo();
+        DistributionSpec.PropertyInfo rightInfo = rightLocalDistributionSpec.getPropertyInfo();
 
         ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
         long leftTableId = leftInfo.tableId;
@@ -281,23 +280,22 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
         }
     }
 
-    // compute the physical property info, just compute the nullable columns now
-    public PhysicalPropertySet computeHashJoinPhysicalPropertyInfo(PhysicalHashJoinOperator node,
+    // compute the distribution property info, just compute the nullable columns now
+    public PhysicalPropertySet computeHashJoinDistributionPropertyInfo(PhysicalHashJoinOperator node,
                                                                    PhysicalPropertySet physicalPropertySet,
                                                                    ExpressionContext context) {
-        DistributionSpec.PropertyInfo physicalPropertyInfo =
-                physicalPropertySet.getDistributionProperty().getSpec()
-                        .getPhysicalPropertyInfo();
+        DistributionSpec.PropertyInfo propertyInfo =
+                physicalPropertySet.getDistributionProperty().getSpec().getPropertyInfo();
 
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = context.getChildOutputColumns(1);
         if (node.getJoinType().isLeftOuterJoin()) {
-            physicalPropertyInfo.nullableColumns.union(rightChildColumns);
+            propertyInfo.nullableColumns.union(rightChildColumns);
         } else if (node.getJoinType().isRightOuterJoin()) {
-            physicalPropertyInfo.nullableColumns.union(leftChildColumns);
+            propertyInfo.nullableColumns.union(leftChildColumns);
         } else if (node.getJoinType().isFullOuterJoin()) {
-            physicalPropertyInfo.nullableColumns.union(leftChildColumns);
-            physicalPropertyInfo.nullableColumns.union(rightChildColumns);
+            propertyInfo.nullableColumns.union(leftChildColumns);
+            propertyInfo.nullableColumns.union(rightChildColumns);
         }
         return physicalPropertySet;
     }
@@ -320,7 +318,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
 
         // 1. Distribution is broadcast
         if (rightChildOutputProperty.getDistributionProperty().isBroadcast()) {
-            return computeHashJoinPhysicalPropertyInfo(node, leftChildOutputProperty, context);
+            return computeHashJoinDistributionPropertyInfo(node, leftChildOutputProperty, context);
         }
         // 2. Distribution is shuffle
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
@@ -353,7 +351,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
                 if (rightDistributionDesc.isLocalShuffle()) {
                     enforceChildShuffleDistribution(rightOnPredicateColumns, rightChild, rightChildOutputProperty, 1);
                 }
-                return computeHashJoinPhysicalPropertyInfo(node,
+                return computeHashJoinDistributionPropertyInfo(node,
                         computeShuffleJoinOutputProperty(leftOnPredicateColumns, rightOnPredicateColumns), context);
             }
 
@@ -362,25 +360,25 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
                 if (!"BUCKET".equalsIgnoreCase(hint) &&
                         canColocateJoin(leftDistributionSpec, rightDistributionSpec, leftOnPredicateColumns,
                                 rightOnPredicateColumns)) {
-                    return computeHashJoinPhysicalPropertyInfo(node,
+                    return computeHashJoinDistributionPropertyInfo(node,
                             computeColocateJoinOutputProperty(leftDistributionSpec, rightDistributionSpec,
                                     leftOnPredicateColumns, rightOnPredicateColumns), context);
                 } else {
                     transToBucketShuffleJoin(leftDistributionDesc, leftOnPredicateColumns, rightOnPredicateColumns);
-                    return computeHashJoinPhysicalPropertyInfo(node, leftChildOutputProperty, context);
+                    return computeHashJoinDistributionPropertyInfo(node, leftChildOutputProperty, context);
                 }
             } else if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isJoinShuffle()) {
                 // bucket join
                 transToBucketShuffleJoin(leftDistributionDesc, leftOnPredicateColumns, rightOnPredicateColumns);
-                return computeHashJoinPhysicalPropertyInfo(node, leftChildOutputProperty, context);
+                return computeHashJoinDistributionPropertyInfo(node, leftChildOutputProperty, context);
             } else if (leftDistributionDesc.isJoinShuffle() && rightDistributionDesc.isLocalShuffle()) {
                 // coordinator can not bucket shuffle data from left to right, so we need to adjust to shuffle join
                 enforceChildShuffleDistribution(rightOnPredicateColumns, rightChild, rightChildOutputProperty, 1);
-                return computeHashJoinPhysicalPropertyInfo(node,
+                return computeHashJoinDistributionPropertyInfo(node,
                         computeShuffleJoinOutputProperty(leftOnPredicateColumns, rightOnPredicateColumns), context);
             } else if (leftDistributionDesc.isJoinShuffle() && rightDistributionDesc.isJoinShuffle()) {
                 // shuffle join
-                return computeHashJoinPhysicalPropertyInfo(node,
+                return computeHashJoinDistributionPropertyInfo(node,
                         computeShuffleJoinOutputProperty(leftOnPredicateColumns, rightOnPredicateColumns), context);
             } else {
                 Preconditions.checkState(false, "Children output property distribution error");
@@ -464,8 +462,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     public PhysicalPropertySet visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
         HashDistributionSpec olapDistributionSpec = node.getDistributionSpec();
 
-        DistributionSpec.PropertyInfo physicalPropertyInfo =
-                new DistributionSpec.PropertyInfo();
+        DistributionSpec.PropertyInfo physicalPropertyInfo = new DistributionSpec.PropertyInfo();
 
         physicalPropertyInfo.tableId = node.getTable().getId();
         physicalPropertyInfo.partitionIds = node.getSelectedPartitionId();

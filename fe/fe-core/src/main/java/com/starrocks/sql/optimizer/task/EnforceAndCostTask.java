@@ -188,7 +188,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
         // TODO(kks): do Lower Bound Pruning here
         RequiredPropertyDeriver requiredPropertyDeriver = new RequiredPropertyDeriver(context.getRequiredProperty());
-        requiredPropertiesList = requiredPropertyDeriver.getInputProps(groupExpression);
+        requiredPropertiesList = requiredPropertyDeriver.getRequiredProps(groupExpression);
         curChildIndex = 0;
     }
 

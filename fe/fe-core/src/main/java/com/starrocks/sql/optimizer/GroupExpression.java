@@ -39,10 +39,13 @@ public class GroupExpression {
     private final BitSet ruleMasks = new BitSet(RuleType.NUM_RULES.ordinal() + 1);
     private boolean statsDerived = false;
     private final Map<PhysicalPropertySet, Pair<Double, List<PhysicalPropertySet>>> lowestCostTable;
-    private final Set<OutputInputProperty> validOutputInputProperties;
-    private Map<OutputInputProperty, Integer> propertiesPlanCountMap;
     // required property by parent -> output property
     private Map<PhysicalPropertySet, PhysicalPropertySet> outputPropertyMap;
+
+    // valid output/input properties, only used in enum plan
+    private final Set<OutputInputProperty> validOutputInputProperties;
+    // property -> plan count, only used in enum plan
+    private Map<OutputInputProperty, Integer> propertiesPlanCountMap;
 
     private boolean isUnused = false;
 

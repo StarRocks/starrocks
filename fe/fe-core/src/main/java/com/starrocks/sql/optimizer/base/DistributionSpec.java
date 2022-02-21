@@ -20,7 +20,7 @@ public class DistributionSpec {
         this.propertyInfo = propertyInfo;
     }
 
-    // Physical property for hash distribution desc
+    // Property information for hash distribution desc, it used for check DistributionSpec satisfy condition.
     public static class PropertyInfo {
         public long tableId = -1;
         public boolean isReplicate = false;
@@ -33,7 +33,7 @@ public class DistributionSpec {
         }
     }
 
-    public PropertyInfo getPhysicalPropertyInfo() {
+    public PropertyInfo getPropertyInfo() {
         return propertyInfo;
     }
 
