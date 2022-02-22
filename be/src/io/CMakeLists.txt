@@ -11,4 +11,5 @@ add_library(IO STATIC
         fd_random_access_file.cpp
         random_access_file.cpp
         readable.cpp
+        s3_random_access_file.cpp
         )

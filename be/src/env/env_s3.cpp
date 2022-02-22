@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#ifdef STARROCKS_WITH_AWS
+
 #include "env/env_s3.h"
 
 #include <fmt/core.h>
@@ -98,3 +100,5 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
 }
 
 } // namespace starrocks
+
+#endif
