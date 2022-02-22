@@ -186,7 +186,7 @@ void GlobalDriverExecutor::update_profile_by_mode(FragmentContext* fragment_ctx,
         return;
     }
 
-    if (fragment_ctx->profile_mode() >= TPipelineProfileMode::type::DETAIL) {
+    if (fragment_ctx->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
         return;
     }
 
@@ -229,7 +229,7 @@ void GlobalDriverExecutor::update_profile_by_mode(FragmentContext* fragment_ctx,
 
 void GlobalDriverExecutor::remove_non_core_metrics(FragmentContext* fragment_ctx,
                                                    std::vector<RuntimeProfile*>& driver_profiles) {
-    if (fragment_ctx->profile_mode() > TPipelineProfileMode::CORE_METRICS) {
+    if (fragment_ctx->profile_level() > TPipelineProfileLevel::CORE_METRICS) {
         return;
     }
 

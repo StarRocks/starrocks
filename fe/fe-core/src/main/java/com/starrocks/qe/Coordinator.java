@@ -84,7 +84,7 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLoadErrorHubInfo;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TPipelineProfileMode;
+import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
@@ -1595,8 +1595,8 @@ public class Coordinator {
             return;
         }
 
-        int profileMode = sessionVariable.getPipelineProfileMode();
-        if (profileMode >= TPipelineProfileMode.DETAIL.getValue()) {
+        int profileLevel = sessionVariable.getPipelineProfileLevel();
+        if (profileLevel >= TPipelineProfileLevel.DETAIL.getValue()) {
             return;
         }
 
