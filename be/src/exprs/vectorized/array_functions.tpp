@@ -112,7 +112,7 @@ public:
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         if constexpr (PT == TYPE_TINYINT || PT == TYPE_SMALLINT || PT == TYPE_INT || PT == TYPE_BIGINT ||
-                      PT == TYPE_LARGEINT || PT == TYPE_FLOAT || PT == TYPE_DOUBLE || PT == TYPE_DECIMALV2) {
+                      PT == TYPE_LARGEINT || PT == TYPE_FLOAT || PT == TYPE_DOUBLE) {
             return _array_difference(columns);
         } else {
             assert(false);
@@ -308,7 +308,7 @@ private:
         }
 
         auto& dest_offsets = dest_column->offsets_column()->get_data();
-        dest_offsets.emplace_back(end - offset);
+        dest_offsets.emplace_back(dest_offsets.back() + (end - offset));
     }
 };
 
@@ -391,7 +391,7 @@ private:
         }
 
         auto& dest_offsets = dest_column->offsets_column()->get_data();
-        dest_offsets.emplace_back(num_rows);
+        dest_offsets.emplace_back(dest_offsets.back() + num_rows);
     }
 };
 
