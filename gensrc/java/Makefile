@@ -24,8 +24,7 @@ ${CLASSLOADER_CLAZZ} : ${CLASSLOADER_SRC} ${BUILD_DIR}/gen_java
 	${JAVAC} -d ${BUILD_DIR}/gen_java ${CLASSLOADER_SRC}
 
 ${TARGET} : ${ANALYZER_CLAZZ} ${CLASSLOADER_CLAZZ} 
-	cd ${BUILD_DIR}/gen_java && jar -cvf udf-class-loader.jar .
-
+	cd ${BUILD_DIR}/gen_java && ${JAR} -cvf udf-class-loader.jar .
 
 clean: 
 	rm -rf ${BUILD_DIR}/gen_java
