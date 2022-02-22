@@ -5,10 +5,14 @@
 #include <memory>
 
 #include "common/statusor.h"
+#include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
+#include "storage/fs/block_manager.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
+
+class Tablet;
 
 template <size_t KeySize>
 struct FixedKey {
@@ -85,6 +89,12 @@ public:
     virtual Status upsert(size_t n, const void* keys, const IndexValue* values, KeysInfo* not_found,
                           size_t* num_found) = 0;
 
+    // load wals
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    virtual Status load_wals(size_t n, const void* keys, const IndexValue* values) = 0;
+
     // batch insert
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -151,7 +161,7 @@ public:
     Status create(size_t key_size, const EditVersion& version);
 
     // load required states from underlying file
-    Status load();
+    Status load(const PersistentIndexMetaPB& index_meta);
 
     // start modification with intended version
     Status prepare(const EditVersion& version);
@@ -160,7 +170,7 @@ public:
     Status abort();
 
     // commit modification
-    Status commit();
+    Status commit(PersistentIndexMetaPB* index_meta);
 
     // batch index operations
 
@@ -191,6 +201,14 @@ public:
     Status erase(size_t n, const void* keys, IndexValue* old_values);
 
 private:
+    std::string _get_l0_index_file_name(std::string& dir, const EditVersion& version);
+
+    // batch append wal
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array, if operation is erase, |values| is nullptr
+    Status _append_wal(size_t n, const void* key, const IndexValue* values);
+
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
@@ -198,6 +216,11 @@ private:
     EditVersion _version;
     std::unique_ptr<MutableIndex> _l0;
     std::unique_ptr<ImmutableIndex> _l1;
+    // |_offset|: the start offset of last wal in index file
+    // |_page_size|: the size of last wal in index file
+    uint64_t _offset = 0;
+    uint32_t _page_size = 0;
+    std::unique_ptr<fs::WritableBlock> _index_block;
 };
 
 } // namespace starrocks
