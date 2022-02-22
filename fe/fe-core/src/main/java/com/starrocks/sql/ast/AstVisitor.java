@@ -22,6 +22,8 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
@@ -51,6 +53,14 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(node, context);
     }
 
+    public R visitShowTableStmt(ShowTableStmt node, C context) {
+        return visitStatement(node, context);
+    }
+
+    public R visitShowDatabasesStmt(ShowDbStmt node, C context) {
+        return visitStatement(node, context);
+    }
+
     // ----------------- Relation ---------------
 
     public R visitRelation(Relation node, C context) {
@@ -77,16 +87,20 @@ public abstract class AstVisitor<R, C> {
         return visitRelation(node, context);
     }
 
-    public R visitUnion(UnionRelation node, C context) {
+    public R visitSetOp(SetOperationRelation node, C context) {
         return visitRelation(node, context);
+    }
+
+    public R visitUnion(UnionRelation node, C context) {
+        return visitSetOp(node, context);
     }
 
     public R visitExcept(ExceptRelation node, C context) {
-        return visitRelation(node, context);
+        return visitSetOp(node, context);
     }
 
     public R visitIntersect(IntersectRelation node, C context) {
-        return visitRelation(node, context);
+        return visitSetOp(node, context);
     }
 
     public R visitValues(ValuesRelation node, C context) {

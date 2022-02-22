@@ -894,7 +894,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             QueryRelation queryRelation = analyzeSuccess(sql);
-            List<Expr> items = ((ValuesRelation) queryRelation).getOutputExpr();
+            List<Expr> items = ((ValuesRelation) queryRelation).getRows().get(0);
             Assert.assertEquals(items.get(0).getType(), ScalarType.DOUBLE);
             Assert.assertEquals(items.get(1).getType(),
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
