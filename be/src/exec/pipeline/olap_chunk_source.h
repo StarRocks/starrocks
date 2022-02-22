@@ -69,6 +69,12 @@ public:
                                                            int worker_id, workgroup::WorkGroupPtr running_wg) override;
 
 private:
+    // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
+    static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
+    // Yield scan io task when maximum time in nano-seconds has spent in current execution round,
+    // if it runs in the worker thread owned by other workgroup, which has running drivers.
+    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
+
     Status _get_tablet(const TInternalScanRange* scan_range);
     Status _init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);

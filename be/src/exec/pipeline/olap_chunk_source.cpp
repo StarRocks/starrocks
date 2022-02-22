@@ -346,11 +346,11 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
             _chunk_buffer.put(std::move(chunk));
         }
 
-        if (time_spent >= config::pipeline_scan_task_yield_max_tims_spent) {
+        if (time_spent >= YIELD_MAX_TIME_SPENT) {
             break;
         }
 
-        if (time_spent >= config::pipeline_scan_task_yield_preempt_max_time_spent &&
+        if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
             workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id, running_wg)) {
             break;
         }

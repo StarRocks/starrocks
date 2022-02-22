@@ -639,12 +639,6 @@ CONF_Int16(tablet_max_versions, "1000");
 // will remove
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
-// yield PipelineDriver when maximum number of chunks has been moved
-// in current execution round.
-CONF_Int64(pipeline_yield_max_chunks_moved, "100");
-// yield PipelineDriver when maximum time in nano-seconds has spent
-// in current execution round.
-CONF_Int64(pipeline_yield_max_time_spent, "100000000");
 // the number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
 // queue size of scan thread pool for pipeline engine.
@@ -657,14 +651,6 @@ CONF_Int64(pipeline_io_buffer_size, "64");
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // the degree of parallelism of brpc
 CONF_Int64(pipeline_sink_brpc_dop, "8");
-
-// The max number of io tasks for each scan operator.
-CONF_Int64(pipeline_scan_max_tasks_per_operator, "4");
-// yield scan io task when maximum time in nano-seconds has spent in current execution round,
-// if it runs in the worker thread owned by other workgroup, which has running drivers.
-CONF_Int64(pipeline_scan_task_yield_max_tims_spent, "100000000");
-// The max schedule period for adjusting io weight of each workgroup.
-CONF_Int64(pipeline_scan_task_yield_preempt_max_time_spent, "20000000");
 
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
