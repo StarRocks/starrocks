@@ -11,19 +11,16 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
 import java.util.Map;
 
 public class PhysicalMysqlScanOperator extends PhysicalScanOperator {
 
     public PhysicalMysqlScanOperator(Table table,
-                                     List<ColumnRefOperator> outputColumns,
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                      long limit,
                                      ScalarOperator predicate,
                                      Projection projection) {
-        super(OperatorType.PHYSICAL_MYSQL_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate,
-                projection);
+        super(OperatorType.PHYSICAL_MYSQL_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
     }
 
     @Override

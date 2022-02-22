@@ -266,9 +266,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 Map<ColumnRefOperator, Column> newColRefToColumnMetaMap =
                         Maps.newHashMap(scanOperator.getColRefToColumnMetaMap());
 
-                List<ColumnRefOperator> newOutputColumns =
-                        Lists.newArrayList(scanOperator.getOutputColumns());
-
                 List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
                 List<ColumnRefOperator> globalDictStringColumns = Lists.newArrayList();
                 Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
@@ -341,10 +338,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         newDictColumn = context.columnRefFactory.create(
                                 stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
                     }
-                    if (newOutputColumns.contains(stringColumn)) {
-                        newOutputColumns.remove(stringColumn);
-                        newOutputColumns.add(newDictColumn);
-                    }
 
                     Column oldColumn = scanOperator.getColRefToColumnMetaMap().get(stringColumn);
                     Column newColumn = new Column(oldColumn.getName(), ID_TYPE, oldColumn.isAllowNull());
@@ -362,7 +355,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 if (context.hasEncoded) {
                     PhysicalOlapScanOperator newOlapScan = new PhysicalOlapScanOperator(
                             scanOperator.getTable(),
-                            newOutputColumns,
                             newColRefToColumnMetaMap,
                             scanOperator.getDistributionSpec(),
                             scanOperator.getLimit(),
