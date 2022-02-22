@@ -34,7 +34,7 @@ private:
 };
 
 Status RandomAccessFileWrapper::read(uint64_t offset, Slice* res) const {
-    ASSIGN_OR_RETURN(res->size, _input->read(res->data, res->size));
+    ASSIGN_OR_RETURN(res->size, _input->read_at(offset, res->data, res->size));
     return Status::OK();
 }
 
