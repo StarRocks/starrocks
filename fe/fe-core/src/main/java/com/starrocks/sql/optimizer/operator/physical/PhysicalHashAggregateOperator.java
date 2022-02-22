@@ -195,6 +195,16 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
                 resultSet.union(v.getUsedColumns());
             }
         });
+        // Now we disable DictOptimize when group by predicate couldn't push down
+        final ScalarOperator predicate = getPredicate();
+        if (predicate != null) {
+            final ColumnRefSet predicateUsedColumns = getPredicate().getUsedColumns();
+            for (Integer dictColId : dictColIds) {
+                if (predicateUsedColumns.contains(dictColId)) {
+                    resultSet.union(dictColId);
+                }
+            }
+        }
     }
 
 }
