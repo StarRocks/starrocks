@@ -116,6 +116,8 @@ set(EXEC_FILES
         ./http/stream_load_test.cpp
         ./io/array_random_access_file_test.cpp
         ./io/fd_random_access_file_test.cpp
+        ./io/s3_random_access_file_test.cpp
+        ./object_store/s3_object_store_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
@@ -274,10 +276,6 @@ endif()
 
 if (WITH_HDFS)
     set(EXEC_FILES ${EXEC_FILES} ./exec/vectorized/hdfs_scan_node_test.cpp)
-endif ()
-
-if (WITH_AWS)
-    set(EXEC_FILES ${EXEC_FILES} ./object_store/s3_client_test.cpp)
 endif ()
 
 add_executable(starrocks_test ${EXEC_FILES})
