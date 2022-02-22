@@ -3594,6 +3594,254 @@ TEST_F(ArrayFunctionsTest, array_concat_varchar_not_nullable) {
     ASSERT_EQ(Slice("1"), dest_column->get(3).get_array()[7].get_slice());
 }
 
+TEST_F(ArrayFunctionsTest, array_overlap_tinyint_with_nullable) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
+    src_column->append_datum(DatumArray{(int8_t)8});
+    src_column->append_datum(DatumArray{(int8_t)4});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    src_column2->append_datum(DatumArray{(int8_t)5, (int8_t)6});
+    src_column2->append_datum(DatumArray{(int8_t)2});
+    src_column2->append_datum(DatumArray{(int8_t)4, (int8_t)3, (int8_t)2, (int8_t)1});
+    src_column2->append_datum(DatumArray{(int8_t)4, (int8_t)9});
+    src_column2->append_datum(DatumArray{(int8_t)4, Datum()});
+
+    ArrayOverlap<PrimitiveType::TYPE_TINYINT> overlap;
+    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 5);
+
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(
+            ColumnHelper::as_raw_column<NullableColumn>(dest_column)->data_column());
+    auto null_data = ColumnHelper::as_raw_column<NullableColumn>(dest_column)->immutable_null_column_data().data();
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_TRUE(v->get_data()[2]);
+    ASSERT_TRUE(null_data[3]);
+    ASSERT_TRUE(v->get_data()[4]);
+}
+
+TEST_F(ArrayFunctionsTest, array_overlap_tinyint) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
+    src_column->append_datum(DatumArray{(int8_t)8});
+    src_column->append_datum(DatumArray{(int8_t)4});
+    src_column->append_datum(DatumArray{(int8_t)99});
+    src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    src_column2->append_datum(DatumArray{(int8_t)5, (int8_t)6});
+    src_column2->append_datum(DatumArray{(int8_t)2});
+    src_column2->append_datum(DatumArray{(int8_t)4, (int8_t)3, (int8_t)2, (int8_t)1});
+    src_column2->append_datum(DatumArray{(int8_t)4, (int8_t)9});
+    src_column2->append_datum(DatumArray{(int8_t)4, Datum()});
+
+    ArrayOverlap<PrimitiveType::TYPE_TINYINT> overlap;
+    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+
+    ASSERT_TRUE(!dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 5);
+
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(dest_column);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_TRUE(v->get_data()[2]);
+    ASSERT_FALSE(v->get_data()[3]);
+    ASSERT_TRUE(v->get_data()[4]);
+}
+
+TEST_F(ArrayFunctionsTest, array_overlap_bigint_with_nullable) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
+    src_column->append_datum(DatumArray{(int64_t)8});
+    src_column->append_datum(DatumArray{(int64_t)4});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{(int64_t)4, (int64_t)1});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+    src_column2->append_datum(DatumArray{(int64_t)5, (int64_t)6});
+    src_column2->append_datum(DatumArray{(int64_t)2});
+    src_column2->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
+    src_column2->append_datum(DatumArray{(int64_t)4, (int64_t)9});
+    src_column2->append_datum(DatumArray{(int64_t)4, Datum()});
+
+    ArrayOverlap<PrimitiveType::TYPE_BIGINT> overlap;
+    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 5);
+
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(
+            ColumnHelper::as_raw_column<NullableColumn>(dest_column)->data_column());
+    auto null_data = ColumnHelper::as_raw_column<NullableColumn>(dest_column)->immutable_null_column_data().data();
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_TRUE(v->get_data()[2]);
+    ASSERT_TRUE(null_data[3]);
+    ASSERT_TRUE(v->get_data()[4]);
+}
+
+TEST_F(ArrayFunctionsTest, array_overlap_bigint) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+    src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
+    src_column->append_datum(DatumArray{(int64_t)8});
+    src_column->append_datum(DatumArray{(int64_t)4});
+    src_column->append_datum(DatumArray{(int64_t)99});
+    src_column->append_datum(DatumArray{(int64_t)4, (int64_t)1});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+    src_column2->append_datum(DatumArray{(int64_t)5, (int64_t)6});
+    src_column2->append_datum(DatumArray{(int64_t)2});
+    src_column2->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
+    src_column2->append_datum(DatumArray{(int64_t)4, (int64_t)9});
+    src_column2->append_datum(DatumArray{(int64_t)4, Datum()});
+
+    ArrayOverlap<PrimitiveType::TYPE_BIGINT> overlap;
+    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+
+    ASSERT_TRUE(!dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 5);
+
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(dest_column);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_TRUE(v->get_data()[2]);
+    ASSERT_FALSE(v->get_data()[3]);
+    ASSERT_TRUE(v->get_data()[4]);
+}
+
+TEST_F(ArrayFunctionsTest, array_overlap_double_with_nullable) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
+    src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
+    src_column->append_datum(DatumArray{(double)8});
+    src_column->append_datum(DatumArray{(double)4});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{(double)4, (double)1});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
+    src_column2->append_datum(DatumArray{(double)5, (double)6});
+    src_column2->append_datum(DatumArray{(double)2});
+    src_column2->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
+    src_column2->append_datum(DatumArray{(double)4, (double)9});
+    src_column2->append_datum(DatumArray{(double)4, Datum()});
+
+    ArrayOverlap<PrimitiveType::TYPE_DOUBLE> overlap;
+    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 5);
+
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(
+            ColumnHelper::as_raw_column<NullableColumn>(dest_column)->data_column());
+    auto null_data = ColumnHelper::as_raw_column<NullableColumn>(dest_column)->immutable_null_column_data().data();
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_TRUE(v->get_data()[2]);
+    ASSERT_TRUE(null_data[3]);
+    ASSERT_TRUE(v->get_data()[4]);
+}
+
+TEST_F(ArrayFunctionsTest, array_overlap_double) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
+    src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
+    src_column->append_datum(DatumArray{(double)8});
+    src_column->append_datum(DatumArray{(double)4});
+    src_column->append_datum(DatumArray{(double)99});
+    src_column->append_datum(DatumArray{(double)4, (double)1});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
+    src_column2->append_datum(DatumArray{(double)5, (double)6});
+    src_column2->append_datum(DatumArray{(double)2});
+    src_column2->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
+    src_column2->append_datum(DatumArray{(double)4, (double)9});
+    src_column2->append_datum(DatumArray{(double)4, Datum()});
+
+    ArrayOverlap<PrimitiveType::TYPE_DOUBLE> overlap;
+    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+
+    ASSERT_TRUE(!dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 5);
+
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(dest_column);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_TRUE(v->get_data()[2]);
+    ASSERT_FALSE(v->get_data()[3]);
+    ASSERT_TRUE(v->get_data()[4]);
+}
+
+TEST_F(ArrayFunctionsTest, array_overlap_varchar_with_nullable) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
+    src_column->append_datum(DatumArray{Slice("8")});
+    src_column->append_datum(DatumArray{Slice("4")});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
+    src_column2->append_datum(DatumArray{Slice("2")});
+    src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
+    src_column2->append_datum(DatumArray{Slice("4"), Slice("9")});
+    src_column2->append_datum(DatumArray{Slice("4"), Datum()});
+
+    ArrayOverlap<PrimitiveType::TYPE_VARCHAR> overlap;
+    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 5);
+
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(
+            ColumnHelper::as_raw_column<NullableColumn>(dest_column)->data_column());
+    auto null_data = ColumnHelper::as_raw_column<NullableColumn>(dest_column)->immutable_null_column_data().data();
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_TRUE(v->get_data()[2]);
+    ASSERT_TRUE(null_data[3]);
+    ASSERT_TRUE(v->get_data()[4]);
+}
+
+TEST_F(ArrayFunctionsTest, array_overlap_varchar) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
+    src_column->append_datum(DatumArray{Slice("8")});
+    src_column->append_datum(DatumArray{Slice("4")});
+    src_column->append_datum(DatumArray{Slice("99")});
+    src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
+    src_column2->append_datum(DatumArray{Slice("2")});
+    src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
+    src_column2->append_datum(DatumArray{Slice("4"), Slice("9")});
+    src_column2->append_datum(DatumArray{Slice("4"), Datum()});
+
+    ArrayOverlap<PrimitiveType::TYPE_VARCHAR> overlap;
+    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+
+    ASSERT_TRUE(!dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 5);
+
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(dest_column);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_TRUE(v->get_data()[2]);
+    ASSERT_FALSE(v->get_data()[3]);
+    ASSERT_TRUE(v->get_data()[4]);
+}
+
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_join_string) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
