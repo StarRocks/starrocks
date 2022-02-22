@@ -830,6 +830,7 @@ Status PersistentIndex::_append_wal(size_t n, const void* keys, const IndexValue
     }
     RETURN_IF_ERROR(_index_block->append(fixed_buf));
     _page_size += fixed_buf.size();
+    return Status::OK();
 }
 
 Status PersistentIndex::_flush_l0() {
