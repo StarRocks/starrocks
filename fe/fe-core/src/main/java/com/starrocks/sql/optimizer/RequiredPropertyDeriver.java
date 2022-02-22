@@ -230,6 +230,7 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
 
     @Override
     public Void visitPhysicalLimit(PhysicalLimitOperator node, ExpressionContext context) {
+        // limit node in Memo means that the limit cannot be merged into other nodes.
         requiredProperties.add(Lists.newArrayList(createLimitGatherProperty(node.getLimit())));
         return null;
     }

@@ -46,6 +46,8 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
 
+// The output property of the node is calculated according to the attributes of the child node and itself.
+// Currently join node enforces a valid property for the child node that cannot meet the requirements.
 public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, ExpressionContext> {
     private GroupExpression groupExpression;
     private PhysicalPropertySet requirements;
@@ -121,7 +123,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
 
             newPhysicalPropertyInfo.tableId = leftTableId;
             HashDistributionDesc outputDesc;
-            if (requiredShuffleDesc.get().getColumns().contains(rightShuffleColumns)) {
+            if (requiredShuffleDesc.get().getColumns().containsAll(rightShuffleColumns)) {
                 outputDesc =
                         new HashDistributionDesc(rightShuffleColumns, HashDistributionDesc.SourceType.SHUFFLE_LOCAL);
             } else {
@@ -455,6 +457,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     public PhysicalPropertySet visitPhysicalHashAggregate(PhysicalHashAggregateOperator node,
                                                           ExpressionContext context) {
         Preconditions.checkState(this.childrenOutputProperties.size() == 1);
+        // The child node meets the distribution attribute requirements for hash Aggregate nodes.
         return childrenOutputProperties.get(0);
     }
 

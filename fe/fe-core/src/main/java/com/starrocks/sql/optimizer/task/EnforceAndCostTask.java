@@ -87,6 +87,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 "\n curTotalCost " + curTotalCost;
     }
 
+    // 1. Get required properties according to node for children nodes.
+    // 2. Get best child group expression, it will optimize the children group from the top down
+    // 3. Get node output property with children output properties, it will add enforcer for children if children output
+    //    property can not satisfy the requirements now.
+    // 4. Add enforcer for node if it can not satisfy the requirements.
     @Override
     public void execute() {
         if (groupExpression.isUnused()) {
