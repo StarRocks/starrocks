@@ -29,18 +29,19 @@ static inline Aws::String to_aws_string(const std::string& s) {
     return Aws::String(s.data(), s.size());
 }
 
-S3ObjectStore::S3ObjectStore(const Aws::Client::ClientConfiguration& config, const S3Credential* cred,
-                             bool use_transfer_manager)
-        : _config(config) {
-    const char* access_key_id = (cred == nullptr || cred->access_key_id.empty()) ? getenv("AWS_ACCESS_KEY_ID")
-                                                                                 : cred->access_key_id.c_str();
-    const char* secret_access_key = (cred == nullptr || cred->secret_access_key.empty())
-                                            ? getenv("AWS_SECRET_ACCESS_KEY")
-                                            : cred->secret_access_key.c_str();
-    std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credentials =
-            std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
+S3ObjectStore::S3ObjectStore(const Aws::Client::ClientConfiguration& config) : _config(config) {}
 
-    _client = std::make_shared<Aws::S3::S3Client>(credentials, _config);
+Status S3ObjectStore::init(const S3Credential* cred, bool use_transfer_manager) {
+    if (cred != nullptr) {
+        std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credentials =
+                std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(cred->access_key_id.c_str(),
+                                                                          cred->secret_access_key.c_str());
+        _client = std::make_shared<Aws::S3::S3Client>(credentials, _config);
+    } else {
+        // if not cred provided, we can use default cred in aws profile.
+        _client = std::make_shared<Aws::S3::S3Client>(_config);
+    }
+
     if (use_transfer_manager) {
         Aws::Transfer::TransferManagerConfiguration transfer_config(_get_transfer_manager_executor());
         transfer_config.s3Client = _client;
@@ -50,6 +51,7 @@ S3ObjectStore::S3ObjectStore(const Aws::Client::ClientConfiguration& config, con
     } else {
         _transfer_manager = nullptr;
     }
+    return Status::OK();
 }
 
 Status S3ObjectStore::create_bucket(const std::string& bucket_name) {
