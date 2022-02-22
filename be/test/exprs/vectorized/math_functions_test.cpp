@@ -48,6 +48,26 @@ TEST_F(VecMathFunctionsTest, truncateTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, truncateNanTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        auto tc2 = Int32Column::create();
+
+        tc1->append(0);
+        tc2->append(1591994755);
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::truncate(ctx.get(), columns);
+
+        ASSERT_EQ(true, result->is_null(0));
+    }
+}
+
 TEST_F(VecMathFunctionsTest, Round_up_toTest) {
     {
         Columns columns;
