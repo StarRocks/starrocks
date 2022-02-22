@@ -60,54 +60,6 @@ using namespace std;
         }                                                                                  \
     } while (false)
 
-std::string SExtLiteral::value_to_string() {
-    std::stringstream ss;
-    switch (_type) {
-    case TYPE_TINYINT:
-        ss << std::to_string(get_byte());
-        break;
-    case TYPE_SMALLINT:
-        ss << std::to_string(get_short());
-        break;
-    case TYPE_INT:
-        ss << std::to_string(get_int());
-        break;
-    case TYPE_BIGINT:
-        ss << std::to_string(get_long());
-        break;
-    case TYPE_FLOAT:
-        ss << std::to_string(get_float());
-        break;
-    case TYPE_DOUBLE:
-        ss << std::to_string(get_double());
-        break;
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-        ss << get_string();
-        break;
-    case TYPE_DATE:
-    case TYPE_DATETIME:
-        ss << get_date_string();
-        break;
-    case TYPE_BOOLEAN:
-        ss << std::to_string(get_bool());
-        break;
-    case TYPE_DECIMAL:
-        ss << get_decimal_string();
-        break;
-    case TYPE_DECIMALV2:
-        ss << get_decimalv2_string();
-        break;
-    case TYPE_LARGEINT:
-        ss << get_largeint_string();
-        break;
-    default:
-        DCHECK(false);
-        break;
-    }
-    return ss.str();
-}
-
 template <typename T, typename... Ts>
 static constexpr bool is_type_in() {
     return (std::is_same_v<T, Ts> || ...);
@@ -134,76 +86,6 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
                 variant);
     });
     return res;
-}
-
-SExtLiteral::~SExtLiteral() = default;
-
-int8_t SExtLiteral::get_byte() {
-    DCHECK(_type == TYPE_TINYINT);
-    return *(reinterpret_cast<int8_t*>(_value));
-}
-
-int16_t SExtLiteral::get_short() {
-    DCHECK(_type == TYPE_SMALLINT);
-    return *(reinterpret_cast<int16_t*>(_value));
-}
-
-int32_t SExtLiteral::get_int() {
-    DCHECK(_type == TYPE_INT);
-    return *(reinterpret_cast<int32_t*>(_value));
-}
-
-int64_t SExtLiteral::get_long() {
-    DCHECK(_type == TYPE_BIGINT);
-    return *(reinterpret_cast<int64_t*>(_value));
-}
-
-float SExtLiteral::get_float() {
-    DCHECK(_type == TYPE_FLOAT);
-    return *(reinterpret_cast<float*>(_value));
-}
-
-double SExtLiteral::get_double() {
-    DCHECK(_type == TYPE_DOUBLE);
-    return *(reinterpret_cast<double*>(_value));
-}
-
-std::string SExtLiteral::get_string() {
-    DCHECK(_type == TYPE_VARCHAR || _type == TYPE_CHAR);
-    return (reinterpret_cast<StringValue*>(_value))->to_string();
-}
-
-std::string SExtLiteral::get_date_string() {
-    DCHECK(_type == TYPE_DATE || _type == TYPE_DATETIME);
-    DateTimeValue date_value = *reinterpret_cast<DateTimeValue*>(_value);
-    if (_type == TYPE_DATE) {
-        date_value.cast_to_date();
-    }
-
-    char str[MAX_DTVALUE_STR_LEN];
-    date_value.to_string(str);
-    return std::string(str, strlen(str));
-}
-
-bool SExtLiteral::get_bool() {
-    DCHECK(_type == TYPE_BOOLEAN);
-    return *(reinterpret_cast<bool*>(_value));
-}
-
-std::string SExtLiteral::get_decimal_string() {
-    DCHECK(_type == TYPE_DECIMAL);
-    return reinterpret_cast<DecimalValue*>(_value)->to_string();
-}
-
-std::string SExtLiteral::get_decimalv2_string() {
-    DCHECK(_type == TYPE_DECIMALV2);
-    return reinterpret_cast<DecimalV2Value*>(_value)->to_string();
-}
-
-std::string SExtLiteral::get_largeint_string() {
-    DCHECK(_type == TYPE_LARGEINT);
-    __int128 v = unaligned_load<__int128>(_value);
-    return LargeIntValue::to_string(v);
 }
 
 EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, ObjectPool* pool)
@@ -432,18 +314,19 @@ Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) 
     if (has_null) {
         return Status::InternalError("build disjuncts failed: hash set has a null value");
     }
-    for (auto v : hash_set) {
+    for (const auto& v : hash_set) {
         func(v);
     }
     return Status::OK();
 }
 
-#define BUILD_INPRED_VALUES(TYPE)                                                                         \
-    case TYPE: {                                                                                          \
-        RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                         \
-            in_pred_values.emplace_back(new SExtLiteral(slot_desc->type().type, static_cast<void*>(&v))); \
-        }));                                                                                              \
-        break;                                                                                            \
+#define BUILD_INPRED_VALUES(TYPE)                                                                                    \
+    case TYPE: {                                                                                                     \
+        RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                                    \
+            in_pred_values.emplace_back(new VExtLiteral(slot_desc->type().type,                                      \
+                                                        vectorized::ColumnHelper::create_const_column<TYPE>(v, 1))); \
+        }));                                                                                                         \
+        break;                                                                                                       \
     }
 
 Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
@@ -489,35 +372,10 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
             BUILD_INPRED_VALUES(TYPE_LARGEINT);
             BUILD_INPRED_VALUES(TYPE_FLOAT);
             BUILD_INPRED_VALUES(TYPE_DOUBLE);
-        case TYPE_DATE: {
-            RETURN_IF_ERROR(build_inpred_values<TYPE_DATE>(pred, is_not_in, [&](auto& v) {
-                // declare_type(v) == DateValue
-                int year, month, day;
-                v.to_date(&year, &month, &day);
-                DateTimeValue date_value(TIME_DATE, year, month, day, 0, 0, 0, 0);
-                in_pred_values.emplace_back(new SExtLiteral(slot_desc->type().type, static_cast<void*>(&date_value)));
-            }));
-            break;
-        }
-        case TYPE_DATETIME: {
-            RETURN_IF_ERROR(build_inpred_values<TYPE_DATETIME>(pred, is_not_in, [&](auto& v) {
-                // declare_type(v) == TimestampValue
-                int year, month, day, hour, minute, second, usec;
-                v.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
-                DateTimeValue ts_value(TIME_DATETIME, year, month, day, hour, minute, second, usec);
-                in_pred_values.emplace_back(new SExtLiteral(slot_desc->type().type, static_cast<void*>(&ts_value)));
-            }));
-            break;
-        }
-        case TYPE_CHAR:
-        case TYPE_VARCHAR: {
-            RETURN_IF_ERROR(build_inpred_values<TYPE_VARCHAR>(pred, is_not_in, [&](auto& v) {
-                // declare_type(v) == Slice
-                StringValue string_val(v.data, v.size);
-                in_pred_values.emplace_back(new SExtLiteral(slot_desc->type().type, static_cast<void*>(&string_val)));
-            }));
-            break;
-        }
+            BUILD_INPRED_VALUES(TYPE_DATE);
+            BUILD_INPRED_VALUES(TYPE_DATETIME);
+            BUILD_INPRED_VALUES(TYPE_CHAR);
+            BUILD_INPRED_VALUES(TYPE_VARCHAR);
         default:
             DCHECK(false) << "unsupported type:" << expr->type().type;
             return Status::InternalError("unsupported type to push down to ES");
@@ -568,10 +426,6 @@ Status EsPredicate::_build_compound_predicate(const Expr* conjunct, bool* handle
         RETURN_IF_ERROR(_vec_build_disjuncts_list(conjunct->get_child(1)));
     }
     return Status::OK();
-}
-
-const SlotDescriptor* EsPredicate::get_slot_desc(const SlotRef* slotRef) {
-    return get_slot_desc(slotRef->slot_id());
 }
 
 const SlotDescriptor* EsPredicate::get_slot_desc(SlotId slot_id) {
