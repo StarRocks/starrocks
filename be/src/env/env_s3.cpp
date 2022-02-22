@@ -5,6 +5,7 @@
 #include "env/env_s3.h"
 
 #include <fmt/core.h>
+#include <limits>
 
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
@@ -34,11 +35,13 @@ private:
 };
 
 Status RandomAccessFileWrapper::read(uint64_t offset, Slice* res) const {
-    ASSIGN_OR_RETURN(res->size, _input->read_at(offset, res->data, res->size));
+    if (UNLIKELY(offset > std::numeric_limits<int64_t>::max())) return Status::NotSupported("offset overflow");
+    ASSIGN_OR_RETURN(res->size, _input->read_at(static_cast<int64_t>(offset), res->data, res->size));
     return Status::OK();
 }
 
 Status RandomAccessFileWrapper::read_at(uint64_t offset, const Slice& res) const {
+    if (UNLIKELY(offset > std::numeric_limits<int64_t>::max())) return Status::NotSupported("offset overflow");
     return _input->read_at_fully(static_cast<int64_t>(offset), res.data, res.size);
 }
 
@@ -81,7 +84,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
     cred.access_key_id = config::aws_access_key_id;
     cred.secret_access_key = config::aws_secret_access_key;
     S3ObjectStore store(config);
-    RETURN_IF_ERROR(store->init(&cred, false));
+    RETURN_IF_ERROR(store.init(&cred, false));
     ASSIGN_OR_RETURN(auto input_file, store.get_object(bucket, object));
     return std::make_unique<RandomAccessFileWrapper>(std::move(input_file), path);
 }
