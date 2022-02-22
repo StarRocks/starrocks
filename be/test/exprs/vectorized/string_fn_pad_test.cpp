@@ -1,4 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+#include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
 #include <random>
@@ -510,6 +511,134 @@ TEST_F(StringFunctionPadTest, rpadConstTest) {
     ASSERT_TRUE(result->is_null(1));
     ASSERT_EQ("", v->get_data()[1].to_string());
 }
+
+struct PadNullableStrConstLenFillTestCase {
+    std::vector<std::string> strs;
+    std::vector<bool> str_nulls;
+    int len;
+    std::string fill;
+
+    bool rpad_expected_null;
+    std::vector<std::string> rpad_expected_results;
+    std::vector<bool> rpad_expected_nulls;
+
+    bool lpad_expected_null;
+    std::vector<std::string> lpad_expected_results;
+    std::vector<bool> lpad_expected_nulls;
+
+    PadNullableStrConstLenFillTestCase(const vector<std::string>& strs, const vector<bool>& str_nulls, int len,
+                                       const string& fill, bool rpad_expected_null,
+                                       const vector<std::string>& rpad_expected_results,
+                                       const vector<bool>& rpad_expected_nulls, bool lpad_expected_null,
+                                       const vector<std::string>& lpad_expected_results,
+                                       const vector<bool>& lpad_expected_nulls)
+            : strs(strs),
+              str_nulls(str_nulls),
+              len(len),
+              fill(fill),
+              rpad_expected_null(rpad_expected_null),
+              rpad_expected_results(rpad_expected_results),
+              rpad_expected_nulls(rpad_expected_nulls),
+              lpad_expected_null(lpad_expected_null),
+              lpad_expected_results(lpad_expected_results),
+              lpad_expected_nulls(lpad_expected_nulls) {}
+};
+
+class PadNullableStrConstLenFillTestFixture : public ::testing::TestWithParam<PadNullableStrConstLenFillTestCase> {};
+
+TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
+    const auto& c = GetParam();
+    int num_rows = c.strs.size();
+
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+
+    auto str_data = BinaryColumn::create();
+    auto str_null = NullColumn::create();
+    auto len_data = Int32Column::create();
+    auto fill_data = BinaryColumn::create();
+
+    for (int i = 0; i < num_rows; ++i) {
+        str_data->append(c.strs[i]);
+        str_null->append(c.str_nulls[i]);
+    }
+    len_data->append(c.len);
+    fill_data->append(c.fill);
+
+    auto str = NullableColumn::create(str_data, str_null);
+    auto len = ConstColumn::create(len_data, num_rows);
+    auto fill = ConstColumn::create(fill_data, num_rows);
+
+    columns.emplace_back(str);
+    columns.emplace_back(len);
+    columns.emplace_back(fill);
+
+    // Check rpad result.
+    ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns);
+    ASSERT_EQ(num_rows, rpad_result->size());
+    ASSERT_EQ(c.rpad_expected_null, rpad_result->is_nullable());
+    std::shared_ptr<BinaryColumn> rpad_v;
+    if (c.rpad_expected_null) {
+        rpad_v = ColumnHelper::cast_to<TYPE_VARCHAR>(
+                ColumnHelper::as_raw_column<NullableColumn>(rpad_result)->data_column());
+    } else {
+        rpad_v = ColumnHelper::cast_to<TYPE_VARCHAR>(rpad_result);
+    }
+    for (int i = 0; i < num_rows; ++i) {
+        ASSERT_EQ(c.rpad_expected_nulls[i], rpad_result->is_null(i)) << "Row#" << i;
+        if (!c.rpad_expected_nulls[i]) {
+            ASSERT_EQ(c.rpad_expected_results[i], rpad_v->get_data()[i].to_string()) << "Row#" << i;
+        }
+    }
+
+    // Check lpad result.
+    ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns);
+    ASSERT_EQ(num_rows, lpad_result->size());
+    ASSERT_EQ(c.lpad_expected_null, lpad_result->is_nullable());
+    std::shared_ptr<BinaryColumn> lpad_v;
+    if (c.lpad_expected_null) {
+        lpad_v = ColumnHelper::cast_to<TYPE_VARCHAR>(
+                ColumnHelper::as_raw_column<NullableColumn>(lpad_result)->data_column());
+    } else {
+        lpad_v = ColumnHelper::cast_to<TYPE_VARCHAR>(lpad_result);
+    }
+    for (int i = 0; i < num_rows; ++i) {
+        ASSERT_EQ(c.lpad_expected_nulls[i], lpad_result->is_null(i)) << "Row#" << i;
+        if (!c.lpad_expected_nulls[i]) {
+            ASSERT_EQ(c.lpad_expected_results[i], lpad_v->get_data()[i].to_string()) << "Row#" << i;
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(StringFunctionPadTest, PadNullableStrConstLenFillTestFixture,
+                         ::testing::Values(PadNullableStrConstLenFillTestCase(
+                                                   // Input str, len, fill.
+                                                   {"<NULL>", "<NULL>"}, {true, true}, 0, "123",
+                                                   // rpad expected results.
+                                                   true, {"<NULL>", "<NULL>"}, {true, true},
+                                                   // lpad expected results.
+                                                   true, {"<NULL>", "<NULL>"}, {true, true}),
+                                           PadNullableStrConstLenFillTestCase(
+                                                   // Input str, len, fill.
+                                                   {"abc", "<NULL>"}, {false, true}, 0, "123",
+                                                   // rpad expected results.
+                                                   true, {"", "<NULL>"}, {false, true},
+                                                   // lpad expected results.
+                                                   true, {"", "<NULL>"}, {false, true}),
+                                           PadNullableStrConstLenFillTestCase(
+                                                   // Input str, len, fill.
+                                                   {"abc", "<NULL>"}, {false, true}, 7, "123",
+                                                   // rpad expected results.
+                                                   true, {"abc1231", "<NULL>"}, {false, true},
+                                                   // lpad expected results.
+                                                   true, {"1231abc", "<NULL>"}, {false, true}),
+                                           PadNullableStrConstLenFillTestCase(
+                                                   // Input str, len, fill.
+                                                   {"abc", "edf", "abcdef"}, {false, false, false}, 7, "123",
+                                                   // rpad expected results.
+                                                   false, {"abc1231", "edf1231", "abcdef1"}, {false, false, false},
+                                                   // lpad expected results.
+                                                   false, {"1231abc", "1231edf", "1abcdef"}, {false, false, false})));
 
 } // namespace vectorized
 } // namespace starrocks
