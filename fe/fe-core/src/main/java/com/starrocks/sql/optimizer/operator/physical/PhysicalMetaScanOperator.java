@@ -12,22 +12,19 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 public class PhysicalMetaScanOperator extends PhysicalScanOperator {
     private final Map<Integer, String> aggColumnIdToNames;
 
-    public PhysicalMetaScanOperator(
-                                    Map<Integer, String> aggColumnIdToNames,
+    public PhysicalMetaScanOperator(Map<Integer, String> aggColumnIdToNames,
                                     Table table,
-                                    List<ColumnRefOperator> outputColumns,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                     long limit,
                                     ScalarOperator predicate,
                                     Projection projection) {
-        super(OperatorType.PHYSICAL_META_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate,
+        super(OperatorType.PHYSICAL_META_SCAN, table, colRefToColumnMetaMap, limit, predicate,
                 projection);
         this.aggColumnIdToNames = aggColumnIdToNames;
     }

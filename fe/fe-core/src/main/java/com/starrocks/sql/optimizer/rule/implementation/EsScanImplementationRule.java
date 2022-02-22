@@ -23,7 +23,6 @@ public class EsScanImplementationRule extends ImplementationRule {
         LogicalEsScanOperator logical = (LogicalEsScanOperator) input.getOp();
         PhysicalEsScanOperator physical = new PhysicalEsScanOperator(
                 logical.getTable(),
-                logical.getOutputColumns(),
                 logical.getColRefToColumnMetaMap(),
                 logical.getSelectedIndex(),
                 logical.getLimit(),

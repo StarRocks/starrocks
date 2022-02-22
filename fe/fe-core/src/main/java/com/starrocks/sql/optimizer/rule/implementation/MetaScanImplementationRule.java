@@ -24,7 +24,6 @@ public class MetaScanImplementationRule extends ImplementationRule {
         PhysicalMetaScanOperator physical = new PhysicalMetaScanOperator(
                 logical.getAggColumnIdToNames(),
                 logical.getTable(),
-                logical.getOutputColumns(),
                 logical.getColRefToColumnMetaMap(),
                 logical.getLimit(),
                 logical.getPredicate(),
