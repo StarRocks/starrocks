@@ -155,7 +155,7 @@ public:
      * Seek to beginning of a row group in the current stripe
      * @param positions a list of PositionProviders storing the positions
      */
-    virtual void seekToRowGroup(PositionProviderMap& providers);
+    virtual void seekToRowGroup(PositionProviderMap* providers);
 
     uint64_t getColumnId() { return columnId; }
 };

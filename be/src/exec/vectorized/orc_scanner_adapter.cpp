@@ -1439,21 +1439,21 @@ ChunkPtr OrcScannerAdapter::cast_chunk(ChunkPtr* chunk) {
     return _cast_chunk(chunk, _src_slot_descriptors, nullptr);
 }
 
-StatusOr<ChunkPtr> OrcScannerAdapter::load_chunk() {
+StatusOr<ChunkPtr> OrcScannerAdapter::get_chunk() {
     ChunkPtr ptr = create_chunk();
     RETURN_IF_ERROR(fill_chunk(&ptr));
     ChunkPtr ret = cast_chunk(&ptr);
     return ret;
 }
 
-StatusOr<ChunkPtr> OrcScannerAdapter::load_active_chunk() {
+StatusOr<ChunkPtr> OrcScannerAdapter::get_active_chunk() {
     ChunkPtr ptr = _create_chunk(_lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
     RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices));
     ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
     return ret;
 }
 
-StatusOr<ChunkPtr> OrcScannerAdapter::load_lazy_chunk(Filter* filter, size_t chunk_size) {
+StatusOr<ChunkPtr> OrcScannerAdapter::get_lazy_chunk(Filter* filter, size_t chunk_size) {
     if (chunk_size != filter->size()) {
         _batch->filter(filter->data(), filter->size(), chunk_size);
     }

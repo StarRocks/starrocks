@@ -561,7 +561,7 @@ public:
      * @return true if a non-zero number of rows were read or false if the
      *   end of the file was reached.
      */
-    virtual bool next(ColumnVectorBatch& data, ReadPosition* pos = nullptr) = 0;
+    virtual bool next(ColumnVectorBatch& data, ReadPosition* pos) = 0;
 
     virtual void lazyLoadSkip(uint64_t numValues) = 0;
     virtual void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) = 0;

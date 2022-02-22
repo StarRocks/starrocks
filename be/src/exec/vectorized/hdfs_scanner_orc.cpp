@@ -432,9 +432,9 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                 StatusOr<ChunkPtr> ret;
                 SCOPED_RAW_TIMER(&_stats.column_convert_ns);
                 if (!_orc_adapter->has_lazy_load_context()) {
-                    ret = _orc_adapter->load_chunk();
+                    ret = _orc_adapter->get_chunk();
                 } else {
-                    ret = _orc_adapter->load_active_chunk();
+                    ret = _orc_adapter->get_active_chunk();
                 }
                 RETURN_IF_ERROR(ret);
                 *chunk = std::move(ret.value());
@@ -491,9 +491,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_convert_ns);
-            StatusOr<ChunkPtr> ret = _orc_adapter->load_lazy_chunk(&filter, chunk_size);
+            StatusOr<ChunkPtr> ret = _orc_adapter->get_lazy_chunk(&filter, chunk_size);
             RETURN_IF_ERROR(ret);
-            ck->merge(ret.value().get());
+            Chunk& ret_ck = *(ret.value());
+            ck->merge(std::move(ret_ck));
         }
         return Status::OK();
     }

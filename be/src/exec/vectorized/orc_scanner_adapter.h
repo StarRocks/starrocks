@@ -104,11 +104,11 @@ public:
 
     void set_lazy_load_context(LazyLoadContext* ctx) { _lazy_load_ctx = ctx; }
     bool has_lazy_load_context() { return _lazy_load_ctx != nullptr; }
-    StatusOr<ChunkPtr> load_chunk();
-    StatusOr<ChunkPtr> load_active_chunk();
+    StatusOr<ChunkPtr> get_chunk();
+    StatusOr<ChunkPtr> get_active_chunk();
     void lazy_read_next(size_t numValues);
     void lazy_skip_next(size_t numValues);
-    StatusOr<ChunkPtr> load_lazy_chunk(Filter* filter, size_t chunk_size);
+    StatusOr<ChunkPtr> get_lazy_chunk(Filter* filter, size_t chunk_size);
 
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);

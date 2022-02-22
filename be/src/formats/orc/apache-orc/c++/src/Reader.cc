@@ -414,7 +414,7 @@ void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
         map.providers.insert(std::make_pair(colId, PositionProvider(position)));
     }
 
-    reader->seekToRowGroup(map);
+    reader->seekToRowGroup(&map);
 }
 
 const FileContents& RowReaderImpl::getFileContents() const {

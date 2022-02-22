@@ -111,9 +111,9 @@ void ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* i
     rowBatch.hasNulls = false;
 }
 
-void ColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void ColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     if (notNullDecoder) {
-        notNullDecoder->seek(positions.at(columnId));
+        notNullDecoder->seek(positions->at(columnId));
     }
 }
 
@@ -150,7 +150,7 @@ public:
 
     void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 };
 
 BooleanColumnReader::BooleanColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
@@ -178,9 +178,9 @@ void BooleanColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, 
     expandBytesToLongs(ptr, numValues);
 }
 
-void BooleanColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void BooleanColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
-    rle->seek(positions.at(columnId));
+    rle->seek(positions->at(columnId));
 }
 
 class ByteColumnReader : public ColumnReader {
@@ -195,7 +195,7 @@ public:
 
     void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 };
 
 ByteColumnReader::ByteColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
@@ -223,9 +223,9 @@ void ByteColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, cha
     expandBytesToLongs(ptr, numValues);
 }
 
-void ByteColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void ByteColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
-    rle->seek(positions.at(columnId));
+    rle->seek(positions->at(columnId));
 }
 
 class IntegerColumnReader : public ColumnReader {
@@ -240,7 +240,7 @@ public:
 
     void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 };
 
 IntegerColumnReader::IntegerColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
@@ -266,9 +266,9 @@ void IntegerColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, 
               rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr);
 }
 
-void IntegerColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void IntegerColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
-    rle->seek(positions.at(columnId));
+    rle->seek(positions->at(columnId));
 }
 
 class TimestampColumnReader : public ColumnReader {
@@ -288,7 +288,7 @@ public:
 
     void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 };
 
 TimestampColumnReader::TimestampColumnReader(const Type& type, StripeStreams& stripe, bool isInstantType)
@@ -358,10 +358,10 @@ void TimestampColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues
     }
 }
 
-void TimestampColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void TimestampColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
-    secondsRle->seek(positions.at(columnId));
-    nanoRle->seek(positions.at(columnId));
+    secondsRle->seek(positions->at(columnId));
+    nanoRle->seek(positions->at(columnId));
 }
 
 class DoubleColumnReader : public ColumnReader {
@@ -373,7 +373,7 @@ public:
 
     void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 
 private:
     std::unique_ptr<SeekableInputStream> inputStream;
@@ -662,9 +662,9 @@ void readFully(char* buffer, int64_t bufferSize, SeekableInputStream* stream) {
     }
 }
 
-void DoubleColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void DoubleColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
-    inputStream->seek(positions.at(columnId));
+    inputStream->seek(positions->at(columnId));
     // clear buffer state after seek
     bufferEnd = nullptr;
     bufferPointer = nullptr;
@@ -689,7 +689,7 @@ public:
 
     void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 
     StringDictionary* getDictionary() {
         loadDictionary();
@@ -812,9 +812,9 @@ void StringDictionaryColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint
     rle->next(batch.index.data(), numValues, notNull);
 }
 
-void StringDictionaryColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void StringDictionaryColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
-    rle->seek(positions.at(columnId));
+    rle->seek(positions->at(columnId));
 }
 
 class StringDirectColumnReader : public ColumnReader {
@@ -841,7 +841,7 @@ public:
 
     void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 };
 
 StringDirectColumnReader::StringDirectColumnReader(const Type& type, StripeStreams& stripe)
@@ -968,10 +968,10 @@ void StringDirectColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numVal
     }
 }
 
-void StringDirectColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void StringDirectColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
-    blobStream->seek(positions.at(columnId));
-    lengthRle->seek(positions.at(columnId));
+    blobStream->seek(positions->at(columnId));
+    lengthRle->seek(positions->at(columnId));
     // clear buffer state after seek
     lastBuffer = nullptr;
     lastBufferLength = 0;
@@ -995,7 +995,7 @@ public:
 
     void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 
     const size_t size() { return children.size(); }
     ColumnReader* childReaderAt(size_t idx) { return children[idx].get(); }
@@ -1081,18 +1081,18 @@ void StructColumnReader::applyLastSeekToRowGroupRequest() {
     if (hasPendingSeekToRowGroupRequest) {
         hasPendingSeekToRowGroupRequest = false;
         for (auto& ptr : lazyLoadChildren) {
-            ptr->seekToRowGroup(pendingSeekToRowGroupRequest);
+            ptr->seekToRowGroup(&pendingSeekToRowGroupRequest);
         }
     }
 }
 
-void StructColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void StructColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
     for (auto& ptr : children) {
         ptr->seekToRowGroup(positions);
     }
     if (lazyLoadChildren.size() != 0) {
-        pendingSeekToRowGroupRequest.copyFrom(positions);
+        pendingSeekToRowGroupRequest.copyFrom(*positions);
         hasPendingSeekToRowGroupRequest = true;
     }
     // for (auto& ptr : lazyLoadChildren) {
@@ -1131,7 +1131,7 @@ public:
 
     void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 
 private:
     template <bool encoded>
@@ -1222,9 +1222,9 @@ void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numVal
     }
 }
 
-void ListColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void ListColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
-    rle->seek(positions.at(columnId));
+    rle->seek(positions->at(columnId));
     if (child) {
         child->seekToRowGroup(positions);
     }
@@ -1246,7 +1246,7 @@ public:
 
     void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 
 private:
     template <bool encoded>
@@ -1355,9 +1355,9 @@ void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValu
     }
 }
 
-void MapColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void MapColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
-    rle->seek(positions.at(columnId));
+    rle->seek(positions->at(columnId));
     if (keyReader) {
         keyReader->seekToRowGroup(positions);
     }
@@ -1382,7 +1382,7 @@ public:
 
     void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 
 private:
     template <bool encoded>
@@ -1472,9 +1472,9 @@ void UnionColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numVa
     }
 }
 
-void UnionColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void UnionColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
-    rle->seek(positions.at(columnId));
+    rle->seek(positions->at(columnId));
     for (size_t i = 0; i < numChildren; ++i) {
         if (childrenReader[i] != nullptr) {
             childrenReader[i]->seekToRowGroup(positions);
@@ -1553,7 +1553,7 @@ public:
 
     void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
-    void seekToRowGroup(PositionProviderMap& positions) override;
+    void seekToRowGroup(PositionProviderMap* positions) override;
 };
 const uint32_t Decimal64ColumnReader::MAX_PRECISION_64;
 const uint32_t Decimal64ColumnReader::MAX_PRECISION_128;
@@ -1647,10 +1647,10 @@ void scaleInt128(Int128& value, uint32_t scale, uint32_t currentScale) {
     }
 }
 
-void Decimal64ColumnReader::seekToRowGroup(PositionProviderMap& positions) {
+void Decimal64ColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
-    valueStream->seek(positions.at(columnId));
-    scaleDecoder->seek(positions.at(columnId));
+    valueStream->seek(positions->at(columnId));
+    scaleDecoder->seek(positions->at(columnId));
     // clear buffer state after seek
     buffer = nullptr;
     bufferEnd = nullptr;
