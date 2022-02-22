@@ -10,7 +10,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteRule;
-import javassist.expr.Cast;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -57,6 +56,27 @@ public class ReduceCastRuleTest {
     }
 
     @Test
+    public void testBooleanWithDecreasingCast() {
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        ScalarOperator operator =
+                new CastOperator(Type.BOOLEAN, new CastOperator(Type.INT,
+                        ConstantOperator.createLargeInt(new BigInteger("1000000000000000000"))));
+
+        ScalarOperator result = rule.apply(operator, null);
+
+        assertEquals(OperatorType.CALL, result.getOpType());
+        assertTrue(result instanceof CastOperator);
+
+        assertTrue(result.getType().isBoolean());
+        ScalarOperator child = result.getChild(0);
+        assertEquals(OperatorType.CALL, child.getOpType());
+        assertTrue(child instanceof CastOperator);
+        ScalarOperator grandChild = child.getChild(0);
+        assertEquals(OperatorType.CONSTANT, grandChild.getOpType());
+    }
+
+    @Test
     public void testSameTypeCast() {
         ScalarOperatorRewriteRule rule = new ReduceCastRule();
 
@@ -93,10 +113,10 @@ public class ReduceCastRuleTest {
 
     @Test
     public void testBinaryPredicateInvolvingDecimalSuccess() {
-        Type[][] typeListList = new Type[][]{
-                {Type.TINYINT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(16,9)},
-                {Type.TINYINT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(9,0)},
-                {ScalarType.createDecimalV3NarrowestType(4,0), Type.SMALLINT, Type.BIGINT},
+        Type[][] typeListList = new Type[][] {
+                {Type.TINYINT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(16, 9)},
+                {Type.TINYINT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(9, 0)},
+                {ScalarType.createDecimalV3NarrowestType(4, 0), Type.SMALLINT, Type.BIGINT},
                 {ScalarType.createDecimalV3NarrowestType(18, 0), Type.BIGINT, Type.LARGEINT},
                 {ScalarType.createDecimalV3NarrowestType(2, 0), Type.TINYINT, Type.INT},
         };
@@ -117,10 +137,10 @@ public class ReduceCastRuleTest {
 
     @Test
     public void testBinaryPredicateInvolvingDecimalFail() {
-        Type[][] typeListList = new Type[][]{
-                {Type.TINYINT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(13,9)},
-                {Type.INT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(9,0)},
-                {ScalarType.createDecimalV3NarrowestType(6,0), Type.SMALLINT, Type.BIGINT},
+        Type[][] typeListList = new Type[][] {
+                {Type.TINYINT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(13, 9)},
+                {Type.INT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(9, 0)},
+                {ScalarType.createDecimalV3NarrowestType(6, 0), Type.SMALLINT, Type.BIGINT},
                 {ScalarType.createDecimalV3NarrowestType(19, 0), Type.BIGINT, Type.LARGEINT},
                 {ScalarType.createDecimalV3NarrowestType(10, 0), Type.TINYINT, Type.INT},
         };
