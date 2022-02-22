@@ -100,9 +100,11 @@ std::unique_ptr<SeekableInputStream> StripeStreamsImpl::getStream(uint64_t colum
         const proto::Stream& stream = footer.streams(i);
         if (stream.has_kind() && stream.kind() == kind && stream.column() == static_cast<uint64_t>(columnId)) {
             uint64_t streamLength = stream.length();
-            // uint64_t myBlock = shouldStream ? input.getNaturalReadSize() : streamLength;
+            uint64_t myBlock = shouldStream ? input.getNaturalReadSize() : streamLength;
             // if we don't need that much data, why we read it?
-            uint64_t myBlock = std::min(input.getNaturalReadSize(), streamLength);
+            if (streamLength < myBlock) {
+                myBlock = streamLength;
+            }
             if (offset + streamLength > dataEnd) {
                 std::stringstream msg;
                 msg << "Malformed stream meta at stream index " << i << " in stripe " << stripeIndex
