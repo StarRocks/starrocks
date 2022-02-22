@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <memory>
+#include <string>
+
 #include "io/random_access_file.h"
 
 namespace Aws::S3 {
@@ -20,6 +23,16 @@ public:
               _object(std::move(object)),
               _offset(0),
               _size(-1) {}
+
+    ~S3RandomAccessFile() override = default;
+
+    // Disallow copy and assignment
+    S3RandomAccessFile(const S3RandomAccessFile&) = delete;
+    void operator=(const S3RandomAccessFile&) = delete;
+
+    // Disallow move ctor and move assignment, because no usage now
+    S3RandomAccessFile(S3RandomAccessFile&&) = delete;
+    void operator=(S3RandomAccessFile&&) = delete;
 
     StatusOr<int64_t> read(void* data, int64_t count) override;
 
