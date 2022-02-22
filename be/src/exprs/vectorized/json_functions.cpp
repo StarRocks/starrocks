@@ -369,7 +369,7 @@ ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& col
         if (!json.ok()) {
             result.append_null();
         } else {
-            result.append(&json.value());
+            result.append(std::move(json.value()));
         }
     }
 
@@ -390,7 +390,7 @@ ColumnPtr JsonFunctions::json_string(FunctionContext* context, const Columns& co
             if (!json_str.ok()) {
                 result.append_null();
             } else {
-                result.append(json_str.value());
+                result.append(std::move(json_str.value()));
             }
         }
     }
@@ -461,7 +461,7 @@ ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& col
             result.append_null();
         } else {
             JsonValue value(slice);
-            result.append(&value);
+            result.append(std::move(value));
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -502,7 +502,7 @@ ColumnPtr JsonFunctions::json_array_empty(FunctionContext* context, const Column
     DCHECK_EQ(0, columns.size());
     ColumnBuilder<TYPE_JSON> result(1);
     JsonValue json(vpack::Slice::emptyArraySlice());
-    result.append(&json);
+    result.append(std::move(json));
     return result.build(true);
 }
 
@@ -533,7 +533,7 @@ ColumnPtr JsonFunctions::json_array(FunctionContext* context, const Columns& col
         }
         vpack::Slice json_slice = builder.slice();
         JsonValue json(json_slice);
-        result.append(&json);
+        result.append(std::move(json));
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
@@ -542,7 +542,7 @@ ColumnPtr JsonFunctions::json_object_empty(FunctionContext* context, const Colum
     DCHECK_EQ(0, columns.size());
     ColumnBuilder<TYPE_JSON> result(1);
     JsonValue json(vpack::Slice::emptyObjectSlice());
-    result.append(&json);
+    result.append(std::move(json));
     return result.build(true);
 }
 
@@ -592,7 +592,7 @@ ColumnPtr JsonFunctions::json_object(FunctionContext* context, const Columns& co
         if (ok) {
             vpack::Slice json_slice = builder.slice();
             JsonValue json(json_slice);
-            result.append(&json);
+            result.append(std::move(json));
         } else {
             result.append_null();
         }
