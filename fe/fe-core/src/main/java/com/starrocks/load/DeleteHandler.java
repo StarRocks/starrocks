@@ -201,7 +201,8 @@ public class DeleteHandler implements Writable {
 
                 // generate label
                 String label = "delete_" + UUID.randomUUID();
-                long jobId = stmt.getJobId();
+                long jobId = Catalog.getCurrentCatalog().getNextId();
+                stmt.setJobId(jobId);
                 // begin txn here and generate txn id
                 transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                         Lists.newArrayList(table.getId()), label, null,
