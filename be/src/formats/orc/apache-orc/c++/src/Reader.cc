@@ -1329,6 +1329,10 @@ RowReader::~RowReader() {
     // PASS
 }
 
+bool RowReader::next(ColumnVectorBatch& cvb) {
+    return this->next(cvb, nullptr);
+}
+
 Reader::~Reader() {
     // PASS
 }

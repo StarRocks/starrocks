@@ -561,6 +561,8 @@ public:
      * @return true if a non-zero number of rows were read or false if the
      *   end of the file was reached.
      */
+    // This function is for backward comptiability.
+    bool next(ColumnVectorBatch& data);
     virtual bool next(ColumnVectorBatch& data, ReadPosition* pos) = 0;
 
     virtual void lazyLoadSkip(uint64_t numValues) = 0;
