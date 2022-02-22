@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "exec/pipeline/olap_chunk_source.h"
+#include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -167,7 +168,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
     bool offer_task_success = false;
     if (_workgroup != nullptr) {
-        auto task = [this, state, chunk_source_index](int worker_id) {
+        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [this, state, chunk_source_index](int worker_id) {
             {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
@@ -180,9 +181,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
             _num_running_io_tasks--;
             _is_io_task_running[chunk_source_index] = false;
-        };
+        });
 
-        offer_task_success = WorkGroupManager::instance()->try_offer_io_task(_workgroup, task);
+        offer_task_success = ExecEnv::GetInstance()->scan_executor()->submit(std::move(task));
     } else {
         PriorityThreadPool::Task task;
         task.work_function = [this, state, chunk_source_index]() {

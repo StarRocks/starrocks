@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include "exec/pipeline/pipeline_driver_queue.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "util/blocking_queue.hpp"
@@ -28,52 +29,8 @@ class WorkGroup;
 class WorkGroupManager;
 using WorkGroupPtr = std::shared_ptr<WorkGroup>;
 using WorkGroupPtrSet = std::unordered_set<WorkGroupPtr>;
-
-class WorkGroupQueue {
-public:
-    WorkGroupQueue() = default;
-    virtual ~WorkGroupQueue() = default;
-
-    virtual void add(const WorkGroupPtr& wg) = 0;
-    virtual void remove(const WorkGroupPtr& wg) = 0;
-    virtual WorkGroupPtr pick_next() = 0;
-
-    virtual void close() = 0;
-};
-
-class IoWorkGroupQueue final : public WorkGroupQueue {
-public:
-    using Task = std::function<void(int)>;
-
-    IoWorkGroupQueue() = default;
-    ~IoWorkGroupQueue() override = default;
-
-    void add(const WorkGroupPtr& wg) override {}
-    void remove(const WorkGroupPtr& wg) override {}
-    WorkGroupPtr pick_next() override { return nullptr; };
-
-    StatusOr<Task> pick_next_task(int worker_id);
-    bool try_offer_io_task(WorkGroupPtr wg, Task task);
-    void close() override;
-
-private:
-    void _maybe_adjust_weight();
-    WorkGroupPtr _select_next_wg(int worker_id);
-
-    std::mutex _global_io_mutex;
-    std::condition_variable _cv;
-
-    bool _is_closed = false;
-
-    std::unordered_set<WorkGroupPtr> _ready_wgs;
-    std::atomic<size_t> _total_task_num = 0;
-
-    const int _max_schedule_num_period = config::pipeline_max_io_schedule_num_period;
-    // Adjust select factor of each wg after every `min(_max_schedule_num_period, num_tasks)` schedule times.
-    int _remaining_schedule_num_period = 0;
-};
-
 using WorkGroupType = TWorkGroupType::type;
+
 // WorkGroup is the unit of resource isolation, it has {CPU, Memory, Concurrency} quotas which limit the
 // resource usage of the queries belonging to the WorkGroup. Each user has be bound to a WorkGroup, when
 // the user issues a query, then the corresponding WorkGroup is chosen to manage the query.
@@ -90,6 +47,7 @@ public:
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
     pipeline::DriverQueue* driver_queue() { return _driver_queue.get(); }
+    ScanTaskQueue* scan_task_queue() { return _scan_task_queue.get(); }
 
     int64_t id() const { return _id; }
 
@@ -108,17 +66,6 @@ public:
 
     double get_cpu_expected_use_ratio() const;
     double get_cpu_actual_use_ratio() const;
-
-    static constexpr int64 DEFAULT_WG_ID = 0;
-    static constexpr int64 DEFAULT_VERSION = 0;
-    bool try_offer_io_task(IoWorkGroupQueue::Task task);
-
-    IoWorkGroupQueue::Task pick_io_task();
-
-public:
-    // Return current io task queue size
-    // need be lock when invoking
-    size_t io_task_queue_size();
 
     // If the scan layer generates data, then this interface should be called
     void incr_period_scaned_chunk_num(int32_t chunk_num);
@@ -173,6 +120,9 @@ public:
     int128_t unique_id() const { return create_unique_id(_id, _version); }
     static int128_t create_unique_id(int64_t id, int64_t version) { return (((int128_t)version) << 64) | id; }
 
+    static constexpr int64 DEFAULT_WG_ID = 0;
+    static constexpr int64 DEFAULT_VERSION = 0;
+
 private:
     std::string _name;
     int64_t _id;
@@ -193,10 +143,7 @@ private:
     std::atomic<size_t> _acc_num_drivers = 0;
     int64_t _vacuum_ttl = std::numeric_limits<int64_t>::max();
 
-    // Queue on which work items are held until a thread is available to process them in
-    // FIFO order.
-    // BlockingPriorityQueue<Task> _io_work_queue;
-    std::queue<IoWorkGroupQueue::Task> _io_work_queue;
+    std::unique_ptr<ScanTaskQueue> _scan_task_queue = nullptr;
 
     //  some variables for io schedule
     std::atomic<size_t> _period_scaned_chunk_num = 1;
@@ -251,11 +198,6 @@ public:
     WorkGroupPtr get_default_workgroup();
     // destruct workgroups
     void destroy();
-    void close();
-
-    // get next workgroup for io
-    StatusOr<IoWorkGroupQueue::Task> pick_next_task_for_io(int worker_id);
-    bool try_offer_io_task(WorkGroupPtr wg, IoWorkGroupQueue::Task task);
 
     size_t sum_cpu_limit() const { return _sum_cpu_limit; }
     void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
@@ -288,7 +230,6 @@ private:
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;
-    IoWorkGroupQueue _wg_io_queue;
 
     std::atomic<size_t> _sum_cpu_limit = 0;
     std::atomic<int64_t> _sum_cpu_runtime_ns = 0;
