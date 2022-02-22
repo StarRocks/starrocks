@@ -8,6 +8,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -15,10 +16,12 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.external.hive.HiveColumnStats;
+import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -37,6 +40,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
@@ -374,6 +378,17 @@ public class Utils {
                     return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
                 } catch (Exception e) {
                     LOG.warn("hive table {} get column failed. error : {}", hiveTable.getName(), e);
+                    return true;
+                }
+            } else if (operator instanceof LogicalIcebergScanOperator) {
+                IcebergTable table = (IcebergTable) scanOperator.getTable();
+                try {
+                    List<ColumnStatistic> columnStatisticList = IcebergTableStatisticCalculator.getColumnStatistics(
+                            new ArrayList<>(), table.getIcebergTable(),
+                            scanOperator.getColRefToColumnMetaMap());
+                    return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
+                } catch (Exception e) {
+                    LOG.warn("Iceberg table {} get column failed. error : {}", table.getName(), e);
                     return true;
                 }
             } else {
