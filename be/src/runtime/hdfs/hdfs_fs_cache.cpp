@@ -7,7 +7,9 @@
 
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
+#ifdef STARROCKS_WITH_AWS
 #include "object_store/s3_object_store.h"
+#endif
 #include "util/hdfs_util.h"
 
 namespace starrocks {
@@ -25,6 +27,7 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
         }
 
     } else if (is_s3a_path(nn) || is_oss_path(nn)) {
+#ifdef STARROCKS_WITH_AWS
         handle->type = HdfsFsHandle::Type::S3;
         Aws::Client::ClientConfiguration config;
         config.scheme = Aws::Http::Scheme::HTTP;
@@ -37,6 +40,9 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
 
         auto* store = new S3ObjectStore(config, &cred, false);
         handle->object_store = store;
+#else
+        return Status::NotSupported("Does not support S3");
+#endif
     } else {
         return Status::InternalError(strings::Substitute("failed to make client, namenode=$0", namenode));
     }
