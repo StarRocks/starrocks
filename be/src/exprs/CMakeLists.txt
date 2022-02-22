@@ -33,6 +33,7 @@ set(EXPR_FILES
   expr.cpp
   slot_ref.cpp
   table_function/table_function_factory.cpp
+  table_function/json_each.cpp
   vectorized/arithmetic_expr.cpp
   vectorized/array_element_expr.cpp
   vectorized/array_expr.cpp
