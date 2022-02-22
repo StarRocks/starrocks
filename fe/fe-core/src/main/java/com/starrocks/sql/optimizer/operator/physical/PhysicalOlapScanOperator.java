@@ -40,7 +40,6 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
     public PhysicalOlapScanOperator(Table table,
-                                    List<ColumnRefOperator> outputColumns,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                     HashDistributionSpec hashDistributionDesc,
                                     long limit,
@@ -49,8 +48,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                                     List<Long> selectedPartitionId,
                                     List<Long> selectedTabletId,
                                     Projection projection) {
-        super(OperatorType.PHYSICAL_OLAP_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate,
-                projection);
+        super(OperatorType.PHYSICAL_OLAP_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
         this.hashDistributionSpec = hashDistributionDesc;
         this.selectedIndexId = selectedIndexId;
         this.selectedPartitionId = selectedPartitionId;
