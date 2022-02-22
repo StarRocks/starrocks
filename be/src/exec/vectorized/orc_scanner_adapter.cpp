@@ -1685,7 +1685,7 @@ void OrcScannerAdapter::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc:
         }
         std::vector<orc::Literal> literals;
         for (int i = 1; i < conjunct->get_num_children(); i++) {
-            Expr* lit = conjunct->get_child(1);
+            Expr* lit = conjunct->get_child(i);
             orc::Literal literal = translate_to_orc_literal(lit, pred_type);
             literals.emplace_back(literal);
         }
