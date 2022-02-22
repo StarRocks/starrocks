@@ -22,6 +22,7 @@
 #include "common/logging.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+#include "io/s3_random_access_file.h"
 
 namespace starrocks {
 
@@ -152,51 +153,9 @@ Status S3ObjectStore::put_string_object(const std::string& bucket_name, const st
     }
 }
 
-Status S3ObjectStore::get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
-                                       size_t length, std::string* object_value, size_t* read_bytes) {
-    object_value->resize(length);
-    return get_object_range(bucket_name, object_key, offset, length, (char*)object_value->data(), read_bytes);
-}
-
-Status S3ObjectStore::get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
-                                       size_t length, char* object_value, size_t* read_bytes) {
-    *read_bytes = 0;
-    length = (length ? length : 1);
-    char buffer[128];
-    int ret = snprintf(buffer, sizeof(buffer), "bytes=%lu-%lu", offset, offset + length - 1);
-    if (ret < 0) {
-        std::string error = strings::Substitute("Get Object Range $0 failed, fail to set range.", object_key);
-        LOG(ERROR) << error;
-        return Status::IOError(error);
-    }
-    Aws::String range(buffer);
-
-    Aws::S3::Model::GetObjectRequest request;
-    request.SetBucket(to_aws_string(bucket_name));
-    request.SetKey(to_aws_string(object_key));
-    request.SetRange(range);
-
-    Aws::S3::Model::GetObjectOutcome outcome = _client->GetObject(request);
-
-    if (outcome.IsSuccess()) {
-        if (object_value) {
-            Aws::IOStream& body = outcome.GetResult().GetBody();
-            body.read(object_value, length);
-            *read_bytes = body.gcount();
-            if (body.gcount() != length) {
-                std::string error = strings::Substitute("Get Object Range $0 failed. expected($1), read($2).",
-                                                        object_key, length, *read_bytes);
-                LOG(ERROR) << error;
-                return Status::IOError(error);
-            }
-        }
-        return Status::OK();
-    } else {
-        std::string error =
-                strings::Substitute("Get Object Range $0 failed. $1.", object_key, outcome.GetError().GetMessage());
-        LOG(ERROR) << error;
-        return Status::IOError(error);
-    }
+StatusOr<std::unique_ptr<io::RandomAccessFile>> S3ObjectStore::get_object(const std::string& bucket_name,
+                                                                          const std::string& object_key) {
+    return std::make_unique<io::S3RandomAccessFile>(_client, bucket_name, object_key);
 }
 
 Status S3ObjectStore::get_object(const std::string& bucket_name, const std::string& object_key,
