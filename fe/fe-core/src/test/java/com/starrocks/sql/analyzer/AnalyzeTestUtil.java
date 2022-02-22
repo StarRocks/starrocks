@@ -100,7 +100,8 @@ public class AnalyzeTestUtil {
                 "  `h1` hll hll_union NULL,\n" +
                 "  `h2` hll hll_union NULL,\n" +
                 "  `h3` hll hll_union NULL,\n" +
-                "  `h4` hll hll_union NULL\n" +
+                "  `h4` hll hll_union NULL,\n" +
+                "  `p1` percentile PERCENTILE_UNION NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "AGGREGATE KEY(`v1`, `v2`, `v3`, `v4`)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 10\n" +
