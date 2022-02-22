@@ -81,7 +81,6 @@ public:
     Status init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs, const std::string& timezone);
     Status read_record_batch(const std::vector<SlotDescriptor*>& tuple_slot_descs, bool* eof);
     const std::shared_ptr<arrow::RecordBatch>& get_batch();
-    const std::vector<std::shared_ptr<arrow::DataType>>& get_column_types();
 
 private:
     Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
@@ -96,9 +95,10 @@ private:
     std::shared_ptr<arrow::RecordBatch> _batch;
     std::unique_ptr<parquet::arrow::FileReader> _reader;
     std::shared_ptr<parquet::FileMetaData> _file_metadata;
-    std::map<std::string, int> _map_column; // column-name <---> column-index
+
+    // For nested column type, it's consisting of multiple physical-columns
+    std::map<std::string, std::vector<int>> _map_column_nested;
     std::vector<int> _parquet_column_ids;
-    std::vector<std::shared_ptr<arrow::DataType>> _parquet_column_type;
     int _total_groups; // groups in a parquet file
     int _current_group;
 

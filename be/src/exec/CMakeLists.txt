@@ -83,6 +83,7 @@ set(EXEC_FILES
     vectorized/orc_scanner.cpp
     vectorized/orc_scanner_adapter.cpp
     vectorized/arrow_to_starrocks_converter.cpp
+    vectorized/arrow_to_json_converter.cpp
     vectorized/parquet_scanner.cpp
     vectorized/parquet_reader.cpp
     vectorized/file_scan_node.cpp

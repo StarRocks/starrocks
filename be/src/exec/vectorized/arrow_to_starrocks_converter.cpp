@@ -4,11 +4,17 @@
 
 #include <arrow/array.h>
 
+#include "arrow/array/array_binary.h"
+#include "arrow/array/array_nested.h"
+#include "arrow/scalar.h"
+#include "arrow/type_fwd.h"
+#include "arrow/type_traits.h"
 #include "column/array_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "exec/vectorized/arrow_type_traits.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
@@ -620,6 +626,21 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     }
 };
 
+// Convert nested arrow type(Map,List,Struct...) to Json
+Status convert_arrow_to_json(const arrow::Array* array, JsonColumn* output);
+
+template <ArrowTypeId AT, PrimitiveType PT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, PT, is_nullable, is_strict, JsonGuard<PT>> {
+    static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
+                        [[maybe_unused]] uint8_t* filter_data, ArrowConvertContext* ctx) {
+        auto* json_column = down_cast<JsonColumn*>(column);
+        json_column->reserve(column->size() + num_elements);
+
+        return convert_arrow_to_json(array, json_column);
+    }
+};
+
 constexpr int32_t convert_idx(ArrowTypeId at, PrimitiveType pt, bool is_nullable, bool is_strict) {
     return (at << 17) | (pt << 2) | (is_nullable ? 2 : 0) | (is_strict ? 1 : 0);
 }
@@ -654,24 +675,26 @@ static const std::unordered_map<ArrowTypeId, PrimitiveType> global_strict_arrow_
 };
 
 static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_conv_table{
-        ARROW_CONV_ENTRY(ArrowTypeId::BOOL, TYPE_BOOLEAN),
-        ARROW_CONV_ENTRY(ArrowTypeId::INT8, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT),
-        ARROW_CONV_ENTRY(ArrowTypeId::INT8, TYPE_FLOAT, TYPE_DOUBLE),
-        ARROW_CONV_ENTRY(ArrowTypeId::UINT8, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT),
-        ARROW_CONV_ENTRY(ArrowTypeId::INT16, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT),
-        ARROW_CONV_ENTRY(ArrowTypeId::INT16, TYPE_FLOAT, TYPE_DOUBLE),
-        ARROW_CONV_ENTRY(ArrowTypeId::UINT16, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT),
-        ARROW_CONV_ENTRY(ArrowTypeId::UINT16, TYPE_FLOAT, TYPE_DOUBLE),
-        ARROW_CONV_ENTRY(ArrowTypeId::INT32, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT, TYPE_DOUBLE),
-        ARROW_CONV_ENTRY(ArrowTypeId::UINT32, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT, TYPE_DOUBLE),
-        ARROW_CONV_ENTRY(ArrowTypeId::INT64, TYPE_BIGINT, TYPE_LARGEINT),
-        ARROW_CONV_ENTRY(ArrowTypeId::UINT64, TYPE_BIGINT, TYPE_LARGEINT),
-        ARROW_CONV_ENTRY(ArrowTypeId::INT64, TYPE_BIGINT, TYPE_LARGEINT),
-        ARROW_CONV_ENTRY(ArrowTypeId::UINT64, TYPE_BIGINT, TYPE_LARGEINT),
+        ARROW_CONV_ENTRY(ArrowTypeId::BOOL, TYPE_BOOLEAN, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::INT8, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT,
+                         TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::INT8, TYPE_FLOAT, TYPE_DOUBLE, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::UINT8, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT,
+                         TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::INT16, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::INT16, TYPE_FLOAT, TYPE_DOUBLE, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::UINT16, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::UINT16, TYPE_FLOAT, TYPE_DOUBLE, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::INT32, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT, TYPE_DOUBLE, TYPE_JSON, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::UINT32, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT, TYPE_DOUBLE, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::INT64, TYPE_BIGINT, TYPE_LARGEINT, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::UINT64, TYPE_BIGINT, TYPE_LARGEINT, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::INT64, TYPE_BIGINT, TYPE_LARGEINT, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::UINT64, TYPE_BIGINT, TYPE_LARGEINT, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::HALF_FLOAT, TYPE_FLOAT, TYPE_DOUBLE),
-        ARROW_CONV_ENTRY(ArrowTypeId::FLOAT, TYPE_FLOAT, TYPE_DOUBLE),
-        ARROW_CONV_ENTRY(ArrowTypeId::DOUBLE, TYPE_DOUBLE),
-        ARROW_CONV_ENTRY(ArrowTypeId::STRING, TYPE_CHAR, TYPE_VARCHAR),
+        ARROW_CONV_ENTRY(ArrowTypeId::FLOAT, TYPE_FLOAT, TYPE_DOUBLE, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::DOUBLE, TYPE_DOUBLE, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::STRING, TYPE_CHAR, TYPE_VARCHAR, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::BINARY, TYPE_CHAR, TYPE_VARCHAR),
         ARROW_CONV_ENTRY(ArrowTypeId::FIXED_SIZE_BINARY, TYPE_CHAR, TYPE_VARCHAR),
         ARROW_CONV_ENTRY(ArrowTypeId::LARGE_BINARY, TYPE_CHAR, TYPE_VARCHAR),
@@ -680,6 +703,11 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         ARROW_CONV_ENTRY(ArrowTypeId::DATE64, TYPE_DATE, TYPE_DATETIME),
         ARROW_CONV_ENTRY(ArrowTypeId::TIMESTAMP, TYPE_DATE, TYPE_DATETIME),
         ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128),
+
+        // JSON converters
+        ARROW_CONV_ENTRY(ArrowTypeId::MAP, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::LIST, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::STRUCT, TYPE_JSON),
 };
 
 ConvertFunc get_arrow_converter(ArrowTypeId at, PrimitiveType pt, bool is_nullable, bool is_strict) {
