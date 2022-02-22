@@ -13,6 +13,7 @@ DIAGNOSTIC_POP
 
 #include "column/chunk.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "http/http_client.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
