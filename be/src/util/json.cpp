@@ -10,6 +10,7 @@
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "simdjson.h"
+#include "util/json_converter.h"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
 
@@ -64,66 +65,11 @@ JsonValue JsonValue::from_string(const Slice& value) {
 }
 
 StatusOr<JsonValue> JsonValue::from_simdjson(simdjson::ondemand::value* value) {
-    namespace sj = simdjson::ondemand;
-
-    try {
-        sj::json_type tp = value->type();
-        switch (tp) {
-        case sj::json_type::null: {
-            return from_null();
-        }
-        case sj::json_type::number: {
-            switch (value->get_number_type()) {
-            case sj::number_type::signed_integer:
-                return from_int(value->get_int64());
-            case sj::number_type::unsigned_integer:
-                return from_uint(value->get_uint64());
-            case sj::number_type::floating_point_number:
-                return from_double(value->get_double());
-            }
-        }
-
-        case sj::json_type::string: {
-            std::string_view view = value->get_string();
-            return from_string(Slice(view.data(), view.size()));
-        }
-
-        case sj::json_type::boolean: {
-            return from_bool(value->get_bool());
-        }
-
-        case sj::json_type::array:
-        case sj::json_type::object: {
-            // TODO(mofei) optimize this, avoid convert to string then parse it
-            std::string_view view = simdjson::to_json_string(*value);
-            return parse(Slice(view.data(), view.size()));
-        }
-
-        default: {
-            auto err_msg = strings::Substitute("Unsupported json type: $0", int(tp));
-            return Status::DataQualityError(err_msg);
-        }
-        }
-    } catch (simdjson::simdjson_error& e) {
-        std::string_view view = simdjson::to_json_string(*value);
-        auto err_msg = strings::Substitute("Failed to parse value, json=$0, error=$1", view.data(),
-                                           simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
-    }
-
-    return Status::OK();
+    return convert_from_simdjson(*value);
 }
 
 StatusOr<JsonValue> JsonValue::from_simdjson(simdjson::ondemand::object* obj) {
-    // TODO(mofei) optimize this, avoid convert to string then parse it
-    std::string_view view = obj->raw_json();
-    try {
-        return parse(Slice(view.data(), view.size()));
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse value, json=$0, error=$1", view.data(),
-                                           simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
-    }
+    return convert_from_simdjson(*obj);
 }
 
 StatusOr<JsonValue> JsonValue::parse(const Slice& src) {
