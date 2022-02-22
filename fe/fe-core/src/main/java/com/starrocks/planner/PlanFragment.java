@@ -552,6 +552,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return this.queryGlobalDicts;
     }
 
+    public List<Pair<Integer, ColumnDict>> getLoadGlobalDicts() {
+        return this.loadGlobalDicts;
+    }
+
     public void setQueryGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
         this.queryGlobalDicts = dicts;
     }
