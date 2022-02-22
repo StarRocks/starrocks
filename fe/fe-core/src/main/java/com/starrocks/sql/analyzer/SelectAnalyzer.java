@@ -160,7 +160,7 @@ public class SelectAnalyzer {
             analyzeState.setOrderSourceExpressions(orderSourceExpressions);
         }
 
-        if (limitElement.hasLimit()) {
+        if (limitElement != null && limitElement.hasLimit()) {
             if (limitElement.getOffset() > 0 && orderByElements.isEmpty()) {
                 // The offset can only be processed in sort,
                 // so when there is no order by, we manually set offset to 0
@@ -172,7 +172,7 @@ public class SelectAnalyzer {
     }
 
     private List<Expr> analyzeSelect(SelectList selectList, Relation fromRelation, boolean hasGroupByClause,
-                                    AnalyzeState analyzeState, Scope scope) {
+                                     AnalyzeState analyzeState, Scope scope) {
         ImmutableList.Builder<Expr> outputExpressionBuilder = ImmutableList.builder();
         List<String> columnOutputNames = new ArrayList<>();
 
@@ -219,7 +219,7 @@ public class SelectAnalyzer {
                     }
 
                     public List<String> visitSubquery(SubqueryRelation node, Void context) {
-                        if (item.getTblName() == null || item.getTblName().getTbl().equals(node.getName())) {
+                        if (item.getTblName() == null || item.getTblName().getTbl().equals(node.getAlias().getTbl())) {
                             return node.getQuery().getColumnOutputNames();
                         } else {
                             return new ArrayList<>();
@@ -244,7 +244,7 @@ public class SelectAnalyzer {
                     @Override
                     public List<String> visitCTE(CTERelation node, Void context) {
                         if (item.getTblName() == null ||
-                                StringUtils.equals(item.getTblName().getTbl(), node.getName())) {
+                                StringUtils.equals(item.getTblName().getTbl(), node.getAlias().getTbl())) {
                             return node.getColumnOutputNames();
                         }
                         return Collections.emptyList();
@@ -307,8 +307,8 @@ public class SelectAnalyzer {
     }
 
     private List<OrderByElement> analyzeOrderBy(List<OrderByElement> orderByElements, AnalyzeState analyzeState,
-                                               Scope orderByScope,
-                                               List<Expr> outputExpressions) {
+                                                Scope orderByScope,
+                                                List<Expr> outputExpressions) {
         if (orderByElements == null) {
             analyzeState.setOrderBy(Collections.emptyList());
             return Collections.emptyList();
@@ -340,7 +340,7 @@ public class SelectAnalyzer {
     }
 
     private void analyzeWindowFunctions(AnalyzeState analyzeState, List<Expr> outputExpressions,
-                                       List<Expr> orderByExpressions) {
+                                        List<Expr> orderByExpressions) {
         List<AnalyticExpr> outputWindowFunctions = new ArrayList<>();
         for (Expr expression : outputExpressions) {
             List<AnalyticExpr> window = Lists.newArrayList();
@@ -386,7 +386,7 @@ public class SelectAnalyzer {
     }
 
     private void analyzeGroupingOperations(AnalyzeState analyzeState, GroupByClause groupByClause,
-                                          List<Expr> outputExpressions) {
+                                           List<Expr> outputExpressions) {
         List<Expr> groupingFunctionCallExprs = Lists.newArrayList();
 
         TreeNode.collect(outputExpressions, expr -> expr instanceof GroupingFunctionCallExpr,
@@ -402,7 +402,7 @@ public class SelectAnalyzer {
     }
 
     private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState, Scope sourceScope,
-                                                      List<Expr> outputAndOrderByExpressions) {
+                                                       List<Expr> outputAndOrderByExpressions) {
         List<FunctionCallExpr> aggregations = Lists.newArrayList();
         TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
@@ -413,7 +413,7 @@ public class SelectAnalyzer {
     }
 
     private List<Expr> analyzeGroupBy(GroupByClause groupByClause, AnalyzeState analyzeState, Scope sourceScope,
-                                     Scope outputScope, List<Expr> outputExpressions) {
+                                      Scope outputScope, List<Expr> outputExpressions) {
         List<Expr> groupByExpressions = new ArrayList<>();
         if (groupByClause != null) {
             if (groupByClause.getGroupingType() == GroupByClause.GroupingType.GROUP_BY) {
@@ -493,7 +493,7 @@ public class SelectAnalyzer {
     }
 
     private List<Expr> rewriteGroupByAlias(List<Expr> groupingExprs, AnalyzeState analyzeState, Scope sourceScope,
-                                   Scope outputScope, List<Expr> outputExpressions) {
+                                           Scope outputScope, List<Expr> outputExpressions) {
         return groupingExprs.stream().map(e -> {
             RewriteAliasVisitor visitor =
                     new RewriteAliasVisitor(sourceScope, outputScope, outputExpressions, session);
@@ -504,7 +504,7 @@ public class SelectAnalyzer {
     }
 
     private void analyzeHaving(Expr havingClause, AnalyzeState analyzeState,
-                              Scope sourceScope, Scope outputScope, List<Expr> outputExprs) {
+                               Scope sourceScope, Scope outputScope, List<Expr> outputExprs) {
         if (havingClause != null) {
             Expr predicate = pushNegationToOperands(havingClause);
 

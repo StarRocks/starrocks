@@ -2,11 +2,15 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.StatementBase;
 
 public class QueryStatement extends StatementBase {
     private final QueryRelation queryRelation;
+
+    // represent the "INTO OUTFILE" clause
+    protected OutFileClause outFileClause;
 
     public QueryStatement(QueryRelation queryRelation) {
         this.queryRelation = queryRelation;
@@ -14,6 +18,19 @@ public class QueryStatement extends StatementBase {
 
     public QueryRelation getQueryRelation() {
         return queryRelation;
+    }
+
+
+    public void setOutFileClause(OutFileClause outFileClause) {
+        this.outFileClause = outFileClause;
+    }
+
+    public OutFileClause getOutFileClause() {
+        return outFileClause;
+    }
+
+    public boolean hasOutFileClause() {
+        return outFileClause != null;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

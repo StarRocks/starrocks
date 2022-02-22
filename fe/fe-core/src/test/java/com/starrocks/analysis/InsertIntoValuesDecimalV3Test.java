@@ -5,7 +5,11 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -15,6 +19,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.UUID;
 
@@ -88,7 +93,15 @@ public class InsertIntoValuesDecimalV3Test {
     @Test
     public void testInsertArray() throws Exception {
         String sql = "insert into tarray values (1, 2, []) ";
-        String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
+
+        SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
+        SqlParser parser = new SqlParser(input);
+        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
+
+        InsertStmt stmt = (InsertStmt) statementBase;
+        ExecPlan execPlan = new StatementPlanner().plan(stmt, ctx);
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+
         Assert.assertTrue(plan.contains("constant exprs: \n" +
                 "         1 | 2 | ARRAY<bigint(20)>[]"));
     }

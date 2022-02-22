@@ -46,7 +46,9 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetVar;
+import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -99,6 +101,8 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -212,7 +216,7 @@ public class StmtExecutor {
         }
 
         // this is a query stmt, but this non-master FE can not read, forward it to master
-        if ((parsedStmt instanceof QueryStmt) && !Catalog.getCurrentCatalog().isMaster()
+        if ((parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) && !Catalog.getCurrentCatalog().isMaster()
                 && !Catalog.getCurrentCatalog().canRead()) {
             return true;
         }
@@ -245,7 +249,7 @@ public class StmtExecutor {
     }
 
     public boolean isQueryStmt() {
-        return parsedStmt != null && parsedStmt instanceof QueryStmt;
+        return parsedStmt != null && (parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement);
     }
 
     public StatementBase getParsedStmt() {
@@ -269,9 +273,17 @@ public class StmtExecutor {
             resolveParseStmtForForward();
 
             // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
-            if (parsedStmt != null && parsedStmt instanceof SelectStmt) {
-                SelectStmt selectStmt = (SelectStmt) parsedStmt;
-                Map<String, String> optHints = selectStmt.getSelectList().getOptHints();
+            if (parsedStmt != null) {
+                Map<String, String> optHints = null;
+                if (parsedStmt instanceof SelectStmt) {
+                    SelectStmt selectStmt = (SelectStmt) parsedStmt;
+                    optHints = selectStmt.getSelectList().getOptHints();
+                } else if (parsedStmt instanceof QueryStatement &&
+                        ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
+                    SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
+                    optHints = selectRelation.getSelectList().getOptHints();
+                }
+
                 if (optHints != null) {
                     SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
                     for (String key : optHints.keySet()) {
@@ -287,14 +299,25 @@ public class StmtExecutor {
             boolean execPlanBuildByNewPlanner = false;
 
             // Entrance to the new planner
-            if (isStatisticsOrAnalyzer(parsedStmt, context)
-                    || supportedByNewPlanner(parsedStmt, context)) {
+            if (isStatisticsOrAnalyzer(parsedStmt, context) || supportedByNewPlanner(parsedStmt, context)) {
                 try {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToMaster()) {
                         context.getDumpInfo().reset();
                         context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
-                        execPlan = new StatementPlanner().plan(parsedStmt, context);
+                        if (parsedStmt instanceof ShowStmt) {
+                            com.starrocks.sql.analyzer.Analyzer analyzer =
+                                    new com.starrocks.sql.analyzer.Analyzer(context.getCatalog(), context);
+                            analyzer.analyze(parsedStmt);
+
+                            SelectStmt selectStmt = ((ShowStmt) parsedStmt).toSelectStmt(null);
+                            if (selectStmt != null) {
+                                parsedStmt = selectStmt;
+                                execPlan = new StatementPlanner().plan(parsedStmt, context);
+                            }
+                        } else {
+                            execPlan = new StatementPlanner().plan(parsedStmt, context);
+                        }
                         execPlanBuildByNewPlanner = true;
                     }
                 } catch (SemanticException e) {
@@ -334,13 +357,12 @@ public class StmtExecutor {
                 addRunningQueryDetail();
             }
 
-            if (parsedStmt instanceof QueryStmt) {
+            if (parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist) {
-                    QueryStmt queryStmt = (QueryStmt) parsedStmt;
-                    String originSql = queryStmt.getOrigStmt().originStmt.trim().toLowerCase().replaceAll(" +", " ");
+                    String originSql = parsedStmt.getOrigStmt().originStmt.trim().toLowerCase().replaceAll(" +", " ");
 
                     // If this sql is in blacklist, show message.
                     SqlBlackList.verifying(originSql);
@@ -554,7 +576,7 @@ public class StmtExecutor {
     }
 
     private void forwardToMaster() throws Exception {
-        boolean isQuery = parsedStmt instanceof QueryStmt;
+        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
         masterOpExecutor = new MasterOpExecutor(parsedStmt, originStmt, context, redirectStatus, isQuery);
         LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
         masterOpExecutor.execute();
@@ -595,6 +617,7 @@ public class StmtExecutor {
         }
 
         if (parsedStmt instanceof QueryStmt
+                || parsedStmt instanceof QueryStatement
                 || parsedStmt instanceof InsertStmt
                 || parsedStmt instanceof CreateTableAsSelectStmt) {
             Preconditions.checkState(false, "Shouldn't reach here");
@@ -667,7 +690,7 @@ public class StmtExecutor {
                                  List<String> colNames, List<Expr> outputExprs, String explainString) throws Exception {
         // Every time set no send flag and clean all data in buffer
         context.getMysqlChannel().reset();
-        QueryStmt queryStmt = (QueryStmt) parsedStmt;
+        StatementBase queryStmt = parsedStmt;
 
         if (queryStmt.isExplain()) {
             handleExplainStmt(explainString);
@@ -694,7 +717,12 @@ public class StmtExecutor {
         // 2. If this is a query, send the result expr fields first, and send result data back to client.
         RowBatch batch;
         MysqlChannel channel = context.getMysqlChannel();
-        boolean isOutfileQuery = queryStmt.hasOutFileClause();
+        boolean isOutfileQuery;
+        if (queryStmt instanceof QueryStmt) {
+            isOutfileQuery = ((QueryStmt) queryStmt).hasOutFileClause();
+        } else {
+            isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
+        }
         boolean isSendFields = false;
         while (true) {
             batch = coord.getNext();
@@ -957,7 +985,7 @@ public class StmtExecutor {
             sql = originStmt.originStmt;
         }
         boolean isQuery = false;
-        if (parsedStmt instanceof QueryStmt) {
+        if (parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) {
             isQuery = true;
         }
         QueryDetail queryDetail = new QueryDetail(
@@ -1002,6 +1030,9 @@ public class StmtExecutor {
         return statement instanceof QueryStmt
                 || statement instanceof InsertStmt
                 || statement instanceof CreateTableAsSelectStmt
+                || statement instanceof QueryStatement
+                || statement instanceof ShowDbStmt
+                || statement instanceof ShowTableStmt
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof DropWorkGroupStmt

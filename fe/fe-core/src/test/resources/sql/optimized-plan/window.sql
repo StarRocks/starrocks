@@ -397,7 +397,7 @@ ANALYTIC ({4: row_number()=row_number()} [1: v1] [] ROWS BETWEEN UNBOUNDED PRECE
 [end]
 
 [sql]
-select * from (select * from (select v1, row_number() over(partition by v1) as rank from t0) a where a.rank = 1) b where b.v1 = 1;
+select * from (select * from (select v1, row_number() over(partition by v1) as `rank` from t0) a where a.`rank` = 1) b where b.v1 = 1;
 [result]
 PREDICATE 4: row_number() = 1
     ANALYTIC ({4: row_number()=row_number()} [1: v1] [] ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
