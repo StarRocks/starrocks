@@ -159,7 +159,16 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // Set up desc tbl
     auto* obj_pool = runtime_state->obj_pool();
     DescriptorTbl* desc_tbl = nullptr;
-    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, t_desc_tbl, &desc_tbl, runtime_state->chunk_size()));
+    if (t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached) {
+        desc_tbl = _query_ctx->desc_tbl();
+        if (desc_tbl == nullptr) {
+            return Status::Cancelled("Query terminates prematurely");
+        }
+    } else {
+        RETURN_IF_ERROR(
+                DescriptorTbl::create(_query_ctx->object_pool(), t_desc_tbl, &desc_tbl, runtime_state->chunk_size()));
+        _query_ctx->set_desc_tbl(desc_tbl);
+    }
     runtime_state->set_desc_tbl(desc_tbl);
     // Set up plan
     ExecNode* plan = nullptr;
