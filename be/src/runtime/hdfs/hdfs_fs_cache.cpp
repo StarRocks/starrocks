@@ -31,15 +31,17 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
         handle->type = HdfsFsHandle::Type::S3;
         Aws::Client::ClientConfiguration config;
         config.scheme = Aws::Http::Scheme::HTTP;
-        config.endpointOverride = config::aws_s3_endpoint;
+        if (!config::aws_s3_endpoint.empty()) {
+            config.endpointOverride = config::aws_s3_endpoint;
+        }
         config.maxConnections = config::aws_s3_max_connection;
 
         S3Credential cred;
         cred.access_key_id = config::aws_access_key_id;
         cred.secret_access_key = config::aws_secret_access_key;
-
-        auto* store = new S3ObjectStore(config, &cred, false);
-        handle->object_store = store;
+        auto store = std::make_unique<S3ObjectStore>(config);
+        RETURN_IF_ERROR(store->init(&cred, false));
+        handle->object_store = store.release();
 #else
         return Status::NotSupported("Does not support S3");
 #endif
