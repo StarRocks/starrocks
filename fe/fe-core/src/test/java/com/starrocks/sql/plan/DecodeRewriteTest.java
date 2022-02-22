@@ -539,7 +539,7 @@ public class DecodeRewriteTest extends PlanTestBase {
         sql = "select sum(S_NATIONKEY) a, sum(S_ACCTBAL) as b, S_ADDRESS as c from supplier group by S_ADDRESS " +
                 "having a < b*1.2 or c not like '%open%'";
         plan = getFragmentPlan(sql);
-        System.out.println("plan = " + plan);
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
     @Test
