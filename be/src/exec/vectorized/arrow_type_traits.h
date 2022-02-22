@@ -4,6 +4,7 @@
 #include <arrow/array.h>
 #include <arrow/status.h>
 
+#include "arrow/type.h"
 #include "util/pred_guard.h"
 
 namespace starrocks::vectorized {
@@ -41,6 +42,7 @@ M_ArrowTypeIdToTypeStruct(ArrowTypeId::TIMESTAMP, arrow::TimestampType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::LIST, arrow::ListType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::LARGE_LIST, arrow::LargeListType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::FIXED_SIZE_LIST, arrow::FixedSizeListType);
+M_ArrowTypeIdToTypeStruct(ArrowTypeId::MAP, arrow::MapType);
 
 template <ArrowTypeId AT>
 using ArrowTypeIdToType = typename ArrowTypeStructTraits<AT>::TypeStruct;
@@ -65,6 +67,10 @@ struct ArrowTypeIdToCppTypeStruct<AT, BinaryATGuard<AT>> {
 };
 template <>
 struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::DECIMAL, guard::Guard> {
+    using type = const uint8_t*;
+};
+template <>
+struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::MAP, guard::Guard> {
     using type = const uint8_t*;
 };
 

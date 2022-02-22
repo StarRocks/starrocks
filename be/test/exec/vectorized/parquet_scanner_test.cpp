@@ -10,15 +10,10 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
+#include "testutil//assert.h"
 
 namespace starrocks::vectorized {
-
-#define ASSERT_STATUS_OK(stmt)                                     \
-    do {                                                           \
-        auto status = (stmt);                                      \
-        std::cout << "Status:" << status.to_string() << std::endl; \
-        ASSERT_TRUE(status.ok());                                  \
-    } while (0)
 
 class ParquetScannerTest : public ::testing::Test {
     std::vector<TBrokerRangeDesc> generate_ranges(const std::vector<std::string>& file_names,
@@ -143,7 +138,7 @@ class ParquetScannerTest : public ::testing::Test {
 
     void validate(std::unique_ptr<ParquetScanner>& scanner, const size_t expect_num_rows,
                   std::function<void(const ChunkPtr&)> check_func) {
-        ASSERT_STATUS_OK(scanner->open());
+        ASSERT_OK(scanner->open());
         size_t num_rows = 0;
         while (true) {
             auto res = scanner->get_next();
@@ -182,10 +177,34 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_decimal_p6s2", TypeDescriptor::from_primtive_type(TYPE_DECIMAL32, -1, 6, 2)},
                 {"col_decimal_p14s5", TypeDescriptor::from_primtive_type(TYPE_DECIMAL64, -1, 14, 5)},
                 {"col_decimal_p27s9", TypeDescriptor::from_primtive_type(TYPE_DECIMALV2, -1, 27, 9)},
+
+                {"col_json_int8", TypeDescriptor::create_json_type()},
+                {"col_json_int16", TypeDescriptor::create_json_type()},
+                {"col_json_int32", TypeDescriptor::create_json_type()},
+                {"col_json_int64", TypeDescriptor::create_json_type()},
+                {"col_json_uint8", TypeDescriptor::create_json_type()},
+                {"col_json_uint16", TypeDescriptor::create_json_type()},
+                {"col_json_uint32", TypeDescriptor::create_json_type()},
+                {"col_json_uint64", TypeDescriptor::create_json_type()},
+
+                {"col_json_float32", TypeDescriptor::create_json_type()},
+                {"col_json_float64", TypeDescriptor::create_json_type()},
+
+                {"col_json_bool", TypeDescriptor::create_json_type()},
+                {"col_json_string", TypeDescriptor::create_json_type()},
+
+                {"col_json_list", TypeDescriptor::create_json_type()},
+                {"col_json_map", TypeDescriptor::create_json_type()},
+                {"col_json_struct", TypeDescriptor::create_json_type()},
+                {"col_json_list_list", TypeDescriptor::create_json_type()},
+                {"col_json_list_struct", TypeDescriptor::create_json_type()},
+                {"col_json_map_list", TypeDescriptor::create_json_type()},
+                {"col_json_struct_struct", TypeDescriptor::create_json_type()},
         };
         SlotInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
+            CHECK_EQ(slot_map.count(name), 1);
             slot_infos.emplace_back(name, slot_map[name], is_nullable);
         }
         return slot_infos;
@@ -196,11 +215,11 @@ class ParquetScannerTest : public ::testing::Test {
                                const std::vector<std::string>& columns_from_path,
                                const std::vector<std::string>& column_values,
                                const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs) {
-        std::vector<std::string>* file_names = nullptr;
+        std::vector<std::string> file_names;
         if constexpr (is_nullable) {
-            file_names = &_nullable_file_names;
+            file_names = _nullable_file_names;
         } else {
-            file_names = &_file_names;
+            file_names = _file_names;
         }
         std::vector<std::string> column_names;
         column_names.reserve(columns_from_file.size() + columns_from_path.size());
@@ -215,7 +234,7 @@ class ParquetScannerTest : public ::testing::Test {
 
         auto dst_slot_infos = select_columns(column_names, is_nullable);
 
-        auto ranges = generate_ranges(*file_names, columns_from_file.size(), column_values);
+        auto ranges = generate_ranges(file_names, columns_from_file.size(), column_values);
         auto* desc_tbl = generate_desc_tbl(src_slot_infos, dst_slot_infos);
         auto scanner = create_parquet_scanner("UTC", desc_tbl, dst_slot_exprs, ranges);
         auto check = [](const ChunkPtr& chunk) {
@@ -231,9 +250,40 @@ class ParquetScannerTest : public ::testing::Test {
         validate(scanner, 36865, check);
     }
 
+    template <bool is_nullable>
+    ChunkPtr test_json_column(const std::vector<std::string>& columns_from_file,
+                              const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
+                              std::string specific_file) {
+        std::vector<std::string> file_names{specific_file};
+        std::vector<std::string> column_names = columns_from_file;
+
+        auto src_slot_infos = select_columns(columns_from_file, is_nullable);
+        auto dst_slot_infos = select_columns(column_names, is_nullable);
+
+        auto ranges = generate_ranges(file_names, columns_from_file.size(), {});
+        auto* desc_tbl = generate_desc_tbl(src_slot_infos, dst_slot_infos);
+        auto scanner = create_parquet_scanner("UTC", desc_tbl, dst_slot_exprs, ranges);
+
+        ChunkPtr result;
+        auto check = [&](const ChunkPtr& chunk) {
+            auto& columns = chunk->columns();
+            for (auto& col : columns) {
+                if constexpr (is_nullable) {
+                    ASSERT_TRUE(!col->only_null() || !col->is_constant());
+                } else {
+                    ASSERT_TRUE(!col->is_nullable() || !col->is_constant());
+                }
+            }
+            result = chunk;
+        };
+        validate(scanner, 36865, check);
+
+        return result;
+    }
+
     void SetUp() {
         std::string starrocks_home = getenv("STARROCKS_HOME");
-        std::string test_exec_dir = starrocks_home + "/be/test/exec";
+        test_exec_dir = starrocks_home + "/be/test/exec";
         _nullable_file_names =
                 std::vector<std::string>{test_exec_dir + "/test_data/nullable_parquet_data/nullable_data_0.parquet",
                                          test_exec_dir + "/test_data/nullable_parquet_data/nullable_data_1.parquet",
@@ -254,6 +304,7 @@ class ParquetScannerTest : public ::testing::Test {
     }
 
 private:
+    std::string test_exec_dir;
     ObjectPool _obj_pool;
     std::vector<std::string> _file_names;
     std::vector<std::string> _nullable_file_names;
@@ -363,6 +414,72 @@ TEST_F(ParquetScannerTest, test_parquet_data_with_3_column_from_path) {
     std::vector<std::string> column_values = {"2021-02-22", "2020-12-20 22:56:04", "beijing"};
     test_column_from_path<true>(columns_from_file, columns_from_path, column_values, dst_slot_exprs);
     test_column_from_path<false>(columns_from_file, columns_from_path, column_values, dst_slot_exprs);
+}
+
+TEST_F(ParquetScannerTest, test_to_json) {
+    // std::vector<std::string> columns = {"col_int", "col_bool", "col_double", "col_string", "col_null", "col_map", "col_list"};
+    const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/data_json.parquet";
+    // TODO(mofei) read struct-type field from parquet has some issues related with FileReader::GetRecordBatchReader,
+    // which does not return correct column data
+    std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
+            {"col_json_int8", {"1", "2", "3"}},
+            {"col_json_int16", {"1", "2", "3"}},
+            {"col_json_int32", {"1", "2", "3"}},
+            {"col_json_int64", {"1", "2", "3"}},
+            {"col_json_uint8", {"1", "2", "3"}},
+            {"col_json_uint16", {"1", "2", "3"}},
+            {"col_json_int32", {"1", "2", "3"}},
+            {"col_json_uint64", {"1", "2", "3"}},
+
+            {"col_json_float32", {"1.100000023841858", "2.0999999046325684", "3.0999999046325684"}},
+            {"col_json_float64", {"1.1", "2.1", "3.1"}},
+
+            {"col_json_bool", {"true", "false", "true"}},
+            {"col_json_string", {"\"s1\"", "\"s2\"", "\"s3\""}},
+            {"col_json_list", {"[1, 2]", "[3, 4]", "[5, 6]"}},
+            {"col_json_map", {"{\"s1\": 1, \"s2\": 3}", "{\"s2\": 2}", "{\"s3\": 3}"}},
+            {"col_json_struct",
+             {R"({ "s0": 1, "s1": "string1" }                                                    )",
+              R"( {"s0": 2, "s1": "string2"}                                                     )",
+              R"({ "s0": 3, "s1": "string3" }                                                    )"}},
+            {"col_json_list_list",
+             {"[[1,2,3], [7,8,9], [10,11,12]]                                                    ",
+              "[[4,5,6], [7,8,9], [12,13,14]]                                                    ",
+              "[[4,5,6], [7,8,9], [12,13,14]]                                                    "}},
+            {"col_json_list_struct",
+             {R"([{"s0": 1, "s1": "string1"}, {"s0": 2, "s1": "string2" } ]                     )",
+              R"( [{"s0": 1, "s1": "string1"} ]                                                 )",
+              R"( [{"s0": 1, "s1": "string3"} ]                                                 )"}},
+            {"col_json_map_list",
+             {R"({"s1": [1,2], "s2": [3,4]}                                                     )",
+              R"({"s1": [5,6]}                                                                  )",
+              R"({"s1": [5,6]}                                                                  )"}},
+            {"col_json_struct_struct",
+             {R"({"s0": 1, "s1": {"s2": 3}}                                                     )",
+              R"({"s0": 2, "s1": {"s2": 4}}                                                     )",
+              R"({ "s0": 3, "s1": {"s2": 5}}                                                    )"}},
+    };
+    std::vector<std::string> columns_from_path;
+    std::vector<std::string> path_values;
+    std::unordered_map<size_t, TExpr> slot_map;
+
+    for (auto& [column_name, expected] : test_cases) {
+        std::vector<std::string> column_names{column_name};
+        std::cerr << "test " << column_name << std::endl;
+
+        ChunkPtr chunk = test_json_column<true>(column_names, slot_map, parquet_file_name);
+        ASSERT_EQ(1, chunk->num_columns());
+
+        auto col = chunk->columns()[0];
+        for (int i = 0; i < col->size(); i++) {
+            std::string result = col->debug_item(i);
+            std::string expect = expected[i];
+            expect.erase(std::remove(expect.begin(), expect.end(), ' '), expect.end());
+            result.erase(std::remove(result.begin(), result.end(), ' '), result.end());
+            EXPECT_EQ(expect, result);
+            std::cerr << "JsonColumn result: " << result << std::endl;
+        }
+    }
 }
 
 } // namespace starrocks::vectorized
