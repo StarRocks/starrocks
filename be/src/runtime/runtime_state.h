@@ -395,7 +395,8 @@ private:
             str << "Mem usage has exceed the limit of query pool";                                                  \
             break;                                                                                                  \
         case MemTracker::LOAD:                                                                                      \
-            str << "Mem usage has exceed the limit of load";                                                        \
+            str << "Mem usage has exceed the limit of load, You can change the limit by "                           \
+                   "set http header exec_mem_limit.";                                                               \
             break;                                                                                                  \
         case MemTracker::SCHEMA_CHANGE_TASK:                                                                        \
             str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]"; \
