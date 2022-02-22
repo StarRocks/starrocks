@@ -26,7 +26,6 @@ public class HiveScanImplementationRule extends ImplementationRule {
         LogicalHiveScanOperator scan = (LogicalHiveScanOperator) input.getOp();
         if (scan.getTableType() == Table.TableType.HIVE) {
             PhysicalHiveScanOperator physicalHiveScan = new PhysicalHiveScanOperator(scan.getTable(),
-                    scan.getOutputColumns(),
                     scan.getColRefToColumnMetaMap(),
                     scan.getSelectedPartitionIds(),
                     scan.getIdToPartitionKey(),

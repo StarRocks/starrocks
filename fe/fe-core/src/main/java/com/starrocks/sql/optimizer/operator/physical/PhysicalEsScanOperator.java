@@ -21,13 +21,12 @@ public class PhysicalEsScanOperator extends PhysicalScanOperator {
     private final List<EsShardPartitions> selectedIndex;
 
     public PhysicalEsScanOperator(Table table,
-                                  List<ColumnRefOperator> outputColumns,
                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                   List<EsShardPartitions> selectedIndex,
                                   long limit,
                                   ScalarOperator predicate,
                                   Projection projection) {
-        super(OperatorType.PHYSICAL_ES_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate, projection);
+        super(OperatorType.PHYSICAL_ES_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
         this.selectedIndex = selectedIndex;
     }
 

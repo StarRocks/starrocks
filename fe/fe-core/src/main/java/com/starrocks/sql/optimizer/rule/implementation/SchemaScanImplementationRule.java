@@ -23,7 +23,6 @@ public class SchemaScanImplementationRule extends ImplementationRule {
         LogicalSchemaScanOperator logical = (LogicalSchemaScanOperator) input.getOp();
         PhysicalSchemaScanOperator physical =
                 new PhysicalSchemaScanOperator(logical.getTable(),
-                        logical.getOutputColumns(),
                         logical.getColRefToColumnMetaMap(),
                         logical.getLimit(),
                         logical.getPredicate(),
