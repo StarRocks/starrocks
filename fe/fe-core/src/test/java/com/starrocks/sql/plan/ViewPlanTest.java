@@ -739,7 +739,7 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql151() throws Exception {
-        String sql = "select * from t1, t3 right semi join test_all_type as a on t3.v1 = a.t1a and 1 > 2;";
+        String sql = "select * from t1 inner join t3 on t1.v4 = t3.v1 right semi join test_all_type as a on t3.v1 = a.t1a and 1 > 2;";
         testView(sql);
     }
 

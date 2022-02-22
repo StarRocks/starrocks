@@ -35,12 +35,28 @@ public class TableFunctionRelation extends Relation {
         this.childExpressions = childExpressions;
     }
 
+    public FunctionName getFunctionName() {
+        return functionName;
+    }
+
+    public FunctionParams getFunctionParams() {
+        return functionParams;
+    }
+
     public TableFunction getTableFunction() {
         return tableFunction;
     }
 
+    public void setTableFunction(TableFunction tableFunction) {
+        this.tableFunction = tableFunction;
+    }
+
     public List<Expr> getChildExpressions() {
         return childExpressions;
+    }
+
+    public void setChildExpressions(List<Expr> childExpressions) {
+        this.childExpressions = childExpressions;
     }
 
     @Override

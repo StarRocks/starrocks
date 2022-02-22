@@ -198,7 +198,6 @@ public class DateLiteral extends LiteralExpr {
             second = dateTime.getSecond();
             this.type = type;
         } catch (Exception ex) {
-            System.out.println(ex);
             throw new AnalysisException("date literal [" + s + "] is invalid");
         }
     }

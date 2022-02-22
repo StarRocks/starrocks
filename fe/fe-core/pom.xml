@@ -616,6 +616,7 @@ under the License.
                         <configuration>
                             <sourceDirectory>src/main/java/com/starrocks/sql/parser</sourceDirectory>
                             <outputDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</outputDirectory>
+                            <libDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</libDirectory>
                             <visitor>true</visitor>
                             <arguments>
                                 <argument>-package</argument>
@@ -776,6 +777,7 @@ under the License.
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
                     <linkXRef>false</linkXRef>
+                    <excludes>**/sql/parser/gen/**</excludes>
                 </configuration>
                 <executions>
                     <execution>
@@ -802,7 +804,6 @@ under the License.
                     </execution>
                 </executions>
             </plugin>
-
         </plugins>
 
         <pluginManagement>

@@ -58,6 +58,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
@@ -723,15 +724,23 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitSubquery(Subquery node, Scope context) {
             QueryStmt stmt = node.getStatement();
-            if (!(stmt instanceof SelectStmt)) {
+
+            if (!(stmt instanceof SelectStmt) && node.getQueryBlock() == null) {
                 throw new StarRocksPlannerException("A subquery must contain a single select block",
                         ErrorType.INTERNAL_ERROR);
             }
 
-            QueryAnalyzer queryAnalyzer = new QueryAnalyzer(catalog, session);
-            QueryRelation queryBlock = queryAnalyzer.transformQueryStmt(stmt, context);
-            node.setQueryBlock(queryBlock);
-            node.setType(queryBlock.getRelationFields().getFieldByIndex(0).getType());
+            if (stmt != null) {
+                QueryAnalyzer queryAnalyzer = new QueryAnalyzer(catalog, session);
+                QueryRelation queryBlock = queryAnalyzer.transformQueryStmt(stmt, context);
+
+                node.setQueryBlock(queryBlock);
+                node.setType(queryBlock.getRelationFields().getFieldByIndex(0).getType());
+            } else if (node.getQueryBlock() != null) {
+                QueryAnalyzerV2 queryAnalyzer = new QueryAnalyzerV2(catalog, session);
+                queryAnalyzer.analyze(new QueryStatement(node.getQueryBlock()), context);
+                node.setType(node.getQueryBlock().getRelationFields().getFieldByIndex(0).getType());
+            }
             return null;
         }
 

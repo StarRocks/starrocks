@@ -57,7 +57,7 @@ select v1 from t0 group by not (false), v1 having not (false) != v1
 [result]
 AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1]] having [null]
     AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1]] having [null]
-        SCAN (columns[1: v1] predicate[1: v1 != 1])
+        SCAN (columns[1: v1] predicate[1: v1 = 0])
 [end]
 
 [sql]

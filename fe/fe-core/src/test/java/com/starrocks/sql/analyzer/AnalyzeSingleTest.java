@@ -379,4 +379,11 @@ public class AnalyzeSingleTest {
         query = analyzeSuccess("select v1+2 as v, * from t0 order by v+1");
         Assert.assertEquals("v,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
     }
+
+
+    @Test
+    public void testDual() {
+        analyzeSuccess("select 1,2,3 from dual");
+        analyzeFail("select * from dual", "No tables used");
+    }
 }

@@ -20,9 +20,9 @@ public class TableRelation extends Relation {
     private final List<Long> tabletIds;
     private boolean isMetaQuery;
 
-    public TableRelation(TableName name) {
+    public TableRelation(TableName name, PartitionNames partitionNames) {
         this.name = name;
-        partitionNames = null;
+        this.partitionNames = partitionNames;
         tabletIds = Lists.newArrayList();
     }
 
@@ -48,6 +48,10 @@ public class TableRelation extends Relation {
         return table;
     }
 
+    public void setTable(Table table) {
+        this.table = table;
+    }
+
     public PartitionNames getPartitionNames() {
         return partitionNames;
     }
@@ -60,8 +64,21 @@ public class TableRelation extends Relation {
         return columns.get(field);
     }
 
+    public void setColumns(Map<Field, Column> columns) {
+        this.columns = columns;
+    }
+
     public Map<Field, Column> getColumns() {
         return columns;
+    }
+
+    @Override
+    public TableName getAlias() {
+        if (alias != null) {
+            return alias;
+        } else {
+            return name;
+        }
     }
 
     public boolean isMetaQuery() {
@@ -72,6 +89,7 @@ public class TableRelation extends Relation {
         isMetaQuery = metaQuery;
     }
 
+    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitTable(this, context);
     }
@@ -79,5 +97,16 @@ public class TableRelation extends Relation {
     @Override
     public String toString() {
         return name.toString();
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sqlBuilder = new StringBuilder();
+        sqlBuilder.append(name);
+
+        if (alias != null) {
+            sqlBuilder.append(" AS ").append(alias.getTbl());
+        }
+        return sqlBuilder.toString();
     }
 }
