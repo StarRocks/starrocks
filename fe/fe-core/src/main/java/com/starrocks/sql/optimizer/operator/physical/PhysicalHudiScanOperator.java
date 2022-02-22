@@ -34,7 +34,6 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
     private final Map<ColumnRefOperator, Column> minMaxColumnRefMap;
 
     public PhysicalHudiScanOperator(Table table,
-                                    List<ColumnRefOperator> outputColumns,
                                     Map<ColumnRefOperator, Column> columnRefMap,
                                     Collection<Long> selectedPartitionIds,
                                     Map<Long, PartitionKey> idToPartitionKey,
@@ -45,7 +44,7 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
                                     long limit,
                                     ScalarOperator predicate,
                                     Projection projection) {
-        super(OperatorType.PHYSICAL_HUDI_SCAN, table, outputColumns, columnRefMap, limit, predicate, projection);
+        super(OperatorType.PHYSICAL_HUDI_SCAN, table, columnRefMap, limit, predicate, projection);
         this.selectedPartitionIds = selectedPartitionIds;
         this.idToPartitionKey = idToPartitionKey;
         this.noEvalPartitionConjuncts = noEvalPartitionConjuncts;
