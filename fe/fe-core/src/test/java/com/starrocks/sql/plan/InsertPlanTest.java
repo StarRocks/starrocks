@@ -341,16 +341,13 @@ public class InsertPlanTest extends PlanTestBase {
         plan = getInsertExecPlan(sql);
         containsKeywords(plan, "OUTPUT EXPRS:1: id | 2: id2", "OLAP TABLE SINK", "0:OlapScanNode");
 
-        sql = "insert into test.bitmap_table select id, to_bitmap(id2) from test.bitmap_table_2;";
-        plan = getInsertExecPlan(sql);
-        containsKeywords(plan, "OUTPUT EXPRS:1: id | 3: to_bitmap", "OLAP TABLE SINK",
-                "1:Project", "<slot 1> : 1: id", "<slot 3> : to_bitmap(CAST(2: id2 AS VARCHAR))", "0:OlapScanNode",
-                "TABLE: bitmap_table_2");
+        Assert.assertThrows("No matching function with signature: to_bitmap(bitmap).", SemanticException.class,
+                () -> getInsertExecPlan(
+                        "insert into test.bitmap_table select id, to_bitmap(id2) from test.bitmap_table_2;"));
 
-        sql = "insert into test.bitmap_table select id, bitmap_hash(id2) from test.bitmap_table_2;";
-        plan = getInsertExecPlan(sql);
-        containsKeywords(plan, "OUTPUT EXPRS:1: id | 3: bitmap_hash", "OLAP TABLE SINK",
-                "1:Project", "<slot 1> : 1: id", "<slot 3> : bitmap_hash(CAST(2: id2 AS VARCHAR))");
+        Assert.assertThrows("No matching function with signature: bitmap_hash(bitmap).", SemanticException.class,
+                () -> getInsertExecPlan(
+                        "insert into test.bitmap_table select id, bitmap_hash(id2) from test.bitmap_table_2;"));
 
         sql = "insert into test.bitmap_table select id, id from test.bitmap_table_2;";
         plan = getInsertExecPlan(sql);

@@ -75,4 +75,11 @@ public class AnalyzeFunctionTest {
         analyzeFail("select approx_count_distinct(b1) from test_object");
         analyzeFail("select ndv(b1) from test_object");
     }
+
+    @Test
+    public void testMatrixTypeCast() {
+        analyzeFail("select trim(b1) from test_object");
+        analyzeFail("select trim(h1) from test_object");
+        analyzeFail("select trim(p1) from test_object");
+    }
 }

@@ -2218,14 +2218,13 @@ public class PlanFragmentTest extends PlanTestBase {
                         "PREAGGREGATION: OFF. Reason: Aggregate Operator not match: COUNT <--> BITMAP_UNION");
 
         starRocksAssert.query("select group_concat(id2) from test.bitmap_table;")
-                .analysisError(
-                        "group_concat requires first parameter to be of getType() STRING: group_concat(`default_cluster:test`.`bitmap_table`.`id2`)");
+                .analysisError("No matching function with signature: group_concat(bitmap).");
 
         starRocksAssert.query("select sum(id2) from test.bitmap_table;").analysisError(
-                "sum requires a numeric parameter: sum(`default_cluster:test`.`bitmap_table`.`id2`)");
+                "No matching function with signature: sum(bitmap).");
 
         starRocksAssert.query("select avg(id2) from test.bitmap_table;")
-                .analysisError("avg requires a numeric parameter: avg(`default_cluster:test`.`bitmap_table`.`id2`)");
+                .analysisError("No matching function with signature: avg(bitmap).");
 
         starRocksAssert.query("select max(id2) from test.bitmap_table;").analysisError(Type.OnlyMetricTypeErrorMsg);
 
@@ -5623,5 +5622,12 @@ public class PlanFragmentTest extends PlanTestBase {
                 "from test_all_type group by t1a";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: t1a | 12: sum | 12: sum"));
+    }
+
+    @Test
+    public void testBitmapHashRewrite() throws Exception {
+        String sql = "select bitmap_hash(NULL)";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("bitmap_hash(NULL)"));
     }
 }
