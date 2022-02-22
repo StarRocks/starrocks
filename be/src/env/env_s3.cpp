@@ -90,12 +90,15 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
     std::string object = path.substr(namenode.size(), path.size() - namenode.size());
     Aws::Client::ClientConfiguration config;
     config.scheme = Aws::Http::Scheme::HTTP;
-    config.endpointOverride = config::aws_s3_endpoint;
+    if (!config::aws_s3_endpoint.empty()) {
+        config.endpointOverride = config::aws_s3_endpoint;
+    }
     config.maxConnections = config::aws_s3_max_connection;
     S3Credential cred;
     cred.access_key_id = config::aws_access_key_id;
     cred.secret_access_key = config::aws_secret_access_key;
-    auto store = std::make_unique<S3ObjectStore>(config, &cred, false);
+    auto store = std::make_unique<S3ObjectStore>(config);
+    RETURN_IF_ERROR(store->init(&cred, false));
     return std::make_unique<S3RandomAccessFile>(std::move(store), std::move(bucket), std::move(object));
 }
 
