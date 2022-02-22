@@ -665,8 +665,6 @@ CONF_Int64(pipeline_scan_max_tasks_per_operator, "4");
 CONF_Int64(pipeline_scan_task_yield_max_tims_spent, "100000000");
 // The max schedule period for adjusting io weight of each workgroup.
 CONF_Int64(pipeline_scan_task_yield_preempt_max_time_spent, "20000000");
-// The max schedule period for adjusting io weight of each workgroup.
-CONF_Int32(pipeline_max_io_schedule_num_period, "512");
 
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
