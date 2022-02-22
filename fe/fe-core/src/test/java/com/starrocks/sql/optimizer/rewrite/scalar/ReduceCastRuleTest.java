@@ -10,6 +10,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteRule;
 import org.junit.Test;
 
+import java.math.BigInteger;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -47,6 +49,27 @@ public class ReduceCastRuleTest {
         assertTrue(result.getType().isBigint());
         assertEquals(OperatorType.CONSTANT, result.getChild(0).getOpType());
         assertTrue(result.getChild(0).getType().isNumericType());
+    }
+
+    @Test
+    public void testBooleanWithDecreasingCast() {
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        ScalarOperator operator =
+                new CastOperator(Type.BOOLEAN, new CastOperator(Type.INT,
+                        ConstantOperator.createLargeInt(new BigInteger("1000000000000000000"))));
+
+        ScalarOperator result = rule.apply(operator, null);
+
+        assertEquals(OperatorType.CALL, result.getOpType());
+        assertTrue(result instanceof CastOperator);
+
+        assertTrue(result.getType().isBoolean());
+        ScalarOperator child = result.getChild(0);
+        assertEquals(OperatorType.CALL, child.getOpType());
+        assertTrue(child instanceof CastOperator);
+        ScalarOperator grandChild = child.getChild(0);
+        assertEquals(OperatorType.CONSTANT, grandChild.getOpType());
     }
 
     @Test
