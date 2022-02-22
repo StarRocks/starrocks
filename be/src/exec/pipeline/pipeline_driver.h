@@ -145,9 +145,7 @@ public:
               _source_node_id(operators[0]->get_plan_node_id()),
               _driver_id(driver_id),
               _is_root(is_root),
-              _state(DriverState::NOT_READY),
-              _yield_max_chunks_moved(config::pipeline_yield_max_chunks_moved),
-              _yield_max_time_spent(config::pipeline_yield_max_time_spent) {
+              _state(DriverState::NOT_READY) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
         for (auto& op : _operators) {
             _operator_stages[op->get_id()] = OperatorStage::INIT;
@@ -345,7 +343,13 @@ public:
     void set_driver_queue_index(size_t driver_queue_index) { _driver_queue_index = driver_queue_index; }
 
 private:
-    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000;
+    // Yield PipelineDriver when maximum number of chunks has been moved in current execution round.
+    static constexpr size_t YIELD_MAX_CHUNKS_MOVED = 100;
+    // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
+    static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
+    // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
+    // if it runs in the worker thread owned by other workgroup, which has running drivers.
+    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
 
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
@@ -392,8 +396,6 @@ private:
     // _state must be set by set_driver_state() to record state timer.
     DriverState _state;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
-    const size_t _yield_max_chunks_moved;
-    const int64_t _yield_max_time_spent;
 
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
