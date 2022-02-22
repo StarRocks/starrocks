@@ -244,7 +244,7 @@ TEST_F(BooleanQueryBuilderTest, bool_query) {
     int range_value_length = (int)strlen(range_value_str);
     Slice range_value(range_value_str, range_value_length);
     auto range_literal =
-            pool.add(new VExtLiteral(TYPE_VARCHAR, ColumnHelper::create_const_column<TYPE_VARCHAR>(value, 1)));
+            pool.add(new VExtLiteral(TYPE_VARCHAR, ColumnHelper::create_const_column<TYPE_VARCHAR>(range_value, 1)));
 
     TypeDescriptor range_type_desc = TypeDescriptor::create_varchar_type(range_value_length);
     std::string range_field_name = "k";
