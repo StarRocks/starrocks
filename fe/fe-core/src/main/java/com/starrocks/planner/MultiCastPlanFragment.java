@@ -33,6 +33,8 @@ public class MultiCastPlanFragment extends PlanFragment {
         // Use random, only send to self
         this.outputPartition = DataPartition.RANDOM;
         this.children.addAll(planFragment.getChildren());
+        this.setLoadGlobalDicts(planFragment.loadGlobalDicts);
+        this.setQueryGlobalDicts(planFragment.queryGlobalDicts);
     }
 
     public List<PlanFragment> getDestFragmentList() {
@@ -101,8 +103,4 @@ public class MultiCastPlanFragment extends PlanFragment {
         Preconditions.checkState(false);
     }
 
-    @Override
-    public void setLoadGlobalDicts(List<Pair<Integer, ColumnDict>> loadGlobalDicts) {
-        Preconditions.checkState(false);
-    }
 }
