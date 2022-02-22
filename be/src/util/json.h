@@ -48,6 +48,11 @@ public:
         return *this;
     }
 
+    JsonValue& operator=(JsonValue&& rhs) {
+        binary_ = std::move(rhs.binary_);
+        return *this;
+    }
+
     // TODO(mofei) avoid copy data from slice ?
     explicit JsonValue(const Slice& src) { assign(src); }
 

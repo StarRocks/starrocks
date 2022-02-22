@@ -125,6 +125,21 @@ public:
         }
     }
 
+    template <typename T>
+    void move_in(T&& value) {
+        if constexpr (std::is_same_v<DateValue, T>) {
+            _value = value.julian();
+        } else if constexpr (std::is_same_v<TimestampValue, T>) {
+            _value = value.timestamp();
+        } else if constexpr (std::is_same_v<bool, T>) {
+            _value = (int8_t)value;
+        } else if constexpr (std::is_unsigned_v<T>) {
+            _value = (std::make_signed_t<T>)value;
+        } else {
+            _value = std::move(value);
+        }
+    }
+
     bool is_null() const { return _value.index() == 0; }
 
     void set_null() { _value = std::monostate(); }
