@@ -576,7 +576,7 @@ TEST_F(JsonScannerTest, test_native_json_single_column) {
     range.__isset.jsonpaths = true;
     range.jsonpaths = R"(["$", "$.k1"])";
     range.__isset.json_root = false;
-    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson_chinese.json");
     ranges.emplace_back(range);
 
     auto scanner = create_json_scanner(types, ranges, {"$", "k1"});
@@ -589,15 +589,15 @@ TEST_F(JsonScannerTest, test_native_json_single_column) {
     EXPECT_EQ(kColumns, chunk->num_columns());
     EXPECT_EQ(5, chunk->num_rows());
 
-    EXPECT_EQ(R"([{"k1": "v1", "keyname": {"ip": "10.10.0.1", "value": "10"}, "kind": "server"}, "v1"])",
+    EXPECT_EQ(R"([{"k1": "v1", "keyname": {"ip地址": "10.10.0.1", "value": "10"}, "kind": "中文"}, "v1"])",
               chunk->debug_row(0));
-    EXPECT_EQ(R"([{"k1": "v2", "keyname": {"ip": "10.10.0.2", "value": "20"}, "kind": "server"}, "v2"])",
+    EXPECT_EQ(R"([{"k1": "v2", "keyname": {"ip地址": "10.10.0.2", "value": "20"}, "kind": "英文"}, "v2"])",
               chunk->debug_row(1));
-    EXPECT_EQ(R"([{"k1": "v3", "keyname": {"ip": "10.10.0.3", "value": "30"}, "kind": "server"}, "v3"])",
+    EXPECT_EQ(R"([{"k1": "v3", "keyname": {"ip地址": "10.10.0.3", "value": "30"}, "kind": "法文"}, "v3"])",
               chunk->debug_row(2));
-    EXPECT_EQ(R"([{"k1": "v4", "keyname": {"ip": "10.10.0.4", "value": "40"}, "kind": "server"}, "v4"])",
+    EXPECT_EQ(R"([{"k1": "v4", "keyname": {"ip地址": "10.10.0.4", "value": "40"}, "kind": "德文"}, "v4"])",
               chunk->debug_row(3));
-    EXPECT_EQ(R"([{"k1": "v5", "keyname": {"ip": "10.10.0.5", "value": "50"}, "kind": "server"}, "v5"])",
+    EXPECT_EQ(R"([{"k1": "v5", "keyname": {"ip地址": "10.10.0.5", "value": "50"}, "kind": "西班牙"}, "v5"])",
               chunk->debug_row(4));
 }
 
