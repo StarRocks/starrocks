@@ -9,7 +9,7 @@ import java.util.Objects;
 
 public class HashDistributionDesc {
     public enum SourceType {
-        SHUFFLE_LOCAL, // hash property from scan node
+        LOCAL, // hash property from scan node
         // @Todo: Should modify Coordinator and PlanFragmentBuilder.
         //  For sql: select * from t1 join[shuffle] (select x1, sum(1) from t1 group by x1) s on t1.x2 = s.x1;
         //  Join check isn't bucket shuffle/shuffle depend on child is exchange node.
@@ -52,7 +52,7 @@ public class HashDistributionDesc {
     }
 
     public boolean isLocalShuffle() {
-        return this.sourceType == SourceType.SHUFFLE_LOCAL;
+        return this.sourceType == SourceType.LOCAL;
     }
 
     public boolean isJoinShuffle() {

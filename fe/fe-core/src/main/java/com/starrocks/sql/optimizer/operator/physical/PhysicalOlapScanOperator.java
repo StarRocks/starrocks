@@ -142,7 +142,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         } else {
             // 1023 is a placeholder column id, only in order to pass UT
             HashDistributionDesc leftHashDesc = new HashDistributionDesc(Collections.singletonList(1023),
-                    HashDistributionDesc.SourceType.SHUFFLE_LOCAL);
+                    HashDistributionDesc.SourceType.LOCAL);
             return DistributionSpec.createHashDistributionSpec(leftHashDesc);
         }
     }

@@ -1966,12 +1966,12 @@ public class OptimizerTaskTest {
                 new LogicalOlapScanOperator(olapTable1, scan1ColumnMap, Maps.newHashMap(),
                         DistributionSpec.createHashDistributionSpec(
                                 new HashDistributionDesc(Lists.newArrayList(column2.getId()),
-                                        HashDistributionDesc.SourceType.SHUFFLE_LOCAL)), -1, null);
+                                        HashDistributionDesc.SourceType.LOCAL)), -1, null);
         LogicalOlapScanOperator scan2 =
                 new LogicalOlapScanOperator(olapTable2, scan2ColumnMap, Maps.newHashMap(),
                         DistributionSpec.createHashDistributionSpec(
                                 new HashDistributionDesc(Lists.newArrayList(column4.getId()),
-                                        HashDistributionDesc.SourceType.SHUFFLE_LOCAL)), -1, null);
+                                        HashDistributionDesc.SourceType.LOCAL)), -1, null);
         LogicalJoinOperator join = new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicate);
         OptExpression expression = OptExpression.create(join,
                 OptExpression.create(scan1),
@@ -2079,12 +2079,12 @@ public class OptimizerTaskTest {
                 new LogicalOlapScanOperator(olapTable1, scan1ColumnMap, Maps.newHashMap(),
                         DistributionSpec.createHashDistributionSpec(
                                 new HashDistributionDesc(Lists.newArrayList(column2.getId()),
-                                        HashDistributionDesc.SourceType.SHUFFLE_LOCAL)), -1, null);
+                                        HashDistributionDesc.SourceType.LOCAL)), -1, null);
         LogicalOlapScanOperator scan2 =
                 new LogicalOlapScanOperator(olapTable2, scan2ColumnMap, Maps.newHashMap(),
                         DistributionSpec.createHashDistributionSpec(
                                 new HashDistributionDesc(Lists.newArrayList(column4.getId()),
-                                        HashDistributionDesc.SourceType.SHUFFLE_LOCAL)), -1, null);
+                                        HashDistributionDesc.SourceType.LOCAL)), -1, null);
         LogicalJoinOperator join = new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicate);
         OptExpression expression = OptExpression.create(join,
                 OptExpression.create(scan1),

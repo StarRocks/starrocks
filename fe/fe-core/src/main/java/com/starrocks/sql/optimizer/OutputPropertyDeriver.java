@@ -125,10 +125,10 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
             HashDistributionDesc outputDesc;
             if (requiredShuffleDesc.get().getColumns().containsAll(rightShuffleColumns)) {
                 outputDesc =
-                        new HashDistributionDesc(rightShuffleColumns, HashDistributionDesc.SourceType.SHUFFLE_LOCAL);
+                        new HashDistributionDesc(rightShuffleColumns, HashDistributionDesc.SourceType.LOCAL);
             } else {
                 outputDesc =
-                        new HashDistributionDesc(leftShuffleColumns, HashDistributionDesc.SourceType.SHUFFLE_LOCAL);
+                        new HashDistributionDesc(leftShuffleColumns, HashDistributionDesc.SourceType.LOCAL);
             }
             return createPropertySetByDistribution(new HashDistributionSpec(outputDesc, newPhysicalPropertyInfo));
         }
@@ -474,7 +474,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
 
         return createPropertySetByDistribution(new HashDistributionSpec(
                 new HashDistributionDesc(olapDistributionSpec.getShuffleColumns(),
-                        HashDistributionDesc.SourceType.SHUFFLE_LOCAL), physicalPropertyInfo));
+                        HashDistributionDesc.SourceType.LOCAL), physicalPropertyInfo));
     }
 
     @Override

@@ -39,11 +39,11 @@ public class HashDistributionSpec extends DistributionSpec {
         HashDistributionDesc.SourceType otherSourceType = other.hashDistributionDesc.getSourceType();
         // shuffle_local may satisfy shuffle_agg or shuffle_join
         if (!thisSourceType.equals(otherSourceType) &&
-                thisSourceType != HashDistributionDesc.SourceType.SHUFFLE_LOCAL) {
+                thisSourceType != HashDistributionDesc.SourceType.LOCAL) {
             return false;
         }
         // check shuffle_local PropertyInfo
-        if (thisSourceType == HashDistributionDesc.SourceType.SHUFFLE_LOCAL) {
+        if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
             ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
             long tableId = propertyInfo.tableId;
             boolean satisfyColocate = (colocateIndex.isColocateTable(tableId) &&
@@ -54,7 +54,7 @@ public class HashDistributionSpec extends DistributionSpec {
             }
         }
         // Left outer join will cause right table produce NULL in different node, also right outer join
-        if (thisSourceType == HashDistributionDesc.SourceType.SHUFFLE_LOCAL &&
+        if (thisSourceType == HashDistributionDesc.SourceType.LOCAL &&
                 otherSourceType == HashDistributionDesc.SourceType.SHUFFLE_AGG) {
             ColumnRefSet otherColumns = new ColumnRefSet();
             other.hashDistributionDesc.getColumns().forEach(otherColumns::union);
