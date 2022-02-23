@@ -107,8 +107,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     if (query_options.__isset.is_report_success && query_options.is_report_success) {
         _fragment_ctx->set_report_profile();
     }
-    if (query_options.__isset.pipeline_profile_mode) {
-        _fragment_ctx->set_profile_mode(query_options.pipeline_profile_mode);
+    if (query_options.__isset.pipeline_profile_level) {
+        _fragment_ctx->set_profile_level(query_options.pipeline_profile_level);
     }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
