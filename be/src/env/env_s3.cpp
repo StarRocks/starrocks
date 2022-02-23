@@ -6,6 +6,8 @@
 
 #include <fmt/core.h>
 
+#include <limits>
+
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
 #include "object_store/s3_object_store.h"
@@ -13,20 +15,13 @@
 
 namespace starrocks {
 
-// ==================================  S3RandomAccessFile  ==========================================
-
-// class for remote read S3 object file.
-// Now this is not thread-safe.
-class S3RandomAccessFile : public RandomAccessFile {
+// Wrap a `starrocks::io::RandomAccessFile` into `starrocks::RandomAccessFile`.
+class RandomAccessFileWrapper : public RandomAccessFile {
 public:
-    S3RandomAccessFile(std::unique_ptr<ObjectStore> client, std::string bucket, std::string object)
-            : _client(std::move(client)),
-              _bucket(std::move(bucket)),
-              _object(std::move(object)),
-              _object_path(fmt::format("s3://{}/{}", _bucket, _object)),
-              _object_size(0) {}
+    explicit RandomAccessFileWrapper(std::unique_ptr<io::RandomAccessFile> input, std::string path)
+            : _input(std::move(input)), _object_path(std::move(path)), _object_size(0) {}
 
-    ~S3RandomAccessFile() override = default;
+    ~RandomAccessFileWrapper() override = default;
 
     Status read(uint64_t offset, Slice* res) const override;
     Status read_at(uint64_t offset, const Slice& res) const override;
@@ -35,41 +30,33 @@ public:
     const std::string& file_name() const override { return _object_path; }
 
 private:
-    std::unique_ptr<ObjectStore> _client;
-    std::string _bucket;
-    std::string _object;
+    std::unique_ptr<io::RandomAccessFile> _input;
     std::string _object_path;
     mutable uint64_t _object_size;
 };
 
-Status S3RandomAccessFile::read(uint64_t offset, Slice* res) const {
-    size_t read_size = 0;
-    RETURN_IF_ERROR(_client->get_object_range(_bucket, _object, offset, res->size, res->data, &read_size));
-    res->size = read_size;
+Status RandomAccessFileWrapper::read(uint64_t offset, Slice* res) const {
+    if (UNLIKELY(offset > std::numeric_limits<int64_t>::max())) return Status::NotSupported("offset overflow");
+    ASSIGN_OR_RETURN(res->size, _input->read_at(static_cast<int64_t>(offset), res->data, res->size));
     return Status::OK();
 }
 
-Status S3RandomAccessFile::read_at(uint64_t offset, const Slice& res) const {
-    size_t read_size = 0;
-    RETURN_IF_ERROR(_client->get_object_range(_bucket, _object, offset, res.size, res.data, &read_size));
-    if (read_size != res.size) {
-        return Status::InternalError(fmt::format("fail to read enough bytes from {} at offset {}, required={} real={}",
-                                                 _object_path, offset, res.size, read_size));
-    }
-    return Status::OK();
+Status RandomAccessFileWrapper::read_at(uint64_t offset, const Slice& res) const {
+    if (UNLIKELY(offset > std::numeric_limits<int64_t>::max())) return Status::NotSupported("offset overflow");
+    return _input->read_at_fully(static_cast<int64_t>(offset), res.data, res.size);
 }
 
-Status S3RandomAccessFile::readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const {
+Status RandomAccessFileWrapper::readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const {
     for (size_t i = 0; i < res_cnt; i++) {
-        RETURN_IF_ERROR(S3RandomAccessFile::read_at(offset, res[i]));
+        RETURN_IF_ERROR(RandomAccessFileWrapper::read_at(offset, res[i]));
         offset += res[i].size;
     }
     return Status::OK();
 }
 
-Status S3RandomAccessFile::size(uint64_t* size) const {
+Status RandomAccessFileWrapper::size(uint64_t* size) const {
     if (_object_size == 0) {
-        RETURN_IF_ERROR(_client->get_object_size(_bucket, _object, &_object_size));
+        ASSIGN_OR_RETURN(_object_size, _input->get_size());
     }
     *size = _object_size;
     return Status::OK();
@@ -97,9 +84,10 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
     S3Credential cred;
     cred.access_key_id = config::aws_access_key_id;
     cred.secret_access_key = config::aws_secret_access_key;
-    auto store = std::make_unique<S3ObjectStore>(config);
-    RETURN_IF_ERROR(store->init(&cred, false));
-    return std::make_unique<S3RandomAccessFile>(std::move(store), std::move(bucket), std::move(object));
+    S3ObjectStore store(config);
+    RETURN_IF_ERROR(store.init(&cred, false));
+    ASSIGN_OR_RETURN(auto input_file, store.get_object(bucket, object));
+    return std::make_unique<RandomAccessFileWrapper>(std::move(input_file), path);
 }
 
 } // namespace starrocks
