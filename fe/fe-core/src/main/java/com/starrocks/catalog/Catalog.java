@@ -1225,6 +1225,17 @@ public class Catalog {
         LOG.info("get helper nodes: {}", helperNodes);
     }
 
+    private void transferToMasterWithOldType(FrontendNodeType oldType) {
+        feType = FrontendNodeType.MASTER;
+        try {
+            transferToMaster();
+        } catch (Throwable t) {
+            // for any failed reason, set feType to oldType
+            feType = oldType;
+            throw t;
+        }
+    }
+
     private void transferToMaster() {
         // stop replayer
         if (replayer != null) {
@@ -1242,6 +1253,9 @@ public class Catalog {
         canRead.set(false);
 
         editLog.open();
+
+        // set the fe type to master
+        feType = FrontendNodeType.MASTER;
 
         if (!haProtocol.fencing()) {
             LOG.error("fencing failed. will exit.");
@@ -2422,7 +2436,7 @@ public class Catalog {
                         case INIT: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMaster();
+                                    transferToMasterWithOldType(feType);
                                     break;
                                 }
                                 case FOLLOWER:
@@ -2440,7 +2454,7 @@ public class Catalog {
                         case UNKNOWN: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMaster();
+                                    transferToMasterWithOldType(feType);
                                     break;
                                 }
                                 case FOLLOWER:
@@ -2456,7 +2470,7 @@ public class Catalog {
                         case FOLLOWER: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMaster();
+                                    transferToMasterWithOldType(feType);
                                     break;
                                 }
                                 case UNKNOWN: {
