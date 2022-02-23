@@ -332,7 +332,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testInColumnPredicate() throws Exception {
         String sql = "select v1 from t0 where v1 in (v1 + v2, sin(v2))";
         String thriftPlan = getThriftPlan(sql);
-        Assert.assertTrue(thriftPlan.contains("FILTER_NEW_IN"));
         Assert.assertFalse(thriftPlan.contains("FILTER_IN"));
     }
 
@@ -5773,4 +5772,41 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("bitmap_hash(NULL)"));
     }
+
+    public void testPlanContains(String sql, String content) throws Exception {
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue("plan is " + plan, plan.contains(content));
+    }
+
+    @Test
+    public void testInPredicateNormalize() throws Exception {
+        //        connectContext.setDatabase("default_cluster:test");
+
+        starRocksAssert.withTable("create table test_in_pred_norm" +
+                "(c0 INT, c1 INT, c2 INT, c3 INT) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 IN (0) ", "c0 = 0");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 IN (0, 1) ", "c0 IN (0, 1)");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 IN (0, 1, 2) ", "c0 IN (0, 1, 2)");
+
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 IN (c1) ", "1: c0 = 2: c1");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 IN (c1, c2) ", "(1: c0 = 2: c1) OR (1: c0 = 3: c2)");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 IN (c1, c2, c3) ",
+                "((1: c0 = 2: c1) OR (1: c0 = 3: c2)) OR (1: c0 = 4: c3)");
+
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (c1) ", "1: c0 != 2: c1");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (c1, c2) ", "1: c0 != 2: c1, 1: c0 != 3: c2");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (c1, c2, c3) ",
+                "1: c0 != 2: c1, 1: c0 != 3: c2, 1: c0 != 4: c3");
+
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 IN (0, c1) ", "(1: c0 = 0) OR (1: c0 = 2: c1)");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 IN (0, c1, c2) ",
+                "((1: c0 = 0) OR (1: c0 = 2: c1)) OR (1: c0 = 3: c2)");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (0, c1) ", "1: c0 != 0, 1: c0 != 2: c1");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (0, c1, c2) ",
+                "1: c0 != 0, 1: c0 != 2: c1, 1: c0 != 3: c2");
+    }
+
 }
