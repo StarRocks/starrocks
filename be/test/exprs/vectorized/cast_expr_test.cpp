@@ -5,6 +5,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
@@ -1429,6 +1431,18 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "[]")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "{}")));
 
+    // overflow
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, "100000")));
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, "-100000")));
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(
+                         cast_expr, std::to_string(std::numeric_limits<int64_t>::max()))));
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(
+                         cast_expr, std::to_string(std::numeric_limits<int64_t>::lowest()))));
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_FLOAT>(
+                         cast_expr, std::to_string(std::numeric_limits<double>::max()))));
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_FLOAT>(
+                         cast_expr, std::to_string(std::numeric_limits<double>::lowest()))));
+
     // Not supported
     EXPECT_EQ(nullptr, evaluateCastJsonNullable<TYPE_DECIMALV2>(cast_expr, "1"));
     EXPECT_EQ(nullptr, evaluateCastJsonNullable<TYPE_DECIMAL32>(cast_expr, "1"));
@@ -1456,7 +1470,13 @@ static std::string evaluateCastToJson(TExprNode& cast_expr, RunTimeCppType<fromT
     if (!ptr) {
         return nullptr;
     }
+    if (ptr->has_null()) {
+        return "";
+    }
     ColumnPtr result_column = ColumnHelper::cast_to<TYPE_JSON>(ptr);
+    if (result_column->is_null(0)) {
+        return "";
+    }
     const JsonValue* json = result_column->get(0).get_json();
     auto json_str = json->to_string();
     if (!json_str.ok()) {
@@ -1486,6 +1506,8 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
         EXPECT_EQ("-1", evaluateCastToJson<TYPE_SMALLINT>(cast_expr, -1));
         EXPECT_EQ("10000000000", evaluateCastToJson<TYPE_BIGINT>(cast_expr, 1E10));
         EXPECT_EQ("10000000000", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, 1E10));
+        EXPECT_EQ("", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, RunTimeTypeLimits<TYPE_LARGEINT>::max_value()));
+        EXPECT_EQ("", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, RunTimeTypeLimits<TYPE_LARGEINT>::min_value()));
     }
 
     // double/float
