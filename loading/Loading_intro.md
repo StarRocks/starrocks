@@ -216,7 +216,7 @@ These two parameters are maximum memory and maximum memory percentage, respectiv
 
 *`load_process_max_memory_limit_percent`
 
-The percentage of the total memory limit for a BE is 80 by default. (The total memory limit `mem_limit` defaults to 80%, indicating the percentage to its physical memory). That is, assuming the physical memory is M, the default import memory limit is `M * 80% * 80%`.
+The percentage of the total memory limit for a BE is 30 by default. (The total memory limit `mem_limit` defaults to 80%, indicating the percentage to its physical memory). That is, assuming the physical memory is M, the default import memory limit is `M * 80% * 30%`.
 
 * `load_process_max_memory_limit_bytes`  is100GB by default.
 

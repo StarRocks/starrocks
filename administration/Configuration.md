@@ -198,7 +198,7 @@ After the service is started, you may adjust the configuration parameters to mee
 |enable_token_check|true|Token check is enabled |
 |enable_prefetch|true|Query prefetching |
 |load_process_max_memory_limit_bytes|107374182400|The maximum amount of memory occupied by all import threads on a single node, 100GB by default |
-|load_process_max_memory_limit_percent|80|The maximum percentage  of the memory occupied by all import threads on a single node |
+|load_process_max_memory_limit_percent|30|The maximum percentage  of the memory occupied by all import threads on a single node |
 |sync_tablet_meta|false|Whether the storage engine is on sync retention to disk. |
 |thrift_rpc_timeout_ms|5000| Timeout of Thrift|
 |txn_commit_rpc_timeout_ms|10000|Number of thread pools routinely imported|
