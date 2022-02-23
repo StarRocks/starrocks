@@ -196,7 +196,7 @@ public:
 
     std::unique_ptr<ColumnVectorBatch> createRowBatch(uint64_t size) const override;
 
-    bool next(ColumnVectorBatch& data) override;
+    bool next(ColumnVectorBatch& data, ReadPosition* pos) override;
     void lazyLoadSkip(uint64_t numValues) override;
     void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) override;
 

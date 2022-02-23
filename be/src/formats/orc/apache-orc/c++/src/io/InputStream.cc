@@ -57,6 +57,21 @@ uint64_t PositionProvider::current() {
     return *position;
 }
 
+PositionProvider& PositionProviderMap::at(uint64_t columnId) {
+    return providers.at(columnId);
+}
+
+void PositionProviderMap::copyFrom(const PositionProviderMap& map) {
+    positions = map.positions;
+    columnIdToPositionIndex = map.columnIdToPositionIndex;
+    providers.clear();
+    for (auto& it : columnIdToPositionIndex) {
+        uint64_t colId = it.first;
+        size_t index = it.second;
+        providers.insert(std::make_pair(colId, PositionProvider(positions[index])));
+    }
+}
+
 SeekableInputStream::~SeekableInputStream() {
     // PASS
 }

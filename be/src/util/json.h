@@ -4,6 +4,7 @@
 #include <ostream>
 #include <string>
 
+#include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -213,6 +214,8 @@ inline std::string to_string(const starrocks::JsonValue& value) {
     return value.to_string_uncheck();
 }
 
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wunused-value")
 template <>
 struct less<starrocks::JsonValue> {
     bool operator()(const starrocks::JsonValue& lhs, const starrocks::JsonValue& rhs) const {
@@ -298,5 +301,7 @@ struct not_equal_to<starrocks::JsonValue> {
         return starrocks::JsonValue::compare(lhs, rhs) != 0;
     }
 };
+
+DIAGNOSTIC_POP
 
 } // namespace std

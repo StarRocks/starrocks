@@ -337,17 +337,40 @@ void RowReaderImpl::loadStripeIndex() {
 
     // obtain row indexes for selected columns
     uint64_t offset = currentStripeInfo.offset();
+
+    static const uint64_t MAX_ONE_READ_ROW_INDEX_SIZE = 1024 * 1024;
+    uint64_t rowIndexSize = currentStripeInfo.indexlength();
+    uint64_t startOffset = offset;
+    // rowIndexBufferData is allocated in rowIndexInputStream
+    std::unique_ptr<SeekableFileInputStream> rowIndexInputStream = nullptr;
+    const char* rowIndexBufferData = nullptr;
+    if (rowIndexSize < MAX_ONE_READ_ROW_INDEX_SIZE) {
+        rowIndexInputStream = std::unique_ptr<SeekableFileInputStream>(new SeekableFileInputStream(
+                contents->stream.get(), startOffset, rowIndexSize, *contents->pool, rowIndexSize));
+        int size = 0;
+        const void* data = nullptr;
+        if (!rowIndexInputStream->Next(&data, &size) || static_cast<uint64_t>(size) != rowIndexSize) {
+            throw ParseError("Failed to read the row index data");
+        }
+        rowIndexBufferData = static_cast<const char*>(data);
+    }
+
     for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {
         const proto::Stream& pbStream = currentStripeFooter.streams(i);
         uint64_t colId = pbStream.column();
         if (selectedColumns[colId] && pbStream.has_kind() &&
             (pbStream.kind() == proto::Stream_Kind_ROW_INDEX ||
              pbStream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
+            std::unique_ptr<SeekableInputStream> inputStream = nullptr;
+            if (rowIndexBufferData) {
+                inputStream = std::unique_ptr<SeekableInputStream>(
+                        new SeekableArrayInputStream(rowIndexBufferData + offset - startOffset, pbStream.length()));
+            } else {
+                inputStream = std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
+                        contents->stream.get(), offset, pbStream.length(), *contents->pool));
+            }
             std::unique_ptr<SeekableInputStream> inStream =
-                    createDecompressor(getCompression(),
-                                       std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
-                                               contents->stream.get(), offset, pbStream.length(), *contents->pool)),
-                                       getCompressionSize(), *contents->pool);
+                    createDecompressor(getCompression(), std::move(inputStream), getCompressionSize(), *contents->pool);
 
             if (pbStream.kind() == proto::Stream_Kind_ROW_INDEX) {
                 proto::RowIndex rowIndex;
@@ -375,25 +398,23 @@ void RowReaderImpl::loadStripeIndex() {
 }
 
 void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
-    // store positions for selected columns
-    std::vector<std::list<uint64_t>> positions;
-    // store position providers for selected colimns
-    std::unordered_map<uint64_t, PositionProvider> positionProviders;
-
+    PositionProviderMap map;
     for (const auto& rowIndexe : rowIndexes) {
         uint64_t colId = rowIndexe.first;
         const proto::RowIndexEntry& entry = rowIndexe.second.entry(static_cast<int32_t>(rowGroupEntryId));
 
         // copy index positions for a specific column
-        positions.emplace_back();
-        auto& position = positions.back();
+        size_t positionIndex = map.positions.size();
+        map.columnIdToPositionIndex[colId] = positionIndex;
+        map.positions.emplace_back();
+        auto& position = map.positions.back();
         for (int pos = 0; pos != entry.positions_size(); ++pos) {
             position.push_back(entry.positions(pos));
         }
-        positionProviders.insert(std::make_pair(colId, PositionProvider(position)));
+        map.providers.insert(std::make_pair(colId, PositionProvider(position)));
     }
 
-    reader->seekToRowGroup(positionProviders);
+    reader->seekToRowGroup(&map);
 }
 
 const FileContents& RowReaderImpl::getFileContents() const {
@@ -965,7 +986,7 @@ void RowReaderImpl::startNextStripe() {
     }
 }
 
-bool RowReaderImpl::next(ColumnVectorBatch& data) {
+bool RowReaderImpl::next(ColumnVectorBatch& data, ReadPosition* pos) {
     if (currentStripe >= lastStripe) {
         data.numElements = 0;
         if (lastStripe > 0) {
@@ -977,6 +998,9 @@ bool RowReaderImpl::next(ColumnVectorBatch& data) {
         return false;
     }
     if (currentRowInStripe == 0) {
+        if (pos != nullptr) {
+            pos->start_new_stripe = true;
+        }
         startNextStripe();
     }
     uint64_t rowsToRead = std::min(static_cast<uint64_t>(data.capacity), rowsInCurrentStripe - currentRowInStripe);
@@ -998,6 +1022,11 @@ bool RowReaderImpl::next(ColumnVectorBatch& data) {
     } else {
         reader->next(data, rowsToRead, nullptr);
     }
+    if (pos != nullptr) {
+        pos->strip_index = currentStripe;
+        pos->num_values = rowsToRead;
+    }
+
     // update row number
     previousRow = firstRowOfStripe[currentStripe] + currentRowInStripe;
     currentRowInStripe += rowsToRead;
@@ -1011,6 +1040,9 @@ bool RowReaderImpl::next(ColumnVectorBatch& data) {
             currentRowInStripe = nextRowToRead;
             if (currentRowInStripe < rowsInCurrentStripe) {
                 seekToRowGroup(static_cast<uint32_t>(currentRowInStripe / footer->rowindexstride()));
+                if (pos != nullptr) {
+                    pos->seek_to_row_group = true;
+                }
             }
         }
     }
@@ -1295,6 +1327,10 @@ std::map<uint32_t, BloomFilterIndex> ReaderImpl::getBloomFilters(uint32_t stripe
 
 RowReader::~RowReader() {
     // PASS
+}
+
+bool RowReader::next(ColumnVectorBatch& cvb) {
+    return this->next(cvb, nullptr);
 }
 
 Reader::~Reader() {
