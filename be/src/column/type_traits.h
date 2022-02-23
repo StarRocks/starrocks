@@ -320,6 +320,14 @@ struct RunTimeTypeLimits<ptype, ArithmeticPTGuard<ptype>> {
     static constexpr value_type max_value() { return std::numeric_limits<value_type>::max(); }
 };
 
+template <>
+struct RunTimeTypeLimits<TYPE_LARGEINT> {
+    using value_type = RunTimeCppType<TYPE_LARGEINT>;
+
+    static constexpr value_type min_value() { return MIN_INT128; }
+    static constexpr value_type max_value() { return MAX_INT128; }
+};
+
 template <PrimitiveType ptype>
 struct RunTimeTypeLimits<ptype, BinaryPTGuard<ptype>> {
     using value_type = RunTimeCppType<ptype>;
