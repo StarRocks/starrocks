@@ -1225,18 +1225,7 @@ public class Catalog {
         LOG.info("get helper nodes: {}", helperNodes);
     }
 
-    private void transferToMasterWithOldType(FrontendNodeType oldType) {
-        feType = FrontendNodeType.MASTER;
-        try {
-            transferToMaster();
-        } catch (Throwable t) {
-            // for any failed reason, set feType to oldType
-            feType = oldType;
-            throw t;
-        }
-    }
-
-    private void transferToMaster() {
+    private void transferToMaster(FrontendNodeType oldType) {
         // stop replayer
         if (replayer != null) {
             replayer.exit();
@@ -1269,52 +1258,61 @@ public class Catalog {
 
         editLog.rollEditLog();
 
-        // Log meta_version
-        int communityMetaVersion = MetaContext.get().getMetaVersion();
-        int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
-        if (communityMetaVersion < FeConstants.meta_version ||
-                starrocksMetaVersion < FeConstants.starrocks_meta_version) {
-            editLog.logMetaVersion(new MetaVersion(FeConstants.meta_version, FeConstants.starrocks_meta_version));
-            MetaContext.get().setMetaVersion(FeConstants.meta_version);
-            MetaContext.get().setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+        // Set the feType to MASTER before writing edit log, because the feType must be Master when writing edit log.
+        // It will be set to the old type if any error happens in the following procedure
+        feType = FrontendNodeType.MASTER;
+        try {
+            // Log meta_version
+            int communityMetaVersion = MetaContext.get().getMetaVersion();
+            int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
+            if (communityMetaVersion < FeConstants.meta_version ||
+                    starrocksMetaVersion < FeConstants.starrocks_meta_version) {
+                editLog.logMetaVersion(new MetaVersion(FeConstants.meta_version, FeConstants.starrocks_meta_version));
+                MetaContext.get().setMetaVersion(FeConstants.meta_version);
+                MetaContext.get().setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+            }
+
+            // Log the first frontend
+            if (isFirstTimeStartUp) {
+                // if isFirstTimeStartUp is true, frontends must contains this Node.
+                Frontend self = frontends.get(nodeName);
+                Preconditions.checkNotNull(self);
+                // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
+                editLog.logAddFirstFrontend(self);
+            }
+
+            if (!isDefaultClusterCreated) {
+                initDefaultCluster();
+            }
+
+            // MUST set master ip before starting checkpoint thread.
+            // because checkpoint thread need this info to select non-master FE to push image
+            this.masterIp = FrontendOptions.getLocalHostAddress();
+            this.masterRpcPort = Config.rpc_port;
+            this.masterHttpPort = Config.http_port;
+            MasterInfo info = new MasterInfo(this.masterIp, this.masterHttpPort, this.masterRpcPort);
+            editLog.logMasterInfo(info);
+
+            // start all daemon threads that only running on MASTER FE
+            startMasterOnlyDaemonThreads();
+            // start other daemon threads that should running on all FE
+            startNonMasterDaemonThreads();
+
+            MetricRepo.init();
+
+            canRead.set(true);
+            isReady.set(true);
+
+            String msg = "master finished to replay journal, can write now.";
+            Util.stdoutWithTime(msg);
+            LOG.info(msg);
+            // for master, there are some new thread pools need to register metric
+            ThreadPoolManager.registerAllThreadPoolMetric();
+        } catch (Throwable t) {
+            LOG.warn("transfer to master failed with error", t);
+            feType = oldType;
+            throw t;
         }
-
-        // Log the first frontend
-        if (isFirstTimeStartUp) {
-            // if isFirstTimeStartUp is true, frontends must contains this Node.
-            Frontend self = frontends.get(nodeName);
-            Preconditions.checkNotNull(self);
-            // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
-            editLog.logAddFirstFrontend(self);
-        }
-
-        if (!isDefaultClusterCreated) {
-            initDefaultCluster();
-        }
-
-        // MUST set master ip before starting checkpoint thread.
-        // because checkpoint thread need this info to select non-master FE to push image
-        this.masterIp = FrontendOptions.getLocalHostAddress();
-        this.masterRpcPort = Config.rpc_port;
-        this.masterHttpPort = Config.http_port;
-        MasterInfo info = new MasterInfo(this.masterIp, this.masterHttpPort, this.masterRpcPort);
-        editLog.logMasterInfo(info);
-
-        // start all daemon threads that only running on MASTER FE
-        startMasterOnlyDaemonThreads();
-        // start other daemon threads that should running on all FE
-        startNonMasterDaemonThreads();
-
-        MetricRepo.init();
-
-        canRead.set(true);
-        isReady.set(true);
-
-        String msg = "master finished to replay journal, can write now.";
-        Util.stdoutWithTime(msg);
-        LOG.info(msg);
-        // for master, there are some new thread pools need to register metric
-        ThreadPoolManager.registerAllThreadPoolMetric();
     }
 
     // start all daemon threads only running on Master
@@ -2433,7 +2431,7 @@ public class Catalog {
                         case INIT: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMasterWithOldType(feType);
+                                    transferToMaster(feType);
                                     break;
                                 }
                                 case FOLLOWER:
@@ -2451,7 +2449,7 @@ public class Catalog {
                         case UNKNOWN: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMasterWithOldType(feType);
+                                    transferToMaster(feType);
                                     break;
                                 }
                                 case FOLLOWER:
@@ -2467,7 +2465,7 @@ public class Catalog {
                         case FOLLOWER: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMasterWithOldType(feType);
+                                    transferToMaster(feType);
                                     break;
                                 }
                                 case UNKNOWN: {
