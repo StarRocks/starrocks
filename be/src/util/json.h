@@ -45,12 +45,16 @@ public:
     JsonValue(JsonValue&& rhs) : binary_(std::move(rhs.binary_)) {}
 
     JsonValue& operator=(const JsonValue& rhs) {
-        binary_ = rhs.binary_;
+        if (this != &rhs) {
+            binary_ = rhs.binary_;
+        }
         return *this;
     }
 
     JsonValue& operator=(JsonValue&& rhs) {
-        binary_ = std::move(rhs.binary_);
+        if (this != &rhs) {
+            binary_ = std::move(rhs.binary_);
+        }
         return *this;
     }
 
