@@ -76,7 +76,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             Optional<ScalarOperator> resultChild2 =
                     Utils.tryDecimalCastConstant((CastOperator) child1, (ConstantOperator) child2);
             return resultChild2
-                    .map(scalarOperator -> new BinaryPredicateOperator(operator.getBinaryType(), castChild, scalarOperator))
+                    .map(scalarOperator -> new BinaryPredicateOperator(operator.getBinaryType(), castChild,
+                            scalarOperator))
                     .orElse(operator);
         }
 
@@ -98,7 +99,16 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         if (parent.isDecimalOfAnyVersion() || child.isDecimalOfAnyVersion() || grandChild.isDecimalOfAnyVersion()) {
             return false;
         }
-        if (parentSlotSize > childSlotSize && grandChildSlotSize > childSlotSize) {
+
+        // decreasing cast cannot be reduced since be use operator not equal
+        // to perform cast from integral to boolean
+        // E.g. cast(cast(10000000000000 as int) as boolean)
+        if (parent.isBoolean() && childSlotSize < grandChildSlotSize) {
+            return false;
+        }
+
+        // cascaded cast cannot be reduced if middle type's size is smaller than two sides
+        if (parentSlotSize > childSlotSize && childSlotSize < grandChildSlotSize) {
             return false;
         }
         PrimitiveType childCompatibleType =
