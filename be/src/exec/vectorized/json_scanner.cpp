@@ -504,7 +504,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
 
             // The columns in JsonReader's chunk are all in NullableColumn type;
             auto column = chunk->get_column_by_slot_id(slot_desc->id());
-            auto col_name = slot_desc->col_name();
+            const auto& col_name = slot_desc->col_name();
 
             try {
                 simdjson::ondemand::value val = row->find_field_unordered(col_name);
@@ -512,7 +512,11 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             } catch (simdjson::simdjson_error& e) {
                 if (col_name == "__op") {
                     // special treatment for __op column, fill default value '0' rather than null
-                    column->append_strings(std::vector{Slice{"0"}});
+                    if (column->is_binary()) {
+                        column->append_strings(std::vector{Slice{"0"}});
+                    } else {
+                        column->append_datum(Datum((uint8_t)0));
+                    }
                 } else {
                     // Column name not found, fill column with null.
                     column->append_nulls(1);
@@ -537,7 +541,11 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             if (i >= jsonpath_size) {
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
-                    column->append_strings(std::vector{Slice{"0"}});
+                    if (column->is_binary()) {
+                        column->append_strings(std::vector{Slice{"0"}});
+                    } else {
+                        column->append_datum(Datum((uint8_t)0));
+                    }
                 } else {
                     column->append_nulls(1);
                 }
@@ -556,7 +564,11 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], val)) {
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
-                    column->append_strings(std::vector{Slice{"0"}});
+                    if (column->is_binary()) {
+                        column->append_strings(std::vector{Slice{"0"}});
+                    } else {
+                        column->append_datum(Datum((uint8_t)0));
+                    }
                 } else {
                     column->append_nulls(1);
                 }
