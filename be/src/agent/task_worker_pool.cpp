@@ -221,8 +221,8 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
                 task_req.__set_recv_time(recv_time);
                 ++it;
             } else {
-                it = tasks->erase(it);
                 failed_task_vec.push_back(*it);
+                it = tasks->erase(it);
             }
         }
     }
