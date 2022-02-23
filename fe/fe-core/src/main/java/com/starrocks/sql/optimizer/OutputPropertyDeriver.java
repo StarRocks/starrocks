@@ -258,22 +258,20 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     private void enforceChildDistribution(DistributionSpec distributionSpec, GroupExpression child,
                                           PhysicalPropertySet childOutputProperty) {
         double childCosts = child.getCost(childOutputProperty);
+        Group childGroup = child.getGroup();
         if (child.getOp() instanceof PhysicalDistributionOperator) {
-            // update child distribution directly
-            PhysicalDistributionOperator rightChildOperator = (PhysicalDistributionOperator) child.getOp();
-            rightChildOperator.setDistributionSpec(distributionSpec);
-            // update child group expression low cost table
-            PhysicalPropertySet newChildOutputProperty = createPropertySetByDistribution(distributionSpec);
+            DistributionProperty newDistributionProperty = new DistributionProperty(distributionSpec);
+            PhysicalPropertySet newOutputProperty = new PhysicalPropertySet(newDistributionProperty);
+            GroupExpression enforcer = newDistributionProperty.appendEnforcers(childGroup);
+            enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, newOutputProperty);
+            context.getMemo().insertEnforceExpression(enforcer, childGroup);
 
-            child.setPropertyWithCost(newChildOutputProperty,
-                    child.getInputProperties(childOutputProperty), childCosts);
-            child.getGroup()
-                    .setBestExpression(child, childCosts, newChildOutputProperty);
+            enforcer.setPropertyWithCost(newOutputProperty, child.getInputProperties(childOutputProperty), childCosts);
+            childGroup.setBestExpression(enforcer, childCosts, newOutputProperty);
+
             if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
-                // record the output/input properties when child group could satisfy this group expression required property
-                child.addValidOutputInputProperties(newChildOutputProperty,
-                        child.getInputProperties(childOutputProperty));
-                child.getGroup().addSatisfyRequiredPropertyGroupExpression(newChildOutputProperty, child);
+                enforcer.addValidOutputInputProperties(newOutputProperty, Lists.newArrayList(PhysicalPropertySet.EMPTY));
+                enforcer.getGroup().addSatisfyRequiredPropertyGroupExpression(newOutputProperty, enforcer);
             }
         } else {
             // add physical distribution operator
