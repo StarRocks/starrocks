@@ -50,27 +50,43 @@ Status BaseCompaction::compact() {
 }
 
 Status BaseCompaction::pick_rowsets_to_compact() {
+    std::vector<RowsetSharedPtr> candidate_rowsets;
     _input_rowsets.clear();
-    _tablet->pick_candicate_rowsets_to_base_compaction(&_input_rowsets);
-    if (_input_rowsets.size() <= 1) {
+    _tablet->pick_candicate_rowsets_to_base_compaction(&candidate_rowsets);
+    if (candidate_rowsets.size() <= 1) {
         return Status::NotFound("base compaction no suitable version error.");
     }
 
-    std::sort(_input_rowsets.begin(), _input_rowsets.end(), Rowset::comparator);
-    RETURN_IF_ERROR(check_version_continuity(_input_rowsets));
-    RETURN_IF_ERROR(_check_rowset_overlapping(_input_rowsets));
+    std::sort(candidate_rowsets.begin(), candidate_rowsets.end(), Rowset::comparator);
+    RETURN_IF_ERROR(check_version_continuity(candidate_rowsets));
+    RETURN_IF_ERROR(_check_rowset_overlapping(candidate_rowsets));
 
-    if (_input_rowsets.size() == 2 && _input_rowsets[0]->end_version() == 1) {
+    if (candidate_rowsets.size() == 2 && candidate_rowsets[0]->end_version() == 1) {
         // the tablet is with rowset: [0-1], [2-y]
         // and [0-1] has no data. in this situation, no need to do base compaction.
         return Status::NotFound("base compaction no suitable version error.");
     }
 
-    // 1. cumulative rowset must reach base_compaction_num_cumulative_deltas threshold
-    if (_input_rowsets.size() > config::base_compaction_num_cumulative_deltas) {
+    std::vector<RowsetSharedPtr> transient_rowsets;
+    size_t compaction_score = 0;
+
+    for (auto& rowset : candidate_rowsets) {
+        if (compaction_score >= config::max_base_compaction_num_singleton_deltas) {
+            // got enough segments
+            break;
+        }
+        compaction_score += rowset->rowset_meta()->get_compaction_score();
+        transient_rowsets.push_back(rowset);
+    }
+
+    if (!transient_rowsets.empty()) {
+        _input_rowsets = transient_rowsets;
+    }
+
+    if (compaction_score >= config::min_base_compaction_num_singleton_deltas) {
         LOG(INFO) << "satisfy the base compaction policy. tablet=" << _tablet->full_name()
                   << ", num_cumulative_rowsets=" << _input_rowsets.size() - 1
-                  << ", base_compaction_num_cumulative_rowsets=" << config::base_compaction_num_cumulative_deltas;
+                  << ", min_base_compaction_num_singleton_deltas=" << config::min_base_compaction_num_singleton_deltas;
         return Status::OK();
     }
 
