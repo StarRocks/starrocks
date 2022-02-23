@@ -66,8 +66,8 @@ const uint32_t PUBLISH_VERSION_MAX_RETRY = 3;
 const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
 
 std::atomic_ulong TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
-std::mutex TaskWorkerPool::_s_task_signatures_lock[TTaskType::type::TASK_TYPE_COUNT];
-std::map<TTaskType::type, std::set<int64_t>> TaskWorkerPool::_s_task_signatures;
+std::mutex TaskWorkerPool::_s_task_signatures_lock[TTaskType::type::NUM_TASK_TYPE];
+std::set<int64_t> TaskWorkerPool::_s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
 FrontendServiceClientCache TaskWorkerPool::_master_service_client_cache;
 
 TaskWorkerPool::TaskWorkerPool(const TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info,
@@ -1259,10 +1259,11 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
     request.__set_backend(worker_pool_this->_backend);
 
     while ((!worker_pool_this->_stopped)) {
-        for (auto& _s_task_signature : _s_task_signatures) {
-            std::lock_guard task_signatures_lock(_s_task_signatures_lock[_s_task_signature.first]);
+
+        for (int i = 0; i < TTaskType::type::NUM_TASK_TYPE; i++) {
+            std::lock_guard task_signatures_lock(_s_task_signatures_lock[i]);
             std::map<TTaskType::type, std::set<int64_t>> one_type_task;
-            one_type_task[_s_task_signature.first] = _s_task_signature.second;
+            one_type_task[static_cast<TTaskType::type>(i)] = _s_task_signatures[i];
             request.__set_tasks(one_type_task);
         }
 

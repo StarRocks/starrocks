@@ -182,7 +182,7 @@ enum TTaskType {
     INSTALL_PLUGIN,
     UNINSTALL_PLUGIN,
     // this use for calculate enum count
-    TASK_TYPE_COUNT
+    NUM_TASK_TYPE
 }
 
 enum TStmtType {
