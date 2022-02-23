@@ -4,7 +4,8 @@
 
 #include <string>
 
-#include "common/status.h"
+#include "common/statusor.h"
+#include "io/random_access_file.h"
 
 namespace starrocks {
 
@@ -26,12 +27,8 @@ public:
     virtual Status get_object(const std::string& bucket_name, const std::string& object_key,
                               const std::string& object_path) = 0;
 
-    virtual Status get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
-                                    size_t length, std::string* object_value, size_t* read_bytes) = 0;
-
-    // `object_value` should already be allocated at least `length` bytes
-    virtual Status get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset,
-                                    size_t length, char* object_value, size_t* read_bytes) = 0;
+    virtual StatusOr<std::unique_ptr<io::RandomAccessFile>> get_object(const std::string& bucket_name,
+                                                                       const std::string& object_key) = 0;
 
     virtual Status exist_object(const std::string& bucket_name, const std::string& object_key) = 0;
 
