@@ -29,7 +29,9 @@ size_t ObjectColumn<T>::byte_size(size_t idx) const {
 
 template <typename T>
 void ObjectColumn<T>::assign(size_t n, size_t idx) {
-    _pool[0] = std::move(_pool[idx]);
+    if (idx != 0) {
+        _pool[0] = std::move(_pool[idx]);
+    }
     _pool.resize(1);
     _pool.reserve(n);
 

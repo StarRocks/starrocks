@@ -294,4 +294,21 @@ PARALLEL_TEST(JsonColumnTest, test_column_builder) {
     }
 }
 
+PARALLEL_TEST(JsonColumnTest, test_assign) {
+    auto column = RunTimeColumnType<TYPE_JSON>::create();
+    column->append(JsonValue::parse("1").value());
+    column->assign(10, 0);
+    ASSERT_EQ(10, column->size());
+    for (int i = 0; i < 10; i++) {
+        const JsonValue* json = column->get_object(i);
+        EXPECT_EQ(JsonValue::parse("1").value(), *json);
+    }
+    column->assign(20, 0);
+    ASSERT_EQ(20, column->size());
+    for (int i = 0; i < 20; i++) {
+        const JsonValue* json = column->get_object(i);
+        EXPECT_EQ(JsonValue::parse("1").value(), *json);
+    }
+}
+
 } // namespace starrocks::vectorized
