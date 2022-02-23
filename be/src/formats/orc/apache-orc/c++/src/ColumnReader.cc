@@ -1095,9 +1095,6 @@ void StructColumnReader::seekToRowGroup(PositionProviderMap* positions) {
         pendingSeekToRowGroupRequest.copyFrom(*positions);
         hasPendingSeekToRowGroupRequest = true;
     }
-    // for (auto& ptr : lazyLoadChildren) {
-    //     ptr->seekToRowGroup(positions);
-    // }
 }
 
 void StructColumnReader::lazyLoadSkip(uint64_t numValues) {
