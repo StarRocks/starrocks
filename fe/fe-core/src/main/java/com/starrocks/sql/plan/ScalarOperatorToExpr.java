@@ -268,7 +268,7 @@ public class ScalarOperatorToExpr {
             if (allConstant) {
                 expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN);
             } else {
-                expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NEW_NOT_IN : TExprOpcode.FILTER_NEW_IN);
+                throw new UnsupportedOperationException("in predicate could only handle constant, " + predicate);
             }
 
             expr.setType(Type.BOOLEAN);
