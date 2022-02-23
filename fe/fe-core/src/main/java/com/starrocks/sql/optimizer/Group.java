@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -40,8 +41,8 @@ public class Group {
 
     private Statistics statistics;
     // confidence statistics record the statistics when group expression has lowest cost,
-    // confidence statistics is the statistics in group with highest confidence
-    private Statistics confidenceStatistics;
+    // confidence statistics is the statistics in group with highest confidence for each physical property
+    private Map<PhysicalPropertySet, Statistics> confidenceStatistics;
     private final Map<PhysicalPropertySet, Pair<Double, GroupExpression>> lowestCostExpressions;
     // GroupExpressions in this Group which could satisfy the required property.
     private final Map<PhysicalPropertySet, Set<GroupExpression>> satisfyRequiredPropertyGroupExpressions;
@@ -57,6 +58,7 @@ public class Group {
         physicalExpressions = Lists.newArrayList();
         lowestCostExpressions = Maps.newHashMap();
         satisfyRequiredPropertyGroupExpressions = Maps.newHashMap();
+        confidenceStatistics = Maps.newHashMap();
     }
 
     public int getId() {
@@ -75,8 +77,12 @@ public class Group {
         return statistics;
     }
 
-    public Statistics getConfidenceStatistics() {
-        return confidenceStatistics;
+    public boolean hasConfidenceStatistic(PhysicalPropertySet physicalPropertySet) {
+        return confidenceStatistics.containsKey(physicalPropertySet);
+    }
+
+    public Statistics getConfidenceStatistic(PhysicalPropertySet physicalPropertySet) {
+        return confidenceStatistics.get(physicalPropertySet);
     }
 
     public void setStatistics(Statistics statistics) {
@@ -113,11 +119,11 @@ public class Group {
         if (lowestCostExpressions.containsKey(physicalPropertySet)) {
             if (lowestCostExpressions.get(physicalPropertySet).first > cost) {
                 lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
-                confidenceStatistics = statistics;
+                confidenceStatistics.put(physicalPropertySet, statistics);
             }
         } else {
             lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
-            confidenceStatistics = statistics;
+            confidenceStatistics.put(physicalPropertySet, statistics);
         }
     }
 
@@ -128,17 +134,19 @@ public class Group {
             if (lowestCostExpressions.get(physicalPropertySet).first > cost) {
                 lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
                 statistics = newStatistics;
-                confidenceStatistics = newStatistics;
+                confidenceStatistics.put(physicalPropertySet, newStatistics);
             }
         } else {
             lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
             statistics = newStatistics;
-            confidenceStatistics = newStatistics;
+            confidenceStatistics.put(physicalPropertySet, newStatistics);
         }
     }
 
     public Set<GroupExpression> getSatisfyRequiredGroupExpressions(PhysicalPropertySet requiredProperty) {
-        return satisfyRequiredPropertyGroupExpressions.get(requiredProperty);
+        Set<GroupExpression> groupExpressions = satisfyRequiredPropertyGroupExpressions.get(requiredProperty);
+        Preconditions.checkState(groupExpressions != null);
+        return groupExpressions;
     }
 
     public void addSatisfyRequiredPropertyGroupExpression(PhysicalPropertySet outputProperty,
@@ -150,7 +158,7 @@ public class Group {
     }
 
     public void addSatisfyRequiredPropertyGroupExpressions(PhysicalPropertySet outputProperty,
-                                                          Set<GroupExpression> groupExpressions) {
+                                                           Set<GroupExpression> groupExpressions) {
         if (!satisfyRequiredPropertyGroupExpressions.containsKey(outputProperty)) {
             satisfyRequiredPropertyGroupExpressions.put(outputProperty, Sets.newLinkedHashSet());
         }
@@ -194,7 +202,8 @@ public class Group {
         for (Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry : other.lowestCostExpressions
                 .entrySet()) {
             setBestExpressionWithStatistics(entry.getValue().second, entry.getValue().first, entry.getKey(),
-                    other.confidenceStatistics != null ? other.confidenceStatistics : other.statistics);
+                    other.hasConfidenceStatistic(entry.getKey()) ? other.getConfidenceStatistic(entry.getKey()) :
+                            other.statistics);
         }
         other.satisfyRequiredPropertyGroupExpressions.forEach(this::addSatisfyRequiredPropertyGroupExpressions);
     }

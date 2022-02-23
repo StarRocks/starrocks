@@ -82,8 +82,8 @@ public class EnumeratePlan {
         OptExpression chooseExpression = OptExpression.create(chooseGroupExpression.getOp(), childPlans);
         // record inputProperties at optExpression, used for planFragment builder to determine join type
         chooseExpression.setRequiredProperties(inputProperties);
-        chooseExpression.setStatistics(group.getConfidenceStatistics() != null ?
-                group.getConfidenceStatistics() :
+        chooseExpression.setStatistics(group.hasConfidenceStatistic(requiredProperty) ?
+                group.getConfidenceStatistic(requiredProperty) :
                 group.getStatistics());
 
         // When build plan fragment, we need the output column of logical property
