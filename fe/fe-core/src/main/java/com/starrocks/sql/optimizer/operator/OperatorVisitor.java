@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
@@ -274,22 +273,18 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, C context) {
-        Preconditions.checkState(false);
         return visitOperator(node, context);
     }
 
     public R visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, C context) {
-        Preconditions.checkState(false);
         return visitOperator(node, context);
     }
 
     public R visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, C context) {
-        Preconditions.checkState(false);
         return visitOperator(node, context);
     }
 
     public R visitPhysicalNoCTE(PhysicalNoCTEOperator node, C context) {
-        Preconditions.checkState(false);
         return visitOperator(node, context);
     }
 

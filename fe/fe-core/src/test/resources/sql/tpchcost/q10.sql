@@ -68,29 +68,31 @@ UNPARTITIONED
 |  <slot 42> : 25: L_EXTENDEDPRICE * 1.0 - 26: L_DISCOUNT
 |
 13:HASH JOIN
-|  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
-|  colocate: false, reason:
-|  equal join conjunct: 1: C_CUSTKEY = 11: O_CUSTKEY
-|
-|----12:EXCHANGE
-|
-4:Project
-|  <slot 1> : 1: C_CUSTKEY
-|  <slot 2> : 2: C_NAME
-|  <slot 3> : 3: C_ADDRESS
-|  <slot 5> : 5: C_PHONE
-|  <slot 6> : 6: C_ACCTBAL
-|  <slot 8> : 8: C_COMMENT
-|  <slot 38> : 38: N_NAME
-|
-3:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 4: C_NATIONKEY = 37: N_NATIONKEY
 |
-|----2:EXCHANGE
+|----12:EXCHANGE
+|
+10:Project
+|  <slot 1> : 1: C_CUSTKEY
+|  <slot 2> : 2: C_NAME
+|  <slot 3> : 3: C_ADDRESS
+|  <slot 4> : 4: C_NATIONKEY
+|  <slot 5> : 5: C_PHONE
+|  <slot 6> : 6: C_ACCTBAL
+|  <slot 8> : 8: C_COMMENT
+|  <slot 25> : 25: L_EXTENDEDPRICE
+|  <slot 26> : 26: L_DISCOUNT
+|
+9:HASH JOIN
+|  join op: INNER JOIN (BUCKET_SHUFFLE)
+|  hash predicates:
+|  colocate: false, reason:
+|  equal join conjunct: 1: C_CUSTKEY = 11: O_CUSTKEY
+|
+|----8:EXCHANGE
 |
 0:OlapScanNode
 TABLE: customer
@@ -109,27 +111,46 @@ PARTITION: RANDOM
 
 STREAM DATA SINK
 EXCHANGE ID: 12
+UNPARTITIONED
+
+11:OlapScanNode
+TABLE: nation
+PREAGGREGATION: ON
+partitions=1/1
+rollup: nation
+tabletRatio=1/1
+tabletList=10185
+cardinality=25
+avgRowSize=29.0
+numNodes=0
+
+PLAN FRAGMENT 3
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 08
 BUCKET_SHFFULE_HASH_PARTITIONED: 11: O_CUSTKEY
 
-11:Project
+7:Project
 |  <slot 11> : 11: O_CUSTKEY
 |  <slot 25> : 25: L_EXTENDEDPRICE
 |  <slot 26> : 26: L_DISCOUNT
 |
-10:HASH JOIN
+6:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 20: L_ORDERKEY = 10: O_ORDERKEY
 |
-|----9:EXCHANGE
+|----5:EXCHANGE
 |
-6:Project
+2:Project
 |  <slot 20> : 20: L_ORDERKEY
 |  <slot 25> : 25: L_EXTENDEDPRICE
 |  <slot 26> : 26: L_DISCOUNT
 |
-5:OlapScanNode
+1:OlapScanNode
 TABLE: lineitem
 PREAGGREGATION: ON
 PREDICATES: 28: L_RETURNFLAG = 'R'
@@ -141,19 +162,19 @@ cardinality=200000000
 avgRowSize=25.0
 numNodes=0
 
-PLAN FRAGMENT 3
+PLAN FRAGMENT 4
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 09
+EXCHANGE ID: 05
 BUCKET_SHFFULE_HASH_PARTITIONED: 10: O_ORDERKEY
 
-8:Project
+4:Project
 |  <slot 10> : 10: O_ORDERKEY
 |  <slot 11> : 11: O_CUSTKEY
 |
-7:OlapScanNode
+3:OlapScanNode
 TABLE: orders
 PREAGGREGATION: ON
 PREDICATES: 14: O_ORDERDATE >= '1994-05-01', 14: O_ORDERDATE < '1994-08-01'
@@ -163,25 +184,6 @@ tabletRatio=10/10
 tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=5738046
 avgRowSize=20.0
-numNodes=0
-
-PLAN FRAGMENT 4
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 02
-UNPARTITIONED
-
-1:OlapScanNode
-TABLE: nation
-PREAGGREGATION: ON
-partitions=1/1
-rollup: nation
-tabletRatio=1/1
-tabletList=10185
-cardinality=25
-avgRowSize=29.0
 numNodes=0
 [end]
 

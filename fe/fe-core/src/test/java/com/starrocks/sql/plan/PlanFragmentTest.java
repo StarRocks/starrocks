@@ -64,7 +64,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
-        connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("colocate: false"));
@@ -74,7 +73,6 @@ public class PlanFragmentTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("colocate: true"));
         Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (COLOCATE)"));
-        connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 
     @Test
@@ -864,13 +862,13 @@ public class PlanFragmentTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         String queryStr = "select avg(v1), count(distinct v1) from t0 group by v1";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  3:AGGREGATE (update finalize)\n"
-                + "  |  output: avg(4: avg), count(1: v1)\n"
-                + "  |  group by: 1: v1\n"
-                + "  |  \n"
-                + "  2:AGGREGATE (merge serialize)\n"
-                + "  |  output: avg(4: avg)\n"
-                + "  |  group by: 1: v1"));
+        Assert.assertTrue(explainString.contains(" 4:AGGREGATE (update finalize)\n" +
+                "  |  output: avg(4: avg), count(1: v1)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  output: avg(4: avg)\n" +
+                "  |  group by: 1: v1"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -1424,6 +1422,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select v1, v2 from t0 union all " +
                 "select v1, v2 from t0 limit 1 ";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("    EXCHANGE ID: 02\n" +
                 "    UNPARTITIONED"));
         Assert.assertTrue(plan.contains("    EXCHANGE ID: 05\n" +
@@ -1567,6 +1566,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testJoinLimitLeft() throws Exception {
         String sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 limit 10";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
@@ -1679,13 +1679,16 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testUsingJoin() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "select * from t0 as x0 join t0 as x1 using(v1);";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  2:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (COLOCATE)\n"
                 + "  |  hash predicates:\n"
                 + "  |  colocate: true\n"
                 + "  |  equal join conjunct: 1: v1 = 4: v1"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test(expected = SemanticException.class)
@@ -1707,6 +1710,7 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testColocateHint() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "select * from t0 as x0 inner join t0 as x1 on x0.v1 = x1.v1;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  join op: INNER JOIN (COLOCATE)\n"
@@ -1724,6 +1728,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  |  join op: INNER JOIN (COLOCATE)\n"
                 + "  |  hash predicates:\n"
                 + "  |  colocate: true"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -2794,6 +2799,7 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testAntiJoinOnFalseConstantPredicate() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "select join2.id from join1 RIGHT ANTI JOIN join2 on join1.id = join2.id" +
                 " and 1 > 2 group by join2.id" +
                 " union select join2.id from join1 RIGHT ANTI JOIN join2 on join1.id = join2.id " +
@@ -2806,6 +2812,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  equal join conjunct: 5: id = 2: id"));
         Assert.assertTrue(plan.contains("  2:EMPTYSET\n"));
         Assert.assertTrue(plan.contains("  8:EMPTYSET\n"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -2905,8 +2912,10 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testPreAggregateForCrossJoin() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "select join1.id from join1, join2 group by join1.id";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
 
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
@@ -2924,10 +2933,12 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
                 "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
     public void testPreAggregationWithJoin() throws Exception {
+        FeConstants.runningUnitTest = true;
         // check left agg table with pre-aggregation
         String sql = "select k2, sum(k9) from baseall join join2 on k1 = id group by k2";
         String plan = getFragmentPlan(sql);
@@ -2965,6 +2976,7 @@ public class PlanFragmentTest extends PlanTestBase {
         sql =
                 "select t1.k2, sum(t1.k9) from baseall t1 join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
         plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("6:OlapScanNode\n" +
                 "  |       TABLE: baseall\n" +
                 "  |       PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
@@ -3010,6 +3022,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
                 "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -3106,15 +3119,15 @@ public class PlanFragmentTest extends PlanTestBase {
                         "  |  join op: INNER JOIN (BROADCAST)\n" +
                         "  |  hash predicates:\n" +
                         "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 5: id = 2: id",
+                        "  |  equal join conjunct: 2: id = 5: id",
                 "  0:OlapScanNode\n" +
-                        "     TABLE: join2\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: id > 1",
-                "  1:OlapScanNode\n" +
                         "     TABLE: join1\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 2: id > 1");
+                        "     PREDICATES: 2: id > 1",
+                "  1:OlapScanNode\n" +
+                        "     TABLE: join2\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 5: id > 1");
 
         // test having aggregate column
         sql = "select count(*) as count from join1 left join join2 on join1.id = join2.id\n" +
@@ -3508,6 +3521,7 @@ public class PlanFragmentTest extends PlanTestBase {
     @Test
     public void testSelfColocateJoin() throws Exception {
         // single partition
+        FeConstants.runningUnitTest = true;
         String queryStr = "select * from test.jointest t1, test.jointest t2 where t1.k1 = t2.k1";
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("colocate: true"));
@@ -3515,7 +3529,8 @@ public class PlanFragmentTest extends PlanTestBase {
         // multi partition
         queryStr = "select * from test.dynamic_partition t1, test.dynamic_partition t2 where t1.k1 = t2.k1";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assert.assertTrue(explainString.contains("colocate: false"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -3688,6 +3703,7 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testMultiNotExistPredicatePushDown() throws Exception {
+        FeConstants.runningUnitTest = true;
         connectContext.setDatabase("default_cluster:test");
 
         String sql =
@@ -3712,6 +3728,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |       TABLE: join1\n" +
                 "  |       PREAGGREGATION: ON\n" +
                 "  |       PREDICATES: 1: dt > 1"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -3768,16 +3785,19 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testMultiCountDistinctType() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "select count(distinct t1a,t1b) from test_all_type";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)\n" +
                 "  |  aggregate: count[(if[(1: t1a IS NULL, NULL, [2: t1b, SMALLINT, true]); args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; result nullable: true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false]"));
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)\n" +
                 "  |  aggregate: count[([11: count, BIGINT, false]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false]"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
     public void testMultiCountDistinctAggPhase() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "select count(distinct t1a,t1b), avg(t1c) from test_all_type";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains(" 2:AGGREGATE (update serialize)\n" +
@@ -3785,6 +3805,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(" 1:AGGREGATE (update serialize)\n" +
                 "  |  aggregate: avg[([3: t1c, INT, true]); args: INT; result: VARCHAR; args nullable: true; result nullable: true]\n" +
                 "  |  group by: [1: t1a, VARCHAR, true], [2: t1b, SMALLINT, true]"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -3828,6 +3849,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "FROM lineitem JOIN [shuffle] orders o1 ON l_orderkey = o1.o_orderkey\n" +
                 "JOIN [shuffle] orders o2 ON l_orderkey = o2.o_orderkey";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("join op: INNER JOIN (BUCKET_SHUFFLE(S))"));
     }
 
@@ -4105,39 +4127,40 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testOuterJoinBucketShuffle() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "SELECT DISTINCT t0.v1 FROM t0 RIGHT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  6:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(plan.contains(" 5:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 1: v1\n" +
                 "  |  \n" +
-                "  5:Project\n" +
+                "  4:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  \n" +
-                "  4:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
-                "  |  hash predicates:"));
+                "  3:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)"));
 
         sql = "SELECT DISTINCT t0.v1 FROM t0 FULL JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  4:HASH JOIN\n" +
-                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+        Assert.assertTrue(plan.contains("3:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  \n" +
-                "  |----3:EXCHANGE\n" +
+                "  |----2:EXCHANGE\n" +
                 "  |    \n" +
-                "  1:EXCHANGE\n"));
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
 
         sql = "SELECT DISTINCT t1.v4 FROM t0 LEFT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
+        Assert.assertTrue(plan.contains("7:AGGREGATE (merge finalize)\n" +
                 "  |  group by: 4: v4\n" +
                 "  |  \n" +
                 "  6:EXCHANGE\n" +
                 "\n" +
-                "PLAN FRAGMENT 1\n" +
+                "PLAN FRAGMENT 2\n" +
                 " OUTPUT EXPRS:\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
@@ -4153,7 +4176,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  <slot 4> : 4: v4\n" +
                 "  |  \n" +
                 "  3:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BROADCAST)"));
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -4443,9 +4467,11 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testColocateCoverReplicate() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "select * from join1 join join1 as xx on join1.id = xx.id;";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  |  join op: INNER JOIN (COLOCATE)\n"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -4710,18 +4736,17 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem";
         String plan = getFragmentPlan(sql);
         // check use 4 stage agg plan
-        Assert.assertTrue(plan.contains("5:AGGREGATE (merge finalize)\n" +
+        Assert.assertTrue(plan.contains("6:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(18: count)"));
-        Assert.assertTrue(plan.contains("3:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(plan.contains("4:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  2:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE\n" +
-                "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
+                "  3:AGGREGATE (merge serialize)\n" +
                 "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE"));
+        System.out.println(" 1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE");
 
         sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem group by L_PARTKEY";
         plan = getFragmentPlan(sql);
@@ -4778,16 +4803,15 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem";
         String plan = getFragmentPlan(sql);
         // check use 4 stage agg plan
-        Assert.assertTrue(plan.contains("5:AGGREGATE (merge finalize)\n" +
+        Assert.assertTrue(plan.contains("6:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(18: count)"));
-        Assert.assertTrue(plan.contains(" 3:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(plan.contains("4:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  2:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE\n" +
-                "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE"));
+        Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE"));
 
@@ -5080,6 +5104,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  and t0.v1 = j2.v4\n" +
                 "  and t0.v2 = j2.v5;";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  9:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (PARTITIONED)"));
         Assert.assertTrue(plan.contains("  6:HASH JOIN\n" +

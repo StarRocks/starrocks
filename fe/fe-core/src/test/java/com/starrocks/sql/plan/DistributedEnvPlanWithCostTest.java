@@ -591,7 +591,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    revenue desc limit 20;";
         String plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("11:Project\n" +
+        Assert.assertTrue(plan.contains("7:Project\n" +
                 "  |  output columns:\n" +
                 "  |  11 <-> [11: O_CUSTKEY, INT, false]\n" +
                 "  |  25 <-> [25: L_EXTENDEDPRICE, DOUBLE, false]\n" +
@@ -602,11 +602,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE\n" +
                 "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE\n" +
                 "  |  \n" +
-                "  10:HASH JOIN\n" +
+                "  6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [20: L_ORDERKEY, INT, false] = [10: O_ORDERKEY, INT, false]\n" +
                 "  |  build runtime filters:\n" +
-                "  |  - filter_id = 1, build_expr = (10: O_ORDERKEY), remote = false\n" +
+                "  |  - filter_id = 0, build_expr = (10: O_ORDERKEY), remote = false\n" +
                 "  |  output columns: 11, 25, 26\n" +
                 "  |  cardinality: 7650728\n" +
                 "  |  column statistics: \n" +
@@ -645,6 +645,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  cardinality: 1"));
     }
 
+    // TODO(ywb): require any type property could consider parent required property
+    //          join1
+    //         /    \
+    //      join2
+    //    /(any) \(broadcast)
+    // Such any type property could prefer choose group expression which is could satisfy the join1 required property
     @Test
     public void testEvalPredicateCardinality() throws Exception {
         String sql = "select\n" +
@@ -665,13 +671,13 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
 
         // eval predicate cardinality in scan node
-        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+        Assert.assertTrue(plan.contains("4:OlapScanNode\n" +
                 "     table: nation, rollup: nation\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
                 "     partitionsRatio=1/1, tabletsRatio=1/1\n"));
         // eval predicate cardinality in join node
-        Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
+        Assert.assertTrue(plan.contains("6:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
                 "  |  cardinality: 2"));
