@@ -97,9 +97,16 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
         }
 
         JsonValue value;
+        bool overflow = false;
         if constexpr (pt_is_integer<FromType>) {
+            constexpr int64_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
+            constexpr int64_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
+            overflow = viewer.value(row) < min || viewer.value(row) > max;
             value = JsonValue::from_int(viewer.value(row));
         } else if constexpr (pt_is_float<FromType>) {
+            constexpr double min = RunTimeTypeLimits<TYPE_DOUBLE>::min_value();
+            constexpr double max = RunTimeTypeLimits<TYPE_DOUBLE>::max_value();
+            overflow = viewer.value(row) < min || viewer.value(row) > max;
             value = JsonValue::from_double(viewer.value(row));
         } else if constexpr (pt_is_boolean<FromType>) {
             value = JsonValue::from_bool(viewer.value(row));
@@ -108,10 +115,10 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
         } else {
             CHECK(false) << "not supported type " << FromType;
         }
-        if (!value.is_null()) {
-            builder.append(std::move(value));
-        } else {
+        if (overflow || value.is_null()) {
             builder.append_null();
+        } else {
+            builder.append(std::move(value));
         }
     }
 
@@ -130,24 +137,29 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
         }
 
         JsonValue* json = viewer.value(row);
-        if constexpr (pt_is_integer<ToType>) {
-            auto res = json->get_int();
-            if (res.ok()) {
-                builder.append(res.value());
+        if constexpr (pt_is_arithmetic<ToType>) {
+            constexpr auto min = RunTimeTypeLimits<ToType>::min_value();
+            constexpr auto max = RunTimeTypeLimits<ToType>::max_value();
+            RunTimeCppType<ToType> cpp_value{};
+            bool ok = true;
+            if constexpr (pt_is_integer<ToType>) {
+                auto res = json->get_int();
+                ok = res.ok() && min <= res.value() && res.value() <= max;
+                cpp_value = ok ? res.value() : cpp_value;
+            } else if constexpr (pt_is_float<ToType>) {
+                auto res = json->get_double();
+                ok = res.ok() && min <= res.value() && res.value() <= max;
+                cpp_value = ok ? res.value() : cpp_value;
+            } else if constexpr (pt_is_boolean<ToType>) {
+                auto res = json->get_bool();
+                ok = res.ok();
+                cpp_value = ok ? res.value() : cpp_value;
             } else {
-                builder.append_null();
+                CHECK(false) << "unreachable type " << ToType;
+                __builtin_unreachable();
             }
-        } else if constexpr (pt_is_float<ToType>) {
-            auto res = json->get_double();
-            if (res.ok()) {
-                builder.append(res.value());
-            } else {
-                builder.append_null();
-            }
-        } else if constexpr (pt_is_boolean<ToType>) {
-            auto res = json->get_bool();
-            if (res.ok()) {
-                builder.append(res.value());
+            if (ok) {
+                builder.append(cpp_value);
             } else {
                 builder.append_null();
             }
@@ -171,7 +183,7 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
             }
         } else {
             DCHECK(false) << "not supported type " << ToType;
-            builder->append_null();
+            builder.append_null();
         }
     }
 
