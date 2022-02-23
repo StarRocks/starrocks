@@ -9,9 +9,11 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -124,4 +126,38 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
 
         return predicate;
     }
+
+    /**
+     * Rewrite column ref into comparison predicate *
+     * Before
+     * example:
+     * IN
+     * / |  \
+     * left 1  a  b
+     * After rule:
+     * left = 1 OR left = a OR left = b
+     */
+    @Override
+    public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        List<ScalarOperator> rhs = predicate.getChildren().subList(1, predicate.getChildren().size());
+        if (rhs.stream().allMatch(ScalarOperator::isConstant)) {
+            return predicate;
+        }
+
+        List<ScalarOperator> result = new ArrayList<>();
+        ScalarOperator lhs = predicate.getChild(0);
+        boolean isIn = !predicate.isNotIn();
+
+        for (ScalarOperator child : predicate.getChildren().subList(1, predicate.getChildren().size())) {
+            BinaryPredicateOperator newOp;
+            if (isIn) {
+                newOp = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, lhs, child);
+            } else {
+                newOp = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.NE, lhs, child);
+            }
+            result.add(newOp);
+        }
+        return isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
+    }
+
 }
