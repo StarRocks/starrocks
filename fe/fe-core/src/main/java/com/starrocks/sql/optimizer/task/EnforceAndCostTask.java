@@ -131,8 +131,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
                 childrenBestExprList.add(childBestExpr);
                 // Get the output properties of children
-                PhysicalPropertySet childOutputProperty =
-                        childBestExpr.getOutputProperty(requiredProperty);
+                PhysicalPropertySet childOutputProperty = childBestExpr.getOutputProperty(requiredProperty);
                 childrenOutputProperties.add(childOutputProperty);
                 // Change child required property to child output property
                 requiredProperties.set(curChildIndex, childOutputProperty);
