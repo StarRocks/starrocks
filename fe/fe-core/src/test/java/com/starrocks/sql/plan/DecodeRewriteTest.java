@@ -386,6 +386,7 @@ public class DecodeRewriteTest extends PlanTestBase {
 
     @Test
     public void testDecodeNodeRewrite13() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql;
         String plan;
         // case join:
@@ -437,6 +438,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <slot 19> : coalesce(3: S_ADDRESS, CAST(4: S_NATIONKEY AS VARCHAR))\n" +
                 "  |  <slot 21> : 21: P_MFGR\n" +
                 "  |  <slot 22> : upper(21: P_MFGR)"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -590,6 +592,7 @@ public class DecodeRewriteTest extends PlanTestBase {
 
     @Test
     public void testCountDistinctMultiColumns() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "select count(distinct S_SUPPKEY, S_COMMENT) from supplier";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("2:Decode\n" +
@@ -604,6 +607,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <dict id 11> : <string id 7>"));
         Assert.assertTrue(plan.contains(" 5:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(3 IS NULL, NULL, 7))"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test

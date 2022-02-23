@@ -2,6 +2,9 @@
 
 package com.starrocks.sql.optimizer.base;
 
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.ColocateTableIndex;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -10,6 +13,11 @@ public class HashDistributionSpec extends DistributionSpec {
 
     public HashDistributionSpec(HashDistributionDesc distributionDesc) {
         super(DistributionType.SHUFFLE);
+        this.hashDistributionDesc = distributionDesc;
+    }
+
+    public HashDistributionSpec(HashDistributionDesc distributionDesc, PropertyInfo propertyInfo) {
+        super(DistributionType.SHUFFLE, propertyInfo);
         this.hashDistributionDesc = distributionDesc;
     }
 
@@ -27,6 +35,33 @@ public class HashDistributionSpec extends DistributionSpec {
         }
 
         HashDistributionSpec other = (HashDistributionSpec) spec;
+        HashDistributionDesc.SourceType thisSourceType = hashDistributionDesc.getSourceType();
+        HashDistributionDesc.SourceType otherSourceType = other.hashDistributionDesc.getSourceType();
+        // shuffle_local may satisfy shuffle_agg or shuffle_join
+        if (!thisSourceType.equals(otherSourceType) &&
+                thisSourceType != HashDistributionDesc.SourceType.LOCAL) {
+            return false;
+        }
+        // check shuffle_local PropertyInfo
+        if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
+            ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+            long tableId = propertyInfo.tableId;
+            boolean satisfyColocate = (colocateIndex.isColocateTable(tableId) &&
+                    !colocateIndex.isGroupUnstable(colocateIndex.getGroup(tableId)))
+                    || propertyInfo.isSinglePartition();
+            if (!satisfyColocate) {
+                return false;
+            }
+        }
+        // Left outer join will cause right table produce NULL in different node, also right outer join
+        if (thisSourceType == HashDistributionDesc.SourceType.LOCAL &&
+                otherSourceType == HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+            ColumnRefSet otherColumns = new ColumnRefSet();
+            other.hashDistributionDesc.getColumns().forEach(otherColumns::union);
+            if (propertyInfo.nullableColumns.isIntersect(otherColumns)) {
+                return false;
+            }
+        }
         return hashDistributionDesc.isSatisfy(other.hashDistributionDesc);
     }
 
