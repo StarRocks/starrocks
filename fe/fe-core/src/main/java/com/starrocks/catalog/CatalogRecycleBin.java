@@ -317,10 +317,12 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     public synchronized void replayEraseTable(long tableId) {
         Map<Long, RecycleTableInfo> column = idToTable.column(tableId);
         for (Long dbId : column.keySet()) {
-            RecycleTableInfo tableInfo = idToTable.column(dbId).remove(tableId);
-            Table table = tableInfo.getTable();
-            if (table.getType() == TableType.OLAP && !Catalog.isCheckpointThread()) {
-                Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, true);
+            RecycleTableInfo tableInfo = idToTable.remove(dbId, tableId);
+            if (tableInfo != null) {
+                Table table = tableInfo.getTable();
+                if (table.getType() == TableType.OLAP && !Catalog.isCheckpointThread()) {
+                    Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, true);
+                }
             }
         }
         idToRecycleTime.remove(tableId);
