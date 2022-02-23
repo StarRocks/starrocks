@@ -34,7 +34,6 @@ import com.starrocks.rewrite.FEFunction;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -115,6 +114,9 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator dateFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
         String format = fmtLiteral.getVarchar();
+        if (format.isEmpty()) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
         // unix style
         if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
             DateTimeFormatterBuilder builder = unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
@@ -395,14 +397,6 @@ public class ScalarOperatorFunctions {
         }
 
         return createDecimalConstant(first.getDecimal().remainder(second.getDecimal()));
-    }
-
-    @FEFunction(name = "mod", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
-    public static ConstantOperator modLargeInt(ConstantOperator first, ConstantOperator second) {
-        if (second.getLargeInt().compareTo(BigInteger.ZERO) == 0) {
-            return ConstantOperator.createNull(Type.LARGEINT);
-        }
-        return ConstantOperator.createLargeInt(first.getLargeInt().mod(second.getLargeInt()));
     }
 
     @FEFunction(name = "concat", argTypes = {"VARCHAR"}, returnType = "VARCHAR")
