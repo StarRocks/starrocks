@@ -1260,12 +1260,10 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
 
     while ((!worker_pool_this->_stopped)) {
         for (auto& _s_task_signature : _s_task_signatures) {
-            {
-                std::lock_guard task_signatures_lock(_s_task_signatures_lock[_s_task_signature.first]);
-                std::map<TTaskType::type, std::set<int64_t>> one_type_task;
-                one_type_task[_s_task_signature.first] = _s_task_signature.second;
-                request.__set_tasks(one_type_task);
-            }
+            std::lock_guard task_signatures_lock(_s_task_signatures_lock[_s_task_signature.first]);
+            std::map<TTaskType::type, std::set<int64_t>> one_type_task;
+            one_type_task[_s_task_signature.first] = _s_task_signature.second;
+            request.__set_tasks(one_type_task);
         }
 
         StarRocksMetrics::instance()->report_task_requests_total.increment(1);
