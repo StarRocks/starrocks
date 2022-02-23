@@ -21,6 +21,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Preconditions;
 import com.sleepycat.je.rep.ReplicaWriteException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
@@ -855,6 +856,9 @@ public class EditLog {
         }
 
         long start = System.currentTimeMillis();
+
+        Preconditions.checkState(Catalog.getCurrentCatalog().isMaster(),
+                "non-master fe can not write bdb log");
 
         try {
             journal.write(op, writable);
