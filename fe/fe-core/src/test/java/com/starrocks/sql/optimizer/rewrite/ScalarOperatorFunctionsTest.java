@@ -579,11 +579,6 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
-    public void modLargeInt() {
-        assertEquals("0", ScalarOperatorFunctions.modLargeInt(O_LI_100, O_LI_100).getLargeInt().toString());
-    }
-
-    @Test
     public void concat() {
         ConstantOperator[] arg = {ConstantOperator.createVarchar("1"),
                 ConstantOperator.createVarchar("2"),

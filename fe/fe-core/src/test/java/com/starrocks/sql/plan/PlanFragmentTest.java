@@ -5809,4 +5809,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "1: c0 != 0, 1: c0 != 2: c1, 1: c0 != 3: c2");
     }
 
+    @Test
+    public void testLargeIntMod() throws Exception {
+        String sql = "select -123 % 100000000000000000000000000000000000";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("     constant exprs: \n" +
+                "         -123 % 100000000000000000000000000000000000"));
+    }
 }

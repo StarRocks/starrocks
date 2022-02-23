@@ -811,7 +811,6 @@ public class PlanTestBase {
     public String getFragmentPlan(String sql) throws Exception {
         String s= UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
-        System.out.println(s);
         return s;
     }
 
