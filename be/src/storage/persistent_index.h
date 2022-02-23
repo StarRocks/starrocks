@@ -209,6 +209,8 @@ private:
 
     bool _load_snapshot(phmap::BinaryInputArchive& ar_in);
 
+    Status _delete_expired_index_file(const EditVersion& version);
+
     // batch append wal
     // |n|: size of key/value array
     // |keys|: key array as raw buffer

@@ -766,6 +766,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
 
     // TODO: there may be expired l0 index files in the `_path` directory
     // and they should be deleted to save disk usage
+    RETURN_IF_ERROR(_delete_expired_index_file(start_version));
     return Status::OK();
 }
 
@@ -968,6 +969,26 @@ bool PersistentIndex::_load_snapshot(phmap::BinaryInputArchive& ar) {
         return false;
     }
     return _l0->load_snapshot(ar);
+}
+
+Status PersistentIndex::_delete_expired_index_file(const EditVersion& version) {
+    std::string file_name = strings::Substitute("index.l0.$0.$1", version.major(), version.minor());
+    std::string prefix("index.l0");
+    std::string dir = _path;
+    auto cb = [&](const char* name) -> bool {
+        std::string full(name);
+        if (full.compare(0, prefix.length(), prefix) == 0 && full.compare(file_name) != 0) {
+            std::string path = dir + "/" + name;
+            VLOG(1) << "delete expired index file " << path;
+            Status st = Env::Default()->delete_file(path);
+            if (!st.ok()) {
+                LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is " << st.to_string();
+                return false;
+            }
+        }
+        return true;
+    };
+    return Env::Default()->iterate_dir(_path, cb);
 }
 
 } // namespace starrocks

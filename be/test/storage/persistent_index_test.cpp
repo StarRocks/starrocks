@@ -162,7 +162,8 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
 
         fs::BlockManager* block_mgr = fs::fs_util::block_manager();
         std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions wblock_opts({kIndexFile});
+        fs::CreateBlockOptions wblock_opts({"./ut_dir/persistent_index_test/index.l0.1.0"});
+        wblock_opts.mode = Env::MUST_EXIST;
         ASSERT_TRUE((block_mgr->create_block(wblock_opts, &wblock)).ok());
         ASSERT_TRUE(wblock->append(fixed_buf).ok());
         wblock->close();
@@ -209,7 +210,8 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
             ASSERT_EQ(values[i], get_values[i]);
         }
     }
-    //FileUtils::remove_all(kPersistentIndexDir);
+
+    FileUtils::remove_all(kPersistentIndexDir);
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
