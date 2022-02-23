@@ -25,8 +25,11 @@ constexpr size_t bucket_per_page = 16;
 constexpr size_t shard_max = 1 << 16;
 constexpr size_t pack_size = 16;
 constexpr size_t page_pack_limit = (page_size - page_header_size) / pack_size;
+constexpr size_t bucket_size_max = 256;
 constexpr uint64_t seed0 = 12980785309524476958ULL;
 constexpr uint64_t seed1 = 9110941936030554525ULL;
+
+const char* const index_file_magic = "IDX1";
 
 using KVPairPtr = const uint8_t*;
 
@@ -72,6 +75,12 @@ struct FixedKeyHash {
         return ret;
     }
 };
+
+uint64_t key_index_hash(const void* data, size_t len) {
+    uint64_t ret;
+    murmur_hash3_x64_64(data, len, seed0, &ret);
+    return ret;
+}
 
 static std::tuple<size_t, size_t> estimate_nshard_and_npage(size_t kv_size, size_t size, size_t usage_percent) {
     size_t usage = size * kv_size;
@@ -306,7 +315,7 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
                                                                            const std::vector<KVPairPtr>& kv_ptrs,
                                                                            size_t npage_hint) {
     size_t npage = npage_hint;
-    size_t bucket_size_max = std::min(256UL, (page_size - page_header_size) / (kv_size + 1));
+    size_t bucket_size_limit = std::min(bucket_size_max, (page_size - page_header_size) / (kv_size + 1));
     size_t nbucket = npage * bucket_per_page;
     std::vector<uint8_t> bucket_sizes(nbucket);
     std::vector<std::pair<std::vector<KVPairPtr>, std::vector<uint8_t>>> bucket_kv_ptrs_tags(nbucket);
@@ -322,7 +331,7 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
         auto bucket = h.bucket();
         auto bid = page * bucket_per_page + bucket;
         auto& sz = bucket_sizes[bid];
-        if (sz == bucket_size_max) {
+        if (sz == bucket_size_limit) {
             // TODO: increase npage and retry
             return Status::InternalError("bucket size limit exceeded");
         }
@@ -406,9 +415,11 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
     return std::move(ret);
 }
 
-Status write_immutable_index(size_t kv_size, const std::vector<std::vector<IndexHash>>& hashes_by_shard,
+Status write_immutable_index(size_t key_size, size_t value_size,
+                             const std::vector<std::vector<IndexHash>>& hashes_by_shard,
                              const std::vector<std::vector<KVPairPtr>>& kv_ptrs_by_shard, size_t npage_hint,
                              const EditVersion& version, fs::WritableBlock& wb) {
+    size_t kv_size = key_size + value_size;
     ImmutableIndexMetaPB meta;
     size_t total = 0;
     size_t total_moved = 0;
@@ -438,6 +449,8 @@ Status write_immutable_index(size_t kv_size, const std::vector<std::vector<Index
             kv_size * total * 1000 / total_bytes / 1000.0);
     version.to_pb(meta.mutable_version());
     meta.set_size(total);
+    meta.set_fixed_key_size(key_size);
+    meta.set_fixed_value_size(value_size);
     std::string footer;
     if (!meta.SerializeToString(&footer)) {
         return Status::InternalError("ImmutableIndexMetaPB::SerializeToString failed");
@@ -445,6 +458,7 @@ Status write_immutable_index(size_t kv_size, const std::vector<std::vector<Index
     put_fixed32_le(&footer, static_cast<uint32_t>(footer.size()));
     uint32_t checksum = crc32c::Value(footer.data(), footer.size());
     put_fixed32_le(&footer, checksum);
+    footer.append(index_file_magic, 4);
     return wb.append(Slice(footer));
 }
 
@@ -482,7 +496,8 @@ public:
             hashes_by_shard[shard].emplace_back(h);
             kv_ptrs_by_shard[shard].emplace_back((const KVPairPtr)&k);
         }
-        return write_immutable_index(kv_size, hashes_by_shard, kv_ptrs_by_shard, npage_hint, version, wb);
+        return write_immutable_index(KeySize, sizeof(IndexValue), hashes_by_shard, kv_ptrs_by_shard, npage_hint,
+                                     version, wb);
     }
 
     Status get(size_t n, const void* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found) const override {
@@ -643,14 +658,205 @@ StatusOr<std::unique_ptr<MutableIndex>> MutableIndex::create(size_t key_size) {
 #undef CASE_SIZE
 }
 
+#ifdef __SSE2__
+
+#include <emmintrin.h>
+
+size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint8_t* matched_idxes) {
+    size_t nmatched = 0;
+    auto tests = _mm_set1_epi8(tag);
+    for (size_t i = 0; i < ntag; i += 16) {
+        auto tags16 = _mm_load_si128((__m128i*)(tags + i));
+        auto eqs = _mm_cmpeq_epi8(tags16, tests);
+        auto mask = _mm_movemask_epi8(eqs);
+        while (mask != 0) {
+            uint32_t match_pos = __builtin_ctz(mask);
+            if (i + match_pos < ntag) {
+                matched_idxes[nmatched++] = i + match_pos;
+            }
+            mask &= (mask - 1);
+        }
+    }
+    return nmatched;
+}
+
+#else
+
+size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint8_t* matched_idxes) {
+    size_t nmatched = 0;
+    for (size_t i = 0; i < ntag; i++) {
+        if (tags[i] == tag) {
+            matched_idxes[nmatched++] = i;
+        }
+    }
+    return nmatched;
+}
+
+#endif
+
+Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info,
+                                     IndexValue* values, size_t* num_found) const {
+    const auto& shard_info = _shards[shard_idx];
+    if (shard_info.size == 0 || keys_info.size() == 0) {
+        return Status::OK();
+    }
+    size_t found = 0;
+    std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
+    CHECK(shard->pages.size() * page_size == shard_info.bytes) << "illegal shard size";
+    RETURN_IF_ERROR(_rb->read(shard_info.offset, Slice((uint8_t*)shard->pages.data(), shard_info.bytes)));
+    uint8_t candidate_idxes[bucket_size_max];
+    for (size_t i = 0; i < keys_info.size(); i++) {
+        IndexHash h(keys_info.hashes[i]);
+        auto pageid = h.page() % shard_info.npage;
+        auto bucketid = h.bucket();
+        auto& bucket_info = shard->bucket(pageid, bucketid);
+        uint8_t* bucket_pos = shard->pages[bucket_info.pageid].pack(bucket_info.packid);
+        auto nele = bucket_info.size;
+        auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
+        auto key_idx = keys_info.key_idxes[i];
+        const uint8_t* fixed_key_probe = (const uint8_t*)keys + _fixed_key_size * key_idx;
+        auto kv_pos = bucket_pos + pad(nele, pack_size);
+        values[key_idx] = NullIndexValue;
+        for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
+            auto idx = candidate_idxes[candidate_idx];
+            auto candidate_kv = kv_pos + (_fixed_key_size + _fixed_value_size) * idx;
+            if (strings::memeq(candidate_kv, fixed_key_probe, _fixed_key_size)) {
+                values[key_idx] = UNALIGNED_LOAD64(candidate_kv + _fixed_key_size);
+                found++;
+                break;
+            }
+        }
+    }
+    *num_found += found;
+    return Status::OK();
+}
+
+Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, const void* keys,
+                                                 const KeysInfo& keys_info) const {
+    const auto& shard_info = _shards[shard_idx];
+    if (shard_info.size == 0 || keys_info.size() == 0) {
+        return Status::OK();
+    }
+    std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
+    CHECK(shard->pages.size() * page_size == shard_info.bytes) << "illegal shard size";
+    RETURN_IF_ERROR(_rb->read(shard_info.offset, Slice((uint8_t*)shard->pages.data(), shard_info.bytes)));
+    uint8_t candidate_idxes[bucket_size_max];
+    for (size_t i = 0; i < keys_info.size(); i++) {
+        IndexHash h(keys_info.hashes[i]);
+        auto pageid = h.page() % shard_info.npage;
+        auto bucketid = h.bucket();
+        auto& bucket_info = shard->bucket(pageid, bucketid);
+        uint8_t* bucket_pos = shard->pages[bucket_info.pageid].pack(bucket_info.packid);
+        auto nele = bucket_info.size;
+        auto key_idx = keys_info.key_idxes[i];
+        auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
+        const uint8_t* fixed_key_probe = (const uint8_t*)keys + _fixed_key_size * key_idx;
+        auto kv_pos = bucket_pos + pad(nele, pack_size);
+        for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
+            auto idx = candidate_idxes[candidate_idx];
+            auto candidate_kv = kv_pos + (_fixed_key_size + _fixed_value_size) * idx;
+            if (strings::memeq(candidate_kv, fixed_key_probe, _fixed_key_size)) {
+                return Status::AlreadyExist("key already exists in immutable index");
+            }
+        }
+    }
+    return Status::OK();
+}
+
+static void split_keys_info_by_shard(const KeysInfo& keys_info, std::vector<KeysInfo>& keys_info_by_shards) {
+    size_t shard_mask = keys_info_by_shards.size() - 1;
+    for (size_t i = 0; i < keys_info.key_idxes.size(); i++) {
+        auto& key_idx = keys_info.key_idxes[i];
+        auto& hash = keys_info.hashes[i];
+        size_t shard = IndexHash(hash).shard() & shard_mask;
+        keys_info_by_shards[shard].key_idxes.emplace_back(key_idx);
+        keys_info_by_shards[shard].hashes.emplace_back(hash);
+    }
+}
+
 Status ImmutableIndex::get(size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values,
                            size_t* num_found) const {
-    *num_found = 0;
+    size_t found = 0;
+    if (_shards.size() > 1) {
+        std::vector<KeysInfo> keys_info_by_shard(_shards.size());
+        split_keys_info_by_shard(keys_info, keys_info_by_shard);
+        for (size_t i = 0; i < _shards.size(); i++) {
+            RETURN_IF_ERROR(_get_in_shard(i, n, keys, keys_info_by_shard[i], values, &found));
+        }
+    } else {
+        RETURN_IF_ERROR(_get_in_shard(0, n, keys, keys_info, values, &found));
+    }
+    *num_found += found;
     return Status::OK();
 }
 
 Status ImmutableIndex::check_not_exist(size_t n, const void* keys) {
+    size_t nshard = _shards.size();
+    std::vector<KeysInfo> keys_info_by_shard(nshard);
+    uint64_t shard_mask = nshard - 1;
+    for (size_t i = 0; i < n; i++) {
+        const uint8_t* key = (const uint8_t*)keys + _fixed_key_size * i;
+        IndexHash h(key_index_hash(key, _fixed_key_size));
+        auto shard = h.shard() & shard_mask;
+        keys_info_by_shard[shard].key_idxes.emplace_back(i);
+        keys_info_by_shard[shard].hashes.emplace_back(h.hash);
+    }
+    for (size_t i = 0; i < nshard; i++) {
+        RETURN_IF_ERROR(_check_not_exist_in_shard(i, n, keys, keys_info_by_shard[i]));
+    }
     return Status::OK();
+}
+
+StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<fs::ReadableBlock>&& rb) {
+    uint64_t file_size;
+    RETURN_IF_ERROR(rb->size(&file_size));
+    if (file_size < 12) {
+        return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < 12", rb->path(), file_size));
+    }
+    size_t footer_read_size = std::min<size_t>(4096, file_size);
+    std::string buff;
+    raw::stl_string_resize_uninitialized(&buff, footer_read_size);
+    RETURN_IF_ERROR(rb->read(file_size - footer_read_size, buff));
+    uint32_t footer_length = UNALIGNED_LOAD32(buff.data() + footer_read_size - 12);
+    uint32_t checksum = UNALIGNED_LOAD32(buff.data() + footer_read_size - 8);
+    uint32_t magic = UNALIGNED_LOAD32(buff.data() + footer_read_size - 4);
+    if (magic != UNALIGNED_LOAD32(index_file_magic)) {
+        return Status::Corruption(strings::Substitute("load immutable index failed $0 illegal magic", rb->path()));
+    }
+    std::string_view meta_str;
+    if (footer_length <= footer_read_size - 12) {
+        meta_str = std::string_view(buff.data() + footer_read_size - 12 - footer_length, footer_length + 4);
+    } else {
+        raw::stl_string_resize_uninitialized(&buff, footer_length + 4);
+        RETURN_IF_ERROR(rb->read(file_size - 12 - footer_length, buff));
+        meta_str = std::string_view(buff.data(), footer_length + 4);
+    }
+    auto actual_checksum = crc32c::Value(meta_str.data(), meta_str.size());
+    if (checksum != actual_checksum) {
+        return Status::Corruption(strings::Substitute("load immutable index failed $0 checksum not match", rb->path()));
+    }
+    ImmutableIndexMetaPB meta;
+    if (!meta.ParseFromArray(meta_str.data(), meta_str.size() - 4)) {
+        return Status::Corruption(
+                strings::Substitute("load immutable index failed $0 parse meta pb failed", rb->path()));
+    }
+    std::unique_ptr<ImmutableIndex> idx = std::make_unique<ImmutableIndex>();
+    idx->_version = EditVersion(meta.version());
+    idx->_size = meta.size();
+    idx->_fixed_key_size = meta.fixed_key_size();
+    idx->_fixed_value_size = meta.fixed_value_size();
+    size_t nshard = meta.shards_size();
+    idx->_shards.resize(nshard);
+    for (size_t i = 0; i < nshard; i++) {
+        const auto& src = meta.shards(i);
+        auto& dest = idx->_shards[i];
+        dest.size = src.size();
+        dest.npage = src.npage();
+        dest.offset = src.data().offset();
+        dest.bytes = src.data().size();
+    }
+    idx->_rb.swap(rb);
+    return std::move(idx);
 }
 
 PersistentIndex::PersistentIndex(const std::string& path) : _path(path) {}

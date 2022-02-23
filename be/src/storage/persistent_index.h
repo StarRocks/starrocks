@@ -16,9 +16,12 @@ namespace starrocks {
 using IndexValue = uint64_t;
 static constexpr IndexValue NullIndexValue = -1;
 
+uint64_t key_index_hash(const void* data, size_t len);
+
 struct KeysInfo {
     std::vector<uint32_t> key_idxes;
     std::vector<uint64_t> hashes;
+    size_t size() const { return key_idxes.size(); }
 };
 
 class MutableIndex {
@@ -99,6 +102,29 @@ public:
 
     // batch check key existence
     Status check_not_exist(size_t n, const void* keys);
+
+    static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<fs::ReadableBlock>&& rb);
+
+private:
+    Status _get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values,
+                         size_t* num_found) const;
+
+    Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info) const;
+
+    std::unique_ptr<fs::ReadableBlock> _rb;
+    EditVersion _version;
+    size_t _size = 0;
+    size_t _fixed_key_size = 0;
+    size_t _fixed_value_size = 0;
+
+    struct ShardInfo {
+        uint64_t offset;
+        uint64_t bytes;
+        uint32_t npage;
+        uint32_t size;
+    };
+
+    std::vector<ShardInfo> _shards;
 };
 
 // A persistent primary index contains an in-memory L0 and an on-SSD/NVMe L1,

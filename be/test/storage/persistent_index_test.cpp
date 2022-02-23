@@ -220,6 +220,40 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
     }
     ASSERT_TRUE(wblock->finalize().ok());
     ASSERT_TRUE(wblock->close().ok());
+    wblock.reset();
+
+    std::unique_ptr<fs::ReadableBlock> rb;
+    ASSERT_TRUE(block_mgr->open_block(opts.path, &rb).ok());
+    auto st_load = ImmutableIndex::load(std::move(rb));
+    if (!st_load.ok()) {
+        LOG(WARNING) << st_load.status();
+    }
+    ASSERT_TRUE(st_load.ok());
+    auto& idx_loaded = st_load.value();
+    KeysInfo keys_info;
+    for (size_t i = 0; i < N; i++) {
+        keys_info.key_idxes.emplace_back(i);
+        uint64_t h = key_index_hash(&keys[i], sizeof(Key));
+        keys_info.hashes.emplace_back(h);
+    }
+    vector<IndexValue> get_values(N);
+    size_t num_found = 0;
+    auto st_get = idx_loaded->get(N, keys.data(), keys_info, get_values.data(), &num_found);
+    if (!st_get.ok()) {
+        LOG(WARNING) << st_get;
+    }
+    ASSERT_TRUE(st_get.ok());
+    ASSERT_EQ(N, num_found);
+    for (size_t i = 0; i < N; i++) {
+        ASSERT_EQ(values[i], get_values[i]);
+    }
+    ASSERT_TRUE(idx_loaded->check_not_exist(N, keys.data()).is_already_exist());
+
+    vector<Key> check_not_exist_keys(10);
+    for (int i = 0; i < 10; i++) {
+        check_not_exist_keys[i] = N + i;
+    }
+    ASSERT_TRUE(idx_loaded->check_not_exist(10, check_not_exist_keys.data()).ok());
 }
 
 } // namespace starrocks
