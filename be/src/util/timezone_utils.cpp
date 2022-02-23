@@ -129,10 +129,10 @@ bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, c
         bool positive = (timezone.substr(0, 1) != "-");
 
         //Regular expression guarantees hour and minute mush be int
-        int hour;
+        int hour = 0;
         std::string_view hour_str = timezone.substr(1, 2);
         std::from_chars(hour_str.begin(), hour_str.end(), hour);
-        int minute;
+        int minute = 0;
         std::string_view minute_str = timezone.substr(4, 5);
         std::from_chars(minute_str.begin(), minute_str.end(), minute);
 

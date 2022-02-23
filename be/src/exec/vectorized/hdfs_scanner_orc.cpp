@@ -21,7 +21,7 @@ public:
 
     uint64_t getLength() const override { return _length; }
 
-    uint64_t getNaturalReadSize() const override { return 8 * 1024 * 1024; }
+    uint64_t getNaturalReadSize() const override { return 2 * 1024 * 1024; }
 
     void read(void* buf, uint64_t length, uint64_t offset) override {
         SCOPED_RAW_TIMER(&_stats->io_ns);
@@ -356,11 +356,21 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
 
     // create orc adapter for further reading.
+    int src_slot_index = 0;
+    bool has_conjunct_ctxs_by_slot = (_conjunct_ctxs_by_slot.size() != 0);
     for (const auto& it : _scanner_params.materialize_slots) {
         const std::string& name = it->col_name();
-        if (known_column_names.find(name) != known_column_names.end()) {
-            _src_slot_descriptors.emplace_back(it);
+        if (known_column_names.find(name) == known_column_names.end()) continue;
+        if (has_conjunct_ctxs_by_slot && _conjunct_ctxs_by_slot.find(it->id()) == _conjunct_ctxs_by_slot.end()) {
+            VLOG_FILE << "[ORC] lazy load field = " << it->col_name();
+            _lazy_load_ctx.lazy_load_slots.emplace_back(it);
+            _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
+        } else {
+            _lazy_load_ctx.active_load_slots.emplace_back(it);
+            _lazy_load_ctx.active_load_indices.emplace_back(src_slot_index);
         }
+        _src_slot_descriptors.emplace_back(it);
+        src_slot_index++;
     }
 
     _orc_adapter = std::make_unique<OrcScannerAdapter>(runtime_state, _src_slot_descriptors);
@@ -382,6 +392,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _orc_adapter->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector);
     }
     _orc_adapter->set_hive_column_names(_scanner_params.hive_column_names);
+    if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0) {
+        _orc_adapter->set_lazy_load_context(&_lazy_load_ctx);
+    }
     RETURN_IF_ERROR(_orc_adapter->init(std::move(reader)));
     return Status::OK();
 }
@@ -396,42 +409,97 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     if (_should_skip_file) {
         return Status::EndOfFile("");
     }
-    {
-        SCOPED_RAW_TIMER(&_stats.column_read_ns);
-        RETURN_IF_ERROR(_orc_adapter->read_next());
-        RETURN_IF_ERROR(_orc_adapter->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache));
-    }
-    // if there is no rows returned from orc, we just returned.
-    // but we have to set num rows to 0, otherwise user may see old data.
-    if (_orc_adapter->get_cvb_size() == 0) {
-        (*chunk)->set_num_rows(0);
-        return Status::OK();
-    }
-    {
-        SCOPED_RAW_TIMER(&_stats.column_convert_ns);
-        ChunkPtr ptr = _orc_adapter->create_chunk();
-        RETURN_IF_ERROR(_orc_adapter->fill_chunk(&ptr));
-        ChunkPtr result = _orc_adapter->cast_chunk(&ptr);
-        *chunk = std::move(result);
-    }
-    ChunkPtr ck = *chunk;
-    // important to add columns before evaluation
-    // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-    _file_read_param.append_not_exised_columns_to_chunk(chunk, ck->num_rows());
-    _file_read_param.append_partition_column_to_chunk(chunk, ck->num_rows());
-    // do stats before we filter rows which does not match.
-    _stats.raw_rows_read += ck->num_rows();
-    for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
-        // do evaluation.
-        SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
-        if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
-            continue;
+
+    size_t skip_num_values = 0;
+    Filter& filter = _chunk_filter;
+    ChunkPtr& ck = *chunk;
+
+    // this infinite for loop is for retry.
+    for (;;) {
+        orc::RowReader::ReadPosition position;
+        size_t read_num_values = 0;
+        {
+            SCOPED_RAW_TIMER(&_stats.column_read_ns);
+            RETURN_IF_ERROR(_orc_adapter->read_next(&position));
+            // read num values is how many rows actually read before doing dict filtering.
+            read_num_values = position.num_values;
+            RETURN_IF_ERROR(_orc_adapter->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
+                                                                       &_chunk_filter));
         }
-        ExecNode::eval_conjuncts(it.second, ck.get());
-        if (ck->num_rows() == 0) {
+
+        size_t chunk_size = 0;
+        if (_orc_adapter->get_cvb_size() != 0) {
+            {
+                StatusOr<ChunkPtr> ret;
+                SCOPED_RAW_TIMER(&_stats.column_convert_ns);
+                if (!_orc_adapter->has_lazy_load_context()) {
+                    ret = _orc_adapter->get_chunk();
+                } else {
+                    ret = _orc_adapter->get_active_chunk();
+                }
+                RETURN_IF_ERROR(ret);
+                *chunk = std::move(ret.value());
+            }
+
+            // important to add columns before evaluation
+            // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
+            _file_read_param.append_not_exised_columns_to_chunk(chunk, ck->num_rows());
+            _file_read_param.append_partition_column_to_chunk(chunk, ck->num_rows());
+            chunk_size = ck->num_rows();
+            // do stats before we filter rows which does not match.
+            _stats.raw_rows_read += chunk_size;
+            filter.assign(chunk_size, 1);
+            {
+                SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
+                for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
+                    // do evaluation.
+                    if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
+                        continue;
+                    }
+                    chunk_size = ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &filter);
+                    if (chunk_size == 0) {
+                        break;
+                    }
+                }
+            }
+            if (chunk_size != 0) {
+                ck->filter(filter);
+            }
+        }
+        ck->set_num_rows(chunk_size);
+
+        if (!_orc_adapter->has_lazy_load_context()) {
             return Status::OK();
         }
+
+        // We batch skip num values beause we have opportunity to skip an entire stripe / row_group
+        // And if that happens,  we can save IO at granuarity of strip / row_group
+        if (position.start_new_stripe || position.seek_to_row_group) {
+            skip_num_values = 0;
+        }
+        // if has lazy load fields, skip it if chunk_size == 0
+        if (chunk_size == 0) {
+            skip_num_values += read_num_values;
+            continue;
+        }
+        {
+            SCOPED_RAW_TIMER(&_stats.column_read_ns);
+            if (skip_num_values != 0) {
+                _orc_adapter->lazy_skip_next(skip_num_values);
+                skip_num_values = 0;
+            }
+            _orc_adapter->lazy_read_next(read_num_values);
+        }
+        {
+            SCOPED_RAW_TIMER(&_stats.column_convert_ns);
+            StatusOr<ChunkPtr> ret = _orc_adapter->get_lazy_chunk(&filter, chunk_size);
+            RETURN_IF_ERROR(ret);
+            Chunk& ret_ck = *(ret.value());
+            ck->merge(std::move(ret_ck));
+        }
+        return Status::OK();
     }
+    __builtin_unreachable();
     return Status::OK();
 }
 
