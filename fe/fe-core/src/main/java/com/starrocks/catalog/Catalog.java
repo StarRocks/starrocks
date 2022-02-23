@@ -1254,9 +1254,6 @@ public class Catalog {
 
         editLog.open();
 
-        // set the fe type to master
-        feType = FrontendNodeType.MASTER;
-
         if (!haProtocol.fencing()) {
             LOG.error("fencing failed. will exit.");
             System.exit(-1);
