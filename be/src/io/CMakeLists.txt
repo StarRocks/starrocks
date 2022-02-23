@@ -12,4 +12,5 @@ add_library(IO STATIC
         random_access_file.cpp
         readable.cpp
         s3_random_access_file.cpp
+        s3_output_stream.cpp
         )
