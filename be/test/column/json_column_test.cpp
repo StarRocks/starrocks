@@ -303,6 +303,12 @@ PARALLEL_TEST(JsonColumnTest, test_assign) {
         const JsonValue* json = column->get_object(i);
         EXPECT_EQ(JsonValue::parse("1").value(), *json);
     }
+    column->assign(20, 0);
+    ASSERT_EQ(20, column->size());
+    for (int i = 0; i < 20; i++) {
+        const JsonValue* json = column->get_object(i);
+        EXPECT_EQ(JsonValue::parse("1").value(), *json);
+    }
 }
 
 } // namespace starrocks::vectorized
