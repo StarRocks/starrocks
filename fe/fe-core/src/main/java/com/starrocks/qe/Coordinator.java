@@ -2232,6 +2232,12 @@ public class Coordinator {
                 fragmentIdToBackendIdBucketCountMap.put(fragmentId, new HashMap<>());
                 fragmentIdToBucketNumMap.put(fragmentId,
                         scanNode.getOlapTable().getDefaultDistributionInfo().getBucketNum());
+                if (scanNode.getSelectedPartitionIds().size() <= 1) {
+                    for (Long pid : scanNode.getSelectedPartitionIds()) {
+                        fragmentIdToBucketNumMap.put(fragmentId,
+                                scanNode.getOlapTable().getPartition(pid).getDistributionInfo().getBucketNum());
+                    }
+                }
             }
             Map<Integer, TNetworkAddress> bucketSeqToAddress =
                     fragmentIdToSeqToAddressMap.get(fragmentId);
