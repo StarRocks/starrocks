@@ -25,16 +25,10 @@ public:
     ~S3ObjectStore() = default;
     Status init(const S3Credential* cred = nullptr, bool use_transfer_manager = false);
 
-    /*
-     *  Bucket Operation
-     */
     Status create_bucket(const std::string& bucket_name) override;
 
     Status delete_bucket(const std::string& bucket_name) override;
 
-    /*
-     *  Object Operation
-     */
     Status put_object(const std::string& bucket_name, const std::string& object_key,
                       const std::string& object_path) override;
 
@@ -44,11 +38,8 @@ public:
     Status get_object(const std::string& bucket_name, const std::string& object_key,
                       const std::string& object_path) override;
 
-    Status get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset, size_t length,
-                            std::string* object_value, size_t* read_bytes) override;
-
-    Status get_object_range(const std::string& bucket_name, const std::string& object_key, size_t offset, size_t length,
-                            char* object_value, size_t* read_bytes) override;
+    StatusOr<std::unique_ptr<io::RandomAccessFile>> get_object(const std::string& bucket_name,
+                                                               const std::string& object_key);
 
     Status exist_object(const std::string& bucket_name, const std::string& object_key) override;
 

@@ -9,6 +9,7 @@
 
 #include <fstream>
 
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 
 namespace starrocks {
@@ -73,13 +74,10 @@ TEST_F(S3Test, object_operation) {
     FileUtils::remove(object_path);
 
     // get object range
-    std::string object_value_range;
-    size_t read_bytes;
-    ASSERT_TRUE(client.get_object_range(bucket_name, object_key, 1 /* offset */, 2 /* length */, &object_value_range,
-                                        &read_bytes)
-                        .ok());
-    ASSERT_EQ(read_bytes, 2);
-    ASSERT_EQ(object_value_range, "or");
+    char buf[2];
+    ASSIGN_OR_ABORT(auto input_stream, client.get_object(bucket_name, object_key));
+    ASSIGN_OR_ABORT(auto bytes_read, input_stream->read_at(1, buf, sizeof(buf)));
+    ASSERT_EQ("or", std::string_view(buf, bytes_read));
 
     // list object
     const std::string object_key2 = "test/hello";
