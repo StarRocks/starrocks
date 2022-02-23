@@ -324,9 +324,8 @@ void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const
 
 void NullableColumn::check_or_die() const {
     CHECK_EQ(_null_column->size(), _data_column->size());
-    if (_has_null) {
-        CHECK_GT(SIMD::count_nonzero(_null_column->get_data()), 0);
-    } else {
+    // when _has_null=true, the column may have no null value, so don't check.
+    if (!_has_null) {
         CHECK_EQ(SIMD::count_nonzero(_null_column->get_data()), 0);
     }
     _data_column->check_or_die();
