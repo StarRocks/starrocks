@@ -219,6 +219,11 @@ public class ScalarOperatorFunctionsTest {
         Assert.assertThrows(IllegalArgumentException.class, () -> ScalarOperatorFunctions
                 .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 21, 13, 4, 5)),
                         ConstantOperator.createVarchar("%X")).getVarchar());
+        assertTrue(ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar(""))
+                .isNull());
+        assertEquals("  ",
+                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("  "))
+                        .getVarchar());
     }
 
     @Test

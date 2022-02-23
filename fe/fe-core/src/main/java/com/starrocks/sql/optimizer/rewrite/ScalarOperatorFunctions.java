@@ -113,6 +113,9 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator dateFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
         String format = fmtLiteral.getVarchar();
+        if (format.isEmpty()) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
         // unix style
         if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
             DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
