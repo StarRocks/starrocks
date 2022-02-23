@@ -46,6 +46,15 @@ public:
     uint64_t current();
 };
 
+class PositionProviderMap {
+public:
+    std::unordered_map<uint64_t, PositionProvider> providers;
+    std::unordered_map<uint64_t, size_t> columnIdToPositionIndex;
+    std::vector<std::list<uint64_t>> positions;
+    PositionProvider& at(uint64_t columnId);
+    void copyFrom(const PositionProviderMap& map);
+};
+
 /**
    * A subclass of Google's ZeroCopyInputStream that supports seek.
    * By extending Google's class, we get the ability to pass it directly
@@ -90,7 +99,7 @@ private:
     const uint64_t start;
     const uint64_t length;
     const uint64_t blockSize;
-    std::unique_ptr<DataBuffer<char> > buffer;
+    std::unique_ptr<DataBuffer<char>> buffer;
     uint64_t position;
     uint64_t pushBack;
 

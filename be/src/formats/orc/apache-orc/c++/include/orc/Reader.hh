@@ -521,6 +521,13 @@ public:
    */
 class RowReader {
 public:
+    struct ReadPosition {
+        uint64_t strip_index = 0;
+        uint64_t num_values = 0;
+        bool start_new_stripe = false;
+        bool seek_to_row_group = false;
+    };
+
     virtual ~RowReader();
     /**
      * Get the selected type of the rows in the file. The file's row type
@@ -550,10 +557,13 @@ public:
      * Caller must look at numElements in the row batch to determine how
      * many rows were read.
      * @param data the row batch to read into.
+     * @param pos about position information.
      * @return true if a non-zero number of rows were read or false if the
      *   end of the file was reached.
      */
-    virtual bool next(ColumnVectorBatch& data) = 0;
+    // This function is for backward comptiability.
+    bool next(ColumnVectorBatch& data);
+    virtual bool next(ColumnVectorBatch& data, ReadPosition* pos) = 0;
 
     virtual void lazyLoadSkip(uint64_t numValues) = 0;
     virtual void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) = 0;

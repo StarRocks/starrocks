@@ -681,6 +681,8 @@ CONF_String(aws_secret_access_key, "");
 CONF_String(aws_s3_endpoint, "");
 CONF_Int64(aws_s3_max_connection, "102400");
 
+CONF_Bool(enable_orc_late_materialization, "true");
+
 } // namespace config
 
 } // namespace starrocks
