@@ -1259,12 +1259,14 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
     request.__set_backend(worker_pool_this->_backend);
 
     while ((!worker_pool_this->_stopped)) {
+        std::map<TTaskType::type, std::set<int64_t>> tasks;
         for (int i = 0; i < TTaskType::type::NUM_TASK_TYPE; i++) {
             std::lock_guard task_signatures_lock(_s_task_signatures_lock[i]);
-            std::map<TTaskType::type, std::set<int64_t>> one_type_task;
-            one_type_task[static_cast<TTaskType::type>(i)] = _s_task_signatures[i];
-            request.__set_tasks(one_type_task);
+            if (!_s_task_signatures[i].empty()) {
+                tasks.emplace(static_cast<TTaskType::type>(i), _s_task_signatures[i]);
+            }
         }
+        request.__set_tasks(tasks);
 
         StarRocksMetrics::instance()->report_task_requests_total.increment(1);
         TMasterResult result;
