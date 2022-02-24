@@ -19,9 +19,11 @@
 
 #include <fstream>
 
+#include "common/config.h"
 #include "common/logging.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+#include "io/s3_output_stream.h"
 #include "io/s3_random_access_file.h"
 
 namespace starrocks {
@@ -55,7 +57,7 @@ Status S3ObjectStore::init(const S3Credential* cred, bool use_transfer_manager) 
     return Status::OK();
 }
 
-Status S3ObjectStore::create_bucket(const std::string& bucket_name) {
+Status S3ObjectStore::create_bucket(const std::string& bucket) {
     Aws::S3::Model::BucketLocationConstraint constraint =
             Aws::S3::Model::BucketLocationConstraintMapper::GetBucketLocationConstraintForName(_config.region);
     Aws::S3::Model::CreateBucketConfiguration bucket_config;
@@ -63,7 +65,7 @@ Status S3ObjectStore::create_bucket(const std::string& bucket_name) {
 
     Aws::S3::Model::CreateBucketRequest request;
     request.SetCreateBucketConfiguration(bucket_config);
-    request.SetBucket(to_aws_string(bucket_name));
+    request.SetBucket(to_aws_string(bucket));
 
     Aws::S3::Model::CreateBucketOutcome outcome = _client->CreateBucket(request);
 
@@ -71,15 +73,15 @@ Status S3ObjectStore::create_bucket(const std::string& bucket_name) {
         return Status::OK();
     } else {
         std::string error =
-                strings::Substitute("Create Bucket $0 failed. $1.", bucket_name, outcome.GetError().GetMessage());
+                strings::Substitute("Create Bucket $0 failed. $1.", bucket, outcome.GetError().GetMessage());
         LOG(ERROR) << error;
         return Status::IOError(error);
     }
 }
 
-Status S3ObjectStore::delete_bucket(const std::string& bucket_name) {
+Status S3ObjectStore::delete_bucket(const std::string& bucket) {
     Aws::S3::Model::DeleteBucketRequest request;
-    request.SetBucket(to_aws_string(bucket_name));
+    request.SetBucket(to_aws_string(bucket));
 
     Aws::S3::Model::DeleteBucketOutcome outcome = _client->DeleteBucket(request);
 
@@ -87,34 +89,33 @@ Status S3ObjectStore::delete_bucket(const std::string& bucket_name) {
         return Status::OK();
     } else {
         std::string error =
-                strings::Substitute("Delete Bucket $0 failed. $1.", bucket_name, outcome.GetError().GetMessage());
+                strings::Substitute("Delete Bucket $0 failed. $1.", bucket, outcome.GetError().GetMessage());
         LOG(ERROR) << error;
         return Status::IOError(error);
     }
 }
 
-Status S3ObjectStore::put_object(const std::string& bucket_name, const std::string& object_key,
-                                 const std::string& object_path) {
+Status S3ObjectStore::put_object(const std::string& bucket, const std::string& object, const std::string& object_path) {
     if (_transfer_manager) {
-        auto handle = _transfer_manager->UploadFile(to_aws_string(object_path), to_aws_string(bucket_name),
-                                                    to_aws_string(object_key), Aws::DEFAULT_CONTENT_TYPE,
-                                                    Aws::Map<Aws::String, Aws::String>());
+        auto handle =
+                _transfer_manager->UploadFile(to_aws_string(object_path), to_aws_string(bucket), to_aws_string(object),
+                                              Aws::DEFAULT_CONTENT_TYPE, Aws::Map<Aws::String, Aws::String>());
         handle->WaitUntilFinished();
         if (handle->GetStatus() != Aws::Transfer::TransferStatus::COMPLETED) {
             // TODO: log error
-            return Status::IOError(strings::Substitute("Put Object $0 failed.", object_key));
+            return Status::IOError(strings::Substitute("Put Object $0 failed.", object));
         } else {
             return Status::OK();
         }
     } else {
         Aws::S3::Model::PutObjectRequest request;
-        request.SetBucket(to_aws_string(bucket_name));
-        request.SetKey(to_aws_string(object_key));
+        request.SetBucket(to_aws_string(bucket));
+        request.SetKey(to_aws_string(object));
         std::shared_ptr<Aws::IOStream> stream = Aws::MakeShared<Aws::FStream>(
                 Aws::Utils::ARRAY_ALLOCATION_TAG, object_path.c_str(), std::ios_base::in | std::ios_base::binary);
         if (!stream->good()) {
             std::string error =
-                    strings::Substitute("Put Object $0 failed, fail to open local file $1.", object_key, object_path);
+                    strings::Substitute("Put Object $0 failed, fail to open local file $1.", object, object_path);
             LOG(ERROR) << error;
             return Status::IOError(error);
         }
@@ -125,43 +126,27 @@ Status S3ObjectStore::put_object(const std::string& bucket_name, const std::stri
             return Status::OK();
         } else {
             std::string error =
-                    strings::Substitute("Put Object $0 failed. $1.", object_key, outcome.GetError().GetMessage());
+                    strings::Substitute("Put Object $0 failed. $1.", object, outcome.GetError().GetMessage());
             LOG(ERROR) << error;
             return Status::IOError(error);
         }
     }
 }
 
-Status S3ObjectStore::put_string_object(const std::string& bucket_name, const std::string& object_key,
-                                        const std::string& object_value) {
-    std::shared_ptr<Aws::IOStream> stream = Aws::MakeShared<Aws::StringStream>("", object_value);
-
-    Aws::S3::Model::PutObjectRequest request;
-    request.SetBucket(to_aws_string(bucket_name));
-    request.SetKey(to_aws_string(object_key));
-    request.SetBody(stream);
-
-    Aws::S3::Model::PutObjectOutcome outcome = _client->PutObject(request);
-
-    if (outcome.IsSuccess()) {
-        return Status::OK();
-    } else {
-        std::string error =
-                strings::Substitute("Put Object $0 failed. $1.", object_key, outcome.GetError().GetMessage());
-        LOG(ERROR) << error;
-        return Status::IOError(error);
-    }
+StatusOr<std::unique_ptr<io::OutputStream>> S3ObjectStore::put_object(const std::string& bucket,
+                                                                      const std::string& object) {
+    return std::make_unique<io::S3OutputStream>(_client, bucket, object, config::experimental_s3_max_single_part_size,
+                                                config::experimental_s3_min_upload_part_size);
 }
 
-StatusOr<std::unique_ptr<io::RandomAccessFile>> S3ObjectStore::get_object(const std::string& bucket_name,
-                                                                          const std::string& object_key) {
-    return std::make_unique<io::S3RandomAccessFile>(_client, bucket_name, object_key);
+StatusOr<std::unique_ptr<io::RandomAccessFile>> S3ObjectStore::get_object(const std::string& bucket,
+                                                                          const std::string& object) {
+    return std::make_unique<io::S3RandomAccessFile>(_client, bucket, object);
 }
 
-Status S3ObjectStore::get_object(const std::string& bucket_name, const std::string& object_key,
-                                 const std::string& object_path) {
+Status S3ObjectStore::get_object(const std::string& bucket, const std::string& object, const std::string& object_path) {
     if (object_path.empty()) {
-        return Status::IOError(strings::Substitute("Get Object $0 failed, path empty.", object_key));
+        return Status::IOError(strings::Substitute("Get Object $0 failed, path empty.", object));
     }
     if (_transfer_manager) {
         Aws::Transfer::CreateDownloadStreamCallback stream;
@@ -173,19 +158,18 @@ Status S3ObjectStore::get_object(const std::string& bucket_name, const std::stri
         } else {
             stream = [=]() -> Aws::IOStream* { return Aws::New<Aws::StringStream>(""); };
         }
-        auto handle = _transfer_manager->DownloadFile(to_aws_string(bucket_name), to_aws_string(object_key),
-                                                      std::move(stream));
+        auto handle = _transfer_manager->DownloadFile(to_aws_string(bucket), to_aws_string(object), std::move(stream));
         handle->WaitUntilFinished();
         if (handle->GetStatus() != Aws::Transfer::TransferStatus::COMPLETED) {
             // TODO: log error
-            return Status::IOError(strings::Substitute("Get Object $0 failed.", object_key));
+            return Status::IOError(strings::Substitute("Get Object $0 failed.", object));
         } else {
             return Status::OK();
         }
     } else {
         Aws::S3::Model::GetObjectRequest request;
-        request.SetBucket(to_aws_string(bucket_name));
-        request.SetKey(to_aws_string(object_key));
+        request.SetBucket(to_aws_string(bucket));
+        request.SetKey(to_aws_string(object));
 
         if (!object_path.empty()) {
             auto stream = [=]() -> Aws::IOStream* {
@@ -201,25 +185,25 @@ Status S3ObjectStore::get_object(const std::string& bucket_name, const std::stri
             return Status::OK();
         } else {
             std::string error =
-                    strings::Substitute("Get Object $0 failed. $1.", object_key, outcome.GetError().GetMessage());
+                    strings::Substitute("Get Object $0 failed. $1.", object, outcome.GetError().GetMessage());
             LOG(ERROR) << error;
             return Status::IOError(error);
         }
     }
 }
 
-Status S3ObjectStore::_head_object(const std::string& bucket_name, const std::string& object_key, size_t* size) {
+Status S3ObjectStore::_head_object(const std::string& bucket, const std::string& object, size_t* size) {
     Aws::S3::Model::HeadObjectRequest request;
-    request.SetBucket(to_aws_string(bucket_name));
-    request.SetKey(to_aws_string(object_key));
+    request.SetBucket(to_aws_string(bucket));
+    request.SetKey(to_aws_string(object));
 
     Aws::S3::Model::HeadObjectOutcome outcome = _client->HeadObject(request);
     if (!outcome.IsSuccess()) {
         if (_is_not_found(outcome.GetError().GetErrorType())) {
-            return Status::NotFound(strings::Substitute("Object $0 not found.", object_key));
+            return Status::NotFound(strings::Substitute("Object $0 not found.", object));
         } else {
             std::string error =
-                    strings::Substitute("Head Object $0 failed. $1.", object_key, outcome.GetError().GetMessage());
+                    strings::Substitute("Head Object $0 failed. $1.", object, outcome.GetError().GetMessage());
             LOG(ERROR) << error;
             return Status::IOError(error);
         }
@@ -231,18 +215,18 @@ Status S3ObjectStore::_head_object(const std::string& bucket_name, const std::st
     }
 }
 
-Status S3ObjectStore::exist_object(const std::string& bucket_name, const std::string& object_key) {
-    return _head_object(bucket_name, object_key, nullptr /* size */);
+Status S3ObjectStore::exist_object(const std::string& bucket, const std::string& object) {
+    return _head_object(bucket, object, nullptr /* size */);
 }
 
-Status S3ObjectStore::get_object_size(const std::string& bucket_name, const std::string& object_key, size_t* size) {
-    return _head_object(bucket_name, object_key, size);
+Status S3ObjectStore::get_object_size(const std::string& bucket, const std::string& object, size_t* size) {
+    return _head_object(bucket, object, size);
 }
 
-Status S3ObjectStore::delete_object(const std::string& bucket_name, const std::string& object_key) {
+Status S3ObjectStore::delete_object(const std::string& bucket, const std::string& object) {
     Aws::S3::Model::DeleteObjectRequest request;
-    request.SetBucket(to_aws_string(bucket_name));
-    request.SetKey(to_aws_string(object_key));
+    request.SetBucket(to_aws_string(bucket));
+    request.SetKey(to_aws_string(object));
 
     Aws::S3::Model::DeleteObjectOutcome outcome = _client->DeleteObject(request);
 
@@ -250,13 +234,13 @@ Status S3ObjectStore::delete_object(const std::string& bucket_name, const std::s
         return Status::OK();
     } else {
         std::string error =
-                strings::Substitute("Delete Object $0 failed. $1.", object_key, outcome.GetError().GetMessage());
+                strings::Substitute("Delete Object $0 failed. $1.", object, outcome.GetError().GetMessage());
         LOG(ERROR) << error;
         return Status::IOError(error);
     }
 }
 
-Status S3ObjectStore::list_objects(const std::string& bucket_name, const std::string& object_prefix,
+Status S3ObjectStore::list_objects(const std::string& bucket, const std::string& object_prefix,
                                    std::vector<std::string>* result) {
     result->clear();
     // S3 paths don't start with '/'
@@ -272,7 +256,7 @@ Status S3ObjectStore::list_objects(const std::string& bucket_name, const std::st
     // get info of bucket+object
     while (1) {
         Aws::S3::Model::ListObjectsRequest request;
-        request.SetBucket(to_aws_string(bucket_name));
+        request.SetBucket(to_aws_string(bucket));
         request.SetMaxKeys(kListObjectMaxKeys);
         request.SetPrefix(to_aws_string(prefix));
         request.SetMarker(marker);
