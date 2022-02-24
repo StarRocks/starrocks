@@ -601,4 +601,47 @@ TEST_F(JsonScannerTest, test_native_json_single_column) {
               chunk->debug_row(4));
 }
 
+// simdjson::ondemand::object cannot be iterated after field accessing.
+// See https://github.com/StarRocks/starrocks/issues/3648.
+TEST_F(JsonScannerTest, test_native_json_single_column_2) {
+    std::vector<TypeDescriptor> types;
+    constexpr int kColumns = 2;
+    for (int i = 0; i < kColumns; i++) {
+        types.emplace_back(TypeDescriptor::create_json_type());
+    }
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    // Iteration after field accessing.
+    range.jsonpaths = R"(["$.k1", "$"])";
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson_chinese.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "$"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(kColumns, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ(R"(["v1", {"k1": "v1", "keyname": {"ip地址": "10.10.0.1", "value": "10"}, "kind": "中文"}])",
+              chunk->debug_row(0));
+    EXPECT_EQ(R"(["v2", {"k1": "v2", "keyname": {"ip地址": "10.10.0.2", "value": "20"}, "kind": "英文"}])",
+              chunk->debug_row(1));
+    EXPECT_EQ(R"(["v3", {"k1": "v3", "keyname": {"ip地址": "10.10.0.3", "value": "30"}, "kind": "法文"}])",
+              chunk->debug_row(2));
+    EXPECT_EQ(R"(["v4", {"k1": "v4", "keyname": {"ip地址": "10.10.0.4", "value": "40"}, "kind": "德文"}])",
+              chunk->debug_row(3));
+    EXPECT_EQ(R"(["v5", {"k1": "v5", "keyname": {"ip地址": "10.10.0.5", "value": "50"}, "kind": "西班牙"}])",
+              chunk->debug_row(4));
+}
+
 } // namespace starrocks::vectorized
