@@ -461,7 +461,7 @@ public class HiveMetaClient {
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
         // get properties like 'field.delim' and 'line.delim' from StorageDescriptor
         TextFileFormatDesc textFileFormatDesc = new TextFileFormatDesc(
-                sd.getSerdeInfo().getParameters().getOrDefault("field.delim", ","),
+                sd.getSerdeInfo().getParameters().getOrDefault("field.delim", "\001"),
                 sd.getSerdeInfo().getParameters().getOrDefault("line.delim", "\n"));
 
         // fileSystem.listLocatedStatus is an api to list all statuses and
