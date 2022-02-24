@@ -10,7 +10,7 @@ import java.io.DataInput;
 import java.io.IOException;
 
 public class UnrecognizedTable extends Table {
-    private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
+    private static final Logger LOG = LogManager.getLogger(UnrecognizedTable.class);
 
     public UnrecognizedTable() {
         super(TableType.UNRECOGNIZED);
