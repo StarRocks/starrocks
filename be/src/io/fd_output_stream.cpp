@@ -89,13 +89,12 @@ Status FdOutputStream::close() {
     }
     _closed = true;
     Status st = do_sync_if_needed();
-    int fd = _fd;
-    _fd = -1;
     int r;
-    RETRY_ON_EINTR(r, ::close(fd));
+    RETRY_ON_EINTR(r, ::close(_fd));
     if (st.ok() && r != 0) {
-        st = io_error(fmt::format("close({})", fd), errno);
+        st = io_error(fmt::format("close({})", _fd), errno);
     }
+    _fd = -1;
     return st;
 }
 
