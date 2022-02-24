@@ -6,8 +6,8 @@ import com.starrocks.external.hive.HiveMetaStoreThriftClient;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
-import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
+import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.iceberg.ClientPoolImpl;
 import org.apache.iceberg.common.DynMethods;
@@ -18,7 +18,7 @@ import org.apache.thrift.transport.TTransportException;
 public class HiveClientPool extends ClientPoolImpl<IMetaStoreClient, TException> {
 
     private static final DynMethods.StaticMethod GET_CLIENT = DynMethods.builder("getProxy")
-            .impl(HiveMetaStoreThriftClient.class, HiveConf.class, HiveMetaHookLoader.class, String.class)
+            .impl(RetryingMetaStoreClient.class, HiveConf.class, HiveMetaHookLoader.class, String.class)
             .buildStatic();
 
     private final HiveConf hiveConf;
@@ -33,7 +33,7 @@ public class HiveClientPool extends ClientPoolImpl<IMetaStoreClient, TException>
     protected IMetaStoreClient newClient()  {
         try {
             try {
-                return GET_CLIENT.invoke(hiveConf, (HiveMetaHookLoader) tbl -> null, HiveMetaStoreClient.class.getName());
+                return GET_CLIENT.invoke(hiveConf, (HiveMetaHookLoader) tbl -> null, HiveMetaStoreThriftClient.class.getName());
             } catch (RuntimeException e) {
                 // any MetaException would be wrapped into RuntimeException during reflection, so let's double-check type here
                 if (e.getCause() instanceof MetaException) {
