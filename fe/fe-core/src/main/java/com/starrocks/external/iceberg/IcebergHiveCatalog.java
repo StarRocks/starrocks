@@ -22,9 +22,9 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.base.MoreObjects;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.List;
@@ -32,18 +32,19 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergCatalog {
-    private static final Logger LOG = LoggerFactory.getLogger(IcebergHiveCatalog.class);
+    private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
 
     private static final ConcurrentHashMap<String, IcebergHiveCatalog> metastoreUriToCatalog = new ConcurrentHashMap<>();
 
     public static synchronized IcebergHiveCatalog getInstance(String uri) {
         if (!metastoreUriToCatalog.containsKey(uri)) {
-            metastoreUriToCatalog.put(uri, new IcebergHiveCatalog(uri));
+            Map<String, String> properties = new HashMap<>();
+            properties.put(CatalogProperties.URI, uri);
+            metastoreUriToCatalog.put(uri, (IcebergHiveCatalog) CatalogLoader.hive(String.format("hive-%s", uri),
+                    new Configuration(), properties).loadCatalog());
         }
         return metastoreUriToCatalog.get(uri);
     }
-
-    private Catalog hiveCatalog;
 
     private String name;
     private Configuration conf;
@@ -52,13 +53,6 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
 
     @VisibleForTesting
     public IcebergHiveCatalog() {}
-
-    private IcebergHiveCatalog(String uri) {
-        Map<String, String> properties = new HashMap<>();
-        properties.put(CatalogProperties.URI, uri);
-        hiveCatalog = CatalogLoader.hive(String.format("hive-%s", uri),
-                new Configuration(), properties).loadCatalog();
-    }
 
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
@@ -81,7 +75,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
                            Map<String, String> properties) throws StarRocksIcebergException {
         Preconditions.checkState(tableId != null);
         try {
-            return hiveCatalog.loadTable(tableId);
+            return super.loadTable(tableId);
         } catch (Exception e) {
             throw new StarRocksIcebergException(String.format(
                     "Failed to load Iceberg table with id: %s", tableId), e);
