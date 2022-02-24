@@ -3,6 +3,7 @@
 #pragma once
 
 #include <memory>
+#include <tuple>
 
 #include "common/statusor.h"
 #include "gen_cpp/persistent_index.pb.h"
@@ -12,44 +13,8 @@
 
 namespace starrocks {
 
-class Tablet;
-
-template <size_t KeySize>
-struct FixedKey {
-    uint8_t data[KeySize];
-};
-
-template <size_t KeySize>
-bool operator==(const FixedKey<KeySize>& lhs, const FixedKey<KeySize>& rhs) {
-    return memcmp(lhs.data, rhs.data, KeySize) == 0;
-}
-
 using IndexValue = uint64_t;
 static constexpr IndexValue NullIndexValue = -1;
-
-constexpr size_t PageSize = 4096;
-constexpr size_t PageHeaderSize = 64;
-constexpr size_t BucketPadding = 16;
-constexpr size_t BucketPerPage = 16;
-
-template <class T, class P>
-T npad(T v, P p) {
-    return (v + p - 1) / p;
-}
-
-template <class T, class P>
-T pad(T v, P p) {
-    return npad(v, p) * p;
-}
-
-struct IndexHash {
-    IndexHash(uint64_t hash) : hash(hash) {}
-    uint64_t hash;
-    uint64_t shard() const { return hash >> 48; }
-    uint64_t page() const { return (hash >> 16) & 0xffffffff; }
-    uint64_t bucket() const { return (hash >> 8) & (BucketPerPage - 1); }
-    uint64_t tag() const { return hash & 0xff; }
-};
 
 struct KeysInfo {
     std::vector<uint32_t> key_idxes;
@@ -60,6 +25,15 @@ class MutableIndex {
 public:
     MutableIndex();
     virtual ~MutableIndex();
+
+    // get the number of entries in the index (including NullIndexValue)
+    virtual size_t size() const = 0;
+
+    // flush mutable index into immutable index
+    // |num_entry|: num of valid entries in this index(excluding NullIndexValue)
+    // |wb|: file block written to
+    virtual Status flush_to_immutable_index(size_t num_entry, const EditVersion& version,
+                                            fs::WritableBlock& wb) const = 0;
 
     // batch get
     // |n|: size of key/value array
@@ -154,6 +128,7 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
+    size_t kv_size = key_size() + sizeof(IndexValue);
 
     EditVersion version() const { return _version; }
 
@@ -208,6 +183,8 @@ private:
     // |keys|: key array as raw buffer
     // |values|: value array, if operation is erase, |values| is nullptr
     Status _append_wal(size_t n, const void* key, const IndexValue* values);
+
+    Status _flush_l0();
 
     // index storage directory
     std::string _path;
