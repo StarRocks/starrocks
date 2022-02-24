@@ -23,7 +23,6 @@
 
 #include <cstring>
 
-#include "udf/udf.h"
 #include "util/hash_util.hpp"
 #include "util/slice.h"
 
@@ -100,14 +99,6 @@ struct StringValue {
 
     // Trims leading and trailing spaces.
     StringValue trim() const;
-
-    void to_string_val(starrocks_udf::StringVal* sv) const {
-        *sv = starrocks_udf::StringVal(reinterpret_cast<uint8_t*>(ptr), len);
-    }
-
-    static StringValue from_string_val(const starrocks_udf::StringVal& sv) {
-        return StringValue(reinterpret_cast<char*>(sv.ptr), sv.len);
-    }
 
     static StringValue from_slice(const starrocks::Slice& slice) { return StringValue(slice.data, slice.size); }
 };
