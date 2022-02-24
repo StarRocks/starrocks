@@ -25,15 +25,15 @@
 
 namespace starrocks {
 namespace config {
-// cluster id
+// The cluster id.
 CONF_Int32(cluster_id, "-1");
-// port on which ImpalaInternalService is exported
+// The port on which ImpalaInternalService is exported.
 CONF_Int32(be_port, "9060");
 
-// port for brpc
+// The port for brpc.
 CONF_Int32(brpc_port, "8060");
 
-// the number of bthreads for brpc, the default value is set to -1, which means the number of bthreads is #cpu-cores
+// The number of bthreads for brpc, the default value is set to -1, which means the number of bthreads is #cpu-cores.
 CONF_Int32(brpc_num_threads, "-1");
 
 // Declare a selection strategy for those servers have many ips.
@@ -45,7 +45,7 @@ CONF_String(priority_networks, "");
 ////
 //// tcmalloc gc parameter
 ////
-// min memory for TCmalloc, when used memory is smaller than this, do not returned to OS
+// Min memory for TCmalloc, when used memory is smaller than this, do not returned to OS.
 CONF_mInt64(tc_use_memory_min, "10737418240");
 // free memory rate.[0-100]
 CONF_mInt64(tc_free_memory_rate, "20");
@@ -71,95 +71,84 @@ CONF_Int64(tc_max_total_thread_cache_bytes, "1073741824");
 // it will be set to physical memory size.
 CONF_String(mem_limit, "90%");
 
-// the port heartbeat service used
+// The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
-// the count of heart beat service
+// The count of heart beat service.
 CONF_Int32(heartbeat_service_thread_count, "1");
-// the count of thread to create table
+// The count of thread to create table.
 CONF_Int32(create_tablet_worker_count, "3");
-// the count of thread to drop table
+// The count of thread to drop table.
 CONF_Int32(drop_tablet_worker_count, "3");
-// the count of thread to batch load
+// The count of thread to batch load.
 CONF_Int32(push_worker_count_normal_priority, "3");
-// the count of thread to high priority batch load
+// Rhe count of thread to high priority batch load.
 CONF_Int32(push_worker_count_high_priority, "3");
-// the count of thread to publish version
+// Rhe count of thread to publish version.
 CONF_Int32(publish_version_worker_count, "2");
-// the count of thread to publish version per partition
+// The count of thread to publish version per partition.
 CONF_Int32(partition_publish_version_worker_count, "8");
-// the count of thread to clear transaction task
+// The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
-// the count of thread to delete
+// The count of thread to delete.
 CONF_Int32(delete_worker_count, "3");
-// the count of thread to alter table
+// The count of thread to alter table.
 CONF_Int32(alter_tablet_worker_count, "3");
-// the count of thread to clone
+// The count of thread to clone.
 CONF_Int32(clone_worker_count, "3");
-// the count of thread to clone
+// The count of thread to clone.
 CONF_Int32(storage_medium_migrate_count, "1");
-// the count of thread to check consistency
+// The count of thread to check consistency.
 CONF_Int32(check_consistency_worker_count, "1");
-// the count of thread to upload
+// The count of thread to upload.
 CONF_Int32(upload_worker_count, "1");
-// the count of thread to download
+// The count of thread to download.
 CONF_Int32(download_worker_count, "1");
-// the count of thread to make snapshot
+// The count of thread to make snapshot.
 CONF_Int32(make_snapshot_worker_count, "5");
-// the count of thread to release snapshot
+// The count of thread to release snapshot.
 CONF_Int32(release_snapshot_worker_count, "5");
-// the interval time(seconds) for agent report tasks signatrue to FE
+// The interval time(seconds) for agent report tasks signatrue to FE.
 CONF_mInt32(report_task_interval_seconds, "10");
-// the interval time(seconds) for agent report disk state to FE
+// The interval time(seconds) for agent report disk state to FE.
 CONF_mInt32(report_disk_state_interval_seconds, "60");
-// the interval time(seconds) for agent report olap table to FE
+// The interval time(seconds) for agent report olap table to FE.
 CONF_mInt32(report_tablet_interval_seconds, "60");
-// the interval time(seconds) for agent report workgroup to FE
+// The interval time(seconds) for agent report workgroup to FE.
 CONF_mInt32(report_workgroup_interval_seconds, "5");
-// the interval time(seconds) for agent report plugin status to FE
-// CONF_Int32(report_plugin_interval_seconds, "120");
-// the timeout(seconds) for alter table
-// CONF_Int32(alter_tablet_timeout_seconds, "86400");
-// the timeout(seconds) for make snapshot
-// CONF_Int32(make_snapshot_timeout_seconds, "600");
-// the timeout(seconds) for release snapshot
-// CONF_Int32(release_snapshot_timeout_seconds, "600");
-// the max download speed(KB/s)
+// The max download speed(KB/s).
 CONF_mInt32(max_download_speed_kbps, "50000");
-// download low speed limit(KB/s)
+// The download low speed limit(KB/s).
 CONF_mInt32(download_low_speed_limit_kbps, "50");
-// download low speed time(seconds)
+// The download low speed time(seconds).
 CONF_mInt32(download_low_speed_time, "300");
-// curl verbose mode
-// CONF_Int64(curl_verbose_mode, "1");
-// seconds to sleep for each time check table status
-// CONF_Int32(check_status_sleep_time_seconds, "10");
-// sleep time for one second
+// The sleep time for one second.
 CONF_Int32(sleep_one_second, "1");
-// sleep time for five seconds
+// The sleep time for five seconds.
 CONF_Int32(sleep_five_seconds, "5");
 
-// log dir
+// The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
+// The user function dir.
 CONF_String(user_function_dir, "${STARROCKS_HOME}/lib/udf");
-// INFO, WARNING, ERROR, FATAL
+// The sys log level, INFO, WARNING, ERROR, FATAL.
 CONF_String(sys_log_level, "INFO");
 // TIME-DAY, TIME-HOUR, SIZE-MB-nnn
 CONF_String(sys_log_roll_mode, "SIZE-MB-1024");
-// log roll num
+// The log roll num.
 CONF_Int32(sys_log_roll_num, "10");
-// verbose log
+// Verbose log.
 CONF_Strings(sys_log_verbose_modules, "");
-// verbose log level
+// Verbose log level.
 CONF_Int32(sys_log_verbose_level, "10");
-// log buffer level
+// The log buffer level.
 CONF_String(log_buffer_level, "");
 
-// Pull load task dir
+// Pull load task dir.
 CONF_String(pull_load_task_dir, "${STARROCKS_HOME}/var/pull_load");
 
-// the maximum number of bytes to display on the debug webserver's log page
+// The maximum number of bytes to display on the debug webserver's log page.
 CONF_Int64(web_log_bytes, "1048576");
-// number of threads available to serve backend execution requests
+// The number of threads available to serve backend execution requests.
 CONF_Int32(be_service_threads, "64");
 // key=value pair of default query options for StarRocks, separated by ','
 CONF_String(default_query_options, "");
@@ -171,65 +160,58 @@ CONF_String(default_query_options, "");
 // or 3x the number of cores.  This keeps the cores busy without causing excessive
 // thrashing.
 CONF_Int32(num_threads_per_core, "3");
-// if true, compresses tuple data in Serialize
+// If true, compresses tuple data in Serialize.
 CONF_Bool(compress_rowbatches, "true");
-// compress ratio when shuffle row_batches in network, not in storage engine.
-// If ratio is less than this value, use uncompressed data instead
+// Compress ratio when shuffle row_batches in network, not in storage engine.
+// If ratio is less than this value, use uncompressed data instead.
 CONF_mDouble(rpc_compress_ratio_threshold, "1.1");
-// serialize and deserialize each returned row batch
+// Serialize and deserialize each returned row batch.
 CONF_Bool(serialize_batch, "false");
-// interval between profile reports; in seconds
+// Interval between profile reports; in seconds.
 CONF_mInt32(status_report_interval, "5");
-// Local directory to copy UDF libraries from HDFS into
+// Local directory to copy UDF libraries from HDFS into.
 CONF_String(local_library_dir, "${UDF_RUNTIME_DIR}");
-// number of olap scanner thread pool size
+// Number of olap scanner thread pool size.
 CONF_mInt32(doris_scanner_thread_pool_thread_num, "48");
-// number of olap scanner thread pool size
+// Number of olap scanner thread pool size.
 CONF_Int32(doris_scanner_thread_pool_queue_size, "102400");
-// number of etl thread pool size
+// Number of etl thread pool size.
 CONF_Int32(etl_thread_pool_size, "8");
-// number of etl thread pool size
+// Number of etl thread pool size.
 CONF_Int32(etl_thread_pool_queue_size, "256");
-// port on which to run StarRocks test backend
+// Port on which to run StarRocks test backend.
 CONF_Int32(port, "20001");
-// default thrift client connect timeout(in seconds)
+// Default thrift client connect timeout(in seconds).
 CONF_Int32(thrift_connect_timeout_seconds, "3");
-// broker write timeout in seconds
+// Broker write timeout in seconds.
 CONF_Int32(broker_write_timeout_seconds, "30");
-// default thrift client retry interval (in milliseconds)
+// Default thrift client retry interval (in milliseconds).
 CONF_mInt64(thrift_client_retry_interval_ms, "100");
-// max row count number for single scan range
+// Max row count number for single scan range.
 CONF_mInt32(doris_scan_range_row_count, "524288");
-// size of scanner queue between scanner thread and compute thread
+// Size of scanner queue between scanner thread and compute thread.
 CONF_mInt32(doris_scanner_queue_size, "1024");
-// single read execute fragment row size
+// Single read execute fragment row size.
 CONF_mInt32(doris_scanner_row_num, "16384");
-// number of max hdfs scanners
+// Number of max hdfs scanners.
 CONF_Int32(max_hdfs_scanner_num, "50");
-// number of max scan keys
+// Number of max scan keys.
 CONF_mInt32(doris_max_scan_key_num, "1024");
-// the max number of push down values of a single column.
+// The max number of push down values of a single column.
 // if exceed, no conditions will be pushed down for that column.
 CONF_mInt32(max_pushdown_conditions_per_column, "1024");
-// return_row / total_row
+// The max pushdown conjuncts return rate.
 CONF_mInt32(doris_max_pushdown_conjuncts_return_rate, "90");
-// (Advanced) Maximum size of per-query receive-side buffer
+// (Advanced) Maximum size of per-query receive-side buffer.
 CONF_mInt32(exchg_node_buffer_size_bytes, "10485760");
-// insert sort threadhold for sorter
-// CONF_Int32(insertion_threadhold, "16");
-// the block_size every block allocate for sorter
+// The block_size every block allocate for sorter.
 CONF_Int32(sorter_block_size, "8388608");
 
 CONF_mInt64(column_dictionary_key_ratio_threshold, "0");
 CONF_mInt64(column_dictionary_key_size_threshold, "0");
-// if true, output IR after optimization passes
-// CONF_Bool(dump_ir, "false");
-// if set, saves the generated IR to the output file.
-//CONF_String(module_output, "");
-// memory_limitation_per_thread_for_schema_change unit GB
+// The memory_limitation_per_thread_for_schema_change unit GB.
 CONF_mInt32(memory_limitation_per_thread_for_schema_change, "2");
 
-// CONF_Int64(max_unpacked_row_block_size, "104857600");
 
 CONF_mInt32(update_cache_expire_sec, "360");
 CONF_mInt32(file_descriptor_cache_clean_interval, "3600");
@@ -346,11 +328,11 @@ CONF_mInt64(streaming_load_max_mb, "10240");
 // Therefore, it is necessary to limit the maximum number of
 // such data when using stream load to prevent excessive memory consumption.
 CONF_mInt64(streaming_load_max_batch_size_mb, "100");
-// the alive time of a TabletsChannel.
+// The alive time of a TabletsChannel.
 // If the channel does not receive any data till this time,
 // the channel will be removed.
 CONF_Int32(streaming_load_rpc_max_alive_time_sec, "1200");
-// the timeout of a rpc to open the tablet writer in remote BE.
+// The timeout of a rpc to open the tablet writer in remote BE.
 // short operation time, can set a short timeout
 CONF_Int32(tablet_writer_open_rpc_timeout_sec, "60");
 // Deprecated, use query_timeout instread
@@ -443,10 +425,10 @@ CONF_String(scratch_dirs, "/tmp");
 // then only the first writable directory is used
 // CONF_Bool(allow_multiple_scratch_dirs_per_device, "false");
 
-// linux transparent huge page
+// Linux transparent huge page.
 CONF_Bool(madvise_huge_pages, "false");
 
-// whether use mmap to allocate memory
+// Whether use mmap to allocate memory.
 CONF_Bool(mmap_buffers, "false");
 
 // Sleep time in seconds between memory maintenance iterations
@@ -458,7 +440,7 @@ CONF_Int32(memory_max_alignment, "16");
 // write buffer size before flush
 CONF_mInt64(write_buffer_size, "104857600");
 
-// following 2 configs limit the memory consumption of load process on a Backend.
+// Following 2 configs limit the memory consumption of load process on a Backend.
 // eg: memory limit to 80% of mem limit config but up to 100GB(default)
 // NOTICE(cmy): set these default values very large because we don't want to
 // impact the load performace when user upgrading StarRocks.
@@ -472,19 +454,19 @@ CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 
-// update interval of tablet stat cache
+// Update interval of tablet stat cache.
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
 
-// result buffer cancelled time (unit: second)
+// Result buffer cancelled time (unit: second).
 CONF_mInt32(result_buffer_cancelled_interval_time, "300");
 
-// the increased frequency of priority for remaining tasks in BlockingPriorityQueue
+// The increased frequency of priority for remaining tasks in BlockingPriorityQueue.
 CONF_mInt32(priority_queue_remaining_tasks_increased_frequency, "512");
 
-// sync tablet_meta when modifing meta
+// Sync tablet_meta when modifing meta.
 CONF_mBool(sync_tablet_meta, "false");
 
-// default thrift rpc timeout ms
+// Default thrift rpc timeout ms.
 CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 
 // txn commit rpc timeout
@@ -493,18 +475,18 @@ CONF_mInt32(txn_commit_rpc_timeout_ms, "10000");
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
 
-// max consumer num in one data consumer group, for routine load
+// Max consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_consumer_num_per_group, "3");
 
-// the size of thread pool for routine load task.
-// this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5)
+// The size of thread pool for routine load task.
+// this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
 // Is set to true, index loading failure will not causing BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
 // CONF_Bool(auto_recover_index_loading_failure, "false");
 
-// max external scan cache batch count, means cache max_memory_cache_batch_count * batch_size row
+// Max external scan cache batch count, means cache max_memory_cache_batch_count * batch_size row
 // default is 20, batch_size's defualt value is 1024 means 20 * 1024 rows will be cached
 CONF_mInt32(max_memory_sink_batch_count, "20");
 
@@ -512,13 +494,13 @@ CONF_mInt32(max_memory_sink_batch_count, "20");
 // note: unit is minute, default is 5min
 CONF_mInt32(scan_context_gc_interval_min, "5");
 
-// es scroll keep-alive
+// es scroll keep-alive.
 CONF_String(es_scroll_keepalive, "5m");
 
-// HTTP connection timeout for es
+// HTTP connection timeout for es.
 CONF_Int32(es_http_timeout_ms, "5000");
 
-// the max client cache number per each host
+// The max client cache number per each host.
 // There are variety of client cache in BE, but currently we use the
 // same cache size configuration.
 // TODO(cmy): use different config to set different client cache if necessary.
@@ -539,34 +521,34 @@ CONF_mInt32(path_scan_interval_second, "86400");
 CONF_mInt32(storage_flood_stage_usage_percent, "95"); // 95%
 // The min bytes that should be left of a data dir
 CONF_mInt64(storage_flood_stage_left_capacity_bytes, "1073741824"); // 1GB
-// number of thread for flushing memtable per store
+// Number of thread for flushing memtable per store.
 CONF_Int32(flush_thread_num_per_store, "2");
 
-// config for tablet meta checkpoint
+// Config for tablet meta checkpoint.
 CONF_mInt32(tablet_meta_checkpoint_min_new_rowsets_num, "10");
 CONF_mInt32(tablet_meta_checkpoint_min_interval_secs, "600");
 
-// Maximum size of a single message body in all protocols
+// Maximum size of a single message body in all protocols.
 CONF_Int64(brpc_max_body_size, "2147483648");
-// Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED
+// Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED.
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 
-// max number of txns for every txn_partition_map in txn manager
-// this is a self protection to avoid too many txns saving in manager
+// Max number of txns for every txn_partition_map in txn manager.
+// this is a self protection to avoid too many txns saving in manager.
 CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 
-// tablet_map_lock shard size, the value must be power of two.
-// this is a an enhancement for better performance to manage tablet
+// The tablet map shard size, the value must be power of two.
+// this is a an enhancement for better performance to manage tablet.
 CONF_Int32(tablet_map_shard_size, "32");
 
 CONF_String(plugin_path, "${STARROCKS_HOME}/plugin");
 
 // txn_map_lock shard size, the value is 2^n, n=0,1,2,3,4
-// this is a an enhancement for better performance to manage txn
+// this is a an enhancement for better performance to manage txn.
 CONF_Int32(txn_map_shard_size, "128");
 
 // txn_lock shard size, the value is 2^n, n=0,1,2,3,4
-// this is a an enhancement for better performance to commit and publish txn
+// this is a an enhancement for better performance to commit and publish txn.
 CONF_Int32(txn_shard_size, "1024");
 
 // Whether to continue to start be when load tablet from header failed.
@@ -578,22 +560,22 @@ CONF_Bool(ignore_rowset_stale_unconsistent_delete, "false");
 // The chunk size for vector query engine
 CONF_Int32(vector_chunk_size, "4096");
 
-// valid range: [0-1000].
+// Valid range: [0-1000].
 // `0` will disable late materialization.
 // `1000` will enable late materialization always.
 CONF_Int32(late_materialization_ratio, "10");
 
-// valid range: [0-1000].
+// Valid range: [0-1000].
 // `0` will disable late materialization select metric type.
 // `1000` will enable late materialization always select metric type.
 CONF_Int32(metric_late_materialization_ratio, "1000");
 
-// Max batched bytes for each transmit request
+// Max batched bytes for each transmit request.
 CONF_Int64(max_transmit_batched_bytes, "65536");
 
 CONF_Int16(bitmap_max_filter_items, "30");
 
-// valid range: [0-1000].
+// The bitmap max filter ratio, valid value range is: [0-1000].
 CONF_Int16(bitmap_max_filter_ratio, "1");
 
 CONF_Bool(bitmap_filter_enable_not_equal, "false");
@@ -612,23 +594,23 @@ CONF_mInt16(storage_format_version, "2");
 // 1 for LZ4_NULL
 CONF_mInt16(null_encoding, "0");
 
-// do pre-aggregate if effect great than the factor, factor range:[1-100].
+// Do pre-aggregate if effect great than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");
 
 #ifdef __x86_64__
-// enable genearate minidump for crash
+// Enable genearate minidump for crash.
 CONF_Bool(sys_minidump_enable, "false");
 
-// minidump dir(generated by google_breakpad)
+// The minidump dir(generated by google_breakpad).
 CONF_String(sys_minidump_dir, "${STARROCKS_HOME}");
 
-// max minidump files number could exist
+// The max minidump files number could exist.
 CONF_mInt32(sys_minidump_max_files, "16");
 
-// max minidump file size could exist
+// The max minidump file size could exist.
 CONF_mInt32(sys_minidump_limit, "20480");
 
-// interval(seconds) for cleaning old minidumps
+// Interval(seconds) for cleaning old minidumps.
 CONF_mInt32(sys_minidump_interval, "600");
 #endif
 
@@ -637,27 +619,27 @@ CONF_mInt32(sys_minidump_interval, "600");
 // requests will fail.
 CONF_Int16(tablet_max_versions, "1000");
 
-// will remove
+// NOTE: it will be deleted.
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
-// the number of scan threads pipeline engine.
+// The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
-// queue size of scan thread pool for pipeline engine.
+// Queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
-// the number of execution threads for pipeline engine.
+// The number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
-// the buffer size of io task
+// The buffer size of io task.
 CONF_Int64(pipeline_io_buffer_size, "64");
-// the buffer size of SinkBuffer
+// The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
-// the degree of parallelism of brpc
+// The degree of parallelism of brpc.
 CONF_Int64(pipeline_sink_brpc_dop, "8");
 
-// bitmap serialize version
+// The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
-// max hdfs file handle
+// The max hdfs file handle.
 CONF_mInt32(max_hdfs_file_handle, "1000");
-// buffer stream reserve size
+// Buffer stream reserve size
 // each column will reserve buffer_stream_reserve_size bytes for read
 // default: 8M
 CONF_mInt32(buffer_stream_reserve_size, "8192000");
@@ -669,14 +651,14 @@ CONF_Int64(max_segment_file_size, "1073741824");
 // hdfsPreadFully() are always enabled for object storage.
 CONF_Bool(use_hdfs_pread, "true");
 
-// rewrite partial semgent or not
+// Rewrite partial semgent or not.
 // if true, partial segment will be rewrite into new segment file first and append other column data
 // if false, the data of other column will be append into partial segment file and rebuild segment footer
 // we may need the both implementations for perf test for now, so use it to decide which implementations to use
 // default: true
 CONF_Bool(rewrite_partial_segment, "true");
 
-// properties to access aws s3
+// Properties to access aws s3.
 CONF_String(aws_access_key_id, "");
 CONF_String(aws_secret_access_key, "");
 CONF_String(aws_s3_endpoint, "");

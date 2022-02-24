@@ -51,7 +51,7 @@ std::string& trim(std::string& s) {
     return s;
 }
 
-// split string by '='
+// Split string by '='.
 void splitkv(const std::string& s, std::string& k, std::string& v) {
     const char sep = '=';
     size_t start = 0;
@@ -65,7 +65,7 @@ void splitkv(const std::string& s, std::string& k, std::string& v) {
     }
 }
 
-// replace env variables
+// Replace env variables.
 bool replaceenv(std::string& s) {
     std::size_t pos = 0;
     std::size_t start = 0;
@@ -170,14 +170,14 @@ bool strtox(const std::string& valstr, std::string& retval) {
     return true;
 }
 
-// load conf file
+// Load conf file.
 bool Properties::load(const char* filename) {
-    // if filename is null, use the empty props
+    // If 'filename' is null, use the empty props.
     if (filename == nullptr) {
         return true;
     }
 
-    // open the conf file
+    // Open the conf file
     std::ifstream input(filename);
     if (!input.is_open()) {
         std::cerr << "config::load() failed to open the file:" << filename << std::endl;
@@ -190,27 +190,27 @@ bool Properties::load(const char* filename) {
     std::string value;
     line.reserve(512);
     while (input) {
-        // read one line at a time
+        // Read one line at a time.
         std::getline(input, line);
 
-        // remove left and right spaces
+        // Remove left and right spaces.
         trim(line);
 
-        // ignore comments
+        // Ignore comments.
         if (line.empty() || line[0] == '#') {
             continue;
         }
 
-        // read key and value
+        // Read key and value.
         splitkv(line, key, value);
         trim(key);
         trim(value);
 
-        // insert into file_conf_map
+        // Insert into 'file_conf_map'.
         file_conf_map[key] = value;
     }
 
-    // close the conf file
+    // Close the conf file.
     input.close();
 
     return true;
@@ -263,18 +263,18 @@ std::ostream& operator<<(std::ostream& out, const std::vector<T>& v) {
         continue;                                                                                  \
     }
 
-// init conf fields
+// Init conf fields.
 bool init(const char* filename, bool fillconfmap) {
-    // load properties file
+    // Load properties file.
     if (!props.load(filename)) {
         return false;
     }
-    // fill full_conf_map ?
+    // Fill 'full_conf_map'.
     if (fillconfmap && full_conf_map == nullptr) {
         full_conf_map = new std::map<std::string, std::string>();
     }
 
-    // set conf fields
+    // Set conf fields.
     for (const auto& it : *Register::_s_field_map) {
         SET_FIELD(it.second, bool, fillconfmap);
         SET_FIELD(it.second, int16_t, fillconfmap);
