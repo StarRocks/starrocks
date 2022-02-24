@@ -637,7 +637,10 @@ public class StmtExecutor {
     public void cancel() {
         if (parsedStmt instanceof DeleteStmt) {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
-            Catalog.getCurrentCatalog().getDeleteHandler().killJob(deleteStmt.getJobId());
+            long jobId = deleteStmt.getJobId();
+            if (jobId != -1) {
+                Catalog.getCurrentCatalog().getDeleteHandler().killJob(jobId);
+            }
         } else {
             Coordinator coordRef = coord;
             if (coordRef != null) {

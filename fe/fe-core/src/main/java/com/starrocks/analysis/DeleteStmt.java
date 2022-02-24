@@ -44,18 +44,21 @@ public class DeleteStmt extends DdlStmt {
     private final List<Predicate> deleteConditions;
     // Each deleteStmt corresponds to a DeleteJob.
     // The JobID is generated here for easy correlation when cancel Delete
-    private final long jobId;
+    private long jobId = -1;
 
     public DeleteStmt(TableName tableName, PartitionNames partitionNames, Expr wherePredicate) {
         this.tbl = tableName;
         this.partitionNames = partitionNames;
         this.wherePredicate = wherePredicate;
         this.deleteConditions = Lists.newLinkedList();
-        this.jobId = Catalog.getCurrentCatalog().getNextId();
     }
 
     public long getJobId() {
         return jobId;
+    }
+
+    public void setJobId(long jobId) {
+        this.jobId = jobId;
     }
 
     public String getTableName() {
