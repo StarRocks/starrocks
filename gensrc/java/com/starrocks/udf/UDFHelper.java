@@ -6,6 +6,9 @@ import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
 public class UDFHelper {
     public static final int TYPE_BOOLEAN = 2;
     public static final int TYPE_TINYINT = 3;
@@ -19,25 +22,26 @@ public class UDFHelper {
     public static final int TYPE_ARRAY = 15;
 
     // create boxed array
+    // 
     public static Object[] createBoxedArray(int type, int numRows, boolean nullable, ByteBuffer... buffer) {
         switch (type) {
             case TYPE_BOOLEAN: {
                 if (!nullable) {
-                    return createBoxedBoolArray(numRows, null, buffer[1]);
+                    return createBoxedBoolArray(numRows, null, buffer[0]);
                 } else {
                     return createBoxedBoolArray(numRows, buffer[0], buffer[1]);
                 }
             }
             case TYPE_TINYINT: {
                 if (!nullable) {
-                    return createBoxedByteArray(numRows, null, buffer[1]);
+                    return createBoxedByteArray(numRows, null, buffer[0]);
                 } else {
                     return createBoxedByteArray(numRows, buffer[0], buffer[1]);
                 }
             }
             case TYPE_SMALLINT: {
                 if (!nullable) {
-                    return createBoxedShortArray(numRows, null, buffer[1]);
+                    return createBoxedShortArray(numRows, null, buffer[0]);
                 } else {
                     return createBoxedShortArray(numRows, buffer[0], buffer[1]);
                 }
@@ -230,7 +234,7 @@ public class UDFHelper {
 
     public static Object[] createBoxedStringArray(int numRows, ByteBuffer nullBuffer, ByteBuffer offsetBuffer,
                                                   ByteBuffer dataBuffer) {
-        final IntBuffer intBuffer = offsetBuffer.asIntBuffer();
+        final IntBuffer intBuffer = offsetBuffer.order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
         int[] offsets = new int[numRows + 1];
         intBuffer.get(offsets);
         final int byteSize = offsets[offsets.length - 1];
@@ -253,6 +257,49 @@ public class UDFHelper {
         }
 
         return strings;
+    }
+
+    // use batch reflect batch call method to reduce JNI call costs
+    // TODO: we need to find a more efficient way of calling
+    public static void batchUpdateSingle(Object o, Method method, Object state, Object[] column)
+            throws InvocationTargetException, IllegalAccessException {
+        Object[][] inputs = (Object[][])column;
+        Object[] parameter = new Object[inputs.length + 1];
+        int numRows = inputs[0].length;
+        parameter[0] = state;
+        for(int i = 0;i < numRows; ++i) {
+            for(int j = 0;j < column.length; ++j) {
+                parameter[j + 1] = inputs[j][i];
+            }
+            method.invoke(o, parameter);
+        }
+    }
+
+    public static void batchUpdate(Object o, Method method, Object[] column)
+            throws InvocationTargetException, IllegalAccessException {
+        Object[][] inputs = (Object[][])column;
+        Object[] parameter = new Object[inputs.length];        
+        int numRows = inputs[0].length;
+        for(int i = 0;i < numRows; ++i) {
+            for(int j = 0;j < column.length; ++j) {
+                parameter[j] = inputs[j][i];
+            }
+            method.invoke(o, parameter);
+        }
+    }
+
+    public static Object[] batchCall(Object o, Method method, int batchSize, Object[] column) 
+            throws InvocationTargetException, IllegalAccessException {
+        Object[][] inputs = (Object[][])column;
+        Object[] parameter = new Object[inputs.length];   
+        Object[] res = new Object[batchSize];     
+        for(int i = 0;i < batchSize; ++i) {
+            for(int j = 0;j < column.length; ++j) {
+                parameter[j] = inputs[j][i];
+            }
+            res[i] = method.invoke(o, parameter);
+        }
+        return res;
     }
 
 }

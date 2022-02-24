@@ -4,8 +4,6 @@
 
 #include <memory>
 
-#include "column/binary_column.h"
-#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -47,7 +45,7 @@ DEFINE_CAST_TO_JVALUE(TYPE_DOUBLE, helper.newDouble(data_value));
 DEFINE_CAST_TO_JVALUE(TYPE_VARCHAR, helper.newString(data_value.get_data(), data_value.get_size()));
 
 void release_jvalue(MethodTypeDescriptor method_type_desc, jvalue val) {
-    if (!method_type_desc.is_box && val.l) {
+    if (method_type_desc.is_box && val.l) {
         auto& helper = JVMFunctionHelper::getInstance();
         helper.getEnv()->DeleteLocalRef(val.l);
     }
@@ -226,7 +224,6 @@ Status init_udaf_context(int id, const std::string& url, const std::string& chec
     auto* udaf_ctx = context->impl()->udaf_ctxs();
     udaf_ctx->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
     RETURN_IF_ERROR(udaf_ctx->udf_classloader->init());
-    udaf_ctx->udf_helper = std::make_unique<UDFHelper>();
     udaf_ctx->analyzer = std::make_unique<ClassAnalyzer>();
 
     udaf_ctx->udaf_class = udaf_ctx->udf_classloader->getClass(symbol);
@@ -253,9 +250,10 @@ Status init_udaf_context(int id, const std::string& url, const std::string& chec
         RETURN_IF_ERROR(analyzer->get_signature(clazz, method_name, &sign));
         RETURN_IF_ERROR(analyzer->get_udaf_method_desc(sign, &mtdesc));
         *res = std::make_unique<JavaMethodDescriptor>();
-        (*res)->name = std::move(method_name);
         (*res)->signature = std::move(sign);
+        (*res)->name = std::move(method_name);
         (*res)->method_desc = std::move(mtdesc);
+        ASSIGN_OR_RETURN((*res)->method, analyzer->get_method_object(clazz, name));
         return Status::OK();
     };
 
@@ -267,8 +265,7 @@ Status init_udaf_context(int id, const std::string& url, const std::string& chec
     RETURN_IF_ERROR(add_method("serialize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->serialize));
     RETURN_IF_ERROR(add_method("serializeLength", udaf_ctx->udaf_state_class.clazz(), &udaf_ctx->serialize_size));
 
-    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->udaf_state_class.clazz(), udaf_ctx->udaf_class.clazz(),
-                                                     udaf_ctx->handle, udaf_ctx);
+    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle, udaf_ctx);
 
     return Status::OK();
 }
