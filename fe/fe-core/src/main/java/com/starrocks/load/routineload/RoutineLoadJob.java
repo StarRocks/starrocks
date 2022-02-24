@@ -271,6 +271,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
     }
 
+    public Map<String, String> getSessionVariables() {
+        return sessionVariables;
+    }
+
     protected void setOptional(CreateRoutineLoadStmt stmt) throws UserException {
         setRoutineLoadDesc(stmt.getRoutineLoadDesc());
         if (stmt.getDesiredConcurrentNum() != -1) {
