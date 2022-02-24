@@ -708,6 +708,9 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     IndexSnapshotMetaPB snapshot_meta = l0_meta.snapshot();
     EditVersion start_version = snapshot_meta.version();
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    PagePointerPB page_pb = snapshot_meta.data();
+    size_t snapshot_off = page_pb.offset();
+    size_t snapshot_size = page_pb.size();
     std::unique_ptr<fs::ReadableBlock> rblock;
     DeferOp close_block([&rblock] {
         if (rblock) {
@@ -720,13 +723,13 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     // if not, we can't call phmap.load() directly because phmap.load() alaways
     // reads the contents of the file from the beginning
     phmap::BinaryInputArchive ar_in(l0_index_file_name.data());
-    if (!_load_snapshot(ar_in)) {
+    if (snapshot_size > 0 && !_load_snapshot(ar_in)) {
         std::string err_msg = strings::Substitute("failed load snapshot from file $0", l0_index_file_name);
         LOG(WARNING) << err_msg;
         return Status::InternalError(err_msg);
     }
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
-    _offset = (mutable_index_size() == 0) ? 0 : _dump_bound();
+    _offset = snapshot_off + snapshot_size;
     int n = l0_meta.wals_size();
     // read wals and build l0
     for (int i = 0; i < n; i++) {
@@ -948,10 +951,6 @@ bool PersistentIndex::_dump(phmap::BinaryOutputArchive& ar_out) {
 // TODO: maybe build snapshot is better than append wals when almost
 // operations are upsert or erase
 bool PersistentIndex::_can_dump_directly() {
-    // if _l0 is empty, we need to build snapshot first
-    if (_size == 0) {
-        return true;
-    }
     return _dump_bound() <= kSnapshotSize;
 }
 
