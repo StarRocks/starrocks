@@ -2,6 +2,7 @@
 
 package com.starrocks.external.iceberg.hive;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.external.hive.HiveMetaStoreThriftClient;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -74,5 +75,10 @@ public class HiveClientPool extends ClientPoolImpl<IMetaStoreClient, TException>
     @Override
     protected void close(IMetaStoreClient client) {
         client.close();
+    }
+
+    @VisibleForTesting
+    HiveConf hiveConf() {
+        return hiveConf;
     }
 }

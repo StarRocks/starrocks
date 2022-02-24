@@ -38,12 +38,14 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     private final String fullName;
     private final String database;
     private final String tableName;
+    private final Configuration conf;
     private final int metadataRefreshMaxRetries;
     private final FileIO fileIO;
     private final ClientPool<IMetaStoreClient, TException> metaClients;
 
     protected HiveTableOperations(Configuration conf, ClientPool metaClients, FileIO fileIO,
                                   String catalogName, String database, String table) {
+        this.conf = conf;
         this.metaClients = metaClients;
         this.fileIO = fileIO;
         this.fullName = catalogName + "." + database + "." + table;
