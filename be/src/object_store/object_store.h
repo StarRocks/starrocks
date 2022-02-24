@@ -15,29 +15,27 @@ public:
     ObjectStore() = default;
     virtual ~ObjectStore() = default;
 
-    virtual Status create_bucket(const std::string& bucket_name) = 0;
+    virtual Status create_bucket(const std::string& bucket) = 0;
 
-    virtual Status delete_bucket(const std::string& bucket_name) = 0;
+    virtual Status delete_bucket(const std::string& bucket) = 0;
 
-    virtual StatusOr<std::unique_ptr<io::OutputStream>> put_object(const std::string& bucket_name,
-                                                                   const std::string& object_key) = 0;
+    virtual StatusOr<std::unique_ptr<io::OutputStream>> put_object(const std::string& bucket,
+                                                                   const std::string& object) = 0;
 
-    virtual StatusOr<std::unique_ptr<io::RandomAccessFile>> get_object(const std::string& bucket_name,
-                                                                       const std::string& object_key) = 0;
+    virtual StatusOr<std::unique_ptr<io::RandomAccessFile>> get_object(const std::string& bucket,
+                                                                       const std::string& object) = 0;
 
-    virtual Status put_object(const std::string& bucket_name, const std::string& object_key,
-                              const std::string& object_path) = 0;
+    virtual Status put_object(const std::string& bucket, const std::string& object, const std::string& object_path) = 0;
 
-    virtual Status get_object(const std::string& bucket_name, const std::string& object_key,
-                              const std::string& object_path) = 0;
+    virtual Status get_object(const std::string& bucket, const std::string& object, const std::string& object_path) = 0;
 
-    virtual Status exist_object(const std::string& bucket_name, const std::string& object_key) = 0;
+    virtual Status exist_object(const std::string& bucket, const std::string& object) = 0;
 
-    virtual Status get_object_size(const std::string& bucket_name, const std::string& object_key, size_t* size) = 0;
+    virtual Status get_object_size(const std::string& bucket, const std::string& object, size_t* size) = 0;
 
-    virtual Status delete_object(const std::string& bucket_name, const std::string& object_key) = 0;
+    virtual Status delete_object(const std::string& bucket, const std::string& object) = 0;
 
-    virtual Status list_objects(const std::string& bucket_name, const std::string& object_prefix,
+    virtual Status list_objects(const std::string& bucket, const std::string& object_prefix,
                                 std::vector<std::string>* result) = 0;
 };
 
