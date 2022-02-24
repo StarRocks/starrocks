@@ -414,10 +414,10 @@ StarRocks支持通过外表的方式查询Apache Iceberg数据湖中的数据，
 ### 注意事项
 
 * Iceberg外表是只读的，只能用于查询操作。
-* 支持Iceberg的表格式为V1（Copy on write表），暂不支持为 V2（Merge on read表）。V1和V2之间的更多区别，请参见[Apache Iceberg官网](~~https://iceberg.apache.org/#spec/#format-versioning~~)。
+* 支持Iceberg的表格式为V1（Copy on write表），暂不支持为 V2（Merge on read表）。V1和V2之间的更多区别，请参见[Apache Iceberg官网](https://iceberg.apache.org/#spec/#format-versioning)。
 * 支持Iceberg文件的压缩格式为GZIP（默认值），ZSTD，LZ4和SNAPPY。
 * 仅支持Iceberg的Catalog类型为Hive Catalog，数据存储格式为Parquet和ORC。
-* StarRocks暂不⽀持同步Iceberg中的[schema evolution](~~https://iceberg.apache.org/#evolution#schema-evolution~~)，如果Iceberg表schema evolution发生变更，您需要在StarRocks中删除对应Iceberg外表并重新建立。
+* StarRocks暂不⽀持同步Iceberg中的[schema evolution](https://iceberg.apache.org/#evolution#schema-evolution)，如果Iceberg表schema evolution发生变更，您需要在StarRocks中删除对应Iceberg外表并重新建立。
 
 ### 操作步骤
 
