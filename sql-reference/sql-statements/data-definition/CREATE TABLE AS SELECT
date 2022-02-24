@@ -19,7 +19,7 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 
 [PROPERTIES ("key"="value", ...)]
 
-AS SELECT <query>
+AS SELECT query
 
   [ ... ]
 ```
@@ -38,9 +38,9 @@ AS SELECT <query>
 
 ### 查询部分
 
-支持`AS SELECT <query>` 直接指定具体列，比如 `as select a, b, c from table_a;` ，则新建表的列名为a，b， c 。
+支持`AS SELECT query` 直接指定具体列，比如 `as select a, b, c from table_a;` ，则新建表的列名为a，b， c 。
 
-支持`AS SELECT <query>` 使用表达式，并且建议您为新表的列设置具有业务意义的别名，便于后续识别，比如`select a+1 as x, b+2 as y, c*c as z from table_a;`，设置新列名为x，y，z。
+支持`AS SELECT query` 使用表达式，并且建议您为新表的列设置具有业务意义的别名，便于后续识别，比如`select a+1 as x, b+2 as y, c*c as z from table_a;`，设置新列名为x，y，z。
 
 ## Usage Notes
 
@@ -59,7 +59,7 @@ create table order_new as select * from order;
 
 示例二：根据原表 order 的列 k1、k2 和 k3，创建一个新表 order_new，并指定列名为 a、b 和 c。
 
-> 指定的列数需要与 AS SELECT *<query>* 的列数保持一致。
+> 指定的列数需要与 AS SELECT *query* 的列数保持一致。
 
 ```SQL
 create table order_new a, b, c as select k1, k2, k3 from order;
@@ -69,7 +69,7 @@ create table order_new a, b, c as select k1, k2, k3 from order;
 create table order_new as select k1 as a, k2 as b, k3 as c from order;
 ```
 
-示例三：AS SELECT *<query>*使用表达式，根据表达式结果，创建一个新表，并重新指定列名。
+示例三：AS SELECT *query*使用表达式，根据表达式结果，创建一个新表，并重新指定列名。
 
 > 建议您为新表的列名设置具有业务意义的别名，便于后续识别。
 
