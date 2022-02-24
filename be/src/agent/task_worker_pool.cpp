@@ -66,8 +66,8 @@ const uint32_t PUBLISH_VERSION_MAX_RETRY = 3;
 const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
 
 std::atomic_ulong TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
-std::mutex TaskWorkerPool::_s_task_signatures_lock;
-std::map<TTaskType::type, std::set<int64_t>> TaskWorkerPool::_s_task_signatures;
+std::mutex TaskWorkerPool::_s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
+std::set<int64_t> TaskWorkerPool::_s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
 FrontendServiceClientCache TaskWorkerPool::_master_service_client_cache;
 
 TaskWorkerPool::TaskWorkerPool(const TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info,
@@ -209,7 +209,7 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
     std::vector<TAgentTaskRequest> failed_task_vec;
     EnumToString(TTaskType, task_type, type_str);
     {
-        std::lock_guard task_signatures_lock(_s_task_signatures_lock);
+        std::lock_guard task_signatures_lock(_s_task_signatures_locks[task_type]);
         const auto recv_time = time(nullptr);
         for (auto it = tasks->begin(); it != tasks->end();) {
             TAgentTaskRequest& task_req = *it;
@@ -264,13 +264,13 @@ void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
 }
 
 bool TaskWorkerPool::_register_task_info(const TTaskType::type task_type, int64_t signature) {
-    std::lock_guard task_signatures_lock(_s_task_signatures_lock);
+    std::lock_guard task_signatures_lock(_s_task_signatures_locks[task_type]);
     std::set<int64_t>& signature_set = _s_task_signatures[task_type];
     return signature_set.insert(signature).second;
 }
 
 void TaskWorkerPool::_remove_task_info(const TTaskType::type task_type, int64_t signature) {
-    std::lock_guard task_signatures_lock(_s_task_signatures_lock);
+    std::lock_guard task_signatures_lock(_s_task_signatures_locks[task_type]);
     _s_task_signatures[task_type].erase(signature);
 }
 
@@ -1273,10 +1273,14 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
     request.__set_backend(worker_pool_this->_backend);
 
     while ((!worker_pool_this->_stopped)) {
-        {
-            std::lock_guard task_signatures_lock(_s_task_signatures_lock);
-            request.__set_tasks(_s_task_signatures);
+        std::map<TTaskType::type, std::set<int64_t>> tasks;
+        for (int i = 0; i < TTaskType::type::NUM_TASK_TYPE; i++) {
+            std::lock_guard task_signatures_lock(_s_task_signatures_locks[i]);
+            if (!_s_task_signatures[i].empty()) {
+                tasks.emplace(static_cast<TTaskType::type>(i), _s_task_signatures[i]);
+            }
         }
+        request.__set_tasks(tasks);
 
         StarRocksMetrics::instance()->report_task_requests_total.increment(1);
         TMasterResult result;
