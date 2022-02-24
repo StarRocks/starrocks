@@ -78,8 +78,6 @@ public:
 
     uint8_t* varargs_buffer() { return _varargs_buffer; }
 
-    std::vector<starrocks_udf::AnyVal*>* staging_input_vals() { return &_staging_input_vals; }
-
     bool closed() const { return _closed; }
 
     int64_t num_updates() const { return _num_updates; }
@@ -184,11 +182,6 @@ private:
     std::vector<starrocks_udf::AnyVal*> _constant_args;
 
     std::vector<vectorized::ColumnPtr> _constant_columns;
-
-    // Used by ScalarFnCall to store the arguments when running without codegen. Allows us
-    // to pass AnyVal* arguments to the scalar function directly, rather than codegening a
-    // call that passes the correct AnyVal subclass pointer type.
-    std::vector<starrocks_udf::AnyVal*> _staging_input_vals;
 
     // Indicates whether this context has been closed. Used for verification/debugging.
     bool _closed;

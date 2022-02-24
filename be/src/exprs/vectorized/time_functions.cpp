@@ -101,8 +101,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
 Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context,
                                          starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || context->get_num_args() != 3 ||
-        context->get_arg_type(1)->type != starrocks_udf::FunctionContext::Type::TYPE_VARCHAR ||
-        context->get_arg_type(2)->type != starrocks_udf::FunctionContext::Type::TYPE_VARCHAR ||
+        context->get_arg_type(1)->type != TYPE_VARCHAR || context->get_arg_type(2)->type != TYPE_VARCHAR ||
         !context->is_constant_column(1) || !context->is_constant_column(2)) {
         return Status::OK();
     }
