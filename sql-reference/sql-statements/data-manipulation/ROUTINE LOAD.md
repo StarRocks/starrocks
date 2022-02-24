@@ -109,7 +109,7 @@ FROM data_source
 
     2. max_batch_interval
 
-        Task scheduling time, which is how often a task executes, defaults to 10s. Task consumption data time is routine_in fe.conf Load_Task_Consume_ Second, defaults to 3s. Task execution timeout is routine_in fe.conf Load_ Task_Timeout_Second, defaults to 15s. Example:
+        Task scheduling time, which is how often a task executes, defaults to 10s. Task consumption data time is routine_in fe.conf Load_Task_Consume_Second, defaults to 3s. Task execution timeout is routine_in fe.conf Load_ Task_Timeout_Second, defaults to 15s. Example:
 
         "max_batch_interval" = "20"
 
