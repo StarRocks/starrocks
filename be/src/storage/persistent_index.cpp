@@ -763,9 +763,6 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     fs::CreateBlockOptions wblock_opts({l0_index_file_name});
     wblock_opts.mode = Env::MUST_EXIST;
     RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &_index_block));
-
-    // TODO: there may be expired l0 index files in the `_path` directory
-    // and they should be deleted to save disk usage
     RETURN_IF_ERROR(_delete_expired_index_file(start_version));
     return Status::OK();
 }
@@ -941,17 +938,11 @@ size_t PersistentIndex::mutable_index_capacity() {
 }
 
 size_t PersistentIndex::_dump_bound() {
-    if (_l0 == nullptr) {
-        return 0;
-    }
-    return _l0->dump_bound();
+    return (_l0 == nullptr) ? 0 : _l0->dump_bound();
 }
 
 bool PersistentIndex::_dump(phmap::BinaryOutputArchive& ar_out) {
-    if (_l0 == nullptr) {
-        return false;
-    }
-    return _l0->dump(ar_out);
+    return (_l0 == nullptr) ? false : _l0->dump(ar_out);
 }
 
 // TODO: maybe build snapshot is better than append wals when almost
@@ -965,10 +956,7 @@ bool PersistentIndex::_can_dump_directly() {
 }
 
 bool PersistentIndex::_load_snapshot(phmap::BinaryInputArchive& ar) {
-    if (_l0 == nullptr) {
-        return false;
-    }
-    return _l0->load_snapshot(ar);
+    return (_l0 == nullptr) ? false : _l0->load_snapshot(ar);
 }
 
 Status PersistentIndex::_delete_expired_index_file(const EditVersion& version) {
