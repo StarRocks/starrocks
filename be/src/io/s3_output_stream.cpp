@@ -81,7 +81,8 @@ Status S3OutputStream::create_multipart_upload() {
         _upload_id = outcome.GetResult().GetUploadId();
         return Status::OK();
     }
-    return Status::IOError(fmt::format("S3: Fail to create multipart upload: {}", outcome.GetError().GetMessage()));
+    return Status::IOError(fmt::format("S3: Fail to create multipart upload for object {}/{}: {}", _bucket, _object,
+                                       outcome.GetError().GetMessage()));
 }
 
 Status S3OutputStream::singlepart_upload() {
@@ -145,7 +146,8 @@ Status S3OutputStream::complete_multipart_upload() {
     if (outcome.IsSuccess()) {
         return Status::OK();
     }
-    return Status::IOError(fmt::format("S3: Fail to complete multipart upload: {}", outcome.GetError().GetMessage()));
+    return Status::IOError(fmt::format("S3: Fail to complete multipart upload for object {}/{}: {}", _bucket, _object,
+                                       outcome.GetError().GetMessage()));
 }
 
 } // namespace starrocks::io
