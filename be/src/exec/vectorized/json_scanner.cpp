@@ -392,6 +392,7 @@ Status JsonReader::_read_chunk_from_document_stream(Chunk* chunk, int32_t rows_t
             // Try to reorder the column according to the column order of first json row.
             // It is much faster when we access the json field as the json key order.
             _reorder_column(&reordered_slot_descs, row);
+            // Resetting the row after for-range iterating in _reorder_column.
             row.reset();
         }
 
@@ -401,7 +402,6 @@ Status JsonReader::_read_chunk_from_document_stream(Chunk* chunk, int32_t rows_t
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                 // We would continue to construct row even if error is returned,
                 // hence the number of error appended to the file should be limited.
-                row.reset();
                 std::string_view sv;
                 (void)!row.raw_json().get(sv);
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
@@ -460,6 +460,7 @@ Status JsonReader::_read_chunk_from_array(Chunk* chunk, int32_t rows_to_read,
             // Try to reorder the column according to the column order of first json row.
             // It is much faster when we access the json field as the json key order.
             _reorder_column(&reordered_slot_descs, row);
+            // Resetting the row after for-range iterating in _reorder_column.
             row.reset();
         }
 
@@ -469,7 +470,6 @@ Status JsonReader::_read_chunk_from_array(Chunk* chunk, int32_t rows_to_read,
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                 // We would continue to construct row even if error is returned,
                 // hence the number of error appended to the file should be limited.
-                row.reset();
                 std::string_view sv;
                 (void)!row.raw_json().get(sv);
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
@@ -559,6 +559,11 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             // As a workaround, extract procedure is duplicated, for both ondemand::object and ondemand::value
             // TODO(mofei) make it more elegant
             if (_scanner->_json_paths[i].size() == 1 && _scanner->_json_paths[i][0].key == "$") {
+                // add_nullable_column may invoke a for-range iterating to the row.
+                // If the for-range iterating is invoked after field access, or a second for-range iterating is invoked,
+                // it would get an error "Objects and arrays can only be iterated when they are first encountered",
+                // Hence, resetting the row object is necessary here.
+                row->reset();
                 RETURN_IF_ERROR(add_nullable_column(column, slot_descs[i]->type(), slot_descs[i]->col_name(), row,
                                                     !_strict_mode));
             } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], val)) {
