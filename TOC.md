@@ -271,6 +271,7 @@
       + [sum](/sql-reference/sql-functions/aggregate-functions/sum.md)
       + [variance](/sql-reference/sql-functions/aggregate-functions/variance.md)
       + [var_samp](/sql-reference/sql-functions/aggregate-functions/var_samp.md)
+      + [any_value](/sql-reference/sql-functions/aggregate-functions/any_value.md)
     + Bitmap函数
       + [bitmap_and](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](/sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
@@ -295,8 +296,12 @@
       + [array_min](/sql-reference/sql-functions/array-functions/array_min.md)
       + [array_position](/sql-reference/sql-functions/array-functions/array_position.md)
       + [array_sum](/sql-reference/sql-functions/array-functions/array_sum.md)
+      + [array_remove](/sql-reference/sql-functions/array-functions/array_remove.md)
     + [cast函数](/sql-reference/sql-functions/cast.md)
     + [hash函数](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
+    + 加密函数
+      + [md5](/sql-reference/sql-functions/encryption-functions/md5.md)
+      + [sha2](/sql-reference/sql-functions/encryption-functions/sha2.md)
   + [系统变量](/reference/System_variable.md)
   + [错误码](/reference/Error_code.md)
   + [系统限制](/reference/System_limit.md)
