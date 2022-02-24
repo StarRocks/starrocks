@@ -6,7 +6,6 @@ public class ObjectStorageUtils {
     private static final String SCHEME_S3A = "s3a://";
     private static final String SCHEME_S3 = "s3://";
     private static final String SCHEME_S3N = "s3n://";
-    private static final String SCHEME_OSS = "oss://";
     private static final String SCHEME_S3_PREFIX = "s3";
     private static final String SCHEME_OSS_PREFIX = "oss";
 
@@ -20,10 +19,6 @@ public class ObjectStorageUtils {
         }
         if (path.startsWith(SCHEME_S3N)) {
             return SCHEME_S3A + path.substring(SCHEME_S3N.length());
-        }
-        // use s3a to access oss.
-        if (path.startsWith(SCHEME_OSS)) {
-            return SCHEME_S3A + path.substring(SCHEME_OSS.length());
         }
         return path;
     }
