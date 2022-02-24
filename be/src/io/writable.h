@@ -35,8 +35,9 @@ public:
     // remains live until all of the data has been consumed from the stream.
     virtual Status write_aliased(const void* data, int64_t size) = 0;
 
-    // Flush buffered bytes, if any
-    virtual Status flush() = 0;
+    // Flushes the output stream and releasing the underlying resource.
+    // Any further access (including another call to close()) to the stream results in undefined behavior.
+    virtual Status close() = 0;
 };
 
 } // namespace starrocks::io

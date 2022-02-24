@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "io/writable.h"
 #include "util/slice.h"
 
