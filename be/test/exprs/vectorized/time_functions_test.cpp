@@ -1501,12 +1501,9 @@ TEST_F(TimeFunctionsTest, convertTzConstTest) {
     columns.emplace_back(tc_to);
 
     _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
-    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(
-            FunctionContext::TypeDesc{FunctionContext::Type::TYPE_DATETIME});
-    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(
-            FunctionContext::TypeDesc{FunctionContext::Type::TYPE_VARCHAR});
-    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(
-            FunctionContext::TypeDesc{FunctionContext::Type::TYPE_VARCHAR});
+    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(FunctionContext::TypeDesc{TYPE_DATETIME});
+    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(FunctionContext::TypeDesc{TYPE_VARCHAR});
+    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(FunctionContext::TypeDesc{TYPE_VARCHAR});
 
     ASSERT_TRUE(
             TimeFunctions::convert_tz_prepare(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)

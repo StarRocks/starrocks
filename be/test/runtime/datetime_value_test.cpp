@@ -1400,20 +1400,6 @@ TEST_F(DateTimeValueTest, packed_time) {
         packed_time = v1.to_int64_datetime_packed();
         ASSERT_EQ(1830650338932162560L, packed_time);
     }
-
-    {
-        starrocks_udf::DateTimeVal tv;
-        tv.packed_time = 1830650338932162560L;
-        tv.type = TIME_DATETIME;
-        DateTimeValue v1 = DateTimeValue::from_datetime_val(tv);
-        v1.to_string(buf);
-        ASSERT_STREQ("2001-02-03 12:34:56", buf);
-
-        starrocks_udf::DateTimeVal tv2;
-        v1.to_datetime_val(&tv2);
-
-        ASSERT_TRUE(tv == tv2);
-    }
 }
 
 TEST_F(DateTimeValueTest, utc_to_offset) {

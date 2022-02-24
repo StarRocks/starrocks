@@ -14,30 +14,6 @@ const int DATETIME_TYPE_BYTE_SIZE = 4;
 
 const int DECIMAL_BYTE_SIZE = 16;
 
-// get_val start
-template <typename ValType, typename T>
-T get_val(const ValType& x) {
-    DCHECK(!x.is_null);
-    return x.val;
-}
-
-template <>
-inline StringValue get_val(const StringVal& x) {
-    DCHECK(!x.is_null);
-    return StringValue::from_string_val(x);
-}
-
-template <>
-inline DateTimeValue get_val(const DateTimeVal& x) {
-    return DateTimeValue::from_datetime_val(x);
-}
-
-template <>
-inline DecimalV2Value get_val(const DecimalV2Val& x) {
-    return DecimalV2Value::from_decimal_val(x);
-}
-// get_val end
-
 // serialize_size start
 template <typename T>
 int32_t serialize_size(const T& v) {
@@ -83,33 +59,6 @@ inline char* write_to(const std::string& v, char* dest) {
     return dest;
 }
 
-template <>
-inline char* write_to(const DateTimeValue& v, char* dest) {
-    DateTimeVal value;
-    v.to_datetime_val(&value);
-    *(int64_t*)dest = value.packed_time;
-    dest += DATETIME_PACKED_TIME_BYTE_SIZE;
-    *(int*)dest = value.type;
-    dest += DATETIME_TYPE_BYTE_SIZE;
-    return dest;
-}
-
-template <>
-inline char* write_to(const DecimalV2Value& v, char* dest) {
-    __int128 value = v.value();
-    memcpy(dest, &value, DECIMAL_BYTE_SIZE);
-    dest += DECIMAL_BYTE_SIZE;
-    return dest;
-}
-
-template <>
-inline char* write_to(const StringValue& v, char* dest) {
-    *(int32_t*)dest = v.len;
-    dest += 4;
-    memcpy(dest, v.ptr, v.len);
-    dest += v.len;
-    return dest;
-}
 // write_to end
 
 // read_from start
@@ -127,42 +76,9 @@ inline void read_from(const char** src, std::string* result) {
     *result = std::string((char*)*src, length);
     *src += length;
 }
-
-template <>
-inline void read_from(const char** src, DateTimeValue* result) {
-    DateTimeVal value;
-    value.is_null = false;
-    value.packed_time = *(int64_t*)(*src);
-    *src += DATETIME_PACKED_TIME_BYTE_SIZE;
-    value.type = *(int*)(*src);
-    *src += DATETIME_TYPE_BYTE_SIZE;
-    *result = DateTimeValue::from_datetime_val(value);
-}
-
-template <>
-inline void read_from(const char** src, DecimalV2Value* result) {
-    __int128 v = 0;
-    memcpy(&v, *src, DECIMAL_BYTE_SIZE);
-    *src += DECIMAL_BYTE_SIZE;
-    *result = DecimalV2Value(v);
-}
-
-template <>
-inline void read_from(const char** src, StringValue* result) {
-    int32_t length = *(int32_t*)(*src);
-    *src += 4;
-    *result = StringValue((char*)*src, length);
-    *src += length;
-}
 // read_from end
 
 } // namespace detail
-
-[[maybe_unused]] static StringVal serialize(FunctionContext* ctx, BitmapValue* value) {
-    StringVal result(ctx, value->getSizeInBytes());
-    value->write((char*)result.ptr);
-    return result;
-}
 
 // Calculate the intersection of two or more bitmaps
 // Usage: intersect_count(bitmap_column_to_count, filter_column, filter_values ...)
