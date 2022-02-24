@@ -25,29 +25,27 @@ public:
     ~S3ObjectStore() = default;
     Status init(const S3Credential* cred = nullptr, bool use_transfer_manager = false);
 
-    Status create_bucket(const std::string& bucket_name) override;
+    Status create_bucket(const std::string& bucket) override;
 
-    Status delete_bucket(const std::string& bucket_name) override;
+    Status delete_bucket(const std::string& bucket) override;
 
-    StatusOr<std::unique_ptr<io::OutputStream>> put_object(const std::string& bucket_name,
-                                                           const std::string& object_key) override;
+    StatusOr<std::unique_ptr<io::OutputStream>> put_object(const std::string& bucket,
+                                                           const std::string& object) override;
 
-    StatusOr<std::unique_ptr<io::RandomAccessFile>> get_object(const std::string& bucket_name,
-                                                               const std::string& object_key);
+    StatusOr<std::unique_ptr<io::RandomAccessFile>> get_object(const std::string& bucket,
+                                                               const std::string& object) override;
 
-    Status put_object(const std::string& bucket_name, const std::string& object_key,
-                      const std::string& object_path) override;
+    Status put_object(const std::string& bucket, const std::string& object, const std::string& object_path) override;
 
-    Status get_object(const std::string& bucket_name, const std::string& object_key,
-                      const std::string& object_path) override;
+    Status get_object(const std::string& bucket, const std::string& object, const std::string& object_path) override;
 
-    Status exist_object(const std::string& bucket_name, const std::string& object_key) override;
+    Status exist_object(const std::string& bucket, const std::string& object) override;
 
-    Status get_object_size(const std::string& bucket_name, const std::string& object_key, size_t* size) override;
+    Status get_object_size(const std::string& bucket, const std::string& object, size_t* size) override;
 
-    Status delete_object(const std::string& bucket_name, const std::string& object_key) override;
+    Status delete_object(const std::string& bucket, const std::string& object) override;
 
-    Status list_objects(const std::string& bucket_name, const std::string& object_prefix,
+    Status list_objects(const std::string& bucket, const std::string& object_prefix,
                         std::vector<std::string>* result) override;
 
 private:
@@ -65,7 +63,7 @@ private:
         return &executor;
     }
 
-    Status _head_object(const std::string& bucket_name, const std::string& object_key, size_t* size);
+    Status _head_object(const std::string& bucket, const std::string& object, size_t* size);
 
     bool _is_not_found(const Aws::S3::S3Errors& err) {
         return (err == Aws::S3::S3Errors::NO_SUCH_BUCKET || err == Aws::S3::S3Errors::NO_SUCH_KEY ||
