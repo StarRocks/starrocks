@@ -10,6 +10,7 @@
 #include <aws/s3/model/BucketLocationConstraint.h>
 #include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/DeleteBucketRequest.h>
+#include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <gtest/gtest.h>
 
@@ -86,13 +87,29 @@ void init_bucket() {
 }
 
 void destroy_bucket() {
-    Aws::S3::Model::DeleteBucketRequest request;
-    request.SetBucket(kBucketName);
-    Aws::S3::Model::DeleteBucketOutcome outcome = g_s3client->DeleteBucket(request);
-    if (outcome.IsSuccess()) {
-        std::cout << "Deleted bucket " << kBucketName;
-    } else {
-        std::cerr << "Fail to delete bucket " << kBucketName << ": " << outcome.GetError().GetMessage();
+    // delete object first
+    {
+        Aws::S3::Model::DeleteObjectRequest request;
+        request.SetBucket(kBucketName);
+        request.SetKey(kObjectName);
+        Aws::S3::Model::DeleteObjectOutcome outcome = g_s3client->DeleteObject(request);
+        if (!outcome.IsSuccess()) {
+            std::cerr << "Fail to delete s3://" << kBucketName << "/" << kObjectName << ": "
+                      << outcome.GetError().GetMessage() << '\n';
+        } else {
+            std::cout << "Deleted object s3://" << kBucketName << "/" << kObjectName << '\n';
+        }
+    }
+    // delete bucket
+    {
+        Aws::S3::Model::DeleteBucketRequest request;
+        request.SetBucket(kBucketName);
+        Aws::S3::Model::DeleteBucketOutcome outcome = g_s3client->DeleteBucket(request);
+        if (outcome.IsSuccess()) {
+            std::cout << "Deleted bucket " << kBucketName << '\n';
+        } else {
+            std::cerr << "Fail to delete bucket " << kBucketName << ": " << outcome.GetError().GetMessage() << '\n';
+        }
     }
 }
 
