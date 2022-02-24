@@ -29,17 +29,17 @@ public:
 
     Status delete_bucket(const std::string& bucket_name) override;
 
-    Status put_object(const std::string& bucket_name, const std::string& object_key,
-                      const std::string& object_path) override;
-
-    Status put_string_object(const std::string& bucket_name, const std::string& object_key,
-                             const std::string& object_value) override;
-
-    Status get_object(const std::string& bucket_name, const std::string& object_key,
-                      const std::string& object_path) override;
+    StatusOr<std::unique_ptr<io::OutputStream>> put_object(const std::string& bucket_name,
+                                                           const std::string& object_key) override;
 
     StatusOr<std::unique_ptr<io::RandomAccessFile>> get_object(const std::string& bucket_name,
                                                                const std::string& object_key);
+
+    Status put_object(const std::string& bucket_name, const std::string& object_key,
+                      const std::string& object_path) override;
+
+    Status get_object(const std::string& bucket_name, const std::string& object_key,
+                      const std::string& object_path) override;
 
     Status exist_object(const std::string& bucket_name, const std::string& object_key) override;
 

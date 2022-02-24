@@ -57,9 +57,12 @@ TEST_F(S3ObjectStoreTest, object_operation) {
     const std::string object_key = "hello";
     const std::string object_value = "world";
     const std::string object_path = "./S3Test_hello";
-    ASSERT_OK(client.put_string_object(bucket_name, object_key, object_value));
 
-    // test object exist
+    ASSIGN_OR_ABORT(auto os, client.put_object(bucket_name, object_key));
+    ASSERT_OK(os->write(object_value.data(), object_value.size()));
+    ASSERT_OK(os->close());
+
+    // test object existence
     ASSERT_OK(client.exist_object(bucket_name, object_key));
 
     // get object size
@@ -67,7 +70,7 @@ TEST_F(S3ObjectStoreTest, object_operation) {
     ASSERT_OK(client.get_object_size(bucket_name, object_key, &size));
     ASSERT_EQ(size, object_value.size());
 
-    // get object
+    // download object to local file
     ASSERT_FALSE(client.get_object(bucket_name, object_key, "").ok());
     ASSERT_OK(client.get_object(bucket_name, object_key, object_path));
     std::ifstream file(object_path.c_str(), std::ios::in);
@@ -77,7 +80,7 @@ TEST_F(S3ObjectStoreTest, object_operation) {
     ASSERT_EQ(object_value_tmp, object_value);
     FileUtils::remove(object_path);
 
-    // get object range
+    // read object
     char buf[2];
     ASSIGN_OR_ABORT(auto input_stream, client.get_object(bucket_name, object_key));
     ASSIGN_OR_ABORT(auto bytes_read, input_stream->read_at(1, buf, sizeof(buf)));
@@ -85,7 +88,9 @@ TEST_F(S3ObjectStoreTest, object_operation) {
 
     // list object
     const std::string object_key2 = "test/hello";
-    ASSERT_OK(client.put_string_object(bucket_name, object_key2, object_value));
+    ASSIGN_OR_ABORT(auto os2, client.put_object(bucket_name, object_key2));
+    ASSERT_OK(os2->write(object_value.data(), object_value.size()));
+    ASSERT_OK(os2->close());
     std::vector<std::string> vector;
     ASSERT_OK(client.list_objects(bucket_name, "/" /* object_prefix */, &vector));
     ASSERT_EQ(vector.size(), 2);

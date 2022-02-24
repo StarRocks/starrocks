@@ -684,6 +684,11 @@ CONF_Int64(aws_s3_max_connection, "102400");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 
+// default: 16MB
+CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
+// default: 16MB
+CONF_mInt64(experimental_s3_min_upload_part_size, "16777216");
+
 } // namespace config
 
 } // namespace starrocks

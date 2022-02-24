@@ -19,9 +19,11 @@
 
 #include <fstream>
 
+#include "common/config.h"
 #include "common/logging.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+#include "io/s3_output_stream.h"
 #include "io/s3_random_access_file.h"
 
 namespace starrocks {
@@ -132,25 +134,11 @@ Status S3ObjectStore::put_object(const std::string& bucket_name, const std::stri
     }
 }
 
-Status S3ObjectStore::put_string_object(const std::string& bucket_name, const std::string& object_key,
-                                        const std::string& object_value) {
-    std::shared_ptr<Aws::IOStream> stream = Aws::MakeShared<Aws::StringStream>("", object_value);
-
-    Aws::S3::Model::PutObjectRequest request;
-    request.SetBucket(to_aws_string(bucket_name));
-    request.SetKey(to_aws_string(object_key));
-    request.SetBody(stream);
-
-    Aws::S3::Model::PutObjectOutcome outcome = _client->PutObject(request);
-
-    if (outcome.IsSuccess()) {
-        return Status::OK();
-    } else {
-        std::string error =
-                strings::Substitute("Put Object $0 failed. $1.", object_key, outcome.GetError().GetMessage());
-        LOG(ERROR) << error;
-        return Status::IOError(error);
-    }
+StatusOr<std::unique_ptr<io::OutputStream>> S3ObjectStore::put_object(const std::string& bucket_name,
+                                                                      const std::string& object_key) {
+    return std::make_unique<io::S3OutputStream>(_client, bucket_name, object_key,
+                                                config::experimental_s3_max_single_part_size,
+                                                config::experimental_s3_min_upload_part_size);
 }
 
 StatusOr<std::unique_ptr<io::RandomAccessFile>> S3ObjectStore::get_object(const std::string& bucket_name,

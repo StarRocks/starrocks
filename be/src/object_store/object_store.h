@@ -5,6 +5,7 @@
 #include <string>
 
 #include "common/statusor.h"
+#include "io/output_stream.h"
 #include "io/random_access_file.h"
 
 namespace starrocks {
@@ -18,17 +19,17 @@ public:
 
     virtual Status delete_bucket(const std::string& bucket_name) = 0;
 
-    virtual Status put_object(const std::string& bucket_name, const std::string& object_key,
-                              const std::string& object_path) = 0;
-
-    virtual Status put_string_object(const std::string& bucket_name, const std::string& object_key,
-                                     const std::string& object_value) = 0;
-
-    virtual Status get_object(const std::string& bucket_name, const std::string& object_key,
-                              const std::string& object_path) = 0;
+    virtual StatusOr<std::unique_ptr<io::OutputStream>> put_object(const std::string& bucket_name,
+                                                                   const std::string& object_key) = 0;
 
     virtual StatusOr<std::unique_ptr<io::RandomAccessFile>> get_object(const std::string& bucket_name,
                                                                        const std::string& object_key) = 0;
+
+    virtual Status put_object(const std::string& bucket_name, const std::string& object_key,
+                              const std::string& object_path) = 0;
+
+    virtual Status get_object(const std::string& bucket_name, const std::string& object_key,
+                              const std::string& object_path) = 0;
 
     virtual Status exist_object(const std::string& bucket_name, const std::string& object_key) = 0;
 
