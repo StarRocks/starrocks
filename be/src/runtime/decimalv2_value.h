@@ -32,7 +32,6 @@
 #include "common/logging.h"
 #include "runtime/decimal_value.h"
 #include "storage/decimal12.h"
-#include "udf/udf.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
@@ -192,10 +191,6 @@ public:
     static DecimalV2Value get_min_decimal() { return DecimalV2Value(-MAX_INT_VALUE, MAX_FRAC_VALUE); }
 
     static DecimalV2Value get_max_decimal() { return DecimalV2Value(MAX_INT_VALUE, MAX_FRAC_VALUE); }
-
-    static DecimalV2Value from_decimal_val(const DecimalV2Val& val) { return DecimalV2Value(val.value()); }
-
-    void to_decimal_val(DecimalV2Val* value) const { value->val = _value; }
 
     // set DecimalV2Value to zero
     void set_to_zero() { _value = 0; }
