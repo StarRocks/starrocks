@@ -626,23 +626,6 @@ TEST_F(JsonScannerTest, test_native_json_single_column) {
                   result1->debug_row(4));
     }
     {
-        std::string jsonpath1 = R"(["$.k1", "$"])";
-        ChunkPtr result1 = test_with_jsonpath(2, datapath, jsonpath1, {"$.k1", "$"});
-        EXPECT_EQ(2, result1->num_columns());
-        EXPECT_EQ(5, result1->num_rows());
-
-        EXPECT_EQ(R"(["v1", {"k1": "v1", "keyname": {"ip地址": "10.10.0.1", "value": "10"}, "kind": "中文"}])",
-                  result1->debug_row(0));
-        EXPECT_EQ(R"(["v2", {"k1": "v2", "keyname": {"ip地址": "10.10.0.2", "value": "20"}, "kind": "英文"}])",
-                  result1->debug_row(1));
-        EXPECT_EQ(R"(["v3", {"k1": "v3", "keyname": {"ip地址": "10.10.0.3", "value": "30"}, "kind": "法文"}])",
-                  result1->debug_row(2));
-        EXPECT_EQ(R"(["v4", {"k1": "v4", "keyname": {"ip地址": "10.10.0.4", "value": "40"}, "kind": "德文"}])",
-                  result1->debug_row(3));
-        EXPECT_EQ(R"(["v5", {"k1": "v5", "keyname": {"ip地址": "10.10.0.5", "value": "50"}, "kind": "西班牙"}])",
-                  result1->debug_row(4));
-    }
-    {
         std::string jsonpath1 = R"(["$.k1","$"])";
         ChunkPtr result1 = test_with_jsonpath(2, datapath, jsonpath1, {"$.k1", "$"});
         EXPECT_EQ(2, result1->num_columns());
