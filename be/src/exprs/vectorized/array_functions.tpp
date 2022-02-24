@@ -320,6 +320,24 @@ public:
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) { return _array_concat(columns); }
 
 private:
+    static void collect_array_columns_and_null_columns(const Columns& columns, std::vector<ArrayColumn*>* src_columns,
+                                                       NullColumnPtr* null_result, bool* is_nullable, bool* has_null,
+                                                       int* null_index) {
+        for (int i = 0; i < columns.size(); ++i) {
+            if (columns[i]->is_nullable()) {
+                (*is_nullable) = true;
+                (*has_null) = (columns[i]->has_null() || (*has_null));
+                (*null_index) = i;
+
+                const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[i].get());
+                src_columns->emplace_back(down_cast<ArrayColumn*>(src_nullable_column->data_column().get()));
+                (*null_result) = FunctionHelper::union_null_column((*null_result), src_nullable_column->null_column());
+            } else {
+                src_columns->emplace_back(down_cast<ArrayColumn*>(columns[i].get()));
+            }
+        }
+    }
+
     static ColumnPtr _array_concat(const Columns& columns) {
         if (columns.size() == 1) {
             return columns[0];
@@ -336,19 +354,8 @@ private:
         NullColumnPtr null_result = NullColumn::create();
         null_result->resize(chunk_size);
 
-        for (int i = 0; i < columns.size(); ++i) {
-            if (columns[i]->is_nullable()) {
-                is_nullable = true;
-                has_null = (columns[i]->has_null() || has_null);
-                null_index = i;
-
-                const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[i].get());
-                src_columns.emplace_back(down_cast<ArrayColumn*>(src_nullable_column->data_column().get()));
-                null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
-            } else {
-                src_columns.emplace_back(down_cast<ArrayColumn*>(columns[i].get()));
-            }
-        }
+        collect_array_columns_and_null_columns(columns, &src_columns, &null_result, &is_nullable, &has_null,
+                                               &null_index);
 
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[null_index]);
         ColumnPtr dest_column = src_column->clone_empty();
