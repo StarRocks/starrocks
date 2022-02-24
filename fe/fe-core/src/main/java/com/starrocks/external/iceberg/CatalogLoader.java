@@ -2,7 +2,6 @@
 
 package com.starrocks.external.iceberg;
 
-import com.starrocks.external.iceberg.hive.HiveCatalog;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
@@ -50,7 +49,7 @@ public interface CatalogLoader {
 
         @Override
         public Catalog loadCatalog() {
-            return CatalogUtil.loadCatalog(HiveCatalog.class.getName(), catalogName, properties, hadoopConf.get());
+            return CatalogUtil.loadCatalog(IcebergHiveCatalog.class.getName(), catalogName, properties, hadoopConf.get());
         }
 
         @Override

@@ -43,8 +43,8 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     private final FileIO fileIO;
     private final ClientPool<IMetaStoreClient, TException> metaClients;
 
-    protected HiveTableOperations(Configuration conf, ClientPool metaClients, FileIO fileIO,
-                                  String catalogName, String database, String table) {
+    public HiveTableOperations(Configuration conf, ClientPool metaClients, FileIO fileIO,
+                               String catalogName, String database, String table) {
         this.conf = conf;
         this.metaClients = metaClients;
         this.fileIO = fileIO;
