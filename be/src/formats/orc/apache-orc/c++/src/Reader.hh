@@ -131,6 +131,9 @@ private:
     uint64_t currentStripe;
     uint64_t lastStripe; // the stripe AFTER the last one
     uint64_t currentRowInStripe;
+    uint64_t lazyLoadRowInStripe;         // which row in stripe lazy load fields are going to use.
+    uint64_t lazyLoadLastUsedRowInStripe; // which row in stripe loazy load files are used in last time.
+
     uint64_t rowsInCurrentStripe;
     proto::StripeInformation currentStripeInfo;
     proto::StripeFooter currentStripeFooter;
@@ -177,8 +180,9 @@ private:
     /**
      * Seek to the start of a row group in the current stripe
      * @param rowGroupEntryId the row group id to seek to
+     * @param onLazyLoadFields seek to row group for lazy load fields
      */
-    void seekToRowGroup(uint32_t rowGroupEntryId);
+    void seekToRowGroup(uint32_t rowGroupEntryId, bool onLazyLoadFields = false);
 
 public:
     /**

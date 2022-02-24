@@ -474,7 +474,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
         // We batch skip num values beause we have opportunity to skip an entire stripe / row_group
         // And if that happens,  we can save IO at granuarity of strip / row_group
-        if (position.start_new_stripe || position.seek_to_row_group) {
+        if (position.start_new_stripe || position.seek_new_row_group) {
             skip_num_values = 0;
         }
         // if has lazy load fields, skip it if chunk_size == 0

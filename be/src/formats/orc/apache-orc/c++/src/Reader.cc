@@ -36,6 +36,7 @@
 #include "Options.hh"
 #include "Statistics.hh"
 #include "StripeStream.hh"
+#include "common/logging.h"
 #include "wrap/coded-stream-wrapper.h"
 
 namespace orc {
@@ -204,6 +205,8 @@ RowReaderImpl::RowReaderImpl(const std::shared_ptr<FileContents>& _contents, con
     currentStripe = numberOfStripes;
     lastStripe = 0;
     currentRowInStripe = 0;
+    lazyLoadRowInStripe = 0;
+    lazyLoadLastUsedRowInStripe = 0;
     rowsInCurrentStripe = 0;
     uint64_t rowTotal = 0;
 
@@ -397,15 +400,11 @@ void RowReaderImpl::loadStripeIndex() {
     }
 }
 
-void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
+void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId, bool onLazyLoadFields) {
     PositionProviderMap map;
     for (const auto& rowIndexe : rowIndexes) {
         uint64_t colId = rowIndexe.first;
         const proto::RowIndexEntry& entry = rowIndexe.second.entry(static_cast<int32_t>(rowGroupEntryId));
-
-        // copy index positions for a specific column
-        size_t positionIndex = map.positions.size();
-        map.columnIdToPositionIndex[colId] = positionIndex;
         map.positions.emplace_back();
         auto& position = map.positions.back();
         for (int pos = 0; pos != entry.positions_size(); ++pos) {
@@ -414,7 +413,11 @@ void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
         map.providers.insert(std::make_pair(colId, PositionProvider(position)));
     }
 
-    reader->seekToRowGroup(&map);
+    if (onLazyLoadFields) {
+        reader->lazyLoadSeekToRowGroup(&map);
+    } else {
+        reader->seekToRowGroup(&map);
+    }
 }
 
 const FileContents& RowReaderImpl::getFileContents() const {
@@ -998,10 +1001,12 @@ bool RowReaderImpl::next(ColumnVectorBatch& data, ReadPosition* pos) {
         return false;
     }
     if (currentRowInStripe == 0) {
+        startNextStripe();
+        lazyLoadRowInStripe = currentRowInStripe;
+        lazyLoadLastUsedRowInStripe = 0;
         if (pos != nullptr) {
             pos->start_new_stripe = true;
         }
-        startNextStripe();
     }
     uint64_t rowsToRead = std::min(static_cast<uint64_t>(data.capacity), rowsInCurrentStripe - currentRowInStripe);
     if (currentStripe >= lastStripe) {
@@ -1022,8 +1027,9 @@ bool RowReaderImpl::next(ColumnVectorBatch& data, ReadPosition* pos) {
     } else {
         reader->next(data, rowsToRead, nullptr);
     }
+
     if (pos != nullptr) {
-        pos->strip_index = currentStripe;
+        pos->stripe_index = currentStripe;
         pos->num_values = rowsToRead;
     }
 
@@ -1040,8 +1046,9 @@ bool RowReaderImpl::next(ColumnVectorBatch& data, ReadPosition* pos) {
             currentRowInStripe = nextRowToRead;
             if (currentRowInStripe < rowsInCurrentStripe) {
                 seekToRowGroup(static_cast<uint32_t>(currentRowInStripe / footer->rowindexstride()));
+                lazyLoadRowInStripe = currentRowInStripe;
                 if (pos != nullptr) {
-                    pos->seek_to_row_group = true;
+                    pos->seek_new_row_group = true;
                 }
             }
         }
@@ -1060,10 +1067,32 @@ void RowReaderImpl::lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) {
     } else {
         reader->lazyLoadNext(data, numValues, nullptr);
     }
+    lazyLoadRowInStripe += numValues;
+    lazyLoadLastUsedRowInStripe = lazyLoadRowInStripe;
 }
 
 void RowReaderImpl::lazyLoadSkip(uint64_t numValues) {
-    reader->lazyLoadSkip(numValues);
+    uint64_t toRow = lazyLoadRowInStripe + numValues;
+    // we have two options to locate `toRow`:
+    // 1. use seek to row group, and skip rest rows(# = toRow % rowindexstripe)
+    // 2. or skip rest rows directly(# = roRow - lazyLoadLastUsedRowInStripe)
+    // we can assume `seek to row group` costs skipping X rows
+    // then #1 cost is X + toRow % rowindexstripe
+    // #2 cost is (row - lazyLoadLastUsedRowInStripe)
+    static const uint64_t SEEK_TO_ROW_GROUP_COST = 4096;
+    uint64_t costSeekAndSkip = SEEK_TO_ROW_GROUP_COST + toRow % footer->rowindexstride();
+    uint64_t costDirectSkip = (toRow - lazyLoadLastUsedRowInStripe);
+
+    if (costSeekAndSkip < costDirectSkip) {
+        uint64_t toRowGroupNumber = toRow / footer->rowindexstride();
+        seekToRowGroup(static_cast<uint32_t>(toRowGroupNumber), true);
+        reader->lazyLoadSkip(toRow % footer->rowindexstride());
+    } else {
+        reader->lazyLoadSkip(toRow - lazyLoadLastUsedRowInStripe);
+    }
+
+    lazyLoadRowInStripe = toRow;
+    lazyLoadLastUsedRowInStripe = toRow;
 }
 
 uint64_t RowReaderImpl::computeBatchSize(uint64_t requestedSize, uint64_t currentRowInStripe,

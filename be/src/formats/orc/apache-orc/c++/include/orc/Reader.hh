@@ -522,10 +522,10 @@ public:
 class RowReader {
 public:
     struct ReadPosition {
-        uint64_t strip_index = 0;
-        uint64_t num_values = 0;
         bool start_new_stripe = false;
-        bool seek_to_row_group = false;
+        bool seek_new_row_group = false;
+        uint64_t stripe_index = 0;
+        uint64_t num_values = 0;
     };
 
     virtual ~RowReader();
