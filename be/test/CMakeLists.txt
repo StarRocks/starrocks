@@ -116,6 +116,7 @@ set(EXEC_FILES
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
         ./io/array_random_access_file_test.cpp
+        ./io/fd_output_stream_test.cpp
         ./io/fd_random_access_file_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_random_access_file_test.cpp
