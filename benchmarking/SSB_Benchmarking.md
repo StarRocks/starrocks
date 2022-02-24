@@ -1,446 +1,370 @@
-# Performance Testing
+# SSB Flat-table Benchmarking
 
-## Testing Methodology
+Star schema benchmark (SSB) is designed to test basic performance metrics of OLAP database products. SSB uses a star schema test set that is widely applied in academia and industry. For more information, see the paper [Star Schema Benchmark](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF).
+ClickHouse flattens the star schema into a wide flat table and rewrites the SSB into a single-table benchmark. For more information, see [Star schema benchmark of ClickHouse](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/).
+This test compares the performance of StarRocks, Apache Druid, and ClickHouse against SSB single-table datasets and also compares the performance of StarRocks and ClickHouse in low-cardinality aggregation scenarios.
 
-StarRocks provides Star Schema Benchmark (SSB) to give users a quick overview of performance metrics.
+## 1. Test Conclusion
 
-Star Schema Benchmark is a star schema test set that is widely used in academia and industry. This test set makes it easy to compare the performance of StarRocks with other OLAP databases.
+- Among the 13 queries performed on SSB standard datasets, ClickHouse has a response time 1.7x that of StarRocks, and Apache Druid 2.2x that of StarRocks.
+- StarRocks performs even better when the bitmap indexing and cache features are enabled, especially on Q2.2, Q2.3, and Q3.3. The overall performance is 2.2x that of ClickHouse and 2.9x that of Apache Druid.
 
-## Testing Preparation
+![overall comparison](/assets/7.1-1.png)
 
-### Testing Environment
+- We also conduct tests on low-cardinality aggregation against standard datasets. ClickHouse has a query response time 2.26x that of StarRocks.
 
-* Hardware environment: StarRocks has no strict requirements for the machine used for testing. It is recommended that the machine configuration is no less than 8C 32G, SSD/SATA, 10 Gigabit NICs.
-* Cluster deployment [Cluster Deployment] (... /administration/Deployment.md)
-* System Parameters [Configuration Parameters](. /administration/Configuration.md)
-* Download the ssb-poc toolset
+![comparison on low-cardinality field](/assets/7.1-2.png)
 
-### SSB SQL
+In the SSB single-table test and low-cardinality aggregation test, three cloud hosts with a configuration of 16-core CPU and 64 GB of memory are used to test data at a scale of 600 million rows of data.
+
+## 2. Test Preparation
+
+### 2.1 Hardware Environment
+
+| Machine           | 3 cloud hosts                                                |
+| ----------------- | ------------------------------------------------------------ |
+| CPU               | 16-Core Intel (R) Xeon (R) Platinum 8269CY CPU @2.50GHz Cache size: 36608 KB |
+| Memory            | 64 GB                                                        |
+| Network bandwidth | 5 Gbit/s                                                     |
+| Disk              | ESSD                                                         |
+
+### 2.2 Software Environment
+
+StarRocks, Apache Druid, and ClickHouse are deployed on hosts of the same configurations.
+
+- StarRocks: three BE nodes and one FE node
+- Clickhouse: three nodes with distributed tables
+- Apache Druid has an additional 8-core master host deployed with Broker, Coordinator, Overlord, and Router. However, we will not pressure test  the master host and the impact is negligible. Historical and MiddleManager processes are hybrid deployed on hosts that have the same configuration as StarRocks and ClickHouse.
+
+Kernel version: Linux 3.10.0-1127.13.1.el 7.x86_64
+
+OS version: CentOS Linux release 7.8.2003
+
+Software version: StarRocks Community Version 2.1, Apache Druid 0.20.1, ClickHouse 21.9
+
+## 3. Test Data and Results
+
+### 3.1 Test Data
+
+| Table          | Record       | Description              |
+| -------------- | ------------ | ------------------------ |
+| lineorder      | 600 million  | Lineorder fact table     |
+| customer       | 3 million    | Customer dimension table |
+| part           | 1.4 million  | Part dimension table     |
+| supplier       | 200 thousand | Supplier dimension table |
+| dates          | 2,556        | Date dimension table     |
+| lineorder_flat | 600 million  | lineorder flat table     |
+
+### 3.2 Test SQL
+
+#### 3.2.1 SQL for single-table test
 
 ```SQL
---Q1.1
-select sum(lo_revenue) as revenue
-from lineorder join dates on lo_orderdate = d_datekey
-where d_year = 1993 and lo_discount between 1 and 3 and lo_quantity < 25;
---Q1.2
-select sum(lo_revenue) as revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-where d_yearmonthnum = 199401
-and lo_discount between 4 and 6
-and lo_quantity between 26 and 35;
---Q1.3
-select sum(lo_revenue) as revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-where d_weeknuminyear = 6 and d_year = 1994
-and lo_discount between 5 and 7
-and lo_quantity between 26 and 35;
---Q2.1
-select sum(lo_revenue) as lo_revenue, d_year, p_brand
-from lineorder
-join dates on lo_orderdate = d_datekey
-join part on lo_partkey = p_partkey
-join supplier on lo_suppkey = s_suppkey
-where p_category = 'MFGR#12' and s_region = 'AMERICA'
-group by d_year, p_brand
-order by d_year, p_brand;
---Q2.2
-select sum(lo_revenue) as lo_revenue, d_year, p_brand
-from lineorder
-join dates on lo_orderdate = d_datekey
-join part on lo_partkey = p_partkey
-join supplier on lo_suppkey = s_suppkey
-where p_brand between 'MFGR#2221' and 'MFGR#2228' and s_region = 'ASIA'
-group by d_year, p_brand
-order by d_year, p_brand;
---Q2.3
-select sum(lo_revenue) as lo_revenue, d_year, p_brand
-from lineorder
-join dates on lo_orderdate = d_datekey
-join part on lo_partkey = p_partkey
-join supplier on lo_suppkey = s_suppkey
-where p_brand = 'MFGR#2239' and s_region = 'EUROPE'
-group by d_year, p_brand
-order by d_year, p_brand;
---Q3.1
-select c_nation, s_nation, d_year, sum(lo_revenue) as lo_revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-where c_region = 'ASIA' and s_region = 'ASIA'and d_year >= 1992 and d_year <= 1997
-group by c_nation, s_nation, d_year
-order by d_year asc, lo_revenue desc;
---Q3.2
-select c_city, s_city, d_year, sum(lo_revenue) as lo_revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-where c_nation = 'UNITED STATES' and s_nation = 'UNITED STATES'
-and d_year >= 1992 and d_year <= 1997
-group by c_city, s_city, d_year
-order by d_year asc, lo_revenue desc;
---Q3.3
-select c_city, s_city, d_year, sum(lo_revenue) as lo_revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-where (c_city='UNITED KI1' or c_city='UNITED KI5')
-and (s_city='UNITED KI1' or s_city='UNITED KI5')
-and d_year >= 1992 and d_year <= 1997
-group by c_city, s_city, d_year
-order by d_year asc, lo_revenue desc;
---Q3.4
-select c_city, s_city, d_year, sum(lo_revenue) as lo_revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-where (c_city='UNITED KI1' or c_city='UNITED KI5') and (s_city='UNITED KI1' or s_city='UNITED KI5') and d_yearmonth = 'Dec1997'
-group by c_city, s_city, d_year
-order by d_year asc, lo_revenue desc;
---Q4.1
-select d_year, c_nation, sum(lo_revenue) - sum(lo_supplycost) as profit
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-join part on lo_partkey = p_partkey
-where c_region = 'AMERICA' and s_region = 'AMERICA' and (p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2')
-group by d_year, c_nation
-order by d_year, c_nation;
---Q4.2
-select d_year, s_nation, p_category, sum(lo_revenue) - sum(lo_supplycost) as profit
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-join part on lo_partkey = p_partkey
-where c_region = 'AMERICA'and s_region = 'AMERICA'
-and (d_year = 1997 or d_year = 1998)
-and (p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2')
-group by d_year, s_nation, p_category
-order by d_year, s_nation, p_category;
---Q4.3
-select d_year, s_city, p_brand, sum(lo_revenue) - sum(lo_supplycost) as profit
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-join part on lo_partkey = p_partkey
-where c_region = 'AMERICA'and s_nation = 'UNITED STATES'
-and (d_year = 1997 or d_year = 1998)
-and p_category = 'MFGR#14'
-group by d_year, s_city, p_brand
-order by d_year, s_city, p_brand;
-```
-
-## Testing process
-
-### Data creation
-
-#### Download and compile the ssb-poc toolkit
-
-```shell
-# create 100G data
-cd output
-bin/gen-ssb.sh 100 data_dir
-
-# create 1T data
-cd output
-bin/gen-ssb.sh 1000 data_dir
-```
-
-This will create 100GB data under the path data\_dir
-
-#### Create table
-
-1. The number of Buckets and bucketing key
-    The number of buckets is one of the factors that have a big impact on performance. Choose a reasonable bucketing key (DISTRIBUTED BY HASH(key)) to ensure that the data is as balanced as possible in each bucket. When  encountering a serious data skew, use multiple columns or MD5 hash as bucketing keys.  Refer to [docs](../table_design/Data_distribution.md###Howtochoosethebucketkey). Here we use the unique key column uniformly.
-
-2. Data type for table
-
-    The choice of data type may affect the results of the performance test. For example, Decimal|String is generally slower than int|bigint.Use the suitable data type to achieve the best results. For example, use Int|Bigint fields over String if possible. If it’s a date type, use Date|Datetime and related functions instead of string and related functions. For SSB data collection, we use Int|Bigint for  multi-table `Join` and Decimal|date for flat table `lineorder_flat`.
-
-    >To benchmark  with other systems, refer to the official documentation of Kylin and Clickhouse for the recommended way to create SSB tables and fine-tune the creation statements.
-    >
-    >[Kylin's table creation method](https://github.com/Kyligence/ssb-kylin/blob/master/hive/1_create_basic.sql)
-    >
-    >[Clickhouse's table creation method](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/)
-
-3. Whether the field can be null
-
-    StarRocks uses the `NOT NULL` keyword because there are no empty fields in the standard data set generated by SSB.
-
-For our three BE nodes environments, we take the following table creation approach:
-
-```sql
-CREATE TABLE IF NOT EXISTS `lineorder` (
-  `lo_orderkey` int(11) NOT NULL COMMENT "",
-  `lo_linenumber` int(11) NOT NULL COMMENT "",
-  `lo_custkey` int(11) NOT NULL COMMENT "",
-  `lo_partkey` int(11) NOT NULL COMMENT "",
-  `lo_suppkey` int(11) NOT NULL COMMENT "",
-  `lo_orderdate` int(11) NOT NULL COMMENT "",
-  `lo_orderpriority` varchar(16) NOT NULL COMMENT "",
-  `lo_shippriority` int(11) NOT NULL COMMENT "",
-  `lo_quantity` int(11) NOT NULL COMMENT "",
-  `lo_extendedprice` int(11) NOT NULL COMMENT "",
-  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
-  `lo_discount` int(11) NOT NULL COMMENT "",
-  `lo_revenue` int(11) NOT NULL COMMENT "",
-  `lo_supplycost` int(11) NOT NULL COMMENT "",
-  `lo_tax` int(11) NOT NULL COMMENT "",
-  `lo_commitdate` int(11) NOT NULL COMMENT "",
-  `lo_shipmode` varchar(11) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`lo_orderkey`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 96
-PROPERTIES (
-    "replication_num" = "1"
-);
-
-
-CREATE TABLE IF NOT EXISTS `customer` (
-  `c_custkey` int(11) NOT NULL COMMENT "",
-  `c_name` varchar(26) NOT NULL COMMENT "",
-  `c_address` varchar(41) NOT NULL COMMENT "",
-  `c_city` varchar(11) NOT NULL COMMENT "",
-  `c_nation` varchar(16) NOT NULL COMMENT "",
-  `c_region` varchar(13) NOT NULL COMMENT "",
-  `c_phone` varchar(16) NOT NULL COMMENT "",
-  `c_mktsegment` varchar(11) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`c_custkey`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12
-PROPERTIES (
-    "replication_num" = "1"
-);
-
-
-CREATE TABLE IF NOT EXISTS `dates` (
-  `d_datekey` int(11) NOT NULL COMMENT "",
-  `d_date` varchar(20) NOT NULL COMMENT "",
-  `d_dayofweek` varchar(10) NOT NULL COMMENT "",
-  `d_month` varchar(11) NOT NULL COMMENT "",
-  `d_year` int(11) NOT NULL COMMENT "",
-  `d_yearmonthnum` int(11) NOT NULL COMMENT "",
-  `d_yearmonth` varchar(9) NOT NULL COMMENT "",
-  `d_daynuminweek` int(11) NOT NULL COMMENT "",
-  `d_daynuminmonth` int(11) NOT NULL COMMENT "",
-  `d_daynuminyear` int(11) NOT NULL COMMENT "",
-  `d_monthnuminyear` int(11) NOT NULL COMMENT "",
-  `d_weeknuminyear` int(11) NOT NULL COMMENT "",
-  `d_sellingseason` varchar(14) NOT NULL COMMENT "",
-  `d_lastdayinweekfl` int(11) NOT NULL COMMENT "",
-  `d_lastdayinmonthfl` int(11) NOT NULL COMMENT "",
-  `d_holidayfl` int(11) NOT NULL COMMENT "",
-  `d_weekdayfl` int(11) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`d_datekey`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`d_datekey`) BUCKETS 1
-PROPERTIES (
-    "replication_num" = "1"
-);
-
- CREATE TABLE IF NOT EXISTS `supplier` (
-  `s_suppkey` int(11) NOT NULL COMMENT "",
-  `s_name` varchar(26) NOT NULL COMMENT "",
-  `s_address` varchar(26) NOT NULL COMMENT "",
-  `s_city` varchar(11) NOT NULL COMMENT "",
-  `s_nation` varchar(16) NOT NULL COMMENT "",
-  `s_region` varchar(13) NOT NULL COMMENT "",
-  `s_phone` varchar(16) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`s_suppkey`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12
-PROPERTIES (
-    "replication_num" = "1"
-);
-
-CREATE TABLE IF NOT EXISTS `part` (
-  `p_partkey` int(11) NOT NULL COMMENT "",
-  `p_name` varchar(23) NOT NULL COMMENT "",
-  `p_mfgr` varchar(7) NOT NULL COMMENT "",
-  `p_category` varchar(8) NOT NULL COMMENT "",
-  `p_brand` varchar(10) NOT NULL COMMENT "",
-  `p_color` varchar(12) NOT NULL COMMENT "",
-  `p_type` varchar(26) NOT NULL COMMENT "",
-  `p_size` int(11) NOT NULL COMMENT "",
-  `p_container` varchar(11) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`p_partkey`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 12
-PROPERTIES (
-    "replication_num" = "1"
-);
-
-# lineorder_flat，100G
-CREATE TABLE `lineorder_flat` (
-  `lo_orderdate` date NOT NULL COMMENT "",
-  `lo_orderkey` int(11) NOT NULL COMMENT "",
-  `lo_linenumber` tinyint(4) NOT NULL COMMENT "",
-  `lo_custkey` int(11) NOT NULL COMMENT "",
-  `lo_partkey` int(11) NOT NULL COMMENT "",
-  `lo_suppkey` int(11) NOT NULL COMMENT "",
-  `lo_orderpriority` varchar(100) NOT NULL COMMENT "",
-  `lo_shippriority` tinyint(4) NOT NULL COMMENT "",
-  `lo_quantity` tinyint(4) NOT NULL COMMENT "",
-  `lo_extendedprice` int(11) NOT NULL COMMENT "",
-  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
-  `lo_discount` tinyint(4) NOT NULL COMMENT "",
-  `lo_revenue` int(11) NOT NULL COMMENT "",
-  `lo_supplycost` int(11) NOT NULL COMMENT "",
-  `lo_tax` tinyint(4) NOT NULL COMMENT "",
-  `lo_commitdate` date NOT NULL COMMENT "",
-  `lo_shipmode` varchar(100) NOT NULL COMMENT "",
-  `c_name` varchar(100) NOT NULL COMMENT "",
-  `c_address` varchar(100) NOT NULL COMMENT "",
-  `c_city` varchar(100) NOT NULL COMMENT "",
-  `c_nation` varchar(100) NOT NULL COMMENT "",
-  `c_region` varchar(100) NOT NULL COMMENT "",
-  `c_phone` varchar(100) NOT NULL COMMENT "",
-  `c_mktsegment` varchar(100) NOT NULL COMMENT "",
-  `s_region` varchar(100) NOT NULL COMMENT "",
-  `s_nation` varchar(100) NOT NULL COMMENT "",
-  `s_city` varchar(100) NOT NULL COMMENT "",
-  `s_name` varchar(100) NOT NULL COMMENT "",
-  `s_address` varchar(100) NOT NULL COMMENT "",
-  `s_phone` varchar(100) NOT NULL COMMENT "",
-  `p_name` varchar(100) NOT NULL COMMENT "",
-  `p_mfgr` varchar(100) NOT NULL COMMENT "",
-  `p_category` varchar(100) NOT NULL COMMENT "",
-  `p_brand` varchar(100) NOT NULL COMMENT "",
-  `p_color` varchar(100) NOT NULL COMMENT "",
-  `p_type` varchar(100) NOT NULL COMMENT "",
-  `p_size` tinyint(4) NOT NULL COMMENT "",
-  `p_container` varchar(100) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`lo_orderdate`, `lo_orderkey`)
-COMMENT "OLAP"
-PARTITION BY RANGE(`lo_orderdate`)
-(START ("1992-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR))
-DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
-PROPERTIES (
-"replication_num" = "1"
-);
-
-# lineorder_flat，1T
-CREATE TABLE `lineorder_flat` (
-  `LO_ORDERDATE` date NOT NULL COMMENT "",
-  `LO_ORDERKEY` bigint(20) NOT NULL COMMENT "",
-  `LO_LINENUMBER` tinyint(4) NOT NULL COMMENT "",
-  `LO_CUSTKEY` int(11) NOT NULL COMMENT "",
-  `LO_PARTKEY` int(11) NOT NULL COMMENT "",
-  `LO_SUPPKEY` int(11) NOT NULL COMMENT "",
-  `LO_ORDERPRIORITY` varchar(100) NOT NULL COMMENT "",
-  `LO_SHIPPRIORITY` tinyint(4) NOT NULL COMMENT "",
-  `LO_QUANTITY` tinyint(4) NOT NULL COMMENT "",
-  `LO_EXTENDEDPRICE` int(11) NOT NULL COMMENT "",
-  `LO_ORDTOTALPRICE` int(11) NOT NULL COMMENT "",
-  `LO_DISCOUNT` tinyint(4) NOT NULL COMMENT "",
-  `LO_REVENUE` int(11) NOT NULL COMMENT "",
-  `LO_SUPPLYCOST` int(11) NOT NULL COMMENT "",
-  `LO_TAX` tinyint(4) NOT NULL COMMENT "",
-  `LO_COMMITDATE` date NOT NULL COMMENT "",
-  `LO_SHIPMODE` varchar(100) NOT NULL COMMENT "",
-  `C_NAME` varchar(100) NOT NULL COMMENT "",
-  `C_ADDRESS` varchar(100) NOT NULL COMMENT "",
-  `C_CITY` varchar(100) NOT NULL COMMENT "",
-  `C_NATION` varchar(100) NOT NULL COMMENT "",
-  `C_REGION` varchar(100) NOT NULL COMMENT "",
-  `C_PHONE` varchar(100) NOT NULL COMMENT "",
-  `C_MKTSEGMENT` varchar(100) NOT NULL COMMENT "",
-  `S_NAME` varchar(100) NOT NULL COMMENT "",
-  `S_ADDRESS` varchar(100) NOT NULL COMMENT "",
-  `S_CITY` varchar(100) NOT NULL COMMENT "",
-  `S_NATION` varchar(100) NOT NULL COMMENT "",
-  `S_REGION` varchar(100) NOT NULL COMMENT "",
-  `S_PHONE` varchar(100) NOT NULL COMMENT "",
-  `P_NAME` varchar(100) NOT NULL COMMENT "",
-  `P_MFGR` varchar(100) NOT NULL COMMENT "",
-  `P_CATEGORY` varchar(100) NOT NULL COMMENT "",
-  `P_BRAND` varchar(100) NOT NULL COMMENT "",
-  `P_COLOR` varchar(100) NOT NULL COMMENT "",
-  `P_TYPE` varchar(100) NOT NULL COMMENT "",
-  `P_SIZE` tinyint(4) NOT NULL COMMENT "",
-  `P_CONTAINER` varchar(100) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`LO_ORDERDATE`, `LO_ORDERKEY`)
-COMMENT "OLAP"
-PARTITION BY RANGE(`LO_ORDERDATE`)
-(START ("1992-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR))
-DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 120
-PROPERTIES (
-"replication_num" = "1"
-);
-```
-
-Modify the configuration file to connect to the cluster.
-
-```shell
-# for mysql cmd
-mysql_host: test1
-mysql_port: 9030
-mysql_user: root
-mysql_password:
-starrocks_db: ssb
-
-# cluster ports
-http_port: 8030
-be_heartbeat_port: 9050
-broker_port: 8000
-
-# parallel_fragment_exec_instance_num 设置并行度，建议是每个集群节点逻辑核数的一半，以下以8为例
-parallel_num: 8
-
-...
-```
-
-Execute the script to create the tables.
-
-```shell
-# 100G
- bin/create_db_table.sh ddl_100
+--Q1.1 
+SELECT sum(lo_extendedprice * lo_discount) AS `revenue` 
+FROM lineorder_flat 
+WHERE lo_orderdate >= '1993-01-01' and lo_orderdate <= '1993-12-31' AND lo_discount BETWEEN 1 AND 3 AND lo_quantity < 25; 
  
-# 1T
- bin/create_db_table.sh ddl_1000
+--Q1.2 
+SELECT sum(lo_extendedprice * lo_discount) AS revenue FROM lineorder_flat  
+WHERE lo_orderdate >= '1994-01-01' and lo_orderdate <= '1994-01-31' AND lo_discount BETWEEN 4 AND 6 AND lo_quantity BETWEEN 26 AND 35; 
+ 
+--Q1.3 
+SELECT sum(lo_extendedprice * lo_discount) AS revenue 
+FROM lineorder_flat 
+WHERE weekofyear(lo_orderdate) = 6 AND lo_orderdate >= '1994-01-01' and lo_orderdate <= '1994-12-31' 
+ AND lo_discount BETWEEN 5 AND 7 AND lo_quantity BETWEEN 26 AND 35; 
+ 
+ 
+--Q2.1 
+SELECT sum(lo_revenue), year(lo_orderdate) AS year,  p_brand 
+FROM lineorder_flat 
+WHERE p_category = 'MFGR#12' AND s_region = 'AMERICA' 
+GROUP BY year,  p_brand 
+ORDER BY year, p_brand; 
+ 
+--Q2.2 
+SELECT 
+sum(lo_revenue), year(lo_orderdate) AS year, p_brand 
+FROM lineorder_flat 
+WHERE p_brand >= 'MFGR#2221' AND p_brand <= 'MFGR#2228' AND s_region = 'ASIA' 
+GROUP BY year,  p_brand 
+ORDER BY year, p_brand; 
+  
+--Q2.3 
+SELECT sum(lo_revenue),  year(lo_orderdate) AS year, p_brand 
+FROM lineorder_flat 
+WHERE p_brand = 'MFGR#2239' AND s_region = 'EUROPE' 
+GROUP BY  year,  p_brand 
+ORDER BY year, p_brand; 
+ 
+ 
+--Q3.1 
+SELECT c_nation, s_nation,  year(lo_orderdate) AS year, sum(lo_revenue) AS revenue FROM lineorder_flat 
+WHERE c_region = 'ASIA' AND s_region = 'ASIA' AND lo_orderdate  >= '1992-01-01' AND lo_orderdate   <= '1997-12-31' 
+GROUP BY c_nation, s_nation, year 
+ORDER BY  year ASC, revenue DESC; 
+ 
+--Q3.2 
+SELECT  c_city, s_city, year(lo_orderdate) AS year, sum(lo_revenue) AS revenue
+FROM lineorder_flat 
+WHERE c_nation = 'UNITED STATES' AND s_nation = 'UNITED STATES' AND lo_orderdate  >= '1992-01-01' AND lo_orderdate <= '1997-12-31' 
+GROUP BY c_city, s_city, year 
+ORDER BY year ASC, revenue DESC; 
+ 
+--Q3.3 
+SELECT c_city, s_city, year(lo_orderdate) AS year, sum(lo_revenue) AS revenue 
+FROM lineorder_flat 
+WHERE c_city in ( 'UNITED KI1' ,'UNITED KI5') AND s_city in ( 'UNITED KI1' ,'UNITED KI5') AND lo_orderdate  >= '1992-01-01' AND lo_orderdate <= '1997-12-31' 
+GROUP BY c_city, s_city, year 
+ORDER BY year ASC, revenue DESC; 
+ 
+--Q3.4 
+SELECT c_city, s_city, year(lo_orderdate) AS year, sum(lo_revenue) AS revenue 
+FROM lineorder_flat 
+WHERE c_city in ('UNITED KI1', 'UNITED KI5') AND s_city in ( 'UNITED KI1',  'UNITED KI5') AND  lo_orderdate  >= '1997-12-01' AND lo_orderdate <= '1997-12-31' 
+GROUP BY c_city,  s_city, year 
+ORDER BY year ASC, revenue DESC; 
+ 
+ 
+--Q4.1 
+SELECT year(lo_orderdate) AS year, c_nation,  sum(lo_revenue - lo_supplycost) AS profit FROM lineorder_flat 
+WHERE c_region = 'AMERICA' AND s_region = 'AMERICA' AND p_mfgr in ( 'MFGR#1' , 'MFGR#2') 
+GROUP BY year, c_nation 
+ORDER BY year ASC, c_nation ASC; 
+ 
+--Q4.2 
+SELECT year(lo_orderdate) AS year, 
+    s_nation, p_category, sum(lo_revenue - lo_supplycost) AS profit 
+FROM lineorder_flat 
+WHERE c_region = 'AMERICA' AND s_region = 'AMERICA' AND lo_orderdate >= '1997-01-01' and lo_orderdate <= '1998-12-31' AND  p_mfgr in ( 'MFGR#1' , 'MFGR#2') 
+GROUP BY year, s_nation,  p_category 
+ORDER BY  year ASC, s_nation ASC, p_category ASC; 
+ 
+--Q4.3 
+SELECT year(lo_orderdate) AS year, s_city, p_brand, 
+    sum(lo_revenue - lo_supplycost) AS profit 
+FROM lineorder_flat 
+WHERE s_nation = 'UNITED STATES' AND lo_orderdate >= '1997-01-01' and lo_orderdate <= '1998-12-31' AND p_category = 'MFGR#14' 
+GROUP BY  year,  s_city, p_brand 
+ORDER BY year ASC,  s_city ASC,  p_brand ASC; 
 ```
 
-We create 6 tables. They are `lineorder`, `supplier`, `dates`, `customer`, `part`, and `lineorder_flat`
+#### 3.2.2 SQL for single-table low-cardinality test
 
-### Data import
-
-We import the data using stream load
-
-```shell
-bin/stream_load.sh data_dir
+```SQL
+--Q1
+select count(*),lo_shipmode from lineorder_flat group by lo_shipmode;
+--Q2
+select count(distinct lo_shipmode) from lineorder_flat;
+--Q3
+select count(*),lo_shipmode,lo_orderpriority from lineorder_flat group by lo_shipmode,lo_orderpriority;
+--Q4
+select count(*),lo_shipmode,lo_orderpriority from lineorder_flat group by lo_shipmode,lo_orderpriority,lo_shippriority;
+--Q5
+select count(*),lo_shipmode,s_city from lineorder_flat group by lo_shipmode,s_city;
+--Q6
+select count(*) from lineorder_flat group by c_city,s_city;
+--Q7
+select count(*) from lineorder_flat group by lo_shipmode,lo_orderdate;
+--Q8
+select count(*) from lineorder_flat group by lo_orderdate,s_nation,s_region;
+--Q9
+select count(*) from lineorder_flat group by c_city,s_city,c_nation,s_nation;
+--Q10
+select count(*) from (select count(*) from lineorder_flat group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation) t;
+--Q11
+select count(*) from (select count(*) from lineorder_flat_distributed group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation,p_mfgr) t;
+--Q12
+select count(*) from (select count(*) from lineorder_flat group by substr(lo_shipmode,2),lower(lo_orderpriority),p_category,s_nation,c_nation,s_region,p_mfgr) t;
 ```
 
-`data_dir` is the data directory.
+### 3.3 Test Results
 
-### Query
+SSB flat-table tests
 
-First, execute the command on the client side to modify the parallelism (similar to clickhouse set max_threads = 8)
+![comparison](/assets/7.1-3.png)
 
-```shell
-# The recommended parallelism is half the number of logical cores per cluster node, for example, 8.
-set global parallel_fragment_exec_instance_num = 8;
-```
+Low-cardinality aggregation tests
 
-Test SSB multi-table query (SQL see share/ssb\_test/sql/ssb/)
+![comparison](/assets/7.1-4.png)
 
-```shell
-# Insert data into the flat table
-bin/flat_insert.sh
-# Execute queries
-bin/benchmark.sh -p -d ssb-flat
-```
+## 4. Test Procedure
+
+For more information about how to create a ClickHouse table and import data to the table, see [ClickHouse official doc](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/). The following sections describe data generation and import procedures of StarRocks.
+
+### 4.1 Generate Data
+
+1. Download the ssb-poc toolkit and compile it.
+
+    ```Bash
+    wget https://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/ssb-poc-0.10.0.zip
+    unzip ssb-poc-0.10.0.zip
+    cd ssb-poc-0.10.0
+    cd ssb-poc
+    make && make install  
+    ```
+
+2. Install all the related tools to the output directory.
+3. Go to the output directory and generate data.
+
+    ```Bash
+    cd output
+    bin/gen-ssb.sh 100 data_dir
+    ```
+
+### 4.2 Create Table Schema
+
+1. Modify the configuration file conf/starrocks.conf and specify the cluster address.
+
+    ```Bash
+    # for mysql cmd
+    mysql_host: 192.168.1.1
+    mysql_port: 9030
+    mysql_user: root
+    mysql_password:
+    database: ssb
+
+    # cluster ports
+      http_port: 8030
+      be_heartbeat_port: 9050
+      broker_port: 8000
+
+    # parallel_fragment_exec_instance_num 设置并行度,建议是每个集群节点逻辑核数的一半,以下以8为例
+      parallel_num: 8
+    ...
+    ```
+
+2. Run the following script to create a table:
+
+    ```SQL
+    # Test 100 GB data.
+    bin/create_db_table.sh ddl_100
+    ```
+
+   Following is the statement for creating table lineorder_flat. The default bucket number has been specified. You can delete the table and re-plan the bucket number based on your cluster size and node configuration, which helps achieve better test results.
+
+    ```SQL
+    CREATE TABLE `lineorder_flat` (
+      `lo_orderdate` date NOT NULL COMMENT "",
+      `lo_orderkey` int(11) NOT NULL COMMENT "",
+      `lo_linenumber` tinyint(4) NOT NULL COMMENT "",
+      `lo_custkey` int(11) NOT NULL COMMENT "",
+      `lo_partkey` int(11) NOT NULL COMMENT "",
+      `lo_suppkey` int(11) NOT NULL COMMENT "",
+      `lo_orderpriority` varchar(100) NOT NULL COMMENT "",
+      `lo_shippriority` tinyint(4) NOT NULL COMMENT "",
+      `lo_quantity` tinyint(4) NOT NULL COMMENT "",
+      `lo_extendedprice` int(11) NOT NULL COMMENT "",
+      `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
+      `lo_discount` tinyint(4) NOT NULL COMMENT "",
+      `lo_revenue` int(11) NOT NULL COMMENT "",
+      `lo_supplycost` int(11) NOT NULL COMMENT "",
+      `lo_tax` tinyint(4) NOT NULL COMMENT "",
+      `lo_commitdate` date NOT NULL COMMENT "",
+      `lo_shipmode` varchar(100) NOT NULL COMMENT "",
+      `c_name` varchar(100) NOT NULL COMMENT "",
+      `c_address` varchar(100) NOT NULL COMMENT "",
+      `c_city` varchar(100) NOT NULL COMMENT "",
+      `c_nation` varchar(100) NOT NULL COMMENT "",
+      `c_region` varchar(100) NOT NULL COMMENT "",
+      `c_phone` varchar(100) NOT NULL COMMENT "",
+      `c_mktsegment` varchar(100) NOT NULL COMMENT "",
+      `s_region` varchar(100) NOT NULL COMMENT "",
+      `s_nation` varchar(100) NOT NULL COMMENT "",
+      `s_city` varchar(100) NOT NULL COMMENT "",
+      `s_name` varchar(100) NOT NULL COMMENT "",
+      `s_address` varchar(100) NOT NULL COMMENT "",
+      `s_phone` varchar(100) NOT NULL COMMENT "",
+      `p_name` varchar(100) NOT NULL COMMENT "",
+      `p_mfgr` varchar(100) NOT NULL COMMENT "",
+      `p_category` varchar(100) NOT NULL COMMENT "",
+      `p_brand` varchar(100) NOT NULL COMMENT "",
+      `p_color` varchar(100) NOT NULL COMMENT "",
+      `p_type` varchar(100) NOT NULL COMMENT "",
+      `p_size` tinyint(4) NOT NULL COMMENT "",
+      `p_container` varchar(100) NOT NULL COMMENT ""
+    ) ENGINE=OLAP
+    DUPLICATE KEY(`lo_orderdate`, `lo_orderkey`)
+    COMMENT "OLAP"
+    PARTITION BY RANGE(`lo_orderdate`)
+    (START ("1992-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR))
+    DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+    PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
+    );
+    ```
+
+3. Modify page_cache parameters and restart the BE node.
+
+    ```SQL
+      disable_storage_page_cache=false; -- Enable page_cache.
+      storage_page_cache_limit=4294967296; -- Specify page_cache_limit.
+    ```
+
+   If you want to test the performance of StarRocks with bitmap indexing enabled, you can perform the following steps. If you want to test standard performance, skip this step and proceed with data loading.
+
+4. Create bitmap indexes for all string columns.
+
+    ```SQL
+    #Create bitmap indexes for lo_orderpriority, lo_shipmode, c_name, c_address, c_city, c_nation, c_region, c_phone, c_mktsegment, s_region, s_nation, s_city, s_name, s_address, s_phone, p_name, p_mfgr, p_category, p_brand, p_color, p_type, p_container.
+    CREATE INDEX bitmap_lo_orderpriority ON lineorder_flat (lo_orderpriority) USING BITMAP;
+    CREATE INDEX bitmap_lo_shipmode ON lineorder_flat (lo_shipmode) USING BITMAP;
+    CREATE INDEX bitmap_c_name ON lineorder_flat (c_name) USING BITMAP;
+    CREATE INDEX bitmap_c_address ON lineorder_flat (c_address) USING BITMAP;
+    CREATE INDEX bitmap_c_city ON lineorder_flat (c_city) USING BITMAP;
+    CREATE INDEX bitmap_c_nation ON lineorder_flat (c_nation) USING BITMAP;
+    CREATE INDEX bitmap_c_region ON lineorder_flat (c_region) USING BITMAP;
+    CREATE INDEX bitmap_c_phone ON lineorder_flat (c_phone) USING BITMAP;
+    CREATE INDEX bitmap_c_mktsegment ON lineorder_flat (c_mktsegment) USING BITMAP;
+    CREATE INDEX bitmap_s_region ON lineorder_flat (s_region) USING BITMAP;
+    CREATE INDEX bitmap_s_nation ON lineorder_flat (s_nation) USING BITMAP;
+    CREATE INDEX bitmap_s_city ON lineorder_flat (s_city) USING BITMAP;
+    CREATE INDEX bitmap_s_name ON lineorder_flat (s_name) USING BITMAP;
+    CREATE INDEX bitmap_s_address ON lineorder_flat (s_address) USING BITMAP;
+    CREATE INDEX bitmap_s_phone ON lineorder_flat (s_phone) USING BITMAP;
+    CREATE INDEX bitmap_p_name ON lineorder_flat (p_name) USING BITMAP;
+    CREATE INDEX bitmap_p_mfgr ON lineorder_flat (p_mfgr) USING BITMAP;
+    CREATE INDEX bitmap_p_category ON lineorder_flat (p_category) USING BITMAP;
+    CREATE INDEX bitmap_p_brand ON lineorder_flat (p_brand) USING BITMAP;
+    CREATE INDEX bitmap_p_color ON lineorder_flat (p_color) USING BITMAP;
+    CREATE INDEX bitmap_p_type ON lineorder_flat (p_type) USING BITMAP;
+    CREATE INDEX bitmap_p_container ON lineorder_flat (p_container) USING BITMAP;
+    ```
+
+5. Modify the following BE parameter and restart the BE node.
+
+    ```SQL
+    bitmap_max_filter_ratio=1000; 
+    ```
+
+### 4.3 Import Data
+
+1. Use Stream Load to import single-table data.
+
+    ```Bash
+    bin/stream_load.sh data_dir
+    ```
+
+2. Insert data into the flat table lineorder_flat.
+
+    ```Bash
+    bin/flat_insert.sh 
+    ```
+
+### 4.4 Query Data
+
+1. SSB query
+
+    ```Bash
+    bin/benchmark.sh -p -d ssb
+    bin/benchmark.sh -p -d ssb-flat
+    ```
+
+2. Low-cardinality field query
+
+    ```Bash
+    bin/benchmark.sh -p -d ssb-low_cardinality
+    ```
