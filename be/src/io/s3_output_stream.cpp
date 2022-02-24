@@ -85,7 +85,7 @@ Status S3OutputStream::create_multipart_upload() {
 }
 
 Status S3OutputStream::singlepart_upload() {
-    VLOG(12) << "Uploading s3://" << _bucket << "/" << _object << " vis singlepart upload";
+    VLOG(12) << "Uploading s3://" << _bucket << "/" << _object << " via singlepart upload";
     DCHECK(_upload_id.empty());
     if (_buffer.empty()) {
         return Status::OK();
@@ -97,13 +97,14 @@ Status S3OutputStream::singlepart_upload() {
     req.SetBody(std::make_shared<Aws::StringStream>(_buffer));
     Aws::S3::Model::PutObjectOutcome outcome = _client->PutObject(req);
     if (!outcome.IsSuccess()) {
-        return Status::IOError(fmt::format("S3: Fail to put object: {}", outcome.GetError().GetMessage()));
+        return Status::IOError(
+                fmt::format("S3: Fail to put object {}/{}: {}", _bucket, _object, outcome.GetError().GetMessage()));
     }
     return Status::OK();
 }
 
 Status S3OutputStream::multipart_upload() {
-    VLOG(12) << "Uploading s3://" << _bucket << "/" << _object << " vis multipart upload";
+    VLOG(12) << "Uploading s3://" << _bucket << "/" << _object << " via multipart upload";
     if (_buffer.empty()) {
         return Status::OK();
     }
@@ -119,7 +120,8 @@ Status S3OutputStream::multipart_upload() {
         _etags.push_back(outcome.GetResult().GetETag());
         return Status::OK();
     }
-    return Status::IOError(fmt::format("S3: Fail to upload part: {}", outcome.GetError().GetMessage()));
+    return Status::IOError(
+            fmt::format("S3: Fail to upload part of {}/{}: {}", _bucket, _object, outcome.GetError().GetMessage()));
 }
 
 Status S3OutputStream::complete_multipart_upload() {
