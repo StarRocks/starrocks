@@ -33,7 +33,7 @@ namespace starrocks {
 
 class ExecEnv;
 
-// Class enclose brpc service
+// Class enclose brpc service.
 class BRpcService {
 public:
     BRpcService(ExecEnv* exec_env);
