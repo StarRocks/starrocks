@@ -142,10 +142,6 @@ public class Utils {
         extractOperator(groupExpression, list, p -> OperatorType.LOGICAL_OLAP_SCAN.equals(p.getOpType()));
     }
 
-    public static void extractScanOperator(GroupExpression groupExpression, List<LogicalScanOperator> list) {
-        extractOperator(groupExpression, list, p -> p instanceof LogicalScanOperator);
-    }
-
     private static <E extends Operator> void extractOperator(GroupExpression root, List<E> list,
                                                              Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
