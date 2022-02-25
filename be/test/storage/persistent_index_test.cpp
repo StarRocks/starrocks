@@ -130,14 +130,14 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     ASSERT_TRUE(index.prepare(EditVersion(1, 0)).ok());
     ASSERT_TRUE(index.insert(100, keys.data(), values.data(), false).ok());
     ASSERT_TRUE(index.commit(&index_meta).ok());
-    ASSERT_TRUE(index.apply().ok());
+    ASSERT_TRUE(index.on_commited().ok());
 
     {
         std::vector<IndexValue> old_values(keys.size());
         ASSERT_TRUE(index.prepare(EditVersion(2, 0)).ok());
         ASSERT_TRUE(index.upsert(keys.size(), keys.data(), values.data(), old_values.data()).ok());
         ASSERT_TRUE(index.commit(&index_meta).ok());
-        ASSERT_TRUE(index.apply().ok());
+        ASSERT_TRUE(index.on_commited().ok());
     }
 
     // erase
@@ -150,7 +150,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     ASSERT_TRUE(index.erase(erase_keys.size(), erase_keys.data(), erase_old_values.data()).ok());
     // update PersistentMetaPB in memory
     ASSERT_TRUE(index.commit(&index_meta).ok());
-    ASSERT_TRUE(index.apply().ok());
+    ASSERT_TRUE(index.on_commited().ok());
 
     // append invalid wal
     std::vector<Key> invalid_keys;
@@ -203,7 +203,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
         ASSERT_TRUE(new_index.upsert(invalid_keys.size(), invalid_keys.data(), invalid_values.data(), old_values.data())
                             .ok());
         ASSERT_TRUE(new_index.commit(&index_meta).ok());
-        ASSERT_TRUE(new_index.apply().ok());
+        ASSERT_TRUE(new_index.on_commited().ok());
     }
     // rebuild mutableindex according to PersistentIndexMetaPB
     {

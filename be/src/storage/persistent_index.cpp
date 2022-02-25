@@ -824,7 +824,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     return Status::OK();
 }
 
-Status PersistentIndex::apply() {
+Status PersistentIndex::on_commited() {
     if (_dump_snapshot) {
         std::string expired_file_path = _index_block->path();
         std::string index_file_path = _get_l0_index_file_name(_path, _version);

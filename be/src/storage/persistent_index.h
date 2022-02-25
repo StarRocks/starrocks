@@ -126,8 +126,8 @@ public:
 //   if (pi.upsert(upsert_keys, values, old_values))
 //   pi.erase(delete_keys, old_values)
 //   pi.commit()
-//   pi.apply()
-// If any error occurred between prepare and apply, abort should be called, the
+//   pi.on_commited()
+// If any error occurred between prepare and on_commited, abort should be called, the
 // index maybe corrupted, currently for simplicity, the whole index is cleared and rebuilt.
 class PersistentIndex {
 public:
@@ -163,7 +163,7 @@ public:
     Status commit(PersistentIndexMetaPB* index_meta);
 
     // apply modification
-    Status apply();
+    Status on_commited();
 
     // batch index operations
 
