@@ -23,7 +23,15 @@ public:
 
     uint64_t getNaturalReadSize() const override { return 1 * 1024 * 1024; }
 
-    uint64_t getNaturalReadSizeAfterSeek() const override { return 128 * 1024; }
+    // It's 1/4 of NaturalReadSize. It's for read size after doing seek.
+    // When doing seek, we are reading data in random way, and the data we want to read maybe is not consectuive.
+    // If we still use NaturalReadSize we probably read many row groups
+    // after the row group we want to read, and that will amplify read IO bytes.
+
+    // So the best way is to reduce read size, hopefully we just read that row group in one shot.
+    // We also have chance that we may not read enough at this shot, then we still use NaturalReadSize to read.
+
+    uint64_t getNaturalReadSizeAfterSeek() const override { return 256 * 1024; }
 
     void read(void* buf, uint64_t length, uint64_t offset) override {
         SCOPED_RAW_TIMER(&_stats->io_ns);
