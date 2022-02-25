@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.parser;
 
-import com.google.common.collect.Lists;
+import com.clearspring.analytics.util.Lists;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
@@ -16,13 +16,14 @@ import java.io.StringReader;
 import java.util.List;
 
 public class SqlParser {
-    public static List<StatementBase> parse(String sql, ConnectContext session) {
+    public static List<StatementBase> parse(String originSql, ConnectContext session) {
+        List<String> splitSql = splitSQL(originSql);
         List<StatementBase> statements = Lists.newArrayList();
-        String[] splitSql = sql.split(";");
 
-        for (int i = 0; i < splitSql.length; ++i) {
+        for (String sql : splitSql) {
             try {
-                StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(splitSql[i])));
+                StarRocksLexer lexer =
+                        new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
                 CommonTokenStream tokenStream = new CommonTokenStream(lexer);
                 StarRocksParser parser = new StarRocksParser(tokenStream);
                 parser.removeErrorListeners();
@@ -30,8 +31,9 @@ public class SqlParser {
                 StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
                 statements.add((StatementBase) new AstBuilder().visitSingleStatement(sqlStatements.singleStatement(0)));
             } catch (ParsingException parsingException) {
-                StatementBase statementBase = parseWithOldParser(splitSql[i], session);
-                if (statementBase instanceof QueryStatement || statementBase instanceof InsertStmt) {
+                StatementBase statementBase = parseWithOldParser(sql, session);
+                if (statementBase instanceof QueryStatement
+                        || statementBase instanceof InsertStmt) {
                     throw parsingException;
                 }
                 statements.add(statementBase);
@@ -63,5 +65,24 @@ public class SqlParser {
                 throw new ParsingException("Internal Error: " + errorMessage);
             }
         }
+    }
+
+    private static List<String> splitSQL(String sql) {
+        List<String> sqlLists = Lists.newArrayList();
+        boolean inString = false;
+        int sqlStartOffset = 0;
+        for (int i = 0; i < sql.length(); ++i) {
+            if (sql.charAt(i) == '\"' || sql.charAt(i) == '\'' || sql.charAt(i) == '`') {
+                inString = !inString;
+            }
+
+            if (sql.charAt(i) == ';') {
+                if (!inString) {
+                    sqlLists.add(sql.substring(sqlStartOffset, i));
+                    sqlStartOffset = i + 1;
+                }
+            }
+        }
+        return sqlLists;
     }
 }
