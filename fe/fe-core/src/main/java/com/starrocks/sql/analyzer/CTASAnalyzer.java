@@ -51,8 +51,7 @@ public class CTASAnalyzer {
 
         // Pair<TableName, Pair<ColumnName, ColumnAlias>>
         Map<Pair<String, Pair<String, String>>, Table> columnNameToTable = Maps.newHashMap();
-        Map<String, Table> tableRefToTable = Maps.newHashMap();
-        new AnalyzerUtils.TableCollector(tableRefToTable, session).visit(queryStatement);
+        Map<String, Table> tableRefToTable = AnalyzerUtils.collectAllTable(queryStatement);
 
         // For replication_num, we select the maximum value of all tables replication_num
         int defaultReplicationNum = 1;

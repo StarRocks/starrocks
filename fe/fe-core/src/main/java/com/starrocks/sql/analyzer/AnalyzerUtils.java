@@ -4,11 +4,13 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Predicate;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
@@ -71,7 +73,13 @@ public class AnalyzerUtils {
     }
 
     //Get all the db used, the query needs to add locks to them
-    public static class DBCollector extends AstVisitor<Void, Void> {
+    public static Map<String, Database> collectAllDatabase(ConnectContext session, StatementBase statementBase) {
+        Map<String, Database> dbs = Maps.newHashMap();
+        new AnalyzerUtils.DBCollector(dbs, session).visit(statementBase);
+        return dbs;
+    }
+
+    private static class DBCollector extends AstVisitor<Void, Void> {
         private final Map<String, Database> dbs;
         private final ConnectContext session;
 
@@ -142,13 +150,17 @@ public class AnalyzerUtils {
     }
 
     //Get all the table used
-    public static class TableCollector extends AstVisitor<Void, Void> {
-        private final Map<String, Table> tables;
-        private final ConnectContext session;
+    public static Map<String, Table> collectAllTable(StatementBase statementBase) {
+        Map<String, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.TableCollector(tables).visit(statementBase);
+        return tables;
+    }
 
-        public TableCollector(Map<String, Table> dbs, ConnectContext session) {
+    private static class TableCollector extends AstVisitor<Void, Void> {
+        private final Map<String, Table> tables;
+
+        public TableCollector(Map<String, Table> dbs) {
             this.tables = dbs;
-            this.session = session;
         }
 
         @Override

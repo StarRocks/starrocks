@@ -45,7 +45,7 @@ public class StatementPlanner {
                 queryStmt.getDbs(session, dbs);
             }
             if (stmt instanceof QueryStatement) {
-                new AnalyzerUtils.DBCollector(dbs, session).visit(stmt);
+                dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
             }
 
             try {
@@ -65,9 +65,7 @@ public class StatementPlanner {
             }
         } else if (stmt instanceof InsertStmt) {
             InsertStmt insertStmt = (InsertStmt) stmt;
-            Map<String, Database> dbs = Maps.newTreeMap();
-            new AnalyzerUtils.DBCollector(dbs, session).visit(insertStmt);
-
+            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, insertStmt);
             try {
                 lock(dbs);
                 return createInsertPlan(relation, session);
