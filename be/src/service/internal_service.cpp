@@ -51,8 +51,8 @@ template <typename T>
 void PInternalServiceImpl<T>::transmit_data(google::protobuf::RpcController* cntl_base,
                                             const PTransmitDataParams* request, PTransmitDataResult* response,
                                             google::protobuf::Closure* done) {
-    VLOG_ROW << "transmit data: fragment_instance_id=" << print_id(request->finst_id())
-             << " node=" << request->node_id();
+    VLOG_ROW << "Transmit data: fragment_instance_id = " << print_id(request->finst_id())
+             << " node = " << request->node_id();
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     if (cntl->request_attachment().size() > 0) {
         PRowBatch* batch = (const_cast<PTransmitDataParams*>(request))->mutable_row_batch();
@@ -60,9 +60,9 @@ void PInternalServiceImpl<T>::transmit_data(google::protobuf::RpcController* cnt
         std::string* tuple_data = batch->mutable_tuple_data();
         io_buf.copy_to(tuple_data);
     }
-    // NOTE: we should give a default value to response to avoid concurrent risk
+    // NOTE: we should give a default value to response to avoid concurrent risk.
     // If we don't give response here, stream manager will call done->Run before
-    // transmit_data(), which will cause a dirty memory access.
+    // 'transmit_data()', which will cause a dirty memory access.
     Status st;
     st.to_protobuf(response->mutable_status());
     st = _exec_env->stream_mgr()->transmit_data(request, &done);

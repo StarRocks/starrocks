@@ -38,7 +38,7 @@ DECLARE_int64(socket_max_unwritten_bytes);
 namespace starrocks {
 
 BRpcService::BRpcService(ExecEnv* exec_env) : _exec_env(exec_env), _server(new brpc::Server()) {
-    // Set config
+    // Set config.
     brpc::FLAGS_max_body_size = config::brpc_max_body_size;
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
 }
@@ -46,10 +46,10 @@ BRpcService::BRpcService(ExecEnv* exec_env) : _exec_env(exec_env), _server(new b
 BRpcService::~BRpcService() = default;
 
 Status BRpcService::start(int port) {
-    // Add service
+    // Add services.
     _server->AddService(new PInternalServiceImpl<PInternalService>(_exec_env), brpc::SERVER_OWNS_SERVICE);
     _server->AddService(new PInternalServiceImpl<doris::PBackendService>(_exec_env), brpc::SERVER_OWNS_SERVICE);
-    // start service
+    // Start services.
     brpc::ServerOptions options;
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
@@ -57,7 +57,7 @@ Status BRpcService::start(int port) {
 
     if (_server->Start(port, &options) != 0) {
         PLOG(WARNING) << "Fail to start brpc server on port " << port;
-        return Status::InternalError("start brpc service failed");
+        return Status::InternalError("Start brpc service failed");
     }
     return Status::OK();
 }
