@@ -62,18 +62,18 @@ bool init_glog(const char* basename, bool install_signal_handler) {
         google::InstallFailureSignalHandler();
     }
 
-    // don't log to stderr
+    // Don't log to stderr.
     FLAGS_stderrthreshold = 5;
-    // set glog log dir
+    // Set glog log dir.
     FLAGS_log_dir = config::sys_log_dir;
-    // 0 means buffer INFO only
+    // 0 means buffer INFO only.
     FLAGS_logbuflevel = 0;
-    // buffer log messages for at most this many seconds
+    // Buffer log messages for at most this many seconds.
     FLAGS_logbufsecs = 30;
-    // set roll num
+    // Set roll num.
     FLAGS_log_filenum_quota = config::sys_log_roll_num;
 
-    // set log level
+    // Set log level.
     std::string& loglevel = config::sys_log_level;
     if (iequals(loglevel, "INFO")) {
         FLAGS_minloglevel = 0;
@@ -88,8 +88,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
         return false;
     }
 
-    // set log buffer level
-    // defalut is 0
+    // Set log buffer level, defalut is 0.
     std::string& logbuflevel = config::log_buffer_level;
     if (iequals(logbuflevel, "-1")) {
         FLAGS_logbuflevel = -1;
@@ -97,7 +96,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
         FLAGS_logbuflevel = 0;
     }
 
-    // set log roll mode
+    // Set log roll mode.
     std::string& rollmode = config::sys_log_roll_mode;
     std::string sizeflag = "SIZE-MB-";
     bool ok = false;
@@ -131,7 +130,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
         return false;
     }
 
-    // set verbose modules.
+    // Set verbose modules.
     FLAGS_v = -1;
     std::vector<std::string>& verbose_modules = config::sys_log_verbose_modules;
     int32_t vlog_level = config::sys_log_verbose_level;
