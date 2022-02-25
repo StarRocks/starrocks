@@ -50,6 +50,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
@@ -64,6 +65,7 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.statistic.Constants;
@@ -144,6 +146,27 @@ public class UtFrameUtils {
         ctx.setCatalog(Catalog.getCurrentCatalog());
         ctx.setThreadLocalInfo();
         return ctx;
+    }
+
+    // Parse an origin stmt . Return a StatementBase instance.
+    public static StatementBase parseStmtWithNewParser(String originStmt, ConnectContext ctx)
+            throws Exception {
+        StatementBase statementBase;
+        com.starrocks.sql.analyzer.Analyzer analyzer =
+                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
+        try {
+            statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx).get(0);
+            Relation relation = analyzer.analyze(statementBase);
+        } catch (ParsingException | SemanticException e) {
+            System.err.println("parse failed: " + e.getMessage());
+            if (e.getMessage() == null) {
+                throw e;
+            } else {
+                throw new AnalysisException(e.getMessage(), e);
+            }
+        }
+
+        return statementBase;
     }
 
     // Parse an origin stmt . Return a StatementBase instance.
@@ -350,7 +373,7 @@ public class UtFrameUtils {
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
 
-        List<StatementBase> statements = com.starrocks.sql.parser.SqlParser.parse(originStmt);
+        List<StatementBase> statements = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext);
         connectContext.getDumpInfo().setOriginStmt(originStmt);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);
