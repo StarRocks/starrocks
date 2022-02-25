@@ -24,7 +24,7 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 
-public class PartitionValue {
+public class PartitionValue implements ParseNode {
     public static final PartitionValue MAX_VALUE = new PartitionValue();
 
     private String value;

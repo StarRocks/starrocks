@@ -113,7 +113,7 @@ Status DataStreamMgr::transmit_data(const PTransmitDataParams* request, ::google
         return Status::OK();
     }
 
-    // request can only be used before calling recvr's add_batch or when request
+    // Request can only be used before calling recvr's add_batch or when request
     // is the last for the sender, because request maybe released after it's batch
     // is consumed by ExchangeNode.
     if (request->has_query_statistics()) {

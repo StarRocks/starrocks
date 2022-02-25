@@ -15,9 +15,11 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
+import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -52,6 +54,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitQueryStatement(QueryStatement node, C context) {
+        return visitStatement(node, context);
+    }
+
+    public R visitInsertStatement(InsertStmt node, C context) {
         return visitStatement(node, context);
     }
 
@@ -230,6 +236,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitOrderByElement(OrderByElement node, C context) {
+        return null;
+    }
+
+    public R visitGroupByClause(GroupByClause node, C context) {
         return null;
     }
 }

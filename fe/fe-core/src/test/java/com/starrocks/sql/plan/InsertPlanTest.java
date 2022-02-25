@@ -1,10 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -13,7 +10,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.StringReader;
 import java.util.stream.Stream;
 
 public class InsertPlanTest extends PlanTestBase {
@@ -336,10 +332,7 @@ public class InsertPlanTest extends PlanTestBase {
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
-        SqlScanner input =
-                new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext).get(0);
         connectContext.getDumpInfo().setOriginStmt(originStmt);
         ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
 

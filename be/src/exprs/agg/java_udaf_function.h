@@ -7,21 +7,18 @@
 #include <vector>
 
 #include "column/binary_column.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
-#include "gen_cpp/Opcodes_types.h"
+#include "gutil/casts.h"
 #include "jni.h"
+#include "runtime/primitive_type.h"
+#include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "udf/udf.h"
 #include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
-
-struct JavaUDAFState {
-    JavaUDAFState(jobject&& handle_) : handle(std::move(handle_)){};
-    ~JavaUDAFState() = default;
-    // UDAF State
-    jobject handle;
-};
 
 template <bool handle_null>
 jvalue cast_to_jvalue(MethodTypeDescriptor method_type_desc, const Column* col, int row_num);
@@ -29,7 +26,6 @@ void release_jvalue(MethodTypeDescriptor method_type_desc, jvalue val);
 void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
 Status get_java_udaf_function(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
                               starrocks_udf::FunctionContext* context, AggregateFunction** func);
-// Not Support Nullable
 
 template <bool handle_null = true>
 class JavaUDAFAggregateFunction : public AggregateFunction {
@@ -56,9 +52,13 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
                size_t row_num) const override final {
         // TODO merge
-        DCHECK(!column->is_nullable());
-        DCHECK(column->is_binary());
-        const auto* input_column = down_cast<const BinaryColumn*>(column);
+        const BinaryColumn* input_column = nullptr;
+        if (column->is_nullable()) {
+            auto* null_column = down_cast<const NullableColumn*>(column);
+            input_column = down_cast<const BinaryColumn*>(null_column->data_column().get());
+        } else {
+            input_column = down_cast<const BinaryColumn*>(column);
+        }
         Slice slice = input_column->get_slice(row_num);
         auto* udaf_ctx = ctx->impl()->udaf_ctxs();
 
@@ -74,11 +74,17 @@ public:
 
     void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                              Column* to) const override final {
+        BinaryColumn* column = nullptr;
         // TODO serialize
-        DCHECK(!to->is_nullable());
-        DCHECK(to->is_binary());
+        if (to->is_nullable()) {
+            auto* null_column = down_cast<NullableColumn*>(to);
+            null_column->null_column()->append(DATUM_NOT_NULL);
+            column = down_cast<BinaryColumn*>(null_column->data_column().get());
+        } else {
+            DCHECK(to->is_binary());
+            column = down_cast<BinaryColumn*>(to);
+        }
 
-        auto* column = down_cast<BinaryColumn*>(to);
         size_t old_size = column->get_bytes().size();
         auto* udaf_ctx = ctx->impl()->udaf_ctxs();
         int serialize_size = udaf_ctx->_func->serialize_size(this->data(state).handle);
@@ -133,8 +139,17 @@ public:
 
     void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
-        for (size_t i = 0; i < batch_size; ++i) {
-            this->update(ctx, columns, states[i] + state_offset, i);
+        auto& helper = JVMFunctionHelper::getInstance();
+        std::vector<DirectByteBuffer> buffers;
+        std::vector<jobject> args;
+        int num_cols = ctx->get_num_args();
+        auto arr = JavaDataTypeConverter::convert_to_object_array(states, state_offset, batch_size);
+        args.emplace_back(arr);
+        JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle, ctx->impl()->udaf_ctxs()->update->method,
+                            args.data(), args.size());
+        for (int i = 0; i < args.size(); ++i) {
+            helper.getEnv()->DeleteLocalRef(args[i]);
         }
     }
 
@@ -149,8 +164,25 @@ public:
 
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        for (size_t i = 0; i < batch_size; ++i) {
-            this->update(ctx, columns, state, i);
+        auto& helper = JVMFunctionHelper::getInstance();
+        auto* env = helper.getEnv();
+        std::vector<DirectByteBuffer> buffers;
+        ConvertDirectBufferVistor vistor(buffers);
+        int num_cols = ctx->get_num_args();
+        PrimitiveType types[num_cols];
+        jobject args[num_cols];
+        for (int i = 0; i < num_cols; ++i) {
+            types[i] = ctx->get_arg_type(i)->type;
+            int buffers_idx = buffers.size();
+            columns[i]->accept(&vistor);
+            int buffers_sz = buffers.size() - buffers_idx;
+            args[i] = helper.create_boxed_array(types[i], batch_size, columns[i]->is_nullable(), &buffers[buffers_idx],
+                                                buffers_sz);
+        }
+        helper.batch_update_single(ctx, ctx->impl()->udaf_ctxs()->handle, ctx->impl()->udaf_ctxs()->update->method,
+                                   this->data(state).handle, args, num_cols);
+        for (int i = 0; i < num_cols; ++i) {
+            env->DeleteLocalRef(args[i]);
         }
     }
 
@@ -180,7 +212,7 @@ public:
     void batch_serialize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
                          size_t state_offset, Column* to) const override {
         for (size_t i = 0; i < batch_size; i++) {
-            this->serialize_to_column(nullptr, agg_states[i] + state_offset, to);
+            this->serialize_to_column(ctx, agg_states[i] + state_offset, to);
         }
     }
 

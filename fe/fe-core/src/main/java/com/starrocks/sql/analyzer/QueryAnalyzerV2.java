@@ -215,7 +215,6 @@ public class QueryAnalyzerV2 {
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
-
                     SubqueryRelation viewRelation =
                             new SubqueryRelation(tableName.getTbl(), queryStatement.getQueryRelation());
                     viewRelation.setAlias(tableName);

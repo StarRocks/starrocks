@@ -19,6 +19,7 @@ import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionParams;
+import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
@@ -266,7 +267,7 @@ public class AST2SQL {
                 for (int i = 0; i < node.getRows().size(); ++i) {
                     sqlBuilder.append("(");
                     List<String> rowStrings =
-                            node.getRows().get(i).stream().map(Expr::toSql).collect(Collectors.toList());
+                            node.getRows().get(i).stream().map(this::visit).collect(Collectors.toList());
                     sqlBuilder.append(Joiner.on(", ").join(rowStrings));
                     sqlBuilder.append(")");
                 }
@@ -446,7 +447,7 @@ public class AST2SQL {
             String notStr = (node.isNotIn()) ? "NOT " : "";
             strBuilder.append(visit(node.getChild(0))).append(" ").append(notStr).append("IN (");
             for (int i = 1; i < node.getChildren().size(); ++i) {
-                strBuilder.append(node.getChild(i).toSql());
+                strBuilder.append(visit(node.getChild(i)));
                 strBuilder.append((i + 1 != node.getChildren().size()) ? ", " : "");
             }
             strBuilder.append(")");
@@ -552,6 +553,11 @@ public class AST2SQL {
                 }
             }
             return strBuilder.toString();
+        }
+
+        @Override
+        public String visitGroupByClause(GroupByClause node, Void context) {
+            return node.toSql();
         }
 
         private String visitAstList(List<? extends ParseNode> contexts) {

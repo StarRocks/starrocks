@@ -26,10 +26,9 @@ import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.meta.SqlBlackList;
 import com.starrocks.meta.BlackListSql;
+import com.starrocks.meta.SqlBlackList;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -40,9 +39,8 @@ import org.junit.Test;
 
 import java.io.File;
 import java.util.List;
-import java.util.UUID;
-import java.util.ArrayList;
 import java.util.Map;
+import java.util.UUID;
 
 public class QueryPlannerTest {
     // use a unique dir so that it won't be conflict with other unit test which
@@ -193,14 +191,5 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
         stmtExecutor3.execute();
         Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
-    }
-
-    @Test
-    public void testCreateView() throws Exception {
-        String sql = "create view view_test (dt) as select k10 from baseall where " +
-                "k10 = ( SELECT max(b.k3) FROM baseall as b );";
-        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, sql);
-        stmtExecutor0.execute();
-        Assert.assertNotSame(connectContext.getState().getStateType(), MysqlStateType.ERR);
     }
 }

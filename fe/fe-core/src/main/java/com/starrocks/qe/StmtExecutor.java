@@ -26,11 +26,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
+import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
@@ -1034,6 +1036,8 @@ public class StmtExecutor {
                 || statement instanceof InsertStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof QueryStatement
+                || statement instanceof CreateViewStmt
+                || statement instanceof AlterViewStmt
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowTableStmt
                 || statement instanceof CreateWorkGroupStmt
@@ -1043,7 +1047,7 @@ public class StmtExecutor {
     }
 
     public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {
-        if (stmt.getQueryStmt().isExplain()) {
+        if (stmt.getQueryStatement().isExplain()) {
             handleExplainStmt(execPlan.getExplainString(TExplainLevel.NORMAL));
             return;
         }

@@ -99,7 +99,7 @@ public:
 #define CONF_mDouble(name, defaultstr) DECLARE_FIELD(double, name)
 #endif
 
-// configuration properties load from config file.
+// Configuration properties load from config file.
 class Properties {
 public:
     bool load(const char* filename);
@@ -112,7 +112,7 @@ private:
 
 extern Properties props;
 
-// full configurations.
+// Full configurations.
 extern std::map<std::string, std::string>* full_conf_map;
 
 bool init(const char* filename, bool fillconfmap = false);

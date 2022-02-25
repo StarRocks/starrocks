@@ -69,5 +69,14 @@ public class UDFClassAnalyzer {
         }
         throw new NoSuchMethodException("Not Found Method:" + methodName);
     }
+    
+    public static Method getMethodObject(String methodName, Class clazz) {
+        for (Method declaredMethod : clazz.getDeclaredMethods()) {
+            if (declaredMethod.getName().equals(methodName)) {
+                return declaredMethod;
+            }
+        }
+        return null;
+    }
 }
 
