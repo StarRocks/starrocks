@@ -4,8 +4,10 @@
 #include <memory>
 
 #include "common/status.h"
+#include "common/statusor.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
+#include "udf/udf.h"
 
 // implements by libhdfs
 // hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
@@ -26,7 +28,7 @@ extern "C" JNIEnv* getJNIEnv(void);
     TYPE val##TYPE(jobject obj);
 
 namespace starrocks::vectorized {
-
+class DirectByteBuffer;
 // Restrictions on use:
 // can only be used in pthread, not in bthread
 // thread local helper
@@ -46,6 +48,16 @@ public:
     jstring to_jstring(const std::string& str);
     jmethodID getMethod(jclass clazz, const std::string& method, const std::string& sig);
     jmethodID getStaticMethod(jclass clazz, const std::string& method, const std::string& sig);
+    // convert column data to Java Object Array
+    jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
+    // batch update input: col1 col2
+    void batch_update_single(FunctionContext* ctx, jobject udaf, jobject update, jobject state, jobject* input,
+                             int cols);
+    // batch update input: state col1 col2
+    void batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
+
+    // batch call evalute
+    jobject batch_call(FunctionContext* ctx, jobject udf, jobject evaluate, jobject* input, int cols, int rows);
 
     DECLARE_NEW_BOX(uint8_t, Boolean)
     DECLARE_NEW_BOX(int8_t, Byte)
@@ -64,10 +76,16 @@ public:
     // eg: java.lang.Integer -> java/lang/Integer
     static std::string to_jni_class_name(const std::string& name);
 
+    jclass object_class() { return _object_class; }
+
 private:
     JVMFunctionHelper(JNIEnv* env) : _env(env) {}
     void _init();
     void _add_class_path(const std::string& path);
+    // pack input array to java object array
+    jobjectArray _build_object_array(jclass clazz, jobject* arr, int sz);
+    // check JNI Exception and set error in FunctionContext
+    void _check_call_exception(FunctionContext* ctx);
 
 private:
     JNIEnv* _env;
@@ -81,6 +99,7 @@ private:
     DEFINE_JAVA_PRIM_TYPE(double);
 
     jclass _object_class;
+    jclass _object_array_class;
     jclass _string_class;
     jclass _throwable_class;
     jclass _jarrays_class;
@@ -88,6 +107,13 @@ private:
     jmethodID _string_construct_with_bytes;
 
     jobject _utf8_charsets;
+
+    jclass _udf_helper_class;
+    jmethodID _create_boxed_array;
+    jmethodID _batch_update_single;
+    jmethodID _batch_update;
+    jmethodID _batch_call;
+    jclass _direct_buffer_class;
 };
 
 // Used for UDAF serialization and deserialization,
@@ -193,11 +219,13 @@ struct MethodTypeDescriptor {
 };
 
 struct JavaMethodDescriptor {
+    ~JavaMethodDescriptor();
     std::string signature; // function signature
     std::string name;      // function name
     std::vector<MethodTypeDescriptor> method_desc;
+    jobject method = nullptr;
     // thread safe
-    jmethodID get_method_id(jclass clazz) const;
+    jmethodID get_method_id() const;
 };
 
 // Used to get function signatures
@@ -208,12 +236,8 @@ public:
     Status has_method(jclass clazz, const std::string& method, bool* has);
     Status get_signature(jclass clazz, const std::string& method, std::string* sign);
     Status get_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
+    StatusOr<jobject> get_method_object(jclass clazz, const std::string& method_name);
     Status get_udaf_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
-};
-
-class UDFHelper {
-public:
-    jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffer, int sz);
 };
 
 struct JavaUDFContext {
@@ -236,8 +260,7 @@ struct JavaUDAFContext;
 
 class UDAFFunction {
 public:
-    UDAFFunction(jobject udaf_state_clazz, jobject udaf_clazz, jobject udaf_handle, JavaUDAFContext* ctx)
-            : _udaf_state_clazz(udaf_state_clazz), _udaf_clazz(udaf_clazz), _udaf_handle(udaf_handle), _ctx(ctx) {}
+    UDAFFunction(jobject udaf_handle, JavaUDAFContext* ctx) : _udaf_handle(udaf_handle), _ctx(ctx) {}
     // create a new state for UDAF
     jobject create();
     // destroy state
@@ -261,8 +284,6 @@ public:
                                 int64_t frame_end, int col_sz, jobject* cols);
 
 private:
-    jobject _udaf_state_clazz;
-    jobject _udaf_clazz;
     jobject _udaf_handle;
     JavaUDAFContext* _ctx;
 };
@@ -270,7 +291,6 @@ private:
 struct JavaUDAFContext {
     std::unique_ptr<ClassLoader> udf_classloader;
     std::unique_ptr<ClassAnalyzer> analyzer;
-    std::unique_ptr<UDFHelper> udf_helper;
     JVMClass udaf_class = nullptr;
     JVMClass udaf_state_class = nullptr;
     std::unique_ptr<JavaMethodDescriptor> create;

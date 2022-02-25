@@ -33,6 +33,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/udf")
 IF (WITH_HDFS)
     set(UDF_FILES
       java/java_udf.cpp
+      java/java_data_converter.cpp
     )
 endif()
 
