@@ -29,7 +29,7 @@ import com.starrocks.common.AnalysisException;
 import java.util.List;
 
 // Describe the partition key values in create table or add partition clause
-public class PartitionKeyDesc {
+public class PartitionKeyDesc implements ParseNode {
     public static final PartitionKeyDesc MAX_VALUE = new PartitionKeyDesc();
 
     public enum PartitionRangeType {

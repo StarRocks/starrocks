@@ -5,9 +5,10 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -19,8 +20,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.io.StringReader;
-import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class InsertIntoValuesDecimalV3Test {
@@ -80,10 +80,10 @@ public class InsertIntoValuesDecimalV3Test {
                 "  (5, 9180620),\n" +
                 "  (6, 0.681794072),\n" +
                 "  (\"99\", \"1724.069658963\");";
-        InsertStmt stmt = (InsertStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
-        SelectStmt selectStmt = (SelectStmt) stmt.getQueryStmt();
-        for (ArrayList<Expr> exprs : selectStmt.getValueList().getRows()) {
+        InsertStmt stmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
+        QueryStatement selectStmt = stmt.getQueryStatement();
+        ExecPlan execPlan = new StatementPlanner().plan(stmt, ctx);
+        for (List<Expr> exprs : ((ValuesRelation) selectStmt.getQueryRelation()).getRows()) {
             Assert.assertEquals(
                     exprs.get(1).getType(),
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 9));
@@ -93,12 +93,7 @@ public class InsertIntoValuesDecimalV3Test {
     @Test
     public void testInsertArray() throws Exception {
         String sql = "insert into tarray values (1, 2, []) ";
-
-        SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-
-        InsertStmt stmt = (InsertStmt) statementBase;
+        InsertStmt stmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ExecPlan execPlan = new StatementPlanner().plan(stmt, ctx);
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
 

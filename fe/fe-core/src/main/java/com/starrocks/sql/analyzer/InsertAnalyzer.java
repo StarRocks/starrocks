@@ -40,8 +40,8 @@ public class InsertAnalyzer {
     }
 
     public Relation transformInsertStmt(InsertStmt insertStmt) {
-        QueryRelation query = new QueryAnalyzer(catalog, session)
-                .transformQueryStmt(insertStmt.getQueryStmt(), new Scope(RelationId.anonymous(), new RelationFields()));
+        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
+        new QueryAnalyzerV2(catalog, session).analyze(insertStmt.getQueryStatement());
 
         /*
          *  Target table
