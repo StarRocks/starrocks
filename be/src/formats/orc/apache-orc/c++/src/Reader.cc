@@ -1074,7 +1074,7 @@ void RowReaderImpl::lazyLoadSkip(uint64_t numValues) {
     uint64_t toRow = lazyLoadRowInStripe + numValues;
     // we have two options to locate `toRow`:
     // 1. use seek to row group, and skip rest rows(# = toRow % rowindexstripe)
-    // 2. or skip rest rows directly(# = roRow - lazyLoadLastUsedRowInStripe)
+    // 2. or skip rest rows directly(# = toRow - lazyLoadLastUsedRowInStripe)
     // we can assume `seek to row group` costs skipping X rows
     // then #1 cost is X + toRow % rowindexstripe
     // #2 cost is (row - lazyLoadLastUsedRowInStripe)

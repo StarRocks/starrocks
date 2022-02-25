@@ -998,11 +998,15 @@ public:
     void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
     void seekToRowGroup(PositionProviderMap* positions) override;
-    void lazyLoadSeekToRowGroup(PositionProviderMap* providers) override;
 
     const size_t size() { return children.size(); }
     ColumnReader* childReaderAt(size_t idx) { return children[idx].get(); }
 
+    // The pace of lazy load fields and active load fields are different.
+    // We read `active load fields` first, if predicates on them are true
+    // then we read `lazy load fields`.
+    // And that's why we need standalone methods just for lazy load fields.
+    void lazyLoadSeekToRowGroup(PositionProviderMap* providers) override;
     void lazyLoadSkip(uint64_t numValues) override;
     void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
     void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
