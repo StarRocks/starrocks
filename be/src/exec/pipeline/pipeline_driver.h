@@ -109,6 +109,8 @@ public:
 
     int64_t get_accumulated_chunks_moved() { return accumulated_chunks_moved; }
 
+    int64_t get_accumulated_time_spent() const { return accumulated_time_spent; }
+
 private:
     int64_t schedule_times{0};
     int64_t schedule_effective_times{0};
@@ -339,7 +341,7 @@ public:
     workgroup::WorkGroup* workgroup();
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
-    size_t get_driver_queue_index() const { return _driver_queue_index; }
+    size_t get_driver_queue_level() const { return _driver_queue_index; }
     void set_driver_queue_index(size_t driver_queue_index) { _driver_queue_index = driver_queue_index; }
 
 private:
