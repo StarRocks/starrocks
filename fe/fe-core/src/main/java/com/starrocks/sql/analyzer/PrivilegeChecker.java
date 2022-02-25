@@ -2,7 +2,9 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
@@ -75,6 +77,10 @@ public class PrivilegeChecker {
                 hintMsg = "DROP RESOURCE_GROUP";
             } else if (statement instanceof AlterWorkGroupStmt) {
                 hintMsg = "ALTER RESOURCE_GROUP";
+            } else if (statement instanceof AlterViewStmt) {
+                hintMsg = "ALTER VIEW";
+            } else if (statement instanceof CreateViewStmt) {
+                hintMsg = "CREATE VIEW";
             } else {
                 throw new AnalysisException("Unsupported DdlStmt");
             }

@@ -44,7 +44,6 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.SetQualifier;
-import com.starrocks.sql.parser.SqlParser;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -205,6 +204,7 @@ public class QueryAnalyzerV2 {
                                 cteRelation.getColumnOutputNames(),
                                 cteRelation.getCteQuery());
                         newCteRelation.setAlias(tableRelation.getAlias());
+                        newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(
                                 new Scope(RelationId.of(newCteRelation), new RelationFields(outputFields.build())));
                         return newCteRelation;
@@ -214,9 +214,9 @@ public class QueryAnalyzerV2 {
                 Table table = resolveTable(tableRelation.getName());
                 if (table instanceof View) {
                     View view = (View) table;
-                    String inlineViewDef = view.getInlineViewDef();
-                    QueryStatement stmt = (QueryStatement) SqlParser.parse(inlineViewDef, session).get(0);
-                    SubqueryRelation viewRelation = new SubqueryRelation(tableName.getTbl(), stmt.getQueryRelation());
+                    QueryStatement queryStatement = view.getQueryStatement();
+                    SubqueryRelation viewRelation =
+                            new SubqueryRelation(tableName.getTbl(), queryStatement.getQueryRelation());
                     viewRelation.setAlias(tableName);
                     return viewRelation;
                 } else {

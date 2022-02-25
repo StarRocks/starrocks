@@ -2432,7 +2432,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: sum(4: k4)\n" +
-                "  |  group by: 1: k1, 3: k3, 2: k2, 6: GROUPING_ID"));
+                "  |  group by: 1: k1, 2: k2, 3: k3, 6: GROUPING_ID"));
         Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 3 lines [[1], [1, 2], [1, 3], [1, 2, 3]]\n" +
                 "  |  PREDICATES: if(2: k2 IS NULL, 'ALL', 2: k2) = 'ALL'"));

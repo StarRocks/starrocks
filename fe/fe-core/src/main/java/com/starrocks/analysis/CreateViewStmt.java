@@ -32,6 +32,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.QueryStatement;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -47,6 +48,13 @@ public class CreateViewStmt extends BaseViewStmt {
 
     public CreateViewStmt(boolean ifNotExists, TableName tableName, List<ColWithComment> cols,
                           String comment, QueryStmt queryStmt) {
+        super(tableName, cols, queryStmt);
+        this.ifNotExists = ifNotExists;
+        this.comment = Strings.nullToEmpty(comment);
+    }
+
+    public CreateViewStmt(boolean ifNotExists, TableName tableName, List<ColWithComment> cols,
+                          String comment, QueryStatement queryStmt) {
         super(tableName, cols, queryStmt);
         this.ifNotExists = ifNotExists;
         this.comment = Strings.nullToEmpty(comment);

@@ -323,43 +323,43 @@ public class AnalyzeSingleTest {
         QueryRelation query = analyzeSuccess("" +
                 "select v1, v2, v3," +
                 "cast(v1 as int), cast(v1 as char), cast(v1 as varchar), cast(v1 as decimal(10,5)), cast(v1 as boolean)," +
-                "abs(v1), " +
+                "abs(v1)," +
                 "v1 * v1 / v1 % v1 + v1 - v1 DIV v1," +
                 "v2&~v1|v3^1,v1+20, case v2 when v3 then 1 else 0 end " +
                 "from t0");
 
         Assert.assertEquals(
                 "v1,v2,v3," +
-                        "CAST(`v1` AS INT),CAST(`v1` AS CHAR),CAST(`v1` AS VARCHAR),CAST(`v1` AS DECIMAL64(10,5)),CAST(`v1` AS BOOLEAN)," +
-                        "abs(`v1`)," +
-                        "`v1` * `v1` / `v1` % `v1` + `v1` - `v1` DIV `v1`,`v2` & ~ `v1` | `v3` ^ 1," +
-                        "`v1` + 20," +
-                        "CASE `v2` WHEN `v3` THEN 1 ELSE 0 END",
+                        "CAST(v1 AS INT),CAST(v1 AS CHAR),CAST(v1 AS VARCHAR),CAST(v1 AS DECIMAL64(10,5)),CAST(v1 AS BOOLEAN)," +
+                        "abs(v1)," +
+                        "v1 * v1 / v1 % v1 + v1 - v1 DIV v1,v2 & ~ v1 | v3 ^ 1," +
+                        "v1 + 20," +
+                        "CASE v2 WHEN v3 THEN 1 ELSE 0 END",
                 String.join(",", query.getColumnOutputNames()));
 
         query = analyzeSuccess(
                 "select * from (select v1 as v, sum(v2) from t0 group by v1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v");
-        Assert.assertEquals("v,sum(`v2`),v,v2", String.join(",", query.getColumnOutputNames()));
+        Assert.assertEquals("v,sum(v2),v,v2", String.join(",", query.getColumnOutputNames()));
 
         query = analyzeSuccess(
                 "select * from (select v1 as v, sum(v2) from t0 group by v1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v");
-        Assert.assertEquals("v,sum(`v2`),v,v2", String.join(",", query.getColumnOutputNames()));
+        Assert.assertEquals("v,sum(v2),v,v2", String.join(",", query.getColumnOutputNames()));
 
         query = analyzeSuccess(
                 "select * from (select v1 as tt from t0,t1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.tt = b.v");
         Assert.assertEquals("tt,v,v2", String.join(",", query.getColumnOutputNames()));
 
         query = analyzeSuccess("select *, v1+1 from t0");
-        Assert.assertEquals("v1,v2,v3,`v1` + 1", String.join(",", query.getColumnOutputNames()));
+        Assert.assertEquals("v1,v2,v3,v1 + 1", String.join(",", query.getColumnOutputNames()));
 
         query = analyzeSuccess("select t1.* from t0 left outer join t1 on t0.v1+3=t1.v4");
         Assert.assertEquals("v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
         query = analyzeSuccess("select v1+1,a.* from (select * from t0) a");
-        Assert.assertEquals("`v1` + 1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
+        Assert.assertEquals("v1 + 1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
 
         query = analyzeSuccess("select v2+1,a.* from (select v1 as v, v2, v3+2 from t0) a left join t1 on a.v = t1.v4");
-        Assert.assertEquals("`v2` + 1,v,v2,`v3` + 2", String.join(",", query.getColumnOutputNames()));
+        Assert.assertEquals("v2 + 1,v,v2,v3 + 2", String.join(",", query.getColumnOutputNames()));
 
         query = analyzeSuccess("select 1 as a, 2 as b");
         Assert.assertEquals("a,b", String.join(",", query.getColumnOutputNames()));
@@ -379,7 +379,6 @@ public class AnalyzeSingleTest {
         query = analyzeSuccess("select v1+2 as v, * from t0 order by v+1");
         Assert.assertEquals("v,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
     }
-
 
     @Test
     public void testDual() {

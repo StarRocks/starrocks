@@ -26,6 +26,12 @@ statement
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
+    | CREATE VIEW (IF NOT EXISTS)? qualifiedName
+            ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+            viewComment=string? AS queryStatement                                       #createView
+    | ALTER VIEW qualifiedName
+        ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+        AS queryStatement                                                               #alterView
     ;
 
 partitionDesc
@@ -74,6 +80,11 @@ property
 comment
     : COMMENT string
     ;
+
+columnNameWithComment
+    : identifier string?
+    ;
+
 
 queryStatement
     : query;

@@ -21,6 +21,8 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.AstVisitor;
+
 /**
  * Combination of limit and offset expressions.
  */
@@ -116,5 +118,10 @@ public class LimitElement implements ParseNode {
     }
 
     public void reset() {
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitLimitElement(this, context);
     }
 }
