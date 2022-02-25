@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+
 #include "udf/java/java_data_converter.h"
 
 #include "column/binary_column.h"
