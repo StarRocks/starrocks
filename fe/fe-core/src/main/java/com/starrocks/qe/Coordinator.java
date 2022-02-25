@@ -474,7 +474,7 @@ public class Coordinator {
             boolean isEnablePipelineEngine = ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isEnablePipelineEngine() &&
                     (fragments.get(0).getSink() instanceof ResultSink);
-            boolean isSelect = isEnablePipelineEngine &&
+            boolean isEnableDescTblCache = isEnablePipelineEngine &&
                     ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableDescTblCache();
 
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
@@ -486,7 +486,7 @@ public class Coordinator {
                 Preconditions.checkState(instanceNum > 0);
                 List<List<FInstanceExecParam>> infightFInstanceExecParamList = new LinkedList<>();
 
-                if (isSelect) {
+                if (isEnableDescTblCache) {
                     List<FInstanceExecParam> firstFInstanceParamList = new ArrayList<>();
                     List<FInstanceExecParam> remainingFInstanceParamList = new ArrayList<>();
 
