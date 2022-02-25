@@ -186,15 +186,15 @@ public class CTASAnalyzerTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String CTASSQL1 = "create table test2 as select * from test;";
 
-        UtFrameUtils.parseStmtWithNewAnalyzer(CTASSQL1, ctx);
+        UtFrameUtils.parseStmtWithNewParser(CTASSQL1, ctx);
 
         String CTASSQL2 = "create table test6 as select c1+c2 as cr from test3;";
 
-        UtFrameUtils.parseStmtWithNewAnalyzer(CTASSQL2, ctx);
+        UtFrameUtils.parseStmtWithNewParser(CTASSQL2, ctx);
 
         String CTASSQL3 = "create table t1 as select k1,k2,k3,k4,k5,k6,k7,k8 from duplicate_table_with_null;";
 
-        UtFrameUtils.parseStmtWithNewAnalyzer(CTASSQL3, ctx);
+        UtFrameUtils.parseStmtWithNewParser(CTASSQL3, ctx);
     }
 
     @Test
@@ -215,7 +215,7 @@ public class CTASAnalyzerTest {
 
         ctx.getCatalog().setStatisticStorage(storage);
 
-        UtFrameUtils.parseStmtWithNewAnalyzer(SQL, ctx);
+        UtFrameUtils.parseStmtWithNewParser(SQL, ctx);
     }
 
     @Test
@@ -265,6 +265,6 @@ public class CTASAnalyzerTest {
                 "INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY\n" +
                 "INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY\n" +
                 "INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;";
-        UtFrameUtils.parseStmtWithNewAnalyzer(CTASTPCH, ctx);
+        UtFrameUtils.parseStmtWithNewParser(CTASTPCH, ctx);
     }
 }

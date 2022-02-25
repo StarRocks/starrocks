@@ -12,20 +12,74 @@ singleStatement
     ;
 
 statement
-    : queryStatement                                                    #statementDefault
-    | EXPLAIN (LOGICAL | VERBOSE | COSTS) queryStatement                #explain
-    | USE schema=identifier                                             #use
+    : queryStatement                                                                    #statementDefault
+    | EXPLAIN (LOGICAL | VERBOSE | COSTS)? queryStatement                               #explain
+    | INSERT INTO qualifiedName (WITH LABEL lable=identifier)? columnAliases?
+    (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))    #insert
+    | CREATE TABLE (IF NOT EXISTS)? qualifiedName
+        ('(' identifier (',' identifier)* ')')? comment?
+        partitionDesc?
+        distributionDesc?
+        properties?
+        AS queryStatement                                                               #createTableAsSelect
+    | USE schema=identifier                                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
-        ((LIKE pattern=string) | (WHERE expression))?                   #showTables
-    | SHOW DATABASES
-        ((LIKE pattern=string) | (WHERE expression))?                   #showDatabases
+        ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
+    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
+    ;
+
+partitionDesc
+    : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
+    ;
+
+rangePartitionDesc
+    : singleRangePartition
+    | multiRangePartition
+    ;
+
+singleRangePartition
+    : PARTITION identifier VALUES partitionKeyDesc
+    ;
+
+multiRangePartition
+    : START '(' string ')' END '(' string ')' EVERY '(' interval ')'
+    | START '(' string ')' END '(' string ')' EVERY '(' INTEGER_VALUE ')'
+    ;
+
+partitionKeyDesc
+    : LESS THAN (MAXVALUE | partitionValueList)
+    | '[' partitionValueList ',' partitionValueList ']'
+    ;
+
+partitionValueList
+    : '(' partitionValue (',' partitionValue)* ')'
+    ;
+
+partitionValue
+    : MAXVALUE | string
+    ;
+
+distributionDesc
+    : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    ;
+
+properties
+    : PROPERTIES '(' property (',' property)* ')'
+    ;
+
+property
+    : key=string '=' value=string
+    ;
+
+comment
+    : COMMENT string
     ;
 
 queryStatement
     : query;
 
 query
-    :  withClause? queryNoWith
+    : withClause? queryNoWith
     ;
 
 withClause
@@ -105,14 +159,20 @@ selectItem
     ;
 
 relation
-    : left=relation joinType hint? LATERAL? rightRelation=relation joinCriteria?         #joinRelation
+    : left=relation crossOrInnerJoinType hint?
+            LATERAL? rightRelation=relation joinCriteria?                                #joinRelation
+    | left=relation outerAndSemiJoinType hint?
+            LATERAL? rightRelation=relation joinCriteria                                 #joinRelation
     | aliasedRelation                                                                    #relationDefault
     ;
 
-joinType
+crossOrInnerJoinType
     : JOIN | INNER JOIN
     | CROSS | CROSS JOIN
-    | LEFT JOIN | RIGHT JOIN | FULL JOIN
+    ;
+
+outerAndSemiJoinType
+    : LEFT JOIN | RIGHT JOIN | FULL JOIN
     | LEFT OUTER JOIN | RIGHT OUTER JOIN
     | FULL OUTER JOIN
     | LEFT SEMI JOIN | RIGHT SEMI JOIN
@@ -152,6 +212,14 @@ partitionNames
     : PARTITIONS '(' identifier (',' identifier)* ')'
     ;
 
+expressionsWithDefault
+    : '(' expressionOrDefault (',' expressionOrDefault)* ')'
+    ;
+
+expressionOrDefault
+    : expression | DEFAULT
+    ;
+
 expression
     : booleanExpression                                                                   #expressionDefault
     | (NOT | LOGICAL_NOT) expression                                                      #logicalNot
@@ -174,7 +242,7 @@ predicateOperations [ParserRuleContext value]
     : NOT? IN '(' expression (',' expression)* ')'                                        #inList
     | NOT? IN '(' query ')'                                                               #inSubquery
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
-    | NOT? (LIKE | REGEXP) pattern=primaryExpression                                      #like
+    | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
     ;
 
 valueExpression
@@ -324,6 +392,10 @@ identifier
     | DIGIT_IDENTIFIER       #digitIdentifier
     ;
 
+identifierList
+    : '(' identifier (',' identifier)* ')'
+    ;
+
 number
     : DECIMAL_VALUE  #decimalValue
     | DOUBLE_VALUE   #doubleValue
@@ -332,21 +404,22 @@ number
 
 nonReserved
     : ARRAY
-    | CAST | CONNECTION_ID| CURRENT | COSTS
+    | BUCKETS
+    | CAST | CONNECTION_ID| CURRENT | COMMENT | COSTS
     | DATA | DATE | DATETIME | DAY
-    | END | EXTRACT
+    | END | EXTRACT | EVERY
     | FILTER | FIRST | FOLLOWING
     | GLOBAL
-    | HOUR
+    | HASH | HOUR
     | INTERVAL
-    | LAST | LOCAL | LOGICAL
+    | LAST | LESS | LOCAL | LOGICAL
     | MINUTE | MONTH
     | NONE | NULLS
     | OFFSET
-    | PRECEDING
+    | PRECEDING | PROPERTIES
     | ROLLUP
-    | SECOND | SESSION | SETS
-    | TABLES | TIME | TYPE
+    | SECOND | SESSION | SETS | START
+    | TABLES | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
     | YEAR

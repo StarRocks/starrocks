@@ -1,27 +1,20 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.CTERelation;
-import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.SetOperationRelation;
-import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -52,7 +45,7 @@ public class StatementPlanner {
                 queryStmt.getDbs(session, dbs);
             }
             if (stmt instanceof QueryStatement) {
-                new DBCollector(dbs, session).visit(stmt);
+                dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
             }
 
             try {
@@ -72,9 +65,7 @@ public class StatementPlanner {
             }
         } else if (stmt instanceof InsertStmt) {
             InsertStmt insertStmt = (InsertStmt) stmt;
-            Map<String, Database> dbs = Maps.newTreeMap();
-            insertStmt.getDbs(session, dbs);
-
+            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, insertStmt);
             try {
                 lock(dbs);
                 return createInsertPlan(relation, session);
@@ -169,66 +160,5 @@ public class StatementPlanner {
 
         ResultSink resultSink = (ResultSink) topFragment.getSink();
         resultSink.setOutfileInfo(queryStmt.getOutFileClause());
-    }
-
-    //Get all the db used, the query needs to add locks to them
-    static class DBCollector extends AstVisitor<Void, Void> {
-        private final Map<String, Database> dbs;
-        private final ConnectContext session;
-
-        public DBCollector(Map<String, Database> dbs, ConnectContext session) {
-            this.dbs = dbs;
-            this.session = session;
-        }
-
-        @Override
-        public Void visitQueryStatement(QueryStatement node, Void context) {
-            return visit(node.getQueryRelation());
-        }
-
-        @Override
-        public Void visitSelect(SelectRelation node, Void context) {
-            if (node.hasWithClause()) {
-                node.getCteRelations().forEach(this::visit);
-            }
-
-            return visit(node.getRelation());
-        }
-
-        @Override
-        public Void visitSetOp(SetOperationRelation node, Void context) {
-            if (node.hasWithClause()) {
-                node.getRelations().forEach(this::visit);
-            }
-            node.getRelations().forEach(this::visit);
-            return null;
-        }
-
-        @Override
-        public Void visitJoin(JoinRelation node, Void context) {
-            visit(node.getLeft());
-            visit(node.getRight());
-            return null;
-        }
-
-        @Override
-        public Void visitCTE(CTERelation node, Void context) {
-            return visit(node.getCteQuery());
-        }
-
-        @Override
-        public Void visitTable(TableRelation node, Void context) {
-            String dbName = node.getName().getDb();
-            if (Strings.isNullOrEmpty(dbName)) {
-                dbName = session.getDatabase();
-            } else {
-                dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
-            }
-
-            Database db = session.getCatalog().getDb(dbName);
-
-            dbs.put(dbName, db);
-            return null;
-        }
     }
 }

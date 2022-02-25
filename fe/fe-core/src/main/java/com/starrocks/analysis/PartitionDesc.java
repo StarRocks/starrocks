@@ -31,7 +31,7 @@ import org.apache.commons.lang.NotImplementedException;
 import java.util.List;
 import java.util.Map;
 
-public class PartitionDesc {
+public class PartitionDesc implements ParseNode {
 
     protected PartitionType type;
 
