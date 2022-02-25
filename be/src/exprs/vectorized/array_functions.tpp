@@ -111,8 +111,7 @@ public:
     using CppType = RunTimeCppType<PT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
-        if constexpr (PT == TYPE_TINYINT || PT == TYPE_SMALLINT || PT == TYPE_INT || PT == TYPE_BIGINT ||
-                      PT == TYPE_LARGEINT || PT == TYPE_FLOAT || PT == TYPE_DOUBLE || PT == TYPE_DECIMALV2) {
+        if constexpr (pt_is_float<PT> || pt_is_integer<PT> || pt_is_decimalv2<PT> || pt_is_boolean<PT>) {
             return _array_difference(columns);
         } else {
             assert(false);
@@ -125,7 +124,23 @@ private:
 
         size_t chunk_size = columns[0]->size();
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
-        ColumnPtr dest_column = src_column->clone_empty();
+        ColumnPtr dest_column_data = nullptr;
+        ColumnPtr dest_column = nullptr;
+
+        if constexpr (pt_is_float<PT>) {
+            dest_column_data = NullableColumn::create(DoubleColumn::create(), NullColumn::create());
+        } else if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+            dest_column_data = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        } else if constexpr (pt_is_decimalv2<PT>) {
+            dest_column_data = NullableColumn::create(DecimalColumn::create(), NullColumn::create());
+        }
+
+        if (columns[0]->is_nullable()) {
+            dest_column = NullableColumn::create(ArrayColumn::create(dest_column_data, UInt32Column::create()),
+                                                 NullColumn::create());
+        } else {
+            dest_column = ArrayColumn::create(dest_column_data, UInt32Column::create());
+        }
 
         if (columns[0]->is_nullable()) {
             const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
@@ -171,13 +186,27 @@ private:
                 if (items[i].is_null()) {
                     dest_data_column->append_nulls(1);
                 } else {
-                    dest_data_column->append_datum((CppType)0);
+                    if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+                        dest_data_column->append_datum((int64_t)0);
+                    } else if constexpr (pt_is_float<PT>) {
+                        dest_data_column->append_datum((double)0);
+                    } else {
+                        dest_data_column->append_datum((DecimalV2Value)0);
+                    }
                 }
             } else {
                 if (items[i - 1].is_null() || items[i].is_null()) {
                     dest_data_column->append_nulls(1);
                 } else {
-                    dest_data_column->append_datum((CppType)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
+                    if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+                        dest_data_column->append_datum(
+                                (int64_t)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
+                    } else if constexpr (pt_is_float<PT>) {
+                        dest_data_column->append_datum((double)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
+                    } else {
+                        dest_data_column->append_datum(
+                                (DecimalV2Value)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
+                    }
                 }
             }
         }

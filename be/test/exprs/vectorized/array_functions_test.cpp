@@ -2932,92 +2932,6 @@ TEST_F(ArrayFunctionsTest, array_reverse_only_null) {
     ASSERT_TRUE(dest_column->get(2).is_null());
 }
 
-TEST_F(ArrayFunctionsTest, array_difference_tinyint) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
-    src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
-    src_column->append_datum(DatumArray{(int8_t)2, (int8_t)3, (int8_t)7, (int8_t)8});
-    src_column->append_datum(DatumArray{(int8_t)4, (int8_t)3, (int8_t)2, (int8_t)1});
-
-    ArrayDifference<PrimitiveType::TYPE_TINYINT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
-
-    ASSERT_EQ(dest_column->size(), 3);
-    _check_array<int8_t>({(int8_t)0, (int8_t)-2, (int8_t)3}, dest_column->get(0).get_array());
-    _check_array<int8_t>({(int8_t)0, (int8_t)1, (int8_t)4, (int8_t)1}, dest_column->get(1).get_array());
-    _check_array<int8_t>({(int8_t)0, (int8_t)-1, (int8_t)-1, (int8_t)-1}, dest_column->get(2).get_array());
-}
-
-TEST_F(ArrayFunctionsTest, array_difference_tinyint_with_entry_null) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
-    src_column->append_datum(DatumArray{(int8_t)5, Datum(), (int8_t)6});
-    src_column->append_datum(DatumArray{Datum(), (int8_t)3, (int8_t)7, (int8_t)8});
-    src_column->append_datum(DatumArray{(int8_t)4, (int8_t)3, (int8_t)2, Datum()});
-    src_column->append_datum(Datum());
-
-    ArrayDifference<PrimitiveType::TYPE_TINYINT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
-
-    ASSERT_EQ(dest_column->size(), 4);
-
-    ASSERT_EQ((int8_t)0, dest_column->get(0).get_array()[0].get_int8());
-    ASSERT_TRUE(dest_column->get(0).get_array()[1].is_null());
-    ASSERT_TRUE(dest_column->get(0).get_array()[2].is_null());
-
-    ASSERT_TRUE(dest_column->get(1).get_array()[0].is_null());
-    ASSERT_TRUE(dest_column->get(1).get_array()[1].is_null());
-    ASSERT_EQ((int8_t)4, dest_column->get(1).get_array()[2].get_int8());
-    ASSERT_EQ((int8_t)1, dest_column->get(1).get_array()[3].get_int8());
-
-    ASSERT_EQ((int8_t)0, dest_column->get(2).get_array()[0].get_int8());
-    ASSERT_EQ((int8_t)-1, dest_column->get(2).get_array()[1].get_int8());
-    ASSERT_EQ((int8_t)-1, dest_column->get(2).get_array()[2].get_int8());
-    ASSERT_TRUE(dest_column->get(2).get_array()[3].is_null());
-    ASSERT_TRUE(dest_column->get(3).is_null());
-}
-
-TEST_F(ArrayFunctionsTest, array_difference_smallint) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_SMALLINT, true);
-    src_column->append_datum(DatumArray{(int16_t)5, (int16_t)3, (int16_t)6});
-    src_column->append_datum(DatumArray{(int16_t)2, (int16_t)3, (int16_t)7, (int16_t)8});
-    src_column->append_datum(DatumArray{(int16_t)4, (int16_t)3, (int16_t)2, (int16_t)1});
-
-    ArrayDifference<PrimitiveType::TYPE_SMALLINT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
-
-    ASSERT_EQ(dest_column->size(), 3);
-    _check_array<int16_t>({(int16_t)0, (int16_t)-2, (int16_t)3}, dest_column->get(0).get_array());
-    _check_array<int16_t>({(int16_t)0, (int16_t)1, (int16_t)4, (int16_t)1}, dest_column->get(1).get_array());
-    _check_array<int16_t>({(int16_t)0, (int16_t)-1, (int16_t)-1, (int16_t)-1}, dest_column->get(2).get_array());
-}
-
-TEST_F(ArrayFunctionsTest, array_difference_smallint_with_entry_null) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_SMALLINT, true);
-    src_column->append_datum(DatumArray{(int16_t)5, Datum(), (int16_t)6});
-    src_column->append_datum(DatumArray{Datum(), (int16_t)3, (int16_t)7, (int16_t)8});
-    src_column->append_datum(DatumArray{(int16_t)4, (int16_t)3, (int16_t)2, Datum()});
-    src_column->append_datum(Datum());
-
-    ArrayDifference<PrimitiveType::TYPE_SMALLINT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
-
-    ASSERT_EQ(dest_column->size(), 4);
-
-    ASSERT_EQ((int16_t)0, dest_column->get(0).get_array()[0].get_int16());
-    ASSERT_TRUE(dest_column->get(0).get_array()[1].is_null());
-    ASSERT_TRUE(dest_column->get(0).get_array()[2].is_null());
-
-    ASSERT_TRUE(dest_column->get(1).get_array()[0].is_null());
-    ASSERT_TRUE(dest_column->get(1).get_array()[1].is_null());
-    ASSERT_EQ((int16_t)4, dest_column->get(1).get_array()[2].get_int16());
-    ASSERT_EQ((int16_t)1, dest_column->get(1).get_array()[3].get_int16());
-
-    ASSERT_EQ((int16_t)0, dest_column->get(2).get_array()[0].get_int16());
-    ASSERT_EQ((int16_t)-1, dest_column->get(2).get_array()[1].get_int16());
-    ASSERT_EQ((int16_t)-1, dest_column->get(2).get_array()[2].get_int16());
-    ASSERT_TRUE(dest_column->get(2).get_array()[3].is_null());
-    ASSERT_TRUE(dest_column->get(3).is_null());
-}
-
 TEST_F(ArrayFunctionsTest, array_difference_int) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{5, 3, 6});
@@ -3028,9 +2942,9 @@ TEST_F(ArrayFunctionsTest, array_difference_int) {
     auto dest_column = difference.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array<int32_t>({0, -2, 3}, dest_column->get(0).get_array());
-    _check_array<int32_t>({0, 1, 4, 1}, dest_column->get(1).get_array());
-    _check_array<int32_t>({0, -1, -1, -1}, dest_column->get(2).get_array());
+    _check_array<int64_t>({0, -2, 3}, dest_column->get(0).get_array());
+    _check_array<int64_t>({0, 1, 4, 1}, dest_column->get(1).get_array());
+    _check_array<int64_t>({0, -1, -1, -1}, dest_column->get(2).get_array());
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_int_with_entry_null) {
@@ -3045,18 +2959,18 @@ TEST_F(ArrayFunctionsTest, array_difference_int_with_entry_null) {
 
     ASSERT_EQ(dest_column->size(), 4);
 
-    ASSERT_EQ(0, dest_column->get(0).get_array()[0].get_int32());
+    ASSERT_EQ(0, dest_column->get(0).get_array()[0].get_int64());
     ASSERT_TRUE(dest_column->get(0).get_array()[1].is_null());
     ASSERT_TRUE(dest_column->get(0).get_array()[2].is_null());
 
     ASSERT_TRUE(dest_column->get(1).get_array()[0].is_null());
     ASSERT_TRUE(dest_column->get(1).get_array()[1].is_null());
-    ASSERT_EQ(4, dest_column->get(1).get_array()[2].get_int32());
-    ASSERT_EQ(1, dest_column->get(1).get_array()[3].get_int32());
+    ASSERT_EQ(4, dest_column->get(1).get_array()[2].get_int64());
+    ASSERT_EQ(1, dest_column->get(1).get_array()[3].get_int64());
 
-    ASSERT_EQ(0, dest_column->get(2).get_array()[0].get_int32());
-    ASSERT_EQ(-1, dest_column->get(2).get_array()[1].get_int32());
-    ASSERT_EQ(-1, dest_column->get(2).get_array()[2].get_int32());
+    ASSERT_EQ(0, dest_column->get(2).get_array()[0].get_int64());
+    ASSERT_EQ(-1, dest_column->get(2).get_array()[1].get_int64());
+    ASSERT_EQ(-1, dest_column->get(2).get_array()[2].get_int64());
     ASSERT_TRUE(dest_column->get(2).get_array()[3].is_null());
     ASSERT_TRUE(dest_column->get(3).is_null());
 }
@@ -3104,92 +3018,6 @@ TEST_F(ArrayFunctionsTest, array_difference_bigint_with_entry_null) {
     ASSERT_TRUE(dest_column->get(3).is_null());
 }
 
-TEST_F(ArrayFunctionsTest, array_difference_largeint) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_LARGEINT, true);
-    src_column->append_datum(DatumArray{(int128_t)5, (int128_t)3, (int128_t)6});
-    src_column->append_datum(DatumArray{(int128_t)2, (int128_t)3, (int128_t)7, (int128_t)8});
-    src_column->append_datum(DatumArray{(int128_t)4, (int128_t)3, (int128_t)2, (int128_t)1});
-
-    ArrayDifference<PrimitiveType::TYPE_LARGEINT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
-
-    ASSERT_EQ(dest_column->size(), 3);
-    _check_array<int128_t>({(int128_t)0, (int128_t)-2, (int128_t)3}, dest_column->get(0).get_array());
-    _check_array<int128_t>({(int128_t)0, (int128_t)1, (int128_t)4, (int128_t)1}, dest_column->get(1).get_array());
-    _check_array<int128_t>({(int128_t)0, (int128_t)-1, (int128_t)-1, (int128_t)-1}, dest_column->get(2).get_array());
-}
-
-TEST_F(ArrayFunctionsTest, array_difference_largeing_with_entry_null) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_LARGEINT, true);
-    src_column->append_datum(DatumArray{(int128_t)5, Datum(), (int128_t)6});
-    src_column->append_datum(DatumArray{Datum(), (int128_t)3, (int128_t)7, (int128_t)8});
-    src_column->append_datum(DatumArray{(int128_t)4, (int128_t)3, (int128_t)2, Datum()});
-    src_column->append_datum(Datum());
-
-    ArrayDifference<PrimitiveType::TYPE_LARGEINT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
-
-    ASSERT_EQ(dest_column->size(), 4);
-
-    ASSERT_EQ((int128_t)0, dest_column->get(0).get_array()[0].get_int128());
-    ASSERT_TRUE(dest_column->get(0).get_array()[1].is_null());
-    ASSERT_TRUE(dest_column->get(0).get_array()[2].is_null());
-
-    ASSERT_TRUE(dest_column->get(1).get_array()[0].is_null());
-    ASSERT_TRUE(dest_column->get(1).get_array()[1].is_null());
-    ASSERT_EQ((int128_t)4, dest_column->get(1).get_array()[2].get_int128());
-    ASSERT_EQ((int128_t)1, dest_column->get(1).get_array()[3].get_int128());
-
-    ASSERT_EQ((int128_t)0, dest_column->get(2).get_array()[0].get_int128());
-    ASSERT_EQ((int128_t)-1, dest_column->get(2).get_array()[1].get_int128());
-    ASSERT_EQ((int128_t)-1, dest_column->get(2).get_array()[2].get_int128());
-    ASSERT_TRUE(dest_column->get(2).get_array()[3].is_null());
-    ASSERT_TRUE(dest_column->get(3).is_null());
-}
-
-TEST_F(ArrayFunctionsTest, array_difference_float) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_FLOAT, true);
-    src_column->append_datum(DatumArray{(float)5, (float)3, (float)6});
-    src_column->append_datum(DatumArray{(float)2, (float)3, (float)7, (float)8});
-    src_column->append_datum(DatumArray{(float)4, (float)3, (float)2, (float)1});
-
-    ArrayDifference<PrimitiveType::TYPE_FLOAT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
-
-    ASSERT_EQ(dest_column->size(), 3);
-    _check_array<float>({(float)0, (float)-2, (float)3}, dest_column->get(0).get_array());
-    _check_array<float>({(float)0, (float)1, (float)4, (float)1}, dest_column->get(1).get_array());
-    _check_array<float>({(float)0, (float)-1, (float)-1, (float)-1}, dest_column->get(2).get_array());
-}
-
-TEST_F(ArrayFunctionsTest, array_difference_float_with_entry_null) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_FLOAT, true);
-    src_column->append_datum(DatumArray{(float)5, Datum(), (float)6});
-    src_column->append_datum(DatumArray{Datum(), (float)3, (float)7, (float)8});
-    src_column->append_datum(DatumArray{(float)4, (float)3, (float)2, Datum()});
-    src_column->append_datum(Datum());
-
-    ArrayDifference<PrimitiveType::TYPE_FLOAT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
-
-    ASSERT_EQ(dest_column->size(), 4);
-
-    ASSERT_EQ((float)0, dest_column->get(0).get_array()[0].get_float());
-    ASSERT_TRUE(dest_column->get(0).get_array()[1].is_null());
-    ASSERT_TRUE(dest_column->get(0).get_array()[2].is_null());
-
-    ASSERT_TRUE(dest_column->get(1).get_array()[0].is_null());
-    ASSERT_TRUE(dest_column->get(1).get_array()[1].is_null());
-    ASSERT_EQ((float)4, dest_column->get(1).get_array()[2].get_float());
-    ASSERT_EQ((float)1, dest_column->get(1).get_array()[3].get_float());
-
-    ASSERT_EQ((float)0, dest_column->get(2).get_array()[0].get_float());
-    ASSERT_EQ((float)-1, dest_column->get(2).get_array()[1].get_float());
-    ASSERT_EQ((float)-1, dest_column->get(2).get_array()[2].get_float());
-    ASSERT_TRUE(dest_column->get(2).get_array()[3].is_null());
-    ASSERT_TRUE(dest_column->get(3).is_null());
-}
-
 TEST_F(ArrayFunctionsTest, array_difference_double) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
     src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
@@ -3203,34 +3031,6 @@ TEST_F(ArrayFunctionsTest, array_difference_double) {
     _check_array<double>({(double)0, (double)-2, (double)3}, dest_column->get(0).get_array());
     _check_array<double>({(double)0, (double)1, (double)4, (double)1}, dest_column->get(1).get_array());
     _check_array<double>({(double)0, (double)-1, (double)-1, (double)-1}, dest_column->get(2).get_array());
-}
-
-TEST_F(ArrayFunctionsTest, array_difference_double_with_entry_null) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
-    src_column->append_datum(DatumArray{5, Datum(), 6});
-    src_column->append_datum(DatumArray{Datum(), 3, 7, 8});
-    src_column->append_datum(DatumArray{4, 3, 2, Datum()});
-    src_column->append_datum(Datum());
-
-    ArrayDifference<PrimitiveType::TYPE_INT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
-
-    ASSERT_EQ(dest_column->size(), 4);
-
-    ASSERT_EQ(0, dest_column->get(0).get_array()[0].get_int32());
-    ASSERT_TRUE(dest_column->get(0).get_array()[1].is_null());
-    ASSERT_TRUE(dest_column->get(0).get_array()[2].is_null());
-
-    ASSERT_TRUE(dest_column->get(1).get_array()[0].is_null());
-    ASSERT_TRUE(dest_column->get(1).get_array()[1].is_null());
-    ASSERT_EQ(4, dest_column->get(1).get_array()[2].get_int32());
-    ASSERT_EQ(1, dest_column->get(1).get_array()[3].get_int32());
-
-    ASSERT_EQ(0, dest_column->get(2).get_array()[0].get_int32());
-    ASSERT_EQ(-1, dest_column->get(2).get_array()[1].get_int32());
-    ASSERT_EQ(-1, dest_column->get(2).get_array()[2].get_int32());
-    ASSERT_TRUE(dest_column->get(2).get_array()[3].is_null());
-    ASSERT_TRUE(dest_column->get(3).is_null());
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_int) {

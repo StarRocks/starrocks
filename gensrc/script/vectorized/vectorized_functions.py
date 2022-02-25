@@ -644,12 +644,12 @@ vectorized_functions = [
     [150150, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join_varchar'],
     [150151, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join_varchar'],
 
-    [150160, 'array_difference', 'ARRAY_TINYINT', ['ARRAY_TINYINT'], 'ArrayFunctions::array_difference_tinyint'],
-    [150161, 'array_difference', 'ARRAY_SMALLINT', ['ARRAY_SMALLINT'], 'ArrayFunctions::array_difference_smallint'],
-    [150162, 'array_difference', 'ARRAY_INT', ['ARRAY_INT'], 'ArrayFunctions::array_difference_int'],
+    [150160, 'array_difference', 'ARRAY_BIGINT', ['ARRAY_TINYINT'], 'ArrayFunctions::array_difference_tinyint'],
+    [150161, 'array_difference', 'ARRAY_BIGINT', ['ARRAY_SMALLINT'], 'ArrayFunctions::array_difference_smallint'],
+    [150162, 'array_difference', 'ARRAY_BIGINT', ['ARRAY_INT'], 'ArrayFunctions::array_difference_int'],
     [150163, 'array_difference', 'ARRAY_BIGINT', ['ARRAY_BIGINT'], 'ArrayFunctions::array_difference_bigint'],
     [150164, 'array_difference', 'ARRAY_LARGEINT', ['ARRAY_LARGEINT'], 'ArrayFunctions::array_difference_largeint'],
-    [150165, 'array_difference', 'ARRAY_FLOAT', ['ARRAY_FLOAT'], 'ArrayFunctions::array_difference_float'],
+    [150165, 'array_difference', 'ARRAY_DOUBLE', ['ARRAY_FLOAT'], 'ArrayFunctions::array_difference_float'],
     [150166, 'array_difference', 'ARRAY_DOUBLE', ['ARRAY_DOUBLE'], 'ArrayFunctions::array_difference_double'],
     [150167, 'array_difference', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_difference_decimalv2'],
 
