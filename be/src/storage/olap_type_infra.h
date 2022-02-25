@@ -30,6 +30,7 @@ namespace starrocks {
     M(OLAP_FIELD_TYPE_DATETIME) \
     M(OLAP_FIELD_TYPE_TIMESTAMP)
 
+// Types that suport bitmap index
 #define APPLY_FOR_BITMAP_INDEX_TYPE(M) \
     APPLY_FOR_TYPE_INTEGER(M)          \
     APPLY_FOR_TYPE_TIME(M)             \
@@ -41,6 +42,15 @@ namespace starrocks {
     M(OLAP_FIELD_TYPE_BOOL)            \
     M(OLAP_FIELD_TYPE_DECIMAL)         \
     M(OLAP_FIELD_TYPE_DECIMAL_V2)
+
+// Types that support bloomfilter(exclude tinyint/float/double)
+#define APPLY_FOR_BLOOMFILTER_TYPE(M) \
+    APPLY_FOR_TYPE_INTEGER(M)         \
+    APPLY_FOR_TYPE_DECIMAL(M)         \
+    APPLY_FOR_TYPE_TIME(M)            \
+    M(OLAP_FIELD_TYPE_UNSIGNED_INT)   \
+    M(OLAP_FIELD_TYPE_CHAR)           \
+    M(OLAP_FIELD_TYPE_VARCHAR)
 
 // These types should be synced with FieldType in olap_common.h
 #define APPLY_FOR_BASIC_OLAP_FIELD_TYPE(M) \
@@ -151,6 +161,20 @@ auto field_type_dispatch_bitmap_index(FieldType ftype, Functor fun, Args... args
         CHECK(false) << "Unsupported type for bitmap: " << ftype;
         __builtin_unreachable();
     }
+}
+
+template <class Functor, class... Args>
+auto field_type_dispatch_bloomfilter(FieldType ftype, Functor fun, Args... args) {
+    // tinyint is not supported specially
+    if (ftype == OLAP_FIELD_TYPE_TINYINT) {
+        return Status::NotSupported("unsupported type for bloom filter: " + std::to_string(ftype));
+    }
+    switch (ftype) {
+        APPLY_FOR_BLOOMFILTER_TYPE(_TYPE_DISPATCH_CASE)
+    default:
+        return Status::NotSupported("unsupported type for bloom filter: " + std::to_string(ftype));
+    }
+    return Status::OK();
 }
 
 template <class Functor, class... Args>
