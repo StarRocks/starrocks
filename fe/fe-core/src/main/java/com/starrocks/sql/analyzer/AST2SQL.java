@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Joiner;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -56,8 +57,8 @@ import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
 
-public class SQLLabelBuilder {
-    public static String toSQL(ParseNode expr) {
+public class AST2SQL {
+    public static String toString(ParseNode expr) {
         return new SQLLabelBuilderImpl().visit(expr);
     }
 
@@ -78,12 +79,7 @@ public class SQLLabelBuilder {
 
             if (queryRelation.hasOrderByClause()) {
                 List<OrderByElement> sortClause = queryRelation.getOrderBy();
-                sqlBuilder.append(" order by ");
-                for (int i = 0; i < sortClause.size(); ++i) {
-                    sqlBuilder.append(visit(sortClause.get(i).getExpr()));
-                    sqlBuilder.append((sortClause.get(i).getIsAsc()) ? " asc" : " desc");
-                    sqlBuilder.append((i + 1 != sortClause.size()) ? ", " : "");
-                }
+                sqlBuilder.append(" ORDER BY ").append(visitAstList(sortClause)).append(" ");
             }
 
             // Limit clause.
@@ -97,10 +93,18 @@ public class SQLLabelBuilder {
         public String visitCTE(CTERelation relation, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append(relation.getName());
+
+            if (relation.isResolvedInFromClause()) {
+                if (relation.getAliasWithoutNameRewrite() != null) {
+                    sqlBuilder.append(" AS ").append(relation.getAliasWithoutNameRewrite());
+                }
+                return sqlBuilder.toString();
+            }
+
             if (relation.getColumnOutputNames() != null) {
                 sqlBuilder.append("(").append(Joiner.on(", ").join(relation.getColumnOutputNames())).append(")");
             }
-            sqlBuilder.append(" AS (").append(visit(new QueryStatement(relation.getCteQuery()))).append(")");
+            sqlBuilder.append(" AS (").append(visit(new QueryStatement(relation.getCteQuery()))).append(") ");
             return sqlBuilder.toString();
         }
 
@@ -173,15 +177,17 @@ public class SQLLabelBuilder {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append(visit(relation.getLeft())).append(" ");
             sqlBuilder.append(relation.getType());
-            sqlBuilder.append(visit(relation.getRight())).append(" ");
             if (relation.getJoinHint() != null && !relation.getJoinHint().isEmpty()) {
-                sqlBuilder.append("[").append(relation.getJoinHint()).append("] ");
+                sqlBuilder.append(" [").append(relation.getJoinHint()).append("]");
             }
+            sqlBuilder.append(" ");
+            sqlBuilder.append(visit(relation.getRight())).append(" ");
+
             if (relation.getUsingColNames() != null) {
                 sqlBuilder.append("USING (").append(Joiner.on(", ").join(relation.getUsingColNames())).append(")");
             }
             if (relation.getOnPredicate() != null) {
-                sqlBuilder.append("ON ").append(relation.getOnPredicate().toSql());
+                sqlBuilder.append("ON ").append(visit(relation.getOnPredicate()));
             }
             return sqlBuilder.toString();
         }
@@ -208,14 +214,14 @@ public class SQLLabelBuilder {
 
             for (int i = 1; i < relation.getRelations().size(); ++i) {
                 if (relation instanceof UnionRelation) {
-                    sqlBuilder.append("UNION");
+                    sqlBuilder.append(" UNION ");
                 } else if (relation instanceof ExceptRelation) {
-                    sqlBuilder.append("EXCEPT");
+                    sqlBuilder.append(" EXCEPT ");
                 } else {
-                    sqlBuilder.append("INTERSECT");
+                    sqlBuilder.append(" INTERSECT ");
                 }
 
-                sqlBuilder.append(" ").append(relation.getQualifier() == SetQualifier.ALL ? "ALL" : "");
+                sqlBuilder.append(relation.getQualifier() == SetQualifier.ALL ? "ALL " : "");
 
                 Relation setChildRelation = relation.getRelations().get(i);
                 if (setChildRelation instanceof SetOperationRelation) {
@@ -234,8 +240,9 @@ public class SQLLabelBuilder {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append(node.getName());
 
-            if (node.getAlias() != null) {
-                sqlBuilder.append(node.getAlias());
+            if (node.getAliasWithoutNameRewrite() != null) {
+                sqlBuilder.append(" AS ");
+                sqlBuilder.append(node.getAliasWithoutNameRewrite());
             }
             return sqlBuilder.toString();
         }
@@ -243,14 +250,28 @@ public class SQLLabelBuilder {
         @Override
         public String visitValues(ValuesRelation node, Void scope) {
             StringBuilder sqlBuilder = new StringBuilder();
-            sqlBuilder.append("VALUES(");
+            if (node.getRows().size() == 1) {
+                sqlBuilder.append("SELECT ");
+                List<String> fieldLis = Lists.newArrayList();
+                for (int i = 0; i < node.getRows().get(0).size(); ++i) {
+                    String field = visit(node.getRows().get(0).get(i));
+                    String alias = " AS `" + node.getColumnOutputNames().get(i) + "`";
+                    fieldLis.add(field + alias);
+                }
 
-            for (int i = 0; i < node.getRows().size(); ++i) {
-                sqlBuilder.append("(");
-                sqlBuilder.append(node.getRows().get(i));
+                sqlBuilder.append(Joiner.on(", ").join(fieldLis));
+            } else {
+                sqlBuilder.append("VALUES(");
+
+                for (int i = 0; i < node.getRows().size(); ++i) {
+                    sqlBuilder.append("(");
+                    List<String> rowStrings =
+                            node.getRows().get(i).stream().map(Expr::toSql).collect(Collectors.toList());
+                    sqlBuilder.append(Joiner.on(", ").join(rowStrings));
+                    sqlBuilder.append(")");
+                }
                 sqlBuilder.append(")");
             }
-            sqlBuilder.append(")");
             return sqlBuilder.toString();
         }
 
@@ -289,11 +310,10 @@ public class SQLLabelBuilder {
             StringBuilder sb = new StringBuilder();
             sb.append(visit(fnCall)).append(" OVER (");
             if (!partitionExprs.isEmpty()) {
-                sb.append("PARTITION BY ").append(expressionListToString(partitionExprs)).append(" ");
+                sb.append("PARTITION BY ").append(visitAstList(partitionExprs)).append(" ");
             }
             if (!orderByElements.isEmpty()) {
-                sb.append("ORDER BY ").append(expressionListToString(
-                        orderByElements.stream().map(OrderByElement::getExpr).collect(toList()))).append(" ");
+                sb.append("ORDER BY ").append(visitAstList(orderByElements)).append(" ");
             }
             if (window != null) {
                 sb.append(window.toSql());
@@ -310,14 +330,14 @@ public class SQLLabelBuilder {
                 sb.append(node.getType().toSql());
             }
             sb.append('[');
-            sb.append(expressionListToString(node.getChildren()));
+            sb.append(visitAstList(node.getChildren()));
             sb.append(']');
             return sb.toString();
         }
 
         @Override
         public String visitArrayElementExpr(ArrayElementExpr node, Void context) {
-            return visit(node.getChild(0)) + "[" + node.getChild(1) + "]";
+            return visit(node.getChild(0)) + "[" + visit(node.getChild(1)) + "]";
         }
 
         public String visitArrowExpr(ArrowExpr node, Void context) {
@@ -328,12 +348,12 @@ public class SQLLabelBuilder {
         public String visitBetweenPredicate(BetweenPredicate node, Void context) {
             String notStr = (node.isNotBetween()) ? "NOT " : "";
             return visit(node.getChild(0)) + " " + notStr + "BETWEEN " +
-                    node.getChild(1) + " AND " + node.getChild(2);
+                    visit(node.getChild(1)) + " AND " + visit(node.getChild(2));
         }
 
         @Override
         public String visitBinaryPredicate(BinaryPredicate node, Void context) {
-            return visit(node.getChild(0)) + node.getOp() + visit(node.getChild(1));
+            return visit(node.getChild(0)) + " " + node.getOp().toString() + " " + visit(node.getChild(1));
         }
 
         @Override
@@ -378,10 +398,10 @@ public class SQLLabelBuilder {
             return visitExpression(node, context);
         }
 
+        @Override
         public String visitExistsPredicate(ExistsPredicate node, Void context) {
-            boolean notExists = node.isNotExists();
             StringBuilder strBuilder = new StringBuilder();
-            if (notExists) {
+            if (node.isNotExists()) {
                 strBuilder.append("NOT ");
 
             }
@@ -420,14 +440,13 @@ public class SQLLabelBuilder {
             return visitExpression(node, context);
         }
 
+        @Override
         public String visitInPredicate(InPredicate node, Void context) {
-            boolean isNotIn = node.isNotIn();
-
             StringBuilder strBuilder = new StringBuilder();
-            String notStr = (isNotIn) ? "NOT " : "";
+            String notStr = (node.isNotIn()) ? "NOT " : "";
             strBuilder.append(visit(node.getChild(0))).append(" ").append(notStr).append("IN (");
             for (int i = 1; i < node.getChildren().size(); ++i) {
-                strBuilder.append(node.getChild(1));
+                strBuilder.append(node.getChild(i).toSql());
                 strBuilder.append((i + 1 != node.getChildren().size()) ? ", " : "");
             }
             strBuilder.append(")");
@@ -451,7 +470,7 @@ public class SQLLabelBuilder {
         }
 
         public String visitSubquery(Subquery node, Void context) {
-            return "(" + visit(node.getQueryBlock()) + ")";
+            return "(" + visit(new QueryStatement(node.getQueryBlock())) + ")";
         }
 
         public String visitSysVariableDesc(SysVariableDesc node, Void context) {
@@ -471,12 +490,12 @@ public class SQLLabelBuilder {
                     strBuilder.append(funcName).append("(");
                     strBuilder.append(timeUnitIdent).append(", ");
                     strBuilder.append(visit(node.getChild(1))).append(", ");
-                    strBuilder.append(visit(node.getChild(1))).append(")");
+                    strBuilder.append(visit(node.getChild(0))).append(")");
                     return strBuilder.toString();
                 }
                 // Function-call like version.
                 strBuilder.append(funcName).append("(");
-                strBuilder.append(visit(node.getChild(1))).append(", ");
+                strBuilder.append(visit(node.getChild(0))).append(", ");
                 strBuilder.append("INTERVAL ");
                 strBuilder.append(visit(node.getChild(1)));
                 strBuilder.append(" ").append(timeUnitIdent);
@@ -489,10 +508,10 @@ public class SQLLabelBuilder {
                 strBuilder.append(visit(node.getChild(1)) + " ");
                 strBuilder.append(timeUnitIdent);
                 strBuilder.append(" ").append(op.toString()).append(" ");
-                strBuilder.append(visit(node.getChild(1)));
+                strBuilder.append(visit(node.getChild(0)));
             } else {
                 // Non-function-call like version with interval as second operand.
-                strBuilder.append(visit(node.getChild(1)));
+                strBuilder.append(visit(node.getChild(0)));
                 strBuilder.append(" " + op.toString() + " ");
                 strBuilder.append("INTERVAL ");
                 strBuilder.append(visit(node.getChild(1)) + " ");
@@ -502,7 +521,7 @@ public class SQLLabelBuilder {
         }
 
         // ----------------- AST ---------------
-
+        @Override
         public String visitLimitElement(LimitElement node, Void context) {
             if (node.getLimit() == -1) {
                 return "";
@@ -515,7 +534,27 @@ public class SQLLabelBuilder {
             return sb.toString();
         }
 
-        private String expressionListToString(List<? extends Expr> contexts) {
+        @Override
+        public String visitOrderByElement(OrderByElement node, Void context) {
+            StringBuilder strBuilder = new StringBuilder();
+            strBuilder.append(visit(node.getExpr()));
+            strBuilder.append(node.getIsAsc() ? " ASC" : " DESC");
+
+            // When ASC and NULLS FIRST or DESC and NULLS LAST, we do not print NULLS FIRST/LAST
+            // because it is the default behavior
+            if (node.getNullsFirstParam() != null) {
+                if (node.getIsAsc() && !node.getNullsFirstParam()) {
+                    // If ascending, nulls are first by default, so only add if nulls last.
+                    strBuilder.append(" NULLS LAST");
+                } else if (!node.getIsAsc() && node.getNullsFirstParam()) {
+                    // If descending, nulls are last by default, so only add if nulls first.
+                    strBuilder.append(" NULLS FIRST");
+                }
+            }
+            return strBuilder.toString();
+        }
+
+        private String visitAstList(List<? extends ParseNode> contexts) {
             return Joiner.on(", ").join(contexts.stream().map(this::visit).collect(toList()));
         }
     }

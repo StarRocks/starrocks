@@ -64,8 +64,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.SQLLabelBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -333,7 +333,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (selectListItem.getAlias() != null) {
                     name = selectListItem.getAlias();
                 } else {
-                    name = SQLLabelBuilder.toSQL(selectListItem.getExpr());
+                    name = AST2SQL.toString(selectListItem.getExpr());
                 }
                 columnNames.add(name);
             }

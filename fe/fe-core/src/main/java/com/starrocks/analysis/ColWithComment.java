@@ -25,10 +25,9 @@ import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeNameFormat;
 
-public class ColWithComment implements ParseNode{
-
-    private String colName;
-    private String comment;
+public class ColWithComment implements ParseNode {
+    private final String colName;
+    private final String comment;
 
     public ColWithComment(String colName, String comment) {
         this.colName = colName;

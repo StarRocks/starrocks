@@ -4,7 +4,7 @@ package com.starrocks.sql.common;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.sql.analyzer.SQLLabelBuilder;
+import com.starrocks.sql.analyzer.AST2SQL;
 
 //Used to build sql digests
 public class SqlDigestBuilder {
@@ -12,7 +12,7 @@ public class SqlDigestBuilder {
         return new SqlDigestBuilderVisitor().visit(statement);
     }
 
-    private static class SqlDigestBuilderVisitor extends SQLLabelBuilder.SQLLabelBuilderImpl {
+    private static class SqlDigestBuilderVisitor extends AST2SQL.SQLLabelBuilderImpl {
         @Override
         public String visitLiteral(LiteralExpr expr, Void context) {
             return "?";

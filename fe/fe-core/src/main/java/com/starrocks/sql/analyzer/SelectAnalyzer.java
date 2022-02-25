@@ -189,7 +189,7 @@ public class SelectAnalyzer {
                             INTERNAL_ERROR);
                 }
 
-                columnOutputNames.addAll(expandStar(item, fromRelation).stream().map(SQLLabelBuilder::toSQL)
+                columnOutputNames.addAll(expandStar(item, fromRelation).stream().map(AST2SQL::toString)
                         .collect(Collectors.toList()));
 
                 for (Field field : fields) {
@@ -213,7 +213,7 @@ public class SelectAnalyzer {
                 if (item.getAlias() != null) {
                     columnOutputNames.add(item.getAlias());
                 } else {
-                    columnOutputNames.add(SQLLabelBuilder.toSQL(item.getExpr()));
+                    columnOutputNames.add(AST2SQL.toString(item.getExpr()));
                 }
 
                 analyzeExpression(item.getExpr(), analyzeState, scope);
@@ -560,7 +560,7 @@ public class SelectAnalyzer {
                 if (item.getAlias() != null) {
                     name = item.getAlias();
                 } else {
-                    name = SQLLabelBuilder.toSQL(item.getExpr());
+                    name = AST2SQL.toString(item.getExpr());
                 }
 
                 outputFields.add(new Field(name, item.getExpr().getType(), relationAlias, item.getExpr()));

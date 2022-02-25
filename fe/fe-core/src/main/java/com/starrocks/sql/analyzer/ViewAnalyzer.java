@@ -46,7 +46,7 @@ public class ViewAnalyzer {
         }
         stmt.setFinalCols(viewColumns);
 
-        String viewSql = ViewDefBuilder.build(stmt.getQueryStatement(), session);
+        String viewSql = ViewDefBuilder.build(stmt.getQueryStatement());
         stmt.setInlineViewDef(viewSql);
     }
 }

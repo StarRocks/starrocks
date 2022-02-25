@@ -333,6 +333,10 @@ public class SlotRef extends Expr {
         this.col = col;
     }
 
+    public String getLabel() {
+        return label;
+    }
+
     @Override
     public boolean supportSerializable() {
         return true;
