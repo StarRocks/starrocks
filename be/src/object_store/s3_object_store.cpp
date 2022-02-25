@@ -35,17 +35,11 @@ static inline Aws::String to_aws_string(const std::string& s) {
 S3ObjectStore::S3ObjectStore(const Aws::Client::ClientConfiguration& config) : _config(config) {}
 
 Status S3ObjectStore::init(bool use_transfer_manager) {
-    const char* env_access_key_id = getenv("AWS_ACCESS_KEY_ID");
-    const char* env_secret_access_key = getenv("AWS_SECRET_ACCESS_KEY");
-    const string be_conf_access_key_id = config::object_storage_access_key_id;
-    const string be_conf_secret_access_key = config::object_storage_secret_access_key;
-    if (!be_conf_access_key_id.empty() && !be_conf_secret_access_key.empty()) {
+    const string access_key_id = config::object_storage_access_key_id;
+    const string secret_access_key = config::object_storage_secret_access_key;
+    if (!access_key_id.empty() && !secret_access_key.empty()) {
         std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credentials =
-                std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(be_conf_access_key_id, be_conf_secret_access_key);
-        _client = std::make_shared<Aws::S3::S3Client>(credentials, _config);
-    } else if (strlen(env_access_key_id) > 0 && strlen(env_secret_access_key) > 0) {
-        std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credentials =
-                std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(env_secret_access_key, env_secret_access_key);
+                std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
         _client = std::make_shared<Aws::S3::S3Client>(credentials, _config);
     } else {
         // if not cred provided, we can use default cred in aws profile.

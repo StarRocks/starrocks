@@ -78,17 +78,14 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
     Aws::Client::ClientConfiguration config;
     config.scheme = Aws::Http::Scheme::HTTP;
     if (is_oss_path(namenode.c_str())) {
-        assert(!config::object_storage_endpoint.empty());
+        CHECK(!config::object_storage_access_key_id.empty()) << "Configuration object_storage_access_key_id is missing for OSS.";
+        CHECK(!config::object_storage_secret_access_key.empty()) << "Configuration object_storage_secret_access_key is missing for OSS.";
+        CHECK(!config::object_storage_endpoint.empty()) << "Configuration object_storage_endpoint is missing for OSS.";
         config.endpointOverride = get_endpoint_from_oss_bucket(config::object_storage_endpoint, &bucket);
-    }
-    if (is_s3a_path(namenode.c_str()) && !config::object_storage_endpoint.empty()){
+    } else if (!config::object_storage_endpoint.empty()){
         config.endpointOverride = config::object_storage_endpoint;
     }
     config.maxConnections = config::object_storage_max_connection;
-    if (is_oss_path(namenode.c_str())) {
-        assert(!config::object_storage_access_key_id.empty());
-        assert(!config::object_storage_secret_access_key.empty());
-    }
     S3ObjectStore store(config);
     RETURN_IF_ERROR(store.init(false));
     ASSIGN_OR_RETURN(auto input_file, store.get_object(bucket, object));
