@@ -21,7 +21,9 @@ public:
 
     uint64_t getLength() const override { return _length; }
 
-    uint64_t getNaturalReadSize() const override { return 2 * 1024 * 1024; }
+    uint64_t getNaturalReadSize() const override { return 1 * 1024 * 1024; }
+
+    uint64_t getNaturalReadSizeAfterSeek() const override { return 128 * 1024; }
 
     void read(void* buf, uint64_t length, uint64_t offset) override {
         SCOPED_RAW_TIMER(&_stats->io_ns);

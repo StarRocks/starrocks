@@ -100,6 +100,7 @@ private:
     std::unique_ptr<DataBuffer<char>> buffer;
     uint64_t position;
     uint64_t pushBack;
+    bool pendingSeek;
 
 public:
     SeekableFileInputStream(InputStream* input, uint64_t offset, uint64_t byteCount, MemoryPool& pool,

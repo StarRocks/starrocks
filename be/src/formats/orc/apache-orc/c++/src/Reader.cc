@@ -36,7 +36,6 @@
 #include "Options.hh"
 #include "Statistics.hh"
 #include "StripeStream.hh"
-#include "common/logging.h"
 #include "wrap/coded-stream-wrapper.h"
 
 namespace orc {
@@ -1079,16 +1078,18 @@ void RowReaderImpl::lazyLoadSkip(uint64_t numValues) {
     // we can assume `seek to row group` costs skipping X rows
     // then #1 cost is X + toRow % rowindexstripe
     // #2 cost is (row - lazyLoadLastUsedRowInStripe)
+    const uint64_t ROW_INDEX_STRIDE = footer->rowindexstride();
     static const uint64_t SEEK_TO_ROW_GROUP_COST = 4096;
-    uint64_t costSeekAndSkip = SEEK_TO_ROW_GROUP_COST + toRow % footer->rowindexstride();
+    uint64_t costIndirectSkip = toRow % ROW_INDEX_STRIDE;
     uint64_t costDirectSkip = (toRow - lazyLoadLastUsedRowInStripe);
+    uint64_t toRowGroupNumber = toRow / ROW_INDEX_STRIDE;
+    uint64_t fromRowGroupNumber = lazyLoadLastUsedRowInStripe / ROW_INDEX_STRIDE;
 
-    if (costSeekAndSkip < costDirectSkip) {
-        uint64_t toRowGroupNumber = toRow / footer->rowindexstride();
+    if ((fromRowGroupNumber != toRowGroupNumber) && (SEEK_TO_ROW_GROUP_COST + costIndirectSkip) < costDirectSkip) {
         seekToRowGroup(static_cast<uint32_t>(toRowGroupNumber), true);
-        reader->lazyLoadSkip(toRow % footer->rowindexstride());
+        reader->lazyLoadSkip(costIndirectSkip);
     } else {
-        reader->lazyLoadSkip(toRow - lazyLoadLastUsedRowInStripe);
+        reader->lazyLoadSkip(costDirectSkip);
     }
 
     lazyLoadRowInStripe = toRow;
@@ -1369,5 +1370,9 @@ Reader::~Reader() {
 InputStream::~InputStream(){
         // PASS
 };
+
+uint64_t InputStream::getNaturalReadSizeAfterSeek() const {
+    return 128 * 1024;
+}
 
 } // namespace orc

@@ -132,8 +132,9 @@ std::string SeekableArrayInputStream::getName() const {
     return result.str();
 }
 
+static const uint64_t DEFAULT_FILE_BLOCK_SIZE = 256 * 1024;
 static uint64_t computeBlock(uint64_t request, uint64_t length) {
-    return std::min(length, request == 0 ? 256 * 1024 : request);
+    return std::min(length, request == 0 ? DEFAULT_FILE_BLOCK_SIZE : request);
 }
 
 SeekableFileInputStream::SeekableFileInputStream(InputStream* stream, uint64_t offset, uint64_t byteCount,
@@ -142,6 +143,7 @@ SeekableFileInputStream::SeekableFileInputStream(InputStream* stream, uint64_t o
     position = 0;
     buffer.reset(new DataBuffer<char>(pool));
     pushBack = 0;
+    pendingSeek = false;
 }
 
 SeekableFileInputStream::~SeekableFileInputStream() {
@@ -155,6 +157,10 @@ bool SeekableFileInputStream::Next(const void** data, int* size) {
         bytesRead = pushBack;
     } else {
         bytesRead = std::min(length - position, blockSize);
+        if (pendingSeek) {
+            pendingSeek = false;
+            bytesRead = std::min(bytesRead, input->getNaturalReadSizeAfterSeek());
+        }
         buffer->resize(bytesRead);
         if (bytesRead > 0) {
             input->read(buffer->data(), bytesRead, start + position);
@@ -203,6 +209,7 @@ void SeekableFileInputStream::seek(PositionProvider& location) {
         throw std::logic_error("seek too far");
     }
     pushBack = 0;
+    pendingSeek = true;
 }
 
 std::string SeekableFileInputStream::getName() const {
