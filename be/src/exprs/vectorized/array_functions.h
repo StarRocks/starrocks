@@ -46,12 +46,12 @@ public:
         return ArrayDifference<PT>::process(context, columns);                                   \
     }
 
-    DEFINE_ARRAY_DIFFERENCE_FN(tinyint, PrimitiveType::TYPE_SMALLINT)
-    DEFINE_ARRAY_DIFFERENCE_FN(smallint, PrimitiveType::TYPE_INT)
-    DEFINE_ARRAY_DIFFERENCE_FN(int, PrimitiveType::TYPE_BIGINT)
+    DEFINE_ARRAY_DIFFERENCE_FN(tinyint, PrimitiveType::TYPE_TINYINT)
+    DEFINE_ARRAY_DIFFERENCE_FN(smallint, PrimitiveType::TYPE_SMALLINT)
+    DEFINE_ARRAY_DIFFERENCE_FN(int, PrimitiveType::TYPE_INT)
     DEFINE_ARRAY_DIFFERENCE_FN(bigint, PrimitiveType::TYPE_BIGINT)
     DEFINE_ARRAY_DIFFERENCE_FN(largeint, PrimitiveType::TYPE_LARGEINT)
-    DEFINE_ARRAY_DIFFERENCE_FN(float, PrimitiveType::TYPE_DOUBLE)
+    DEFINE_ARRAY_DIFFERENCE_FN(float, PrimitiveType::TYPE_FLOAT)
     DEFINE_ARRAY_DIFFERENCE_FN(double, PrimitiveType::TYPE_DOUBLE)
     DEFINE_ARRAY_DIFFERENCE_FN(decimalv2, PrimitiveType::TYPE_DECIMALV2)
 
