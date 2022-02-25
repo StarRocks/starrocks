@@ -777,6 +777,7 @@ Status PersistentIndex::prepare(const EditVersion& version) {
 }
 
 Status PersistentIndex::abort() {
+    _dump_snapshot = false;
     return Status::NotSupported("TODO");
 }
 
@@ -788,15 +789,6 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
         Env::Default()->delete_file(file_name);
-        fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-        std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions wblock_opts({file_name});
-        RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
-        DeferOp close_block([&wblock] {
-            if (wblock) {
-                wblock->close();
-            }
-        });
         size_t snapshot_size = _dump_bound();
         phmap::BinaryOutputArchive ar_out(file_name.data());
         if (!_dump(ar_out)) {
