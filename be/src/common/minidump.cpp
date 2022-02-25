@@ -68,7 +68,7 @@ Minidump::Minidump() : _minidump(), _minidump_dir(config::sys_minidump_dir) {
     sigaction(SIGUSR1, &signal_action, nullptr);
 }
 
-// This Implementations for clean oldest and malformed files is modified from IMPALA
+// This Implementations for clean oldest and malformed files is modified from IMPALA.
 void Minidump::check_and_rotate_minidumps(int max_minidumps, const std::string& minidump_dir) {
     if (max_minidumps <= 0) return;
 

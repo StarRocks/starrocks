@@ -29,13 +29,13 @@ public:
         }
     }
 
-    // copy c'tor makes copy of error detail so Status can be returned by value
+    // Copy c'tor makes copy of error detail so Status can be returned by value
     Status(const Status& s) : _state(s._state == nullptr ? nullptr : copy_state(s._state)) {}
 
-    // move c'tor
+    // Move c'tor
     Status(Status&& s) noexcept : _state(s._state) { s._state = moved_from_state(); }
 
-    // same as copy c'tor
+    // Same as copy c'tor
     Status& operator=(const Status& s) {
         if (this != &s) {
             Status tmp(s);
@@ -44,7 +44,7 @@ public:
         return *this;
     }
 
-    // move assign
+    // Move assign.
     Status& operator=(Status&& s) noexcept {
         if (this != &s) {
             Status tmp(std::move(s));
@@ -109,7 +109,7 @@ public:
         return Status(TStatusCode::DUPLICATE_RPC_INVOCATION, msg);
     }
     static Status JsonFormatError(const Slice& msg) {
-        // TODO(mofei) define json format error
+        // TODO(mofei) define json format error.
         return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
     }
 
@@ -124,16 +124,16 @@ public:
     bool is_io_error() const { return code() == TStatusCode::IO_ERROR; }
     bool is_not_supported() const { return code() == TStatusCode::NOT_IMPLEMENTED_ERROR; }
 
-    /// @return @c true iff the status indicates Uninitialized.
+    /// @return @c true if the status indicates Uninitialized.
     bool is_uninitialized() const { return code() == TStatusCode::UNINITIALIZED; }
 
-    // @return @c true iff the status indicates an Aborted error.
+    // @return @c true if the status indicates an Aborted error.
     bool is_aborted() const { return code() == TStatusCode::ABORTED; }
 
-    /// @return @c true iff the status indicates an InvalidArgument error.
+    /// @return @c true if the status indicates an InvalidArgument error.
     bool is_invalid_argument() const { return code() == TStatusCode::INVALID_ARGUMENT; }
 
-    // @return @c true iff the status indicates ServiceUnavailable.
+    // @return @c true if the status indicates ServiceUnavailable.
     bool is_service_unavailable() const { return code() == TStatusCode::SERVICE_UNAVAILABLE; }
 
     bool is_data_quality_error() const { return code() == TStatusCode::DATA_QUALITY_ERROR; }
@@ -177,7 +177,7 @@ public:
     //   this returns an empty string.
     Slice message() const;
 
-    // error message with extra context info, like file name, line number
+    // Error message with extra context info, like file name, line number.
     Slice detailed_message() const;
 
     TStatusCode::type code() const {
@@ -246,7 +246,7 @@ inline const Status& to_status(const StatusOr<T>& st) {
 #define AS_STRING_INTERNAL(x) #x
 #endif
 
-// some generally useful macros
+// Some generally useful macros.
 #define RETURN_IF_ERROR(stmt)                                                                         \
     do {                                                                                              \
         const auto& _status_ = (stmt);                                                                \

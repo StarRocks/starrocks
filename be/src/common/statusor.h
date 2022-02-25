@@ -245,7 +245,7 @@ public:
                       int> = 0>
     explicit StatusOr(StatusOr<U>&& other) : Base(static_cast<typename StatusOr<U>::Base&&>(other)) {}
 
-    // Converting Assignment Operators
+    // Converting Assignment Operators.
 
     // Creates an `starrocks::StatusOr<T>` through assignment from an
     // `starrocks::StatusOr<U>` when:
