@@ -78,11 +78,11 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
     Aws::Client::ClientConfiguration config;
     config.scheme = Aws::Http::Scheme::HTTP;
     if (is_oss_path(namenode.c_str())) {
-        if (config::object_storage_access_key_id.empty() ||
-            config::object_storage_secret_access_key.empty() ||
+        if (config::object_storage_access_key_id.empty() || config::object_storage_secret_access_key.empty() ||
             config::object_storage_endpoint.empty()) {
-            return Status::RuntimeError("Configuration object_storage_access_key_id, "
-                    "object_storage_secret_access_key and object_storage_endpoint is required for OSS.");
+            return Status::RuntimeError(
+                    "Configuration object_storage_access_key_id, object_storage_secret_access_key "
+                    "and object_storage_endpoint is required for OSS.");
         }
         config.endpointOverride = get_endpoint_from_oss_bucket(config::object_storage_endpoint, &bucket);
     } else if (!config::object_storage_endpoint.empty()) {
