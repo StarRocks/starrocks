@@ -22,7 +22,6 @@
 package com.starrocks.persist;
 
 import com.google.common.base.Preconditions;
-import com.sleepycat.je.rep.ReplicaWriteException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.alter.DecommissionBackendJob;
@@ -862,8 +861,6 @@ public class EditLog {
 
         try {
             journal.write(op, writable);
-        } catch (ReplicaWriteException e) {
-            throw e;
         } catch (Exception e) {
             LOG.error("Fatal Error : write stream Exception", e);
             System.exit(-1);
