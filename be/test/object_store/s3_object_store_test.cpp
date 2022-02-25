@@ -5,6 +5,7 @@
 #include "object_store/s3_object_store.h"
 
 #include <aws/core/Aws.h>
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <fstream>
@@ -14,7 +15,7 @@
 
 namespace starrocks {
 
-static const std::string bucket_name = "starrocks-cloud-test-2022";
+static constexpr const char* kBucketName = "starrocks-cloud-test-2022";
 
 class S3ObjectStoreTest : public testing::Test {
 public:
@@ -28,51 +29,42 @@ private:
 };
 
 TEST_F(S3ObjectStoreTest, bucket_operation) {
-    Aws::Client::ClientConfiguration config;
-    config.region = Aws::Region::AP_SOUTHEAST_1;
+    ASSIGN_OR_ABORT(auto client, ObjectStore::create_unique_from_uri(fmt::format("s3://{}", kBucketName)));
 
-    S3ObjectStore client(config);
-    ASSERT_OK(client.init(nullptr, false));
-
-    (void)client.delete_bucket(bucket_name);
+    (void)client->delete_bucket(kBucketName);
 
     // create bucket
-    ASSERT_OK(client.create_bucket(bucket_name));
+    ASSERT_OK(client->create_bucket(kBucketName));
 
     // delete bucket
-    ASSERT_OK(client.delete_bucket(bucket_name));
+    ASSERT_OK(client->delete_bucket(kBucketName));
 }
 
 TEST_F(S3ObjectStoreTest, object_operation) {
-    Aws::Client::ClientConfiguration config;
-    config.region = Aws::Region::AP_SOUTHEAST_1;
-
-    S3ObjectStore client(config);
-    ASSERT_OK(client.init(nullptr, false));
+    ASSIGN_OR_ABORT(auto client, ObjectStore::create_unique_from_uri(fmt::format("s3://{}", kBucketName)));
 
     // create bucket
-    ASSERT_OK(client.create_bucket(bucket_name));
+    ASSERT_OK(client->create_bucket(kBucketName));
 
     // put object
-    const std::string object_key = "hello";
+    const std::string uri = fmt::format("s3://{}/hello", kBucketName);
     const std::string object_value = "world";
     const std::string object_path = "./S3Test_hello";
 
-    ASSIGN_OR_ABORT(auto os, client.put_object(bucket_name, object_key));
+    ASSIGN_OR_ABORT(auto os, client->put_object(uri));
     ASSERT_OK(os->write(object_value.data(), object_value.size()));
     ASSERT_OK(os->close());
 
     // test object existence
-    ASSERT_OK(client.exist_object(bucket_name, object_key));
+    ASSERT_OK(client->exist_object(uri));
 
     // get object size
-    size_t size = 0;
-    ASSERT_OK(client.get_object_size(bucket_name, object_key, &size));
+    ASSIGN_OR_ABORT(auto size, client->get_object_size(uri));
     ASSERT_EQ(size, object_value.size());
 
     // download object to local file
-    ASSERT_FALSE(client.get_object(bucket_name, object_key, "").ok());
-    ASSERT_OK(client.get_object(bucket_name, object_key, object_path));
+    ASSERT_FALSE(client->download_object(uri, "").ok());
+    ASSERT_OK(client->download_object(uri, object_path));
     std::ifstream file(object_path.c_str(), std::ios::in);
     ASSERT_TRUE(file.good());
     std::string object_value_tmp;
@@ -82,31 +74,31 @@ TEST_F(S3ObjectStoreTest, object_operation) {
 
     // read object
     char buf[2];
-    ASSIGN_OR_ABORT(auto input_stream, client.get_object(bucket_name, object_key));
+    ASSIGN_OR_ABORT(auto input_stream, client->get_object(uri));
     ASSIGN_OR_ABORT(auto bytes_read, input_stream->read_at(1, buf, sizeof(buf)));
     ASSERT_EQ("or", std::string_view(buf, bytes_read));
 
     // list object
-    const std::string object_key2 = "test/hello";
-    ASSIGN_OR_ABORT(auto os2, client.put_object(bucket_name, object_key2));
+    const std::string uri2 = fmt::format("s3://{}/test/hello", kBucketName);
+    ASSIGN_OR_ABORT(auto os2, client->put_object(uri2));
     ASSERT_OK(os2->write(object_value.data(), object_value.size()));
     ASSERT_OK(os2->close());
     std::vector<std::string> vector;
-    ASSERT_OK(client.list_objects(bucket_name, "/" /* object_prefix */, &vector));
+    ASSERT_OK(client->list_objects(kBucketName, "/" /* object_prefix */, &vector));
     ASSERT_EQ(vector.size(), 2);
     ASSERT_EQ(vector[0], "hello");
     ASSERT_EQ(vector[1], "test/hello");
 
     // delete object
-    ASSERT_OK(client.delete_object(bucket_name, object_key));
-    ASSERT_OK(client.delete_object(bucket_name, object_key2));
+    ASSERT_OK(client->delete_object(uri));
+    ASSERT_OK(client->delete_object(uri2));
 
     // test object not exist
-    ASSERT_TRUE(client.exist_object(bucket_name, object_key).is_not_found());
-    ASSERT_TRUE(client.exist_object(bucket_name, object_key2).is_not_found());
+    ASSERT_TRUE(client->exist_object(uri).is_not_found());
+    ASSERT_TRUE(client->exist_object(uri2).is_not_found());
 
     // delete bucket
-    ASSERT_OK(client.delete_bucket(bucket_name));
+    ASSERT_OK(client->delete_bucket(kBucketName));
 }
 
 } // namespace starrocks

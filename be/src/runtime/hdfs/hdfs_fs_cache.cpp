@@ -28,19 +28,8 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
 
     } else if (is_s3a_path(nn) || is_oss_path(nn)) {
 #ifdef STARROCKS_WITH_AWS
+        ASSIGN_OR_RETURN(auto store, new_s3_object_store());
         handle->type = HdfsFsHandle::Type::S3;
-        Aws::Client::ClientConfiguration config;
-        config.scheme = Aws::Http::Scheme::HTTP;
-        if (!config::aws_s3_endpoint.empty()) {
-            config.endpointOverride = config::aws_s3_endpoint;
-        }
-        config.maxConnections = config::aws_s3_max_connection;
-
-        S3Credential cred;
-        cred.access_key_id = config::aws_access_key_id;
-        cred.secret_access_key = config::aws_secret_access_key;
-        auto store = std::make_unique<S3ObjectStore>(config);
-        RETURN_IF_ERROR(store->init(&cred, false));
         handle->object_store = store.release();
 #else
         return Status::NotSupported("Does not support S3");

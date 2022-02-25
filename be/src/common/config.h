@@ -661,6 +661,7 @@ CONF_Bool(rewrite_partial_segment, "true");
 CONF_String(aws_access_key_id, "");
 CONF_String(aws_secret_access_key, "");
 CONF_String(aws_s3_endpoint, "");
+CONF_String(aws_s3_region, "");
 CONF_Int64(aws_s3_max_connection, "102400");
 
 CONF_Bool(enable_orc_late_materialization, "true");

@@ -8,5 +8,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/object_store")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/object_store")
 
 add_library(ObjectStore STATIC
+    object_store.cpp
     s3_object_store.cpp
 )
