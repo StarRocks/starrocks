@@ -42,7 +42,10 @@ class MorselQueue {
 public:
     MorselQueue(Morsels&& morsels) : _morsels(std::move(morsels)), _num_morsels(_morsels.size()), _pop_index(0) {}
 
+    const Morsels& morsels() const { return _morsels; }
+
     size_t num_morsels() const { return _num_morsels; }
+
     std::optional<MorselPtr> try_get() {
         auto idx = _pop_index.load();
         // prevent _num_morsels from superfluous addition

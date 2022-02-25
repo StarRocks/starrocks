@@ -12,6 +12,10 @@
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
+
+class Rowset;
+using RowsetSharedPtr = std::shared_ptr<Rowset>;
+
 namespace vectorized {
 class RuntimeFilterProbeCollector;
 }
@@ -44,6 +48,7 @@ public:
     void set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
@@ -58,12 +63,20 @@ private:
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
 
+    Status _capture_tablet_rowsets();
+
+private:
     // TODO(hcf) ugly, remove this later
     RuntimeState* _state = nullptr;
 
     bool _is_finished = false;
     int32_t _io_task_retry_cnt = 0;
 
+    // The row sets of tablets will become stale and be deleted, if compaction occurs
+    // and these row sets aren't referenced, which will typically happen when the tablets
+    // of the left table are compacted at building the right hash table. Therefore, reference
+    // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
+    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
     const TOlapScanNode& _olap_scan_node;
     const std::vector<ExprContext*>& _conjunct_ctxs;
     PriorityThreadPool* _io_threads = nullptr;
