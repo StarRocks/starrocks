@@ -56,7 +56,6 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class StarRocksAssert {
@@ -118,7 +117,7 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withView(String sql) throws Exception {
-        CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Catalog.getCurrentCatalog().createView(createTableStmt);
         return this;
     }

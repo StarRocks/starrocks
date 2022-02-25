@@ -10,6 +10,7 @@ import com.starrocks.sql.analyzer.FieldId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public abstract class QueryRelation extends Relation {
 
@@ -48,8 +49,16 @@ public abstract class QueryRelation extends Relation {
         return sortClause;
     }
 
+    public List<Expr> getOrderByExpressions() {
+        return sortClause.stream().map(OrderByElement::getExpr).collect(Collectors.toList());
+    }
+
     public boolean hasOrderByClause() {
-        return sortClause != null;
+        return sortClause != null && !sortClause.isEmpty();
+    }
+
+    public void clearOrder() {
+        sortClause.clear();
     }
 
     public LimitElement getLimit() {
@@ -80,26 +89,7 @@ public abstract class QueryRelation extends Relation {
         return cteRelations;
     }
 
-    @Override
-    public String toSql() {
-        StringBuilder sqlBuilder = new StringBuilder();
-
-        if (hasOrderByClause()) {
-            sqlBuilder.append(" ORDER BY ");
-            for (int i = 0; i < sortClause.size(); ++i) {
-                if (i != 0) {
-                    sqlBuilder.append(", ");
-                }
-                sqlBuilder.append(sortClause.get(i).toSql());
-            }
-        }
-
-        // Limit clause.
-        if (limit != null) {
-            sqlBuilder.append(limit.toSql());
-        }
-        return sqlBuilder.toString();
-    }
+    public abstract List<Expr> getOutputExpression();
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

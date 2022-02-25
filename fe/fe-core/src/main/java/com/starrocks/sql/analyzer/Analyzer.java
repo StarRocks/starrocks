@@ -5,6 +5,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
+import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -70,6 +71,9 @@ public class Analyzer {
             }
 
             return ((QueryStatement) node).getQueryRelation();
+        } else if (node instanceof BaseViewStmt) {
+            new ViewAnalyzer(session).analyze((BaseViewStmt) node);
+            return null;
         } else if (node instanceof InsertStmt) {
             return new InsertAnalyzer(catalog, session).transformInsertStmt((InsertStmt) node);
         } else if (node instanceof AnalyzeStmt) {

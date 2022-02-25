@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -201,5 +202,10 @@ public class OrderByElement implements ParseNode {
      */
     public static boolean nullsFirst(Boolean nullsFirstParam, boolean isAsc) {
         return nullsFirstParam == null ? isAsc : nullsFirstParam;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitOrderByElement(this, context);
     }
 }

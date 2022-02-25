@@ -302,6 +302,18 @@ public class TimestampArithmeticExpr extends Expr {
         return null;
     }
 
+    public String getFuncName() {
+        return funcName;
+    }
+
+    public String getTimeUnitIdent() {
+        return timeUnitIdent;
+    }
+
+    public boolean isIntervalFirst() {
+        return intervalFirst;
+    }
+
     @Override
     public String toSqlImpl() {
         StringBuilder strBuilder = new StringBuilder();

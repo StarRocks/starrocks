@@ -81,6 +81,10 @@ public class TableRelation extends Relation {
         }
     }
 
+    public TableName getAliasWithoutNameRewrite() {
+        return alias;
+    }
+
     public boolean isMetaQuery() {
         return isMetaQuery;
     }
@@ -97,16 +101,5 @@ public class TableRelation extends Relation {
     @Override
     public String toString() {
         return name.toString();
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sqlBuilder = new StringBuilder();
-        sqlBuilder.append(name);
-
-        if (alias != null) {
-            sqlBuilder.append(" AS ").append(alias.getTbl());
-        }
-        return sqlBuilder.toString();
     }
 }
