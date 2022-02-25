@@ -89,7 +89,7 @@ public class HiveClientPoolTest {
     }
 
     @Test
-    public void testGetTablesFailsForNonReconnectableException(@Mocked HiveMetaStoreThriftClient hmsClient) {
+    public void testGetTablesFailsForNonReconnectableException(@Mocked HiveMetaStoreThriftClient hmsClient) throws Exception {
         new MockUp<HiveClientPool>() {
             @Mock
             protected IMetaStoreClient newClient() {
@@ -97,7 +97,14 @@ public class HiveClientPoolTest {
             }
         };
 
-        Assert.assertThrows("method not implemented", TException.class,
+        new Expectations() {
+            {
+                hmsClient.getTables(anyString, anyString);
+                result = new MetaException("Another meta exception");
+            }
+        };
+
+        Assert.assertThrows("Another meta exception", MetaException.class,
                 () -> clients.run(client -> client.getTables("default", "t")));
     }
 
