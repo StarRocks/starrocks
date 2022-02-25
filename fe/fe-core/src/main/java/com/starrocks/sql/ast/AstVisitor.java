@@ -15,13 +15,16 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
+import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -130,11 +133,11 @@ public abstract class AstVisitor<R, C> {
         return visitNode(node, context);
     }
 
-    public R visitSlot(SlotRef node, C context) {
+    public R visitArithmeticExpr(ArithmeticExpr node, C context) {
         return visitExpression(node, context);
     }
 
-    public R visitFieldReference(FieldReference node, C context) {
+    public R visitAnalyticExpr(AnalyticExpr node, C context) {
         return visitExpression(node, context);
     }
 
@@ -158,7 +161,19 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
+    public R visitCaseWhenExpr(CaseExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitCastExpr(CastExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
     public R visitCompoundPredicate(CompoundPredicate node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitDefaultValueExpr(DefaultValueExpr node, C context) {
         return visitExpression(node, context);
     }
 
@@ -166,11 +181,19 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    public R visitArithmeticExpr(ArithmeticExpr node, C context) {
+    public R visitFieldReference(FieldReference node, C context) {
         return visitExpression(node, context);
     }
 
-    public R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
+    public R visitFunctionCall(FunctionCallExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitGroupingFunctionCall(GroupingFunctionCallExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitInformationFunction(InformationFunction node, C context) {
         return visitExpression(node, context);
     }
 
@@ -190,19 +213,7 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    public R visitFunctionCall(FunctionCallExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    public R visitGroupingFunctionCall(GroupingFunctionCallExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    public R visitCastExpr(CastExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    public R visitCaseWhenExpr(CaseExpr node, C context) {
+    public R visitSlot(SlotRef node, C context) {
         return visitExpression(node, context);
     }
 
@@ -210,19 +221,25 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    public R visitAnalyticExpr(AnalyticExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    public R visitInformationFunction(InformationFunction node, C context) {
-        return visitExpression(node, context);
-    }
-
     public R visitSysVariableDesc(SysVariableDesc node, C context) {
         return visitExpression(node, context);
     }
 
-    public R visitDefaultValueExpr(DefaultValueExpr node, C context) {
+    public R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
         return visitExpression(node, context);
+    }
+
+    // ----------------- AST ---------------
+
+    public R visitLimitElement(LimitElement node, C context) {
+        return null;
+    }
+
+    public R visitOrderByElement(OrderByElement node, C context) {
+        return null;
+    }
+
+    public R visitGroupByClause(GroupByClause node, C context) {
+        return null;
     }
 }

@@ -30,6 +30,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.List;
 
@@ -38,6 +39,10 @@ public class AlterViewStmt extends BaseViewStmt {
 
     public AlterViewStmt(TableName tbl, List<ColWithComment> cols, QueryStmt queryStmt) {
         super(tbl, cols, queryStmt);
+    }
+
+    public AlterViewStmt(TableName tbl, List<ColWithComment> cols, QueryStatement queryStatement) {
+        super(tbl, cols, queryStatement);
     }
 
     public TableName getTbl() {

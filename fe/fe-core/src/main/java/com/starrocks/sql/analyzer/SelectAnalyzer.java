@@ -29,20 +29,18 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -191,66 +189,8 @@ public class SelectAnalyzer {
                             INTERNAL_ERROR);
                 }
 
-                columnOutputNames.addAll(new AstVisitor<List<String>, Void>() {
-                    @Override
-                    public List<String> visitTable(TableRelation node, Void context) {
-                        if (item.getTblName() == null) {
-                            return node.getTable().getBaseSchema().stream().map(Column::getName)
-                                    .collect(Collectors.toList());
-                        } else {
-                            if (!item.getTblName().getTbl().equals(node.getAlias().getTbl())) {
-                                return new ArrayList<>();
-                            } else {
-                                return node.getTable().getBaseSchema().stream().map(Column::getName)
-                                        .collect(Collectors.toList());
-                            }
-                        }
-                    }
-
-                    public List<String> visitJoin(JoinRelation node, Void context) {
-                        if (node.getType().isLeftSemiAntiJoin()) {
-                            return visit(node.getLeft());
-                        } else if (node.getType().isRightSemiAntiJoin()) {
-                            return visit(node.getRight());
-                        } else {
-                            return Streams.concat(visit(node.getLeft()).stream(), visit(node.getRight()).stream())
-                                    .collect(Collectors.toList());
-                        }
-                    }
-
-                    public List<String> visitSubquery(SubqueryRelation node, Void context) {
-                        if (item.getTblName() == null || item.getTblName().getTbl().equals(node.getAlias().getTbl())) {
-                            return node.getQuery().getColumnOutputNames();
-                        } else {
-                            return new ArrayList<>();
-                        }
-                    }
-
-                    public List<String> visitValues(ValuesRelation node, Void context) {
-                        return node.getRelationFields().getAllFields().stream().map(Field::getName)
-                                .collect(Collectors.toList());
-                    }
-
-                    @Override
-                    public List<String> visitTableFunction(TableFunctionRelation node, Void context) {
-                        return node.getRelationFields().getAllFields().stream().map(Field::getName)
-                                .collect(Collectors.toList());
-                    }
-
-                    public List<String> visitUnion(UnionRelation node, Void context) {
-                        return node.getRelations().get(0).getColumnOutputNames();
-                    }
-
-                    @Override
-                    public List<String> visitCTE(CTERelation node, Void context) {
-                        if (item.getTblName() == null ||
-                                StringUtils.equals(item.getTblName().getTbl(), node.getAlias().getTbl())) {
-                            return node.getColumnOutputNames();
-                        }
-                        return Collections.emptyList();
-                    }
-
-                }.visit(fromRelation));
+                columnOutputNames.addAll(expandStar(item, fromRelation).stream().map(AST2SQL::toString)
+                        .collect(Collectors.toList()));
 
                 for (Field field : fields) {
                     //shadow column is not visible
@@ -273,7 +213,7 @@ public class SelectAnalyzer {
                 if (item.getAlias() != null) {
                     columnOutputNames.add(item.getAlias());
                 } else {
-                    columnOutputNames.add(item.getExpr().toColumnLabel());
+                    columnOutputNames.add(AST2SQL.toString(item.getExpr()));
                 }
 
                 analyzeExpression(item.getExpr(), analyzeState, scope);
@@ -447,16 +387,19 @@ public class SelectAnalyzer {
             } else {
                 if (groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUPING_SETS)) {
                     List<List<Expr>> groupingSets = new ArrayList<>();
-                    Set<Expr> groupBySet = new HashSet<>();
+                    ArrayList<Expr> groupByList = Lists.newArrayList();
                     for (ArrayList<Expr> g : groupByClause.getGroupingSetList()) {
                         List<Expr> rewriteGrouping = rewriteGroupByAlias(g, analyzeState,
                                 sourceScope, outputScope, outputExpressions);
-
+                        rewriteGrouping.forEach(e -> {
+                            if (!groupByList.contains(e)) {
+                                groupByList.add(e);
+                            }
+                        });
                         groupingSets.add(rewriteGrouping);
-                        groupBySet.addAll(rewriteGrouping);
                     }
 
-                    groupByExpressions.addAll(groupBySet);
+                    groupByExpressions.addAll(groupByList);
                     analyzeState.setGroupingSetsList(groupingSets);
                 } else if (groupByClause.getGroupingType().equals(GroupByClause.GroupingType.CUBE)) {
                     groupByExpressions.addAll(rewriteGroupByAlias(groupByClause.getGroupingExprs(), analyzeState,
@@ -616,11 +559,8 @@ public class SelectAnalyzer {
                 TableName relationAlias = null;
                 if (item.getAlias() != null) {
                     name = item.getAlias();
-                } else if (item.getExpr() instanceof SlotRef) {
-                    name = ((SlotRef) item.getExpr()).getColumnName();
-                    relationAlias = ((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed();
                 } else {
-                    name = item.getExpr().toColumnLabel();
+                    name = AST2SQL.toString(item.getExpr());
                 }
 
                 outputFields.add(new Field(name, item.getExpr().getType(), relationAlias, item.getExpr()));
@@ -634,5 +574,105 @@ public class SelectAnalyzer {
 
     private void analyzeExpression(Expr expr, AnalyzeState analyzeState, Scope scope) {
         ExpressionAnalyzer.analyzeExpression(expr, analyzeState, scope, catalog, session);
+    }
+
+    public static List<Expr> expandStar(SelectListItem item, Relation fromRelation) {
+        List<Expr> outputExpressions = Lists.newArrayList();
+        outputExpressions.addAll(new AstVisitor<List<Expr>, Void>() {
+            @Override
+            public List<Expr> visitCTE(CTERelation node, Void context) {
+                if (item.getTblName() == null || item.getTblName().getTbl().equals(node.getAlias().getTbl())) {
+                    List<Expr> outputExpressions = new ArrayList<>();
+                    for (String outputName : node.getColumnOutputNames()) {
+                        outputExpressions.add(new SlotRef(node.getAlias(), outputName, outputName));
+                    }
+                    return outputExpressions;
+                } else {
+                    return new ArrayList<>();
+                }
+            }
+
+            @Override
+            public List<Expr> visitJoin(JoinRelation node, Void context) {
+                if (node.getType().isLeftSemiAntiJoin()) {
+                    return visit(node.getLeft());
+                } else if (node.getType().isRightSemiAntiJoin()) {
+                    return visit(node.getRight());
+                } else {
+                    return Streams.concat(visit(node.getLeft()).stream(), visit(node.getRight()).stream())
+                            .collect(Collectors.toList());
+                }
+            }
+
+            @Override
+            public List<Expr> visitSelect(SelectRelation node, Void context) {
+                List<Expr> outputExpression = Lists.newArrayList();
+                for (SelectListItem item : node.getSelectList().getItems()) {
+                    if (item.isStar()) {
+                        outputExpression.addAll(expandStar(item, node.getRelation()));
+                    } else {
+                        outputExpression.add(item.getExpr());
+                    }
+                }
+                return outputExpression;
+            }
+
+            @Override
+            public List<Expr> visitSetOp(SetOperationRelation node, Void context) {
+                return node.getOutputExpression();
+            }
+
+            @Override
+            public List<Expr> visitSubquery(SubqueryRelation node, Void context) {
+                if (item.getTblName() == null || item.getTblName().getTbl().equals(node.getAlias().getTbl())) {
+                    List<Expr> outputExpressions = new ArrayList<>();
+                    for (String outputName : node.getQuery().getColumnOutputNames()) {
+                        outputExpressions.add(new SlotRef(node.getAlias(), outputName, outputName));
+                    }
+                    return outputExpressions;
+                } else {
+                    return new ArrayList<>();
+                }
+            }
+
+            @Override
+            public List<Expr> visitTable(TableRelation node, Void context) {
+                if (item.getTblName() == null) {
+                    List<Expr> outputExpressions = new ArrayList<>();
+                    for (Column column : node.getTable().getBaseSchema()) {
+                        outputExpressions.add(new SlotRef(node.getAlias(), column.getName(), column.getName()));
+                    }
+                    return outputExpressions;
+                } else {
+                    if (!item.getTblName().getTbl().equals(node.getAlias().getTbl())) {
+                        return new ArrayList<>();
+                    } else {
+                        List<Expr> outputExpressions = new ArrayList<>();
+                        for (Column column : node.getTable().getBaseSchema()) {
+                            outputExpressions.add(new SlotRef(node.getAlias(), column.getName(), column.getName()));
+                        }
+                        return outputExpressions;
+                    }
+                }
+            }
+
+            @Override
+            public List<Expr> visitTableFunction(TableFunctionRelation node, Void context) {
+                List<Expr> outputExpressions = Lists.newArrayList();
+                for (int i = 0; i < node.getTableFunction().getDefaultColumnNames().size(); ++i) {
+                    outputExpressions.add(new SlotRef(node.getAlias(),
+                            node.getTableFunction().getDefaultColumnNames().get(i),
+                            node.getTableFunction().getDefaultColumnNames().get(i))
+                    );
+                }
+                return outputExpressions;
+            }
+
+            @Override
+            public List<Expr> visitValues(ValuesRelation node, Void context) {
+                return node.getRows().get(0);
+            }
+        }.visit(fromRelation));
+        return outputExpressions;
     }
 }

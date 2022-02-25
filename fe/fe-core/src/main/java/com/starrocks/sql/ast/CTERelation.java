@@ -11,6 +11,7 @@ public class CTERelation extends Relation {
     private final String name;
     private List<String> columnOutputNames;
     private final QueryRelation cteQuery;
+    private boolean resolvedInFromClause;
 
     public CTERelation(int cteId, String name, List<String> columnOutputNames, QueryRelation cteQuery) {
         this.cteId = cteId;
@@ -37,6 +38,18 @@ public class CTERelation extends Relation {
 
     public void setColumnOutputNames(List<String> columnOutputNames) {
         this.columnOutputNames = columnOutputNames;
+    }
+
+    public void setResolvedInFromClause(boolean resolvedInFromClause) {
+        this.resolvedInFromClause = resolvedInFromClause;
+    }
+
+    public boolean isResolvedInFromClause() {
+        return resolvedInFromClause;
+    }
+
+    public TableName getAliasWithoutNameRewrite() {
+        return alias;
     }
 
     @Override

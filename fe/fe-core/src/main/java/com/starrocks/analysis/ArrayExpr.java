@@ -72,6 +72,10 @@ public class ArrayExpr extends Expr {
         this.type = this.type == null ? new ArrayType(targetItemType) : this.type;
     }
 
+    public boolean isExplicitType() {
+        return explicitType;
+    }
+
     @Override
     protected String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
