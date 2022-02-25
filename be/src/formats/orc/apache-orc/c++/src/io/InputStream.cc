@@ -143,7 +143,7 @@ SeekableFileInputStream::SeekableFileInputStream(InputStream* stream, uint64_t o
     position = 0;
     buffer.reset(new DataBuffer<char>(pool));
     pushBack = 0;
-    pendingSeek = false;
+    hasSeek = false;
 }
 
 SeekableFileInputStream::~SeekableFileInputStream() {
@@ -157,8 +157,8 @@ bool SeekableFileInputStream::Next(const void** data, int* size) {
         bytesRead = pushBack;
     } else {
         bytesRead = std::min(length - position, blockSize);
-        if (pendingSeek) {
-            pendingSeek = false;
+        if (hasSeek) {
+            hasSeek = false;
             bytesRead = std::min(bytesRead, input->getNaturalReadSizeAfterSeek());
         }
         buffer->resize(bytesRead);
@@ -209,7 +209,7 @@ void SeekableFileInputStream::seek(PositionProvider& location) {
         throw std::logic_error("seek too far");
     }
     pushBack = 0;
-    pendingSeek = true;
+    hasSeek = true;
 }
 
 std::string SeekableFileInputStream::getName() const {
