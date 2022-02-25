@@ -3233,74 +3233,6 @@ TEST_F(ArrayFunctionsTest, array_difference_double_with_entry_null) {
     ASSERT_TRUE(dest_column->get(3).is_null());
 }
 
-TEST_F(ArrayFunctionsTest, array_slice_tinyint) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
-    src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
-    src_column->append_datum(DatumArray{(int8_t)2, (int8_t)3, (int8_t)7, (int8_t)8});
-    src_column->append_datum(DatumArray{(int8_t)4, (int8_t)3, (int8_t)2, (int8_t)1});
-    src_column->append_datum(Datum());
-    src_column->append_datum(DatumArray{(int8_t)4, Datum(), (int8_t)2, (int8_t)1});
-
-    auto offset_column = Int64Column::create();
-    offset_column->append(1);
-    offset_column->append(2);
-    offset_column->append(3);
-    offset_column->append(1);
-    offset_column->append(2);
-
-    auto length_column = Int64Column::create();
-    length_column->append(1);
-    length_column->append(3);
-    length_column->append(2);
-    length_column->append(1);
-    length_column->append(2);
-
-    ArraySlice<PrimitiveType::TYPE_TINYINT> slice;
-    auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
-
-    ASSERT_EQ(dest_column->size(), 5);
-    _check_array<int8_t>({(int8_t)5}, dest_column->get(0).get_array());
-    _check_array<int8_t>({(int8_t)3, (int8_t)7, (int8_t)8}, dest_column->get(1).get_array());
-    _check_array<int8_t>({(int8_t)2, (int8_t)1}, dest_column->get(2).get_array());
-    ASSERT_TRUE(dest_column->get(3).is_null());
-    ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
-    ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_int8());
-}
-
-TEST_F(ArrayFunctionsTest, array_slice_smallint) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_SMALLINT, true);
-    src_column->append_datum(DatumArray{(int16_t)5, (int16_t)3, (int16_t)6});
-    src_column->append_datum(DatumArray{(int16_t)2, (int16_t)3, (int16_t)7, (int16_t)8});
-    src_column->append_datum(DatumArray{(int16_t)4, (int16_t)3, (int16_t)2, (int16_t)1});
-    src_column->append_datum(Datum());
-    src_column->append_datum(DatumArray{(int16_t)4, Datum(), (int16_t)2, (int16_t)1});
-
-    auto offset_column = Int64Column::create();
-    offset_column->append(1);
-    offset_column->append(2);
-    offset_column->append(3);
-    offset_column->append(1);
-    offset_column->append(2);
-
-    auto length_column = Int64Column::create();
-    length_column->append(1);
-    length_column->append(3);
-    length_column->append(2);
-    length_column->append(1);
-    length_column->append(2);
-
-    ArraySlice<PrimitiveType::TYPE_SMALLINT> slice;
-    auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
-
-    ASSERT_EQ(dest_column->size(), 5);
-    _check_array<int16_t>({(int16_t)5}, dest_column->get(0).get_array());
-    _check_array<int16_t>({(int16_t)3, (int16_t)7, (int16_t)8}, dest_column->get(1).get_array());
-    _check_array<int16_t>({(int16_t)2, (int16_t)1}, dest_column->get(2).get_array());
-    ASSERT_TRUE(dest_column->get(3).is_null());
-    ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
-    ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_int16());
-}
-
 TEST_F(ArrayFunctionsTest, array_slice_int) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
@@ -3308,6 +3240,9 @@ TEST_F(ArrayFunctionsTest, array_slice_int) {
     src_column->append_datum(DatumArray{(int32_t)4, (int32_t)3, (int32_t)2, (int32_t)1});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int32_t)4, Datum(), (int32_t)2, (int32_t)1});
+    src_column->append_datum(DatumArray{(int32_t)1, (int32_t)2, Datum(), (int32_t)4, (int32_t)5});
+    src_column->append_datum(DatumArray{(int32_t)1, (int32_t)2, Datum(), (int32_t)4, (int32_t)5});
+    src_column->append_datum(DatumArray{(int32_t)1, (int32_t)2, Datum(), (int32_t)4, (int32_t)5});
 
     auto offset_column = Int64Column::create();
     offset_column->append(1);
@@ -3315,6 +3250,9 @@ TEST_F(ArrayFunctionsTest, array_slice_int) {
     offset_column->append(3);
     offset_column->append(1);
     offset_column->append(2);
+    offset_column->append(-2);
+    offset_column->append(-7);
+    offset_column->append(-8);
 
     auto length_column = Int64Column::create();
     length_column->append(1);
@@ -3322,17 +3260,23 @@ TEST_F(ArrayFunctionsTest, array_slice_int) {
     length_column->append(2);
     length_column->append(1);
     length_column->append(2);
+    length_column->append(3);
+    length_column->append(3);
+    length_column->append(3);
 
     ArraySlice<PrimitiveType::TYPE_INT> slice;
     auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
 
-    ASSERT_EQ(dest_column->size(), 5);
+    ASSERT_EQ(dest_column->size(), 8);
     _check_array<int32_t>({(int32_t)5}, dest_column->get(0).get_array());
     _check_array<int32_t>({(int32_t)3, (int32_t)7, (int32_t)8}, dest_column->get(1).get_array());
     _check_array<int32_t>({(int32_t)2, (int32_t)1}, dest_column->get(2).get_array());
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
     ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_int32());
+    _check_array<int32_t>({(int32_t)4, (int32_t)5}, dest_column->get(5).get_array());
+    _check_array<int32_t>({(int32_t)1}, dest_column->get(6).get_array());
+    _check_array<int32_t>({}, dest_column->get(7).get_array());
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_bigint) {
@@ -3367,40 +3311,6 @@ TEST_F(ArrayFunctionsTest, array_slice_bigint) {
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
     ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_int64());
-}
-
-TEST_F(ArrayFunctionsTest, array_slice_largeint) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_LARGEINT, true);
-    src_column->append_datum(DatumArray{(int128_t)5, (int128_t)3, (int128_t)6});
-    src_column->append_datum(DatumArray{(int128_t)2, (int128_t)3, (int128_t)7, (int128_t)8});
-    src_column->append_datum(DatumArray{(int128_t)4, (int128_t)3, (int128_t)2, (int128_t)1});
-    src_column->append_datum(Datum());
-    src_column->append_datum(DatumArray{(int128_t)4, Datum(), (int128_t)2, (int128_t)1});
-
-    auto offset_column = Int64Column::create();
-    offset_column->append(1);
-    offset_column->append(2);
-    offset_column->append(3);
-    offset_column->append(1);
-    offset_column->append(2);
-
-    auto length_column = Int64Column::create();
-    length_column->append(1);
-    length_column->append(3);
-    length_column->append(2);
-    length_column->append(1);
-    length_column->append(2);
-
-    ArraySlice<PrimitiveType::TYPE_LARGEINT> slice;
-    auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
-
-    ASSERT_EQ(dest_column->size(), 5);
-    _check_array<int128_t>({(int128_t)5}, dest_column->get(0).get_array());
-    _check_array<int128_t>({(int128_t)3, (int128_t)7, (int128_t)8}, dest_column->get(1).get_array());
-    _check_array<int128_t>({(int128_t)2, (int128_t)1}, dest_column->get(2).get_array());
-    ASSERT_TRUE(dest_column->get(3).is_null());
-    ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
-    ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_int128());
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_float) {
