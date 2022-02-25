@@ -71,7 +71,7 @@ Status FdOutputStream::do_sync_if_needed() {
     }
     if (!_sync_dir.empty()) {
         int dir_fd;
-        RETRY_ON_EINTR(dir_fd, open(_sync_dir.c_str(), O_DIRECTORY | O_RDONLY));
+        RETRY_ON_EINTR(dir_fd, ::open(_sync_dir.c_str(), O_DIRECTORY | O_RDONLY));
         if (dir_fd < 0) {
             return io_error(fmt::format("open(\"{}\", O_DIRECTORY | O_RDONLY)", _sync_dir), errno);
         }
