@@ -120,6 +120,7 @@ set(EXEC_FILES
         ./io/s3_output_stream_test.cpp
         ./io/s3_random_access_file_test.cpp
         ./object_store/s3_object_store_test.cpp
+        ./object_store/s3_uri_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp

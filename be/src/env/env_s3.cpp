@@ -10,7 +10,7 @@
 
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
-#include "object_store/s3_object_store.h"
+#include "object_store/object_store.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {
@@ -68,25 +68,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
 
 StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const RandomAccessFileOptions& opts,
                                                                           const std::string& path) {
-    if (!is_object_storage_path(path.c_str())) {
-        return Status::InvalidArgument(fmt::format("Invalid S3 path {}", path));
-    }
-    std::string namenode;
-    RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
-    std::string bucket = get_bucket_from_namenode(namenode);
-    std::string object = path.substr(namenode.size(), path.size() - namenode.size());
-    Aws::Client::ClientConfiguration config;
-    config.scheme = Aws::Http::Scheme::HTTP;
-    if (!config::aws_s3_endpoint.empty()) {
-        config.endpointOverride = config::aws_s3_endpoint;
-    }
-    config.maxConnections = config::aws_s3_max_connection;
-    S3Credential cred;
-    cred.access_key_id = config::aws_access_key_id;
-    cred.secret_access_key = config::aws_secret_access_key;
-    S3ObjectStore store(config);
-    RETURN_IF_ERROR(store.init(&cred, false));
-    ASSIGN_OR_RETURN(auto input_file, store.get_object(bucket, object));
+    ASSIGN_OR_RETURN(auto store, ObjectStore::create_unique_from_uri(path));
+    ASSIGN_OR_RETURN(auto input_file, store->get_object(path));
     return std::make_unique<RandomAccessFileWrapper>(std::move(input_file), path);
 }
 

@@ -19,6 +19,9 @@
 #include "util/logging.h"
 #include "util/mem_info.h"
 #include "util/timezone_utils.h"
+#ifdef STARROCKS_WITH_AWS
+#include "object_store/s3_object_store.h"
+#endif
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
@@ -35,6 +38,10 @@ int main(int argc, char** argv) {
     butil::FilePath storage_root;
     CHECK(butil::CreateNewTempDirectory("tmp_ut_", &storage_root));
     starrocks::config::storage_root_path = storage_root.value();
+
+#ifdef STARROCKS_WITH_AWS
+    starrocks::s3_global_init();
+#endif
 
     starrocks::init_glog("be_test", true);
     starrocks::CpuInfo::init();

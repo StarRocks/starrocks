@@ -57,6 +57,9 @@
 #include "util/thrift_server.h"
 #include "util/thrift_util.h"
 #include "util/uid_util.h"
+#ifdef STARROCKS_WITH_AWS
+#include "object_store/s3_object_store.h"
+#endif
 
 DECLARE_bool(s2debug);
 
@@ -174,6 +177,10 @@ int main(int argc, char** argv) {
         LOG(FATAL) << "All disks are broken, exit.";
         exit(-1);
     }
+
+#ifdef STARROCKS_WITH_AWS
+    starrocks::s3_global_init();
+#endif
 
     // Initilize libcurl here to avoid concurrent initialization.
     auto curl_ret = curl_global_init(CURL_GLOBAL_ALL);
