@@ -1453,10 +1453,14 @@ StatusOr<ChunkPtr> OrcScannerAdapter::get_active_chunk() {
     return ret;
 }
 
-StatusOr<ChunkPtr> OrcScannerAdapter::get_lazy_chunk(Filter* filter, size_t chunk_size) {
-    if (chunk_size != filter->size()) {
-        _batch->filter(filter->data(), filter->size(), chunk_size);
+void OrcScannerAdapter::lazy_filter_on_cvb(Filter* filter) {
+    size_t true_size = SIMD::count_nonzero(*filter);
+    if (filter->size() != true_size) {
+        _batch->filter(filter->data(), filter->size(), true_size);
     }
+}
+
+StatusOr<ChunkPtr> OrcScannerAdapter::get_lazy_chunk() {
     ChunkPtr ptr = _create_chunk(_lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
     RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices));
     ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);

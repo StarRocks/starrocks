@@ -24,12 +24,14 @@ public:
     uint64_t getNaturalReadSize() const override { return 1 * 1024 * 1024; }
 
     // It's 1/4 of NaturalReadSize. It's for read size after doing seek.
-    // When doing seek, we are reading data in random way, and the data we want to read maybe is not consectuive.
-    // If we still use NaturalReadSize we probably read many row groups
+    // When doing read after seek, we make assumption that we are doing random read because of seeking row group.
+    // And if we still use NaturalReadSize we probably read many row groups
     // after the row group we want to read, and that will amplify read IO bytes.
 
     // So the best way is to reduce read size, hopefully we just read that row group in one shot.
-    // We also have chance that we may not read enough at this shot, then we still use NaturalReadSize to read.
+    // We also have chance that we may not read enough at this shot, then we fallback to NaturalReadSize to read.
+    // The cost is, there is a extra IO, and we read 1/4 of NaturalReadSize more data.
+    // And the potential gain is, we save 3/4 of NaturalReadSize IO bytes.
 
     uint64_t getNaturalReadSizeAfterSeek() const override { return 256 * 1024; }
 
@@ -106,14 +108,6 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
         VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_params.min_max_tuple_desc->debug_string();
         for (ExprContext* ctx : _scanner_params.min_max_conjunct_ctxs) {
             VLOG_FILE << "OrcRowReaderFilter: min_max_ctx = " << ctx->root()->debug_string();
-        }
-    }
-    for (const auto& col : reader_params.materialized_columns) {
-        if (col.slot_desc->type().is_complex_type()) {
-            // not support to do point filter on complex type
-            // because corresponing orc cvb struct is quite hard to do filter.
-            _can_do_filter_on_orc_cvb = false;
-            break;
         }
     }
     for (const auto& r : _scanner_params.scan_ranges) {
@@ -376,6 +370,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             _lazy_load_ctx.lazy_load_slots.emplace_back(it);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
         } else {
+            VLOG_FILE << "[ORC] active load field = " << it->col_name();
             _lazy_load_ctx.active_load_slots.emplace_back(it);
             _lazy_load_ctx.active_load_indices.emplace_back(src_slot_index);
         }
@@ -421,20 +416,23 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     }
 
     size_t skip_num_values = 0;
-    Filter& filter = _chunk_filter;
     ChunkPtr& ck = *chunk;
 
     // this infinite for loop is for retry.
     for (;;) {
         orc::RowReader::ReadPosition position;
         size_t read_num_values = 0;
+        bool has_used_dict_filter = false;
         {
             SCOPED_RAW_TIMER(&_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_adapter->read_next(&position));
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
             RETURN_IF_ERROR(_orc_adapter->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
-                                                                       &_chunk_filter));
+                                                                       &_dict_filter));
+            if (_orc_adapter->get_cvb_size() != read_num_values) {
+                has_used_dict_filter = true;
+            }
         }
 
         size_t chunk_size = 0;
@@ -458,7 +456,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
             chunk_size = ck->num_rows();
             // do stats before we filter rows which does not match.
             _stats.raw_rows_read += chunk_size;
-            filter.assign(chunk_size, 1);
+            _chunk_filter.assign(chunk_size, 1);
             {
                 SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
                 for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
@@ -466,14 +464,14 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                     if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
                         continue;
                     }
-                    chunk_size = ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &filter);
+                    chunk_size = ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter);
                     if (chunk_size == 0) {
                         break;
                     }
                 }
             }
-            if (chunk_size != 0) {
-                ck->filter(filter);
+            if (chunk_size != 0 && chunk_size != ck->num_rows()) {
+                ck->filter(_chunk_filter);
             }
         }
         ck->set_num_rows(chunk_size);
@@ -502,7 +500,11 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_convert_ns);
-            StatusOr<ChunkPtr> ret = _orc_adapter->get_lazy_chunk(&filter, chunk_size);
+            if (has_used_dict_filter) {
+                _orc_adapter->lazy_filter_on_cvb(&_dict_filter);
+            }
+            _orc_adapter->lazy_filter_on_cvb(&_chunk_filter);
+            StatusOr<ChunkPtr> ret = _orc_adapter->get_lazy_chunk();
             RETURN_IF_ERROR(ret);
             Chunk& ret_ck = *(ret.value());
             ck->merge(std::move(ret_ck));

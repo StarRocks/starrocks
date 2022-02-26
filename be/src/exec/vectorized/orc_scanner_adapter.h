@@ -108,7 +108,8 @@ public:
     StatusOr<ChunkPtr> get_active_chunk();
     void lazy_read_next(size_t numValues);
     void lazy_skip_next(size_t numValues);
-    StatusOr<ChunkPtr> get_lazy_chunk(Filter* filter, size_t chunk_size);
+    void lazy_filter_on_cvb(Filter* filter);
+    StatusOr<ChunkPtr> get_lazy_chunk();
 
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
