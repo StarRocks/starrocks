@@ -86,6 +86,7 @@ LOCAL: 'LOCAL';
 LOGICAL: 'LOGICAL';
 MAXVALUE: 'MAXVALUE';
 MINUTE: 'MINUTE';
+MINUS: 'MINUS';
 MONTH: 'MONTH';
 NONE: 'NONE';
 NOT: 'NOT';
@@ -149,12 +150,12 @@ GT  : '>';
 GTE : '>=';
 EQ_FOR_NULL: '<=>';
 
-PLUS: '+';
-MINUS: '-';
-ASTERISK: '*';
-SLASH: '/';
-PERCENT: '%';
-CONCAT: '||';
+PLUS_SYMBOL: '+';
+MINUS_SYMBOL: '-';
+ASTERISK_SYMBOL: '*';
+SLASH_SYMBOL: '/';
+PERCENT_SYMBOL: '%';
+CONCAT_SYMBOL: '||';
 
 INT_DIV: 'DIV';
 BITAND: '&';
@@ -212,7 +213,7 @@ fragment DIGIT
     ;
 
 fragment LETTER
-    : [A-Z]
+    : [a-zA-Z_$\u0080-\uffff]
     ;
 
 SIMPLE_COMMENT

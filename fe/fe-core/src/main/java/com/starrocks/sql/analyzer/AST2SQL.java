@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 
 import java.util.List;
@@ -174,6 +175,16 @@ public class AST2SQL {
         }
 
         @Override
+        public String visitView(ViewRelation node, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            sqlBuilder.append("(");
+            sqlBuilder.append(visit(new QueryStatement(node.getQuery())));
+            sqlBuilder.append(")");
+            sqlBuilder.append(" ").append(node.getAlias());
+            return sqlBuilder.toString();
+        }
+
+        @Override
         public String visitJoin(JoinRelation relation, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append(visit(relation.getLeft())).append(" ");
@@ -239,11 +250,11 @@ public class AST2SQL {
         @Override
         public String visitTable(TableRelation node, Void outerScope) {
             StringBuilder sqlBuilder = new StringBuilder();
-            sqlBuilder.append(node.getName());
+            sqlBuilder.append(node.getName().toSql());
 
             if (node.getAliasWithoutNameRewrite() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append(node.getAliasWithoutNameRewrite());
+                sqlBuilder.append("`").append(node.getAliasWithoutNameRewrite()).append("`");
             }
             return sqlBuilder.toString();
         }

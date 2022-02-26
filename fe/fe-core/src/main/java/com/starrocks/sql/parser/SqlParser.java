@@ -2,7 +2,12 @@
 package com.starrocks.sql.parser;
 
 import com.clearspring.analytics.util.Lists;
+import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
@@ -31,12 +36,17 @@ public class SqlParser {
                 StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
                 statements.add((StatementBase) new AstBuilder().visitSingleStatement(sqlStatements.singleStatement(0)));
             } catch (ParsingException parsingException) {
-                StatementBase statementBase = parseWithOldParser(sql, session);
-                if (statementBase instanceof QueryStatement
-                        || statementBase instanceof InsertStmt) {
+                StatementBase statement = parseWithOldParser(sql, session);
+                if (statement instanceof QueryStatement
+                        || statement instanceof InsertStmt
+                        || statement instanceof CreateTableAsSelectStmt
+                        || statement instanceof CreateViewStmt
+                        || statement instanceof AlterViewStmt
+                        || statement instanceof ShowDbStmt
+                        || statement instanceof ShowTableStmt) {
                     throw parsingException;
                 }
-                statements.add(statementBase);
+                statements.add(statement);
             }
         }
 
@@ -83,6 +93,7 @@ public class SqlParser {
                 }
             }
         }
+        sqlLists.add(sql.substring(sqlStartOffset));
         return sqlLists;
     }
 }
