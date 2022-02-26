@@ -2,9 +2,16 @@
 
 #include "exprs/vectorized/es_functions.h"
 
+#include <ext/alloc_traits.h>
+#include <memory>
+
 #include "column/column_builder.h"
-#include "column/column_viewer.h"
 #include "udf/udf_internal.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 

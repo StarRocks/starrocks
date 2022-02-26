@@ -2,6 +2,12 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "env/env.h"
@@ -12,12 +18,33 @@
 #include "simdjson.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
+#include "column/vectorized_fwd.h"
+#include "common/object_pool.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "exprs/vectorized/json_functions.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/types.h"
+
+namespace starrocks {
+class Expr;
+class RuntimeProfile;
+class RuntimeState;
+class SequentialFile;
+class SlotDescriptor;
+class TBrokerScanRange;
+namespace vectorized {
+class Chunk;
+class Column;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 
 struct SimpleJsonPath;
 class JsonReader;
 class JsonParser;
+
 class JsonScanner : public FileScanner {
 public:
     JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,

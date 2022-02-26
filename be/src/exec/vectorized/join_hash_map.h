@@ -5,13 +5,33 @@
 #include <gen_cpp/PlanNodes_types.h>
 #include <runtime/descriptors.h>
 #include <runtime/runtime_state.h>
-
+#include <smmintrin.h>
+#include <string.h>
 #include <cstdint>
+#include <iosfwd>
+#include <memory>
+#include <set>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "util/phmap/phmap.h"
+#include "column/column.h"
+#include "column/nullable_column.h"
+#include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "runtime/mem_pool.h"
+#include "runtime/primitive_type.h"
+#include "util/runtime_profile.h"
+#include "util/slice.h"
+
+namespace starrocks {
+class RowDescriptor;
+class SlotDescriptor;
+}  // namespace starrocks
 
 #if defined(__aarch64__)
 #include "arm_acle.h"

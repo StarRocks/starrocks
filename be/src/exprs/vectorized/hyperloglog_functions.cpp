@@ -2,10 +2,23 @@
 
 #include "exprs/vectorized/hyperloglog_functions.h"
 
-#include "column/column_builder.h"
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <memory>
+
 #include "column/column_viewer.h"
 #include "column/object_column.h"
 #include "exprs/vectorized/unary_function.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/vectorized_fwd.h"
+#include "runtime/primitive_type.h"
+#include "storage/hll.h"
+#include "udf/udf.h"
+#include "util/hash_util.hpp"
+#include "util/slice.h"
 
 namespace starrocks::vectorized {
 

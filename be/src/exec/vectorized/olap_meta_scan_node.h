@@ -3,16 +3,29 @@
 
 #include <exec/olap_common.h>
 #include <gen_cpp/Descriptors_types.h>
+#include <stddef.h>
+#include <memory>
+#include <ostream>
+#include <vector>
 
 #include "exec/scan_node.h"
 #include "exec/vectorized/olap_meta_scanner.h"
 #include "runtime/descriptors.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/object_pool.h"
+#include "common/status.h"
+#include "exec/exec_node.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
 class RuntimeState;
+class TScanRangeParams;
 
 namespace vectorized {
+class OlapMetaScanner;
 
 class OlapMetaScanNode final : public starrocks::ScanNode {
 public:

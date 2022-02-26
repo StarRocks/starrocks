@@ -2,6 +2,13 @@
 
 #include "exprs/vectorized/bitmap_functions.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -11,6 +18,18 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "util/string_parser.hpp"
+#include "column/column.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "glog/logging.h"
+#include "gutil/integral_types.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf.h"
+#include "util/bitmap_value.h"
+#include "util/hash_util.hpp"
+#include "util/slice.h"
 
 namespace starrocks::vectorized {
 

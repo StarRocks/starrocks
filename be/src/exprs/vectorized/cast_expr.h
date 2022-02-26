@@ -2,14 +2,27 @@
 
 #pragma once
 
+#include <memory>
+#include <vector>
+
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/nullable_column.h"
+#include "common/global_types.h"
+#include "common/object_pool.h"
+#include "exprs/expr_context.h"
+#include "udf/udf_internal.h"
 
 namespace starrocks {
+class TExprNode;
+struct TypeDescriptor;
+
 namespace vectorized {
 
 class VectorizedCastExprFactory {

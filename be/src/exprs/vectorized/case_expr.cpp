@@ -2,18 +2,41 @@
 
 #include "exprs/vectorized/case_expr.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
 #include <cstdint>
+#include <memory>
+#include <ostream>
+#include <vector>
 
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
-#include "exprs/vectorized/function_helper.h"
 #include "gutil/casts.h"
 #include "simd/mulselector.h"
-#include "util/percentile_value.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/fixed_length_column.h"
+#include "common/status.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/Exprs_types.h"
+#include "glog/logging.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/date_value.h"
+#include "runtime/primitive_type.h"
+#include "runtime/timestamp_value.h"
+#include "runtime/types.h"
+#include "udf/udf.h"
+#include "udf/udf_internal.h"
+#include "util/slice.h"
+
+namespace starrocks {
+class ObjectPool;
+class RuntimeState;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

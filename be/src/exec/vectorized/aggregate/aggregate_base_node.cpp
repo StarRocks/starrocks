@@ -2,8 +2,23 @@
 
 #include "exec/vectorized/aggregate/aggregate_base_node.h"
 
-#include "exprs/anyval_util.h"
-#include "gutil/strings/substitute.h"
+#include <map>
+#include <memory>
+#include <utility>
+
+#include "common/global_types.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "exprs/vectorized/column_ref.h"
+#include "exprs/vectorized/runtime_filter_bank.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gutil/casts.h"
+
+namespace starrocks {
+class DescriptorTbl;
+class ObjectPool;
+class RuntimeState;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

@@ -3,11 +3,17 @@
 #include "exprs/vectorized/cast_expr.h"
 
 #include <ryu/ryu.h>
+#include <string.h>
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <ostream>
+#include <string>
+#include <utility>
 
-#include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
-#include "column/json_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -21,6 +27,38 @@
 #include "storage/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "column/binary_column.h"
+#include "column/fixed_length_column.h"
+#include "common/compiler_util.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "fmt/format.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Types_types.h"
+#include "glog/logging.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/date_value.h"
+#include "runtime/datetime_value.h"
+#include "runtime/decimalv2_value.h"
+#include "runtime/large_int_value.h"
+#include "runtime/timestamp_value.h"
+#include "runtime/types.h"
+#include "runtime/vectorized/time_types.h"
+#include "storage/key_coder.h"
+#include "util/mysql_global.h"
+#include "util/slice.h"
+#include "util/string_parser.hpp"
+
+namespace starrocks {
+namespace vectorized {
+struct NumberCheck;
+struct TimeCheck;
+template <bool check_overflow> struct DecimalFrom;
+template <bool check_overflow> struct DecimalTo;
+template <bool check_overflow> struct DecimalToDecimal;
+template <starrocks::PrimitiveType FromType, starrocks::PrimitiveType ToType> class VectorizedCastExpr;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

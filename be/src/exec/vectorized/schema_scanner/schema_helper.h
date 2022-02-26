@@ -2,11 +2,39 @@
 
 #pragma once
 
+#include <stdint.h>
+#include <string>
+
 #include "column/column.h"
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/primitive_type.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "gutil/casts.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/date_value.h"
+#include "runtime/datetime_value.h"
+#include "runtime/timestamp_value.h"
+
+namespace starrocks {
+class TDescribeTableParams;
+class TDescribeTableResult;
+class TGetDBPrivsParams;
+class TGetDBPrivsResult;
+class TGetDbsParams;
+class TGetDbsResult;
+class TGetTablePrivsParams;
+class TGetTablePrivsResult;
+class TGetTablesParams;
+class TGetTablesResult;
+class TGetUserPrivsParams;
+class TGetUserPrivsResult;
+class TListTableStatusResult;
+class TShowVariableRequest;
+class TShowVariableResult;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

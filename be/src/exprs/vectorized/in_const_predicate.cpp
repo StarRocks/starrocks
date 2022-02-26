@@ -2,8 +2,21 @@
 
 #include "exprs/vectorized/in_const_predicate.hpp"
 
+#include <new>
+
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type_infra.h"
+#include "column/binary_column.h"
+#include "column/decimalv3_column.h"
+#include "column/json_column.h"
+#include "column/nullable_column.h"
+#include "common/object_pool.h"
+#include "gen_cpp/Opcodes_types.h"
+#include "gen_cpp/Types_types.h"
+#include "runtime/date_value.h"
+#include "runtime/timestamp_value.h"
+#include "runtime/types.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 namespace vectorized {

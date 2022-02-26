@@ -24,6 +24,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <mutex>
+#include <ostream>
 
 #include "column/chunk.h"
 #include "common/status.h"
@@ -37,6 +39,11 @@
 #include "runtime/string_value.hpp"
 #include "runtime/types.h"
 #include "udf/udf.h"
+#include "common/global_types.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Types_types.h"
+#include "gutil/strings/numbers.h"
+#include "udf/udf_internal.h"
 
 //
 #undef USING_STARROCKS_UDF

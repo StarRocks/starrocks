@@ -2,17 +2,33 @@
 
 #include "exprs/vectorized/runtime_filter_bank.h"
 
+#include <string.h>
 #include <thread>
+#include <chrono>
+#include <cstdint>
+#include <list>
+#include <ostream>
+#include <utility>
 
 #include "column/column.h"
-#include "exec/pipeline/runtime_filter_types.h"
-#include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 #include "simd/simd.h"
 #include "util/time.h"
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "column/type_traits.h"
+#include "common/logging.h"
+#include "common/object_pool.h"
+#include "exec/exec_node.h"
+#include "gen_cpp/Metrics_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "runtime/runtime_state.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::vectorized {
 

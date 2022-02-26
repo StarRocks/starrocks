@@ -2,16 +2,16 @@
 
 #include "exec/vectorized/project_node.h"
 
-#include <algorithm>
+#include <ext/alloc_traits.h>
+#include <stdint.h>
 #include <cstring>
 #include <memory>
-#include <set>
 #include <vector>
+#include <map>
+#include <utility>
 
-#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
@@ -21,12 +21,22 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/runtime_filter.h"
-#include "fmt/compile.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "column/column.h"
+#include "column/const_column.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exprs/vectorized/runtime_filter_bank.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "runtime/descriptors.h"
+#include "udf/udf_internal.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class ObjectPool;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

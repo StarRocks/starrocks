@@ -3,9 +3,18 @@
 #pragma once
 
 #include <orc/OrcFile.hh>
+#include <memory>
+#include <vector>
 
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exec/vectorized/orc_scanner_adapter.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+
+namespace starrocks {
+class RuntimeState;
+class SlotDescriptor;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

@@ -2,10 +2,35 @@
 
 #include "exec/vectorized/hdfs_scanner_text.h"
 
+#include <stdint.h>
+#include <algorithm>
+#include <ostream>
+#include <type_traits>
+#include <utility>
+
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gutil/strings/substitute.h"
 #include "util/utf8_check.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "env/env.h"
+#include "exec/exec_node.h"
+#include "exprs/expr_context.h"
+#include "formats/csv/converter.h"
+#include "formats/csv/csv_reader.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
+#include "runtime/types.h"
+#include "udf/udf_internal.h"
+#include "util/runtime_profile.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::vectorized {
 

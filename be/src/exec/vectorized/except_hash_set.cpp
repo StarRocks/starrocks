@@ -2,9 +2,18 @@
 
 #include "exec/vectorized/except_hash_set.h"
 
+#include <string.h>
+#include <cstdint>
+
 #include "exec/exec_node.h"
-#include "exec/vectorized/aggregate/agg_hash_set.h"
 #include "runtime/mem_tracker.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "common/compiler_util.h"
+#include "exprs/expr_context.h"
+#include "glog/logging.h"
+#include "runtime/runtime_state.h"
+#include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
 

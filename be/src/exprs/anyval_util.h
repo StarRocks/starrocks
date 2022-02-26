@@ -30,6 +30,7 @@
 namespace starrocks {
 
 class MemPool;
+struct TypeDescriptor;
 
 // Utilities for AnyVals
 class AnyValUtil {

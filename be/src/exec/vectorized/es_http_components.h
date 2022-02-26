@@ -2,13 +2,22 @@
 
 #pragma once
 #include <string>
+#include <map>
 
 #include "common/compiler_util.h"
+#include "common/status.h"
+#include "gutil/strings/numbers.h"
+#include "rapidjson/encodings.h"
+#include "rapidjson/rapidjson.h"
+#include "util/slice.h"
+
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
+#include <stddef.h>
+
 DIAGNOSTIC_POP
 
 #include "column/chunk.h"
@@ -17,6 +26,14 @@ DIAGNOSTIC_POP
 #include "http/http_client.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
+
+namespace starrocks {
+class RuntimeState;
+class TupleDescriptor;
+namespace vectorized {
+class Column;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 class ScrollParser {

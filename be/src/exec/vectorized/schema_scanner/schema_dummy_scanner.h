@@ -4,6 +4,8 @@
 
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
 
 namespace starrocks::vectorized {
 

@@ -2,9 +2,29 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 #include "exec/vectorized/hdfs_scanner.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/csv_reader.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "gutil/strings/numbers.h"
+
+namespace starrocks {
+class RuntimeState;
+namespace vectorized {
+class CSVReader;
+class Column;
+namespace csv {
+class Converter;
+}  // namespace csv
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

@@ -2,11 +2,18 @@
 
 #include "exprs/vectorized/geo_functions.h"
 
+#include <ext/alloc_traits.h>
+#include <memory>
+#include <string>
+
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "common/logging.h"
 #include "geo/geo_types.h"
+#include "column/column.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/primitive_type.h"
+#include "util/slice.h"
 
 namespace starrocks::vectorized {
 

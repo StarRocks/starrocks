@@ -5,6 +5,18 @@
 
 #include "common/object_pool.h"
 #include "exprs/expr.h"
+#include "common/status.h"
+#include "exprs/expr_context.h"
+#include "udf/udf.h"
+#include "udf/udf_internal.h"
+
+namespace starrocks {
+class RuntimeState;
+class TExprNode;
+namespace vectorized {
+class Chunk;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 struct JavaUDFContext;

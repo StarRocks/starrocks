@@ -2,10 +2,22 @@
 
 #include "exec/vectorized/schema_scanner/schema_schemata_scanner.h"
 
+#include <string.h>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "column/chunk.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
+#include "gutil/strings/numbers.h"
+#include "util/phmap/phmap.h"
+#include "util/slice.h"
+
+namespace starrocks {
+class RuntimeState;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

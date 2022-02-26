@@ -2,13 +2,37 @@
 
 #pragma once
 
+#include <cstdint>
+#include <memory>
+#include <set>
+#include <vector>
+
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
+#include "column/column.h"
+#include "column/const_column.h"
+#include "column/datum.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "exprs/expr_context.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf_internal.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class DescriptorTbl;
 class SlotDescriptor;
 class TupleDescriptor;
+class ObjectPool;
+class RuntimeState;
+class TPlanNode;
+namespace pipeline {
+class OperatorFactory;
+class PipelineBuilderContext;
+}  // namespace pipeline
 } // namespace starrocks
 
 namespace starrocks::vectorized {

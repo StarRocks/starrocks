@@ -2,15 +2,49 @@
 
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <any>
+#include <array>
+#include <new>
+#include <ostream>
+#include <utility>
+
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
+#include "column/chunk.h"
+#include "common/logging.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/source_operator.h"
+#include "exec/vectorized/aggregate/agg_hash_map.h"
+#include "exec/vectorized/aggregate/agg_hash_variant.h"
+#include "exprs/expr.h"
+#include "gen_cpp/Partitions_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "runtime/date_value.h"
+#include "runtime/mem_pool.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
+#include "runtime/timestamp_value.h"
+#include "util/phmap/phmap.h"
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class ExprContext;
+namespace pipeline {
+class OperatorFactory;
+}  // namespace pipeline
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

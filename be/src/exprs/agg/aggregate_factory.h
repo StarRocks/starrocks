@@ -2,8 +2,12 @@
 
 #pragma once
 
+#include <string>
+
 #include "exprs/agg/aggregate.h"
 #include "runtime/primitive_type.h"
+#include "gen_cpp/Types_types.h"
+#include "gutil/strings/numbers.h"
 
 namespace starrocks {
 namespace vectorized {

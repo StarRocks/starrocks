@@ -7,6 +7,8 @@
 #include "column/column_builder.h"
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
+#include "common/status.h"
+#include "udf/udf.h"
 
 namespace starrocks {
 namespace vectorized {

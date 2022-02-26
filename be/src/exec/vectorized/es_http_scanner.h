@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
+#include <stdint.h>
 #include <map>
 #include <memory>
 #include <string>
@@ -12,14 +13,20 @@
 #include "exec/vectorized/es_http_components.h"
 #include "runtime/mem_pool.h"
 #include "util/runtime_profile.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "gutil/strings/numbers.h"
 
 namespace starrocks {
 class RuntimeState;
 class RuntimeProfile;
 class ExprContext;
 class TupleDescriptor;
+class ESScanReader;
 
 namespace vectorized {
+class ScrollParser;
+
 struct EsScanCounter {
     EsScanCounter() {}
 

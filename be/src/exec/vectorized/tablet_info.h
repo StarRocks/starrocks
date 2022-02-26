@@ -2,11 +2,27 @@
 
 #pragma once
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <map>
+#include <memory>
+#include <vector>
+
 #include "column/column.h"
 #include "exec/tablet_info.h"
+#include "column/vectorized_fwd.h"
+#include "common/object_pool.h"
+#include "common/status.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "glog/logging.h"
 
 namespace starrocks {
+class SlotDescriptor;
+class TExprNode;
+
 namespace vectorized {
+class Chunk;
 
 struct ChunkRow {
     ChunkRow() = default;

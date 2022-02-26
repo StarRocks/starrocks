@@ -3,21 +3,23 @@
 #include "exec/vectorized/hash_joiner.h"
 
 #include <runtime/runtime_state.h>
-
 #include <memory>
+#include <utility>
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/expr.h"
-#include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/in_const_predicate.hpp"
-#include "exprs/vectorized/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/runtime_filter_worker.h"
 #include "simd/simd.h"
 #include "util/debug_util.h"
 #include "util/runtime_profile.h"
+#include "column/nullable_column.h"
+#include "common/compiler_util.h"
+#include "gen_cpp/InternalService_types.h"
+#include "gen_cpp/Metrics_types.h"
+#include "glog/logging.h"
+#include "runtime/types.h"
 
 namespace starrocks::vectorized {
 

@@ -18,12 +18,26 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
 #include <runtime/types.h>
-
 #include <cstdint>
 #include <map>
 #include <string>
+#include <memory>
+#include <vector>
 
 #include "common/status.h"
+#include "arrow/record_batch.h"
+#include "arrow/result.h"
+#include "arrow/status.h"
+#include "gutil/strings/numbers.h"
+
+namespace arrow {
+class Buffer;
+}  // namespace arrow
+namespace starrocks {
+class ParquetReaderWrap;
+class RandomAccessFile;
+class SlotDescriptor;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

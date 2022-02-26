@@ -1,14 +1,16 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include <stdint.h>
+#include <string.h>
 #include <algorithm>
 
-#include "column/binary_column.h"
-#include "column/column_builder.h"
-#include "column/column_helper.h"
-#include "column/column_viewer.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/string_functions.h"
 #include "util/memcmp.h"
+#include "column/column.h"
+#include "column/vectorized_fwd.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 

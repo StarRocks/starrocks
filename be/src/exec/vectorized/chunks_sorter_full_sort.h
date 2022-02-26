@@ -2,12 +2,21 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+#include <memory>
+#include <vector>
+
 #include "exec/vectorized/chunks_sorter.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
 
 namespace starrocks {
 class ExprContext;
+class RuntimeState;
 
 namespace vectorized {
+class Chunk;
 
 class ChunksSorterFullSort : public ChunksSorter {
 public:

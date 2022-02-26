@@ -2,7 +2,27 @@
 
 #pragma once
 
+#include <stdint.h>
+#include <algorithm>
+#include <new>
+#include <vector>
+
 #include "exprs/vectorized/array_functions.tpp"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/vectorized/function_helper.h"
+#include "runtime/date_value.h"
+#include "runtime/primitive_type.h"
+#include "runtime/timestamp_value.h"
+#include "udf/udf.h"
+#include "util/phmap/phmap.h"
+#include "util/slice.h"
+
+namespace starrocks {
+namespace vectorized {
+class Column;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

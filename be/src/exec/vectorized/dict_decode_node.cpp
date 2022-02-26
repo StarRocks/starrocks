@@ -2,9 +2,11 @@
 
 #include "exec/vectorized/dict_decode_node.h"
 
-#include <fmt/ranges.h>
-
+#include <ext/alloc_traits.h>
+#include <stddef.h>
 #include <utility>
+#include <algorithm>
+#include <cstdint>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -16,6 +18,23 @@
 #include "glog/logging.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
+#include "column/column.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/Types_types.h"
+#include "runtime/primitive_type.h"
+#include "runtime/types.h"
+#include "udf/udf_internal.h"
+#include "util/phmap/phmap.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class DescriptorTbl;
+class ObjectPool;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

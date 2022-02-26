@@ -2,12 +2,14 @@
 
 #include "exec/vectorized/file_scan_node.h"
 
+#include <stddef.h>
 #include <chrono>
 #include <sstream>
+#include <algorithm>
+#include <string>
+#include <utility>
 
 #include "column/chunk.h"
-#include "env/env.h"
-#include "env/env_broker.h"
 #include "exec/vectorized/csv_scanner.h"
 #include "exec/vectorized/json_scanner.h"
 #include "exec/vectorized/orc_scanner.h"
@@ -15,9 +17,20 @@
 #include "exprs/expr.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 #include "util/thread.h"
+#include "common/logging.h"
+#include "common/statusor.h"
+#include "exec/vectorized/file_scanner.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "runtime/descriptors.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class ExprContext;
+class ObjectPool;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

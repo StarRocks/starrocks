@@ -2,12 +2,21 @@
 
 #include "chunks_sorter_topn.h"
 
-#include "column/type_traits.h"
-#include "exprs/expr.h"
-#include "gutil/casts.h"
+#include <ext/alloc_traits.h>
+#include <algorithm>
+#include <cstdint>
+#include <limits>
+#include <ostream>
+
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
+#include "glog/logging.h"
+#include "util/runtime_profile.h"
+
+namespace starrocks {
+class ExprContext;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

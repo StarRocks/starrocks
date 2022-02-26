@@ -2,21 +2,27 @@
 
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 
-#include <boost/thread/thread.hpp>
-#include <sstream>
-
 #include "gen_cpp/FrontendService.h"
-#include "gen_cpp/FrontendService_types.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/client_cache.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
-#include "util/debug_util.h"
-#include "util/network_util.h"
-#include "util/runtime_profile.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_util.h"
+
+namespace starrocks {
+class TDescribeTableParams;
+class TDescribeTableResult;
+class TGetDBPrivsParams;
+class TGetDBPrivsResult;
+class TGetDbsParams;
+class TGetDbsResult;
+class TGetTablePrivsParams;
+class TGetTablePrivsResult;
+class TGetTablesParams;
+class TGetTablesResult;
+class TGetUserPrivsParams;
+class TGetUserPrivsResult;
+class TListTableStatusResult;
+class TShowVariableRequest;
+class TShowVariableResult;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

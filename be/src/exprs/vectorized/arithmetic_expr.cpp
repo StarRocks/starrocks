@@ -2,7 +2,10 @@
 
 #include "exprs/vectorized/arithmetic_expr.h"
 
-#include "common/object_pool.h"
+#include <memory>
+#include <ostream>
+#include <string>
+
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/decimal_binary_function.h"

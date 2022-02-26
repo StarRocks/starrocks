@@ -4,8 +4,15 @@
 
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <functional>
 #include <memory>
+#include <queue>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
@@ -13,6 +20,15 @@
 #include "glog/logging.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "column/column.h"
+#include "common/status.h"
+#include "gutil/strings/numbers.h"
+#include "util/runtime_profile.h"
+
+namespace starrocks {
+class ExprContext;
+class RuntimeState;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

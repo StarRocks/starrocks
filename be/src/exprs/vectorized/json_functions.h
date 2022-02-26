@@ -3,10 +3,21 @@
 #pragma once
 
 #include "common/compiler_util.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "gutil/strings/numbers.h"
+#include "re2/re2.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf.h"
+
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 
 #include <utility>
+#include <ostream>
+#include <string>
+#include <vector>
+
 DIAGNOSTIC_POP
 
 #include "column/column_builder.h"
@@ -14,6 +25,12 @@ DIAGNOSTIC_POP
 #include "exprs/vectorized/jsonpath.h"
 #include "simdjson.h"
 #include "velocypack/vpack.h"
+
+namespace starrocks {
+namespace vectorized {
+template <starrocks::PrimitiveType Type> class ColumnBuilder;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks {
 namespace vectorized {

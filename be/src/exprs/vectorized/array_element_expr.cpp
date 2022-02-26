@@ -2,11 +2,34 @@
 
 #include "exprs/vectorized/array_element_expr.h"
 
+#include <stddef.h>
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
 #include "util/raw_container.h"
+#include "column/column.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/Exprs_types.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "runtime/types.h"
+#include "udf/udf_internal.h"
+
+namespace starrocks {
+namespace vectorized {
+class Chunk;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

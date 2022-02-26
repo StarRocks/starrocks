@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/intersect_hash_set.h"
 
+#include <string.h>
+
 #include "exec/exec_node.h"
 #include "exec/vectorized/aggregate/agg_hash_set.h"
 #include "util/phmap/phmap_dump.h"

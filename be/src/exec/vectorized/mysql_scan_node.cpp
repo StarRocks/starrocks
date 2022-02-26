@@ -3,23 +3,44 @@
 #include "mysql_scan_node.h"
 
 #include <fmt/format.h>
-
 #include <sstream>
+#include <cstdint>
+#include <typeinfo>
+#include <unordered_map>
+#include <utility>
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/fixed_length_column_base.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
-#include "exprs/slot_ref.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/decimalv3.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "util/runtime_profile.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/datum.h"
+#include "column/hash_set.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "runtime/date_value.h"
+#include "runtime/decimal_value.h"
+#include "runtime/descriptors.h"
+#include "runtime/timestamp_value.h"
+#include "runtime/types.h"
+#include "udf/udf_internal.h"
+#include "util/phmap/phmap.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
+#include "util/string_parser.hpp"
+
+namespace starrocks {
+class ObjectPool;
+class TScanRangeParams;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

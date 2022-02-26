@@ -2,10 +2,21 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "common/object_pool.h"
 #include "exprs/expr.h"
+#include "column/chunk.h"
+#include "common/global_types.h"
+#include "exprs/expr_context.h"
+#include "gutil/strings/numbers.h"
+#include "udf/udf_internal.h"
 
 namespace starrocks {
+class SlotDescriptor;
+class TExprNode;
+
 namespace vectorized {
 
 class ColumnRef final : public Expr {

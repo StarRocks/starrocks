@@ -1,11 +1,19 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
+#include <string>
+
 #include "common/object_pool.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gutil/strings/numbers.h"
+#include "udf/udf_internal.h"
 
 namespace starrocks {
+class TExprNode;
+
 namespace vectorized {
+class Chunk;
 
 class VectorizedLiteral final : public Expr {
 public:

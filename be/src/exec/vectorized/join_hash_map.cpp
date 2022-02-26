@@ -5,10 +5,21 @@
 #include <column/chunk.h>
 #include <gen_cpp/PlanNodes_types.h>
 #include <runtime/descriptors.h>
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <utility>
 
 #include "exec/vectorized/hash_join_node.h"
 #include "serde/column_array_serde.h"
-#include "simd/simd.h"
+#include "column/fixed_length_column.h"
+#include "column/fixed_length_column_base.h"
+#include "exec/exec_node.h"
+#include "exec/vectorized/join_hash_map.tpp"
+#include "exprs/expr_context.h"
+#include "glog/logging.h"
+#include "runtime/runtime_state.h"
+#include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
 

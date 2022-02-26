@@ -2,12 +2,15 @@
 
 #include "exec/vectorized/arrow_to_starrocks_converter.h"
 
-#include <arrow/array.h>
+#include <emmintrin.h>
+#include <ext/alloc_traits.h>
+#include <immintrin.h>
+#include <algorithm>
+#include <memory>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
-#include "arrow/array/array_binary.h"
-#include "arrow/array/array_nested.h"
-#include "arrow/scalar.h"
-#include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "column/array_column.h"
 #include "column/nullable_column.h"
@@ -22,6 +25,30 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "util/pred_guard.h"
+#include "arrow/array/array_base.h"
+#include "arrow/array/array_decimal.h"
+#include "arrow/type.h"
+#include "cctz/time_zone.h"
+#include "column/datum.h"
+#include "column/fixed_length_column.h"
+#include "column/json_column.h"
+#include "common/compiler_util.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
+#include "runtime/datetime_value.h"
+#include "runtime/decimalv3.h"
+#include "runtime/timestamp_value.h"
+#include "util/decimal_types.h"
+#include "util/guard.h"
+#include "util/meta_macro.h"
+#include "util/slice.h"
+#include "util/timezone_utils.h"
+
+namespace starrocks {
+class DecimalV2Value;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

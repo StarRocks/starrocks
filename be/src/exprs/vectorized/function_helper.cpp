@@ -7,6 +7,16 @@
 #endif
 
 #include <util/raw_container.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+#include <vector>
+
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/fixed_length_column.h"
+#include "glog/logging.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
 

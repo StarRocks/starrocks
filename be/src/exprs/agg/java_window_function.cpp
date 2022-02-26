@@ -3,8 +3,12 @@
 #include "exprs/agg/java_window_function.h"
 
 #include <vector>
+#include <utility>
 
 #include "runtime/user_function_cache.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "fmt/format.h"
 
 namespace starrocks::vectorized {
 

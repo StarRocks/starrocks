@@ -1,19 +1,42 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #include "exec/vectorized/parquet_scanner.h"
 
-#include <env/env_broker.h>
-#include <exec/broker_reader.h>
 #include <exprs/vectorized/cast_expr.h>
 #include <exprs/vectorized/column_ref.h>
+#include <ext/alloc_traits.h>
+#include <stdint.h>
+#include <algorithm>
+#include <sstream>
+#include <string>
+#include <type_traits>
+#include <utility>
 
 #include "column/column_helper.h"
-#include "env/env_util.h"
 #include "exec/parquet_reader.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_pipe.h"
-#include "simd/simd.h"
+#include "arrow/array/array_base.h"
+#include "arrow/record_batch.h"
+#include "arrow/type.h"
+#include "column/chunk.h"
+#include "column/datum.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "env/env.h"
+#include "exec/vectorized/arrow_type_traits.h"
+#include "exec/vectorized/parquet_reader.h"
+#include "exprs/expr.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/types.pb.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "gutil/strings/numbers.h"
+#include "gutil/strings/substitute.h"
+#include "runtime/descriptors.h"
+#include "runtime/primitive_type.h"
+#include "runtime/types.h"
+#include "util/decimal_types.h"
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::vectorized {
 

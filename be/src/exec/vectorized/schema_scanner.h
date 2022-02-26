@@ -2,7 +2,10 @@
 
 #pragma once
 
+#include <stdint.h>
 #include <string>
+#include <memory>
+#include <vector>
 
 #include "column/chunk.h"
 #include "common/object_pool.h"
@@ -11,11 +14,17 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
+#include "column/vectorized_fwd.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks {
 // forehead declar class, because jni function init in StarRocksServer.
 class StarRocksServer;
 class RuntimeState;
+class ObjectPool;
+class SlotDescriptor;
+class TUserIdentity;
 } // namespace starrocks
 
 namespace starrocks::vectorized {

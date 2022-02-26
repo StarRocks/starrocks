@@ -2,9 +2,15 @@
 
 #pragma once
 
+#include <memory>
+
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/type_traits.h"
+#include "column/column.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "gutil/casts.h"
 
 namespace starrocks {
 namespace vectorized {

@@ -2,12 +2,27 @@
 
 #include "exprs/vectorized/literal.h"
 
+#include <memory>
+#include <ostream>
+
 #include "column/column_helper.h"
-#include "column/const_column.h"
-#include "column/fixed_length_column.h"
-#include "column/nullable_column.h"
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/datum.h"
+#include "column/type_traits.h"
+#include "gen_cpp/Exprs_types.h"
+#include "glog/logging.h"
+#include "runtime/date_value.h"
+#include "runtime/decimalv2_value.h"
+#include "runtime/decimalv3.h"
+#include "runtime/large_int_value.h"
+#include "runtime/primitive_type.h"
+#include "runtime/timestamp_value.h"
+#include "runtime/types.h"
+#include "util/slice.h"
+#include "util/string_parser.hpp"
 
 namespace starrocks::vectorized {
 

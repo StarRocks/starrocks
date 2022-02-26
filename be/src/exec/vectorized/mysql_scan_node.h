@@ -2,13 +2,25 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
 #include <memory>
+#include <iosfwd>
+#include <string>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exec/mysql_scanner.h"
 #include "exec/scan_node.h"
 #include "runtime/descriptors.h"
+#include "column/type_traits.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "exec/exec_node.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/mem_pool.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks {
 
@@ -16,8 +28,15 @@ class TupleDescriptor;
 class RuntimeState;
 class MemPool;
 class Status;
+class DescriptorTbl;
+class ObjectPool;
+class SlotDescriptor;
+class TPlanNode;
+class TScanRangeParams;
 
 namespace vectorized {
+class Column;
+
 #define APPLY_FOR_NUMERICAL_TYPE(M, APPEND_TO_SQL) \
     M(TYPE_TINYINT, APPEND_TO_SQL)                 \
     M(TYPE_BOOLEAN, APPEND_TO_SQL)                 \

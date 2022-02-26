@@ -1,15 +1,29 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include <ext/alloc_traits.h>
+#include <string.h>
 #include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <vector>
 
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "common/status.h"
 #include "exprs/vectorized/string_functions.h"
 #include "runtime/vectorized/Volnitsky.h"
 #include "util/utf8.h"
+#include "column/column.h"
+#include "column/fixed_length_column.h"
+#include "column/fixed_length_column_base.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/vectorized/function_helper.h"
+#include "runtime/primitive_type.h"
+#include "runtime/vectorized/StringSearcher.h"
+#include "udf/udf.h"
+#include "util/slice.h"
 
 namespace starrocks::vectorized {
 

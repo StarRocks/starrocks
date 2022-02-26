@@ -3,8 +3,11 @@
 #include "exec/vectorized/hash_join_node.h"
 
 #include <runtime/runtime_state.h>
-
+#include <ext/alloc_traits.h>
 #include <memory>
+#include <atomic>
+#include <ostream>
+#include <utility>
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -17,7 +20,6 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
-#include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
@@ -25,6 +27,25 @@
 #include "runtime/runtime_filter_worker.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
+#include "column/chunk.h"
+#include "column/const_column.h"
+#include "column/nullable_column.h"
+#include "common/logging.h"
+#include "common/object_pool.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/runtime_filter_types.h"
+#include "exprs/vectorized/runtime_filter.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/InternalService_types.h"
+#include "gen_cpp/Metrics_types.h"
+#include "gen_cpp/Opcodes_types.h"
+#include "gen_cpp/Partitions_types.h"
+#include "glog/logging.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/primitive_type.h"
+#include "runtime/types.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::vectorized {
 

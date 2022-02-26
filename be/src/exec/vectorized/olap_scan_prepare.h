@@ -2,13 +2,27 @@
 
 #pragma once
 
+#include <stdint.h>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "common/status.h"
 #include "exec/olap_common.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exec/olap_utils.h"
+#include "gen_cpp/InternalService_types.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/descriptors.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks {
 class RuntimeState;
+class ExprContext;
+class ObjectPool;
+
 namespace vectorized {
 
 class RuntimeFilterProbeCollector;

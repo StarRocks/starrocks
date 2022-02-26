@@ -3,10 +3,28 @@
 #pragma once
 
 #include <orc/OrcFile.hh>
+#include <stdint.h>
+#include <memory>
+#include <vector>
 
 #include "env/env.h"
 #include "exec/vectorized/file_scanner.h"
 #include "exec/vectorized/orc_scanner_adapter.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "udf/udf_internal.h"
+
+namespace orc {
+struct ColumnVectorBatch;
+}  // namespace orc
+namespace starrocks {
+class RuntimeProfile;
+class RuntimeState;
+class SlotDescriptor;
+class TBrokerScanRange;
+struct TypeDescriptor;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

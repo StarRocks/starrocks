@@ -2,10 +2,17 @@
 
 #pragma once
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
 #include <any>
 #include <atomic>
 #include <mutex>
 #include <queue>
+#include <cstdint>
+#include <memory>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "column/column_helper.h"
 #include "column/type_traits.h"
@@ -18,8 +25,24 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "exprs/agg/aggregate.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/Types_types.h"
+#include "glog/logging.h"
+#include "runtime/mem_pool.h"
+#include "udf/udf.h"
+#include "udf/udf_internal.h"
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
+class MemTracker;
+class ObjectPool;
 
 struct AggFunctionTypes {
     TypeDescriptor result_type;
@@ -51,6 +74,7 @@ static const int STREAMING_HT_MIN_REDUCTION_SIZE =
         sizeof(STREAMING_HT_MIN_REDUCTION) / sizeof(STREAMING_HT_MIN_REDUCTION[0]);
 
 class Aggregator;
+
 using AggregatorPtr = std::shared_ptr<Aggregator>;
 
 // Component used to process aggregation including bloking aggregate and streaming aggregate
@@ -497,6 +521,7 @@ private:
 };
 
 class AggregatorFactory;
+
 using AggregatorFactoryPtr = std::shared_ptr<AggregatorFactory>;
 
 class AggregatorFactory {

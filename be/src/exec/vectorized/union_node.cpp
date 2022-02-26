@@ -2,6 +2,13 @@
 
 #include "exec/vectorized/union_node.h"
 
+#include <ext/alloc_traits.h>
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <unordered_map>
+#include <utility>
+
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exec/pipeline/limit_operator.h"
@@ -11,6 +18,20 @@
 #include "exec/pipeline/set/union_passthrough_operator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/const_column.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "runtime/descriptors.h"
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class ObjectPool;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 UnionNode::UnionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)

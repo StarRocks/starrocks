@@ -2,6 +2,15 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+#include <atomic>
+#include <list>
+#include <memory>
+#include <set>
+#include <string>
+#include <vector>
+
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "common/statusor.h"
@@ -12,6 +21,22 @@
 #include "exec/vectorized/join_hash_map.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "util/phmap/phmap.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "exprs/vectorized/runtime_filter_bank.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/Types_types.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/descriptors.h"
+#include "udf/udf_internal.h"
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 

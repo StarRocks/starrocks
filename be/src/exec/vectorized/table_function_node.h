@@ -2,6 +2,10 @@
 
 #pragma once
 
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -10,6 +14,26 @@
 #include "exprs/table_function/table_function_factory.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "exprs/expr_context.h"
+#include "udf/udf_internal.h"
+#include "util/runtime_profile.h"
+
+namespace starrocks {
+class DescriptorTbl;
+class ObjectPool;
+class RuntimeState;
+class TPlanNode;
+namespace pipeline {
+class OperatorFactory;
+class PipelineBuilderContext;
+}  // namespace pipeline
+namespace vectorized {
+class TableFunction;
+class TableFunctionState;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 class TableFunctionNode final : public ExecNode {

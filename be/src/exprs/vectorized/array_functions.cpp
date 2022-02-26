@@ -2,10 +2,26 @@
 
 #include "exprs/vectorized/array_functions.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <memory>
+#include <ostream>
+#include <type_traits>
+#include <typeinfo>
+#include <utility>
+
 #include "column/array_column.h"
-#include "column/column_hash.h"
 #include "column/type_traits.h"
 #include "util/raw_container.h"
+#include "column/binary_column.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/fixed_length_column.h"
+#include "column/fixed_length_column_base.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "runtime/decimalv2_value.h"
 
 namespace starrocks::vectorized {
 

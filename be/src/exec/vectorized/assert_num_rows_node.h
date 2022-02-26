@@ -2,7 +2,12 @@
 
 #pragma once
 
+#include <stdint.h>
 #include <unordered_set>
+#include <deque>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/column_hash.h"
@@ -16,6 +21,20 @@
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "exec/exec_node.h"
+#include "gutil/strings/numbers.h"
+
+namespace starrocks {
+class DescriptorTbl;
+class ObjectPool;
+class RuntimeState;
+namespace pipeline {
+class OperatorFactory;
+class PipelineBuilderContext;
+}  // namespace pipeline
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

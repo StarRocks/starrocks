@@ -5,6 +5,10 @@
 #include <cstring>
 #include <memory>
 #include <vector>
+#include <cstdint>
+#include <new>
+#include <ostream>
+#include <string>
 
 #include "column/binary_column.h"
 #include "column/nullable_column.h"
@@ -17,6 +21,12 @@
 #include "udf/java/java_udf.h"
 #include "udf/udf.h"
 #include "udf/udf_internal.h"
+#include "column/column.h"
+#include "column/fixed_length_column.h"
+#include "common/status.h"
+#include "glog/logging.h"
+#include "gutil/strings/numbers.h"
+#include "util/slice.h"
 
 namespace starrocks::vectorized {
 

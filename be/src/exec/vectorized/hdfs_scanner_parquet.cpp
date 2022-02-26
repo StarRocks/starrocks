@@ -2,9 +2,17 @@
 
 #include "exec/vectorized/hdfs_scanner_parquet.h"
 
+#include <string>
+#include <vector>
+
 #include "exec/parquet/file_reader.h"
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "util/runtime_profile.h"
+#include "exec/exec_node.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/runtime_state.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::vectorized {
 

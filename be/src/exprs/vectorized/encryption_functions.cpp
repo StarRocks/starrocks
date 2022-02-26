@@ -2,17 +2,28 @@
 
 #include "exprs/vectorized/encryption_functions.h"
 
-#include <boost/smart_ptr.hpp>
+#include <ext/alloc_traits.h>
+#include <math.h>
+#include <stddef.h>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/status.h"
 #include "exprs/base64.h"
-#include "exprs/expr.h"
 #include "util/aes_util.h"
-#include "util/debug_util.h"
 #include "util/md5.h"
 #include "util/sha.h"
+#include "column/column.h"
+#include "column/column_builder.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/expr_context.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf_internal.h"
+#include "util/slice.h"
 
 namespace starrocks::vectorized {
 

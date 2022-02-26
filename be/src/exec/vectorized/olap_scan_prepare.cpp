@@ -3,6 +3,12 @@
 
 #include "exec/vectorized/olap_scan_prepare.h"
 
+#include <stddef.h>
+#include <algorithm>
+#include <ostream>
+#include <set>
+#include <utility>
+
 #include "column/type_traits.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "gutil/map_util.h"
@@ -12,6 +18,39 @@
 #include "runtime/primitive_type_infra.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/predicate_parser.h"
+#include "boost/detail/basic_pointerbuf.hpp"
+#include "boost/variant/detail/apply_visitor_unary.hpp"
+#include "boost/variant/get.hpp"
+#include "boost/variant/static_visitor.hpp"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/datum.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/config.h"
+#include "common/global_types.h"
+#include "common/logging.h"
+#include "common/object_pool.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "exprs/vectorized/runtime_filter.h"
+#include "exprs/vectorized/runtime_filter_bank.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Opcodes_types.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "runtime/date_value.h"
+#include "runtime/decimal_value.h"
+#include "runtime/decimalv2_value.h"
+#include "runtime/string_value.h"
+#include "runtime/timestamp_value.h"
+#include "runtime/types.h"
+#include "udf/udf_internal.h"
+#include "util/decimal_types.h"
+#include "util/phmap/phmap.h"
+#include "util/slice.h"
 
 namespace starrocks {
 namespace vectorized {

@@ -2,12 +2,15 @@
 
 #include "exprs/table_function/java_udtf_function.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
 #include <memory>
 #include <utility>
+#include <string>
+#include <type_traits>
+#include <vector>
 
-#include "column/array_column.h"
 #include "column/column_helper.h"
-#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/table_function/table_function.h"
 #include "gen_cpp/Types_types.h"
@@ -16,6 +19,11 @@
 #include "runtime/types.h"
 #include "runtime/user_function_cache.h"
 #include "udf/java/java_udf.h"
+#include "column/column.h"
+#include "column/fixed_length_column.h"
+#include "fmt/format.h"
+#include "glog/logging.h"
+#include "gutil/strings/numbers.h"
 
 namespace starrocks::vectorized {
 template <bool handle_null>

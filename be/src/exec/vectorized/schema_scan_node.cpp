@@ -2,15 +2,33 @@
 
 #include "exec/vectorized/schema_scan_node.h"
 
-#include <boost/algorithm/string.hpp>
+#include <stddef.h>
+#include <stdint.h>
+#include <ostream>
+#include <utility>
 
 #include "column/column_helper.h"
-#include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "util/runtime_profile.h"
+#include "boost/algorithm/string/predicate.hpp"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "common/object_pool.h"
+#include "common/status.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/FrontendService_types.h"
+#include "glog/logging.h"
+#include "gutil/int128.h"
+#include "runtime/descriptors.h"
+#include "runtime/types.h"
+#include "udf/udf_internal.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class TScanRangeParams;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

@@ -24,9 +24,11 @@
 #include <sstream>
 
 #include "gen_cpp/Exprs_types.h"
-#include "runtime/runtime_state.h"
+#include "gutil/int128.h"
 
 namespace starrocks {
+class RuntimeState;
+struct TypeDescriptor;
 
 SlotRef::SlotRef(const TExprNode& node)
         : Expr(node, true),

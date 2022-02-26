@@ -5,6 +5,9 @@
 #include "exprs/expr.h"
 
 namespace starrocks {
+class Expr;
+class TExprNode;
+
 namespace vectorized {
 
 class VectorizedConditionExprFactory {

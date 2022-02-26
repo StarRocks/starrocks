@@ -2,9 +2,7 @@
 
 #include "exprs/vectorized/grouping_sets_functions.h"
 
-#include "column/column_builder.h"
-#include "column/column_helper.h"
-#include "column/column_viewer.h"
+#include "glog/logging.h"
 
 namespace starrocks::vectorized {
 

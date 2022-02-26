@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "column/column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
@@ -9,9 +11,18 @@
 #include "exprs/vectorized/function_helper.h"
 #include "udf/udf.h"
 #include "util/timezone_hsscan.h"
+#include "cctz/time_zone.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/primitive_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 namespace vectorized {
+class TimestampValue;
+template <starrocks::PrimitiveType Type> class ColumnBuilder;
+
 // TODO:
 class TimeFunctions {
 public:

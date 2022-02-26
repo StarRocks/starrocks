@@ -21,8 +21,11 @@
 
 #include "exprs/anyval_util.h"
 
-#include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
+#include <ostream>
+
+#include "glog/logging.h"
+#include "runtime/primitive_type.h"
+#include "runtime/types.h"
 
 namespace starrocks {
 using starrocks_udf::AnyVal;

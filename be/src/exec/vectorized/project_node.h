@@ -2,10 +2,32 @@
 
 #pragma once
 
+#include <list>
+#include <memory>
+#include <vector>
+
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
 #include "exprs/expr_context.h"
 #include "util/runtime_profile.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "runtime/global_dicts.h"
+
+namespace starrocks {
+class DescriptorTbl;
+class ExprContext;
+class ObjectPool;
+class RuntimeState;
+class TPlanNode;
+namespace pipeline {
+class OperatorFactory;
+class PipelineBuilderContext;
+}  // namespace pipeline
+namespace vectorized {
+class RuntimeFilterProbeCollector;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 class ProjectNode final : public ExecNode {

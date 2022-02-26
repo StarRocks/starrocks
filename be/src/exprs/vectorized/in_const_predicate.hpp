@@ -2,6 +2,12 @@
 
 #pragma once
 
+#include <string.h>
+#include <cstdint>
+#include <memory>
+#include <type_traits>
+#include <vector>
+
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -9,6 +15,18 @@
 #include "common/object_pool.h"
 #include "exprs/predicate.h"
 #include "gutil/strings/substitute.h"
+#include "column/column.h"
+#include "column/const_column.h"
+#include "column/fixed_length_column.h"
+#include "column/type_traits.h"
+#include "common/status.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/Exprs_types.h"
+#include "glog/logging.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf.h"
+#include "udf/udf_internal.h"
 
 namespace starrocks {
 
@@ -18,6 +36,7 @@ class Expr;
 class ExprContext;
 
 namespace vectorized {
+class Chunk;
 
 namespace in_const_pred_detail {
 template <PrimitiveType Type, typename Enable = void>

@@ -2,15 +2,29 @@
 
 #pragma once
 
+#include <iosfwd>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "exec/scan_node.h"
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptors.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "exec/exec_node.h"
+#include "gutil/strings/numbers.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class TupleDescriptor;
 class RuntimeState;
 class Status;
+class DescriptorTbl;
+class ObjectPool;
+class TPlanNode;
+class TScanRangeParams;
 } // namespace starrocks
 
 namespace starrocks::vectorized {

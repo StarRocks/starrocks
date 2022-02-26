@@ -2,12 +2,26 @@
 
 #include "exprs/table_function/json_each.h"
 
-#include "column/column_builder.h"
+#include <ext/alloc_traits.h>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <type_traits>
+
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/table_function/table_function.h"
-#include "exprs/table_function/table_function_factory.h"
-#include "velocypack/vpack.h"
+#include "column/binary_column.h"
+#include "column/column.h"
+#include "column/fixed_length_column.h"
+#include "column/json_column.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "gutil/strings/numbers.h"
+#include "util/json.h"
+#include "util/slice.h"
+#include "velocypack/Iterator.h"
+#include "velocypack/Slice.h"
 
 namespace starrocks::vectorized {
 

@@ -2,6 +2,11 @@
 
 #include "exprs/vectorized/utility_functions.h"
 
+#include <ext/alloc_traits.h>
+#include <stdint.h>
+#include <memory>
+#include <string>
+
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "gen_cpp/version.h"
@@ -9,6 +14,12 @@
 #include "udf/udf_internal.h"
 #include "util/monotime.h"
 #include "util/uid_util.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 

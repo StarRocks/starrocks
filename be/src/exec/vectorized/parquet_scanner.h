@@ -3,7 +3,7 @@
 #pragma once
 
 #include <env/env.h>
-
+#include <stddef.h>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -19,6 +19,27 @@
 #include "runtime/mem_pool.h"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
+#include "column/column.h"
+#include "common/object_pool.h"
+#include "common/statusor.h"
+#include "exprs/expr_context.h"
+#include "udf/udf_internal.h"
+
+namespace arrow {
+class Array;
+class DataType;
+}  // namespace arrow
+namespace starrocks {
+class Expr;
+class RandomAccessFile;
+class RuntimeProfile;
+class RuntimeState;
+class SlotDescriptor;
+class TBrokerRangeDesc;
+class TBrokerScanRange;
+class TBrokerScanRangeParams;
+struct TypeDescriptor;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

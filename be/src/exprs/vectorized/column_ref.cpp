@@ -2,6 +2,12 @@
 
 #include "exprs/vectorized/column_ref.h"
 
+#include <ostream>
+
+#include "gen_cpp/Exprs_types.h"
+#include "runtime/descriptors.h"
+#include "runtime/types.h"
+
 namespace starrocks::vectorized {
 
 ColumnRef::ColumnRef(const TExprNode& node)

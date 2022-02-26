@@ -22,12 +22,17 @@
 #pragma once
 
 #include <memory>
+#include <atomic>
+#include <string>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/column.h"
 #include "common/status.h"
 #include "udf/udf.h"
 #include "udf/udf_internal.h" // for ArrayVal
+#include "glog/logging.h"
+#include "gutil/strings/numbers.h"
 
 #undef USING_STARROCKS_UDF
 #define USING_STARROCKS_UDF using namespace starrocks_udf

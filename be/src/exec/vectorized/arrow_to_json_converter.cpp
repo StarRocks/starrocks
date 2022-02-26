@@ -2,15 +2,23 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
+#include <utility>
 
-#include "arrow/array.h"
 #include "arrow/type.h"
-#include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "column/json_column.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "util/json.h"
+#include "arrow/array/array_base.h"
+#include "arrow/array/array_binary.h"
+#include "arrow/array/array_nested.h"
+#include "arrow/array/array_primitive.h"
+#include "common/status.h"
+#include "gutil/strings/numbers.h"
+#include "velocypack/Builder.h"
+#include "velocypack/Value.h"
 
 namespace starrocks::vectorized {
 

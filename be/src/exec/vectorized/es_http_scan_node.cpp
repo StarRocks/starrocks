@@ -3,8 +3,12 @@
 #include "exec/vectorized/es_http_scan_node.h"
 
 #include <fmt/format.h>
-
+#include <stddef.h>
+#include <stdint.h>
 #include <memory>
+#include <algorithm>
+#include <functional>
+#include <utility>
 
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -13,9 +17,27 @@
 #include "exec/es/es_scan_reader.h"
 #include "exec/es/es_scroll_query.h"
 #include "runtime/current_thread.h"
-#include "util/defer_op.h"
-#include "util/spinlock.h"
 #include "util/thread.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/datum.h"
+#include "common/compiler_util.h"
+#include "common/object_pool.h"
+#include "exec/vectorized/es_http_scanner.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/Types_types.h"
+#include "glog/logging.h"
+#include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
+#include "service/backend_options.h"
+#include "udf/udf_internal.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class MemTracker;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 EsHttpScanNode::EsHttpScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)

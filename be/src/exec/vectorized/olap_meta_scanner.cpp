@@ -2,8 +2,20 @@
 
 #include "exec/vectorized/olap_meta_scanner.h"
 
+#include <stdlib.h>
+#include <ostream>
+#include <string>
+
 #include "exec/vectorized/olap_meta_scan_node.h"
 #include "storage/storage_engine.h"
+#include "exec/exec_node.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/Types_types.h"
+#include "glog/logging.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/runtime_state.h"
+#include "storage/olap_common.h"
+#include "storage/tablet_manager.h"
 
 namespace starrocks {
 namespace vectorized {

@@ -2,7 +2,10 @@
 
 #pragma once
 
+#include <stdint.h>
 #include <unordered_set>
+#include <memory>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/column_hash.h"
@@ -17,11 +20,23 @@
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "exec/exec_node.h"
+#include "runtime/types.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class DescriptorTbl;
 class SlotDescriptor;
 class TupleDescriptor;
+class ExprContext;
+class ObjectPool;
+class RuntimeState;
+class TPlanNode;
+namespace pipeline {
+class PipelineBuilderContext;
+}  // namespace pipeline
 } // namespace starrocks
 
 namespace starrocks::vectorized {

@@ -2,7 +2,24 @@
 
 #pragma once
 
+#include <memory>
+#include <vector>
+
 #include "exec/vectorized/aggregate/aggregate_base_node.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "exec/exec_node.h"
+
+namespace starrocks {
+class DescriptorTbl;
+class ObjectPool;
+class RuntimeState;
+class TPlanNode;
+namespace pipeline {
+class OperatorFactory;
+class PipelineBuilderContext;
+}  // namespace pipeline
+}  // namespace starrocks
 
 // Distinct means this node handle distinct or group by no aggregate function query.
 // Blocking means this node will consume all input and build hash set in open phase.

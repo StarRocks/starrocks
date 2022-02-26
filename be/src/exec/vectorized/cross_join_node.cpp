@@ -2,6 +2,10 @@
 
 #include "exec/vectorized/cross_join_node.h"
 
+#include <ext/alloc_traits.h>
+#include <cstdint>
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "exec/pipeline/crossjoin/cross_join_context.h"
@@ -13,6 +17,22 @@
 #include "exprs/expr_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
+#include "column/column.h"
+#include "column/const_column.h"
+#include "column/fixed_length_column.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/source_operator.h"
+#include "gen_cpp/Metrics_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class ObjectPool;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 CrossJoinNode::CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)

@@ -2,7 +2,19 @@
 
 #pragma once
 
+#include <memory>
+
 #include "exec/vectorized/hdfs_scanner.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "util/runtime_profile.h"
+
+namespace starrocks {
+class RuntimeState;
+namespace parquet {
+class FileReader;
+}  // namespace parquet
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

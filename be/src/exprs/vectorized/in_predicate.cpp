@@ -2,11 +2,27 @@
 
 #include "exprs/vectorized/in_predicate.h"
 
-#include "common/object_pool.h"
+#include <memory>
+#include <new>
+#include <ostream>
+#include <vector>
+
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/in_iterator_predicate.hpp"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
+#include "column/column.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Opcodes_types.h"
+#include "glog/logging.h"
+#include "runtime/date_value.h"
+#include "runtime/timestamp_value.h"
+#include "util/phmap/phmap.h"
+#include "util/slice.h"
+
+namespace starrocks {
+class Expr;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

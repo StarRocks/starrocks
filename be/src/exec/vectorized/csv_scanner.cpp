@@ -2,12 +2,32 @@
 
 #include "exec/vectorized/csv_scanner.h"
 
+#include <stddef.h>
+#include <cstdint>
+#include <new>
+#include <ostream>
+#include <utility>
+
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "env/env.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "util/utf8_check.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/column_hash.h"
+#include "exprs/expr_context.h"
+#include "formats/csv/converter.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "runtime/descriptors.h"
+#include "runtime/primitive_type.h"
+#include "runtime/types.h"
+#include "util/phmap/phmap.h"
+#include "util/runtime_profile.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::vectorized {
 

@@ -2,10 +2,16 @@
 
 #include "exprs/vectorized/info_func.h"
 
+#include <memory>
+#include <ostream>
+
 #include "column/column_helper.h"
-#include "column/const_column.h"
-#include "column/fixed_length_column.h"
-#include "column/nullable_column.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "gen_cpp/Exprs_types.h"
+#include "glog/logging.h"
+#include "runtime/primitive_type.h"
+#include "runtime/types.h"
 
 namespace starrocks::vectorized {
 

@@ -2,6 +2,12 @@
 
 #include "chunks_sorter_full_sort.h"
 
+#include <ext/alloc_traits.h>
+#include <algorithm>
+#include <cstdint>
+#include <limits>
+#include <ostream>
+
 #include "column/type_traits.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
@@ -9,6 +15,20 @@
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
+#include "column/binary_column.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/nullable_column.h"
+#include "common/compiler_util.h"
+#include "exprs/expr_context.h"
+#include "glog/logging.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/date_value.h"
+#include "runtime/primitive_type.h"
+#include "runtime/timestamp_value.h"
+#include "runtime/types.h"
+#include "util/runtime_profile.h"
+#include "util/slice.h"
 
 namespace starrocks::vectorized {
 

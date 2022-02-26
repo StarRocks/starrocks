@@ -2,14 +2,26 @@
 
 #include "exec/vectorized/schema_scanner/schema_columns_scanner.h"
 
+#include <stdint.h>
+#include <string.h>
 #include <sstream>
+#include <memory>
+#include <vector>
 
 #include "column/chunk.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/datetime_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
+#include "gen_cpp/Types_types.h"
+#include "util/phmap/phmap.h"
+#include "util/runtime_profile.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class RuntimeState;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

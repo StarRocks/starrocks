@@ -2,12 +2,29 @@
 
 #include "exprs/vectorized/like_predicate.h"
 
+#include <ext/alloc_traits.h>
+#include <stdint.h>
+#include <string.h>
 #include <memory>
+#include <algorithm>
+#include <ostream>
+#include <vector>
 
 #include "exprs/vectorized/binary_function.h"
 #include "glog/logging.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/vectorized/Volnitsky.h"
+#include "column/binary_column.h"
+#include "column/column.h"
+#include "column/column_builder.h"
+#include "column/column_viewer.h"
+#include "column/const_column.h"
+#include "column/fixed_length_column.h"
+#include "column/fixed_length_column_base.h"
+#include "column/nullable_column.h"
+#include "re2/re2.h"
+#include "re2/stringpiece.h"
+#include "runtime/vectorized/StringSearcher.h"
 
 namespace starrocks::vectorized {
 

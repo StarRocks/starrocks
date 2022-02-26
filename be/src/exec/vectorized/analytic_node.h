@@ -2,13 +2,29 @@
 
 #pragma once
 
+#include <stdint.h>
+#include <memory>
+#include <vector>
+
 #include "analytor.h"
 #include "exec/exec_node.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks {
+class DescriptorTbl;
+class ObjectPool;
+class RuntimeState;
+class TupleDescriptor;
+namespace pipeline {
+class OperatorFactory;
+class PipelineBuilderContext;
+}  // namespace pipeline
+
 namespace vectorized {
 
 class AnalyticNode final : public ExecNode {

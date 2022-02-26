@@ -2,7 +2,14 @@
 
 #include "exprs/vectorized/time_functions.h"
 
+#include <ctype.h>
+#include <ext/alloc_traits.h>
+#include <limits.h>
+#include <stdint.h>
+#include <string.h>
 #include <string_view>
+#include <memory>
+#include <vector>
 
 #include "column/column_helper.h"
 #include "exprs/vectorized/binary_function.h"
@@ -10,6 +17,21 @@
 #include "runtime/date_value.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
+#include "column/binary_column.h"
+#include "column/column.h"
+#include "column/column_builder.h"
+#include "column/column_viewer.h"
+#include "column/const_column.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/type_traits.h"
+#include "glog/logging.h"
+#include "runtime/date_value.hpp"
+#include "runtime/datetime_value.h"
+#include "runtime/timestamp_value.h"
+#include "runtime/vectorized/time_types.h"
+#include "util/timezone_hsscan.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks::vectorized {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.

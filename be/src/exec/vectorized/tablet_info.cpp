@@ -2,12 +2,26 @@
 
 #include "exec/vectorized/tablet_info.h"
 
-#include "column/binary_column.h"
+#include <algorithm>
+#include <cstdint>
+#include <iterator>
+#include <ostream>
+#include <string>
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/fixed_length_column.h"
-#include "runtime/mem_pool.h"
 #include "util/string_parser.hpp"
+#include "common/compiler_util.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gutil/casts.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/date_value.h"
+#include "runtime/descriptors.h"
+#include "runtime/large_int_value.h"
+#include "runtime/primitive_type.h"
+#include "runtime/timestamp_value.h"
+#include "runtime/types.h"
 
 namespace starrocks::vectorized {
 

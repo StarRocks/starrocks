@@ -3,9 +3,22 @@
 #pragma once
 
 #include <any>
+#include <vector>
 
 #include "exec/exec_node.h"
 #include "exec/vectorized/aggregator.h"
+#include "common/status.h"
+
+namespace starrocks {
+class DescriptorTbl;
+class ExprContext;
+class ObjectPool;
+class RuntimeState;
+class TPlanNode;
+namespace vectorized {
+class RuntimeFilterProbeCollector;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

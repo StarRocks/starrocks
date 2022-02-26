@@ -2,13 +2,28 @@
 
 #include "gutil/strings/split.h"
 
+#include <ext/alloc_traits.h>
+#include <stdint.h>
+#include <string.h>
 #include <algorithm>
+#include <cstddef>
+#include <memory>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/vectorized/string_functions.h"
+#include "column/column.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "exprs/vectorized/function_helper.h"
+#include "gutil/casts.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf.h"
+#include "util/slice.h"
 
 namespace starrocks::vectorized {
 

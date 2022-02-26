@@ -1,5 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#pragma once
+
+#include "exec/vectorized/join_hash_map.h"
+#include "runtime/primitive_type.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {

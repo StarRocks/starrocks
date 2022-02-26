@@ -5,15 +5,32 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <memory>
+#include <string>
 
 #include "exec/vectorized/file_scanner.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/csv_reader.h"
 #include "util/logging.h"
 #include "util/raw_container.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "gutil/strings/numbers.h"
 
 namespace starrocks {
 class SequentialFile;
+class RuntimeProfile;
+class RuntimeState;
+class SlotDescriptor;
+class TBrokerScanRange;
+namespace vectorized {
+class Chunk;
+class Column;
+namespace csv {
+class Converter;
+}  // namespace csv
+}  // namespace vectorized
 }
 
 namespace starrocks::vectorized {

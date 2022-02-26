@@ -4,6 +4,9 @@
 
 #include <arrow/array.h>
 #include <arrow/status.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string>
 
 #include "column/array_column.h"
 #include "column/nullable_column.h"
@@ -16,10 +19,17 @@
 #include "runtime/primitive_type.h"
 #include "runtime/types.h"
 #include "util/meta_macro.h"
+#include "column/column.h"
+#include "gutil/strings/numbers.h"
+
+namespace arrow {
+class Array;
+}  // namespace arrow
 
 namespace starrocks {
 class RuntimeState;
 class SlotDescriptor;
+struct TypeDescriptor;
 
 } // namespace starrocks
 namespace starrocks::vectorized {

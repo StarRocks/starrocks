@@ -1,13 +1,37 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #pragma once
 
+#include <stdint.h>
 #include <unordered_map>
+#include <map>
+#include <memory>
+#include <ostream>
+#include <utility>
+#include <vector>
 
 #include "column/chunk.h"
 #include "common/global_types.h"
 #include "exec/exec_node.h"
 #include "exec/olap_common.h"
 #include "runtime/global_dicts.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "util/runtime_profile.h"
+
+namespace starrocks {
+class DescriptorTbl;
+class ExprContext;
+class ObjectPool;
+class RuntimeState;
+class TPlanNode;
+namespace pipeline {
+class OperatorFactory;
+class PipelineBuilderContext;
+}  // namespace pipeline
+namespace vectorized {
+class Chunk;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

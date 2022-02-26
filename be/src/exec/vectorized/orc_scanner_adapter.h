@@ -3,6 +3,13 @@
 #pragma once
 
 #include <orc/OrcFile.hh>
+#include <stddef.h>
+#include <stdint.h>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include "column/column_helper.h"
 #include "common/object_pool.h"
@@ -11,7 +18,23 @@
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
+#include "cctz/time_zone.h"
+#include "column/column.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "gutil/strings/numbers.h"
+#include "orc/Reader.hh"
+#include "udf/udf_internal.h"
+
 namespace orc {
+class InputStream;
+class RowReaderFilter;
+class SearchArgumentBuilder;
+class Type;
+struct ColumnVectorBatch;
+
 namespace proto {
 class ColumnStatistics;
 }
@@ -19,6 +42,12 @@ class ColumnStatistics;
 
 namespace starrocks {
 class RuntimeState;
+class Expr;
+class SlotDescriptor;
+namespace vectorized {
+class JoinRuntimeFilter;
+class RuntimeFilterProbeCollector;
+}  // namespace vectorized
 }
 namespace starrocks::vectorized {
 

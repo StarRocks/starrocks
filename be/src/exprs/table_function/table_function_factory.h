@@ -2,8 +2,19 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "exprs/table_function/table_function.h"
 #include "runtime/primitive_type.h"
+#include "gen_cpp/Types_types.h"
+#include "gutil/strings/numbers.h"
+
+namespace starrocks {
+namespace vectorized {
+class TableFunction;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

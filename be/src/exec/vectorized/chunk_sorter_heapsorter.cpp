@@ -5,15 +5,24 @@
 #include <functional>
 #include <memory>
 #include <vector>
+#include <algorithm>
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type_infra.h"
-#include "util/defer_op.h"
+#include "column/fixed_length_column.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/Metrics_types.h"
+#include "runtime/date_value.h"
+#include "runtime/runtime_state.h"
+#include "runtime/timestamp_value.h"
+#include "runtime/types.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::vectorized {
 

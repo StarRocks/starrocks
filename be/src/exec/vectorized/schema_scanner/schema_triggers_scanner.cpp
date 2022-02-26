@@ -2,8 +2,11 @@
 
 #include "exec/vectorized/schema_scanner/schema_triggers_scanner.h"
 
+#include <stdint.h>
+
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
+#include "runtime/datetime_value.h"
 
 namespace starrocks::vectorized {
 

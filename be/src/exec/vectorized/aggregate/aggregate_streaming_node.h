@@ -2,7 +2,24 @@
 
 #pragma once
 
+#include <memory>
+#include <vector>
+
 #include "exec/vectorized/aggregate/aggregate_base_node.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "exec/exec_node.h"
+
+namespace starrocks {
+class DescriptorTbl;
+class ObjectPool;
+class RuntimeState;
+class TPlanNode;
+namespace pipeline {
+class OperatorFactory;
+class PipelineBuilderContext;
+}  // namespace pipeline
+}  // namespace starrocks
 
 // Aggregate means this node handle query with aggregate functions.
 // Streaming means this node will handle input in get_next phase, and maybe directly

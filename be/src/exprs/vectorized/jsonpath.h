@@ -3,9 +3,28 @@
 #pragma once
 
 #include <utility>
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "exprs/vectorized/function_helper.h"
 #include "velocypack/vpack.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "gutil/strings/numbers.h"
+#include "util/slice.h"
+#include "velocypack/Slice.h"
+#include "velocypack/velocypack-common.h"
+
+namespace arangodb {
+namespace velocypack {
+class Builder;
+}  // namespace velocypack
+}  // namespace arangodb
+namespace starrocks {
+class JsonValue;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

@@ -2,8 +2,15 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
 #include <atomic>
 #include <utility>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include "column/chunk.h"
 #include "env/env.h"
@@ -11,6 +18,20 @@
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/types.h"
+#include "udf/udf_internal.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class RuntimeState;
+class SlotDescriptor;
+class THdfsScanRange;
+class TupleDescriptor;
+}  // namespace starrocks
 
 namespace starrocks::parquet {
 class FileReader;

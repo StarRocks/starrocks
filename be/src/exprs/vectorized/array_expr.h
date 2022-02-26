@@ -4,6 +4,11 @@
 
 #include "exprs/expr.h"
 
+namespace starrocks {
+class Expr;
+class TExprNode;
+}  // namespace starrocks
+
 namespace starrocks::vectorized {
 
 class ArrayExprFactory {

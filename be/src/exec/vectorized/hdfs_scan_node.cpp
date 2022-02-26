@@ -2,8 +2,16 @@
 
 #include "exec/vectorized/hdfs_scan_node.h"
 
+#include <assert.h>
 #include <atomic>
 #include <memory>
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <ostream>
+#include <thread>
 
 #include "env/env_hdfs.h"
 #include "env/env_s3.h"
@@ -11,20 +19,31 @@
 #include "exec/vectorized/hdfs_scanner_text.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/runtime_filter.h"
-#include "fmt/core.h"
 #include "glog/logging.h"
 #include "gutil/map_util.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/hdfs/hdfs_fs_cache.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "storage/vectorized/chunk_helper.h"
-#include "util/defer_op.h"
 #include "util/hdfs_util.h"
 #include "util/priority_thread_pool.hpp"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "common/object_pool.h"
+#include "env/env.h"
+#include "exec/vectorized/hdfs_scanner_orc.h"
+#include "fmt/format.h"
+#include "gen_cpp/InternalService_types.h"
+#include "gen_cpp/Metrics_types.h"
+#include "runtime/descriptors.h"
+#include "udf/udf_internal.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class MemTracker;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

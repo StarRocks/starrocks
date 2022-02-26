@@ -2,10 +2,32 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+#include <memory>
+#include <vector>
+
 #include "column/chunk.h"
 #include "exec/exec_node.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "exprs/expr_context.h"
+#include "udf/udf_internal.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
+class DescriptorTbl;
+class MonotonicStopWatch;
+class ObjectPool;
+class RuntimeState;
+class SlotDescriptor;
+class TPlanNode;
+namespace pipeline {
+class OperatorFactory;
+class PipelineBuilderContext;
+}  // namespace pipeline
+
 namespace vectorized {
 class CrossJoinNode final : public ExecNode {
 public:

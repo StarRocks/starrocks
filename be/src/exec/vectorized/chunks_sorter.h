@@ -2,11 +2,30 @@
 
 #pragma once
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "column/vectorized_fwd.h"
 #include "exec/sort_exec_exprs.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "common/status.h"
+#include "gutil/strings/numbers.h"
+
+namespace starrocks {
+class RuntimeState;
+class SortExecExprs;
+class TupleDescriptor;
+struct OrderByType;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 struct PermutationItem {

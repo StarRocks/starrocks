@@ -3,14 +3,19 @@
 #include "exec/vectorized/orc_scanner_adapter.h"
 
 #include <glog/logging.h>
-
-#include <exception>
+#include <bits/exception.h>
 #include <limits>
 #include <set>
 #include <unordered_map>
 #include <utility>
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <list>
+#include <map>
+#include <ostream>
+#include <type_traits>
 
-#include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
 #include "exprs/vectorized/cast_expr.h"
@@ -21,6 +26,40 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
 #include "simd/simd.h"
+#include "cctz/civil_time_detail.h"
+#include "column/binary_column.h"
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "column/datum.h"
+#include "column/fixed_length_column.h"
+#include "column/fixed_length_column_base.h"
+#include "column/nullable_column.h"
+#include "column/type_traits.h"
+#include "common/logging.h"
+#include "exprs/expr.h"
+#include "exprs/vectorized/column_ref.h"
+#include "exprs/vectorized/runtime_filter.h"
+#include "exprs/vectorized/runtime_filter_bank.h"
+#include "gen_cpp/Opcodes_types.h"
+#include "orc/Int128.hh"
+#include "orc/MemoryPool.hh"
+#include "orc/OrcFile.hh"
+#include "orc/Type.hh"
+#include "orc/Vector.hh"
+#include "orc/sargs/Literal.hh"
+#include "orc/sargs/SearchArgument.hh"
+#include "orc/sargs/TruthValue.hh"
+#include "runtime/date_value.h"
+#include "runtime/decimalv2_value.h"
+#include "runtime/decimalv3.h"
+#include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
+#include "runtime/timestamp_value.h"
+#include "runtime/vectorized/time_types.h"
+#include "util/decimal_types.h"
+#include "util/slice.h"
+#include "util/timezone_utils.h"
+
 namespace starrocks::vectorized {
 
 const FillColumnFunction& find_fill_func(PrimitiveType type, bool nullable);

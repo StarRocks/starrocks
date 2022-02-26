@@ -2,15 +2,18 @@
 
 #include "exec/vectorized/chunks_sorter.h"
 
-#include <type_traits>
-
 #include "column/column_helper.h"
-#include "column/type_traits.h"
-#include "exprs/expr.h"
 #include "gutil/casts.h"
-#include "runtime/runtime_state.h"
-#include "util/orlp/pdqsort.h"
-#include "util/stopwatch.hpp"
+#include "column/const_column.h"
+#include "column/nullable_column.h"
+#include "exec/sort_exec_exprs.h"
+#include "glog/logging.h"
+#include "runtime/descriptors.h"
+#include "udf/udf_internal.h"
+
+namespace starrocks {
+class RuntimeState;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

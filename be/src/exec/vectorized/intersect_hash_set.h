@@ -2,12 +2,25 @@
 
 #pragma once
 
+#include <stdint.h>
+#include <cstddef>
+#include <memory>
+#include <vector>
+
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_pool.h"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+
+namespace starrocks {
+class ExprContext;
+class MemPool;
+class RuntimeState;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

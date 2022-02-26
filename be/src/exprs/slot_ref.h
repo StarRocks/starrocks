@@ -21,10 +21,24 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "common/object_pool.h"
 #include "exprs/expr.h"
+#include "column/chunk.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "exprs/expr_context.h"
+#include "glog/logging.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/descriptors.h"
+#include "udf/udf_internal.h"
 
 namespace starrocks {
+class RuntimeState;
+class TExprNode;
+struct TypeDescriptor;
 
 // Reference to a single slot of a tuple.
 // We inline this here in order for Expr::get_value() to be able

@@ -5,6 +5,9 @@
 #include "exprs/predicate.h"
 
 namespace starrocks {
+class Expr;
+class TExprNode;
+
 namespace vectorized {
 
 class VectorizedIsNullPredicateFactory {

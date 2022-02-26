@@ -3,6 +3,13 @@
 #include "exec/vectorized/file_scanner.h"
 
 #include <memory>
+#include <cstdint>
+#include <iterator>
+#include <map>
+#include <new>
+#include <ostream>
+#include <unordered_map>
+#include <utility>
 
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -17,6 +24,21 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/column_hash.h"
+#include "common/global_types.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/Types_types.h"
+#include "runtime/types.h"
+#include "udf/udf_internal.h"
+#include "util/phmap/phmap.h"
+#include "util/runtime_profile.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::vectorized {
 

@@ -2,14 +2,16 @@
 
 #include "exec/vectorized/analytor.h"
 
+#include <ext/alloc_traits.h>
 #include <algorithm>
-#include <cmath>
 #include <memory>
+#include <ostream>
+#include <string>
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/status.h"
-#include "exprs/agg/count.h"
 #include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -17,6 +19,19 @@
 #include "runtime/runtime_state.h"
 #include "udf/udf.h"
 #include "util/runtime_profile.h"
+#include "column/column.h"
+#include "column/const_column.h"
+#include "common/logging.h"
+#include "common/object_pool.h"
+#include "exprs/agg/aggregate_factory.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Metrics_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/descriptors.h"
+#include "runtime/primitive_type.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 namespace vectorized {

@@ -2,8 +2,15 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
 #include <atomic>
 #include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "env/env.h"
 #include "exec/scan_node.h"
@@ -12,6 +19,38 @@
 #include "exec/vectorized/hdfs_scanner_parquet.h"
 #include "exec/vectorized/hdfs_scanner_text.h"
 #include "hdfs/hdfs.h"
+#include "column/vectorized_fwd.h"
+#include "common/config.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "exec/exec_node.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/mem_pool.h"
+#include "util/blocking_queue.hpp"
+#include "util/runtime_profile.h"
+#include "util/spinlock.h"
+
+namespace starrocks {
+class DescriptorTbl;
+class Env;
+class ExprContext;
+class HdfsTableDescriptor;
+class HudiTableDescriptor;
+class IcebergTableDescriptor;
+class ObjectPool;
+class RuntimeState;
+class SlotDescriptor;
+class TScanRangeParams;
+class TupleDescriptor;
+namespace vectorized {
+class HdfsOrcScanner;
+class HdfsScanner;
+class HdfsTextScanner;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

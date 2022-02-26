@@ -2,26 +2,38 @@
 
 #include "exec/vectorized/analytic_node.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
 #include <algorithm>
-#include <cmath>
 #include <memory>
+#include <cstdint>
+#include <utility>
 
 #include "column/chunk.h"
-#include "column/column_helper.h"
 #include "exec/pipeline/analysis/analytic_sink_operator.h"
 #include "exec/pipeline/analysis/analytic_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exprs/agg/count.h"
-#include "exprs/anyval_util.h"
-#include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "udf/udf.h"
 #include "util/runtime_profile.h"
+#include "column/column.h"
+#include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/source_operator.h"
+#include "exec/vectorized/analytor.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "runtime/descriptors.h"
+#include "udf/udf_internal.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class ObjectPool;
+namespace pipeline {
+class OperatorFactory;
+}  // namespace pipeline
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

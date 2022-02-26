@@ -2,10 +2,24 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+#include <functional>
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exprs/expr_context.h"
 #include "util/runtime_profile.h"
+#include "column/chunk.h"
+#include "common/status.h"
+
+namespace starrocks {
+class ExprContext;
+class RuntimeState;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 // Sort Chunks in memory with specified order by rules.

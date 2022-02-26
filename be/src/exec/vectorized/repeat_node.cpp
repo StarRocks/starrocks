@@ -2,12 +2,27 @@
 
 #include "exec/vectorized/repeat_node.h"
 
+#include <ext/alloc_traits.h>
+#include <utility>
+
 #include "exec/pipeline/aggregate/repeat/repeat_operator.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exprs/expr.h"
 #include "runtime/runtime_state.h"
+#include "column/chunk.h"
+#include "common/config.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "runtime/descriptors.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class ObjectPool;
+namespace pipeline {
+class OperatorFactory;
+}  // namespace pipeline
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 RepeatNode::RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)

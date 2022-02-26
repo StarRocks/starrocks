@@ -2,8 +2,15 @@
 
 #include "exprs/agg/aggregate_factory.h"
 
+#include <stddef.h>
 #include <tuple>
 #include <unordered_map>
+#include <algorithm>
+#include <map>
+#include <memory>
+#include <new>
+#include <type_traits>
+#include <utility>
 
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
@@ -30,6 +37,16 @@
 #include "exprs/agg/window.h"
 #include "percentile_union.h"
 #include "udf/java/java_function_fwd.h"
+#include "column/hash_set.h"
+#include "runtime/date_value.h"
+#include "runtime/decimalv2_value.h"
+#include "runtime/timestamp_value.h"
+#include "storage/hll.h"
+#include "storage/olap_define.h"
+#include "util/bitmap_value.h"
+#include "util/percentile_value.h"
+#include "util/phmap/phmap.h"
+#include "util/phmap/phmap_dump.h"
 
 namespace starrocks::vectorized {
 

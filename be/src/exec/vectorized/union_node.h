@@ -2,9 +2,30 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <map>
+#include <vector>
+
 #include "exec/exec_node.h"
 #include "exec/pipeline/set/union_passthrough_operator.h"
 #include "runtime/runtime_state.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "exec/pipeline/operator.h"
+#include "exprs/expr_context.h"
+#include "udf/udf_internal.h"
+
+namespace starrocks {
+class DescriptorTbl;
+class ObjectPool;
+class SlotDescriptor;
+class TPlanNode;
+class TupleDescriptor;
+namespace pipeline {
+class PipelineBuilderContext;
+}  // namespace pipeline
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

@@ -2,10 +2,13 @@
 
 #include "exec/vectorized/topn_node.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <sys/types.h>
 #include <memory>
+#include <ostream>
+#include <utility>
 
-#include "column/column_helper.h"
-#include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
@@ -17,6 +20,23 @@
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
+#include "column/chunk.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/source_operator.h"
+#include "exprs/expr.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
+#include "runtime/types.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class ObjectPool;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

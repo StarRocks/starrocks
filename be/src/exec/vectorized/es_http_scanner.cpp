@@ -3,12 +3,17 @@
 #include "exec/vectorized/es_http_scanner.h"
 
 #include <fmt/format.h>
-
 #include <memory>
+#include <utility>
 
 #include "exec/exec_node.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
+#include "exec/es/es_scan_reader.h"
+#include "exec/vectorized/es_http_components.h"
+#include "gen_cpp/Metrics_types.h"
+#include "runtime/descriptors.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::vectorized {
 EsHttpScanner::EsHttpScanner(RuntimeState* state, RuntimeProfile* profile, TupleId tuple_id,

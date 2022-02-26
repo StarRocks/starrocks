@@ -2,13 +2,20 @@
 #pragma once
 
 #include <gen_cpp/InternalService_types.h>
+#include <stdint.h>
+#include <memory>
 
 #include "common/status.h"
 #include "exec/olap_utils.h"
 #include "runtime/runtime_state.h"
 #include "storage/vectorized/meta_reader.h"
+#include "column/vectorized_fwd.h"
+#include "storage/tablet.h"
 
 namespace starrocks {
+class RuntimeState;
+class TInternalScanRange;
+
 namespace vectorized {
 
 class OlapMetaScanNode;

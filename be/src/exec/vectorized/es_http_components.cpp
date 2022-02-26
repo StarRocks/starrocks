@@ -3,13 +3,32 @@
 #include "exec/vectorized/es_http_components.h"
 
 #include <fmt/format.h>
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <ostream>
+#include <utility>
+#include <vector>
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/timestamp_value.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "rapidjson/allocators.h"
+#include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
+#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
+#include "runtime/descriptors.h"
+#include "runtime/types.h"
+#include "util/string_parser.hpp"
+#include "util/timezone_utils.h"
 
 namespace starrocks::vectorized {
 

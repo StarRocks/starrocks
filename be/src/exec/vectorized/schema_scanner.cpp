@@ -2,21 +2,23 @@
 
 #include "exec/vectorized/schema_scanner.h"
 
-#include "column/type_traits.h"
+#include <new>
+
 #include "exec/vectorized/schema_scanner/schema_charsets_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_collations_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_columns_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_dummy_scanner.h"
-#include "exec/vectorized/schema_scanner/schema_events_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_schema_privileges_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_schemata_scanner.h"
-#include "exec/vectorized/schema_scanner/schema_statistics_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_table_privileges_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_tables_scanner.h"
-#include "exec/vectorized/schema_scanner/schema_triggers_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_variables_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_views_scanner.h"
+#include "common/object_pool.h"
+#include "gen_cpp/Types_types.h"
+#include "runtime/descriptors.h"
+#include "runtime/types.h"
 
 namespace starrocks::vectorized {
 

@@ -2,16 +2,30 @@
 
 #include "exec/vectorized/hdfs_scanner.h"
 
-#include <hdfs/hdfs.h>
-#include <unistd.h>
-
-#include <algorithm>
+#include <ext/alloc_traits.h>
 #include <memory>
-#include <mutex>
-#include <thread>
+#include <ostream>
+#include <type_traits>
+#include <utility>
 
-#include "env/env_hdfs.h"
 #include "exec/vectorized/hdfs_scan_node.h"
+#include "column/chunk.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "common/statusor.h"
+#include "exec/exec_node.h"
+#include "exprs/expr.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Metrics_types.h"
+#include "glog/logging.h"
+#include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
+#include "util/runtime_profile.h"
+
+namespace starrocks {
+class THdfsScanRange;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

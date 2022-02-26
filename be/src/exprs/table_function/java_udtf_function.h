@@ -2,7 +2,15 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exprs/table_function/table_function.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+
+namespace starrocks {
+class TFunction;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

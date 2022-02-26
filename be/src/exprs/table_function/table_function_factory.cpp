@@ -2,14 +2,17 @@
 
 #include "table_function_factory.h"
 
+#include <stddef.h>
 #include <unordered_map>
+#include <memory>
+#include <tuple>
+#include <utility>
 
-#include "column/column.h"
-#include "column/type_traits.h"
 #include "exprs/table_function/json_each.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
 #include "udf/java/java_function_fwd.h"
+#include "storage/olap_define.h"
 
 namespace starrocks::vectorized {
 

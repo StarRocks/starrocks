@@ -2,9 +2,35 @@
 
 #include "aggregator.h"
 
+#include <stdint.h>
+#include <algorithm>
+#include <new>
+#include <ostream>
+#include <string>
+#include <type_traits>
+
 #include "common/status.h"
 #include "exprs/anyval_util.h"
 #include "runtime/current_thread.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/nullable_column.h"
+#include "column/type_traits.h"
+#include "common/compiler_util.h"
+#include "common/logging.h"
+#include "common/object_pool.h"
+#include "exec/vectorized/aggregate/agg_hash_map.h"
+#include "exec/vectorized/aggregate/agg_hash_set.h"
+#include "exprs/agg/aggregate_factory.h"
+#include "exprs/expr.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Metrics_types.h"
+#include "gutil/int128.h"
+#include "gutil/strings/numbers.h"
+#include "gutil/strings/substitute.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/primitive_type.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 namespace vectorized {

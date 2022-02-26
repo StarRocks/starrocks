@@ -2,8 +2,15 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
 #include <mutex>
 #include <set>
+#include <atomic>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "column/column.h"
 #include "common/global_types.h"
@@ -19,16 +26,27 @@
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "util/blocking_queue.hpp"
+#include "common/status.h"
+#include "gutil/casts.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/types.h"
+#include "udf/udf_internal.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class RowDescriptor;
 class MemTracker;
 class ExecEnv;
 class RuntimeProfile;
+class ObjectPool;
+class RuntimeState;
+class TRuntimeFilterDescription;
 
 namespace vectorized {
 class HashJoinNode;
 class RuntimeFilterProbeCollector;
+class Chunk;
+
 class RuntimeFilterHelper {
 public:
     // ==================================

@@ -2,6 +2,19 @@
 
 #pragma once
 
+#include <emmintrin.h>
+#include <immintrin.h>
+#include <mm_malloc.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <functional>
+#include <limits>
+#include <ostream>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/const_column.h"
@@ -10,8 +23,21 @@
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "column/column.h"
+#include "column/vectorized_fwd.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/date_value.h"
+#include "runtime/decimalv2_value.h"
+#include "runtime/primitive_type.h"
+#include "runtime/timestamp_value.h"
+#include "util/hash_util.hpp"
+#include "util/slice.h"
 
 namespace starrocks {
+class ObjectPool;
+
 namespace vectorized {
 
 // Modify from https://github.com/FastFilter/fastfilter_cpp/blob/master/src/bloom/simd-block.h

@@ -8,15 +8,32 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <memory>
+#include <vector>
 
 #include "exec/scan_node.h"
 #include "exec/vectorized/es_http_scanner.h"
 #include "util/blocking_queue.hpp"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "exec/exec_node.h"
+#include "gen_cpp/InternalService_types.h"
+#include "gutil/strings/numbers.h"
+#include "util/runtime_profile.h"
+#include "util/spinlock.h"
 
 namespace starrocks {
 class EsPredicate;
+class DescriptorTbl;
+class ObjectPool;
+class RuntimeState;
+class TPlanNode;
+class TupleDescriptor;
 
 namespace vectorized {
+class EsHttpScanner;
+
 class EsHttpScanNode final : public starrocks::ScanNode {
 public:
     EsHttpScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

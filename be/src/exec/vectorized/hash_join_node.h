@@ -2,11 +2,28 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+#include <list>
+#include <set>
+#include <string>
+#include <vector>
+
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "exec/exec_node.h"
 #include "exec/vectorized/join_hash_map.h"
 #include "util/phmap/phmap.h"
+#include "column/column.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/status.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gutil/strings/numbers.h"
+#include "udf/udf_internal.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -15,6 +32,10 @@ class TPlanNode;
 class DescriptorTbl;
 class RuntimeState;
 class ExprContext;
+class MonotonicStopWatch;
+namespace pipeline {
+class PipelineBuilderContext;
+}  // namespace pipeline
 
 namespace vectorized {
 class ColumnRef;

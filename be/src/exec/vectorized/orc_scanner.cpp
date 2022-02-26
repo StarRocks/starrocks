@@ -3,18 +3,26 @@
 #include "exec/vectorized/orc_scanner.h"
 
 #include <memory>
-#include <type_traits>
+#include <ostream>
+#include <string>
+#include <utility>
 
-#include "column/array_column.h"
-#include "column/column_helper.h"
 #include "env/env.h"
 #include "exec/vectorized/orc_scanner_adapter.h"
-#include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/broker_mgr.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "column/chunk.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/types.pb.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "gutil/strings/numbers.h"
+#include "orc/Exceptions.hh"
+#include "orc/OrcFile.hh"
+#include "util/runtime_profile.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::vectorized {
 

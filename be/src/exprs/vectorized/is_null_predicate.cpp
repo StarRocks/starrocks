@@ -2,9 +2,31 @@
 
 #include "exprs/vectorized/is_null_predicate.h"
 
-#include "column/column_builder.h"
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "column/column_helper.h"
 #include "exprs/vectorized/unary_function.h"
+#include "column/column.h"
+#include "column/nullable_column.h"
+#include "common/object_pool.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "exprs/predicate.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Types_types.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf_internal.h"
+
+namespace starrocks {
+namespace vectorized {
+class Chunk;
+class VectorizedIsNotNullPredicate;
+class VectorizedIsNullPredicate;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

@@ -3,21 +3,21 @@
 #include "exprs/vectorized/jsonpath.h"
 
 #include <re2/re2.h>
-
-#include <algorithm>
-#include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
+#include <utility>
 
-#include "column/column_builder.h"
-#include "column/column_helper.h"
-#include "column/column_viewer.h"
 #include "common/status.h"
-#include "exprs/vectorized/function_helper.h"
-#include "exprs/vectorized/json_functions.h"
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "velocypack/vpack.h"
+#include "boost/iterator/iterator_facade.hpp"
+#include "boost/token_functions.hpp"
+#include "common/compiler_util.h"
+#include "util/json.h"
+#include "util/string_parser.hpp"
+#include "velocypack/Builder.h"
+#include "velocypack/Exception.h"
+#include "velocypack/Iterator.h"
 
 namespace starrocks::vectorized {
 

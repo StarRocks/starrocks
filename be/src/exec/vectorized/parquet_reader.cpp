@@ -1,21 +1,19 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #include "exec/vectorized/parquet_reader.h"
 
-#include <arrow/array.h>
 #include <arrow/status.h>
-#include <column/array_column.h>
-#include <column/column_helper.h>
-#include <gutil/strings/substitute.h>
-
 #include <utility>
 
-#include "column/chunk.h"
-#include "common/logging.h"
-#include "exec/file_reader.h"
-#include "exec/vectorized/arrow_to_starrocks_converter.h"
-#include "runtime/client_cache.h"
-#include "runtime/descriptors.h"
-#include "runtime/mem_pool.h"
+#include "common/compiler_util.h"
+#include "env/env.h"
+#include "exec/parquet_reader.h"
+#include "gen_cpp/StatusCode_types.h"
+#include "parquet/platform.h"
+#include "util/slice.h"
+
+namespace starrocks {
+class SlotDescriptor;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

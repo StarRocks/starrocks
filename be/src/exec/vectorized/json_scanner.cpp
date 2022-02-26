@@ -2,30 +2,43 @@
 
 #include "exec/vectorized/json_scanner.h"
 
-#include <fmt/compile.h>
-#include <fmt/format.h>
-#include <ryu/ryu.h>
-
-#include <algorithm>
+#include <ext/alloc_traits.h>
+#include <string.h>
 #include <sstream>
+#include <cstdint>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
 
-#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/fixed_length_column.h"
-#include "env/env.h"
-#include "exec/broker_reader.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/decimal_cast_expr.h"
 #include "exprs/vectorized/json_functions.h"
-#include "exprs/vectorized/unary_function.h"
 #include "formats/json/nullable_column.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "util/runtime_profile.h"
+#include "column/column.h"
+#include "column/datum.h"
+#include "column/nullable_column.h"
+#include "env/env_stream_pipe.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "gutil/int128.h"
+#include "runtime/descriptors.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf_internal.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
+
+namespace starrocks {
+class SequentialFile;
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

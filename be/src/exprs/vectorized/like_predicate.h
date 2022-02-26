@@ -4,7 +4,6 @@
 
 #include <hs/hs.h>
 #include <re2/re2.h>
-
 #include <memory>
 #include <string>
 
@@ -13,9 +12,20 @@
 #include "column/column_viewer.h"
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "gutil/strings/numbers.h"
+#include "hs/hs_common.h"
+#include "hs/hs_compile.h"
+#include "hs/hs_runtime.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf.h"
+#include "util/slice.h"
 
 namespace starrocks {
 namespace vectorized {
+template <starrocks::PrimitiveType Type> class ColumnBuilder;
+template <starrocks::PrimitiveType Type> class ColumnViewer;
 
 class LikePredicate {
 public:
@@ -151,6 +161,7 @@ private:
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
     class LikePredicateState;
+
     static Status hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, starrocks_udf::FunctionContext*,
                                                const Slice& slice);
 

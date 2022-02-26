@@ -2,13 +2,38 @@
 
 #include "exprs/vectorized/binary_predicate.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <functional>
+#include <memory>
+
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "exprs/vectorized/binary_function.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
-#include "storage/vectorized/column_predicate.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "exprs/predicate.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Opcodes_types.h"
+#include "gutil/strings/numbers.h"
+#include "runtime/date_value.h"
+#include "runtime/timestamp_value.h"
+#include "udf/udf_internal.h"
+#include "util/json.h"
+#include "util/slice.h"
+
+namespace starrocks {
+class ObjectPool;
+namespace vectorized {
+class Chunk;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

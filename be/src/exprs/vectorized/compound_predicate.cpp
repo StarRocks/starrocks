@@ -2,10 +2,33 @@
 
 #include "exprs/vectorized/compound_predicate.h"
 
+#include <memory>
+#include <ostream>
+#include <utility>
+#include <vector>
+
 #include "common/object_pool.h"
 #include "exprs/predicate.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Opcodes_types.h"
+#include "glog/logging.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf_internal.h"
+
+namespace starrocks {
+namespace vectorized {
+class Chunk;
+class VectorizedAndCompoundPredicate;
+class VectorizedNotCompoundPredicate;
+class VectorizedOrCompoundPredicate;
+}  // namespace vectorized
+}  // namespace starrocks
 
 namespace starrocks::vectorized {
 

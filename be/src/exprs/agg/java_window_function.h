@@ -2,14 +2,23 @@
 
 #pragma once
 
+#include <stdint.h>
 #include <cstring>
 #include <vector>
+#include <memory>
+#include <string>
 
 #include "exprs/agg/java_udaf_function.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
+#include "column/column.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/agg/aggregate.h"
+#include "gutil/strings/numbers.h"
+#include "udf/udf.h"
+#include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
 void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val);

@@ -1,6 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #include "exec/vectorized/olap_meta_scan_node.h"
 
+#include "exec/vectorized/olap_meta_scanner.h"
+#include "gen_cpp/InternalService_types.h"
+#include "gen_cpp/Metrics_types.h"
+#include "glog/logging.h"
+#include "runtime/runtime_state.h"
+#include "util/stopwatch.hpp"
+
 namespace starrocks {
 namespace vectorized {
 

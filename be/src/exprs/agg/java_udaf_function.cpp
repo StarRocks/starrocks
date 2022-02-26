@@ -3,17 +3,20 @@
 #include "exprs/agg/java_udaf_function.h"
 
 #include <memory>
+#include <utility>
 
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "fmt/core.h"
 #include "fmt/format.h"
 #include "gutil/casts.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
 #include "runtime/user_function_cache.h"
+#include "column/datum.h"
+#include "column/fixed_length_column_base.h"
+#include "common/statusor.h"
 
 #define APPLY_FOR_NUMBERIC_TYPE(M) \
     M(TYPE_BOOLEAN)                \
