@@ -94,7 +94,7 @@ set(UTIL_FILES
   path_util.cpp
   file_cache.cpp
   monotime.cpp
-        thread.cpp
+  thread.cpp
   threadpool.cpp
   trace.cpp
   trace_metrics.cpp
