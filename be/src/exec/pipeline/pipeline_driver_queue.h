@@ -33,6 +33,12 @@ public:
 
     virtual size_t size() = 0;
     bool empty() { return size() == 0; }
+
+protected:
+    // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
+    // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2s, 3s, 4.2s, 5.6s, and 7.2s,
+    // it will move to next level.
+    static constexpr int64_t LEVEL_TIME_SLICE_BASE_NS = 200'000'000L;
 };
 
 class SubQuerySharedDriverQueue {
@@ -95,11 +101,6 @@ private:
     int _compute_driver_level(const DriverRawPtr driver) const;
 
 private:
-    // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
-    // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2s, 3s, 4.2s, 5.6s, and 7.2s,
-    // it will move to next level.
-    static constexpr int64_t LEVEL_TIME_SLICE_BASE_NS = 200'000'000L;
-
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns.
     int64_t _level_time_slices[QUEUE_SIZE];
@@ -154,10 +155,6 @@ private:
 private:
     static constexpr size_t QUEUE_SIZE = 8;
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
-    // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
-    // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2s, 3s, 4.2s, 5.6s, and 7.2s,
-    // it will move to next level.
-    static constexpr int64_t LEVEL_TIME_SLICE_BASE_NS = 200'000'000L;
 
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns.
