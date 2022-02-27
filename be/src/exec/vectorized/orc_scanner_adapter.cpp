@@ -1471,8 +1471,8 @@ void OrcScannerAdapter::lazy_read_next(size_t numValues) {
     _row_reader->lazyLoadNext(*_batch, numValues);
 }
 
-void OrcScannerAdapter::lazy_skip_next(size_t numValues) {
-    _row_reader->lazyLoadSkip(numValues);
+void OrcScannerAdapter::lazy_sync_to(size_t rowInStripe) {
+    _row_reader->lazyLoadSyncTo(rowInStripe);
 }
 
 void OrcScannerAdapter::set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter) {

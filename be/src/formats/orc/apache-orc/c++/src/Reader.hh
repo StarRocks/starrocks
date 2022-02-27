@@ -131,7 +131,6 @@ private:
     uint64_t currentStripe;
     uint64_t lastStripe; // the stripe AFTER the last one
     uint64_t currentRowInStripe;
-    uint64_t lazyLoadRowInStripe;         // which row in stripe lazy load fields are going to use.
     uint64_t lazyLoadLastUsedRowInStripe; // which row in stripe loazy load files are used in last time.
 
     uint64_t rowsInCurrentStripe;
@@ -201,7 +200,7 @@ public:
     std::unique_ptr<ColumnVectorBatch> createRowBatch(uint64_t size) const override;
 
     bool next(ColumnVectorBatch& data, ReadPosition* pos) override;
-    void lazyLoadSkip(uint64_t numValues) override;
+    void lazyLoadSyncTo(uint64_t rowInStripe) override;
     void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) override;
 
     CompressionKind getCompression() const;

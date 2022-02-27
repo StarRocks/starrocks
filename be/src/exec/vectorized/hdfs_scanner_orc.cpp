@@ -415,9 +415,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         return Status::EndOfFile("");
     }
 
-    size_t skip_num_values = 0;
     ChunkPtr& ck = *chunk;
-
     // this infinite for loop is for retry.
     for (;;) {
         orc::RowReader::ReadPosition position;
@@ -480,22 +478,13 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
             return Status::OK();
         }
 
-        // We batch skip num values beause we have opportunity to skip an entire stripe / row_group
-        // And if that happens,  we can save IO at granuarity of strip / row_group
-        if (position.start_new_stripe || position.seek_new_row_group) {
-            skip_num_values = 0;
-        }
         // if has lazy load fields, skip it if chunk_size == 0
         if (chunk_size == 0) {
-            skip_num_values += read_num_values;
             continue;
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_read_ns);
-            if (skip_num_values != 0) {
-                _orc_adapter->lazy_skip_next(skip_num_values);
-                skip_num_values = 0;
-            }
+            _orc_adapter->lazy_sync_to(position.row_in_stripe);
             _orc_adapter->lazy_read_next(read_num_values);
         }
         {
