@@ -33,7 +33,7 @@ KeyCoder::KeyCoder(TraitsType traits)
 
 // Helper class used to get KeyCoder.
 class KeyCoderResolver {
-public
+public:
     ~KeyCoderResolver() {
         for (KeyCoder* p : _coder_map) {
             delete p;
