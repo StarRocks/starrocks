@@ -1169,6 +1169,19 @@ Status OrcScannerAdapter::_init_position_in_orc() {
         SlotId id = slot_desc->id();
         _slot_id_to_position[id] = pos;
     }
+
+    if (_lazy_load_ctx != nullptr) {
+        for (int i = 0; i < _lazy_load_ctx->active_load_slots.size(); i++) {
+            int src_index = _lazy_load_ctx->active_load_indices[i];
+            int pos = _position_in_orc[src_index];
+            _lazy_load_ctx->active_load_orc_positions[i] = pos;
+        }
+        for (int i = 0; i < _lazy_load_ctx->lazy_load_slots.size(); i++) {
+            int src_index = _lazy_load_ctx->lazy_load_indices[i];
+            int pos = _position_in_orc[src_index];
+            _lazy_load_ctx->lazy_load_orc_positions[i] = pos;
+        }
+    }
     return Status::OK();
 }
 
@@ -1456,7 +1469,8 @@ StatusOr<ChunkPtr> OrcScannerAdapter::get_active_chunk() {
 void OrcScannerAdapter::lazy_filter_on_cvb(Filter* filter) {
     size_t true_size = SIMD::count_nonzero(*filter);
     if (filter->size() != true_size) {
-        _batch->filter(filter->data(), filter->size(), true_size);
+        _batch->filterOnFields(filter->data(), filter->size(), true_size, _lazy_load_ctx->lazy_load_orc_positions,
+                               true);
     }
 }
 
@@ -2121,7 +2135,12 @@ Status OrcScannerAdapter::apply_dict_filter_eval_cache(
     if (!filter_all) {
         uint32_t one_count = filter->size() - SIMD::count_zero(*filter);
         if (one_count != filter->size()) {
-            _batch->filter(filter->data(), filter->size(), one_count);
+            if (has_lazy_load_context()) {
+                _batch->filterOnFields(filter->data(), filter->size(), one_count,
+                                       _lazy_load_ctx->active_load_orc_positions, false);
+            } else {
+                _batch->filter(filter->data(), filter->size(), one_count);
+            }
         }
     } else {
         _batch->numElements = 0;

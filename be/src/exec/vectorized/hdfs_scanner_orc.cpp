@@ -369,10 +369,12 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             VLOG_FILE << "[ORC] lazy load field = " << it->col_name();
             _lazy_load_ctx.lazy_load_slots.emplace_back(it);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
+            _lazy_load_ctx.lazy_load_orc_positions.emplace_back(0);
         } else {
             VLOG_FILE << "[ORC] active load field = " << it->col_name();
             _lazy_load_ctx.active_load_slots.emplace_back(it);
             _lazy_load_ctx.active_load_indices.emplace_back(src_slot_index);
+            _lazy_load_ctx.active_load_orc_positions.emplace_back(0);
         }
         _src_slot_descriptors.emplace_back(it);
         src_slot_index++;

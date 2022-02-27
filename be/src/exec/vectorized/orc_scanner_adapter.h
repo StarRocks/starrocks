@@ -36,8 +36,10 @@ public:
     struct LazyLoadContext {
         std::vector<SlotDescriptor*> active_load_slots;
         std::vector<int> active_load_indices;
+        std::vector<int> active_load_orc_positions;
         std::vector<SlotDescriptor*> lazy_load_slots;
         std::vector<int> lazy_load_indices;
+        std::vector<int> lazy_load_orc_positions;
     };
 
     // src slot descriptors should exactly matches columns in row readers.
