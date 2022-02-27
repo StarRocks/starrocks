@@ -92,7 +92,6 @@ void DelVector::_update_stats() {
         roaring_statistics_t st;
         roaring_bitmap_statistics(&_roaring->roaring, &st);
         _memory_usage = st.n_bytes_array_containers + st.n_bytes_bitset_containers + st.n_bytes_run_containers;
-        //_memory_usage = _roaring->getSizeInBytes(false);
         _cardinality = st.cardinality;
     } else {
         _memory_usage = 0;

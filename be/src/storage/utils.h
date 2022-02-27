@@ -70,7 +70,7 @@ uint32_t olap_adler32(uint32_t adler, const char* buf, size_t len);
 
 Status gen_timestamp_string(std::string* out_string);
 
-// move file to storage_root/trash, file can be a directory
+// Move file to 'storage_root/trash,' file can be a directory.
 Status move_to_trash(const std::filesystem::path& tablet_id_path);
 
 Status copy_file(const std::string& src, const std::string& dest);
@@ -96,7 +96,7 @@ inline bool is_io_error(Status status) {
     return status.is_io_error();
 }
 
-// check if int8_t, int16_t, int32_t, int64_t value is overflow
+// Check if value is overflow for 'int8_t', 'int16_t', 'int32_t', 'int64_t'.
 template <typename T>
 bool valid_signed_number(const std::string& value_str) {
     char* endptr = nullptr;
@@ -118,7 +118,7 @@ bool valid_signed_number(const std::string& value_str) {
 template <>
 bool valid_signed_number<int128_t>(const std::string& value_str);
 
-// check if uint8_t, uint16_t, uint32_t, uint64_t value is overflow
+// Check if value is overflow for 'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t'.
 template <typename T>
 bool valid_unsigned_number(const std::string& value_str) {
     if (value_str[0] == '-') {
@@ -143,12 +143,12 @@ bool valid_unsigned_number(const std::string& value_str) {
 
 bool valid_decimal(const std::string& value_str, uint32_t precision, uint32_t frac);
 
-// check if date and datetime value is valid
+// Check if date and datetime value is valid.
 bool valid_datetime(const std::string& value_str);
 
 bool valid_bool(const std::string& value_str);
 
-// Util used to get string name of thrift enum item
+// Util used to get string name of thrift enum item.
 #define EnumToString(enum_type, index, out)                                                         \
     do {                                                                                            \
         std::map<int, const char*>::const_iterator it = _##enum_type##_VALUES_TO_NAMES.find(index); \

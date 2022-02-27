@@ -59,7 +59,7 @@ Status DeleteConditionHandler::generate_delete_predicate(const TabletSchema& sch
         return Status::InvalidArgument("Invalid parameters for store_cond");
     }
 
-    // check delete condition meet the requirements
+    // Check delete condition meet the requirements.
     for (const TCondition& condition : conditions) {
         if (!check_condition_valid(schema, condition).ok()) {
             LOG(WARNING) << "invalid condition. condition=" << ThriftDebugString(condition);
@@ -67,7 +67,7 @@ Status DeleteConditionHandler::generate_delete_predicate(const TabletSchema& sch
         }
     }
 
-    // storage delete condition
+    // Storage delete condition.
     for (const TCondition& condition : conditions) {
         // condition.condition_op eq !*= or *=
         if (condition.condition_values.size() > 1) {
@@ -158,7 +158,7 @@ bool DeleteConditionHandler::is_condition_value_valid(const TabletColumn& column
 }
 
 Status DeleteConditionHandler::check_condition_valid(const TabletSchema& schema, const TCondition& cond) {
-    // Checks for the existence of the specified column name
+    // Checks for the existence of the specified column name.
     int field_index = _get_field_index(schema, cond.column_name);
 
     if (field_index < 0) {

@@ -29,7 +29,7 @@
 
 namespace starrocks {
 
-// the sign of integer must be same as fraction
+// The sign of integer must be same as fraction.
 struct decimal12_t {
     decimal12_t() {}
     decimal12_t(int64_t int_part, int32_t frac_part) {
@@ -52,7 +52,7 @@ struct decimal12_t {
             fraction += FRAC_RATIO;
         }
 
-        // if sign of fraction is different from integer
+        // If sign of fraction is different from integer.
         if ((fraction != 0) && (integer != 0) && (fraction ^ integer) < 0) {
             bool sign = integer < 0;
             integer += (sign ? 1 : -1);

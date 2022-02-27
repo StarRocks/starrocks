@@ -62,13 +62,13 @@ public:
 
     ~CacheKey() = default;
 
-    // Return a pointer to the beginning of the referenced data
+    // Return a pointer to the beginning of the referenced data.
     const char* data() const { return _data; }
 
-    // Return the length (in bytes) of the referenced data
+    // Return the length (in bytes) of the referenced data.
     size_t size() const { return _size; }
 
-    // Return true iff the length of the referenced data is zero
+    // Return true iff the length of the referenced data is zero.
     bool empty() const { return _size == 0; }
 
     // Return the ith byte in the referenced data.
@@ -78,7 +78,7 @@ public:
         return _data[n];
     }
 
-    // Change this slice to refer to an empty array
+    // Change this slice to refer to an empty array.
     void clear() {
         _data = nullptr;
         _size = 0;
@@ -115,14 +115,15 @@ public:
 
     uint32_t hash(const char* data, size_t n, uint32_t seed) const;
 
-    // Return true iff "x" is a prefix of "*this"
+    // Return true iff "x" is a prefix of "*this".
     bool starts_with(const CacheKey& x) const { return ((_size >= x._size) && (memcmp(_data, x._data, x._size) == 0)); }
 
 private:
     uint32_t _decode_fixed32(const char* ptr) const {
-        // Load the raw bytes
+        // Load the raw bytes.
         uint32_t result;
-        memcpy(&result, ptr, sizeof(result)); // gcc optimizes this to a plain load
+        // gcc optimizes this to a plain load.
+        memcpy(&result, ptr, sizeof(result));
         return result;
     }
 
@@ -130,7 +131,7 @@ private:
     size_t _size{0};
 };
 
-// The entry with smaller CachePriority will evict firstly
+// The entry with smaller CachePriority will evict firstly.
 enum class CachePriority { NORMAL = 0, DURABLE = 1 };
 
 class Cache {
@@ -215,11 +216,14 @@ typedef struct LRUHandle {
     LRUHandle* prev;
     size_t charge;
     size_t key_length;
-    bool in_cache; // Whether entry is in the cache.
+    // Whether entry is in the cache.
+    bool in_cache;
     uint32_t refs;
-    uint32_t hash; // Hash of key(); used for fast sharding and comparisons
+    // Hash of key(); used for fast sharding and comparisons.
+    uint32_t hash;
     CachePriority priority = CachePriority::NORMAL;
-    char key_data[1]; // Beginning of key
+    // Beginning of key.
+    char key_data[1];
 
     CacheKey key() const {
         // For cheaper lookups, we allow a temporary Handle object
@@ -243,7 +247,6 @@ typedef struct LRUHandle {
 // tablet implementations in some of the compiler/runtime combinations
 // we have tested.  E.g., readrandom speeds up by ~5% over the g++
 // 4.4.3's builtin hashtable.
-
 class HandleTable {
 public:
     HandleTable() { _resize(); }
@@ -310,7 +313,7 @@ private:
 
     // Dummy head of LRU list.
     // lru.prev is newest entry, lru.next is oldest entry.
-    // Entries have refs==1 and in_cache==true.
+    // Entries have 'refs == 1' and 'in_cache == true'.
     LRUHandle _lru;
 
     HandleTable _table;

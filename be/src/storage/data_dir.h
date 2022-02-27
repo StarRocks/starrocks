@@ -43,7 +43,7 @@ class TabletMeta;
 class TxnManager;
 
 // A DataDir used to manage data in same path.
-// Now, After DataDir was created, it will never be deleted for easy implementation.
+// Now, after data dir was created, it will never be deleted for easy implementation.
 class DataDir {
 public:
     DataDir(std::string path, TStorageMedium::type storage_medium = TStorageMedium::HDD,
@@ -70,9 +70,9 @@ public:
         return info;
     }
 
-    // save a cluster_id file under data path to prevent
+    // Save a cluster_id file under data path to prevent
     // invalid be config for example two be use the same
-    // data path
+    // data path.
     Status set_cluster_id(int32_t cluster_id);
     void health_check();
 
@@ -95,18 +95,18 @@ public:
 
     static std::string get_root_path_from_schema_hash_path_in_trash(const std::string& schema_hash_dir_in_trash);
 
-    // load data from meta and data files
+    // Load data from meta and data files.
     Status load();
 
-    // this function scans the paths in data dir to collect the paths to check
-    // this is a producer function. After scan, it will notify the perform_path_gc function to gc
+    // This function scans the paths in data dir to collect the paths to checkm,
+    // this is a producer function. After scan, it will notify the perform_path_gc function to gc.
     void perform_path_scan();
 
     void perform_path_gc_by_rowsetid();
 
     void perform_path_gc_by_tablet();
 
-    // check if the capacity reach the limit after adding the incoming data
+    // Check if the capacity reach the limit after adding the incoming data
     // return true if limit reached, otherwise, return false.
     // TODO(cmy): for now we can not precisely calculate the capacity StarRocks used,
     // so in order to avoid running out of disk capacity, we currently use the actual
@@ -135,9 +135,9 @@ private:
 
     std::string _path;
     int64_t _path_hash;
-    // the actual available capacity of the disk of this data dir
+    // The actual available capacity of the disk of this data dir.
     int64_t _available_bytes;
-    // the actual capacity of the disk of this data dir
+    // The actual capacity of the disk of this data dir.
     int64_t _disk_capacity_bytes;
     TStorageMedium::type _storage_medium;
     bool _is_used;
@@ -146,10 +146,10 @@ private:
     TabletManager* _tablet_manager;
     TxnManager* _txn_manager;
     int32_t _cluster_id;
-    // This flag will be set true if this store was not in root path when reloading
+    // This flag will be set true if this store was not in root path when reloading.
     bool _to_be_deleted;
 
-    // used to protect _current_shard and _tablet_set
+    // Used to protect '_current_shard' and '_tablet_set'.
     std::mutex _mutex;
     uint64_t _current_shard;
     std::set<TabletInfo> _tablet_set;

@@ -70,7 +70,7 @@ public:
         _init(columns, col_ids, num_key_columns);
     }
 
-    // Only for UT
+    // Only for UT.
     Schema(const std::vector<TabletColumn>& columns, size_t num_key_columns) {
         std::vector<ColumnId> col_ids(columns.size());
         for (uint32_t cid = 0; cid < columns.size(); ++cid) {
@@ -102,7 +102,7 @@ public:
 
     size_t column_offset(ColumnId cid) const { return _col_offsets[cid]; }
 
-    // TODO(lingbin): What is the difference between colun_size() and index_size()
+    // TODO(lingbin): What is the difference between 'colun_size()' and 'index_size()'.
     size_t column_size(ColumnId cid) const { return _cols[cid]->size(); }
 
     size_t index_size(ColumnId cid) const { return _cols[cid]->index_size(); }
@@ -116,7 +116,7 @@ public:
     size_t num_column_ids() const { return _col_ids.size(); }
     const std::vector<ColumnId>& column_ids() const { return _col_ids; }
 
-    // Generate a new schema based this schema, replace the field according to the input new_types
+    // Generate a new schema based this schema, replace the field according to the input new_types.
     Status convert_to(const std::vector<FieldType>& new_types, bool* converted,
                       std::unique_ptr<Schema>* new_schema) const;
 
@@ -134,10 +134,10 @@ private:
     // a column in current row, not the unique id-identifier of each column
     std::vector<ColumnId> _col_ids;
     // NOTE: Both _cols[cid] and _col_offsets[cid] can only be accessed when the cid is
-    // contained in _col_ids
+    // contained in _col_ids.
     std::vector<Field*> _cols;
     // The value of each item indicates the starting offset of the corresponding column in
-    // current row. e.g. _col_offsets[idx] is the offset of _cols[idx] (idx must in _col_ids)
+    // current row. e.g. _col_offsets[idx] is the offset of _cols[idx] (idx must in _col_ids).
     std::vector<size_t> _col_offsets;
 
     size_t _num_key_columns;

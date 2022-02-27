@@ -40,14 +40,14 @@ public:
     DeleteConditionHandler() = default;
     ~DeleteConditionHandler() = default;
 
-    // generated DeletePredicatePB by TCondition
+    // Generated DeletePredicatePB by TCondition.
     Status generate_delete_predicate(const TabletSchema& schema, const std::vector<TCondition>& conditions,
                                      DeletePredicatePB* del_pred);
 
     // Check if cond is a valid delete condition
     Status check_condition_valid(const TabletSchema& tablet_schema, const TCondition& cond);
 
-    // construct sub condition from TCondition
+    // Construct sub condition from TCondition.
     std::string construct_sub_predicates(const TCondition& condition);
 
 private:
@@ -79,7 +79,7 @@ private:
 //    * Should hold header lock before calling init()
 class DeleteHandler {
 public:
-    // Use regular expression to extract 'column_name', 'op' and 'operands'
+    // Use regular expression to extract 'column_name', 'op' and 'operands'.
     static bool parse_condition(const std::string& condition_str, TCondition* condition);
 };
 

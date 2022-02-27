@@ -12,7 +12,7 @@ DIAGNOSTIC_POP
 namespace starrocks {
 
 // Used to run bthread::ExecutionQueue task in pthread instead of bthread.
-// Reference: https://github.com/apache/incubator-brpc/blob/master/docs/cn/execution_queue.md
+// Reference: https://github.com/apache/incubator-brpc/blob/master/docs/cn/execution_queue.md.
 class AsyncDeltaWriterExecutor : public bthread::Executor {
 public:
     Status init() {

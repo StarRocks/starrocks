@@ -79,19 +79,20 @@ public:
     void deregister_tablet_from_dir();
 
     void save_meta();
-    // Used in clone task, to update local meta when finishing a clone job
+    // Used in clone task, to update local meta when finishing a clone job.
     Status revise_tablet_meta(MemTracker* mem_tracker, const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                               const std::vector<Version>& versions_to_delete);
 
     inline const int64_t cumulative_layer_point() const;
     inline void set_cumulative_layer_point(int64_t new_point);
 
-    size_t tablet_footprint(); // disk space occupied by tablet
+    // Disk space occupied by tablet.
+    size_t tablet_footprint();
     size_t num_rows();
     int version_count() const;
     Version max_version() const;
 
-    // propreties encapsulated in TabletSchema
+    // Propreties encapsulated in TabletSchema.
     inline KeysType keys_type() const;
     inline size_t num_columns() const;
     inline size_t num_key_columns() const;
@@ -102,11 +103,11 @@ public:
     inline size_t row_size() const;
     inline size_t field_index(const string& field_name) const;
 
-    // operation in rowsets
+    // Operation in rowsets.
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
     void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete);
 
-    // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
+    // '_rs_version_map' and '_inc_rs_version_map' should be protected by '_meta_lock'.
     // The caller must call hold _meta_lock when call this two function.
     const RowsetSharedPtr get_rowset_by_version(const Version& version) const;
     const RowsetSharedPtr get_inc_rowset_by_version(const Version& version) const;
@@ -132,7 +133,7 @@ public:
 
     using IteratorList = std::vector<ChunkIteratorPtr>;
 
-    // Get the segment iterators for the specified version |spec_version|.
+    // Get the segment iterators for the specified version 'spec_version'.
     StatusOr<IteratorList> capture_segment_iterators(const Version& spec_version, const vectorized::Schema& schema,
                                                      const vectorized::RowsetReadOptions& options) const;
 
@@ -140,7 +141,7 @@ public:
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     bool version_for_delete_predicate(const Version& version);
 
-    // message for alter task
+    // Message for alter task.
     AlterTabletTaskSharedPtr alter_task();
     void add_alter_task(int64_t related_tablet_id, int32_t related_schema_hash,
                         const vector<Version>& versions_to_alter, const AlterTabletType alter_type);
@@ -169,22 +170,22 @@ public:
     inline std::mutex& get_cumulative_lock() { return _cumulative_lock; }
 
     inline std::shared_mutex& get_migration_lock() { return _migration_lock; }
-    // should use with migration lock.
+    // Should use with migration lock.
     bool is_migrating() const { return _is_migrating; }
-    // should use with migration lock.
+    // Should use with migration lock.
     void set_is_migrating(bool is_migrating) { _is_migrating = is_migrating; }
 
-    // check tablet is migrating or has been migrated.
-    // if tablet is migrating or has been migrated, return true.
+    // Check tablet is migrating or has been migrated.
+    // If tablet is migrating or has been migrated, return true.
     // should use with migration lock.
     static bool check_migrate(const TabletSharedPtr& tablet);
 
-    // operation for compaction
+    // Operation for compaction.
     bool can_do_compaction();
     const uint32_t calc_cumulative_compaction_score() const;
     const uint32_t calc_base_compaction_score() const;
 
-    // operation for clone
+    // Operation for clone.
     void calc_missed_versions(int64_t spec_version, vector<Version>* missed_versions);
     void calc_missed_versions_unlocked(int64_t spec_version, vector<Version>* missed_versions) const;
 
@@ -217,12 +218,9 @@ public:
     void pick_candicate_rowsets_to_base_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
 
     void calculate_cumulative_point();
-    // TODO(ygl):
     inline bool is_primary_replica() { return false; }
 
-    // TODO(ygl):
-    // eco mode means power saving in new energy car
-    // eco mode also means save money in starrocks
+    // TODO(ygl): eco mode means power saving in new energy car and eco mode also means save money in starrocks.
     inline bool in_eco_mode() { return false; }
 
     void do_tablet_meta_checkpoint();
@@ -232,13 +230,13 @@ public:
     void build_tablet_report_info(TTabletInfo* tablet_info);
 
     void generate_tablet_meta_copy(const TabletMetaSharedPtr& new_tablet_meta) const;
-    // caller should hold the _meta_lock before calling this method
+    // Caller should hold the '_meta_lock' before calling this method.
     void generate_tablet_meta_copy_unlocked(const TabletMetaSharedPtr& new_tablet_meta) const;
 
-    // return a json string to show the compaction status of this tablet
+    // Return a json string to show the compaction status of this tablet.
     void get_compaction_status(std::string* json_result);
 
-    // updatable tablet specific operations
+    // Updatable tablet specific operations.
     TabletUpdates* updates() { return _updates.get(); }
     Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
 
@@ -267,18 +265,18 @@ private:
     TimestampedVersionTracker _timestamped_version_tracker;
 
     StarRocksCallOnce<Status> _init_once;
-    // meta store lock is used for prevent 2 threads do checkpoint concurrently
-    // it will be used in econ-mode in the future
+    // Meta store lock is used for prevent 2 threads do checkpoint concurrently
+    // it will be used in econ-mode in the future.
     std::shared_mutex _meta_store_lock;
     std::mutex _ingest_lock;
     std::mutex _base_lock;
     std::mutex _cumulative_lock;
 
     std::shared_mutex _migration_lock;
-    // should use with migration lock.
+    // Should use with migration lock.
     std::atomic<bool> _is_migrating{false};
 
-    // explain how these two locks work together.
+    // Explain how these two locks work together.
     mutable std::shared_mutex _meta_lock;
     // A new load job will produce a new rowset, which will be inserted into both _rs_version_map
     // and _inc_rs_version_map. Only the most recent rowsets are kept in _inc_rs_version_map to
@@ -300,14 +298,14 @@ private:
     // States used for updatable tablets only
     std::unique_ptr<TabletUpdates> _updates;
 
-    // if this tablet is broken, set to true. default is false
-    // timestamp of last cumu compaction failure
+    // If this tablet is broken, set to true. default is false
+    // timestamp of last cumu compaction failure.
     std::atomic<int64_t> _last_cumu_compaction_failure_millis{0};
-    // timestamp of last base compaction failure
+    // Timestamp of last base compaction failure.
     std::atomic<int64_t> _last_base_compaction_failure_millis{0};
-    // timestamp of last cumu compaction success
+    // Timestamp of last cumu compaction success.
     std::atomic<int64_t> _last_cumu_compaction_success_millis{0};
-    // timestamp of last base compaction success
+    // Timestamp of last base compaction success.
     std::atomic<int64_t> _last_base_compaction_success_millis{0};
 
     std::atomic<int64_t> _cumulative_point{0};

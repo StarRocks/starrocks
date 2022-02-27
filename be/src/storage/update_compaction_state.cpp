@@ -90,7 +90,7 @@ Status CompactionState::_do_load(Rowset* rowset) {
     auto& itrs = res.value();
     CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
 
-    // only hold pkey, so can use larger chunk size
+    // Only hold pkey, so can use larger chunk size.
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
 
@@ -120,7 +120,7 @@ Status CompactionState::_do_load(Rowset* rowset) {
         _memory_usage += dest->memory_usage();
         tracker->consume(dest->memory_usage());
         if (tracker->any_limit_exceeded()) {
-            // currently we can only log error here, and allow memory over usage
+            // Currently we can only log error here, and allow memory over usage.
             LOG(ERROR) << " memory limit exceeded when loading compaction state pk tablet_id:"
                        << rowset->rowset_meta()->tablet_id() << " rowset #rows:" << rowset->num_rows()
                        << " size:" << rowset->data_disk_size() << " seg:" << i << " memory:" << _memory_usage

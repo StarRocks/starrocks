@@ -23,8 +23,8 @@
 
 namespace starrocks {
 enum DelCondSatisfied {
-    DEL_SATISFIED = 0,         //satisfy delete condition
-    DEL_NOT_SATISFIED = 1,     //not satisfy delete condition
-    DEL_PARTIAL_SATISFIED = 2, //partially satisfy delete condition
+    DEL_SATISFIED = 0,         // satisfy delete condition.
+    DEL_NOT_SATISFIED = 1,     // not satisfy delete condition.
+    DEL_PARTIAL_SATISFIED = 2, // partially satisfy delete condition.
 };
 }

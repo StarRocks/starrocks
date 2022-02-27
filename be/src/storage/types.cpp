@@ -981,8 +981,6 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_HLL> : public ScalarTypeInfoImpl<OLAP_
      * cmp/from_string/set_to_max/set_to_min function
      * in this struct has no significance
      */
-
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
     static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
         Slice dst_slice;
         Slice src_slice = unaligned_load<Slice>(src);
@@ -1002,8 +1000,6 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_OBJECT> : public ScalarTypeInfoImpl<OL
      * cmp/from_string/set_to_max/set_to_min function
      * in this struct has no significance
      */
-
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
     static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
         Slice dst_slice;
         Slice src_slice = unaligned_load<Slice>(src);
@@ -1018,7 +1014,6 @@ template <>
 struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_PERCENTILE> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
     static const FieldType type = OLAP_FIELD_TYPE_PERCENTILE;
     static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_PERCENTILE>::size;
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
     static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
         auto dst_slice = reinterpret_cast<Slice*>(dest);
         auto src_slice = reinterpret_cast<const Slice*>(src);

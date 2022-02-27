@@ -57,7 +57,6 @@ public:
 
     virtual void deep_copy(void* dest, const void* src, MemPool* mem_pool) const = 0;
 
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
     // It is same with deep_copy() for all type except for HLL and OBJECT type
     virtual void copy_object(void* dest, const void* src, MemPool* mem_pool) const = 0;
 
@@ -113,8 +112,7 @@ public:
 
     void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override { _deep_copy(dest, src, mem_pool); }
 
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    // It is same with deep_copy() for all type except for HLL and OBJECT type
+    // It is same with deep copy for all type except for HLL and OBJECT type.
     void copy_object(void* dest, const void* src, MemPool* mem_pool) const override {
         _copy_object(dest, src, mem_pool);
     }
@@ -123,7 +121,7 @@ public:
         _direct_copy(dest, src, mem_pool);
     }
 
-    //convert and deep copy value from other type's source
+    // Convert and deep copy value from other type's source.
     Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const override {
         return _convert_from(dest, src, src_type, mem_pool);
     }
@@ -273,12 +271,12 @@ public:
         dest_value.has_null = src_value.has_null;
         dest_value.null_signs = src_value.has_null ? reinterpret_cast<uint8_t*>(dest_value.data) + item_size : nullptr;
 
-        // copy null_signs
+        // Copy null signs.
         if (src_value.has_null) {
             memory_copy(dest_value.null_signs, src_value.null_signs, sizeof(uint8_t) * src_value.length);
         }
 
-        // copy item
+        // Copy item.
         for (uint32_t i = 0; i < src_value.length; ++i) {
             if (dest_value.is_null_at(i)) {
                 Collection* item = reinterpret_cast<Collection*>((uint8_t*)dest_value.data + i * _item_size);
@@ -359,7 +357,7 @@ private:
 };
 
 // TypeComparator
-// static compare functions for performance-critical scenario
+// static compare functions for performance-critical scenario.
 template <FieldType ftype>
 struct TypeComparator {
     static int cmp(const void* lhs, const void* rhs);

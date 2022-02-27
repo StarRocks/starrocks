@@ -31,7 +31,7 @@
 
 namespace starrocks {
 
-// struct that contains column data(null bitmap), data array in sub class.
+// Struct that contains column data(null bitmap), data array in sub class.
 class ColumnVectorBatch {
 public:
     explicit ColumnVectorBatch(TypeInfoPtr type_info, bool is_nullable)
@@ -81,10 +81,10 @@ public:
     // Get the start of the data.
     virtual uint8_t* data() const = 0;
 
-    // Get the idx's cell_ptr
+    // Get the idx's 'cell_ptr'.
     virtual const uint8_t* cell_ptr(size_t idx) const = 0;
 
-    // Get thr idx's cell_ptr for write
+    // Get thr idx's cell_ptr for write.
     virtual uint8_t* mutable_cell_ptr(size_t idx) = 0;
 
     virtual void swap(ColumnVectorBatch* rhs) {
@@ -126,10 +126,10 @@ public:
     // Get the start of the data.
     uint8_t* data() const override { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(_data.data())); }
 
-    // Get the idx's cell_ptr
+    // Get the idx's 'cell_ptr'.
     const uint8_t* cell_ptr(size_t idx) const override { return reinterpret_cast<const uint8_t*>(&_data[idx]); }
 
-    // Get thr idx's cell_ptr for write
+    // Get thr idx's 'cell_ptr' for write.
     uint8_t* mutable_cell_ptr(size_t idx) override { return reinterpret_cast<uint8_t*>(&_data[idx]); }
 
     void swap(ColumnVectorBatch* rhs) override {
@@ -152,10 +152,10 @@ public:
     // Get the start of the data.
     uint8_t* data() const override { return reinterpret_cast<uint8*>(const_cast<Collection*>(_data.data())); }
 
-    // Get the idx's cell_ptr
+    // Get the idx's 'cell_ptr'.
     const uint8_t* cell_ptr(size_t idx) const override { return reinterpret_cast<const uint8*>(&_data[idx]); }
 
-    // Get thr idx's cell_ptr for write
+    // Get thr idx's 'cell_ptr' for write.
     uint8_t* mutable_cell_ptr(size_t idx) override { return reinterpret_cast<uint8*>(&_data[idx]); }
 
     size_t item_offset(size_t idx) const { return _item_offsets[idx]; }
@@ -177,7 +177,7 @@ private:
 
     std::unique_ptr<ColumnVectorBatch> _elements;
 
-    // Stores each collection's start offsets in _elements.
+    // Stores each collection's start offsets in '_elements'.
     std::vector<uint32_t> _item_offsets;
 };
 

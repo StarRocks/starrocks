@@ -96,20 +96,20 @@ Status move_to_trash(const std::filesystem::path& file_path) {
                                        .parent_path() // storage_root
                                        .string();
 
-    // 1. get timestamp string
+    // 1. get timestamp string.
     std::string time_str;
     RETURN_IF_ERROR(gen_timestamp_string(&time_str));
 
     std::string new_file_dir = fmt::format("{}{}/{}.{}/", storage_root, TRASH_PREFIX, time_str,
                                            delete_counter.fetch_add(1, std::memory_order_relaxed));
     std::string new_file_path = fmt::format("{}/{}", new_file_dir, old_file_name);
-    // 2. create target dir, or the rename() function will fail.
+    // 2. Create target dir, or the rename() function will fail.
     if (auto st = Env::Default()->create_dir(new_file_dir); !st.ok()) {
         // May be because the parent directory does not exist, try create directories recursively.
         RETURN_IF_ERROR(FileUtils::create_dir(new_file_dir));
     }
 
-    // 3. remove file to trash
+    // 3. Remove file to trash.
     auto st = Env::Default()->rename_file(old_file_path, new_file_path);
     auto t1 = std::chrono::steady_clock::now();
     g_move_trash << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
@@ -193,7 +193,7 @@ Status read_write_test_file(const string& test_file_path) {
         return Status::Corruption("Fail to allocate write buffer memory");
     }
     std::unique_ptr<char, decltype(&std::free)> read_buff(read_test_buff, &std::free);
-    // generate random numbers
+    // Generate random numbers.
     uint32_t rand_seed = static_cast<uint32_t>(time(nullptr));
     for (size_t i = 0; i < TEST_FILE_BUF_SIZE; ++i) {
         int32_t tmp_value = rand_r(&rand_seed);
@@ -235,7 +235,7 @@ bool check_datapath_rw(const string& path) {
         Status res = read_write_test_file(file_path);
         return res.ok();
     } catch (...) {
-        // do nothing
+        // Do nothing.
     }
     LOG(WARNING) << "error when try to read and write temp file under the data path and return "
                     "false. [path="
@@ -248,7 +248,7 @@ Status copy_dir(const string& src_dir, const string& dst_dir) {
     std::filesystem::path dst_path(dst_dir.c_str());
 
     try {
-        // Check whether the function call is valid
+        // Check whether the function call is valid.
         if (!std::filesystem::exists(src_path) || !std::filesystem::is_directory(src_path)) {
             LOG(WARNING) << "Not found dir:" << src_path.string();
             return Status::NotFound(fmt::format("Not found dir: {}", src_path.string()));
@@ -259,7 +259,7 @@ Status copy_dir(const string& src_dir, const string& dst_dir) {
             return Status::AlreadyExist(fmt::format("Dir already exist: {}", dst_path.string()));
         }
 
-        // Create the destination directory
+        // Create the destination directory.
         if (!std::filesystem::create_directory(dst_path)) {
             LOG(WARNING) << "Error to create dir: " << dst_path.string();
             return Status::IOError(
@@ -270,12 +270,12 @@ Status copy_dir(const string& src_dir, const string& dst_dir) {
         return Status::InternalError("Invalid input path");
     }
 
-    // Iterate through the source directory
+    // Iterate through the source directory.
     for (const auto& file : std::filesystem::directory_iterator(src_path)) {
         try {
             const std::filesystem::path& current(file.path());
             if (std::filesystem::is_directory(current)) {
-                // Found directory: Recursion
+                // Found directory: Recursion.
                 Status res = copy_dir(current.string(), (dst_path / current.filename()).string());
                 if (!res.ok()) {
                     LOG(WARNING) << "Fail to copy file. src_path=" << src_path.string()
@@ -370,8 +370,8 @@ bool valid_decimal(const string& value_str, uint32_t precision, uint32_t frac) {
         fractional_len = number_length - point_pos - 1;
     }
 
-    // when precision = frac, integer_len can be 1; i.e.
-    // decimal(2,2) can accept 0.1, 0.11, 0, 0.0
+    // When 'precision = frac', integer_len can be 1; i.e.
+    // decimal(2,2) can accept 0.1, 0.11, 0, 0.0.
     if (precision == frac && integer_len == 1 && s[0] == '0') {
         return true;
     }

@@ -32,23 +32,23 @@ public:
 
     virtual void reserve(size_t size) = 0;
 
-    // batch insert a range [idx_begin, idx_end) of keys
+    // Batch insert a range [idx_begin, idx_end) of keys.
     virtual Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
                           uint32_t idx_begin, uint32_t idx_end) = 0;
-    // batch upsert a range [idx_begin, idx_end) of keys
+    // Batch upsert a range [idx_begin, idx_end) of keys.
     virtual void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
                         uint32_t idx_end, DeletesMap* deletes) = 0;
-    // batch try_replace a range [idx_begin, idx_end) of keys
+    // Batch try_replace a range [idx_begin, idx_end) of keys.
     virtual void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                              const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                              vector<uint32_t>* failed) = 0;
-    // batch erase a range [idx_begin, idx_end) of keys
+    // Batch erase a range [idx_begin, idx_end) of keys.
     virtual void erase(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) = 0;
 
     virtual void get(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
                      std::vector<uint64_t>* rowids) = 0;
 
-    // just an estimate value for now
+    // Just an estimate value for now.
     virtual std::size_t memory_usage() const = 0;
 };
 
@@ -939,7 +939,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
             return res.status();
         }
         auto& itrs = res.value();
-        // TODO(cbl): auto close iterators on failure
+        // TODO(cbl): auto close iterators on failure.
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
         for (size_t i = 0; i < itrs.size(); i++) {
             auto itr = itrs[i].get();

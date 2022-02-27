@@ -95,7 +95,7 @@ public:
         return local.release();
     }
 
-    // Test if these two cell is equal with each other
+    // Test if these two cell is equal with each other.
     template <typename LhsCellType, typename RhsCellType>
     bool equal(const LhsCellType& lhs, const RhsCellType& rhs) const {
         bool l_null = lhs.is_null();
@@ -155,7 +155,7 @@ public:
         return _type_info->direct_copy(dst->mutable_cell_ptr(), src.cell_ptr(), pool);
     }
 
-    // deep copy source cell' content to destination cell.
+    // Deep copy source cell's content to destination cell.
     // For string type, this will allocate data form pool,
     // and copy srouce's conetent.
     template <typename DstCellType, typename SrcCellType>
@@ -168,7 +168,7 @@ public:
         _type_info->copy_object(dst->mutable_cell_ptr(), src.cell_ptr(), pool);
     }
 
-    // deep copy source cell' content to destination cell.
+    // Deep copy source cell's content to destination cell.
     // For string type, this will allocate data form pool,
     // and copy srouce's conetent.
     template <typename DstCellType, typename SrcCellType>
@@ -181,16 +181,16 @@ public:
         _type_info->deep_copy(dst->mutable_cell_ptr(), src.cell_ptr(), pool);
     }
 
-    // deep copy field content from `src` to `dst` without null-byte
+    // Deep copy field content from `src` to `dst` without null-byte.
     void deep_copy_content(char* dst, const char* src, MemPool* mem_pool) const {
         _type_info->deep_copy(dst, src, mem_pool);
     }
 
-    // shallow copy field content from `src` to `dst` without null-byte.
+    // Shallow copy field content from `src` to `dst` without null-byte.
     // for string like type, shallow copy only copies Slice, not the actual data pointed by slice.
     void shallow_copy_content(char* dst, const char* src) const { _type_info->shallow_copy(dst, src); }
 
-    //convert and copy field from src to desc
+    // Convert and copy field from src to desc.
     Status convert_from(char* dest, const char* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const {
         return _type_info->convert_from(dest, src, src_type, mem_pool);
     }
@@ -199,13 +199,13 @@ public:
     template <typename DstCellType, typename SrcCellType>
     void to_index(DstCellType* dst, const SrcCellType& src) const;
 
-    // used by init scan key stored in string format
-    // value_string should end with '\0'
+    // Used by init scan key stored in string format
+    // value_string should end with '\0'.
     Status from_string(char* buf, const std::string& value_string) const {
         return _type_info->from_string(buf, value_string);
     }
 
-    // It's a critical function, used by ZoneMapIndexWriter to serialize max and min value
+    // It's a critical function, used by ZoneMapIndexWriter to serialize max and min value.
     std::string to_string(const char* src) const { return _type_info->to_string(src); }
 
     template <typename CellType>
@@ -226,13 +226,13 @@ public:
     const TypeInfoPtr& type_info() const { return _type_info; }
     bool is_nullable() const { return _is_nullable; }
 
-    // similar to `full_encode_ascending`, but only encode part (the first `index_size` bytes) of the value.
-    // only applicable to string type
+    // Similar to `full_encode_ascending`, but only encode part (the first `index_size` bytes) of the value.
+    // only applicable to string type.
     void encode_ascending(const void* value, std::string* buf) const {
         _key_coder->encode_ascending(value, _index_size, buf);
     }
 
-    // encode the provided `value` into `buf`.
+    // Encode the provided `value` into `buf`.
     void full_encode_ascending(const void* value, std::string* buf) const {
         _key_coder->full_encode_ascending(value, buf);
     }
@@ -334,7 +334,7 @@ int Field::index_cmp(const LhsCellType& lhs, const RhsCellType& rhs) const {
 
         if (r_slice->size + OLAP_STRING_MAX_BYTES > _index_size ||
             l_slice->size + OLAP_STRING_MAX_BYTES > _index_size) {
-            // if field length is larger than short key, only compare prefix to make sure that
+            // If field length is larger than short key, only compare prefix to make sure that
             // the same short key block will be scanned.
             int compare_size = _index_size - OLAP_STRING_MAX_BYTES;
             // l_slice size and r_slice size may be less than compare_size
@@ -434,7 +434,7 @@ public:
 
     size_t get_variable_len() const override { return _length - OLAP_STRING_MAX_BYTES; }
 
-    // minus OLAP_STRING_MAX_BYTES here just for being compatible with old storage format
+    // Minus 'OLAP_STRING_MAX_BYTES' here just for being compatible with old storage format.
     char* allocate_memory(char* cell_ptr, char* variable_ptr) const override {
         auto slice = (Slice*)cell_ptr;
         slice->data = variable_ptr;
@@ -515,7 +515,7 @@ public:
 class FieldFactory {
 public:
     static Field* create(const TabletColumn& column) {
-        // for key column
+        // For key column.
         if (column.is_key()) {
             switch (column.type()) {
             case OLAP_FIELD_TYPE_CHAR:
@@ -542,7 +542,7 @@ public:
             }
         }
 
-        // for value column
+        // For value column.
         switch (column.aggregation()) {
         case OLAP_FIELD_AGGREGATION_NONE:
         case OLAP_FIELD_AGGREGATION_SUM:

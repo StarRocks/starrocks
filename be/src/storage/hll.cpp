@@ -43,7 +43,7 @@ using std::stringstream;
 namespace starrocks {
 
 HyperLogLog::HyperLogLog(const Slice& src) {
-    // When deserialize return false, we make this object a empty
+    // When deserialize return false, we make this object a empty.
     if (!deserialize(src)) {
         _type = HLL_DATA_EMPTY;
     }
@@ -73,8 +73,8 @@ void HyperLogLog::_convert_explicit_to_register() {
     phmap::flat_hash_set<uint64_t>().swap(_hash_set);
 }
 
-// Change HLL_DATA_EXPLICIT to HLL_DATA_FULL directly, because HLL_DATA_SPARSE
-// is implemented in the same way in memory with HLL_DATA_FULL.
+// Change 'HLL_DATA_EXPLICIT' to 'HLL_DATA_FULL' directly, because 'HLL_DATA_SPARSE'
+// is implemented in the same way in memory with 'HLL_DATA_FULL'.
 void HyperLogLog::update(uint64_t hash_value) {
     switch (_type) {
     case HLL_DATA_EMPTY:
@@ -103,7 +103,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
     }
     switch (_type) {
     case HLL_DATA_EMPTY: {
-        // _type must change
+        // '_type' must change.
         _type = other._type;
         switch (other._type) {
         case HLL_DATA_EXPLICIT:
@@ -207,7 +207,7 @@ size_t HyperLogLog::serialize(uint8_t* dst) const {
                 num_non_zero_registers++;
             }
         }
-        // each register in sparse format will occupy 3bytes, 2 for index and
+        // Each register in sparse format will occupy 3bytes, 2 for index and
         // 1 for register value. So if num_non_zero_registers is greater than
         // 4K we use full encode format.
         if (num_non_zero_registers > HLL_SPARSE_THRESHOLD) {
@@ -216,7 +216,7 @@ size_t HyperLogLog::serialize(uint8_t* dst) const {
             ptr += HLL_REGISTERS_COUNT;
         } else {
             *ptr++ = HLL_DATA_SPARSE;
-            // 2-5(4 byte): number of registers
+            // 2-5(4 byte): number of registers.
             encode_fixed32_le(ptr, num_non_zero_registers);
             ptr += 4;
 
@@ -273,7 +273,7 @@ bool HyperLogLog::is_valid(const Slice& slice) {
     return ptr == end;
 }
 
-// TODO(zc): check input string's length
+// TODO(zc): check input string's length.
 bool HyperLogLog::deserialize(const Slice& slice) {
     // can be called only when type is empty
     DCHECK(_type == HLL_DATA_EMPTY);
@@ -287,7 +287,7 @@ bool HyperLogLog::deserialize(const Slice& slice) {
     if (slice.data == nullptr || slice.size <= 0) {
         return false;
     }
-    // check if input length is valid
+    // Check if input length is valid.
     if (!is_valid(slice)) {
         return false;
     }
@@ -380,7 +380,7 @@ int64_t HyperLogLog::estimate_cardinality() const {
 
     harmonic_mean = 1.0f / harmonic_mean;
     double estimate = alpha * num_streams * num_streams * harmonic_mean;
-    // according to HerperLogLog current correction, if E is cardinal
+    // According to HerperLogLog current correction, if E is cardinal
     // E =< num_streams * 2.5 , LC has higher accuracy.
     // num_streams * 2.5 < E , HerperLogLog has higher accuracy.
     // Generally , we can use HerperLogLog to produce value as E.

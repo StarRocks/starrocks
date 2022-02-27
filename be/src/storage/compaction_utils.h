@@ -14,20 +14,20 @@ class RowsetWriter;
 class Tablet;
 
 enum CompactionAlgorithm {
-    // compaction by all columns together.
+    // Compaction by all columns together.
     HORIZONTAL_COMPACTION = 0,
-    // compaction by column group, for tablet with many columns.
+    // Compaction by column group, for tablet with many columns.
     VERTICAL_COMPACTION = 1
 };
 
 struct Statistics {
-    // number of rows written to the destination rowset after merge
+    // Number of rows written to the destination rowset after merge.
     int64_t output_rows = 0;
     int64_t merged_rows = 0;
     int64_t filtered_rows = 0;
 };
 
-// need a factory of compaction task
+// Need a factory of compaction task.
 class CompactionUtils {
 public:
     static const char* compaction_algorithm_to_string(CompactionAlgorithm v);
@@ -44,7 +44,7 @@ public:
     static void split_column_into_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
                                          std::vector<std::vector<uint32_t>>* column_groups);
 
-    // choose compaction algorithm according to tablet schema, max columns per group and segment iterator num.
+    // Choose compaction algorithm according to tablet schema, max columns per group and segment iterator num.
     // 1. if the number of columns in the schema is less than or equal to max_columns_per_group, use HORIZONTAL_COMPACTION.
     // 2. if source_num is less than or equal to 1, or is more than MAX_SOURCES, use HORIZONTAL_COMPACTION.
     static CompactionAlgorithm choose_compaction_algorithm(size_t num_columns, int64_t max_columns_per_group,

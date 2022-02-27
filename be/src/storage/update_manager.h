@@ -93,7 +93,7 @@ private:
 
     std::atomic<int64_t> _last_clear_expired_cache_millis{0};
 
-    // DelVector related states
+    // DelVector related states.
     std::mutex _del_vec_cache_lock;
     std::unordered_map<TabletSegmentId, DelVectorPtr> _del_vec_cache;
     std::unique_ptr<MemTracker> _del_vec_cache_mem_tracker;

@@ -72,7 +72,7 @@ Status KVStore::init(bool read_only) {
     std::string db_path = _root_path + META_POSTFIX;
 
     // The index of each column family must be consistent with the enum `ColumnFamilyIndex`
-    // defined in olap_define.h
+    // defined in 'olap_define.h'.
     std::vector<ColumnFamilyDescriptor> cf_descs(NUM_COLUMN_FAMILY_INDEX);
     cf_descs[0].name = DEFAULT_COLUMN_FAMILY;
     cf_descs[1].name = STARROCKS_COLUMN_FAMILY;

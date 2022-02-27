@@ -28,19 +28,20 @@
 
 namespace starrocks {
 
-// The block size of the column storage file, which may be loaded into memory in its entirety, needs to be strictly controlled, defined here as 256MB
+// The block size of the column storage file, which may be loaded into memory in its entirety,
+// needs to be strictly controlled, defined here as 256MB.
 static const uint32_t OLAP_MAX_COLUMN_SEGMENT_FILE_SIZE = 268435456;
 static const double OLAP_COLUMN_FILE_SEGMENT_SIZE_SCALE = 0.9;
 
-// data and index page size, default is 64k
+// Data and index page size, default is 64k/
 static const size_t OLAP_PAGE_SIZE = 65536;
 
 static const uint64_t OLAP_FIX_HEADER_MAGIC_NUMBER = 0;
 
-// the max length supported for varchar type
+// The max length supported for varchar type.
 static const uint32_t OLAP_STRING_MAX_LENGTH = 1048576;
 
-// the max bytes for stored string length
+// The max bytes for stored string length.
 using StringLengthType = uint16_t;
 static const uint16_t OLAP_STRING_MAX_BYTES = sizeof(StringLengthType);
 
@@ -71,7 +72,7 @@ static const uint64_t GB_EXCHANGE_BYTE = 1024 * 1024 * 1024;
 // bloom filter fpp
 static const double BLOOM_FILTER_DEFAULT_FPP = 0.05;
 
-// default value of chunk_size, it's a value decided at compile time
+// Default value of chunk_size, it's a value decided at compile time.
 static const int32_t DEFAULT_CHUNK_SIZE = 4096;
 
 #define OLAP_GOTO(label) goto label
@@ -103,14 +104,14 @@ const std::string ROWSET_ID_PREFIX = "s_";                                    //
 #define OLAP_UNLIKELY(x)
 #endif
 
-// Declare copy constructor and equal operator as private
+// Declare copy constructor and equal operator as private.
 #ifndef DISALLOW_COPY_AND_ASSIGN
 #define DISALLOW_COPY_AND_ASSIGN(type_t) \
     type_t& operator=(const type_t&);    \
     type_t(const type_t&);
 #endif
 
-// thread-safe(gcc only) method for obtaining singleton
+// Thread-safe(gcc only) method for obtaining singleton.
 #define DECLARE_SINGLETON(classname)     \
 public:                                  \
     static classname* instance() {       \

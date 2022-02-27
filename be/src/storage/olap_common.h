@@ -396,7 +396,7 @@ class Field;
 class WrapperField;
 using KeyRange = std::pair<WrapperField*, WrapperField*>;
 
-// ReaderStatistics used to collect statistics when scan data from storage
+// ReaderStatistics used to collect statistics when scan data from storage.
 struct OlapReaderStatistics {
     int64_t create_segment_iter_ns = 0;
     int64_t io_ns = 0;
@@ -405,7 +405,7 @@ struct OlapReaderStatistics {
     int64_t decompress_ns = 0;
     int64_t uncompressed_bytes_read = 0;
 
-    // total read bytes in memory
+    // Total read bytes in memory.
     int64_t bytes_read = 0;
 
     int64_t block_load_ns = 0;
@@ -451,14 +451,14 @@ struct OlapReaderStatistics {
 };
 
 typedef uint32_t ColumnId;
-// Column unique id set
+// Column unique id set.
 typedef std::set<uint32_t> UniqueIdSet;
-// Column unique Id -> column id map
+// Column unique Id -> column id map.
 typedef std::map<ColumnId, ColumnId> UniqueIdToColumnIdMap;
 
 // 8 bit rowset id version
 // 56 bit, inc number from 1
-// 128 bit backend uid, it is a uuid bit, id version
+// 128 bit backend uid, it is a uuid bit, id version.
 struct RowsetId {
     int8_t version = 0;
     int64_t hi = 0;
@@ -466,8 +466,8 @@ struct RowsetId {
     int64_t lo = 0;
 
     void init(const std::string& rowset_id_str) {
-        // for new rowsetid its a 48 hex string
-        // if the len < 48, then it is an old format rowset id
+        // For new rowsetid its a 48 hex string
+        // if the len < 48, then it is an old format rowset id.
         if (rowset_id_str.length() < 48) {
             int64_t high = std::stol(rowset_id_str, nullptr, 10);
             init(1, high, 0, 0);
@@ -482,7 +482,7 @@ struct RowsetId {
         }
     }
 
-    // to compatiable with old version
+    // To compatiable with old version.
     void init(int64_t rowset_id) { init(1, rowset_id, 0, 0); }
 
     void init(int64_t id_version, int64_t high, int64_t middle, int64_t low) {

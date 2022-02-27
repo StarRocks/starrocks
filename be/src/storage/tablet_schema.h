@@ -49,7 +49,7 @@ class TabletColumn {
 
 public:
     // To developers: if you changed the typedefs, don't forget to reorder class members to
-    // minimize the memory space of TabletColumn, i.e, sizeof(TabletColumn)
+    // minimize the memory space of tablet column, i.e, sizeof(TabletColumn).
     using ColumnName = CString;
     using ColumnUID = int32_t;
     using ColumnLength = int32_t;
@@ -213,13 +213,13 @@ public:
     static std::shared_ptr<TabletSchema> create(const TabletSchema& tablet_schema,
                                                 const std::vector<int32_t>& column_indexes);
 
-    // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
-    // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
+    // Must be consistent with MaterializedIndexMeta. 'INVALID_SCHEMA_ID' defined in
+    // file './fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java'.
     constexpr static SchemaId invalid_id() { return 0; }
 
     TabletSchema() = default;
     explicit TabletSchema(const TabletSchemaPB& schema_pb) { init_from_pb(schema_pb); }
-    // Does NOT take ownership of |schema_map| and |schema_map| must outlive TabletSchema.
+    // Does not take ownership of 'schema_map' and 'schema_map' must outlive TabletSchema.
     TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
         init_from_pb(schema_pb);
     }
@@ -245,7 +245,7 @@ public:
     bool has_bf_fpp() const { return _has_bf_fpp; }
     double bf_fpp() const { return _bf_fpp; }
 
-    // The in-memory property is no longer supported, but leave this API for compatibility.
+    // The in memory property is no longer supported, but leave this API for compatibility.
     // Newly-added code should not rely on this method, it may be removed at any time.
     bool is_in_memory() const { return false; }
 

@@ -26,7 +26,7 @@ public:
     MutableIndex();
     virtual ~MutableIndex();
 
-    // get the number of entries in the index (including NullIndexValue)
+    // Get the number of entries in the index (including NullIndexValue).
     virtual size_t size() const = 0;
 
     // flush mutable index into immutable index

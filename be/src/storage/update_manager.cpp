@@ -64,7 +64,7 @@ Status UpdateManager::get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& 
 }
 
 Status UpdateManager::set_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, const DelVector& delvec) {
-    // TODO: support batch transaction with tablet/rowset meta save
+    // TODO: support batch transaction with tablet/rowset meta save.
     return TabletMetaManager::set_del_vector(meta, tsid.tablet_id, tsid.segment_id, delvec);
 }
 
@@ -77,7 +77,7 @@ Status UpdateManager::get_del_vec(KVStore* meta, const TabletSegmentId& tsid, in
                 VLOG(3) << strings::Substitute("get_del_vec cached tablet_segment=$0 version=$1 actual_version=$2",
                                                tsid.to_string(), version, itr->second->version());
                 // cache valid
-                // TODO(cbl): add cache hit stats
+                // TODO(cbl): add cache hit stats.
                 *pdelvec = itr->second;
                 return Status::OK();
             }
@@ -93,7 +93,7 @@ Status UpdateManager::get_del_vec(KVStore* meta, const TabletSegmentId& tsid, in
             _del_vec_cache.emplace(tsid, *pdelvec);
             _del_vec_cache_mem_tracker->consume((*pdelvec)->memory_usage());
         } else if (latest_version > itr->second->version()) {
-            // should happen rarely
+            // Should happen rarely.
             _del_vec_cache_mem_tracker->release(itr->second->memory_usage());
             itr->second = (*pdelvec);
             _del_vec_cache_mem_tracker->consume(itr->second->memory_usage());
@@ -212,7 +212,7 @@ Status UpdateManager::get_latest_del_vec(KVStore* meta, const TabletSegmentId& t
         *pdelvec = itr->second;
         return Status::OK();
     } else {
-        // TODO(cbl): move get_del_vec_in_meta out of lock
+        // TODO(cbl): move 'get_del_vec_in_meta' out of lock.
         (*pdelvec).reset(new DelVector());
         int64_t latest_version = 0;
         RETURN_IF_ERROR(get_del_vec_in_meta(meta, tsid, INT64_MAX, pdelvec->get(), &latest_version));

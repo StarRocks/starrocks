@@ -45,14 +45,14 @@ public:
     // Each cached page corresponds to a specific offset within
     // a file.
     //
-    // TODO(zc): Now we use file name(std::string) as a part of
-    // key, which is not efficient. We should make it better later
+    // TODO(zc): now we use file name(std::string) as a part of
+    // key, which is not efficient. We should make it better later.
     struct CacheKey {
         CacheKey(std::string fname_, int64_t offset_) : fname(std::move(fname_)), offset(offset_) {}
         std::string fname;
         int64_t offset;
 
-        // Encode to a flat binary which can be used as LRUCache's key
+        // Encode to a flat binary which can be used as LRUCache's key.
         std::string encode() const {
             std::string key_buf(fname);
             key_buf.append((char*)&offset, sizeof(offset));
@@ -60,7 +60,7 @@ public:
         }
     };
 
-    // Create global instance of this class
+    // Create global instance of this class.
     static void create_global_cache(MemTracker* mem_tracker, size_t capacity);
 
     static void release_global_cache();
@@ -133,7 +133,7 @@ private:
     Cache* _cache = nullptr;
     Cache::Handle* _handle = nullptr;
 
-    // Don't allow copy and assign
+    // Don't allow copy and assign.
     PageCacheHandle(const PageCacheHandle&) = delete;
     const PageCacheHandle& operator=(const PageCacheHandle&) = delete;
 };

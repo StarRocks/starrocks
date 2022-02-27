@@ -51,7 +51,7 @@ namespace starrocks {
         break;                                                                        \
     }
 
-// number of running SCHEMA-CHANGE threads
+// Number of running SCHEMA-CHANGE threads.
 volatile uint32_t g_schema_change_active_threads = 0;
 
 Status StorageEngine::start_bg_threads() {
@@ -63,31 +63,31 @@ Status StorageEngine::start_bg_threads() {
     Thread::set_thread_name(_unused_rowset_monitor_thread, "rowset_monitor");
     LOG(INFO) << "unused rowset monitor thread started";
 
-    // start thread for monitoring the snapshot and trash folder
+    // Start thread for monitoring the snapshot and trash folder.
     _garbage_sweeper_thread = std::thread([this] { _garbage_sweeper_thread_callback(nullptr); });
     Thread::set_thread_name(_garbage_sweeper_thread, "garbage_sweeper");
     LOG(INFO) << "garbage sweeper thread started";
 
-    // start thread for monitoring the tablet with io error
+    // Start thread for monitoring the tablet with io error.
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
     LOG(INFO) << "disk stat monitor thread started";
 
-    // convert store map to vector
+    // Convert store map to vector.
     std::vector<DataDir*> data_dirs;
     for (auto& tmp_store : _store_map) {
         data_dirs.push_back(tmp_store.second);
     }
     int32_t data_dir_num = data_dirs.size();
 
-    // base and cumulative compaction threads
+    // Base and cumulative compaction threads.
     int32_t base_compaction_num_threads_per_disk = std::max<int32_t>(1, config::base_compaction_num_threads_per_disk);
     int32_t cumulative_compaction_num_threads_per_disk =
             std::max<int32_t>(1, config::cumulative_compaction_num_threads_per_disk);
     int32_t base_compaction_num_threads = base_compaction_num_threads_per_disk * data_dir_num;
     int32_t cumulative_compaction_num_threads = cumulative_compaction_num_threads_per_disk * data_dir_num;
 
-    // calc the max concurrency of compaction tasks
+    // alc the max concurrency of compaction tasks.
     int32_t max_compaction_concurrency = config::max_compaction_concurrency;
     if (max_compaction_concurrency < 0 ||
         max_compaction_concurrency > base_compaction_num_threads + cumulative_compaction_num_threads) {
@@ -125,19 +125,19 @@ Status StorageEngine::start_bg_threads() {
     }
     LOG(INFO) << "update compaction threads started. number: " << update_compaction_num_threads;
 
-    // tablet checkpoint thread
+    // Tablet checkpoint thread.
     for (auto data_dir : data_dirs) {
         _tablet_checkpoint_threads.emplace_back([this, data_dir] { _tablet_checkpoint_callback((void*)data_dir); });
         Thread::set_thread_name(_tablet_checkpoint_threads.back(), "tablet_check_pt");
     }
     LOG(INFO) << "tablet checkpoint thread started";
 
-    // fd cache clean thread
+    // FD cache clean thread.
     _fd_cache_clean_thread = std::thread([this] { _fd_cache_clean_callback(nullptr); });
     Thread::set_thread_name(_fd_cache_clean_thread, "fd_cache_clean");
     LOG(INFO) << "fd cache clean thread started";
 
-    // path scan and gc thread
+    // path scan and gc thread.
     if (config::path_gc_check) {
         for (auto data_dir : get_stores()) {
             _path_scan_threads.emplace_back([this, data_dir] { _path_scan_thread_callback((void*)data_dir); });
@@ -174,11 +174,9 @@ void* StorageEngine::_base_compaction_thread_callback(void* arg, DataDir* data_d
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    //string last_base_compaction_fs;
-    //TTabletId last_base_compaction_tablet_id = -1;
     Status status = Status::OK();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        // must be here, because this thread is start on start and
+        // Must be here, because this thread is start.
         if (!data_dir->reach_capacity_limit(0)) {
             status = _perform_base_compaction(data_dir);
         } else {
@@ -210,7 +208,6 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
 #endif
     Status status = Status::OK();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        // must be here, because this thread is start on start and
         if (!data_dir->reach_capacity_limit(0)) {
             status = _perform_update_compaction(data_dir);
         } else {
@@ -267,7 +264,7 @@ void* StorageEngine::_garbage_sweeper_thread_callback(void* arg) {
         curr_interval = curr_interval > min_interval ? curr_interval : min_interval;
         SLEEP_IN_BG_WORKER(curr_interval);
 
-        // start sweep, and get usage after sweep
+        // Start sweep, and get usage after sweep.
         Status res = _start_trash_sweep(&usage);
         if (!res.ok()) {
             LOG(WARNING) << "one or more errors occur when sweep trash."
@@ -381,7 +378,7 @@ void* StorageEngine::_path_gc_thread_callback(void* arg) {
         ((DataDir*)arg)->perform_path_gc_by_tablet();
 
         LOG(INFO) << "try to perform path gc by rowsetid!";
-        // perform path gc by rowset id
+        // Perform path gc by rowset id.
         ((DataDir*)arg)->perform_path_gc_by_rowsetid();
 
         int32_t interval = config::path_gc_check_interval_second;

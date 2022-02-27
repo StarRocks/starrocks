@@ -135,7 +135,7 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
 }
 
 Status StorageEngine::_open() {
-    // init store_map
+    // Init store map.
     RETURN_IF_ERROR_WITH_WARN(_init_store_map(), "_init_store_map failed");
 
     _effective_cluster_id = config::cluster_id;
@@ -231,13 +231,13 @@ void StorageEngine::_update_storage_medium_type_count() {
 
 Status StorageEngine::_judge_and_update_effective_cluster_id(int32_t cluster_id) {
     if (cluster_id == -1 && _effective_cluster_id == -1) {
-        // maybe this is a new cluster, cluster id will get from heartbeat message
+        // Maybe this is a new cluster, cluster id will get from heartbeat message.
         return Status::OK();
     } else if (cluster_id != -1 && _effective_cluster_id == -1) {
         _effective_cluster_id = cluster_id;
         return Status::OK();
     } else if (cluster_id == -1 && _effective_cluster_id != -1) {
-        // _effective_cluster_id is the right effective cluster id
+        // '_effective_cluster_id' is the right effective cluster id.
         return Status::OK();
     } else {
         if (cluster_id != _effective_cluster_id) {
@@ -294,11 +294,11 @@ Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos,
         }
     }
 
-    // 2. get total tablets' size of each data dir
+    // 2. Get total tablets' size of each data dir.
     size_t tablet_count = 0;
     _tablet_manager->update_root_path_info(&path_map, &tablet_count);
 
-    // add path info to data_dir_infos
+    // Add path info to 'data_dir_infos'.
     for (auto& entry : path_map) {
         data_dir_infos->emplace_back(entry.second);
     }
@@ -314,8 +314,8 @@ void StorageEngine::_start_disk_stat_monitor() {
 
     _update_storage_medium_type_count();
     bool some_tablets_were_dropped = _delete_tablets_on_unused_root_path();
-    // If some tablets were dropped, we should notify disk_state_worker_thread and
-    // tablet_worker_thread (see TaskWorkerPool) to make them report to FE ASAP.
+    // If some tablets were dropped, we should notify 'disk_state_worker_thread' and
+    // 'tablet_worker_thread' (see TaskWorkerPool) to make them report to FE ASAP.
     if (some_tablets_were_dropped) {
         trigger_report();
     }
@@ -345,7 +345,7 @@ Status StorageEngine::_check_all_root_path_cluster_id() {
         if (tmp_cluster_id == -1) {
             _is_all_cluster_id_exist = false;
         } else if (tmp_cluster_id == cluster_id) {
-            // both hava right cluster id, do nothing
+            // Both hava right cluster id, do nothing.
         } else if (cluster_id == -1) {
             cluster_id = tmp_cluster_id;
         } else {
@@ -356,10 +356,10 @@ Status StorageEngine::_check_all_root_path_cluster_id() {
         }
     }
 
-    // judge and get effective cluster id
+    // Judge and get effective cluster id.
     RETURN_IF_ERROR(_judge_and_update_effective_cluster_id(cluster_id));
 
-    // write cluster id into cluster_id_path if get effective cluster id success
+    // Write cluster id into 'cluster_id_path' if get effective cluster id success.
     if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist) {
         set_cluster_id(_effective_cluster_id);
     }
@@ -396,7 +396,7 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
 }
 
 DataDir* StorageEngine::get_store(const std::string& path) {
-    // _store_map is unchanged, no need to lock
+    // '_store_map' is unchanged, no need to lock.
     auto it = _store_map.find(path);
     if (it == std::end(_store_map)) {
         return nullptr;
@@ -516,7 +516,7 @@ void StorageEngine::stop() {
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {
-    // clear transaction task may not contains partitions ids, we should get partition id from txn manager.
+    // Clear transaction task may not contains partitions ids, we should get partition id from txn manager.
     std::vector<int64_t> partition_ids;
     StorageEngine::instance()->txn_manager()->get_partition_ids(transaction_id, &partition_ids);
     clear_transaction_task(transaction_id, partition_ids);
@@ -530,12 +530,11 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
         std::map<TabletInfo, RowsetSharedPtr> tablet_infos;
         StorageEngine::instance()->txn_manager()->get_txn_related_tablets(transaction_id, partition_id, &tablet_infos);
 
-        // each tablet
         for (auto& tablet_info : tablet_infos) {
-            // should use tablet uid to ensure clean txn correctly
+            // Should use tablet uid to ensure clean txn correctly.
             TabletSharedPtr tablet =
                     _tablet_manager->get_tablet(tablet_info.first.tablet_id, tablet_info.first.tablet_uid);
-            // The tablet may be dropped or altered, leave a INFO log and go on process other tablet
+            // The tablet may be dropped or altered, leave a INFO log and go on process other tablet.
             if (tablet == nullptr) {
                 LOG(INFO) << "tablet is no longer exist, tablet_id=" << tablet_info.first.tablet_id
                           << " schema_hash=" << tablet_info.first.schema_hash
@@ -716,13 +715,13 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
         }
     }
 
-    // clear expire incremental rowset, move deleted tablet to trash
+    // Clear expire incremental rowset, move deleted tablet to trash.
     (void)_tablet_manager->start_trash_sweep();
 
-    // clean rubbish transactions
+    // Clean rubbish transactions.
     _clean_unused_txns();
 
-    // clean unused rowset metas in KVStore
+    // Clean unused rowset metas in KVStore.
     _clean_unused_rowset_metas();
 
     return res;
@@ -736,7 +735,7 @@ void StorageEngine::_clean_unused_rowset_metas() {
         bool parsed = rowset_meta->init(meta_str);
         if (!parsed) {
             LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
-            // return false will break meta iterator, return true to skip this error
+            // Return false will break meta iterator, return true to skip this error.
             return true;
         }
         if (rowset_meta->tablet_uid() != tablet_uid) {
@@ -772,7 +771,7 @@ void StorageEngine::_clean_unused_txns() {
     for (auto& tablet_info : tablet_infos) {
         TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id, tablet_info.tablet_uid, true);
         if (tablet == nullptr) {
-            // TODO(ygl) :  should check if tablet still in meta, it's a improvement
+            // TODO(ygl): should check if tablet still in meta, it's a improvement
             // case 1: tablet still in meta, just remove from memory
             // case 2: tablet not in meta store, remove rowset from meta
             // currently just remove them from memory
@@ -786,7 +785,7 @@ void StorageEngine::_clean_unused_txns() {
 Status StorageEngine::_do_sweep(const std::string& scan_root, const time_t& local_now, const int32_t expire) {
     Status res = Status::OK();
     if (!FileUtils::check_exist(scan_root)) {
-        // dir not existed. no need to sweep trash.
+        // If dir not existed, no need to sweep trash.
         return res;
     }
 
@@ -805,8 +804,8 @@ Status StorageEngine::_do_sweep(const std::string& scan_root, const time_t& loca
             }
 
             int32_t actual_expire = expire;
-            // try get timeout in dir name, the old snapshot dir does not contain timeout
-            // eg: 20190818221123.3.86400, the 86400 is timeout, in second
+            // Try get timeout in dir name, the old snapshot dir does not contain timeout
+            // eg: 20190818221123.3.86400, the 86400 is timeout, in second.
             size_t pos = dir_name.find('.', str_time.size() + 1);
             if (pos != std::string::npos) {
                 actual_expire = std::stoi(dir_name.substr(pos + 1));
@@ -866,7 +865,7 @@ void StorageEngine::add_unused_rowset(const RowsetSharedPtr& rowset) {
 }
 
 Status StorageEngine::create_tablet(const TCreateTabletReq& request) {
-    // Get all available stores, use ref_root_path if the caller specified
+    // Get all available stores, use ref_root_path if the caller specified.
     std::vector<DataDir*> stores;
     stores = get_stores_for_create_tablet(request.storage_medium);
     if (stores.empty()) {
@@ -881,14 +880,14 @@ Status StorageEngine::obtain_shard_path(TStorageMedium::type storage_medium, int
     DCHECK(shard_path != nullptr) << "Null pointer";
 
     if (path_hash != -1) {
-        // get store by path hash
+        // Get store by path hash.
         *store = StorageEngine::instance()->get_store(path_hash);
         if (*store == nullptr) {
             LOG(WARNING) << "Fail to get store. path_hash=" << path_hash;
             return Status::InternalError(fmt::format("Fail to get store. path_hash: {}", path_hash));
         }
     } else {
-        // get store randomly by the specified medium
+        // Get store randomly by the specified medium.
         auto stores = get_stores_for_create_tablet(storage_medium);
         if (stores.empty()) {
             LOG(WARNING) << "There is no suitable DataDir";
@@ -928,7 +927,7 @@ Status StorageEngine::load_header(const std::string& shard_path, const TCloneReq
 
     std::stringstream schema_hash_path_stream;
     schema_hash_path_stream << shard_path << "/" << request.tablet_id << "/" << request.schema_hash;
-    // not surely, reload and restore tablet action call this api
+    // Not surely, reload and restore tablet action call this api.
     Status st;
     if (!is_primary_key) {
         st = _tablet_manager->load_tablet_from_dir(store, request.tablet_id, request.schema_hash,
@@ -972,11 +971,11 @@ Status StorageEngine::execute_task(EngineTask* task) {
                 LOG(WARNING) << "could not get tablet before prepare tabletid: " << tablet_info.tablet_id;
             }
         }
-        // add write lock to all related tablets
+        // Add write lock to all related tablets.
         RETURN_IF_ERROR(task->prepare());
     }
 
-    // do execute work without lock
+    // Do execute work without lock.
     RETURN_IF_ERROR(task->execute());
 
     // 1. add wlock to related tablets
@@ -984,7 +983,7 @@ Status StorageEngine::execute_task(EngineTask* task) {
     // 3. release wlock
     {
         std::vector<TabletInfo> tablet_infos;
-        // related tablets may be changed after execute task, so that get them here again
+        // Related tablets may be changed after execute task, so that get them here again.
         task->get_related_tablets(&tablet_infos);
         sort(tablet_infos.begin(), tablet_infos.end());
         std::vector<TabletSharedPtr> related_tablets;
@@ -1004,12 +1003,12 @@ Status StorageEngine::execute_task(EngineTask* task) {
                 LOG(WARNING) << "Fail to get tablet before finish tablet_id=" << tablet_info.tablet_id;
             }
         }
-        // add write lock to all related tablets
+        // Add write lock to all related tablets.
         return task->finish();
     }
 }
 
-// check whether any unused rowsets's id equal to rowset_id
+// Check whether any unused rowsets's id equal to 'rowset_id'.
 bool StorageEngine::check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id) {
     std::lock_guard lock(_gc_mutex);
     auto search = _unused_rowsets.find(rowset_id.to_string());

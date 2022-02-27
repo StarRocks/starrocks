@@ -39,8 +39,8 @@ namespace vectorized {
 class MemTable;
 }
 
-// the statistic of a certain flush handler.
-// use atomic because it may be updated by multi threads
+// The statistic of a certain flush handler.
+// use atomic because it may be updated by multi threads.
 struct FlushStatistic {
     int64_t flush_time_ns = 0;
     int64_t flush_count = 0;
@@ -64,14 +64,14 @@ public:
 
     Status submit(std::unique_ptr<vectorized::MemTable> mem_table);
 
-    // error has happpens, so we cancel this token
+    // Error has happpens, so we cancel this token
     // And remove all tasks in the queue.
     void cancel();
 
-    // wait all tasks in token to be completed.
+    // Wait all tasks in token to be completed.
     Status wait();
 
-    // get flush operations' statistics
+    // Get flush operations' statistics.
     const FlushStatistic& get_stats() const { return _stats; }
 
     Status status() const {
@@ -114,7 +114,7 @@ public:
     MemTableFlushExecutor() = default;
     ~MemTableFlushExecutor() = default;
 
-    // init should be called after storage engine is opened,
+    // Init should be called after storage engine is opened,
     // because it needs path hash of each data dir.
     Status init(const std::vector<DataDir*>& data_dirs);
 

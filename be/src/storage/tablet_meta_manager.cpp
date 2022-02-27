@@ -86,7 +86,7 @@ static bool decode_tablet_meta_key(std::string_view key, TTabletId* tablet_id, T
         return false;
     }
     str = sep + 1;
-    // |key| is not a zero terminated string, cannot use std::strtol here.
+    // 'key' is not a zero terminated string, cannot use std::strtol here.
     return safe_strto32(str, end - str, schema_hash);
 }
 
@@ -297,9 +297,9 @@ Status TabletMetaManager::get_primary_meta(KVStore* meta, TTabletId tablet_id, T
     return Status::OK();
 }
 
-// should use tablet's generate tablet meta copy method to get a copy of current tablet meta
+// Should use tablet's generate tablet meta copy method to get a copy of current tablet meta
 // there are some rowset meta in local meta store and in in-memory tablet meta
-// but not in tablet meta in local meta store
+// but not in tablet meta in local meta store.
 Status TabletMetaManager::get_tablet_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
                                           TabletMeta* tablet_meta) {
     std::string key = encode_tablet_meta_key(tablet_id, schema_hash);
@@ -348,7 +348,7 @@ Status TabletMetaManager::get_json_meta(DataDir* store, TTabletId tablet_id, std
             return false;
         }
         if (tid == tablet_id) {
-            // TODO(cbl): check multiple meta with same tablet_id exists
+            // TODO(cbl): check multiple meta with same tablet_id exists.
             pbdata = value;
             return false;
         } else {
@@ -426,7 +426,7 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id, TSchemaHas
 Status TabletMetaManager::traverse_headers(KVStore* meta,
                                            std::function<bool(long, long, const std::string&)> const& func) {
     auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> bool {
-        // TODO: avoid converting to std::string
+        // TODO: avoid converting to 'std::string'.
         std::string value_str(value);
         TTabletId tablet_id;
         TSchemaHash schema_hash;
@@ -466,7 +466,7 @@ Status TabletMetaManager::build_primary_meta(DataDir* store, rapidjson::Document
         return Status::IOError("rocksdb put tablet_meta failed");
     }
 
-    // delete older data first
+    // Delete older data first.
     if (!clear_log(store, &batch, tablet_id).ok()) {
         return Status::IOError("clear_log add to batch failed");
     }
@@ -719,14 +719,14 @@ Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int
         return to_status(st);
     }
     if (!rowset_meta_key.empty()) {
-        // delete rowset meta in txn
+        // Delete rowset meta in txn.
         st = batch.Delete(handle, rowset_meta_key);
         if (!st.ok()) {
             LOG(WARNING) << "rowset_commit failed, rocksdb.batch.delete failed";
             return to_status(st);
         }
     }
-    // pending rowset may exists or not, but delete it anyway
+    // Pending rowset may exists or not, but delete it anyway.
     RETURN_IF_ERROR(delete_pending_rowset(store, &batch, tablet_id, edit->version().major()));
     return store->get_meta()->write_batch(&batch);
 }
@@ -743,7 +743,7 @@ Status TabletMetaManager::write_rowset_meta(DataDir* store, TTabletId tablet_id,
         return to_status(st);
     }
     if (!rowset_meta_key.empty()) {
-        // delete rowset meta in txn
+        // Delete rowset meta in txn.
         st = batch.Delete(handle, rowset_meta_key);
         if (!st.ok()) {
             LOG(WARNING) << "put rowset meta failed, rocksdb.batch.delete failed";
@@ -1007,7 +1007,7 @@ Status TabletMetaManager::remove_tablet_meta(DataDir* store, WriteBatch* batch, 
 }
 
 Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool detail) {
-    // TODO(cbl): implement detail
+    // TODO(cbl): implement detail.
     KVStore* meta = store->get_meta();
 
     auto traverse_tabletmeta_func = [&](std::string_view key, std::string_view value) -> bool {

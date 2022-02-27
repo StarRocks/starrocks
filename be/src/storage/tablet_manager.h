@@ -53,9 +53,9 @@ enum TabletDropFlag {
     kKeepMetaAndFiles = 2,
 };
 
-// TabletManager provides get, add, delete tablet method for storage engine
-// NOTE: If you want to add a method that needs to hold meta-lock before you can call it,
-// please uniformly name the method in "xxx_unlocked()" mode
+// TabletManager provides get, add, delete tablet method for storage engine.
+// NOTE: if you want to add a method that needs to hold meta-lock before you can call it,
+// please uniformly name the method in "xxx_unlocked()" mode.
 class TabletManager {
 public:
     explicit TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
@@ -67,7 +67,7 @@ public:
     // linked-schema-change type requires Linux hard-link, which does not support cross disk.
     // TODO(lingbin): Other schema-change type do not need to be on the same disk. Because
     // there may be insufficient space on the current disk, which will lead the schema-change
-    // task to be fail, even if there is enough space on other disks
+    // task to be fail, even if there is enough space on other disks.
     Status create_tablet(const TCreateTabletReq& request, std::vector<DataDir*> stores);
 
     Status drop_tablet(TTabletId tablet_id, TabletDropFlag flag = kMoveFilesToTrash);
@@ -100,9 +100,9 @@ public:
 
     void get_tablet_stat(TTabletStatResult* result);
 
-    // parse tablet header msg to generate tablet object
+    // Parse tablet header msg to generate tablet object
     // - restore: whether the request is from restore tablet action,
-    //   where we should change tablet status from shutdown back to running
+    //   where we should change tablet status from shutdown back to running.
     //
     // return NotFound if the tablet path has been deleted or the tablet statue is SHUTDOWN.
     Status load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash,
@@ -178,8 +178,8 @@ private:
     TabletManager(const TabletManager&) = delete;
     const TabletManager& operator=(const TabletManager&) = delete;
 
-    // Add a tablet pointer to StorageEngine
-    // If force, drop the existing tablet add this new one
+    // Add a tablet pointer to StorageEngine.
+    // If force, drop the existing tablet add this new one.
     Status _add_tablet_unlocked(const TabletSharedPtr& tablet, bool update_meta, bool force);
 
     Status _update_tablet_map_and_partition_info(const TabletSharedPtr& tablet);
@@ -224,9 +224,9 @@ private:
     const int32_t _tablets_shards_mask;
     LockTable _schema_change_lock_tbl;
 
-    // Protect _partition_tablet_map, should not be obtained before _tablet_map_lock to avoid deadlock
+    // Protect '_partition_tablet_map', should not be obtained before _tablet_map_lock to avoid deadlock.
     mutable std::shared_mutex _partition_tablet_map_lock;
-    // Protect _shutdown_tablets, should not be obtained before _tablet_map_lock to avoid deadlock
+    // Protect '_shutdown_tablets', should not be obtained before _tablet_map_lock to avoid deadlock.
     mutable std::shared_mutex _shutdown_tablets_lock;
     // partition_id => tablet_info
     std::map<int64_t, std::set<TabletInfo>> _partition_tablet_map;
@@ -234,9 +234,9 @@ private:
 
     std::mutex _tablet_stat_mutex;
     // cache to save tablets' statistics, such as data-size and row-count
-    // TODO(cmy): for now, this is a naive implementation
+    // TODO(cmy): for now, this is a naive implementation.
     std::map<int64_t, TTabletStat> _tablet_stat_cache;
-    // last update time of tablet stat cache
+    // Last update time of tablet stat cache.
     int64_t _last_update_stat_ms;
 };
 

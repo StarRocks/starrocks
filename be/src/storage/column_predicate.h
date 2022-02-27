@@ -38,10 +38,10 @@ public:
 
     virtual ~ColumnPredicate() = default;
 
-    // evaluate predicate on ColumnBlock
+    // Evaluate predicate on ColumnBlock.
     virtual void evaluate(ColumnBlock* block, uint16_t* sel, uint16_t* size) const = 0;
 
-    //evaluate predicate on Bitmap
+    // Evaluate predicate on Bitmap.
     virtual Status evaluate(const Schema& schema, const std::vector<BitmapIndexIterator*>& iterators, uint32_t num_rows,
                             Roaring* roaring) const = 0;
 

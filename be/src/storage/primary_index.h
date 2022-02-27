@@ -37,25 +37,25 @@ public:
     // [thread-safe]
     Status load(Tablet* tablet);
 
-    // Reset primary index to unload state, clear all contents
+    // Reset primary index to unload state, clear all contents.
     //
     // [thread-safe]
     void unload();
 
-    // insert new primary keys into this index. caller need to make sure key doesn't exists
-    // in index
+    // Insert new primary keys into this index. caller need to make sure key doesn't exists
+    // in index.
     // [not thread-safe]
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks);
     Status insert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks);
 
-    // insert new primary keys into this index. if a key already exists in the index, assigns
+    // Insert new primary keys into this index. if a key already exists in the index, assigns
     // the new record's position to the mapped value corresponding to the key, and save the
-    // old position to |deletes|.
+    // old position to 'deletes'.
     //
     // [not thread-safe]
     void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes);
 
-    // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
+    // Used for compaction, try replace input rowsets' rowid with output segment's rowid, if
     // input rowsets' rowid doesn't exist, this indicates that the row of output rowset is
     // deleted during compaction, so append it's rowid into |deletes|
     // |rssid| output segment's rssid
@@ -67,8 +67,8 @@ public:
     void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                      const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
 
-    // |key_col| contains the *encoded* primary keys to be deleted from this index.
-    // The position of deleted keys will be appended into |new_deletes|.
+    // 'key_col' contains the *encoded* primary keys to be deleted from this index.
+    // The position of deleted keys will be appended into 'new_deletes'.
     //
     // [not thread-safe]
     void erase(const vectorized::Column& pks, DeletesMap* deletes);

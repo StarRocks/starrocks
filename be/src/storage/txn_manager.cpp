@@ -82,9 +82,9 @@ Status TxnManager::delete_txn(TPartitionId partition_id, const TabletSharedPtr& 
                       tablet->schema_hash(), tablet->tablet_uid());
 }
 
-// prepare txn should always be allowed because ingest task will be retried
-// could not distinguish rollup, schema change or base table, prepare txn successfully will allow
-// ingest retried
+// Prepare txn should always be allowed because ingest task will be retried.
+// Could not distinguish rollup, schema change or base table, prepare txn successfully will allow
+// ingest retried.
 Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
                                SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id) {
     TxnKey key(partition_id, transaction_id);
@@ -95,10 +95,10 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
     if (it != txn_tablet_map.end()) {
         auto load_itr = it->second.find(tablet_info);
         if (load_itr != it->second.end()) {
-            // found load for txn,tablet
-            // case 1: user commit rowset, then the load id must be equal
+            // Found load for txn, tablet
+            // case 1: user commit rowset, then the load id must be equal.
             TabletTxnInfo& load_info = load_itr->second;
-            // check if load id is equal
+            // Check if load id is equal.
             if (load_info.load_id.hi() == load_id.hi() && load_info.load_id.lo() == load_id.lo() &&
                 load_info.rowset != nullptr) {
                 LOG(WARNING) << "Transaction altready exists. tablet: " << tablet_info.tablet_id
@@ -108,7 +108,7 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
         }
     }
 
-    // check if there are too many transactions on running.
+    // Check if there are too many transactions on running.
     // if yes, reject the request.
     txn_partition_map_t& txn_partition_map = _get_txn_partition_map(transaction_id);
     if (txn_partition_map.size() > config::max_runnings_transactions_per_txn_map) {
@@ -118,7 +118,7 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
         return Status::ServiceUnavailable(msg);
     }
 
-    // not found load id
+    // Not found load id
     // case 1: user start a new txn, rowset_ptr = null
     // case 2: loading txn from meta env
     TabletTxnInfo load_info(load_id, nullptr);
@@ -150,26 +150,26 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
 
     std::lock_guard txn_lock(_get_txn_lock(transaction_id));
     {
-        // get tx
+        // Get tx.
         std::shared_lock rdlock(_get_txn_map_lock(transaction_id));
         txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
         auto it = txn_tablet_map.find(key);
         if (it != txn_tablet_map.end()) {
             auto load_itr = it->second.find(tablet_info);
             if (load_itr != it->second.end()) {
-                // found load for txn,tablet
-                // case 1: user commit rowset, then the load id must be equal
+                // Found load for txn, tablet.
+                // case 1: user commit rowset, then the load id must be equal.
                 TabletTxnInfo& load_info = load_itr->second;
-                // check if load id is equal
+                // Check if load id is equal.
                 if (load_info.load_id.hi() == load_id.hi() && load_info.load_id.lo() == load_id.lo() &&
                     load_info.rowset != nullptr && load_info.rowset->rowset_id() == rowset_ptr->rowset_id()) {
-                    // find a rowset with same rowset id, then it means a duplicate call
+                    // Find a rowset with same rowset id, then it means a duplicate call.
                     LOG(INFO) << "Transaction altready exists. tablet: " << tablet_id << ", partition_id: " << key.first
                               << ", txn_id: " << key.second << ", rowset_id: " << load_info.rowset->rowset_id();
                     return Status::OK();
                 } else if (load_info.load_id.hi() == load_id.hi() && load_info.load_id.lo() == load_id.lo() &&
                            load_info.rowset != nullptr && load_info.rowset->rowset_id() != rowset_ptr->rowset_id()) {
-                    // find a rowset with different rowset id, then it should not happen, just return errors
+                    // Find a rowset with different rowset id, then it should not happen, just return errors.
                     LOG(WARNING) << "Txn are correpsonds to two different rowsets. "
                                  << "txn_id: " << key.second << ", tablet_id: " << tablet_id
                                  << ", first_rowset_id: " << load_info.rowset->rowset_id()
@@ -182,9 +182,9 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         }
     }
 
-    // if not in recovery mode, then should persist the meta to meta env
+    // If not in recovery mode, then should persist the meta to meta env.
     // save meta need access disk, it maybe very slow, so that it is not in global txn lock
-    // it is under a single txn lock
+    // it is under a single txn lock.
     if (!is_recovery) {
         RowsetMetaPB rowset_meta_pb;
         rowset_ptr->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
@@ -211,7 +211,7 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     return Status::OK();
 }
 
-// remove a txn from txn manager
+// Remove a txn from txn manager.
 Status TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
                                TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                const Version& version) {
@@ -226,18 +226,18 @@ Status TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransa
         if (it != txn_tablet_map.end()) {
             auto load_itr = it->second.find(tablet_info);
             if (load_itr != it->second.end()) {
-                // found load for txn,tablet
-                // case 1: user commit rowset, then the load id must be equal
+                // Found load for txn, tablet.
+                // case 1: user commit rowset, then the load id must be equal.
                 TabletTxnInfo& load_info = load_itr->second;
                 rowset_ptr = load_info.rowset;
             }
         }
     }
-    // save meta need access disk, it maybe very slow, so that it is not in global txn lock
-    // it is under a single txn lock
+    // Save meta need access disk, it maybe very slow, so that it is not in global txn lock
+    // it is under a single txn lock.
     if (rowset_ptr != nullptr) {
         // TODO(ygl): rowset is already set version here, memory is changed, if save failed
-        // it maybe a fatal error
+        // it maybe a fatal error.
         rowset_ptr->make_visible(version);
         auto& rowset_meta_pb = rowset_ptr->rowset_meta()->get_meta_pb();
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_ptr->rowset_id(), rowset_meta_pb);
@@ -284,15 +284,15 @@ Status TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId part
         if (it != txn_tablet_map.end()) {
             auto load_itr = it->second.find(tablet_info);
             if (load_itr != it->second.end()) {
-                // found load for txn,tablet
-                // case 1: user commit rowset, then the load id must be equal
+                // Found load for txn, tablet.
+                // case 1: user commit rowset, then the load id must be equal.
                 TabletTxnInfo& load_info = load_itr->second;
                 rowset_ptr = load_info.rowset;
             }
         }
     }
-    // save meta need access disk, it maybe very slow, so that it is not in global txn lock
-    // it is under a single txn lock
+    // Save meta need access disk, it maybe very slow, so that it is not in global txn lock
+    // it is under a single txn lock.
     if (rowset_ptr != nullptr) {
         StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
         auto st = tablet->rowset_commit(version, rowset_ptr);
@@ -326,7 +326,7 @@ Status TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId part
 // txn could be rollbacked if it does not have related rowset
 // if the txn has related rowset then could not rollback it, because it
 // may be committed in another thread and our current thread meets errors when writing to data file
-// BE has to wait for fe call clear txn api
+// BE has to wait for fe call clear txn api.
 Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
                                 SchemaHash schema_hash, const TabletUid& tablet_uid) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
@@ -337,12 +337,12 @@ Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transa
     if (it != txn_tablet_map.end()) {
         auto load_itr = it->second.find(tablet_info);
         if (load_itr != it->second.end()) {
-            // found load for txn,tablet
-            // case 1: user commit rowset, then the load id must be equal
+            // Found load for txn,tablet,
+            // case 1: user commit rowset, then the load id must be equal.
             TabletTxnInfo& load_info = load_itr->second;
             if (load_info.rowset != nullptr) {
-                // if rowset is not null, it means other thread may commit the rowset
-                // should not delete txn any more
+                // If rowset is not null, it means other thread may commit the rowset
+                // should not delete txn any more.
                 return Status::AlreadyExist(
                         fmt::format("Txn already exists. tablet_id: {}, txn_id: {}", tablet_id, transaction_id));
             }
@@ -359,8 +359,8 @@ Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transa
     return Status::OK();
 }
 
-// fe call this api to clear unused rowsets in be
-// could not delete the rowset if it already has a valid version
+// FE call this api to clear unused rowsets in BE.
+// could not delete the rowset if it already has a valid version.
 Status TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
                               TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
@@ -373,8 +373,8 @@ Status TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransac
     }
     auto load_itr = it->second.find(tablet_info);
     if (load_itr != it->second.end()) {
-        // found load for txn,tablet
-        // case 1: user commit rowset, then the load id must be equal
+        // Found load for txn, tablet.
+        // case 1: user commit rowset, then the load id must be equal.
         TabletTxnInfo& load_info = load_itr->second;
         if (load_info.rowset != nullptr && meta != nullptr) {
             if (load_info.rowset->version().first > 0) {
@@ -428,8 +428,8 @@ void TxnManager::get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_
     }
 }
 
-// force drop all txns related with the tablet
-// maybe lock error, because not get txn lock before remove from meta
+// Force drop all txns related with the tablet.
+// maybe lock error, because not get txn lock before remove from meta.
 void TxnManager::force_rollback_tablet_related_txns(KVStore* meta, TTabletId tablet_id, SchemaHash schema_hash,
                                                     const TabletUid& tablet_uid) {
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
@@ -464,7 +464,7 @@ void TxnManager::force_rollback_tablet_related_txns(KVStore* meta, TTabletId tab
 
 void TxnManager::get_txn_related_tablets(const TTransactionId transaction_id, TPartitionId partition_id,
                                          std::map<TabletInfo, RowsetSharedPtr>* tablet_infos) {
-    // get tablets in this transaction
+    // Get tablets in this transaction.
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     std::shared_lock txn_rdlock(_get_txn_map_lock(transaction_id));
     txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
@@ -479,8 +479,8 @@ void TxnManager::get_txn_related_tablets(const TTransactionId transaction_id, TP
     // each tablet
     for (auto& load_info : load_info_map) {
         const TabletInfo& tablet_info = load_info.first;
-        // must not check rowset == null here, because if rowset == null
-        // publish version should failed
+        // must not check 'rowset == null' here, because if rowset == null
+        // publish version should failed.
         tablet_infos->emplace(tablet_info, load_info.second.rowset);
     }
 }
@@ -510,7 +510,7 @@ bool TxnManager::has_txn(TPartitionId partition_id, TTransactionId transaction_i
 
 void TxnManager::build_expire_txn_map(std::map<TabletInfo, std::vector<int64_t>>* expire_txn_map) {
     int64_t now = UnixSeconds();
-    // traverse the txn map, and get all expired txns
+    // Traverse the txn map, and get all expired txns.
     for (int32_t i = 0; i < _txn_map_shard_size; i++) {
         std::shared_lock txn_rdlock(_txn_map_locks[i]);
         for (auto& it : _txn_tablet_maps[i]) {

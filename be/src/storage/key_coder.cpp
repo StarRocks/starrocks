@@ -31,10 +31,10 @@ KeyCoder::KeyCoder(TraitsType traits)
           _full_encode_ascending_datum(traits.full_encode_ascending_datum),
           _encode_ascending_datum(traits.encode_ascending_datum) {}
 
-// Helper class used to get KeyCoder
+// Helper class used to get KeyCoder.
 class KeyCoderResolver {
-public:
-    ~KeyCoderResolver() {
+public
+    .~KeyCoderResolver() {
         for (KeyCoder* p : _coder_map) {
             delete p;
         }

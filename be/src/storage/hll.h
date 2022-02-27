@@ -194,7 +194,7 @@ public:
     // function is O(1).
     static bool is_valid(const Slice& slice);
 
-    // only for debug
+    // Only for debug.
     std::string to_string() const;
 
     uint64_t serialize_size() const { return max_serialized_size(); }
@@ -217,23 +217,23 @@ private:
 private:
     void _convert_explicit_to_register();
 
-    // absorb other registers into this registers
+    // Absorb other registers into this registers.
     void _merge_registers(uint8_t* other_registers);
 
-    // update one hash value into this registers
+    // Update one hash value into this registers.
     void _update_registers(uint64_t hash_value) {
         // Use the lower bits to index into the number of streams and then
         // find the first 1 bit after the index bits.
         int idx = hash_value % HLL_REGISTERS_COUNT;
         hash_value >>= HLL_COLUMN_PRECISION;
-        // make sure max first_one_bit is HLL_ZERO_COUNT_BITS + 1
+        // Make sure max first_one_bit is HLL_ZERO_COUNT_BITS + 1.
         hash_value |= ((uint64_t)1 << HLL_ZERO_COUNT_BITS);
         uint8_t first_one_bit = __builtin_ctzl(hash_value) + 1;
         _registers.data[idx] = std::max((uint8_t)_registers.data[idx], first_one_bit);
     }
 };
 
-// todo(kks): remove this when dpp_sink class was removed
+// TODO(kks): remove this when dpp_sink class was removed.
 class HllSetResolver {
 public:
     HllSetResolver()
@@ -248,7 +248,7 @@ public:
     typedef uint16_t SparseIndexType;
     typedef uint8_t SparseValueType;
 
-    // only save pointer
+    // Only save pointer.
     void init(char* buf, int len) {
         this->_buf_ref = buf;
         this->_buf_len = len;
@@ -257,10 +257,10 @@ public:
     // hll set type
     HllDataType get_hll_data_type() { return _set_type; };
 
-    // explicit value num
+    // Explicit value num.
     int get_explicit_count() const { return (int)_explicit_num; };
 
-    // get explicit index value 64bit
+    // Get explicit index value 64bit.
     uint64_t get_explicit_value(int index) {
         if (index >= _explicit_num) {
             return -1;
@@ -268,7 +268,7 @@ public:
         return _explicit_value[index];
     };
 
-    // get full register value
+    // Get full register value.
     char* get_full_value() { return _full_value_position; };
 
     // get (index, value) map
@@ -288,7 +288,7 @@ private:
     SparseLengthValueType* _sparse_count{nullptr};
 };
 
-// todo(kks): remove this when dpp_sink class was removed
+// TODO(kks): remove this when dpp_sink class was removed.
 class HllSetHelper {
 public:
     static void set_sparse(char* result, const std::map<int, uint8_t>& index_to_value, int* len);

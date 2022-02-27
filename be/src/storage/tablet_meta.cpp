@@ -294,7 +294,7 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
         field_version = FieldTypeVersion::kV2;
     }
 
-    // set column information
+    // Set column information.
     uint32_t col_ordinal = 0;
     uint32_t key_count = 0;
     bool has_bf_columns = false;
@@ -457,15 +457,15 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
         LOG(WARNING) << "tablet has no state. tablet=" << tablet_id() << ", schema_hash=" << schema_hash();
     }
 
-    // init _schema
+    // Init the '_schema'.
     if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
-        // Does not collect the memory usage of |_schema|.
+        // Does not collect the memory usage of '_schema'.
         _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
     } else {
         _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
     }
 
-    // init _rs_metas
+    // Init '_rs_metas'.
     for (auto& it : tablet_meta_pb.rs_metas()) {
         RowsetMetaSharedPtr rs_meta(new RowsetMeta());
         rs_meta->init_from_pb(it);
@@ -480,7 +480,7 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
         _inc_rs_metas.push_back(std::move(rs_meta));
     }
 
-    // generate AlterTabletTask
+    // Generate alter tablet task.
     if (tablet_meta_pb.has_alter_task()) {
         _alter_task = std::make_shared<AlterTabletTask>();
         _alter_task->init_from_pb(tablet_meta_pb.alter_task());
@@ -541,7 +541,7 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
 
     tablet_meta_pb->set_in_restore_mode(in_restore_mode());
 
-    // to avoid modify tablet meta to the greatest extend
+    // To avoid modify tablet meta to the greatest extend.
     if (_preferred_rowset_type == BETA_ROWSET) {
         tablet_meta_pb->set_preferred_rowset_type(_preferred_rowset_type);
     }
@@ -569,7 +569,7 @@ Version TabletMeta::max_version() const {
 }
 
 Status TabletMeta::add_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
-    // check RowsetMeta is valid
+    // Check RowsetMeta is valid.
     for (auto& rs : _rs_metas) {
         if (rs->version() == rs_meta->version()) {
             if (rs->rowset_id() != rs_meta->rowset_id()) {
@@ -577,7 +577,7 @@ Status TabletMeta::add_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
                              << ", tablet=" << full_name();
                 return Status::AlreadyExist("publish version");
             } else {
-                // rowsetid,version is equal, it is a duplicate req, skip it
+                // If rowsetid and version is equal, it is a duplicate req, skip it.
                 return Status::OK();
             }
         }
@@ -607,7 +607,7 @@ void TabletMeta::delete_rs_meta_by_version(const Version& version, std::vector<R
 
 void TabletMeta::modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
                                  const std::vector<RowsetMetaSharedPtr>& to_delete) {
-    // Remove to_delete rowsets from _rs_metas
+    // Remove to_delete rowsets from '_rs_metas'.
     for (const auto& rs_to_del : to_delete) {
         auto it = _rs_metas.begin();
         while (it != _rs_metas.end()) {
@@ -616,22 +616,22 @@ void TabletMeta::modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
                     remove_delete_predicate_by_version((*it)->version());
                 }
                 _rs_metas.erase(it);
-                // there should be only one rowset match the version
+                // There should be only one rowset match the version.
                 break;
             }
             ++it;
         }
     }
-    // put to_delete rowsets in _stale_rs_metas.
+    // Put to_delete rowsets in '_stale_rs_metas'.
     _stale_rs_metas.insert(_stale_rs_metas.end(), to_delete.begin(), to_delete.end());
 
-    // put to_add rowsets in _rs_metas.
+    // Put to_add rowsets in '_rs_metas'.
     _rs_metas.insert(_rs_metas.end(), to_add.begin(), to_add.end());
 }
 
 void TabletMeta::revise_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas) {
     std::unique_lock wrlock(_meta_lock);
-    // delete alter task
+    // Delete alter task.
     _alter_task.reset();
 
     _rs_metas = std::move(rs_metas);
@@ -639,14 +639,14 @@ void TabletMeta::revise_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas) {
 
 void TabletMeta::revise_inc_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas) {
     std::unique_lock wrlock(_meta_lock);
-    // delete alter task
+    // Delete alter task.
     _alter_task.reset();
 
     _inc_rs_metas = std::move(rs_metas);
 }
 
 Status TabletMeta::add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
-    // check RowsetMeta is valid
+    // Check rowset meta is valid.
     for (const auto& rs : _inc_rs_metas) {
         if (rs->version() == rs_meta->version()) {
             LOG(WARNING) << "rowset already exist. rowset_id=" << rs->rowset_id();
@@ -717,14 +717,14 @@ void TabletMeta::remove_delete_predicate_by_version(const Version& version) {
     for (int ordinal = 0; ordinal < _del_pred_array.size(); ++ordinal) {
         const DeletePredicatePB& temp = _del_pred_array.Get(ordinal);
         if (temp.version() == version.first) {
-            // log delete condition
+            // Log delete condition.
             string del_cond_str;
             for (const auto& it : temp.sub_predicates()) {
                 del_cond_str += it + ";";
             }
             LOG(INFO) << "remove one del_pred. version=" << temp.version() << ", condition=" << del_cond_str;
 
-            // remove delete condition from PB
+            // Remove delete condition from PB.
             _del_pred_array.SwapElements(ordinal, _del_pred_array.size() - 1);
             _del_pred_array.RemoveLast();
         }
@@ -749,8 +749,8 @@ bool TabletMeta::version_for_delete_predicate(const Version& version) {
     return false;
 }
 
-// return value not reference
-// MVCC modification for alter task, upper application get a alter task mirror
+// Return value not reference.
+// MVCC modification for alter task, upper application get a alter task mirror.
 AlterTabletTaskSharedPtr TabletMeta::alter_task() {
     std::shared_lock rlock(_meta_lock);
     return _alter_task;
@@ -766,12 +766,12 @@ void TabletMeta::delete_alter_task() {
     _alter_task.reset();
 }
 
-// if alter task is nullptr, return error?
+// If alter task is nullptr, return error.
 Status TabletMeta::set_alter_state(AlterTabletState alter_state) {
     std::unique_lock wrlock(_meta_lock);
     if (_alter_task == nullptr) {
-        // alter state should be set to ALTER_PREPARED when starting to
-        // alter tablet. In this scenario, _alter_task is null pointer.
+        // Alter state should be set to ALTER_PREPARED when starting to
+        // alter tablet. In this scenario, '_alter_task' is null pointer.
         LOG(WARNING) << "original alter task is null, could not set state";
         return Status::InternalError("original alter task is null");
     } else {

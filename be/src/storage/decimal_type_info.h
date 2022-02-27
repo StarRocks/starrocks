@@ -33,7 +33,6 @@ public:
         return _delegate->deep_copy(dest, src, mem_pool);
     }
 
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
     // It is same with deep_copy() for all type except for HLL and OBJECT type
     void copy_object(void* dest, const void* src, MemPool* mem_pool) const override {
         return _delegate->copy_object(dest, src, mem_pool);

@@ -49,7 +49,7 @@ namespace starrocks {
 //      +-------------------------------------+
 
 enum TabletState {
-    // Tablet is under alter table, rollup, clone
+    // Tablet is under alter table, rollup, clone.
     TABLET_NOTREADY,
 
     TABLET_RUNNING,
@@ -154,7 +154,7 @@ public:
     inline void set_cumulative_layer_point(int64_t new_point);
 
     inline size_t num_rows() const;
-    // disk space occupied by tablet
+    // Disk space occupied by tablet.
     inline size_t tablet_footprint() const;
     inline size_t version_count() const;
     Version max_version() const;
@@ -162,7 +162,7 @@ public:
     inline TabletState tablet_state() const;
     // NOTE: Normally you should NOT call this method directly but call Tablet::set_tablet_state().
     // This is a dangerous method, it may change the state from SHUTDOWN to RUNNING again, which should not happen
-    // in normal cases
+    // in normal cases.
     inline void set_tablet_state(TabletState state);
 
     inline bool in_restore_mode() const;
@@ -208,9 +208,9 @@ public:
         _preferred_rowset_type = preferred_rowset_type;
     }
 
-    // used when create new tablet
+    // Used when create new tablet.
     void create_inital_updates_meta();
-    // _updates will become empty after release
+    // '_updates' will become empty after release.
     TabletUpdatesPB* release_updates(TabletUpdates* updates) {
         _updates = updates;
         return _updatesPB.release();
@@ -229,7 +229,7 @@ private:
         return mem_usage;
     }
 
-    // _del_pred_array is ignored to compare.
+    // '_del_pred_array' is ignored to compare.
     friend bool operator==(const TabletMeta& a, const TabletMeta& b);
     friend bool operator!=(const TabletMeta& a, const TabletMeta& b);
 
@@ -245,7 +245,7 @@ private:
 
     TabletState _tablet_state = TABLET_NOTREADY;
     // Note: Segment store the pointer of TabletSchema,
-    // so this point should never change
+    // so this point should never change.
     std::shared_ptr<const TabletSchema> _schema = nullptr;
 
     std::vector<RowsetMetaSharedPtr> _rs_metas;
@@ -265,7 +265,7 @@ private:
     // and then deleted.
     std::unique_ptr<TabletUpdatesPB> _updatesPB;
     // A reference to TabletUpdates, so update related meta
-    // can be serialized with tablet meta automatically
+    // can be serialized with tablet meta automatically.
     TabletUpdates* _updates = nullptr;
 
     std::shared_mutex _meta_lock;

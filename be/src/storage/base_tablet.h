@@ -62,7 +62,7 @@ public:
     TabletState tablet_state() const { return _state; }
     Status set_tablet_state(TabletState state);
 
-    // Property encapsulated in TabletMeta
+    // Property encapsulated in TabletMeta.
     inline const TabletMetaSharedPtr tablet_meta();
 
     inline TabletUid tablet_uid() const;
@@ -78,7 +78,7 @@ public:
     inline void set_creation_time(int64_t creation_time);
     inline bool equal(int64_t tablet_id, int32_t schema_hash);
 
-    // properties encapsulated in TabletSchema
+    // Properties encapsulated in tablet schema.
     inline const TabletSchema& tablet_schema() const;
 
 protected:
@@ -90,7 +90,8 @@ protected:
     TabletMetaSharedPtr _tablet_meta;
 
     DataDir* _data_dir;
-    std::string _tablet_path; // TODO: remove this variable for less memory occupation
+    // TODO: remove this variable for less memory occupation.
+    std::string _tablet_path;
 
 private:
     BaseTablet(const BaseTablet&) = delete;

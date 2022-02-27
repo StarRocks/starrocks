@@ -21,13 +21,13 @@ using std::stringstream;
 namespace starrocks {
 
 uint32_t CacheKey::hash(const char* data, size_t n, uint32_t seed) const {
-    // Similar to murmur hash
+    // Similar to murmur hash.
     const uint32_t m = 0xc6a4a793;
     const uint32_t r = 24;
     const char* limit = data + n;
     uint32_t h = seed ^ (n * m);
 
-    // Pick up four bytes at a time
+    // Pick up four bytes at a time.
     while (data + 4 <= limit) {
         uint32_t w = _decode_fixed32(data);
         data += 4;
@@ -36,16 +36,16 @@ uint32_t CacheKey::hash(const char* data, size_t n, uint32_t seed) const {
         h ^= (h >> 16);
     }
 
-    // Pick up remaining bytes
+    // Pick up remaining bytes.
     switch (limit - data) {
     case 3:
         h += static_cast<unsigned char>(data[2]) << 16;
 
-        // fall through
+        // fall through.
     case 2:
         h += static_cast<unsigned char>(data[1]) << 8;
 
-        // fall through
+        // fall through.
     case 1:
         h += static_cast<unsigned char>(data[0]);
         h *= m;
@@ -61,7 +61,7 @@ uint32_t CacheKey::hash(const char* data, size_t n, uint32_t seed) const {
 
 Cache::~Cache() = default;
 
-// LRU cache implementation
+// LRU cache implementation.
 LRUHandle* HandleTable::lookup(const CacheKey& key, uint32_t hash) {
     return *_find_pointer(key, hash);
 }
@@ -176,7 +176,7 @@ void LRUCache::_lru_remove(LRUHandle* e) {
 }
 
 void LRUCache::_lru_append(LRUHandle* list, LRUHandle* e) {
-    // Make "e" newest entry by inserting just before *list
+    // Make "e" newest entry by inserting just before *list.
     e->next = list;
     e->prev = list->prev;
     e->prev->next = e;
@@ -188,10 +188,10 @@ Cache::Handle* LRUCache::lookup(const CacheKey& key, uint32_t hash) {
     ++_lookup_count;
     LRUHandle* e = _table.lookup(key, hash);
     if (e != nullptr) {
-        // we get it from _table, so in_cache must be true
+        // We get it from '_table', so in_cache must be true.
         DCHECK(e->in_cache);
         if (e->refs == 1) {
-            // only in LRU free list, remove it from list
+            // Only in LRU free list, remove it from list.
             _lru_remove(e);
         }
         e->refs++;
@@ -212,22 +212,22 @@ void LRUCache::release(Cache::Handle* handle) {
         if (last_ref) {
             _usage -= e->charge;
         } else if (e->in_cache && e->refs == 1) {
-            // only exists in cache
+            // Only exists in cache.
             if (_usage > _capacity) {
-                // take this opportunity and remove the item
+                // Take this opportunity and remove the item.
                 _table.remove(e->key(), e->hash);
                 e->in_cache = false;
                 _unref(e);
                 _usage -= e->charge;
                 last_ref = true;
             } else {
-                // put it to LRU free list
+                // Put it to LRU free list.
                 _lru_append(&_lru, e);
             }
         }
     }
 
-    // free handle out of mutex
+    // Free handle out of mutex.
     if (last_ref) {
         e->free();
     }
@@ -235,7 +235,7 @@ void LRUCache::release(Cache::Handle* handle) {
 
 void LRUCache::_evict_from_lru(size_t charge, std::vector<LRUHandle*>* deleted) {
     LRUHandle* cur = &_lru;
-    // 1. evict normal cache entries
+    // 1. evict normal cache entries.
     while (_usage + charge > _capacity && cur->next != &_lru) {
         LRUHandle* old = cur->next;
         if (old->priority == CachePriority::DURABLE) {
@@ -245,7 +245,7 @@ void LRUCache::_evict_from_lru(size_t charge, std::vector<LRUHandle*>* deleted) 
         _evict_one_entry(old);
         deleted->push_back(old);
     }
-    // 2. evict durable cache entries if need
+    // 2. evict durable cache entries if need.
     while (_usage + charge > _capacity && _lru.next != &_lru) {
         LRUHandle* old = _lru.next;
         DCHECK(old->priority == CachePriority::DURABLE);
@@ -256,7 +256,8 @@ void LRUCache::_evict_from_lru(size_t charge, std::vector<LRUHandle*>* deleted) 
 
 void LRUCache::_evict_one_entry(LRUHandle* e) {
     DCHECK(e->in_cache);
-    DCHECK(e->refs == 1); // LRU list contains elements which may be evicted
+    // LRU list contains elements which may be evicted.
+    DCHECK(e->refs == 1);
     _lru_remove(e);
     _table.remove(e->key(), e->hash);
     e->in_cache = false;
@@ -272,7 +273,8 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
     e->charge = charge;
     e->key_length = key.size();
     e->hash = hash;
-    e->refs = 2; // one for the returned handle, one for LRUCache.
+    // one for the returned handle, one for LRUCache.
+    e->refs = 2;
     e->next = e->prev = nullptr;
     e->in_cache = true;
     e->priority = priority;
@@ -285,25 +287,25 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
         // is freed or the lru list is empty
         _evict_from_lru(charge, &last_ref_list);
 
-        // insert into the cache
+        // Insert into the cache.
         // note that the cache might get larger than its capacity if not enough
-        // space was freed
+        // space was freed.
         auto old = _table.insert(e);
         _usage += charge;
         if (old != nullptr) {
             old->in_cache = false;
             if (_unref(old)) {
                 _usage -= old->charge;
-                // old is on LRU because it's in cache and its reference count
-                // was just 1 (Unref returned 0)
+                // 'old' is on LRU because it's in cache and its reference count
+                // was just 1 (Unref returned 0).
                 _lru_remove(old);
                 last_ref_list.push_back(old);
             }
         }
     }
 
-    // we free the entries here outside of mutex for
-    // performance reasons
+    // We free the entries here outside of mutex for
+    // performance reasons.
     for (auto entry : last_ref_list) {
         entry->free();
     }
@@ -329,7 +331,7 @@ void LRUCache::erase(const CacheKey& key, uint32_t hash) {
             e->in_cache = false;
         }
     }
-    // free handle out of mutex, when last_ref is true, e must not be nullptr
+    // Free handle out of mutex, when last_ref is true, e must not be nullptr.
     if (last_ref) {
         e->free();
     }
@@ -342,7 +344,8 @@ int LRUCache::prune() {
         while (_lru.next != &_lru) {
             LRUHandle* old = _lru.next;
             DCHECK(old->in_cache);
-            DCHECK(old->refs == 1); // LRU list contains elements which may be evicted
+            // LRU list contains elements which may be evicted.
+            DCHECK(old->refs == 1);
             _lru_remove(old);
             _table.remove(old->key(), old->hash);
             old->in_cache = false;

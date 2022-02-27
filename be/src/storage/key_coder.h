@@ -52,13 +52,13 @@ public:
     template <typename TraitsType>
     explicit KeyCoder(TraitsType traits);
 
-    // encode the provided `value` into `buf`.
+    // Encode the provided `value` into `buf`.
     void full_encode_ascending(const void* value, std::string* buf) const { _full_encode_ascending(value, buf); }
 
     void full_encode_ascending(const Datum& value, std::string* buf) const { _full_encode_ascending_datum(value, buf); }
 
-    // similar to `full_encode_ascending`, but only encode part (the first `index_size` bytes) of the value.
-    // only applicable to string type
+    // Similar to `full_encode_ascending`, but only encode part (the first `index_size` bytes) of the value.
+    // only applicable to string type.
     void encode_ascending(const void* value, size_t index_size, std::string* buf) const {
         _encode_ascending(value, index_size, buf);
     }
@@ -96,7 +96,7 @@ public:
     static void full_encode_ascending(const void* value, std::string* buf) {
         UnsignedCppType unsigned_val;
         memcpy(&unsigned_val, value, sizeof(unsigned_val));
-        // swap MSB to encode integer
+        // Swap MSB to encode integer.
         if (std::is_signed<CppType>::value) {
             unsigned_val ^= (static_cast<UnsignedCppType>(1) << (sizeof(UnsignedCppType) * CHAR_BIT - 1));
         }

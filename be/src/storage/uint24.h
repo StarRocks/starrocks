@@ -31,7 +31,7 @@ namespace starrocks {
 typedef __int128 int128_t;
 typedef unsigned __int128 uint128_t;
 
-// 24bit int type, used to store date type in storage
+// 24bit int type, used to store date type in storage.
 struct uint24_t {
 public:
     uint24_t() { memset(data, 0, sizeof(data)); }

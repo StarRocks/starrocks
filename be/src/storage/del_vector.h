@@ -25,7 +25,7 @@ public:
 
     void set_empty();
 
-    // create a new DelVector based on this delvec and add more deleted ids
+    // Create a new DelVector based on this delvec and add more deleted ids.
     void add_dels_as_new_version(const std::vector<uint32_t>& dels, int64_t version,
                                  std::shared_ptr<DelVector>* pdelvec) const;
 

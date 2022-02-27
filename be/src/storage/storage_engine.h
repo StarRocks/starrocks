@@ -91,7 +91,7 @@ public:
 
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
-    // get root path for creating tablet. The returned vector of root path should be random,
+    // Get root path for creating tablet. The returned vector of root path should be random,
     // for avoiding that all the tablet would be deployed one disk.
     std::vector<DataDir*> get_stores_for_create_tablet(TStorageMedium::type storage_medium);
     DataDir* get_store(const std::string& path);
@@ -125,7 +125,7 @@ public:
     Status load_header(const std::string& shard_path, const TCloneReq& request, bool restore = false,
                        bool is_primary_key = false);
 
-    // To trigger a disk-stat and tablet report
+    // To trigger a disk-stat and tablet report.
     void trigger_report() {
         std::lock_guard<std::mutex> l(_report_mtx);
         _need_report_tablet = true;
@@ -133,7 +133,7 @@ public:
         _report_cv.notify_all();
     }
 
-    // call this to wait for a report notification until timeout
+    // Call this to wait for a report notification until timeout.
     void wait_for_report_notify(int64_t timeout_sec, bool from_report_tablet_thread) {
         auto wait_timeout_sec = std::chrono::seconds(timeout_sec);
         std::unique_lock<std::mutex> l(_report_mtx);
@@ -174,7 +174,7 @@ public:
 
     void set_heartbeat_flags(HeartbeatFlags* heartbeat_flags) { _heartbeat_flags = heartbeat_flags; }
 
-    // start all backgroud threads. This should be call after env is ready.
+    // Start all backgroud threads. This should be call after env is ready.
     Status start_bg_threads();
 
     void stop();
@@ -192,7 +192,7 @@ private:
 
     void _update_storage_medium_type_count();
 
-    // Some check methods
+    // Some check methods.
     Status _check_file_descriptor_number();
     Status _check_all_root_path_cluster_id();
     Status _judge_and_update_effective_cluster_id(int32_t cluster_id);
@@ -206,29 +206,29 @@ private:
     Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 
     // All these xxx_callback() functions are for Background threads
-    // update cache expire thread
+    // update cache expire thread.
     void* _update_cache_expire_thread_callback(void* arg);
 
-    // unused rowset monitor thread
+    // Unused rowset monitor thread.
     void* _unused_rowset_monitor_thread_callback(void* arg);
 
-    // base compaction thread process function
+    // Base compaction thread process function.
     void* _base_compaction_thread_callback(void* arg, DataDir* data_dir);
-    // cumulative process function
+    // Cumulative process function.
     void* _cumulative_compaction_thread_callback(void* arg, DataDir* data_dir);
-    // update compaction function
+    // Update compaction function.
     void* _update_compaction_thread_callback(void* arg, DataDir* data_dir);
 
-    // garbage sweep thread process function. clear snapshot and trash folder
+    // Garbage sweep thread process function. clear snapshot and trash folder.
     void* _garbage_sweeper_thread_callback(void* arg);
 
-    // delete tablet with io error process function
+    // Delete tablet with io error process function.
     void* _disk_stat_monitor_thread_callback(void* arg);
 
-    // clean file descriptors cache
+    // Clean file descriptors cache.
     void* _fd_cache_clean_callback(void* arg);
 
-    // path gc process function
+    // Path gc process function.
     void* _path_gc_thread_callback(void* arg);
 
     void* _path_scan_thread_callback(void* arg);
@@ -251,7 +251,7 @@ private:
         uint32_t disk_index = -1;
     };
 
-    // In descending order
+    // In descending order.
     struct CompactionCandidateComparator {
         bool operator()(const CompactionCandidate& a, const CompactionCandidate& b) { return a.nice > b.nice; }
     };
@@ -276,7 +276,7 @@ private:
 
     Cache* _index_stream_lru_cache = nullptr;
 
-    // _file_cache is a lru_cache for file descriptors of files opened by starrocks,
+    // The '_file_cache' is a LRU cache for file descriptors of files opened by starrocks,
     // which can be shared by others. Why we need to share cache with others?
     // Beacuse a unique memory space is easier for management. For example,
     // we can deal with segment v1's cache and segment v2's cache at same time.
@@ -288,32 +288,31 @@ private:
     static StorageEngine* _s_instance;
 
     std::mutex _gc_mutex;
-    // map<rowset_id(str), RowsetSharedPtr>, if we use RowsetId as the key, we need custom hash func
     std::unordered_map<std::string, RowsetSharedPtr> _unused_rowsets;
 
     std::atomic<bool> _bg_worker_stopped{false};
-    // thread to expire update cache;
+    // Thread to expire update cache.
     std::thread _update_cache_expire_thread;
     std::thread _unused_rowset_monitor_thread;
-    // thread to monitor snapshot expiry
+    // Thread to monitor snapshot expiry.
     std::thread _garbage_sweeper_thread;
-    // thread to monitor disk stat
+    // Thread to monitor disk stat.
     std::thread _disk_stat_monitor_thread;
-    // threads to run base compaction
+    // Threads to run base compaction.
     std::vector<std::thread> _base_compaction_threads;
-    // threads to check cumulative
+    // Threads to check cumulative.
     std::vector<std::thread> _cumulative_compaction_threads;
-    // threads to run update compaction
+    // Threads to run update compaction.
     std::vector<std::thread> _update_compaction_threads;
-    // threads to clean all file descriptor not actively in use
+    // Threads to clean all file descriptor not actively in use.
     std::thread _fd_cache_clean_thread;
     std::vector<std::thread> _path_gc_threads;
-    // threads to scan disk paths
+    // Threads to scan disk paths.
     std::vector<std::thread> _path_scan_threads;
-    // threads to run tablet checkpoint
+    // Threads to run tablet checkpoint.
     std::vector<std::thread> _tablet_checkpoint_threads;
 
-    // For tablet and disk-stat report
+    // For tablets and disk stats report.
     std::mutex _report_mtx;
     std::condition_variable _report_cv;
     bool _need_report_tablet = false;

@@ -64,7 +64,7 @@ struct TabletTxnInfo {
     TabletTxnInfo() = default;
 };
 
-// txn manager is used to manage mapping between tablet and txns
+// txn manager is used to manage mapping between tablet and txns.
 class TxnManager {
 public:
     TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size);
@@ -80,17 +80,17 @@ public:
     Status publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                        const Version& version);
 
-    // publish_txn for updatable tablet
+    // Publish txn for updatable tablet.
     Status publish_txn2(TTransactionId transaction_id, TPartitionId partition_id, const TabletSharedPtr& tablet,
                         int64_t version);
 
-    // delete the txn from manager if it is not committed(not have a valid rowset)
+    // Delete the txn from manager if it is not committed(not have a valid rowset).
     Status rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id);
 
     Status delete_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id);
 
-    // add a txn to manager
-    // partition id is useful in publish version stage because version is associated with partition
+    // Add a txn to manager,
+    // partition id is useful in publish version stage because version is associated with partition.
     Status prepare_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
                        SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id);
 
@@ -98,15 +98,15 @@ public:
                       SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id,
                       const RowsetSharedPtr& rowset_ptr, bool is_recovery);
 
-    // remove a txn from txn manager & persist rowset meta
+    // Remove a txn from txn manager & persist rowset meta.
     Status publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
                        SchemaHash schema_hash, const TabletUid& tablet_uid, const Version& version);
 
-    // delete the txn from manager if it is not committed(not have a valid rowset)
+    // Delete the txn from manager if it is not committed(not have a valid rowset).
     Status rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
                         SchemaHash schema_hash, const TabletUid& tablet_uid);
 
-    // remove the txn from txn manager
+    // Remove the txn from txn manager.
     // delete the related rowset if it is not null
     // delete rowset related data if it is not null
     Status delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
@@ -120,11 +120,11 @@ public:
 
     void get_all_related_tablets(std::set<TabletInfo>* tablet_infos);
 
-    // just check if the txn exists
+    // Just check if the txn exists.
     bool has_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id, SchemaHash schema_hash,
                  const TabletUid& tablet_uid);
 
-    // get all expired txns and save tham in expire_txn_map.
+    // Get all expired txns and save tham in expire_txn_map.
     // This is currently called before reporting all tablet info, to avoid iterating txn map for every tablets.
     void build_expire_txn_map(std::map<TabletInfo, std::vector<int64_t>>* expire_txn_map);
 
@@ -136,7 +136,7 @@ public:
 private:
     using TxnKey = std::pair<int64_t, int64_t>; // partition_id, transaction_id;
 
-    // implement TxnKey hash function to support TxnKey as a key for unordered_map
+    // Implement TxnKey hash function to support TxnKey as a key for unordered_map.
     struct TxnKeyHash {
         template <typename T, typename U>
         size_t operator()(const std::pair<T, U>& e) const {
@@ -144,7 +144,7 @@ private:
         }
     };
 
-    // implement TxnKey equal function to support TxnKey as a key for unordered_map
+    // Implement TxnKey equal function to support TxnKey as a key for unordered_map.
     struct TxnKeyEqual {
         template <class T, typename U>
         bool operator()(const std::pair<T, U>& l, const std::pair<T, U>& r) const {
@@ -163,8 +163,8 @@ private:
 
     inline std::mutex& _get_txn_lock(TTransactionId transactionId);
 
-    // insert or remove (transaction_id, partition_id) from _txn_partition_map
-    // get _txn_map_lock before calling
+    // Insert or remove (transaction_id, partition_id) from _txn_partition_map
+    // get '_txn_map_lock' before calling.
     void _insert_txn_partition_map_unlocked(int64_t transaction_id, int64_t partition_id);
     void _clear_txn_partition_map_unlocked(int64_t transaction_id, int64_t partition_id);
 

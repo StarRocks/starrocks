@@ -107,14 +107,14 @@ public:
     static Status remove(DataDir* store, TTabletId tablet_id);
 
     //
-    // Updatable tablet meta operations
+    // Updatable tablet meta operations.
     //
 
-    // commit a rowset into tablet
+    // Commit a rowset into tablet.
     static Status rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, EditVersionMetaPB* edit,
                                 const RowsetMetaPB& rowset, const string& rowset_meta_key);
-    // write rowset_meta into rocksdb
-    // this function is used for partial update so far
+    // Write 'rowset_meta' into rocksdb.
+    // This function is used for partial update so far.
     static Status write_rowset_meta(DataDir* store, TTabletId tablet_id, const RowsetMetaPB& rowset,
                                     const string& rowset_meta_key);
 
@@ -123,7 +123,7 @@ public:
     using RowsetIterateFunc = std::function<bool(RowsetMetaSharedPtr rowset_meta)>;
     static Status rowset_iterate(DataDir* store, TTabletId tablet_id, const RowsetIterateFunc& func);
 
-    // methods for operating pending commits
+    // Methods for operating pending commits.
     static Status pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key);
 
@@ -142,18 +142,18 @@ public:
     // All delete vectors that associated with this rowset will be deleted too.
     static Status rowset_delete(DataDir* store, TTabletId tablet_id, uint32_t rowset_id, uint32_t segments);
 
-    // update meta after state of a rowset commit is applied
+    // Update meta after state of a rowset commit is applied.
     static Status apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, const EditVersion& version,
                                       std::vector<std::pair<uint32_t, DelVectorPtr>>& delvecs);
 
-    // traverse all the op logs for a tablet
+    // Traverse all the op logs for a tablet.
     static Status traverse_meta_logs(DataDir* store, TTabletId tablet_id,
                                      const std::function<bool(uint64_t, const TabletMetaLogPB&)>& func);
 
-    // TODO: rename parameter |segment_id|, it's different from `Segment::id()`
+    // TODO: rename parameter |segment_id|, it's different from `Segment::id()`.
     static Status set_del_vector(KVStore* meta, TTabletId tablet_id, uint32_t segment_id, const DelVector& delvec);
 
-    // TODO: rename parameter |segment_id|, it's different from `Segment::id()`
+    // TODO: rename parameter |segment_id|, it's different from `Segment::id()`.
     static Status get_del_vector(KVStore* meta, TTabletId tablet_id, uint32_t segment_id, int64_t version,
                                  DelVector* delvec, int64_t* latest_version);
 

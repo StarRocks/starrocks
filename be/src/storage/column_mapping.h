@@ -32,9 +32,9 @@ struct ColumnMapping {
     // <0: use default value
     // >=0: use origin column
     int32_t ref_column{-1};
-    // normally for default value. stores values for filters
+    // Normally for default value. stores values for filters.
     WrapperField* default_value{nullptr};
-    // materialize view transform function used in schema change
+    // Materialize view transform function used in schema change.
     std::string materialized_function;
 };
 

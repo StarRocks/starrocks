@@ -81,7 +81,7 @@ inline ColumnBlockCell ColumnBlock::cell(size_t idx) const {
 }
 
 // Wrap ColumnBlock and offset, easy to access data at the specified offset
-// Used to read data from page decoder
+// Used to read data from page decoder.
 class ColumnBlockView {
 public:
     explicit ColumnBlockView(ColumnBlock* block, size_t row_offset = 0) : _block(block), _row_offset(row_offset) {}
