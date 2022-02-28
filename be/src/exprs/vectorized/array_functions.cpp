@@ -125,7 +125,6 @@ private:
 
         auto result_array = ArrayColumn::create(NullableColumn::create(elements.clone_empty(), NullColumn::create()),
                                                 UInt32Column::create());
-        ;
         UInt32Column::Container& result_offsets = result_array->offsets_column()->get_data();
         ColumnPtr& result_elements = result_array->elements_column();
 

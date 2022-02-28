@@ -106,6 +106,329 @@ private:
 };
 
 template <PrimitiveType PT>
+class ArrayDifference {
+public:
+    using CppType = RunTimeCppType<PT>;
+
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        if constexpr (pt_is_arithmetic<PT> || pt_is_decimalv2<PT>) {
+            return _array_difference(columns);
+        } else {
+            assert(false);
+        }
+    }
+
+private:
+    static ColumnPtr _array_difference(const Columns& columns) {
+        DCHECK_EQ(columns.size(), 1);
+
+        size_t chunk_size = columns[0]->size();
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+        ColumnPtr dest_column_data = nullptr;
+        ColumnPtr dest_column = nullptr;
+
+        if constexpr (pt_is_float<PT>) {
+            dest_column_data = NullableColumn::create(DoubleColumn::create(), NullColumn::create());
+        } else if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+            dest_column_data = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        } else if constexpr (pt_is_decimalv2<PT>) {
+            dest_column_data = NullableColumn::create(DecimalColumn::create(), NullColumn::create());
+        }
+
+        if (columns[0]->is_nullable()) {
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
+            const auto* src_data_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column().get());
+
+            dest_column = NullableColumn::create(ArrayColumn::create(dest_column_data, UInt32Column::create(src_data_column->offsets())),
+                                                            NullColumn::create());
+
+            auto& dest_nullable_column = down_cast<NullableColumn&>(*dest_column);
+            auto& dest_null_data = down_cast<NullableColumn&>(*dest_column).null_column_data();
+            auto& dest_data_column = down_cast<ArrayColumn&>(*dest_nullable_column.data_column());
+
+            dest_null_data = src_nullable_column->immutable_null_column_data();
+            dest_nullable_column.set_has_null(src_nullable_column->has_null());
+
+            if (src_nullable_column->has_null()) {
+                for (size_t i = 0; i < chunk_size; i++) {
+                    if (!src_nullable_column->is_null(i)) {
+                        _array_difference_item(*src_data_column, i, &dest_data_column);
+                    }
+                }
+            } else {
+                for (size_t i = 0; i < chunk_size; i++) {
+                    _array_difference_item(*src_data_column, i, &dest_data_column);
+                }
+            }
+        } else {
+            const auto* src_data_column = down_cast<const ArrayColumn*>(src_column.get());
+            dest_column = ArrayColumn::create(dest_column_data, UInt32Column::create(src_data_column->offsets()));
+
+            auto* dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
+            for (size_t i = 0; i < chunk_size; i++) {
+                _array_difference_item(*src_data_column, i, dest_data_column);
+            }
+        }
+        return dest_column;
+    }
+
+    static void _array_difference_item(const ArrayColumn& column, size_t index, ArrayColumn* dest_column) {
+        Datum v = column.get(index);
+        const auto& items = v.get<DatumArray>();
+
+        auto& dest_data_column = dest_column->elements_column();
+        for (size_t i = 0; i < items.size(); ++i) {
+            if (i == 0) {
+                if (items[i].is_null()) {
+                    dest_data_column->append_nulls(1);
+                } else {
+                    if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+                        dest_data_column->append_datum((int64_t)0);
+                    } else if constexpr (pt_is_float<PT>) {
+                        dest_data_column->append_datum((double)0);
+                    } else {
+                        dest_data_column->append_datum((DecimalV2Value)0);
+                    }
+                }
+            } else {
+                if (items[i - 1].is_null() || items[i].is_null()) {
+                    dest_data_column->append_nulls(1);
+                } else {
+                    if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+                        dest_data_column->append_datum(
+                                (int64_t)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
+                    } else if constexpr (pt_is_float<PT>) {
+                        dest_data_column->append_datum((double)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
+                    } else {
+                        dest_data_column->append_datum(
+                                (DecimalV2Value)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
+                    }
+                }
+            }
+        }
+    }
+};
+
+template <PrimitiveType PT>
+class ArraySlice {
+public:
+    using CppType = RunTimeCppType<PT>;
+
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) { return _array_slice(columns); }
+
+private:
+    static ColumnPtr _array_slice(const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+        size_t chunk_size = columns[0]->size();
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+        ColumnPtr dest_column = src_column->clone_empty();
+
+        bool is_nullable = false;
+        bool has_null = false;
+        NullColumnPtr null_result = nullptr;
+
+        ArrayColumn* array_column = nullptr;
+        if (columns[0]->is_nullable()) {
+            is_nullable = true;
+            has_null = (columns[0]->has_null() || has_null);
+
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[0].get());
+            array_column = down_cast<ArrayColumn*>(src_nullable_column->data_column().get());
+            null_result = NullColumn::create(*src_nullable_column->null_column());
+        } else {
+            array_column = down_cast<ArrayColumn*>(src_column.get());
+        }
+
+        Int64Column* offset_column = nullptr;
+        if (columns[1]->is_nullable()) {
+            is_nullable = true;
+            has_null = (columns[1]->has_null() || has_null);
+
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[1].get());
+            offset_column = down_cast<Int64Column*>(src_nullable_column->data_column().get());
+            if (null_result) {
+                null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
+            } else {
+                null_result = NullColumn::create(*src_nullable_column->null_column());
+            }
+        } else {
+            offset_column = down_cast<Int64Column*>(
+                    ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[1]).get());
+        }
+
+        Int64Column* length_column = nullptr;
+        if (columns[2]->is_nullable()) {
+            is_nullable = true;
+            has_null = (columns[2]->has_null() || has_null);
+
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[2].get());
+            length_column = down_cast<Int64Column*>(src_nullable_column->data_column().get());
+            if (null_result) {
+                null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
+            } else {
+                null_result = NullColumn::create(*src_nullable_column->null_column());
+            }
+        } else {
+            length_column = down_cast<Int64Column*>(
+                    ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[2]).get());
+        }
+
+        ArrayColumn* dest_data_column = nullptr;
+        if (columns[0]->is_nullable()) {
+            auto& dest_nullable_column = down_cast<NullableColumn&>(*dest_column);
+            dest_data_column = down_cast<ArrayColumn*>(dest_nullable_column.data_column().get());
+            auto& dest_null_data = dest_nullable_column.null_column_data();
+
+            dest_null_data = null_result->get_data();
+            dest_nullable_column.set_has_null(has_null);
+        } else {
+            dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
+        }
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            _array_slice_item(array_column, i, dest_data_column, offset_column->get(i).get_int64(),
+                              length_column->get(i).get_int64());
+        }
+
+        if (is_nullable) {
+            if (columns[0]->is_nullable()) {
+                return dest_column;
+            } else {
+                return NullableColumn::create(dest_column, null_result);
+            }
+        } else {
+            return dest_column;
+        }
+    }
+
+    static void _array_slice_item(ArrayColumn* column, size_t index, ArrayColumn* dest_column, int64_t offset,
+                                  int64_t length) {
+        auto& dest_offsets = dest_column->offsets_column()->get_data();
+        if (!offset) {
+            dest_offsets.emplace_back(dest_offsets.back());
+            return;
+        }
+
+        Datum v = column->get(index);
+        const auto& items = v.get<DatumArray>();
+
+        if (offset > 0) {
+            // because offset start with 1.
+            --offset;
+        } else {
+            offset += items.size();
+        }
+
+        auto& dest_data_column = dest_column->elements_column();
+        auto end = std::max((int64_t)0, std::min((int64_t)items.size(), (offset + length)));
+        offset = (offset > 0 ? offset : 0);
+        for (size_t i = offset; i < end; ++i) {
+            if (items[i].is_null()) {
+                dest_data_column->append_nulls(1);
+            } else {
+                dest_data_column->append_datum(items[i]);
+            }
+        }
+        dest_offsets.emplace_back(dest_offsets.back() + (end - offset));
+    }
+};
+
+template <PrimitiveType PT>
+class ArrayConcat {
+public:
+    using CppType = RunTimeCppType<PT>;
+
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) { return _array_concat(columns); }
+
+private:
+    static void collect_array_columns_and_null_columns(const Columns& columns, std::vector<ArrayColumn*>* src_columns,
+                                                       NullColumnPtr* null_result, bool* is_nullable, bool* has_null,
+                                                       int* null_index) {
+        for (int i = 0; i < columns.size(); ++i) {
+            if (columns[i]->is_nullable()) {
+                (*is_nullable) = true;
+                (*has_null) = (columns[i]->has_null() || (*has_null));
+                (*null_index) = i;
+
+                const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[i].get());
+                src_columns->emplace_back(down_cast<ArrayColumn*>(src_nullable_column->data_column().get()));
+                if ((*null_result)) {
+                    (*null_result) =
+                            FunctionHelper::union_null_column((*null_result), src_nullable_column->null_column());
+                } else {
+                    (*null_result) = NullColumn::create(*src_nullable_column->null_column());
+                }
+            } else {
+                src_columns->emplace_back(down_cast<ArrayColumn*>(columns[i].get()));
+            }
+        }
+    }
+
+    static ColumnPtr _array_concat(const Columns& columns) {
+        if (columns.size() == 1) {
+            return columns[0];
+        }
+
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+        size_t chunk_size = columns[0]->size();
+        bool is_nullable = false;
+        bool has_null = false;
+        int null_index = 0;
+        std::vector<ArrayColumn*> src_columns;
+        src_columns.reserve(columns.size());
+        NullColumnPtr null_result = nullptr;
+
+        collect_array_columns_and_null_columns(columns, &src_columns, &null_result, &is_nullable, &has_null,
+                                               &null_index);
+
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[null_index]);
+        ColumnPtr dest_column = src_column->clone_empty();
+
+        ArrayColumn* dest_data_column = nullptr;
+        if (is_nullable) {
+            auto& dest_nullable_column = down_cast<NullableColumn&>(*dest_column);
+            dest_data_column = down_cast<ArrayColumn*>(dest_nullable_column.data_column().get());
+            auto& dest_null_data = dest_nullable_column.null_column_data();
+
+            dest_null_data = null_result->get_data();
+            dest_nullable_column.set_has_null(has_null);
+        } else {
+            dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
+        }
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            _array_concat_item(src_columns, i, dest_data_column);
+        }
+
+        return dest_column;
+    }
+
+    static void _array_concat_item(const std::vector<ArrayColumn*>& columns, size_t index, ArrayColumn* dest_column) {
+        size_t num_rows = 0;
+        for (size_t i = 0; i < columns.size(); ++i) {
+            Datum v = columns[i]->get(index);
+            const auto& items = v.get<DatumArray>();
+
+            auto& dest_data_column = dest_column->elements_column();
+            for (size_t i = 0; i < items.size(); ++i) {
+                if (items[i].is_null()) {
+                    dest_data_column->append_nulls(1);
+                } else {
+                    dest_data_column->append_datum(items[i]);
+                }
+            }
+
+            num_rows += items.size();
+        }
+
+        auto& dest_offsets = dest_column->offsets_column()->get_data();
+        dest_offsets.emplace_back(dest_offsets.back() + num_rows);
+    }
+};
+
+template <PrimitiveType PT>
 class ArraySort {
 public:
     using ColumnType = RunTimeColumnType<PT>;
