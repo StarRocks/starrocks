@@ -264,7 +264,12 @@ public class DecodeRewriteTest extends PlanTestBase {
     public void testDecodeNodeRewriteTwoPhaseAgg() throws Exception {
         String sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by a,b";
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
-        String plan = getThriftPlan(sql);
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 13> : lower(upper(12: S_ADDRESS))\n" +
+                "  |  <slot 14> : upper(12: S_ADDRESS)"));
+        Assert.assertFalse(plan.contains("common expressions"));
+        plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
         Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
 
