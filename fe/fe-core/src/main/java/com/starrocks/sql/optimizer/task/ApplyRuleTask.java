@@ -28,21 +28,17 @@ import java.util.List;
 public class ApplyRuleTask extends OptimizerTask {
     private final GroupExpression groupExpression;
     private final Rule rule;
-    private final boolean exploreOnly;
 
-    ApplyRuleTask(TaskContext context, GroupExpression groupExpression,
-                  Rule rule, boolean exploreOnly) {
+    ApplyRuleTask(TaskContext context, GroupExpression groupExpression, Rule rule) {
         super(context);
         this.groupExpression = groupExpression;
         this.rule = rule;
-        this.exploreOnly = exploreOnly;
     }
 
     @Override
     public String toString() {
         return "ApplyRuleTask for groupExpression " + groupExpression +
-                "\n rule " + rule +
-                "\n exploreOnly " + exploreOnly;
+                "\n rule " + rule;
     }
 
     @Override
@@ -81,7 +77,7 @@ public class ApplyRuleTask extends OptimizerTask {
             GroupExpression newGroupExpression = result.second;
             if (newGroupExpression.getOp().isLogical()) {
                 // For logic newGroupExpression, optimize it
-                pushTask(new OptimizeExpressionTask(context, newGroupExpression, exploreOnly));
+                pushTask(new OptimizeExpressionTask(context, newGroupExpression));
                 pushTask(new DeriveStatsTask(context, newGroupExpression));
             } else {
                 // For physical newGroupExpression, enforce and cost it,

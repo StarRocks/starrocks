@@ -97,7 +97,7 @@ public class InsertPlanner {
         //7. Build fragment exec plan
         ExecPlan execPlan;
         if ((insertRelation.getQueryRelation() instanceof SelectRelation &&
-                ((SelectRelation) insertRelation.getQueryRelation()).hasLimit())
+                insertRelation.getQueryRelation().hasLimit())
                 || insertRelation.getTargetTable() instanceof MysqlTable) {
             execPlan = new PlanFragmentBuilder().createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
