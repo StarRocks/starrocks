@@ -33,6 +33,12 @@ public:
 
     virtual size_t size() = 0;
     bool empty() { return size() == 0; }
+
+protected:
+    // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
+    // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2s, 3s, 4.2s, 5.6s, and 7.2s,
+    // it will move to next level.
+    static constexpr int64_t LEVEL_TIME_SLICE_BASE_NS = 200'000'000L;
 };
 
 class SubQuerySharedDriverQueue {
@@ -64,13 +70,15 @@ public:
             _queues[i].factor_for_normal = factor;
             factor *= RATIO_OF_ADJACENT_QUEUE;
         }
+
+        int64_t time_slice = 0;
+        for (int i = 0; i < QUEUE_SIZE; ++i) {
+            time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
+            _level_time_slices[i] = time_slice;
+        }
     }
     ~QuerySharedDriverQueue() override = default;
     void close() override;
-
-    static const size_t QUEUE_SIZE = 8;
-    // maybe other value for ratio.
-    static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
     void put_back(const DriverRawPtr driver) override;
     void put_back(const std::vector<DriverRawPtr>& drivers) override;
 
@@ -84,8 +92,19 @@ public:
 
     size_t size() override;
 
+    static constexpr size_t QUEUE_SIZE = 8;
+    static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
+
+private:
+    // When the driver at the i-th level costs _level_time_slices[i],
+    // it will move to (i+1)-th level.
+    int _compute_driver_level(const DriverRawPtr driver) const;
+
 private:
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
+    // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns.
+    int64_t _level_time_slices[QUEUE_SIZE];
+
     std::mutex _global_mutex;
     std::condition_variable _cv;
     bool _is_closed = false;
@@ -105,6 +124,12 @@ public:
             _queues[i].factor_for_normal = factor;
             factor *= RATIO_OF_ADJACENT_QUEUE;
         }
+
+        int64_t time_slice = 0;
+        for (int i = 0; i < QUEUE_SIZE; ++i) {
+            time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
+            _level_time_slices[i] = time_slice;
+        }
     }
     ~QuerySharedDriverQueueWithoutLock() override = default;
     void close() override {}
@@ -123,11 +148,17 @@ public:
 
 private:
     void _put_back(const DriverRawPtr driver);
+    // When the driver at the i-th level costs _level_time_slices[i],
+    // it will move to (i+1)-th level.
+    int _compute_driver_level(const DriverRawPtr driver) const;
 
+private:
     static constexpr size_t QUEUE_SIZE = 8;
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
 
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
+    // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns.
+    int64_t _level_time_slices[QUEUE_SIZE];
 
     size_t _size = 0;
 };
