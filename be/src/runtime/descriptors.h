@@ -289,6 +289,28 @@ private:
     std::string _passwd;
 };
 
+class JDBCTableDescriptor : public TableDescriptor {
+public:
+    JDBCTableDescriptor(const TTableDescriptor& tdesc);
+    std::string debug_string() const override;
+    const std::string jdbc_driver() const { return _jdbc_driver; }
+    const std::string jdbc_url() const { return _jdbc_url; }
+    const std::string jdbc_database() const { return _jdbc_database; }
+    const std::string jdbc_table() const { return _jdbc_table; }
+    const std::string jdbc_user() const { return _jdbc_user; }
+    const std::string jdbc_passwd() const { return _jdbc_passwd; }
+    const std::map<std::string, std::string> jdbc_properties() const { return _jdbc_properties; }
+
+private:
+    std::string _jdbc_driver;
+    std::string _jdbc_url;
+    std::string _jdbc_database;
+    std::string _jdbc_table;
+    std::string _jdbc_user;
+    std::string _jdbc_passwd;
+    std::map<std::string, std::string> _jdbc_properties;
+};
+
 class TupleDescriptor {
 public:
     int byte_size() const { return _byte_size; }
