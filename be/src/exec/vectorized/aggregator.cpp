@@ -453,8 +453,8 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
         vectorized::Columns agg_result_column = _create_agg_result_columns();
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
-            _agg_functions[i]->convert_to_serialize_format(_agg_intput_columns[i], result_chunk->num_rows(),
-                                                           &agg_result_column[i]);
+            _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_intput_columns[i],
+                                                           result_chunk->num_rows(), &agg_result_column[i]);
             result_chunk->append_column(std::move(agg_result_column[i]), _intermediate_tuple_desc->slots()[id]->id());
         }
     }

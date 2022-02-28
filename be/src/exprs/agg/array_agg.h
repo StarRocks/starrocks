@@ -92,7 +92,8 @@ public:
         return serialize_to_column(ctx, state, to);
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         auto* column = down_cast<ArrayColumn*>(dst->get());
         auto& offsets = column->offsets_column()->get_data();
         auto& elements_column = column->elements_column();

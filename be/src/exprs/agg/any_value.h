@@ -156,7 +156,8 @@ public:
         down_cast<InputColumnType*>(to)->append(this->data(state).result);
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         *dst = src[0];
     }
 
@@ -209,7 +210,8 @@ public:
         column->append(this->data(state).slice());
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         *dst = src[0];
     }
 
