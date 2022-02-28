@@ -85,9 +85,16 @@ columnNameWithComment
     : identifier string?
     ;
 
+outfile
+    : INTO OUTFILE file=string fileFormat? properties?
+    ;
+
+fileFormat
+    : FORMAT AS (identifier | string)
+    ;
 
 queryStatement
-    : query;
+    : query outfile?;
 
 query
     : withClause? queryNoWith
@@ -221,7 +228,7 @@ relationPrimary
     ;
 
 partitionNames
-    : (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
     ;
 
 expressionsWithDefault
@@ -292,6 +299,8 @@ primaryExpression
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
     | IF '(' (expression (',' expression)*)? ')'                                          #functionCall
+    | LEFT '(' expression ',' expression ')'                                              #functionCall
+    | RIGHT '(' expression ',' expression ')'                                             #functionCall
     | qualifiedName '(' ASTERISK_SYMBOL ')' over?                                         #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
     | windowFunction over                                                                 #windowFunctionCall

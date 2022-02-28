@@ -54,6 +54,7 @@ FIRST: 'FIRST';
 FIRST_VALUE: 'FIRST_VALUE';
 FOLLOWING: 'FOLLOWING';
 FOR: 'FOR';
+FORMAT: 'FORMAT';
 FROM: 'FROM';
 FULL: 'FULL';
 GLOBAL: 'GLOBAL';
@@ -97,6 +98,7 @@ ON: 'ON';
 OR: 'OR';
 ORDER: 'ORDER';
 OUTER: 'OUTER';
+OUTFILE: 'OUTFILE';
 OVER: 'OVER';
 PARTITION: 'PARTITION';
 PARTITIONS: 'PARTITIONS';
@@ -123,6 +125,7 @@ SHOW: 'SHOW';
 START: 'START';
 TABLE: 'TABLE';
 TABLES: 'TABLES';
+TEMPORARY: 'TEMPORARY';
 THAN: 'THAN';
 THEN: 'THEN';
 TIME: 'TIME';
@@ -170,9 +173,7 @@ SINGLE_QUOTED_TEXT
     : '\'' ( ~'\'' | '\'\'' )* '\''
     ;
 
-DOUBLE_QUOTED_TEXT
-    : '"' ( ~'"' | '""' )* '"'
-    ;
+
 
 INTEGER_VALUE
     : DIGIT+
@@ -198,6 +199,10 @@ DIGIT_IDENTIFIER
 
 QUOTED_IDENTIFIER
     : '"' ( ~'"' | '""' )* '"'
+    ;
+
+DOUBLE_QUOTED_TEXT
+    : ('"' (('\\' .)? ( ~'"' | '""' ))*? '"')+
     ;
 
 BACKQUOTED_IDENTIFIER
