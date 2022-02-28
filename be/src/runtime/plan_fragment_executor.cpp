@@ -124,7 +124,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         static_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
 
-    RETURN_IF_ERROR(_plan->prepare(_runtime_state));
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;
@@ -139,6 +138,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         scan_node->set_scan_ranges(scan_ranges);
         VLOG(1) << "scan_node_Id=" << scan_node->id() << " size=" << scan_ranges.size();
     }
+
+    RETURN_IF_ERROR(_plan->prepare(_runtime_state));
 
     _runtime_state->set_per_fragment_instance_idx(params.sender_id);
     _runtime_state->set_num_per_fragment_instances(params.num_senders);
