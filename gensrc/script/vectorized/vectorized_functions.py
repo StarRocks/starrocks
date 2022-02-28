@@ -693,8 +693,8 @@ vectorized_functions = [
     [150220, 'array_overlap', 'BOOLEAN', ['ARRAY_DECIMALV2', 'ARRAY_DECIMALV2'],   'ArrayFunctions::array_overlap_decimalv2'],
     [150221, 'array_overlap', 'BOOLEAN',   ['ARRAY_VARCHAR', 'ARRAY_VARCHAR'],     'ArrayFunctions::array_overlap_varchar'],
 
-    [150230, 'array_intersect', 'ARRAY_DATE',      ['ARRAY_DATE', "..."],        'ArrayFunctions::array_intersect_date'],
-    [150231, 'array_intersect', 'ARRAY_DATETIME',  ['ARRAY_DATETIME', "..."],    'ArrayFunctions::array_intersect_datetime'],
+    [150230, 'array_intersect', 'ARRAY_DATETIME',  ['ARRAY_DATETIME', "..."],    'ArrayFunctions::array_intersect_datetime'],
+    [150231, 'array_intersect', 'ARRAY_DATE',      ['ARRAY_DATE', "..."],        'ArrayFunctions::array_intersect_date'],
     [150232, 'array_intersect', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN', "..."],     'ArrayFunctions::array_intersect_boolean'],
     [150233, 'array_intersect', 'ARRAY_TINYINT',   ['ARRAY_TINYINT', "..."],     'ArrayFunctions::array_intersect_tinyint'],
     [150234, 'array_intersect', 'ARRAY_SMALLINT',  ['ARRAY_SMALLINT', "..."],    'ArrayFunctions::array_intersect_smallint'],
