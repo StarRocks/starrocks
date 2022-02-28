@@ -84,7 +84,7 @@ public class JDBCScanNode extends ScanNode {
                 continue;
             }
             Column col = slot.getColumn();
-            columns.add("`" + col.getName() + "`");
+            columns.add(col.getName());
         }
         // this happends when count(*)
         if (0 == columns.size()) {
