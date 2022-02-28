@@ -110,7 +110,8 @@ public:
         column->get_offset().emplace_back(new_size);
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         DCHECK(src[0]->is_object());
 
         // initial keys in BitmapIntersect.

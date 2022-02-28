@@ -72,7 +72,7 @@ public:
         udaf_ctx->_func->merge(this->data(state).handle, udaf_ctx->buffer->handle());
     }
 
-    void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
+    void serialize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                              Column* to) const override final {
         BinaryColumn* column = nullptr;
         // TODO serialize
@@ -101,9 +101,8 @@ public:
         memcpy(column->get_bytes().data(), udaf_ctx->buffer_data.data(), serialize_size);
     }
 
-    void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
+    void finalize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                             Column* to) const override final {
-        // TODO finalize
         auto* udaf_ctx = ctx->impl()->udaf_ctxs();
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
         append_jvalue(udaf_ctx->finalize->method_desc[0], to, val);
@@ -111,7 +110,8 @@ public:
     }
 
     //Now Java UDAF don't Not Support Streaming Aggregate
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override final {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override final {
         DCHECK(false) << "Now Java UDAF Not Support Streaming Mode";
     }
 

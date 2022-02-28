@@ -3,6 +3,7 @@
 #pragma once
 
 #include "column/object_column.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
@@ -35,7 +36,8 @@ public:
         col->append(std::move(value));
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         if constexpr (std::is_integral_v<T>) {
             BitmapColumn* dst_column = down_cast<BitmapColumn*>((*dst).get());
             const auto* src_column = static_cast<const InputColumnType*>(src[0].get());

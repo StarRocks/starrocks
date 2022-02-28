@@ -115,7 +115,8 @@ public:
         }
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
@@ -131,10 +132,10 @@ public:
                     if constexpr (IgnoreNull) {
                         Columns src_data_columns(1);
                         src_data_columns[0] = nullable_column->data_column();
-                        nested_function->convert_to_serialize_format(src_data_columns, chunk_size,
+                        nested_function->convert_to_serialize_format(ctx, src_data_columns, chunk_size,
                                                                      &dst_nullable_column->data_column());
                     } else {
-                        nested_function->convert_to_serialize_format(src, chunk_size,
+                        nested_function->convert_to_serialize_format(ctx, src, chunk_size,
                                                                      &dst_nullable_column->data_column());
                     }
                 }
@@ -143,12 +144,12 @@ public:
 
                 Columns src_data_columns(1);
                 src_data_columns[0] = nullable_column->data_column();
-                nested_function->convert_to_serialize_format(src_data_columns, chunk_size,
+                nested_function->convert_to_serialize_format(ctx, src_data_columns, chunk_size,
                                                              &dst_nullable_column->data_column());
             }
         } else {
             dst_nullable_column->null_column_data().resize(chunk_size);
-            nested_function->convert_to_serialize_format(src, chunk_size, &dst_nullable_column->data_column());
+            nested_function->convert_to_serialize_format(ctx, src, chunk_size, &dst_nullable_column->data_column());
         }
     }
 
@@ -606,7 +607,8 @@ public:
         }
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
 
         // dst's null_column, initial with false.
@@ -639,9 +641,10 @@ public:
         }
 
         if (!has_nullable_column) {
-            this->nested_function->convert_to_serialize_format(src, chunk_size, &dst_nullable_column->data_column());
+            this->nested_function->convert_to_serialize_format(ctx, src, chunk_size,
+                                                               &dst_nullable_column->data_column());
         } else {
-            this->nested_function->convert_to_serialize_format(data_columns, chunk_size,
+            this->nested_function->convert_to_serialize_format(ctx, data_columns, chunk_size,
                                                                &dst_nullable_column->data_column());
         }
     }
