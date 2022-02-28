@@ -26,8 +26,12 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
@@ -66,6 +70,22 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowDatabasesStmt(ShowDbStmt node, C context) {
+        return visitStatement(node, context);
+    }
+
+    public R visitShowWorkGroupStmt(ShowWorkGroupStmt node, C context) {
+        return visitStatement(node, context);
+    }
+
+    public R visitShowVariablesStmt(ShowVariablesStmt node, C context) {
+        return visitStatement(node, context);
+    }
+
+    public R visitShowColumnStmt(ShowColumnStmt node, C context) {
+        return visitStatement(node, context);
+    }
+
+    public R visitShowTableStatusStmt(ShowTableStatusStmt node, C context) {
         return visitStatement(node, context);
     }
 

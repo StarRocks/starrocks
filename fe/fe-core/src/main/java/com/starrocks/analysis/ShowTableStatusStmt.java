@@ -35,6 +35,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 
 // SHOW TABLE STATUS
 public class ShowTableStatusStmt extends ShowStmt {
@@ -70,6 +71,10 @@ public class ShowTableStatusStmt extends ShowStmt {
         this.db = db;
         this.wild = wild;
         this.where = where;
+    }
+
+    public void setDb(String db) {
+        this.db = db;
     }
 
     public String getDb() {
@@ -193,5 +198,10 @@ public class ShowTableStatusStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowTableStatusStmt(this, context);
     }
 }

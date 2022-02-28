@@ -26,6 +26,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -58,6 +59,10 @@ public class ShowVariablesStmt extends ShowStmt {
 
     public SetType getType() {
         return type;
+    }
+
+    public void setType(SetType type) {
+        this.type = type;
     }
 
     public String getPattern() {
@@ -128,5 +133,10 @@ public class ShowVariablesStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowVariablesStmt(this, context);
     }
 }
