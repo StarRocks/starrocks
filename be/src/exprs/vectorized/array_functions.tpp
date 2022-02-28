@@ -111,7 +111,7 @@ public:
     using CppType = RunTimeCppType<PT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
-        if constexpr (pt_is_float<PT> || pt_is_integer<PT> || pt_is_decimalv2<PT> || pt_is_boolean<PT>) {
+        if constexpr (pt_is_arithmetic<PT> || pt_is_decimalv2<PT>) {
             return _array_difference(columns);
         } else {
             assert(false);
