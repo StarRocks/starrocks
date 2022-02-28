@@ -325,9 +325,9 @@ struct THudiTable {
 struct TJDBCTable {
     1: optional string jdbc_driver
     2: optional string jdbc_url
-    3: optional string jdbc_database;
-    4: optional string jdbc_table;
-    5: optional map<string, string> jdbc_properties;
+    3: optional string jdbc_table
+    4: optional string jdbc_user
+    5: optional string jdbc_passwd
 }
 
 // "Union" of all table types.

@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 
 public class JDBCTableTest {
-    private String database;
     private String table;
     private String resourceName;
     private List<Column> columns;
@@ -27,7 +26,6 @@ public class JDBCTableTest {
 
     @Before
     public void setUp() {
-        database = "db0";
         table = "table0";
         resourceName = "jdbc0";
 
@@ -36,7 +34,6 @@ public class JDBCTableTest {
         columns.add(column);
 
         properties = Maps.newHashMap();
-        properties.put("database", database);
         properties.put("table", table);
         properties.put("resource", resourceName);
     }
@@ -44,11 +41,10 @@ public class JDBCTableTest {
     private Resource getMockedJDBCResource(String name) throws Exception {
         Resource jdbcResource = new JDBCResource(name);
         Map<String, String> resourceProperties = Maps.newHashMap();
-        resourceProperties.put("hosts", "host0,host1");
+        resourceProperties.put("jdbc_uri", "jdbc_uri");
         resourceProperties.put("user", "user0");
         resourceProperties.put("password", "password0");
         resourceProperties.put("driver", "driver0");
-        resourceProperties.put("jdbc_type", "jdbc_type0");
         jdbcResource.setProperties(resourceProperties);
         return jdbcResource;
     }
@@ -68,17 +64,9 @@ public class JDBCTableTest {
                 result = getMockedJDBCResource(resourceName);
             }
         };
-        // put jdbc properties
-        Map<String, String> jdbcProperties = Maps.newHashMap();
-        jdbcProperties.put("socketTimeout", "1000");
-        jdbcProperties.put("connectionTimeout", "1000");
-        properties.putAll(jdbcProperties);
-
         JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, properties);
         Assert.assertEquals(this.resourceName, table.getResourceName());
-        Assert.assertEquals(this.database, table.getJdbcDatabase());
         Assert.assertEquals(this.table, table.getJdbcTable());
-        Assert.assertEquals(jdbcProperties, table.getJdbcProperties());
     }
 
 
@@ -123,13 +111,6 @@ public class JDBCTableTest {
     @Test(expected = DdlException.class)
     public void testNoResource() throws Exception {
         properties.remove("resource");
-        new JDBCTable(1000, "jdbc_table", columns, properties);
-        Assert.fail("No exception throws.");
-    }
-
-    @Test(expected = DdlException.class)
-    public void testNoDatabase() throws Exception {
-        properties.remove("database");
         new JDBCTable(1000, "jdbc_table", columns, properties);
         Assert.fail("No exception throws.");
     }

@@ -4668,11 +4668,7 @@ public class Catalog {
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
-            sb.append("\"database\" = \"").append(jdbcTable.getJdbcDatabase()).append("\",\n");
             sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
-            if (!jdbcTable.getJdbcProperties().isEmpty()) {
-                sb.append(",\n").append(new PrintableMap<>(jdbcTable.getJdbcProperties(), " = ", true, true, false).toString());
-            }
             sb.append("\n)");
         }
         sb.append(";");
