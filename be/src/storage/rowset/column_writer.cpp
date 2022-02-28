@@ -573,6 +573,12 @@ Status ScalarColumnWriter::finish_current_page() {
             PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body, &compressed_body));
     if (compressed_body.size() == 0) {
         // page body is uncompressed
+        double space_saving =
+                1.0 - static_cast<double>(encoded_values->size()) / static_cast<double>(encoded_values->capacity());
+        if (space_saving >= _opts.compression_min_space_saving) {
+            encoded_values->shrink_to_fit();
+        }
+
         page->data.emplace_back(encoded_values->build());
         page->data.emplace_back(std::move(nullmap));
         // Move the ownership of the internal storage of |compressed_body| to |encoded_values|,
