@@ -341,8 +341,8 @@ public:
     workgroup::WorkGroup* workgroup();
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
-    size_t get_driver_queue_level() const { return _driver_queue_index; }
-    void set_driver_queue_index(size_t driver_queue_index) { _driver_queue_index = driver_queue_index; }
+    size_t get_driver_queue_level() const { return _driver_queue_level; }
+    void set_driver_queue_level(size_t driver_queue_level) { _driver_queue_level = driver_queue_level; }
 
 private:
     // Yield PipelineDriver when maximum number of chunks has been moved in current execution round.
@@ -403,7 +403,7 @@ private:
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
     // The index of QuerySharedDriverQueue{WithoutLock}._queues which this driver belongs to.
-    size_t _driver_queue_index = 0;
+    size_t _driver_queue_level = 0;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

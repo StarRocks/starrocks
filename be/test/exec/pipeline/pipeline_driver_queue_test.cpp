@@ -34,7 +34,7 @@ Operators _gen_operators() {
 }
 
 void _set_driver_level(DriverRawPtr driver, int level) {
-    driver->set_driver_queue_index(level % QuerySharedDriverQueue::QUEUE_SIZE);
+    driver->set_driver_queue_level(level % QuerySharedDriverQueue::QUEUE_SIZE);
 }
 
 PARALLEL_TEST(QuerySharedDriverQueueTest, test_basic) {
