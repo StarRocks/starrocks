@@ -136,15 +136,12 @@ private:
         }
 
         if (columns[0]->is_nullable()) {
-            dest_column = NullableColumn::create(ArrayColumn::create(dest_column_data, UInt32Column::create()),
-                                                 NullColumn::create());
-        } else {
-            dest_column = ArrayColumn::create(dest_column_data, UInt32Column::create());
-        }
-
-        if (columns[0]->is_nullable()) {
             const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
             const auto* src_data_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column().get());
+
+            dest_column = NullableColumn::create(ArrayColumn::create(dest_column_data, UInt32Column::create(src_data_column->offsets())),
+                                                            NullColumn::create());
+
             auto& dest_nullable_column = down_cast<NullableColumn&>(*dest_column);
             auto& dest_null_data = down_cast<NullableColumn&>(*dest_column).null_column_data();
             auto& dest_data_column = down_cast<ArrayColumn&>(*dest_nullable_column.data_column());
@@ -156,8 +153,6 @@ private:
                 for (size_t i = 0; i < chunk_size; i++) {
                     if (!src_nullable_column->is_null(i)) {
                         _array_difference_item(*src_data_column, i, &dest_data_column);
-                    } else {
-                        dest_data_column.append_default();
                     }
                 }
             } else {
@@ -167,8 +162,9 @@ private:
             }
         } else {
             const auto* src_data_column = down_cast<const ArrayColumn*>(src_column.get());
-            auto* dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
+            dest_column = ArrayColumn::create(dest_column_data, UInt32Column::create(src_data_column->offsets()));
 
+            auto* dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
             for (size_t i = 0; i < chunk_size; i++) {
                 _array_difference_item(*src_data_column, i, dest_data_column);
             }
@@ -210,9 +206,6 @@ private:
                 }
             }
         }
-
-        auto& dest_offsets = dest_column->offsets_column()->get_data();
-        dest_offsets.emplace_back(dest_offsets.back() + items.size());
     }
 };
 
