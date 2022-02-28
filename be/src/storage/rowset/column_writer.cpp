@@ -575,6 +575,12 @@ Status ScalarColumnWriter::finish_current_page() {
         // page body is uncompressed
         double space_saving =
                 1.0 - static_cast<double>(encoded_values->size()) / static_cast<double>(encoded_values->capacity());
+        // when the page is first compressed by bitshuffle, the compression effect of lz4 is not obvious.
+        // Then the decompress page (may be much larger then the actual size,
+        // e.g. the page is 6K, but the compressed page allocated is 256K),
+        // is swaped to the encoded_values for opt the memory allocation.
+        // In this scenario, the page is all 256K, bug actual data size is 6K.
+        // So, we should shrink the page to the right size.
         if (space_saving >= _opts.compression_min_space_saving) {
             encoded_values->shrink_to_fit();
         }
