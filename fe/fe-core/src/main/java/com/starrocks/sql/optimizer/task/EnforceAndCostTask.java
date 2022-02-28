@@ -59,8 +59,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     // Current stage of enumeration through outputInputProperties
     private int curPropertyPairIndex = 0;
     //
-    private List<GroupExpression> childrenBestExprList = Lists.newArrayList();
-    private List<PhysicalPropertySet> childrenOutputProperties = Lists.newArrayList();
+    private final List<GroupExpression> childrenBestExprList = Lists.newArrayList();
+    private final List<PhysicalPropertySet> childrenOutputProperties = Lists.newArrayList();
 
     EnforceAndCostTask(TaskContext context, GroupExpression expression) {
         super(context);
@@ -329,9 +329,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 return false;
             }
             // 1.2 disable one stage agg with multi group by columns
-            if (aggregate.getGroupBys().size() > 1) {
-                return false;
-            }
+            return aggregate.getGroupBys().size() <= 1;
         }
         return true;
     }
