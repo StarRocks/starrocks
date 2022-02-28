@@ -25,8 +25,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.QueryStmt;
+import com.starrocks.analysis.SqlParser;
+import com.starrocks.analysis.SqlScanner;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.SqlParserUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -36,6 +41,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.StringReader;
 import java.lang.ref.SoftReference;
 import java.util.List;
 
@@ -125,7 +131,14 @@ public class View extends Table {
     // 1. Write member variable in a readonly interface
     // 2. Hold a temporary cache in the globally shared metadata
     public QueryStmt getQueryStmt() {
-        return null;
+        try {
+            SqlScanner input = new SqlScanner(new StringReader(inlineViewDef), sqlMode);
+            SqlParser parser = new SqlParser(input);
+            StatementBase node = SqlParserUtils.getFirstStmt(parser);
+            return (QueryStmt) node;
+        } catch (Exception e) {
+            throw new SemanticException(e.getMessage());
+        }
     }
 
     public QueryStmt getQueryStmtWithParse() throws StarRocksPlannerException {

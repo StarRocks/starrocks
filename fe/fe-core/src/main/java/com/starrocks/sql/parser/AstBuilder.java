@@ -372,10 +372,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitColumnNameWithComment(StarRocksParser.ColumnNameWithCommentContext context) {
         String comment = null;
         if (context.string() != null) {
-            comment = visit(context.string()).toString();
+            comment = ((StringLiteral) visit(context.string())).getStringValue();
         }
 
-        return new ColWithComment(visit(context.identifier()).toString(), comment);
+        return new ColWithComment(((Identifier) visit(context.identifier())).getValue(), comment);
     }
 
     // ------------------------------------------- Query Relation -------------------------------------------
@@ -463,6 +463,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     return new IntersectRelation(Lists.newArrayList(left, right), setQualifier);
                 }
             case StarRocksLexer.EXCEPT:
+            case StarRocksLexer.MINUS:
                 if (left instanceof ExceptRelation && ((ExceptRelation) left).getQualifier().equals(setQualifier)) {
                     ((ExceptRelation) left).addRelation(right);
                     return left;
@@ -518,10 +519,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         SelectList selectList = new SelectList(selectItems, isDistinct);
         if (context.hint() != null) {
             Map<String, String> selectHints = new HashMap<>();
-            for (StarRocksParser.HintMapContext hintMapContext : context.hint().hintMap()) {
-                String key = hintMapContext.k.getText();
-                String value = hintMapContext.v.getText();
-                selectHints.put(key, value);
+            for (StarRocksParser.HintContext hintContext : context.hint()) {
+                for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
+                    String key = hintMapContext.k.getText();
+                    String value = hintMapContext.v.getText();
+                    selectHints.put(key, value);
+                }
             }
             selectList.setOptHints(selectHints);
         }
@@ -1009,7 +1012,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitArithmeticUnary(StarRocksParser.ArithmeticUnaryContext context) {
         Expr child = (Expr) visit(context.valueExpression());
         switch (context.operator.getType()) {
-            case StarRocksLexer.MINUS:
+            case StarRocksLexer.MINUS_SYMBOL:
                 if (child.isLiteral() && child.getType().isNumericType()) {
                     try {
                         ((LiteralExpr) child).swapSign();
@@ -1020,7 +1023,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 } else {
                     return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, new IntLiteral(-1), child);
                 }
-            case StarRocksLexer.PLUS:
+            case StarRocksLexer.PLUS_SYMBOL:
                 return child;
             case StarRocksLexer.BITNOT:
                 return new ArithmeticExpr(ArithmeticExpr.Operator.BITNOT, child, null);
@@ -1048,15 +1051,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     private static ArithmeticExpr.Operator getArithmeticBinaryOperator(Token operator) {
         switch (operator.getType()) {
-            case StarRocksLexer.PLUS:
+            case StarRocksLexer.PLUS_SYMBOL:
                 return ArithmeticExpr.Operator.ADD;
-            case StarRocksLexer.MINUS:
+            case StarRocksLexer.MINUS_SYMBOL:
                 return ArithmeticExpr.Operator.SUBTRACT;
-            case StarRocksLexer.ASTERISK:
+            case StarRocksLexer.ASTERISK_SYMBOL:
                 return ArithmeticExpr.Operator.MULTIPLY;
-            case StarRocksLexer.SLASH:
+            case StarRocksLexer.SLASH_SYMBOL:
                 return ArithmeticExpr.Operator.DIVIDE;
-            case StarRocksLexer.PERCENT:
+            case StarRocksLexer.PERCENT_SYMBOL:
                 return ArithmeticExpr.Operator.MOD;
             case StarRocksLexer.INT_DIV:
                 return ArithmeticExpr.Operator.INT_DIVIDE;
@@ -1077,7 +1080,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("if", visit(context.expression(), Expr.class));
         }
 
-        boolean isStar = context.ASTERISK() != null;
+        boolean isStar = context.ASTERISK_SYMBOL() != null;
         boolean distinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
 
         String functionName = getQualifiedName(context.qualifiedName()).toString();

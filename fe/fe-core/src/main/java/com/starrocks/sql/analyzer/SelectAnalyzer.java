@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.StarRocksPlannerException;
 
 import java.util.ArrayList;
@@ -347,6 +348,12 @@ public class SelectAnalyzer {
         TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
 
+        if (aggregations.stream().filter(FunctionCallExpr::isDistinct).count() > 1
+                && aggregations.stream().anyMatch(functionCallExpr ->
+                functionCallExpr.getChild(0).getType().isArrayType())) {
+            throw new SemanticException("No matching function with signature: multi_distinct_count(ARRAY)");
+        }
+
         analyzeState.setAggregate(aggregations);
 
         return aggregations;
@@ -410,7 +417,7 @@ public class SelectAnalyzer {
 
                     List<List<Expr>> groupingSets =
                             Sets.powerSet(IntStream.range(0, rewriteOriGrouping.size())
-                                            .boxed().collect(Collectors.toSet())).stream()
+                                    .boxed().collect(Collectors.toSet())).stream()
                                     .map(l -> l.stream().map(rewriteOriGrouping::get).collect(Collectors.toList()))
                                     .collect(Collectors.toList());
 
@@ -629,6 +636,20 @@ public class SelectAnalyzer {
                     for (String outputName : node.getQuery().getColumnOutputNames()) {
                         outputExpressions.add(new SlotRef(node.getAlias(), outputName, outputName));
                     }
+                    return outputExpressions;
+                } else {
+                    return new ArrayList<>();
+                }
+            }
+
+            @Override
+            public List<Expr> visitView(ViewRelation node, Void context) {
+                if (item.getTblName() == null || item.getTblName().getTbl().equals(node.getAlias().getTbl())) {
+                    List<Expr> outputExpressions = new ArrayList<>();
+                    for (Column column : node.getView().getBaseSchema()) {
+                        outputExpressions.add(new SlotRef(node.getAlias(), column.getName(), column.getName()));
+                    }
+
                     return outputExpressions;
                 } else {
                     return new ArrayList<>();
