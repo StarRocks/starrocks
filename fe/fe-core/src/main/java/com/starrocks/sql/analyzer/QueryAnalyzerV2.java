@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -41,6 +42,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.SetQualifier;
@@ -215,8 +217,8 @@ public class QueryAnalyzerV2 {
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
-                    SubqueryRelation viewRelation =
-                            new SubqueryRelation(tableName.getTbl(), queryStatement.getQueryRelation());
+                    ViewRelation viewRelation =
+                            new ViewRelation(tableName, view, queryStatement.getQueryRelation());
                     viewRelation.setAlias(tableName);
                     return viewRelation;
                 } else {
@@ -413,6 +415,23 @@ public class QueryAnalyzerV2 {
             Scope scope = new Scope(RelationId.of(subquery), new RelationFields(outputFields.build()));
             subquery.setScope(scope);
             return scope;
+        }
+
+        @Override
+        public Scope visitView(ViewRelation node, Scope scope) {
+            process(new QueryStatement(node.getQuery()), scope);
+
+            View view = node.getView();
+            TableName tableName = node.getName();
+            List<Field> fields = Lists.newArrayList();
+            for (Column column : view.getBaseSchema()) {
+                Field field = new Field(column.getName(), column.getType(), tableName, null, true);
+                fields.add(field);
+            }
+
+            Scope viewScope = new Scope(RelationId.of(node), new RelationFields(fields));
+            node.setScope(viewScope);
+            return viewScope;
         }
 
         @Override

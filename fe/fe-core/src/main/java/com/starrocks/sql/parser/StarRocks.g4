@@ -104,7 +104,8 @@ queryNoWith
 queryTerm
     : queryPrimary                                                             #queryTermDefault
     | left=queryTerm operator=INTERSECT setQuantifier? right=queryTerm         #setOperation
-    | left=queryTerm operator=(UNION | EXCEPT) setQuantifier? right=queryTerm  #setOperation
+    | left=queryTerm operator=(UNION | EXCEPT | MINUS)
+        setQuantifier? right=queryTerm                                         #setOperation
     ;
 
 queryPrimary
@@ -131,7 +132,7 @@ limitElement
     ;
 
 querySpecification
-    : SELECT hint? setQuantifier? selectItem (',' selectItem)*
+    : SELECT hint* setQuantifier? selectItem (',' selectItem)*
       fromClause
       (WHERE where=expression)?
       (GROUP BY groupingElement)?
@@ -165,8 +166,8 @@ setQuantifier
 
 selectItem
     : expression (AS? (identifier | string))?                                            #selectSingle
-    | qualifiedName '.' ASTERISK                                                         #selectAll
-    | ASTERISK                                                                           #selectAll
+    | qualifiedName '.' ASTERISK_SYMBOL                                                  #selectAll
+    | ASTERISK_SYMBOL                                                                    #selectAll
     ;
 
 relation
@@ -220,7 +221,7 @@ relationPrimary
     ;
 
 partitionNames
-    : PARTITIONS '(' identifier (',' identifier)* ')'
+    : (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
     ;
 
 expressionsWithDefault
@@ -258,12 +259,13 @@ predicateOperations [ParserRuleContext value]
 
 valueExpression
     : primaryExpression                                                                   #valueExpressionDefault
-    | operator = (MINUS | PLUS | BITNOT) valueExpression                                  #arithmeticUnary
-    | left = valueExpression operator =
-        (ASTERISK | SLASH | PERCENT | INT_DIV | BITAND| BITOR | BITXOR)
+    | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) valueExpression                    #arithmeticUnary
+    | left = valueExpression operator = (ASTERISK_SYMBOL | SLASH_SYMBOL |
+        PERCENT_SYMBOL | INT_DIV | BITAND| BITOR | BITXOR)
       right = valueExpression                                                             #arithmeticBinary
-    | left = valueExpression operator = (PLUS | MINUS) right=valueExpression              #arithmeticBinary
-    | left = valueExpression CONCAT right = valueExpression                               #concatenation
+    | left = valueExpression operator =
+        (PLUS_SYMBOL | MINUS_SYMBOL) right=valueExpression                                #arithmeticBinary
+    | left = valueExpression CONCAT_SYMBOL right = valueExpression                        #concatenation
     ;
 
 primaryExpression
@@ -290,7 +292,7 @@ primaryExpression
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
     | IF '(' (expression (',' expression)*)? ')'                                          #functionCall
-    | qualifiedName '(' ASTERISK ')' over?                                                #functionCall
+    | qualifiedName '(' ASTERISK_SYMBOL ')' over?                                         #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
     | windowFunction over                                                                 #windowFunctionCall
     | CAST '(' expression AS type ')'                                                     #cast
