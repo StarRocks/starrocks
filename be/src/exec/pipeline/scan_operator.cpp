@@ -10,7 +10,9 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/defer_op.h"
+#include "storage/rowset/rowset.h"
+#include "storage/storage_engine.h"
+#include "storage/tablet.h"
 
 namespace starrocks::pipeline {
 
@@ -30,6 +32,8 @@ Status ScanOperator::prepare(RuntimeState* state) {
                                         _io_threads->get_queue_capacity()));
         }
     }
+
+    RETURN_IF_ERROR(_capture_tablet_rowsets());
 
     // init filtered_ouput_columns
     for (const auto& col_name : _olap_scan_node.unused_output_column_name) {
@@ -250,6 +254,39 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         }
 
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
+    }
+
+    return Status::OK();
+}
+
+Status ScanOperator::_capture_tablet_rowsets() {
+    const auto& morsels = _morsel_queue->morsels();
+    _tablet_rowsets.resize(morsels.size());
+    for (int i = 0; i < morsels.size(); ++i) {
+        OlapMorsel* olap_morsel = (OlapMorsel*)morsels[i].get();
+        auto* scan_range = olap_morsel->get_scan_range();
+
+        // Get version.
+        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
+
+        // Get tablet.
+        TTabletId tablet_id = scan_range->tablet_id;
+        std::string err;
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
+        if (!tablet) {
+            std::stringstream ss;
+            SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
+            ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
+               << ", reason=" << err;
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+
+        // Capture row sets of this version tablet.
+        {
+            std::shared_lock l(tablet->get_header_lock());
+            RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
+        }
     }
 
     return Status::OK();
