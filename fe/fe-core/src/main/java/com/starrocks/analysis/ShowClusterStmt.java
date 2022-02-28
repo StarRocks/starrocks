@@ -55,11 +55,6 @@ public class ShowClusterStmt extends ShowStmt {
     }
 
     @Override
-    public SelectStmt toSelectStmt(Analyzer analyzer) throws AnalysisException {
-        return null;
-    }
-
-    @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
         if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(),
                 PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
