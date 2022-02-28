@@ -13,7 +13,7 @@
 namespace orc {
 
 TEST(TestLazyLoad, TestNormal) {
-    orc::MemoryOutputStream buffer(102400);
+    orc::MemoryOutputStream buffer(1024000);
     size_t batchSize = 1024;
     size_t batchNum = 128;
 
@@ -22,6 +22,7 @@ TEST(TestLazyLoad, TestNormal) {
         orc::WriterOptions writerOptions;
         // force to make stripe every time.
         writerOptions.setStripeSize(0);
+        writerOptions.setRowIndexStride(10);
         ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<c0:int,c1:int>"));
         ORC_UNIQUE_PTR<orc::Writer> writer = createWriter(*schema, &buffer, writerOptions);
 
@@ -68,8 +69,8 @@ TEST(TestLazyLoad, TestNormal) {
             // clear memory.
             std::memset(c0->data.data(), 0x0, sizeof((c0->data[0])) * batchSize);
             std::memset(c1->data.data(), 0x0, sizeof((c1->data[0])) * batchSize);
-
-            EXPECT_EQ(rr->next(*batch), true);
+            orc::RowReader::ReadPosition pos;
+            EXPECT_EQ(rr->next(*batch, &pos), true);
             EXPECT_EQ(batch->numElements, batchSize);
 
             if ((k & 0x1) == 0) {
@@ -79,7 +80,7 @@ TEST(TestLazyLoad, TestNormal) {
                     ASSERT_EQ(c1->data[i], 0);
                     index += 1;
                 }
-                rr->lazyLoadSkip(batch->numElements);
+                rr->lazyLoadSyncTo(pos.row_in_stripe);
             } else {
                 rr->lazyLoadNext(*batch, batch->numElements);
                 for (size_t i = 0; i < batchSize; i++) {
@@ -96,7 +97,7 @@ TEST(TestLazyLoad, TestNormal) {
 }
 
 TEST(TestLazyLoad, TestWithSearchArgument) {
-    orc::MemoryOutputStream buffer(102400);
+    orc::MemoryOutputStream buffer(1024000);
     size_t batchSize = 1024;
     size_t batchNum = 2;
     size_t readSize = 256;
@@ -109,8 +110,6 @@ TEST(TestLazyLoad, TestWithSearchArgument) {
         orc::WriterOptions writerOptions;
         // force to make stripe every time.
         writerOptions.setStripeSize(0);
-        writerOptions.setRowIndexStride(batchSize);
-
         ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<c0:int,c1:int>"));
         ORC_UNIQUE_PTR<orc::Writer> writer = createWriter(*schema, &buffer, writerOptions);
 
@@ -168,14 +167,15 @@ TEST(TestLazyLoad, TestWithSearchArgument) {
         //     EXPECT_EQ(batch->numElements, readSize);
         // }
 
+        orc::RowReader::ReadPosition pos;
         // stripe #2.
-        EXPECT_EQ(rr->next(*batch), true);
+        EXPECT_EQ(rr->next(*batch, &pos), true);
         EXPECT_EQ(batch->numElements, readSize);
 
         // we don't need to skip first stripe.
-        EXPECT_EQ(rr->next(*batch), true);
+        EXPECT_EQ(rr->next(*batch, &pos), true);
         EXPECT_EQ(batch->numElements, readSize);
-        rr->lazyLoadSkip(readSize);
+        rr->lazyLoadSyncTo(pos.row_in_stripe);
         rr->lazyLoadNext(*batch, readSize);
 
         size_t index = batchSize + readSize;
