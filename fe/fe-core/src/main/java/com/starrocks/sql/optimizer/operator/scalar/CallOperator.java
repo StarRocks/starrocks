@@ -147,6 +147,7 @@ public class CallOperator extends ScalarOperator {
         CallOperator other = (CallOperator) obj;
         return isDistinct == other.isDistinct &&
                 Objects.equals(fnName, other.fnName) &&
+                Objects.equals(type, other.type) &&
                 Objects.equals(arguments, other.arguments);
     }
 
