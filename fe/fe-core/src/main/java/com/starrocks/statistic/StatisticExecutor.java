@@ -7,7 +7,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -24,7 +23,9 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -115,7 +116,9 @@ public class StatisticExecutor {
         StatementBase parsedStmt;
         try {
             parsedStmt = parseSQL(sql, context);
-            ((QueryStmt) parsedStmt).getDbs(context, dbs);
+            if (parsedStmt instanceof QueryStatement) {
+                dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
+            }
         } catch (Exception e) {
             LOG.warn("Parse statistic table query fail.", e);
             throw e;
@@ -167,7 +170,9 @@ public class StatisticExecutor {
         StatementBase parsedStmt;
         try {
             parsedStmt = parseSQL(sql, context);
-            ((QueryStmt) parsedStmt).getDbs(context, dbs);
+            if (parsedStmt instanceof QueryStatement) {
+                dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
+            }
             Preconditions.checkState(dbs.size() == 1);
         } catch (Exception e) {
             LOG.warn("Parse statistic dict query {} fail.", sql, e);
@@ -272,7 +277,9 @@ public class StatisticExecutor {
         StatementBase parsedStmt;
         try {
             parsedStmt = parseSQL(sql.toString(), context);
-            ((QueryStmt) parsedStmt).getDbs(context, dbs);
+            if (parsedStmt instanceof QueryStatement) {
+                dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
+            }
         } catch (Exception e) {
             LOG.warn("Parse statistic table query fail. SQL: " + sql, e);
             throw e;
