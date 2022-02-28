@@ -46,6 +46,7 @@ public:
         return ArrayDifference<PT>::process(context, columns);                                   \
     }
 
+    DEFINE_ARRAY_DIFFERENCE_FN(boolean, PrimitiveType::TYPE_BOOLEAN)
     DEFINE_ARRAY_DIFFERENCE_FN(tinyint, PrimitiveType::TYPE_TINYINT)
     DEFINE_ARRAY_DIFFERENCE_FN(smallint, PrimitiveType::TYPE_SMALLINT)
     DEFINE_ARRAY_DIFFERENCE_FN(int, PrimitiveType::TYPE_INT)

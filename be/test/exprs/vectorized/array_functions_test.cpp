@@ -58,7 +58,11 @@ private:
 template <typename CppType>
 void ArrayFunctionsTest::_check_array(const Buffer<CppType>& check_values, const DatumArray& value) {
     ASSERT_EQ(check_values.size(), value.size());
-    if constexpr (std::is_same_v<CppType, int8_t>) {
+    if constexpr (std::is_same_v<CppType, uint8_t>) {
+        for (size_t i = 0; i < value.size(); i++) {
+            ASSERT_EQ(check_values[i], value[i].get_uint8());
+        }
+    } else if constexpr (std::is_same_v<CppType, int8_t>) {
         for (size_t i = 0; i < value.size(); i++) {
             ASSERT_EQ(check_values[i], value[i].get_int8());
         }
@@ -2930,6 +2934,49 @@ TEST_F(ArrayFunctionsTest, array_reverse_only_null) {
     ASSERT_TRUE(dest_column->get(0).is_null());
     ASSERT_TRUE(dest_column->get(1).is_null());
     ASSERT_TRUE(dest_column->get(2).is_null());
+}
+
+TEST_F(ArrayFunctionsTest, array_difference_boolean) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    src_column->append_datum(DatumArray{(uint8_t)5, (uint8_t)3, (uint8_t)6});
+    src_column->append_datum(DatumArray{(uint8_t)2, (uint8_t)3, (uint8_t)7, (uint8_t)8});
+    src_column->append_datum(DatumArray{(uint8_t)4, (uint8_t)3, (uint8_t)2, (uint8_t)1});
+
+    ArrayDifference<PrimitiveType::TYPE_BOOLEAN> difference;
+    auto dest_column = difference.process(nullptr, {src_column});
+
+    ASSERT_EQ(dest_column->size(), 3);
+    _check_array<int64_t>({0, -2, 3}, dest_column->get(0).get_array());
+    _check_array<int64_t>({0, 1, 4, 1}, dest_column->get(1).get_array());
+    _check_array<int64_t>({0, -1, -1, -1}, dest_column->get(2).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_difference_boolean_with_entry_null) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    src_column->append_datum(DatumArray{(uint8_t)5, Datum(), (uint8_t)6});
+    src_column->append_datum(DatumArray{Datum(), (uint8_t)3, (uint8_t)7, (uint8_t)8});
+    src_column->append_datum(DatumArray{(uint8_t)4, (uint8_t)3, (uint8_t)2, Datum()});
+    src_column->append_datum(Datum());
+
+    ArrayDifference<PrimitiveType::TYPE_BOOLEAN> difference;
+    auto dest_column = difference.process(nullptr, {src_column});
+
+    ASSERT_EQ(dest_column->size(), 4);
+
+    ASSERT_EQ(0, dest_column->get(0).get_array()[0].get_int64());
+    ASSERT_TRUE(dest_column->get(0).get_array()[1].is_null());
+    ASSERT_TRUE(dest_column->get(0).get_array()[2].is_null());
+
+    ASSERT_TRUE(dest_column->get(1).get_array()[0].is_null());
+    ASSERT_TRUE(dest_column->get(1).get_array()[1].is_null());
+    ASSERT_EQ(4, dest_column->get(1).get_array()[2].get_int64());
+    ASSERT_EQ(1, dest_column->get(1).get_array()[3].get_int64());
+
+    ASSERT_EQ(0, dest_column->get(2).get_array()[0].get_int64());
+    ASSERT_EQ(-1, dest_column->get(2).get_array()[1].get_int64());
+    ASSERT_EQ(-1, dest_column->get(2).get_array()[2].get_int64());
+    ASSERT_TRUE(dest_column->get(2).get_array()[3].is_null());
+    ASSERT_TRUE(dest_column->get(3).is_null());
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_int) {
