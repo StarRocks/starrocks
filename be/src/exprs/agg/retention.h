@@ -18,6 +18,7 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "thrift/protocol/TJSONProtocol.h"
+#include "udf/udf.h"
 #include "udf/udf_internal.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
@@ -145,7 +146,8 @@ public:
         this->data(state).finalize_to_array_column(array_column);
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         auto* dst_column = down_cast<Int64Column*>((*dst).get());
         dst_column->reserve(chunk_size);
 
