@@ -122,11 +122,6 @@ public class NullLiteral extends LiteralExpr {
     }
 
     @Override
-    protected boolean canCastTo(Type targetType) {
-        return true;
-    }
-
-    @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
         Preconditions.checkState(targetType.isValid());
         if (!type.equals(targetType)) {
