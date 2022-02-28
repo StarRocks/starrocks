@@ -1,0 +1,6 @@
+{
+	"postgresql": {
+		"driver_path": "jdbc driver jar location",
+		"class_name": "jdbc driver class name"
+	}
+}

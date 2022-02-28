@@ -27,6 +27,7 @@
 #include "column/column_helper.h"
 #include "column/column_pool.h"
 #include "common/config.h"
+#include "common/jdbc_config.h"
 #include "common/minidump.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -245,6 +246,13 @@ void init_minidump() {
 #endif
 }
 
+void init_jdbc_driver_configs() {
+    std::string jdbc_config_file = std::string(getenv("STARROCKS_HOME")) + "/conf/jdbc_drivers.json";
+    if (!starrocks::config::JDBCDriverConfig::getInstance().load_from_json_file(jdbc_config_file)) {
+        LOG(WARNING) << "cannot load jdbc driver config file, just ignore it...";
+    }
+}
+
 void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     // google::SetVersionString(get_build_version(false));
     // google::ParseCommandLineFlags(&argc, &argv, true);
@@ -252,6 +260,8 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     init_glog("be", true);
 
     LOG(INFO) << get_version_string(false);
+
+    init_jdbc_driver_configs();
 
     init_thrift_logging();
     CpuInfo::init();
