@@ -8,8 +8,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -19,7 +17,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.OriginStatement;
@@ -48,7 +45,6 @@ import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
-import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharsetDecoder;
@@ -358,8 +354,7 @@ public class StatisticExecutor {
     }
 
     public static StatementBase parseSQL(String sql, ConnectContext context) throws Exception {
-        SqlScanner scanner = new SqlScanner(new StringReader(sql), context.getSessionVariable().getSqlMode());
-        StatementBase parsedStmt = SqlParserUtils.getStmt(new SqlParser(scanner), 0);
+        StatementBase parsedStmt =  com.starrocks.sql.parser.SqlParser.parse(sql, context).get(0);
         parsedStmt.setOrigStmt(new OriginStatement(sql, 0));
         return parsedStmt;
     }
