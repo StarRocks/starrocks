@@ -3,8 +3,10 @@
 package com.starrocks.catalog;
 
 import com.google.common.io.FileBackedOutputStream;
+import com.google.gson.Gson;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -23,36 +25,21 @@ public class JDBCResourceTest {
 
     @Test
     public void testSerialization() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./jdbcResource");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
         Map<String, String> configs = new HashMap<>();
         configs.put("user", "user");
         configs.put("password", "password");
         configs.put("driver", "driver");
         configs.put("jdbc_uri", "jdbc:postgresql://host1:port1,host2:port2/");
-        configs.put("socketTimeout", "1000");
-        JDBCResource jdbcResourceWrite = new JDBCResource("jdbc_resource_test", configs);
-        jdbcResourceWrite.write(dos);
+        JDBCResource resource0 = new JDBCResource("jdbc_resource_test", configs);
 
-        dos.flush();
-        dos.close();
+        String json = GsonUtils.GSON.toJson(resource0);
+        Resource resource1 = GsonUtils.GSON.fromJson(json, Resource.class);
 
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-
-        JDBCResource jdbcResourceRead = (JDBCResource) JDBCResource.read(dis);
-
-        Assert.assertEquals("jdbc_resource_test", jdbcResourceRead.getName());
-        Assert.assertEquals(jdbcResourceRead.getProperty("user"), "user");
-        Assert.assertEquals(jdbcResourceRead.getProperty("password"), "password");
-        Assert.assertEquals(jdbcResourceRead.getProperty("driver"), "driver");
-        Assert.assertEquals(jdbcResourceRead.getProperty("jdbc_uri"), "jdbc:postgresql://host1:port1,host2:port2/");
-        Assert.assertEquals(jdbcResourceRead.getProperty("socketTimeout"), "1000");
-
-        dis.close();
-        file.delete();
+        Assert.assertTrue(resource1 instanceof JDBCResource);
+        Assert.assertEquals(resource0.getName(), resource1.getName());
+        Assert.assertEquals(resource0.getProperty(JDBCResource.DRIVER), ((JDBCResource) resource1).getProperty(JDBCResource.DRIVER));
+        Assert.assertEquals(resource0.getProperty(JDBCResource.URI), ((JDBCResource) resource1).getProperty(JDBCResource.URI));
+        Assert.assertEquals(resource0.getProperty(JDBCResource.USER), ((JDBCResource) resource1).getProperty(JDBCResource.USER));
+        Assert.assertEquals(resource0.getProperty(JDBCResource.PASSWORD), ((JDBCResource) resource1).getProperty(JDBCResource.PASSWORD));
     }
 }
