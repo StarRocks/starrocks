@@ -57,7 +57,11 @@ public class JDBCResource extends Resource {
     @Override
     protected void setProperties(Map<String, String> properties) throws DdlException {
         Preconditions.checkState(properties != null);
-
+        for (String key : properties.keySet()) {
+            if (!DRIVER.equals(key) && !URI.equals(key) && !USER.equals(key) && !PASSWORD.equals(key)) {
+                throw new DdlException("Property " + key + " is unknown");
+            }
+        }
         configs = properties;
 
         checkProperties(DRIVER);
