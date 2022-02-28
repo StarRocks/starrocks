@@ -48,9 +48,12 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetVar;
+import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -218,7 +221,8 @@ public class StmtExecutor {
         }
 
         // this is a query stmt, but this non-master FE can not read, forward it to master
-        if ((parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) && !Catalog.getCurrentCatalog().isMaster()
+        if ((parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) &&
+                !Catalog.getCurrentCatalog().isMaster()
                 && !Catalog.getCurrentCatalog().canRead()) {
             return true;
         }
@@ -312,7 +316,8 @@ public class StmtExecutor {
                                     new com.starrocks.sql.analyzer.Analyzer(context.getCatalog(), context);
                             analyzer.analyze(parsedStmt);
 
-                            SelectStmt selectStmt = ((ShowStmt) parsedStmt).toSelectStmt(null);
+                            SelectStmt selectStmt =
+                                    ((ShowStmt) parsedStmt).toSelectStmt(new Analyzer(context.getCatalog(), context));
                             if (selectStmt != null) {
                                 parsedStmt = selectStmt;
                                 execPlan = new StatementPlanner().plan(parsedStmt, context);
@@ -614,7 +619,7 @@ public class StmtExecutor {
         if (parsedStmt instanceof ShowStmt) {
             SelectStmt selectStmt = ((ShowStmt) parsedStmt).toSelectStmt(analyzer);
             if (selectStmt != null) {
-                parsedStmt = selectStmt;
+                Preconditions.checkState(false, "Shouldn't reach here");
             }
         }
 
@@ -1043,7 +1048,10 @@ public class StmtExecutor {
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof DropWorkGroupStmt
-                || statement instanceof ShowWorkGroupStmt;
+                || statement instanceof ShowWorkGroupStmt
+                || statement instanceof ShowColumnStmt
+                || statement instanceof ShowTableStatusStmt
+                || statement instanceof ShowVariablesStmt;
     }
 
     public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {

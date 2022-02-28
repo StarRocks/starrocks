@@ -28,6 +28,7 @@ import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 
 // SHOW COLUMNS
 public class ShowColumnStmt extends ShowStmt {
@@ -107,6 +108,21 @@ public class ShowColumnStmt extends ShowStmt {
         }
     }
 
+    public TableName getTableName() {
+        return tableName;
+    }
+
+    public void init() {
+        if (!Strings.isNullOrEmpty(db)) {
+            tableName.setDb(db);
+        }
+        if (isVerbose) {
+            metaData = META_DATA_VERBOSE;
+        } else {
+            metaData = META_DATA;
+        }
+    }
+
     @Override
     public SelectStmt toSelectStmt(Analyzer analyzer) throws AnalysisException {
         if (where == null) {
@@ -122,6 +138,7 @@ public class ShowColumnStmt extends ShowStmt {
         // Field
         SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "COLUMN_NAME"), "Field");
         selectList.addItem(item);
+        // TODO: Fix analyze error: Rhs expr must be analyzed.
         aliasMap.put(new SlotRef(null, "Field"), item.getExpr().clone(null));
         // Type
         item = new SelectListItem(new SlotRef(TABLE_NAME, "DATA_TYPE"), "Type");
@@ -172,5 +189,10 @@ public class ShowColumnStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return metaData;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowColumnStmt(this, context);
     }
 }
