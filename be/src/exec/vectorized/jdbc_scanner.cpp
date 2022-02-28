@@ -126,7 +126,7 @@ Status JDBCScanner::_init_jdbc_scanner() {
 
     jmethodID scanner_open = _jni_env->GetMethodID(_jdbc_scanner_cls, "open", "()V");
     DCHECK(scanner_open != nullptr);
-    
+
     _jni_env->CallVoidMethod(_jdbc_scanner, scanner_open);
     CHECK_JAVA_EXCEPTION("open JDBCScanner failed")
 
