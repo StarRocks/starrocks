@@ -40,12 +40,12 @@ public class GroupExpression {
     private boolean statsDerived = false;
     private final Map<PhysicalPropertySet, Pair<Double, List<PhysicalPropertySet>>> lowestCostTable;
     // required property by parent -> output property
-    private Map<PhysicalPropertySet, PhysicalPropertySet> outputPropertyMap;
+    private final Map<PhysicalPropertySet, PhysicalPropertySet> outputPropertyMap;
 
     // valid output/input properties, only used in enum plan
     private final Set<OutputInputProperty> validOutputInputProperties;
     // property -> plan count, only used in enum plan
-    private Map<OutputInputProperty, Integer> propertiesPlanCountMap;
+    private final Map<OutputInputProperty, Integer> propertiesPlanCountMap;
 
     private boolean isUnused = false;
 

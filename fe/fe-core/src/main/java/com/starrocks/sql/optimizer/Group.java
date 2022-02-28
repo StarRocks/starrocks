@@ -34,23 +34,19 @@ public class Group {
 
     private final int id;
 
-    private boolean hasExplored = false;
-
     private final List<GroupExpression> logicalExpressions;
     private final List<GroupExpression> physicalExpressions;
 
     private Statistics statistics;
     // confidence statistics record the statistics when group expression has lowest cost,
     // confidence statistics is the statistics in group with highest confidence for each physical property
-    private Map<PhysicalPropertySet, Statistics> confidenceStatistics;
+    private final Map<PhysicalPropertySet, Statistics> confidenceStatistics;
     private final Map<PhysicalPropertySet, Pair<Double, GroupExpression>> lowestCostExpressions;
     // GroupExpressions in this Group which could satisfy the required property.
     private final Map<PhysicalPropertySet, Set<GroupExpression>> satisfyRequiredPropertyGroupExpressions;
 
     // All expressions in one group have same logical property.
     private LogicalProperty logicalProperty;
-
-    private double costLowerBound = -1000;
 
     public Group(int groupId) {
         this.id = groupId;
@@ -63,14 +59,6 @@ public class Group {
 
     public int getId() {
         return id;
-    }
-
-    public boolean hasExplored() {
-        return hasExplored;
-    }
-
-    public void setHasExplored() {
-        hasExplored = true;
     }
 
     public Statistics getStatistics() {
@@ -112,7 +100,7 @@ public class Group {
     }
 
     public double getCostLowerBound() {
-        return costLowerBound;
+        return -1000;
     }
 
     public void setBestExpression(GroupExpression expression, double cost, PhysicalPropertySet physicalPropertySet) {
