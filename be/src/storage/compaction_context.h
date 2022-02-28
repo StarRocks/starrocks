@@ -24,6 +24,7 @@ struct RowsetComparator {
         return left->start_version() < right->start_version() && left->end_version() < right->start_version();
     }
 };
+
 struct CompactionContext {
     // sort rowsets by version
     std::set<Rowset*, RowsetComparator> rowset_levels[LEVEL_NUMBER];
