@@ -41,7 +41,7 @@ public abstract class Resource implements Writable {
         HIVE,
         ICEBERG,
         HUDI,
-        ODBC_CATALOG;
+        ODBC_CATALOG,
         JDBC;
 
         public static ResourceType fromString(String resourceType) {

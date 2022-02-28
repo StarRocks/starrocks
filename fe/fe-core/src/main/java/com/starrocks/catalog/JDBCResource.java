@@ -20,10 +20,8 @@ import java.util.Map;
 * "type" = "jdbc",
 * "user" = "user",
 * "password" = "password",
-* "hosts" = "127.0.0.1:1234,127.0.0.2:1235",
+* "jdbc_uri" = "jdbc:postgresql://127.0.0.1:5432/db"
 * "driver" = "driver_name",
-* "jdbc_type" = "postgresql",
-* "connectionTimeout": "10000"
 * );
 * <p>
 * DROP RESOURCE "jdbc_pg";

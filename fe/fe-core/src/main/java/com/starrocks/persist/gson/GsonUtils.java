@@ -127,7 +127,7 @@ public class GsonUtils {
             .registerSubtype(HiveResource.class, HiveResource.class.getSimpleName())
             .registerSubtype(IcebergResource.class, IcebergResource.class.getSimpleName())
             .registerSubtype(HudiResource.class, HudiResource.class.getSimpleName())
-            .registerSubtype(OdbcCatalogResource.class, OdbcCatalogResource.class.getSimpleName());
+            .registerSubtype(OdbcCatalogResource.class, OdbcCatalogResource.class.getSimpleName())
             .registerSubtype(JDBCResource.class, JDBCResource.class.getSimpleName());
 
     // runtime adapter for class "AlterJobV2"
