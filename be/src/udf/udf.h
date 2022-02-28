@@ -208,6 +208,9 @@ public:
 
     std::shared_ptr<starrocks::vectorized::Column> get_constant_column(int arg_idx) const;
 
+    bool is_udf() { return _is_udf; }
+    void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
+
     // Create a test FunctionContext object. The caller is responsible for calling delete
     // on it. This context has additional debugging validation enabled.
     static FunctionContext* create_test_context();
@@ -223,7 +226,10 @@ private:
     FunctionContext(const FunctionContext& other);
     FunctionContext& operator=(const FunctionContext& other);
 
-    starrocks::FunctionContextImpl* _impl; // Owned by this object.
+    bool _is_udf = false;
+
+    // Owned by this object.
+    starrocks::FunctionContextImpl* _impl;
 };
 
 //----------------------------------------------------------------------------

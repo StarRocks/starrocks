@@ -81,6 +81,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const
     TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
+    RETURN_IF_ERROR(_aggregator->check_has_error());
     return Status::OK();
 }
 
