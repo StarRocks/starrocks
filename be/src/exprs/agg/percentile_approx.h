@@ -88,7 +88,8 @@ public:
         }
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         const DoubleColumn* input = nullptr;
         BinaryColumn* result = nullptr;
         // get input data column

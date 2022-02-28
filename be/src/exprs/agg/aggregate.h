@@ -66,7 +66,8 @@ public:
                                 size_t state_offsets, Column* to) const = 0;
 
     // For streaming aggregation, we directly convert column data to serialize format
-    virtual void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const = 0;
+    virtual void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                             ColumnPtr* dst) const = 0;
 
     // Insert current aggregation state into dst column from start to end
     // For aggregation window functions
