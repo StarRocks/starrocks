@@ -168,7 +168,7 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chun
                                                          const uint32_t* indexes, uint32_t from, uint32_t size,
                                                          RuntimeState* state) {
     if (UNLIKELY(_chunks[driver_sequence] == nullptr)) {
-        _chunks[driver_sequence] = chunk->clone_empty_with_slot();
+        _chunks[driver_sequence] = chunk->clone_empty_with_slot(size);
     }
 
     if (_chunks[driver_sequence]->num_rows() + size > state->chunk_size()) {
