@@ -20,6 +20,9 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
+#include "storage/rowset/rowset.h"
+#include "storage/storage_engine.h"
+#include "storage/tablet.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
@@ -52,6 +55,8 @@ Status OlapScanNode::prepare(RuntimeState* state) {
         _runtime_profile->add_info_string("Predicates", _olap_scan_node.sql_predicates);
     }
     _runtime_state = state;
+
+    RETURN_IF_ERROR(_capture_tablet_rowsets());
 
     return Status::OK();
 }
@@ -503,6 +508,37 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     for (int i = 0; i < concurrency; i++) {
         CHECK(_submit_scanner(_pending_scanners.pop(), true));
     }
+    return Status::OK();
+}
+
+Status OlapScanNode::_capture_tablet_rowsets() {
+    _tablet_rowsets.resize(_scan_ranges.size());
+    for (int i = 0; i < _scan_ranges.size(); ++i) {
+        const auto& scan_range = _scan_ranges[i];
+
+        // Get version.
+        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
+
+        // Get tablet.
+        TTabletId tablet_id = scan_range->tablet_id;
+        std::string err;
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
+        if (!tablet) {
+            std::stringstream ss;
+            SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
+            ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
+               << ", reason=" << err;
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+
+        // Capture row sets of this version tablet.
+        {
+            std::shared_lock l(tablet->get_header_lock());
+            RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
+        }
+    }
+
     return Status::OK();
 }
 

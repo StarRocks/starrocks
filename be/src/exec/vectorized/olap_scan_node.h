@@ -17,6 +17,9 @@ namespace starrocks {
 class DescriptorTbl;
 class SlotDescriptor;
 class TupleDescriptor;
+
+class Rowset;
+using RowsetSharedPtr = std::shared_ptr<Rowset>;
 } // namespace starrocks
 
 namespace starrocks::vectorized {
@@ -106,6 +109,10 @@ private:
     void _close_pending_scanners();
     int _compute_priority(int32_t num_submitted_tasks);
 
+    // Reference the row sets into _tablet_rowsets in the preparation phase to avoid
+    // the row sets being deleted. Should be called after set_scan_ranges.
+    Status _capture_tablet_rowsets();
+
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     RuntimeState* _runtime_state = nullptr;
@@ -133,6 +140,12 @@ private:
     std::atomic<int32_t> _scanner_submit_count{0};
     std::atomic<int32_t> _running_threads{0};
     std::atomic<int32_t> _closed_scanners{0};
+
+    // The row sets of tablets will become stale and be deleted, if compaction occurs
+    // and these row sets aren't referenced, which will typically happen when the tablets
+    // of the left table are compacted at building the right hash table. Therefore, reference
+    // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
+    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;
