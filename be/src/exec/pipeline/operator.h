@@ -197,14 +197,13 @@ public:
 
     // invoked by ExecNode::init_runtime_filter_for_operator to initialize fields involving runtime filter
     void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
-                             const LocalRFWaitingSet& rf_waiting_set, const RowDescriptor& row_desc,
+                             const LocalRFWaitingSet& rf_waiting_set,
                              const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector,
                              std::vector<SlotId>&& filter_null_value_columns,
                              std::vector<TupleSlotMapping>&& tuple_slot_mappings) {
         _runtime_filter_hub = runtime_filter_hub;
         _tuple_ids = tuple_ids;
         _rf_waiting_set = rf_waiting_set;
-        _row_desc = row_desc;
         _runtime_filter_collector = runtime_filter_collector;
         _filter_null_value_columns = std::move(filter_null_value_columns);
         _tuple_slot_mappings = std::move(tuple_slot_mappings);
@@ -234,8 +233,6 @@ public:
 
     RuntimeState* runtime_state() { return _state; }
 
-    RowDescriptor* row_desc() { return &_row_desc; }
-
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state) {
         auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);
@@ -263,7 +260,6 @@ protected:
     // a set of TPlanNodeIds of HashJoinNode who generates Local RF that take effects on this operator.
     LocalRFWaitingSet _rf_waiting_set;
     std::once_flag _prepare_runtime_in_filters_once;
-    RowDescriptor _row_desc;
     std::vector<ExprContext*> _runtime_in_filters;
     std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector;
     std::vector<SlotId> _filter_null_value_columns;

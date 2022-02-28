@@ -174,7 +174,7 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
 void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::PipelineBuilderContext* context,
                                                 const RcRfProbeCollectorPtr& rc_rf_probe_collector) {
     op->init_runtime_filter(context->fragment_context()->runtime_filter_hub(), this->get_tuple_ids(),
-                            this->local_rf_waiting_set(), this->row_desc(), rc_rf_probe_collector,
+                            this->local_rf_waiting_set(), rc_rf_probe_collector,
                             std::move(_filter_null_value_columns), std::move(_tuple_slot_mappings));
 }
 
@@ -201,7 +201,7 @@ Status ExecNode::prepare(RuntimeState* state) {
             "");
     _mem_tracker.reset(new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), _runtime_profile.get()));
+    RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, _runtime_profile.get()));
 
     // TODO(zc):
     // AddExprCtxsToFree(_conjunct_ctxs);

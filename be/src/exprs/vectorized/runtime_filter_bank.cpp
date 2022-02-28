@@ -163,7 +163,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     return Status::OK();
 }
 
-Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
+Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, RuntimeProfile* p) {
     if (_probe_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_probe_expr_ctx->prepare(state));
     }
@@ -225,12 +225,11 @@ RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeColle
           _wait_timeout_ms(that._wait_timeout_ms),
           _eval_context(that._eval_context) {}
 
-Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc,
-                                            RuntimeProfile* profile) {
+Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, RuntimeProfile* profile) {
     _runtime_profile = profile;
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
-        RETURN_IF_ERROR(rf_desc->prepare(state, row_desc, profile));
+        RETURN_IF_ERROR(rf_desc->prepare(state, profile));
     }
     return Status::OK();
 }

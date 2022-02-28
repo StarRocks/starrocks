@@ -416,7 +416,7 @@ public class OlapScanNode extends ScanNode {
             tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                     visibleVersion, localBeId, schemaHash);
             if (allQueryableReplicas.isEmpty()) {
-                LOG.error("no queryable replica found in tablet {}. visible version {}-{}",
+                LOG.error("no queryable replica found in tablet {}. visible version {}",
                         tabletId, visibleVersion);
                 if (LOG.isDebugEnabled()) {
                     for (Replica replica : tablet.getReplicas()) {

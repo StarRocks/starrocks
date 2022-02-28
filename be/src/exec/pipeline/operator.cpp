@@ -165,7 +165,7 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     _state = state;
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to
-        RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _row_desc, _runtime_profile.get()));
+        RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _runtime_profile.get()));
     }
     return Status::OK();
 }

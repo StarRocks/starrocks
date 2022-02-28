@@ -161,9 +161,9 @@ public:
               _num_operators_generated(num_operators_generated),
               _rf_probe_collector(std::move(rf_probe_collector)) {}
 
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
+    Status prepare(RuntimeState* state, RuntimeProfile* p) {
         if ((_count.fetch_sub(1) & 0xffff'ffffull) == _num_operators_generated) {
-            RETURN_IF_ERROR(_rf_probe_collector.prepare(state, row_desc, p));
+            RETURN_IF_ERROR(_rf_probe_collector.prepare(state, p));
             RETURN_IF_ERROR(_rf_probe_collector.open(state));
         }
         return Status::OK();
