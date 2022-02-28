@@ -13,10 +13,7 @@ import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTableStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Catalog;
@@ -90,11 +87,9 @@ public class Analyzer {
             return ((AlterWorkGroupStmt) node).analyze();
         } else if (node instanceof DropWorkGroupStmt) {
             return ((DropWorkGroupStmt) node).analyze();
-        } else if (node instanceof ShowDbStmt || node instanceof ShowTableStmt) {
+        } else if (node instanceof ShowStmt) {
             new ShowStmtAnalyzer(session).analyze((ShowStmt) node);
             return null;
-        } else if (node instanceof ShowWorkGroupStmt) {
-            return ((ShowWorkGroupStmt) node).analyze();
         } else {
             throw unsupportedException("New Planner only support Query Statement");
         }

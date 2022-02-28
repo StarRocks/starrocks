@@ -54,12 +54,6 @@ public class ShowMigrationsStmt extends ShowStmt {
     }
 
     @Override
-    public SelectStmt toSelectStmt(Analyzer analyzer) throws AnalysisException {
-        // TODO Auto-generated method stub
-        return super.toSelectStmt(analyzer);
-    }
-
-    @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
         if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
