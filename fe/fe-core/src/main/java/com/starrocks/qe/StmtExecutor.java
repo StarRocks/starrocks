@@ -269,7 +269,8 @@ public class StmtExecutor {
                 if (optHints != null) {
                     SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
                     for (String key : optHints.keySet()) {
-                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                        VariableMgr
+                                .setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
                     }
                     context.setSessionVariable(sessionVariable);
                 }
@@ -280,8 +281,16 @@ public class StmtExecutor {
             boolean execPlanBuildByNewPlanner = false;
 
             // Entrance to the new planner
-            if (isStatisticsOrAnalyzer(parsedStmt, context)
-                    || supportedByNewPlanner(parsedStmt, context)) {
+            if (parsedStmt instanceof ShowStmt) {
+                SelectStmt selectStmt =
+                        ((ShowStmt) parsedStmt).toSelectStmt(new Analyzer(context.getCatalog(), context));
+                if (selectStmt != null) {
+                    selectStmt.setOrigStmt(parsedStmt.getOrigStmt());
+                    parsedStmt = selectStmt;
+                }
+            }
+
+            if (isStatisticsOrAnalyzer(parsedStmt, context) || supportedByNewPlanner(parsedStmt, context)) {
                 try {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToMaster()) {
@@ -583,7 +592,7 @@ public class StmtExecutor {
         if (parsedStmt instanceof ShowStmt) {
             SelectStmt selectStmt = ((ShowStmt) parsedStmt).toSelectStmt(analyzer);
             if (selectStmt != null) {
-                parsedStmt = selectStmt;
+                Preconditions.checkState(false, "Shouldn't reach here");
             }
         }
 
