@@ -2,6 +2,10 @@
 
 #include "exprs/vectorized/math_functions.h"
 
+#include <runtime/decimalv3.h>
+#include <runtime/primitive_type.h>
+#include <util/decimal_types.h>
+
 #include <cmath>
 
 #include "column/column_helper.h"
@@ -403,6 +407,95 @@ std::string MathFunctions::decimal_to_base(int64_t src_num, int8_t dest_base) {
         ++result_len;
     }
     return std::string(buf + max_digits - result_len, result_len);
+}
+
+int128_t MathFunctions::decimal_truncate(const int128_t& lv, const int32_t& l_scale, const int32_t& rv,
+                                         bool keep_scale) {
+    int32_t dec = rv;
+    if (dec < 0) {
+        dec = 0;
+    }
+    int32_t max_precision = decimal_precision_limit<int128_t>;
+    if (dec > max_precision) {
+        dec = max_precision;
+    }
+    int32_t scale_diff = dec - l_scale;
+    int128_t result;
+    if (scale_diff > 0) {
+        if (keep_scale) {
+            result = lv;
+        } else {
+            DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, true, true>(
+                    lv, get_scale_factor<int128_t>(scale_diff), &result);
+        }
+    } else if (scale_diff < 0) {
+        DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, false, true>(
+                lv, get_scale_factor<int128_t>(-scale_diff), &result);
+        if (keep_scale) {
+            int128_t new_result;
+            DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, true, true>(
+                    result, get_scale_factor<int128_t>(-scale_diff), &new_result);
+            result = new_result;
+        }
+    } else {
+        result = lv;
+    }
+    return result;
+}
+
+ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    const auto& type = context->get_return_type();
+
+    ColumnPtr maybe_nullable_c1 = columns[0];
+    ColumnPtr maybe_nullable_c2 = columns[1];
+    if (maybe_nullable_c1->only_null() || maybe_nullable_c2->only_null()) {
+        return ColumnHelper::create_const_null_column(maybe_nullable_c1->size());
+    }
+
+    // Unpack nullable
+    ColumnPtr maybe_const_c1 = FunctionHelper::get_data_column_of_nullable(maybe_nullable_c1);
+    ColumnPtr maybe_const_c2 = FunctionHelper::get_data_column_of_nullable(maybe_nullable_c2);
+
+    const bool c1_is_const = maybe_const_c1->is_constant();
+    const bool c2_is_const = maybe_const_c2->is_constant();
+
+    // Unpack const
+    ColumnPtr c1 = FunctionHelper::get_data_column_of_const(maybe_const_c1);
+    ColumnPtr c2 = FunctionHelper::get_data_column_of_const(maybe_const_c2);
+    ColumnPtr c3 = RunTimeColumnType<TYPE_DECIMAL128>::create(type.precision, type.scale);
+    c3->resize_uninitialized(c1->size());
+
+    const int32_t original_scale = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c1)->scale();
+
+    int128_t* raw_c1 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c1)->get_data().data();
+    int32_t* raw_c2 = ColumnHelper::cast_to_raw<TYPE_INT>(c2)->get_data().data();
+    int128_t* raw_c3 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c3)->get_data().data();
+
+    const int size = c1->size();
+    // If c2 is not const, than we need to keep the originl scale
+    if (c1_is_const && c2_is_const) {
+        raw_c3[0] = MathFunctions::decimal_truncate(raw_c1[0], original_scale, raw_c2[0], false);
+        c3 = ConstColumn::create(c3, c3->size());
+    } else if (c1_is_const) {
+        for (auto i = 0; i < size; i++) {
+            raw_c3[i] = MathFunctions::decimal_truncate(raw_c1[0], original_scale, raw_c2[i], true);
+        }
+    } else if (c2_is_const) {
+        for (auto i = 0; i < size; i++) {
+            raw_c3[i] = MathFunctions::decimal_truncate(raw_c1[i], original_scale, raw_c2[0], false);
+        }
+    } else {
+        for (auto i = 0; i < size; i++) {
+            raw_c3[i] = MathFunctions::decimal_truncate(raw_c1[i], original_scale, raw_c2[i], true);
+        }
+    }
+
+    if (maybe_nullable_c1->has_null() || maybe_nullable_c2->has_null()) {
+        NullColumnPtr null_flags = FunctionHelper::union_nullable_column(maybe_nullable_c1, maybe_nullable_c2);
+        return NullableColumn::create(std::move(c3), std::move(null_flags));
+    } else {
+        return c3;
+    }
 }
 
 ColumnPtr MathFunctions::conv_int(FunctionContext* context, const starrocks::vectorized::Columns& columns) {

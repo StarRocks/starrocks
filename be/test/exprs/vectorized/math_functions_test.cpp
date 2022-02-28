@@ -21,50 +21,135 @@ TEST_F(VecMathFunctionsTest, truncateTest) {
     {
         Columns columns;
 
-        auto tc1 = DoubleColumn::create();
+        auto tc1 = DecimalV3Column<int128_t>::create(10, 2);
         auto tc2 = Int32Column::create();
 
-        double dous[] = {2341.2341111, 4999.90134, 2144.2855, 934.12439};
-        int ints[] = {2, 3, 1, 4};
+        int128_t value;
+        std::string str = "18450.76";
+        DecimalV3Cast::from_string<int128_t>(&value, 10, 2, str.c_str(), str.length());
 
-        double res[] = {2341.23, 4999.901, 2144.2, 934.1243};
-
-        for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
-            tc1->append(dous[i]);
-            tc2->append(ints[i]);
-        }
+        tc1->append(value);
+        tc2->append(2);
 
         columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(ConstColumn::create(tc2, 1));
 
-        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = MathFunctions::truncate(ctx.get(), columns);
+        FunctionContext::TypeDesc return_type;
+        return_type.precision = decimal_precision_limit<int128_t>;
+        return_type.scale = 2;
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+                std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
+        auto tr = ColumnHelper::cast_to<TYPE_DECIMAL128>(MathFunctions::truncate_decimal128(ctx.get(), columns));
 
-        auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
-
-        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
-            ASSERT_EQ(res[i], v->get_data()[i]);
-        }
+        ASSERT_EQ(decimal_precision_limit<int128_t>, tr->precision());
+        ASSERT_EQ(2, tr->scale());
+        ASSERT_EQ("18450.76",
+                  DecimalV3Cast::to_string<int128_t>(tr->get_data()[0], decimal_precision_limit<int128_t>, 2));
     }
 }
 
-TEST_F(VecMathFunctionsTest, truncateNanTest) {
+TEST_F(VecMathFunctionsTest, truncateNullTest) {
     {
         Columns columns;
 
-        auto tc1 = DoubleColumn::create();
+        auto tc1 = DecimalV3Column<int128_t>::create(1, 1);
+        NullColumnPtr tc1_null = NullColumn::create();
         auto tc2 = Int32Column::create();
 
         tc1->append(0);
-        tc2->append(1591994755);
+        tc1_null->append_nulls(1);
+        tc2->append(3);
+
+        columns.emplace_back(NullableColumn::create(tc1, tc1_null));
+        columns.emplace_back(ConstColumn::create(tc2, 1));
+
+        FunctionContext::TypeDesc return_type;
+        return_type.precision = decimal_precision_limit<int128_t>;
+        return_type.scale = 3;
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+                std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
+        auto tr = ColumnHelper::cast_to<TYPE_DECIMAL128>(MathFunctions::truncate_decimal128(ctx.get(), columns));
+
+        ASSERT_EQ(decimal_precision_limit<int128_t>, tr->precision());
+        ASSERT_EQ(3, tr->scale());
+        ASSERT_EQ("0", DecimalV3Cast::to_string<int128_t>(tr->get_data()[0], decimal_precision_limit<int128_t>,
+                                                          decimal_precision_limit<int128_t>));
+    }
+}
+
+TEST_F(VecMathFunctionsTest, truncateScaleExpandTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DecimalV3Column<int128_t>::create(1, 1);
+        auto tc2 = Int32Column::create();
+
+        int128_t value;
+        std::string str = "0.1";
+        DecimalV3Cast::from_string<int128_t>(&value, 5, 1, str.c_str(), str.length());
+
+        tc1->append(value);
+        tc2->append(100);
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(ConstColumn::create(tc2, 1));
+
+        FunctionContext::TypeDesc return_type;
+        return_type.precision = decimal_precision_limit<int128_t>;
+        return_type.scale = decimal_precision_limit<int128_t>;
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+                std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
+        auto tr = ColumnHelper::cast_to<TYPE_DECIMAL128>(MathFunctions::truncate_decimal128(ctx.get(), columns));
+
+        ASSERT_EQ(decimal_precision_limit<int128_t>, tr->precision());
+        ASSERT_EQ(decimal_precision_limit<int128_t>, tr->scale());
+        ASSERT_EQ("0.10000000000000000000000000000000000000",
+                  DecimalV3Cast::to_string<int128_t>(tr->get_data()[0], decimal_precision_limit<int128_t>,
+                                                     decimal_precision_limit<int128_t>));
+    }
+}
+
+TEST_F(VecMathFunctionsTest, truncateByColTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DecimalV3Column<int128_t>::create(15, 5);
+        auto tc2 = Int32Column::create();
+
+        int128_t value;
+        std::string str = "123.45678";
+        DecimalV3Cast::from_string<int128_t>(&value, 15, 5, str.c_str(), str.length());
+
+        for (int i = 0; i <= 6; i++) {
+            tc1->append(value);
+            tc2->append(i);
+        }
 
         columns.emplace_back(tc1);
         columns.emplace_back(tc2);
 
-        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = MathFunctions::truncate(ctx.get(), columns);
+        FunctionContext::TypeDesc return_type;
+        return_type.precision = decimal_precision_limit<int128_t>;
+        return_type.scale = 5;
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+                std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
+        auto tr = ColumnHelper::cast_to<TYPE_DECIMAL128>(MathFunctions::truncate_decimal128(ctx.get(), columns));
 
-        ASSERT_EQ(true, result->is_null(0));
+        ASSERT_EQ(decimal_precision_limit<int128_t>, tr->precision());
+        ASSERT_EQ(5, tr->scale());
+        ASSERT_EQ("123", DecimalV3Cast::to_string<int128_t>(tr->get_data()[0], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.40000",
+                  DecimalV3Cast::to_string<int128_t>(tr->get_data()[1], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.45000",
+                  DecimalV3Cast::to_string<int128_t>(tr->get_data()[2], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.45600",
+                  DecimalV3Cast::to_string<int128_t>(tr->get_data()[3], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.45670",
+                  DecimalV3Cast::to_string<int128_t>(tr->get_data()[4], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.45678",
+                  DecimalV3Cast::to_string<int128_t>(tr->get_data()[5], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.45678",
+                  DecimalV3Cast::to_string<int128_t>(tr->get_data()[6], decimal_precision_limit<int128_t>, 5));
     }
 }
 
