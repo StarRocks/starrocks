@@ -141,7 +141,7 @@ SeekableFileInputStream::SeekableFileInputStream(InputStream* stream, uint64_t o
                                                  MemoryPool& _pool, uint64_t _blockSize)
         : pool(_pool), input(stream), start(offset), length(byteCount), blockSize(computeBlock(_blockSize, length)) {
     position = 0;
-    buffer.reset(new DataBuffer<char>(pool));
+    buffer = nullptr;
     pushBack = 0;
     hasSeek = false;
 }
@@ -151,6 +151,9 @@ SeekableFileInputStream::~SeekableFileInputStream() {
 }
 
 bool SeekableFileInputStream::Next(const void** data, int* size) {
+    if (buffer == nullptr) {
+        buffer.reset(new DataBuffer<char>(pool, blockSize));
+    }
     uint64_t bytesRead;
     if (pushBack != 0) {
         *data = buffer->data() + (buffer->size() - pushBack);
@@ -161,7 +164,6 @@ bool SeekableFileInputStream::Next(const void** data, int* size) {
             hasSeek = false;
             bytesRead = std::min(bytesRead, input->getNaturalReadSizeAfterSeek());
         }
-        buffer->resize(bytesRead);
         if (bytesRead > 0) {
             input->read(buffer->data(), bytesRead, start + position);
             *data = static_cast<void*>(buffer->data());

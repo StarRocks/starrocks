@@ -179,9 +179,9 @@ private:
     /**
      * Seek to the start of a row group in the current stripe
      * @param rowGroupEntryId the row group id to seek to
-     * @param onLazyLoadFields seek to row group for lazy load fields
      */
-    void seekToRowGroup(uint32_t rowGroupEntryId, bool onLazyLoadFields = false);
+    void seekToRowGroup(uint32_t rowGroupEntryId);
+    void getRowGroupPosition(uint32_t rowGroupEntryId, PositionProviderMap* map);
 
 public:
     /**

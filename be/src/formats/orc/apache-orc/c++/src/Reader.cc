@@ -398,24 +398,23 @@ void RowReaderImpl::loadStripeIndex() {
     }
 }
 
-void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId, bool onLazyLoadFields) {
-    PositionProviderMap map;
+void RowReaderImpl::getRowGroupPosition(uint32_t rowGroupEntryId, PositionProviderMap* map) {
     for (const auto& rowIndexe : rowIndexes) {
         uint64_t colId = rowIndexe.first;
         const proto::RowIndexEntry& entry = rowIndexe.second.entry(static_cast<int32_t>(rowGroupEntryId));
-        map.positions.emplace_back();
-        auto& position = map.positions.back();
+        map->positions.emplace_back();
+        auto& position = map->positions.back();
         for (int pos = 0; pos != entry.positions_size(); ++pos) {
             position.push_back(entry.positions(pos));
         }
-        map.providers.insert(std::make_pair(colId, PositionProvider(position)));
+        map->providers.insert(std::make_pair(colId, PositionProvider(position)));
     }
+}
 
-    if (onLazyLoadFields) {
-        reader->lazyLoadSeekToRowGroup(&map);
-    } else {
-        reader->seekToRowGroup(&map);
-    }
+void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
+    PositionProviderMap map;
+    getRowGroupPosition(rowGroupEntryId, &map);
+    reader->seekToRowGroup(&map);
 }
 
 const FileContents& RowReaderImpl::getFileContents() const {
@@ -1082,7 +1081,9 @@ void RowReaderImpl::lazyLoadSyncTo(uint64_t toRow) {
     uint64_t fromRowGroupNumber = lazyLoadLastUsedRowInStripe / ROW_INDEX_STRIDE;
 
     if ((fromRowGroupNumber != toRowGroupNumber) && (SEEK_TO_ROW_GROUP_COST + costIndirectSkip) < costDirectSkip) {
-        seekToRowGroup(static_cast<uint32_t>(toRowGroupNumber), true);
+        PositionProviderMap map;
+        getRowGroupPosition(static_cast<uint32_t>(toRowGroupNumber), &map);
+        reader->lazyLoadSeekToRowGroup(&map);
         reader->lazyLoadSkip(costIndirectSkip);
     } else {
         reader->lazyLoadSkip(costDirectSkip);
