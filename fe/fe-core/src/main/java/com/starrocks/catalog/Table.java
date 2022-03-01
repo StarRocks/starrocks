@@ -60,7 +60,8 @@ public class Table extends MetaObject implements Writable {
         HIVE,
         ICEBERG,
         HUDI,
-        ODBC
+        ODBC,
+        UNRECOGNIZED,
     }
 
     protected long id;
@@ -179,30 +180,39 @@ public class Table extends MetaObject implements Writable {
     }
 
     public static Table read(DataInput in) throws IOException {
-        Table table = null;
-        TableType type = TableType.valueOf(Text.readString(in));
-        if (type == TableType.OLAP) {
-            table = new OlapTable();
-        } else if (type == TableType.MYSQL) {
-            table = new MysqlTable();
-        } else if (type == TableType.VIEW) {
-            table = new View();
-        } else if (type == TableType.BROKER) {
-            table = new BrokerTable();
-        } else if (type == TableType.ELASTICSEARCH) {
-            table = new EsTable();
-        } else if (type == TableType.HIVE) {
-            table = new HiveTable();
-        } else if (type == TableType.HUDI) {
-            table = new HudiTable();
-        } else if (type == TableType.ODBC) {
-            table = new OdbcTable();
-        } else if (type == TableType.OLAP_EXTERNAL) {
-            table = new ExternalOlapTable();
-        } else if (type == TableType.ICEBERG) {
-            table = new IcebergTable();
-        } else {
-            throw new IOException("Unknown table type: " + type.name());
+        Table table;
+        TableType type;
+        try {
+            type = TableType.valueOf(Text.readString(in));
+
+            if (type == TableType.OLAP) {
+                table = new OlapTable();
+            } else if (type == TableType.MYSQL) {
+                table = new MysqlTable();
+            } else if (type == TableType.VIEW) {
+                table = new View();
+            } else if (type == TableType.BROKER) {
+                table = new BrokerTable();
+            } else if (type == TableType.ELASTICSEARCH) {
+                table = new EsTable();
+            } else if (type == TableType.HIVE) {
+                table = new HiveTable();
+            } else if (type == TableType.HUDI) {
+                table = new HudiTable();
+            } else if (type == TableType.ODBC) {
+                table = new OdbcTable();
+            } else if (type == TableType.OLAP_EXTERNAL) {
+                table = new ExternalOlapTable();
+            } else if (type == TableType.ICEBERG) {
+                table = new IcebergTable();
+            } else {
+                throw new IOException("Unknown table type: " + type.name());
+            }
+        } catch (IllegalArgumentException e) {
+            // For compatibility reason, a new table type created by a new version of fe may not be recognized by an
+            // old version of fe, which makes downward compatibility impossible.
+            LOG.error("Encounter an unrecognized table type!", e);
+            table = new UnrecognizedTable();
         }
 
         table.setTypeRead(true);
