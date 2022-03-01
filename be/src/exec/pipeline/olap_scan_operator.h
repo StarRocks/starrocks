@@ -22,10 +22,10 @@ class RuntimeFilterProbeCollector;
 
 namespace pipeline {
 
-class ScanOperator final : public SourceOperator {
+class OlapScanOperator final : public SourceOperator {
 public:
-    ScanOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
-                 const std::vector<ExprContext*>& conjunct_ctxs, int64_t limit)
+    OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
+                     const std::vector<ExprContext*>& conjunct_ctxs, int64_t limit)
             : SourceOperator(factory, id, "olap_scan", plan_node_id),
               _olap_scan_node(olap_scan_node),
               _conjunct_ctxs(conjunct_ctxs),
@@ -33,7 +33,7 @@ public:
               _is_io_task_running(MAX_IO_TASKS_PER_OP),
               _chunk_sources(MAX_IO_TASKS_PER_OP) {}
 
-    ~ScanOperator() override = default;
+    ~OlapScanOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
 
@@ -92,22 +92,22 @@ private:
     workgroup::WorkGroupPtr _workgroup = nullptr;
 };
 
-class ScanOperatorFactory final : public SourceOperatorFactory {
+class OlapScanOperatorFactory final : public SourceOperatorFactory {
 public:
-    ScanOperatorFactory(int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
-                        std::vector<ExprContext*>&& conjunct_ctxs, int64_t limit)
+    OlapScanOperatorFactory(int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
+                            std::vector<ExprContext*>&& conjunct_ctxs, int64_t limit)
             : SourceOperatorFactory(id, "olap_scan", plan_node_id),
               _olap_scan_node(olap_scan_node),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _limit(limit) {}
 
-    ~ScanOperatorFactory() override = default;
+    ~OlapScanOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<ScanOperator>(this, _id, _plan_node_id, _olap_scan_node, _conjunct_ctxs, _limit);
+        return std::make_shared<OlapScanOperator>(this, _id, _plan_node_id, _olap_scan_node, _conjunct_ctxs, _limit);
     }
 
-    // ScanOperator needs to attach MorselQueue.
+    // OlapScanOperator needs to attach MorselQueue.
     bool with_morsels() const override { return true; }
 
     Status prepare(RuntimeState* state) override;

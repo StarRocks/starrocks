@@ -11,10 +11,10 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/morsel.h"
+#include "exec/pipeline/olap_scan_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/result_sink_operator.h"
-#include "exec/pipeline/scan_operator.h"
 #include "exec/scan_node.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
@@ -227,7 +227,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                   << " fragment_instance_id=" << print_id(params.fragment_instance_id);
         const bool is_root = pipeline->is_root();
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
-        // at present, only ScanOperator need a MorselQueue attached.
+        // at present, only OlapScanOperator need a MorselQueue attached.
         setup_profile_hierarchy(runtime_state, pipeline);
         if (pipeline->source_operator_factory()->with_morsels()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
@@ -247,12 +247,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx,
                                                                     driver_id++, is_root);
                 driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
-                auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
+                auto* olap_scan_operator = down_cast<OlapScanOperator*>(driver->source_operator());
                 if (wg != nullptr) {
                     // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
-                    scan_operator->set_workgroup(wg);
+                    olap_scan_operator->set_workgroup(wg);
                 } else {
-                    scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                    olap_scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
                 }
                 setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));

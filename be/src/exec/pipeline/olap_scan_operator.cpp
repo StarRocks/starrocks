@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/pipeline/scan_operator.h"
+#include "exec/pipeline/olap_scan_operator.h"
 
 #include "column/chunk.h"
 #include "exec/pipeline/olap_chunk_source.h"
@@ -18,7 +18,7 @@ namespace starrocks::pipeline {
 
 using starrocks::workgroup::WorkGroupManager;
 
-Status ScanOperator::prepare(RuntimeState* state) {
+Status OlapScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _state = state;
@@ -43,7 +43,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ScanOperator::close(RuntimeState* state) {
+Status OlapScanOperator::close(RuntimeState* state) {
     DCHECK(_num_running_io_tasks == 0);
 
     if (_workgroup == nullptr) {
@@ -59,7 +59,7 @@ Status ScanOperator::close(RuntimeState* state) {
     return Operator::close(state);
 }
 
-bool ScanOperator::has_output() const {
+bool OlapScanOperator::has_output() const {
     if (_is_finished) {
         return false;
     }
@@ -92,14 +92,14 @@ bool ScanOperator::has_output() const {
     return false;
 }
 
-bool ScanOperator::pending_finish() const {
+bool OlapScanOperator::pending_finish() const {
     DCHECK(_is_finished);
     // If there isn't next morsel, and any io task is active,
     // we just wait for the io thread to end.
     return _num_running_io_tasks > 0;
 }
 
-bool ScanOperator::is_finished() const {
+bool OlapScanOperator::is_finished() const {
     if (_is_finished) {
         return true;
     }
@@ -120,11 +120,11 @@ bool ScanOperator::is_finished() const {
     return true;
 }
 
-void ScanOperator::set_finishing(RuntimeState* state) {
+void OlapScanOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 }
 
-StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
+StatusOr<vectorized::ChunkPtr> OlapScanOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     if (_workgroup != nullptr) {
         _workgroup->incr_period_ask_chunk_num(1);
@@ -142,7 +142,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     return nullptr;
 }
 
-Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
+Status OlapScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP) {
         return Status::OK();
     }
@@ -166,7 +166,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
+Status OlapScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
@@ -211,21 +211,21 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         _num_running_io_tasks--;
         _is_io_task_running[chunk_source_index] = false;
         // TODO(hcf) set a proper retry times
-        LOG(WARNING) << "ScanOperator failed to offer io task due to thread pool overload, retryCnt="
+        LOG(WARNING) << "OlapScanOperator failed to offer io task due to thread pool overload, retryCnt="
                      << _io_task_retry_cnt;
         if (++_io_task_retry_cnt > 100) {
-            return Status::RuntimeError("ScanOperator failed to offer io task due to thread pool overload");
+            return Status::RuntimeError("OlapScanOperator failed to offer io task due to thread pool overload");
         }
     }
 
     return Status::OK();
 }
 
-void ScanOperator::set_workgroup(starrocks::workgroup::WorkGroupPtr wg) {
+void OlapScanOperator::set_workgroup(starrocks::workgroup::WorkGroupPtr wg) {
     _workgroup = wg;
 }
 
-Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
+Status OlapScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
     DCHECK(_morsel_queue != nullptr);
     if (_chunk_sources[chunk_source_index] != nullptr) {
         _chunk_sources[chunk_source_index]->close(state);
@@ -259,7 +259,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     return Status::OK();
 }
 
-Status ScanOperator::_capture_tablet_rowsets() {
+Status OlapScanOperator::_capture_tablet_rowsets() {
     const auto& morsels = _morsel_queue->morsels();
     _tablet_rowsets.resize(morsels.size());
     for (int i = 0; i < morsels.size(); ++i) {
@@ -292,7 +292,7 @@ Status ScanOperator::_capture_tablet_rowsets() {
     return Status::OK();
 }
 
-Status ScanOperatorFactory::prepare(RuntimeState* state) {
+Status OlapScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
@@ -303,7 +303,7 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void ScanOperatorFactory::close(RuntimeState* state) {
+void OlapScanOperatorFactory::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
     OperatorFactory::close(state);
 }
