@@ -49,10 +49,8 @@ public:
 class PositionProviderMap {
 public:
     std::unordered_map<uint64_t, PositionProvider> providers;
-    std::unordered_map<uint64_t, size_t> columnIdToPositionIndex;
     std::vector<std::list<uint64_t>> positions;
     PositionProvider& at(uint64_t columnId);
-    void copyFrom(const PositionProviderMap& map);
 };
 
 /**
@@ -102,6 +100,7 @@ private:
     std::unique_ptr<DataBuffer<char>> buffer;
     uint64_t position;
     uint64_t pushBack;
+    bool hasSeek;
 
 public:
     SeekableFileInputStream(InputStream* input, uint64_t offset, uint64_t byteCount, MemoryPool& pool,
