@@ -46,10 +46,7 @@
 
 ### 如何合理地设置并行度
 
-* 通过session变量   parallel\_fragment\_exec\_instance\_num  可以设置查询的并行度（单个 BE 内部的并行度），如果我们觉得查询性能不够好但是cpu资源充足可以通过 set parallel\_fragment\_exec\_instance\_num = 16; 来调整这里并行度可以 **设置成CPU核数量的一半** 。
-* 通过set **global** parallel\_fragment\_exec\_instance\_num = 16; 可以让session变量全局有效。
-* parallel\_fragment\_exec\_instance\_num 受到每个BE的tablet数量的影响，比如 一张表的bucket数量是 32, 有3个分区，分布在4个BE上，那么每个BE的tablet数量是 32 * 3  / 4 = 24, 那么单机的并行度无法超过24，即使你set parallel\_fragment\_exec\_instance\_num = 32 ，但是实际执行的时候并行度还是会变成24。
-* 对于需要进行高QPS查询的场景，因为机器整体资源是充分利用的，所以建议设置parallel\_fragment\_exec\_instance\_num为1，这样可以减少不同查询之间的资源竞争，反而整体可以提升QPS。
+您可以通过设置 Pipeline 执行引擎变量（推荐），或者设置一个 Fragment 实例的并行数量，来设置查询并行度，从而提高CPU资源利用率和查询效率。设置方式，请参见[查询并行度相关参数](/administration/Query_management.md/#查询相关的session变量)。
 
 ### 如何查看Profile分析查询瓶颈
 
