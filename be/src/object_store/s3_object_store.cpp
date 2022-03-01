@@ -90,9 +90,9 @@ private:
         return &executor;
     }
 
-    Status _head_object(const std::string& bucket, const std::string& object, size_t* size);
+    Status head_object(const std::string& bucket, const std::string& object, size_t* size);
 
-    bool _is_not_found(const Aws::S3::S3Errors& err) {
+    bool is_not_found(const Aws::S3::S3Errors& err) {
         return (err == Aws::S3::S3Errors::NO_SUCH_BUCKET || err == Aws::S3::S3Errors::NO_SUCH_KEY ||
                 err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND);
     }
@@ -197,7 +197,7 @@ Status S3ObjectStore::upload_object(const std::string& uri, const std::string& l
     if (!parsed_uri.parse()) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", uri));
     }
-    return upload_object(std::string(parsed_uri.bucket()), std::string(parsed_uri.object()), local_path);
+    return upload_object(std::string(parsed_uri.bucket()), std::string(parsed_uri.key()), local_path);
 }
 
 StatusOr<std::unique_ptr<io::OutputStream>> S3ObjectStore::put_object(const std::string& bucket,
@@ -212,7 +212,7 @@ StatusOr<std::unique_ptr<io::OutputStream>> S3ObjectStore::put_object(const std:
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", uri));
     }
     return std::make_unique<io::S3OutputStream>(
-            _client, std::string(parsed_uri.bucket()), std::string(parsed_uri.object()),
+            _client, std::string(parsed_uri.bucket()), std::string(parsed_uri.key()),
             config::experimental_s3_max_single_part_size, config::experimental_s3_min_upload_part_size);
 }
 
@@ -227,7 +227,7 @@ StatusOr<std::unique_ptr<io::RandomAccessFile>> S3ObjectStore::get_object(const 
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", uri));
     }
     return std::make_unique<io::S3RandomAccessFile>(_client, std::string(parsed_uri.bucket()),
-                                                    std::string(parsed_uri.object()));
+                                                    std::string(parsed_uri.key()));
 }
 
 Status S3ObjectStore::download_object(const std::string& bucket, const std::string& object,
@@ -284,17 +284,17 @@ Status S3ObjectStore::download_object(const std::string& uri, const std::string&
     if (!parsed_uri.parse()) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", uri));
     }
-    return download_object(std::string(parsed_uri.bucket()), std::string(parsed_uri.object()), local_path);
+    return download_object(std::string(parsed_uri.bucket()), std::string(parsed_uri.key()), local_path);
 }
 
-Status S3ObjectStore::_head_object(const std::string& bucket, const std::string& object, size_t* size) {
+Status S3ObjectStore::head_object(const std::string& bucket, const std::string& object, size_t* size) {
     Aws::S3::Model::HeadObjectRequest request;
     request.SetBucket(to_aws_string(bucket));
     request.SetKey(to_aws_string(object));
 
     Aws::S3::Model::HeadObjectOutcome outcome = _client->HeadObject(request);
     if (!outcome.IsSuccess()) {
-        if (_is_not_found(outcome.GetError().GetErrorType())) {
+        if (is_not_found(outcome.GetError().GetErrorType())) {
             return Status::NotFound(strings::Substitute("Object $0 not found.", object));
         } else {
             std::string error =
@@ -311,7 +311,7 @@ Status S3ObjectStore::_head_object(const std::string& bucket, const std::string&
 }
 
 Status S3ObjectStore::exist_object(const std::string& bucket, const std::string& object) {
-    return _head_object(bucket, object, nullptr /* size */);
+    return head_object(bucket, object, nullptr /* size */);
 }
 
 Status S3ObjectStore::exist_object(const std::string& uri) {
@@ -319,12 +319,12 @@ Status S3ObjectStore::exist_object(const std::string& uri) {
     if (!parsed_uri.parse()) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", uri));
     }
-    return _head_object(std::string(parsed_uri.bucket()), std::string(parsed_uri.object()), nullptr /* size */);
+    return head_object(std::string(parsed_uri.bucket()), std::string(parsed_uri.key()), nullptr /* size */);
 }
 
 StatusOr<int64_t> S3ObjectStore::get_object_size(const std::string& bucket, const std::string& object) {
     size_t size;
-    RETURN_IF_ERROR(_head_object(bucket, object, &size));
+    RETURN_IF_ERROR(head_object(bucket, object, &size));
     return static_cast<int64_t>(size);
 }
 
@@ -333,7 +333,7 @@ StatusOr<int64_t> S3ObjectStore::get_object_size(const std::string& uri) {
     if (!parsed_uri.parse()) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", uri));
     }
-    return get_object_size(std::string(parsed_uri.bucket()), std::string(parsed_uri.object()));
+    return get_object_size(std::string(parsed_uri.bucket()), std::string(parsed_uri.key()));
 }
 
 Status S3ObjectStore::delete_object(const std::string& bucket, const std::string& object) {
@@ -358,7 +358,7 @@ Status S3ObjectStore::delete_object(const std::string& uri) {
     if (!parsed_uri.parse()) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", uri));
     }
-    return delete_object(std::string(parsed_uri.bucket()), std::string(parsed_uri.object()));
+    return delete_object(std::string(parsed_uri.bucket()), std::string(parsed_uri.key()));
 }
 
 Status S3ObjectStore::list_objects(const std::string& bucket, const std::string& object_prefix,
@@ -384,7 +384,7 @@ Status S3ObjectStore::list_objects(const std::string& bucket, const std::string&
 
         Aws::S3::Model::ListObjectsOutcome outcome = _client->ListObjects(request);
         if (!outcome.IsSuccess()) {
-            if (_is_not_found(outcome.GetError().GetErrorType())) {
+            if (is_not_found(outcome.GetError().GetErrorType())) {
                 return Status::OK();
             }
             std::string error = strings::Substitute("List Objects prefix $0 failed. $1.", object_prefix,
