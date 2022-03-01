@@ -134,6 +134,10 @@ public:
     static const int32_t s_pseudo_plan_node_id_for_result_sink;
     static const int32_t s_pseudo_plan_node_id_upper_bound;
 
+    std::shared_ptr<RuntimeProfile>& runtime_profile() { return _runtime_profile; }
+    std::shared_ptr<RuntimeProfile>& common_metrics() { return _common_metrics; }
+    std::shared_ptr<RuntimeProfile>& unique_metrics() { return _unique_metrics; }
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
