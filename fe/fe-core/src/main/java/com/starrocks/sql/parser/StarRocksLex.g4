@@ -173,7 +173,9 @@ SINGLE_QUOTED_TEXT
     : '\'' ( ~'\'' | '\'\'' )* '\''
     ;
 
-
+DOUBLE_QUOTED_TEXT
+    : ('"' (('\\' .)? ( ~'"' | '""' ))*? '"')+
+    ;
 
 INTEGER_VALUE
     : DIGIT+
@@ -199,10 +201,6 @@ DIGIT_IDENTIFIER
 
 QUOTED_IDENTIFIER
     : '"' ( ~'"' | '""' )* '"'
-    ;
-
-DOUBLE_QUOTED_TEXT
-    : ('"' (('\\' .)? ( ~'"' | '""' ))*? '"')+
     ;
 
 BACKQUOTED_IDENTIFIER
