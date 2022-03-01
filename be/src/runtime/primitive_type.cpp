@@ -19,10 +19,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include "runtime/primitive_type.h"
+
 #include <sstream>
 
 #include "gen_cpp/Types_types.h"
-#include "runtime/primitive_type.h"
+#include "primitive_type_full.h"
 #include "runtime/primitive_type_infra.h"
 
 namespace starrocks {
@@ -60,40 +62,7 @@ std::string type_to_odbc_string(PrimitiveType t) {
     }
 }
 
-// for test only
-TTypeDesc gen_type_desc(const TPrimitiveType::type val) {
-    std::vector<TTypeNode> types_list;
-    TTypeNode type_node;
-    TTypeDesc type_desc;
-    TScalarType scalar_type;
-    scalar_type.__set_type(val);
-    scalar_type.__set_precision(2);
-    scalar_type.__set_scale(2);
-    scalar_type.__set_len(10);
 
-    type_node.__set_scalar_type(scalar_type);
-    types_list.push_back(type_node);
-    type_desc.__set_types(types_list);
-    return type_desc;
-}
-
-// for test only
-TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name) {
-    std::vector<TTypeNode> types_list;
-    TTypeNode type_node;
-    TTypeDesc type_desc;
-    TScalarType scalar_type;
-    scalar_type.__set_type(val);
-    std::vector<TStructField> fields;
-    TStructField field;
-    field.__set_name(name);
-    fields.push_back(field);
-    type_node.__set_struct_fields(fields);
-    type_node.__set_scalar_type(scalar_type);
-    types_list.push_back(type_node);
-    type_desc.__set_types(types_list);
-    return type_desc;
-}
 
 class ScalarFieldTypeToPrimitiveTypeMapping {
 public:

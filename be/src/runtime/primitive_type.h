@@ -23,13 +23,6 @@
 
 #include <string>
 
-#include "common/logging.h"
-#include "runtime/datetime_value.h"
-#include "runtime/decimal_value.h"
-#include "runtime/decimalv2_value.h"
-#include "runtime/large_int_value.h"
-#include "runtime/string_value.h"
-#include "storage/olap_common.h"
 #include "util/guard.h"
 
 namespace starrocks {
@@ -173,9 +166,5 @@ UNION_VALUE_GUARD(PrimitiveType, FixedLengthPTGuard, pt_is_fixedlength, pt_is_ar
 
 std::string type_to_string(PrimitiveType t);
 std::string type_to_odbc_string(PrimitiveType t);
-TTypeDesc gen_type_desc(const TPrimitiveType::type val);
-TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name);
-
-PrimitiveType scalar_field_type_to_primitive_type(FieldType field_type);
 
 } // namespace starrocks

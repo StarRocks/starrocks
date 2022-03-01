@@ -23,6 +23,7 @@
 
 #include <sstream>
 
+#include "runtime/large_int_value.h"
 #include "runtime/mem_pool.h"
 #include "runtime/string_value.hpp"
 #include "storage/utils.h"

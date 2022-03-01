@@ -10,6 +10,7 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
+#include "runtime/large_int_value.h"
 #include "runtime/primitive_type.h"
 #include "util/json.h"
 

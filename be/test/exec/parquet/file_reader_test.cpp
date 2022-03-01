@@ -15,6 +15,7 @@
 #include "exprs/slot_ref.h"
 #include "exprs/vectorized/binary_predicate.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/primitive_type_thrift.h"
 
 namespace starrocks::parquet {
 

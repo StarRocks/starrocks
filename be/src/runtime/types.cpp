@@ -24,8 +24,9 @@
 #include <ostream>
 
 #include "gutil/strings/substitute.h"
-#include "storage/types.h"
+#include "runtime/primitive_type_full.h"
 #include "runtime/primitive_type_thrift.h"
+#include "storage/types.h"
 
 namespace starrocks {
 

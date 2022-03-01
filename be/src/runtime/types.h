@@ -28,7 +28,11 @@
 #include "common/config.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
+#include "runtime/datetime_value.h"
+#include "runtime/decimal_value.h"
+#include "runtime/decimalv2_value.h"
 #include "runtime/primitive_type.h"
+#include "runtime/string_value.h"
 #include "storage/hll.h"
 #include "thrift/protocol/TDebugProtocol.h"
 #include "util/json.h"

@@ -25,6 +25,7 @@
 
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/decimalv2_value.h"
 #include "runtime/raw_value.h"
 #include "service/brpc.h"
 #include "util/thrift_util.h"
