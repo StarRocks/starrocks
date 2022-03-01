@@ -82,4 +82,11 @@ public class AnalyzeFunctionTest {
         analyzeFail("select trim(h1) from test_object");
         analyzeFail("select trim(p1) from test_object");
     }
+
+    @Test
+    public void testToBitMap() {
+        analyzeFail("select to_bitmap(b1) from test_object", "No matching function with signature: to_bitmap(bitmap)");
+        analyzeFail("select to_bitmap(h1) from test_object", "No matching function with signature: to_bitmap(hll)");
+        analyzeSuccess("select to_bitmap(v1) from test_object");
+    }
 }
