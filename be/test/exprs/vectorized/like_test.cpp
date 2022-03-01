@@ -6,6 +6,7 @@
 #include "butil/time.h"
 #include "exprs/vectorized/like_predicate.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
+#include "runtime/primitive_type_thrift.h"
 
 namespace starrocks {
 namespace vectorized {

@@ -14,6 +14,7 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_thrift.h"
 #include "runtime/vectorized/time_types.h"
 #include "util/json.h"
 

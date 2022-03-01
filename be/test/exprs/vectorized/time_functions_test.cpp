@@ -15,6 +15,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
+#include "runtime/primitive_type_thrift.h"
 #include "runtime/vectorized/time_types.h"
 #include "testutil/function_utils.h"
 #include "udf/udf.h"

@@ -16,6 +16,7 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_thrift.h"
 
 namespace starrocks {
 namespace vectorized {

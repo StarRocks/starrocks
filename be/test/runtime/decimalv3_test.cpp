@@ -9,6 +9,8 @@
 #include <vector>
 
 #include "util/logging.h"
+#include "runtime/primitive_type_full.h"
+
 namespace starrocks {
 
 class TestDecimalV3 : public ::testing::Test {};

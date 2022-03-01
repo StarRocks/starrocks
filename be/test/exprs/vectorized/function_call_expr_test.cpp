@@ -11,6 +11,7 @@
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
+#include "runtime/primitive_type_thrift.h"
 
 namespace starrocks {
 namespace vectorized {

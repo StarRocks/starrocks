@@ -15,6 +15,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_thrift.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/predicate_parser.h"

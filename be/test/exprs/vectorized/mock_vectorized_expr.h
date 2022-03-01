@@ -16,6 +16,7 @@
 #include "column/type_traits.h"
 #include "common/object_pool.h"
 #include "glog/logging.h"
+#include "runtime/primitive_type_thrift.h"
 
 namespace starrocks {
 namespace vectorized {

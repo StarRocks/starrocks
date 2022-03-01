@@ -6,6 +6,7 @@
 #include "runtime/decimal_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
+#include "runtime/large_int_value.h"
 #include "storage/olap_common.h"
 
 namespace starrocks {

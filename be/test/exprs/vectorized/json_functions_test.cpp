@@ -6,7 +6,6 @@
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 #include <velocypack/vpack.h>
-
 #include <string>
 
 #include "butil/time.h"
@@ -14,6 +13,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "gtest/gtest-param-test.h"
 #include "gutil/strings/strip.h"
+#include "runtime/primitive_type_thrift.h"
 #include "util/json.h"
 
 namespace starrocks {

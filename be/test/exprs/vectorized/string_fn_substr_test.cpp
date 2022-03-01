@@ -7,6 +7,7 @@
 #include "butil/time.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
+#include "runtime/primitive_type_thrift.h"
 
 namespace starrocks {
 namespace vectorized {

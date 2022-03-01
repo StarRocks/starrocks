@@ -15,6 +15,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_thrift.h"
 
 namespace starrocks {
 namespace vectorized {

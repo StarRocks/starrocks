@@ -12,6 +12,7 @@
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_thrift.h"
 #include "runtime/vectorized/time_types.h"
 #include "testutil/parallel_test.h"
 

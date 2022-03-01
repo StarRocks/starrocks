@@ -3,6 +3,7 @@
 
 #include "exprs/vectorized/string_functions.h"
 #include "gen_cpp/Exprs_types.h"
+#include "runtime/primitive_type_thrift.h"
 
 namespace starrocks {
 namespace vectorized {
