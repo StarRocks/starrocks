@@ -34,11 +34,12 @@ static inline Aws::String to_aws_string(const std::string& s) {
 
 S3ObjectStore::S3ObjectStore(const Aws::Client::ClientConfiguration& config) : _config(config) {}
 
-Status S3ObjectStore::init(const S3Credential* cred, bool use_transfer_manager) {
-    if (cred != nullptr) {
+Status S3ObjectStore::init(bool use_transfer_manager) {
+    const string access_key_id = config::object_storage_access_key_id;
+    const string secret_access_key = config::object_storage_secret_access_key;
+    if (!access_key_id.empty() && !secret_access_key.empty()) {
         std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credentials =
-                std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(cred->access_key_id.c_str(),
-                                                                          cred->secret_access_key.c_str());
+                std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
         _client = std::make_shared<Aws::S3::S3Client>(credentials, _config);
     } else {
         // if not cred provided, we can use default cred in aws profile.

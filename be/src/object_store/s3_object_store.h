@@ -23,7 +23,7 @@ class S3ObjectStore final : public ObjectStore {
 public:
     S3ObjectStore(const Aws::Client::ClientConfiguration& config);
     ~S3ObjectStore() = default;
-    Status init(const S3Credential* cred = nullptr, bool use_transfer_manager = false);
+    Status init(bool use_transfer_manager = false);
 
     Status create_bucket(const std::string& bucket) override;
 
