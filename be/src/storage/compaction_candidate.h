@@ -43,7 +43,7 @@ struct CompactionCandidate {
 
     bool is_valid() { return tablet && level >= 0 && level <= 1; }
 
-    std::string to_string() {
+    std::string to_string() const {
         std::stringstream ss;
         if (tablet) {
             ss << "tablet_id:" << tablet->tablet_id();
@@ -62,7 +62,9 @@ struct CompactionCandidateComparator {
         int32_t left_score = static_cast<int32_t>(left.tablet->compaction_score(left.level) * 100);
         int32_t right_score = static_cast<int32_t>(right.tablet->compaction_score(right.level) * 100);
         return left_score > right_score ||
-               (left_score == right_score && left.tablet->tablet_id() < right.tablet->tablet_id());
+               (left_score == right_score && left.tablet->tablet_id() < right.tablet->tablet_id()) ||
+               (left_score == right_score && left.tablet->tablet_id() == right.tablet->tablet_id() &&
+                left.level < right.level);
     }
 };
 

@@ -26,7 +26,7 @@ TEST(CompactionManagerTest, test_candidates) {
         tablet->set_tablet_meta(tablet_meta);
         tablet->set_data_dir(&data_dir);
         std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
-        compaction_context->tablet = tablet.get();
+        compaction_context->tablet = tablet;
         compaction_context->current_level = 0;
         // for i == 9 and i == 10, compaction scores are equal
         if (i == 10) {
@@ -44,21 +44,30 @@ TEST(CompactionManagerTest, test_candidates) {
     std::shuffle(tablets.begin(), tablets.end(), g);
 
     for (auto& tablet : tablets) {
-        CompactionManager::instance()->update_candidate(tablet.get());
+        CompactionManager::instance()->update_tablet(tablet, false, false);
     }
 
-    ASSERT_EQ(11, CompactionManager::instance()->candidates_size());
-    Tablet* candidate_1 = CompactionManager::instance()->pick_candidate();
-    ASSERT_EQ(9, candidate_1->tablet_id());
-    Tablet* candidate_2 = CompactionManager::instance()->pick_candidate();
-    ASSERT_EQ(10, candidate_2->tablet_id());
-    ASSERT_EQ(candidate_1->compaction_score(), candidate_2->compaction_score());
-    double last_score = candidate_2->compaction_score();
-    for (int i = 8; i >= 0; i--) {
-        Tablet* candidate = CompactionManager::instance()->pick_candidate();
-        ASSERT_EQ(i, candidate->tablet_id());
-        ASSERT_LT(candidate->compaction_score(), last_score);
-        last_score = candidate->compaction_score();
+    {
+        ASSERT_EQ(22, CompactionManager::instance()->candidates_size());
+        CompactionCandidate candidate_1 = CompactionManager::instance()->pick_candidate();
+        ASSERT_EQ(9, candidate_1.tablet->tablet_id());
+        CompactionCandidate candidate_2 = CompactionManager::instance()->pick_candidate();
+        ASSERT_EQ(10, candidate_2.tablet->tablet_id());
+        ASSERT_EQ(candidate_1.tablet->compaction_score(0), candidate_2.tablet->compaction_score(0));
+        double last_score = candidate_2.tablet->compaction_score(0);
+        while (true) {
+            CompactionCandidate candidate = CompactionManager::instance()->pick_candidate();
+            if (!candidate.is_valid()) {
+                break;
+            }
+            ASSERT_LE(candidate.tablet->compaction_score(candidate.level), last_score);
+            last_score = candidate.tablet->compaction_score(candidate.level);
+        }
+    }
+
+    for (int i = 0; i < tablets.size(); i++) {
+        std::unique_ptr<CompactionContext> compaction_context;
+        tablets[i]->set_compaction_context(compaction_context);
     }
 }
 
@@ -84,14 +93,14 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
         tablet->set_tablet_meta(tablet_meta);
         tablet->set_data_dir(&data_dir);
         std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
-        compaction_context->tablet = tablet.get();
+        compaction_context->tablet = tablet;
         compaction_context->current_level = 0;
         compaction_context->compaction_scores[0] = 1 + i;
         compaction_context->compaction_scores[1] = 1 + 0.5 * i;
         tablet->set_compaction_context(compaction_context);
         tablets.push_back(tablet);
         std::shared_ptr<MockCompactionTask> task = std::make_shared<MockCompactionTask>();
-        task->set_tablet(tablet.get());
+        task->set_tablet(tablet);
         task->set_task_id(i);
         task->set_compaction_level(0);
         tasks.emplace_back(std::move(task));
@@ -148,6 +157,10 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
     }
     ASSERT_EQ(config::max_base_compaction_task, CompactionManager::instance()->running_tasks_num());
     ASSERT_EQ(1, CompactionManager::instance()->running_tasks_num_for_level(1));
+    for (int i = 0; i < tablets.size(); i++) {
+        std::unique_ptr<CompactionContext> compaction_context;
+        tablets[i]->set_compaction_context(compaction_context);
+    }
 }
 
 TEST(CompactionManagerTest, test_next_compaction_task_id) {

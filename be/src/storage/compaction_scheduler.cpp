@@ -38,8 +38,7 @@ void CompactionScheduler::schedule() {
                       << ", task_id:" << compaction_task->task_id()
                       << ", tablet_id:" << compaction_task->tablet()->tablet_id()
                       << ", compaction level:" << (int32_t)compaction_task->compaction_level()
-                      << ", compaction score:" << compaction_task->compaction_score()
-                      << " for round:" << _round;
+                      << ", compaction score:" << compaction_task->compaction_score() << " for round:" << _round;
             bool ret = _compaction_pool.try_offer(task);
             if (!ret) {
                 LOG(WARNING) << "submit compaction task to compaction pool failed."
