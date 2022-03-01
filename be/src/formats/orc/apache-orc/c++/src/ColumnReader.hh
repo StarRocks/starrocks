@@ -156,6 +156,7 @@ public:
      * @param positions a list of PositionProviders storing the positions
      */
     virtual void seekToRowGroup(PositionProviderMap* providers);
+    virtual void lazyLoadSeekToRowGroup(PositionProviderMap* providers);
 
     uint64_t getColumnId() { return columnId; }
 };

@@ -91,6 +91,8 @@ struct ColumnVectorBatch {
     // f_size: filter size
     // true_size: number of ones in filter data.
     virtual void filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size);
+    virtual void filterOnFields(uint8_t* f_data, uint32_t f_size, uint32_t true_size, const std::vector<int>& fields,
+                                bool onLazyLoad);
 
 private:
     ColumnVectorBatch(const ColumnVectorBatch&) = delete;
@@ -188,6 +190,8 @@ struct StructVectorBatch : public ColumnVectorBatch {
 
     std::vector<ColumnVectorBatch*> fields;
     void filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) override;
+    void filterOnFields(uint8_t* f_data, uint32_t f_size, uint32_t true_size, const std::vector<int>& fields,
+                        bool onLazyLoad) override;
 };
 
 struct ListVectorBatch : public ColumnVectorBatch {

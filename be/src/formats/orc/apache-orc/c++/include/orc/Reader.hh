@@ -522,10 +522,10 @@ public:
 class RowReader {
 public:
     struct ReadPosition {
-        uint64_t strip_index = 0;
-        uint64_t num_values = 0;
         bool start_new_stripe = false;
-        bool seek_to_row_group = false;
+        uint64_t stripe_index = 0;
+        uint64_t num_values = 0;
+        uint64_t row_in_stripe = 0;
     };
 
     virtual ~RowReader();
@@ -565,7 +565,7 @@ public:
     bool next(ColumnVectorBatch& data);
     virtual bool next(ColumnVectorBatch& data, ReadPosition* pos) = 0;
 
-    virtual void lazyLoadSkip(uint64_t numValues) = 0;
+    virtual void lazyLoadSeekTo(uint64_t rowInStripe) = 0;
     virtual void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) = 0;
 
     /**

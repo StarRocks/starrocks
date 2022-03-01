@@ -61,17 +61,6 @@ PositionProvider& PositionProviderMap::at(uint64_t columnId) {
     return providers.at(columnId);
 }
 
-void PositionProviderMap::copyFrom(const PositionProviderMap& map) {
-    positions = map.positions;
-    columnIdToPositionIndex = map.columnIdToPositionIndex;
-    providers.clear();
-    for (auto& it : columnIdToPositionIndex) {
-        uint64_t colId = it.first;
-        size_t index = it.second;
-        providers.insert(std::make_pair(colId, PositionProvider(positions[index])));
-    }
-}
-
 SeekableInputStream::~SeekableInputStream() {
     // PASS
 }
@@ -143,16 +132,18 @@ std::string SeekableArrayInputStream::getName() const {
     return result.str();
 }
 
+static const uint64_t DEFAULT_FILE_BLOCK_SIZE = 256 * 1024;
 static uint64_t computeBlock(uint64_t request, uint64_t length) {
-    return std::min(length, request == 0 ? 256 * 1024 : request);
+    return std::min(length, request == 0 ? DEFAULT_FILE_BLOCK_SIZE : request);
 }
 
 SeekableFileInputStream::SeekableFileInputStream(InputStream* stream, uint64_t offset, uint64_t byteCount,
                                                  MemoryPool& _pool, uint64_t _blockSize)
         : pool(_pool), input(stream), start(offset), length(byteCount), blockSize(computeBlock(_blockSize, length)) {
     position = 0;
-    buffer.reset(new DataBuffer<char>(pool));
+    buffer = nullptr;
     pushBack = 0;
+    hasSeek = false;
 }
 
 SeekableFileInputStream::~SeekableFileInputStream() {
@@ -160,13 +151,19 @@ SeekableFileInputStream::~SeekableFileInputStream() {
 }
 
 bool SeekableFileInputStream::Next(const void** data, int* size) {
+    if (buffer == nullptr) {
+        buffer.reset(new DataBuffer<char>(pool, blockSize));
+    }
     uint64_t bytesRead;
     if (pushBack != 0) {
         *data = buffer->data() + (buffer->size() - pushBack);
         bytesRead = pushBack;
     } else {
         bytesRead = std::min(length - position, blockSize);
-        buffer->resize(bytesRead);
+        if (hasSeek) {
+            hasSeek = false;
+            bytesRead = std::min(bytesRead, input->getNaturalReadSizeAfterSeek());
+        }
         if (bytesRead > 0) {
             input->read(buffer->data(), bytesRead, start + position);
             *data = static_cast<void*>(buffer->data());
@@ -214,6 +211,7 @@ void SeekableFileInputStream::seek(PositionProvider& location) {
         throw std::logic_error("seek too far");
     }
     pushBack = 0;
+    hasSeek = true;
 }
 
 std::string SeekableFileInputStream::getName() const {
