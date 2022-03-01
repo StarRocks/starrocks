@@ -24,8 +24,6 @@
 #include <string>
 
 #include "common/logging.h"
-#include "gen_cpp/Opcodes_types.h"
-#include "gen_cpp/Types_types.h"
 #include "runtime/datetime_value.h"
 #include "runtime/decimal_value.h"
 #include "runtime/decimalv2_value.h"
@@ -33,6 +31,7 @@
 #include "runtime/string_value.h"
 #include "storage/olap_common.h"
 #include "util/guard.h"
+
 namespace starrocks {
 
 enum PrimitiveType {
@@ -172,10 +171,6 @@ UNION_VALUE_GUARD(PrimitiveType, NumericPTGuard, pt_is_numeric, pt_is_number_str
 UNION_VALUE_GUARD(PrimitiveType, FixedLengthPTGuard, pt_is_fixedlength, pt_is_arithmetic_struct, pt_is_decimalv2_struct,
                   pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct, pt_is_time_struct)
 
-TExprOpcode::type to_in_opcode(PrimitiveType t);
-PrimitiveType thrift_to_type(TPrimitiveType::type ttype);
-TPrimitiveType::type to_thrift(PrimitiveType ptype);
-TColumnType to_tcolumn_type_thrift(TPrimitiveType::type ttype);
 std::string type_to_string(PrimitiveType t);
 std::string type_to_odbc_string(PrimitiveType t);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val);

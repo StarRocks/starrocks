@@ -28,6 +28,7 @@
 #include "gen_cpp/DataSinks_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "runtime/primitive_type_thrift.h"
 
 namespace starrocks {
 

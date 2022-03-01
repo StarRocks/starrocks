@@ -44,6 +44,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/primitive_type_thrift.h"
 #include "service/backend_options.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"

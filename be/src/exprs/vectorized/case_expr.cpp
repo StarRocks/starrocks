@@ -15,6 +15,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "runtime/primitive_type_thrift.h"
 #include "simd/mulselector.h"
 #include "column/chunk.h"
 #include "column/column.h"

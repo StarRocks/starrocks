@@ -2,8 +2,7 @@
 
 #include "exprs/vectorized/in_const_predicate.hpp"
 
-#include <new>
-
+#include "gen_cpp/Opcodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type_infra.h"
 #include "column/binary_column.h"
@@ -20,6 +19,7 @@
 
 namespace starrocks {
 namespace vectorized {
+
 
 ExprContext* VectorizedInConstPredicateBuilder::_create() {
     Expr* probe_expr = _expr;
@@ -41,7 +41,7 @@ ExprContext* VectorizedInConstPredicateBuilder::_create() {
     node.in_predicate.__set_is_not_in(_is_not_in);
     node.__set_opcode(TExprOpcode::FILTER_IN);
     node.__isset.vector_opcode = true;
-    node.__set_vector_opcode(to_in_opcode(probe_type));
+    node.__set_vector_opcode(TExprOpcode::FILTER_IN);
 
     // create template of in-predicate.
     // and fill actual IN values later.

@@ -23,6 +23,7 @@
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_thrift.h"
 #include "runtime/runtime_state.h"
 #include "storage/hll.h"
 #include "util/date_func.h"
