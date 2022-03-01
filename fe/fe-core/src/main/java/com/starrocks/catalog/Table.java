@@ -60,7 +60,8 @@ public class Table extends MetaObject implements Writable {
         HIVE,
         ICEBERG,
         HUDI,
-        ODBC
+        ODBC,
+        JDBC,
     }
 
     protected long id;
@@ -201,6 +202,8 @@ public class Table extends MetaObject implements Writable {
             table = new ExternalOlapTable();
         } else if (type == TableType.ICEBERG) {
             table = new IcebergTable();
+        } else if (type == TableType.JDBC) {
+            table = new JDBCTable();
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }
