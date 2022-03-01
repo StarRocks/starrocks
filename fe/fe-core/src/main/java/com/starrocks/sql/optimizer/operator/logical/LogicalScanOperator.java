@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -14,6 +15,7 @@ import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -91,6 +93,14 @@ public abstract class LogicalScanOperator extends LogicalOperator {
                 "table='" + table.getId() + '\'' +
                 ", outputColumns='" + new ArrayList<>(colRefToColumnMetaMap.keySet()) + '\'' +
                 '}';
+    }
+
+    public ScanOperatorPredicates getScanOperatorPredicates() throws AnalysisException {
+        throw new AnalysisException("Base class calls are not supported");
+    }
+
+    public void setScanOperatorPredicates(ScanOperatorPredicates predicates) throws AnalysisException {
+        throw new AnalysisException("Base class calls are not supported");
     }
 
     @Override

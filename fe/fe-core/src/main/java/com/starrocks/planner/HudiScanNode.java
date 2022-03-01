@@ -3,65 +3,34 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.UserException;
 import com.starrocks.external.RemoteScanRangeLocations;
-import com.starrocks.external.hive.HdfsFileBlockDesc;
-import com.starrocks.external.hive.HdfsFileDesc;
-import com.starrocks.external.hive.HivePartition;
+import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
 
 public class HudiScanNode extends ScanNode {
-    private static final Logger LOG = LogManager.getLogger(HudiScanNode.class);
-
     private RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
 
     private HudiTable hudiTable;
-
-    // partitionColumnName -> (LiteralExpr -> partition ids)
-    // no null partitions in this map, used by ListPartitionPruner
-    private final Map<String, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
-    // Store partitions with null partition values separately, used by ListPartitionPruner
-    // partitionColumnName -> null partitionIds
-    private final Map<String, Set<Long>> columnToNullPartitions = Maps.newHashMap();
-    // id -> partition key
-    private Map<Long, PartitionKey> idToPartitionKey = Maps.newHashMap();
-    private Collection<Long> selectedPartitionIds = Lists.newArrayList();
-
-    // partitionConjuncts contains partition filters.
-    private final List<Expr> partitionConjuncts = Lists.newArrayList();
-    // After partition pruner prune, conjuncts that are not evaled will be send to backend.
-    private final List<Expr> noEvalPartitionConjuncts = Lists.newArrayList();
-    // nonPartitionConjuncts contains non-partition filters, and will be sent to backend.
-    private final List<Expr> nonPartitionConjuncts = Lists.newArrayList();
-
-    // List of conjuncts for min/max values that are used to skip data when scanning Parquet files.
-    private final List<Expr> minMaxConjuncts = new ArrayList<>();
-    private TupleDescriptor minMaxTuple;
+    private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
     public HudiScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
-        hudiTable = (HudiTable) desc.getTable();
+        this.hudiTable = (HudiTable) desc.getTable();
+    }
+
+    public HDFSScanNodePredicates getPredictsExpr() {
+        return scanNodePredicates;
     }
 
     @Override
@@ -72,59 +41,8 @@ public class HudiScanNode extends ScanNode {
         return helper.toString();
     }
 
-    public void setSelectedPartitionIds(Collection<Long> selectedPartitionIds) {
-        this.selectedPartitionIds = selectedPartitionIds;
-    }
-
-    public void setIdToPartitionKey(Map<Long, PartitionKey> idToPartitionKey) {
-        this.idToPartitionKey = idToPartitionKey;
-    }
-
-    public List<Expr> getNonPartitionConjuncts() {
-        return nonPartitionConjuncts;
-    }
-
-    public List<Expr> getNoEvalPartitionConjuncts() {
-        return noEvalPartitionConjuncts;
-    }
-
-    public List<Expr> getMinMaxConjuncts() {
-        return minMaxConjuncts;
-    }
-
-    public void setMinMaxTuple(TupleDescriptor tuple) {
-        minMaxTuple = tuple;
-    }
-
-    public void getScanRangeLocations(DescriptorTable descTbl) throws UserException {
-        if (selectedPartitionIds.isEmpty()) {
-            return;
-        }
-
-        long start = System.currentTimeMillis();
-        List<PartitionKey> partitionKeys = Lists.newArrayList();
-        List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = Lists.newArrayList();
-        for (long partitionId : selectedPartitionIds) {
-            PartitionKey partitionKey = idToPartitionKey.get(partitionId);
-            partitionKeys.add(partitionKey);
-            partitionInfos.add(new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey));
-        }
-        List<HivePartition> hudiPartitions = hudiTable.getPartitions(partitionKeys);
-
-        for (int i = 0; i < hudiPartitions.size(); i++) {
-            descTbl.addReferencedPartitions(hudiTable, partitionInfos.get(i));
-            for (HdfsFileDesc fileDesc : hudiPartitions.get(i).getFiles()) {
-                for (HdfsFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
-                    scanRangeLocations.addScanRangeLocations(partitionInfos.get(i).getId(), fileDesc, blockDesc,
-                            hudiPartitions.get(i).getFormat());
-                    LOG.debug("Add scan range success. partition: {}, file: {}, block: {}-{}",
-                            hudiPartitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
-                            blockDesc.getLength());
-                }
-            }
-        }
-        LOG.debug("Get {} scan range locations cost: {} ms",
-                scanRangeLocations.getScanRangeLocationsSize(), (System.currentTimeMillis() - start));
+    public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
+        scanRangeLocations.setupScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
     }
 
     @Override
@@ -141,17 +59,18 @@ public class HudiScanNode extends ScanNode {
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
-        if (!partitionConjuncts.isEmpty()) {
+        if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    getExplainString(partitionConjuncts)).append("\n");
+                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
         }
-        if (!nonPartitionConjuncts.isEmpty()) {
+        if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(nonPartitionConjuncts)).append("\n");
+                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
 
         output.append(prefix).append(
-                String.format("partitions=%s/%s", selectedPartitionIds.size(), idToPartitionKey.size()));
+                String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
+                        scanNodePredicates.getIdToPartitionKey().size()));
         output.append("\n");
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
@@ -175,17 +94,18 @@ public class HudiScanNode extends ScanNode {
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
-        if (!partitionConjuncts.isEmpty()) {
+        if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    getExplainString(partitionConjuncts)).append("\n");
+                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
         }
-        if (!nonPartitionConjuncts.isEmpty()) {
+        if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(nonPartitionConjuncts)).append("\n");
+                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
 
         output.append(prefix).append(
-                String.format("partitions=%s/%s", selectedPartitionIds.size(), idToPartitionKey.size()));
+                String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
+                        scanNodePredicates.getIdToPartitionKey().size()));
         output.append("\n");
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
@@ -209,6 +129,7 @@ public class HudiScanNode extends ScanNode {
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
 
+        List<Expr> noEvalPartitionConjuncts = scanNodePredicates.getNoEvalPartitionConjuncts();
         String partitionSqlPredicate = getExplainString(noEvalPartitionConjuncts);
         for (Expr expr : noEvalPartitionConjuncts) {
             msg.hdfs_scan_node.addToPartition_conjuncts(expr.treeToThrift());
@@ -219,18 +140,21 @@ public class HudiScanNode extends ScanNode {
         if (msg.isSetConjuncts()) {
             msg.conjuncts.clear();
         }
+
+        List<Expr> nonPartitionConjuncts = scanNodePredicates.getNonPartitionConjuncts();
         for (Expr expr : nonPartitionConjuncts) {
             msg.addToConjuncts(expr.treeToThrift());
         }
         String sqlPredicate = getExplainString(nonPartitionConjuncts);
         msg.hdfs_scan_node.setSql_predicates(sqlPredicate);
 
+        List<Expr> minMaxConjuncts = scanNodePredicates.getMinMaxConjuncts();
         if (!minMaxConjuncts.isEmpty()) {
             String minMaxSqlPredicate = getExplainString(minMaxConjuncts);
             for (Expr expr : minMaxConjuncts) {
                 msg.hdfs_scan_node.addToMin_max_conjuncts(expr.treeToThrift());
             }
-            msg.hdfs_scan_node.setMin_max_tuple_id(minMaxTuple.getId().asInt());
+            msg.hdfs_scan_node.setMin_max_tuple_id(scanNodePredicates.getMinMaxTuple().getId().asInt());
             msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
         }
 

@@ -5,9 +5,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -67,6 +69,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public Table getTable() {
         return table;
+    }
+
+    public ScanOperatorPredicates getScanOperatorPredicates() throws AnalysisException {
+        throw new AnalysisException("Base class calls are not supported");
+    }
+
+    public void setScanOperatorPredicates(ScanOperatorPredicates predicates) throws AnalysisException {
+        throw new AnalysisException("Base class calls are not supported");
     }
 
     @Override
