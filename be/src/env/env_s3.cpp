@@ -77,15 +77,20 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
     std::string object = path.substr(namenode.size(), path.size() - namenode.size());
     Aws::Client::ClientConfiguration config;
     config.scheme = Aws::Http::Scheme::HTTP;
-    if (!config::aws_s3_endpoint.empty()) {
-        config.endpointOverride = config::aws_s3_endpoint;
+    if (is_oss_path(namenode.c_str())) {
+        if (config::object_storage_access_key_id.empty() || config::object_storage_secret_access_key.empty() ||
+            config::object_storage_endpoint.empty()) {
+            return Status::RuntimeError(
+                    "Configuration object_storage_access_key_id, object_storage_secret_access_key "
+                    "and object_storage_endpoint is required for OSS.");
+        }
+        config.endpointOverride = get_endpoint_from_oss_bucket(config::object_storage_endpoint, &bucket);
+    } else if (!config::object_storage_endpoint.empty()) {
+        config.endpointOverride = config::object_storage_endpoint;
     }
-    config.maxConnections = config::aws_s3_max_connection;
-    S3Credential cred;
-    cred.access_key_id = config::aws_access_key_id;
-    cred.secret_access_key = config::aws_secret_access_key;
+    config.maxConnections = config::object_storage_max_connection;
     S3ObjectStore store(config);
-    RETURN_IF_ERROR(store.init(&cred, false));
+    RETURN_IF_ERROR(store.init(false));
     ASSIGN_OR_RETURN(auto input_file, store.get_object(bucket, object));
     return std::make_unique<RandomAccessFileWrapper>(std::move(input_file), path);
 }
