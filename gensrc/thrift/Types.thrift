@@ -356,6 +356,7 @@ enum TTableType {
     HDFS_TABLE,
     ICEBERG_TABLE,
     HUDI_TABLE,
+    JDBC_TABLE,
     VIEW = 20
 }
 
