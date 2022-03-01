@@ -200,7 +200,7 @@ public:
     std::unique_ptr<ColumnVectorBatch> createRowBatch(uint64_t size) const override;
 
     bool next(ColumnVectorBatch& data, ReadPosition* pos) override;
-    void lazyLoadSyncTo(uint64_t rowInStripe) override;
+    void lazyLoadSeekTo(uint64_t rowInStripe) override;
     void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) override;
 
     CompressionKind getCompression() const;

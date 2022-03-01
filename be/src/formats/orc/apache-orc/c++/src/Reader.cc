@@ -1063,7 +1063,7 @@ void RowReaderImpl::lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) {
     lazyLoadLastUsedRowInStripe += numValues;
 }
 
-void RowReaderImpl::lazyLoadSyncTo(uint64_t toRow) {
+void RowReaderImpl::lazyLoadSeekTo(uint64_t toRow) {
     uint64_t costDirectSkip = (toRow - lazyLoadLastUsedRowInStripe);
     if (costDirectSkip == 0) {
         return;

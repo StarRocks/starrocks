@@ -565,7 +565,7 @@ public:
     bool next(ColumnVectorBatch& data);
     virtual bool next(ColumnVectorBatch& data, ReadPosition* pos) = 0;
 
-    virtual void lazyLoadSyncTo(uint64_t rowInStripe) = 0;
+    virtual void lazyLoadSeekTo(uint64_t rowInStripe) = 0;
     virtual void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) = 0;
 
     /**

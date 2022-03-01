@@ -80,7 +80,7 @@ TEST(TestLazyLoad, TestNormal) {
                     ASSERT_EQ(c1->data[i], 0);
                     index += 1;
                 }
-                rr->lazyLoadSyncTo(pos.row_in_stripe);
+                rr->lazyLoadSeekTo(pos.row_in_stripe);
             } else {
                 rr->lazyLoadNext(*batch, batch->numElements);
                 for (size_t i = 0; i < batchSize; i++) {
@@ -175,7 +175,7 @@ TEST(TestLazyLoad, TestWithSearchArgument) {
         // we don't need to skip first stripe.
         EXPECT_EQ(rr->next(*batch, &pos), true);
         EXPECT_EQ(batch->numElements, readSize);
-        rr->lazyLoadSyncTo(pos.row_in_stripe);
+        rr->lazyLoadSeekTo(pos.row_in_stripe);
         rr->lazyLoadNext(*batch, readSize);
 
         size_t index = batchSize + readSize;

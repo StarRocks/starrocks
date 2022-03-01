@@ -21,9 +21,10 @@ public:
 
     uint64_t getLength() const override { return _length; }
 
+    // refers to paper `Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores`
     uint64_t getNaturalReadSize() const override { return 1 * 1024 * 1024; }
 
-    // It's 1/4 of NaturalReadSize. It's for read size after doing seek.
+    // It's for read size after doing seek.
     // When doing read after seek, we make assumption that we are doing random read because of seeking row group.
     // And if we still use NaturalReadSize we probably read many row groups
     // after the row group we want to read, and that will amplify read IO bytes.
@@ -32,6 +33,10 @@ public:
     // We also have chance that we may not read enough at this shot, then we fallback to NaturalReadSize to read.
     // The cost is, there is a extra IO, and we read 1/4 of NaturalReadSize more data.
     // And the potential gain is, we save 3/4 of NaturalReadSize IO bytes.
+
+    // Normally 256K can cover a row group of a column(like integer or double, but maybe not string)
+    // And this value can not be too small because if we can not read a row group in a single shot,
+    // we will fallback to read in normal size, and we pay cost of a extra read.
 
     uint64_t getNaturalReadSizeAfterSeek() const override { return 256 * 1024; }
 
@@ -369,11 +374,13 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             VLOG_FILE << "[ORC] lazy load field = " << it->col_name();
             _lazy_load_ctx.lazy_load_slots.emplace_back(it);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
+            // reserve room for later set in `OrcScannerAdapter`
             _lazy_load_ctx.lazy_load_orc_positions.emplace_back(0);
         } else {
             VLOG_FILE << "[ORC] active load field = " << it->col_name();
             _lazy_load_ctx.active_load_slots.emplace_back(it);
             _lazy_load_ctx.active_load_indices.emplace_back(src_slot_index);
+            // reserve room for later set in `OrcScannerAdapter`
             _lazy_load_ctx.active_load_orc_positions.emplace_back(0);
         }
         _src_slot_descriptors.emplace_back(it);
@@ -486,7 +493,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_read_ns);
-            _orc_adapter->lazy_sync_to(position.row_in_stripe);
+            _orc_adapter->lazy_seek_to(position.row_in_stripe);
             _orc_adapter->lazy_read_next(read_num_values);
         }
         {
