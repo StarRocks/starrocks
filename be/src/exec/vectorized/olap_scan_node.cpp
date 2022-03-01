@@ -62,8 +62,6 @@ Status OlapScanNode::prepare(RuntimeState* state) {
     }
     _runtime_state = state;
 
-    RETURN_IF_ERROR(_capture_tablet_rowsets());
-
     return Status::OK();
 }
 
@@ -325,6 +323,8 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
         _scan_ranges.emplace_back(std::make_unique<TInternalScanRange>(scan_range.scan_range.internal_scan_range));
         COUNTER_UPDATE(_tablet_counter, 1);
     }
+
+    RETURN_IF_ERROR(_capture_tablet_rowsets());
 
     return Status::OK();
 }
