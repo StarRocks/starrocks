@@ -103,8 +103,6 @@ public class JDBCTable extends Table {
         String jsonStr = Text.readString(in);
         JsonObject obj = JsonParser.parseString(jsonStr).getAsJsonObject();
         jdbcTable = obj.getAsJsonPrimitive(TABLE).getAsString();
-        obj.remove(TABLE);
         resourceName = obj.getAsJsonPrimitive(RESOURCE).getAsString();
-        obj.remove(RESOURCE);
     }
 }
