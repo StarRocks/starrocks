@@ -99,9 +99,12 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        auto timestamp = src.get_timestamp();
-        int year, mon, day, hour, minute, second, usec;
-        timestamp.to_timestamp(&year, &mon, &day, &hour, &minute, &second, &usec);
+
+        auto src_value = src.get_int64();
+        int64_t part1 = (src_value / 1000000L);
+        uint24_t year = static_cast<uint24_t>((part1 / 10000L) % 10000);
+        uint24_t mon = static_cast<uint24_t>((part1 / 100) % 100);
+        uint24_t day = static_cast<uint24_t>(part1 % 100);
         dst.set_uint24((year << 9) + (mon << 5) + day);
         return Status::OK();
     }
@@ -196,7 +199,11 @@ public:
             return Status::OK();
         }
         auto src_value = src.get_timestamp();
-        dst.set_date(src_value);
+        int year, mon, day, hour, minute, second, usec;
+        src_value.to_timestamp(&year, &mon, &day, &hour, &minute, &second, &usec);
+        DateValue dst_value;
+        dst_value.from_date(year, mon, day);
+        dst.set_date(dst_value);
         return Status::OK();
     }
 };
@@ -219,7 +226,14 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        dst.set_date(src.get_timestamp());
+        auto src_value = src.get_int64();
+        int64_t part1 = (src_value / 1000000L);
+        int32_t year = static_cast<int32_t>((part1 / 10000L) % 10000);
+        int32_t mon = static_cast<int32_t>((part1 / 100) % 100);
+        int32_t day = static_cast<int32_t>(part1 % 100);
+        DateValue date_v2;
+        date_v2.from_date(year, mon, day);
+        dst.set_date(date_v2);
         return Status::OK();
     }
 };
@@ -239,7 +253,9 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        dst.set_date(src.get_date());
+        DateValue date_v2;
+        date_v2.from_mysql_date(src.get_uint24());
+        dst.set_date(date_v2);
         return Status::OK();
     }
 };
@@ -259,9 +275,10 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        DateValue date_v2 = src.get_date();
-        int year, month, day;
-        date_v2.to_date(&year, &month, &day);
+        uint32_t src_value = src.get_uint24();
+        int day = implicit_cast<int>(src_value & 31u);
+        int month = implicit_cast<int>((src_value >> 5u) & 15u);
+        int year = implicit_cast<int>(src_value >> 9u);
         dst.set_int64(static_cast<int64>(year * 10000L + month * 100L + day) * 1000000);
         return Status::OK();
     }
@@ -330,9 +347,10 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        DateValue date_v2 = src.get_date();
-        int year, month, day;
-        date_v2.to_date(&year, &month, &day);
+        uint32_t src_value = src.get_uint24();
+        int day = implicit_cast<int>(src_value & 31u);
+        int month = implicit_cast<int>((src_value >> 5u) & 15u);
+        int year = implicit_cast<int>(src_value >> 9u);
         dst.set_timestamp(TimestampValue::create(year, month, day, 0, 0, 0));
         return Status::OK();
     }
@@ -384,7 +402,9 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        dst.set_timestamp(src.get_timestamp());
+        TimestampValue timestamp{0};
+        timestamp.from_timestamp_literal(src.get_int64());
+        dst.set_timestamp(timestamp);
         return Status::OK();
     }
 };
@@ -448,7 +468,8 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        DecimalV2Value dst_value = src.get_decimal();
+        DecimalV2Value dst_value;
+        dst_value.from_olap_decimal(src.get_decimal12().integer, src.get_decimal12().fraction);
         dst.set_decimal(dst_value);
         return Status::OK();
     }
@@ -542,27 +563,6 @@ public:
                                                    dst_typeinfo->precision(), dst_typeinfo->scale());
         dst.set<DstCppType>(dst_val);
         return overflow;
-    }
-};
-
-class StringToDateV2TypeConverter : public TypeConverter {
-public:
-    StringToDateV2TypeConverter() = default;
-    ~StringToDateV2TypeConverter() = default;
-
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        auto str = unaligned_load<Slice>(src);
-        DateValue tmp;
-        if (tmp.from_string((const char*)str.data, str.size)) {
-            unaligned_store<DateValue>(dst, tmp);
-            return Status::OK();
-        }
-        return Status::InvalidArgument(Substitute("Can not convert $0 to Date", str.to_string()));
-    }
-
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
-                         MemPool* mem_pool) const override {
-        return Status::InternalError("missing implementation");
     }
 };
 
@@ -730,10 +730,6 @@ const TypeConverter* get_datev2_converter(FieldType from_type, FieldType to_type
     }
     case OLAP_FIELD_TYPE_DATE: {
         static DateToDateV2TypeConverter s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_VARCHAR: {
-        static StringToDateV2TypeConverter s_converter;
         return &s_converter;
     }
     default:
