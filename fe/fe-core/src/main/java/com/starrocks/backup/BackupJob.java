@@ -34,6 +34,7 @@ import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -398,9 +399,8 @@ public class BackupJob extends AbstractJob {
                     List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.VISIBLE);
                     for (MaterializedIndex index : indexes) {
                         int schemaHash = tbl.getSchemaHashByIndexId(index.getId());
-                        List<Tablet> tablets = index.getTablets();
-                        for (Tablet tablet : tablets) {
-                            Replica replica = chooseReplica(tablet, visibleVersion);
+                        for (Tablet tablet : index.getTablets()) {
+                            Replica replica = chooseReplica((LocalTablet) tablet, visibleVersion);
                             if (replica == null) {
                                 status = new Status(ErrCode.COMMON_ERROR,
                                         "failed to choose replica to make snapshot for tablet " + tablet.getId()
@@ -668,7 +668,7 @@ public class BackupJob extends AbstractJob {
      * Choose a replica whose version >= visibleVersion and dose not have failed version.
      * Iterate replica order by replica id, the reason is to choose the same replica at each backup job.
      */
-    private Replica chooseReplica(Tablet tablet, long visibleVersion) {
+    private Replica chooseReplica(LocalTablet tablet, long visibleVersion) {
         List<Long> replicaIds = Lists.newArrayList();
         for (Replica replica : tablet.getReplicas()) {
             replicaIds.add(replica.getId());

@@ -24,6 +24,7 @@ package com.starrocks.http.rest;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -180,7 +181,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
                         long indexSize = 0;
                         for (Tablet tablet : mIndex.getTablets()) {
                             long maxReplicaSize = 0;
-                            for (Replica replica : tablet.getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 if (replica.getState() == ReplicaState.NORMAL
                                         || replica.getState() == ReplicaState.SCHEMA_CHANGE) {
                                     if (replica.getDataSize() > maxReplicaSize) {

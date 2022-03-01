@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MetaObject;
@@ -32,7 +33,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.TimeUtils;
@@ -313,7 +313,7 @@ public class ConsistencyChecker extends MasterDaemon {
                                 tabletQueue.addAll(index.getTablets());
 
                                 while ((chosenOne = tabletQueue.poll()) != null) {
-                                    Tablet tablet = (Tablet) chosenOne;
+                                    LocalTablet tablet = (LocalTablet) chosenOne;
                                     long chosenTabletId = tablet.getId();
 
                                     if (this.jobs.containsKey(chosenTabletId)) {
@@ -371,7 +371,7 @@ public class ConsistencyChecker extends MasterDaemon {
             OlapTable table = (OlapTable) db.getTable(info.getTableId());
             Partition partition = table.getPartition(info.getPartitionId());
             MaterializedIndex index = partition.getIndex(info.getIndexId());
-            Tablet tablet = index.getTablet(info.getTabletId());
+            LocalTablet tablet = (LocalTablet) index.getTablet(info.getTabletId());
 
             long lastCheckTime = info.getLastCheckTime();
             db.setLastCheckTime(lastCheckTime);

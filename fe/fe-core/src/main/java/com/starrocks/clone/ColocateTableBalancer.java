@@ -29,12 +29,12 @@ import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.Tablet.TabletStatus;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
@@ -224,7 +224,7 @@ public class ColocateTableBalancer extends MasterDaemon {
                                 Set<Long> bucketsSeq = backendBucketsSeq.get(idx);
                                 Preconditions.checkState(bucketsSeq.size() == replicationNum,
                                         bucketsSeq.size() + " vs. " + replicationNum);
-                                Tablet tablet = index.getTablet(tabletId);
+                                LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                                 TabletStatus st = tablet.getColocateHealthStatus(visibleVersion,
                                         replicationNum, bucketsSeq);
                                 if (st != TabletStatus.HEALTHY) {

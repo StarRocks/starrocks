@@ -17,6 +17,7 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
@@ -107,7 +108,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         for (Partition partition : table.getPartitions()) {
             // check replicate miss
             if (partition.getBaseIndex().getTablets().stream()
-                    .anyMatch(t -> t.getNormalReplicaBackendIds().isEmpty())) {
+                    .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
                 return false;
             }
         }

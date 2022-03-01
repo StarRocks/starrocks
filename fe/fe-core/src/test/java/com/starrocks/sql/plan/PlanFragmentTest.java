@@ -7,6 +7,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -3638,7 +3639,7 @@ public class PlanFragmentTest extends PlanTestBase {
             for (MaterializedIndex mIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 mIndex.setRowCount(10000);
                 for (Tablet tablet : mIndex.getTablets()) {
-                    for (Replica replica : tablet.getReplicas()) {
+                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                         replica.updateRowCount(2, 200000, 10000);
                     }
                 }

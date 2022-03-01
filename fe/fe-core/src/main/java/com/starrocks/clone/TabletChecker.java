@@ -30,6 +30,8 @@ import com.starrocks.analysis.AdminCancelRepairTableStmt;
 import com.starrocks.analysis.AdminRepairTableStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -38,7 +40,6 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.Tablet.TabletStatus;
 import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -235,6 +236,7 @@ public class TabletChecker extends MasterDaemon {
                          */
                         for (MaterializedIndex idx : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                             for (Tablet tablet : idx.getTablets()) {
+                                LocalTablet localTablet = (LocalTablet) tablet;
                                 totalTabletNum++;
 
                                 if (tabletScheduler.containsTablet(tablet.getId())) {
@@ -243,7 +245,7 @@ public class TabletChecker extends MasterDaemon {
                                 }
 
                                 Pair<TabletStatus, TabletSchedCtx.Priority> statusWithPrio =
-                                        tablet.getHealthStatusWithPriority(
+                                        localTablet.getHealthStatusWithPriority(
                                                 infoService,
                                                 db.getClusterName(),
                                                 partition.getVisibleVersion(),
@@ -252,7 +254,7 @@ public class TabletChecker extends MasterDaemon {
 
                                 if (statusWithPrio.first == TabletStatus.HEALTHY) {
                                     // Only set last status check time when status is healthy.
-                                    tablet.setLastStatusCheckTime(start);
+                                    localTablet.setLastStatusCheckTime(start);
                                     continue;
                                 } else if (isInPrios) {
                                     statusWithPrio.second = TabletSchedCtx.Priority.VERY_HIGH;
@@ -261,7 +263,7 @@ public class TabletChecker extends MasterDaemon {
 
                                 unhealthyTabletNum++;
 
-                                if (!tablet.readyToBeRepaired(statusWithPrio.second)) {
+                                if (!localTablet.readyToBeRepaired(statusWithPrio.second)) {
                                     tabletNotReady++;
                                     continue;
                                 }

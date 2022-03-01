@@ -26,13 +26,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.Tablet.TabletStatus;
 import com.starrocks.clone.DiskAndTabletLoadReBalancer.BalanceType;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletScheduler.PathSlot;
@@ -182,7 +182,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private long createTime = -1;
     private long finishedTime = -1;
 
-    private Tablet tablet = null;
+    private LocalTablet tablet = null;
     private long visibleVersion = -1;
     private long committedVersion = -1;
 
@@ -344,11 +344,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return visibleVersion;
     }
 
-    public void setTablet(Tablet tablet) {
+    public void setTablet(LocalTablet tablet) {
         this.tablet = tablet;
     }
 
-    public Tablet getTablet() {
+    public LocalTablet getTablet() {
         return tablet;
     }
 
@@ -876,7 +876,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                         + ", task's: " + schemaHash);
             }
 
-            Tablet tablet = index.getTablet(tabletId);
+            LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
             if (tablet == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tablet does not exist");
             }

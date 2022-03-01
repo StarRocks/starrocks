@@ -52,6 +52,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -411,15 +412,16 @@ public class OlapScanNode extends ScanNode {
             internalRange.setTablet_id(tabletId);
 
             // random shuffle List && only collect one copy
+            LocalTablet localTablet = (LocalTablet) tablet;
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
-            tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+            localTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                     visibleVersion, localBeId, schemaHash);
             if (allQueryableReplicas.isEmpty()) {
                 LOG.error("no queryable replica found in tablet {}. visible version {}-{}",
                         tabletId, visibleVersion);
                 if (LOG.isDebugEnabled()) {
-                    for (Replica replica : tablet.getReplicas()) {
+                    for (Replica replica : localTablet.getReplicas()) {
                         LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
                     }
                 }

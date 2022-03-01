@@ -25,13 +25,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
@@ -127,7 +127,7 @@ public class CheckConsistencyJob {
             resourceInfo = ConnectContext.get().toResourceCtx();
         }
 
-        Tablet tablet = null;
+        LocalTablet tablet = null;
 
         AgentBatchTask batchTask = new AgentBatchTask();
         db.readLock();
@@ -158,7 +158,7 @@ public class CheckConsistencyJob {
                 return false;
             }
 
-            tablet = index.getTablet(tabletId);
+            tablet = (LocalTablet) index.getTablet(tabletId);
             if (tablet == null) {
                 LOG.debug("tablet[{}] does not exist", tabletId);
                 return false;
@@ -279,7 +279,7 @@ public class CheckConsistencyJob {
                 return -1;
             }
 
-            Tablet tablet = index.getTablet(tabletId);
+            LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
             if (tablet == null) {
                 LOG.warn("tablet[{}] does not exist", tabletId);
                 return -1;
