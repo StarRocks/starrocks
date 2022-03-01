@@ -8,6 +8,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -21,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -385,6 +387,15 @@ public class Utils {
                     return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                 } catch (Exception e) {
                     LOG.warn("Iceberg table {} get column failed. error : {}", table.getName(), e);
+                    return true;
+                }
+            } else if (operator instanceof LogicalHudiScanOperator) {
+                HudiTable hudiTable = (HudiTable) scanOperator.getTable();
+                try {
+                    Map<String, HiveColumnStats> hudiColumnStatisticMap = hudiTable.getTableLevelColumnStats(colNames);
+                    return hudiColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
+                } catch (Exception e) {
+                    LOG.warn("Hudi table {} get column failed. error : {}", hudiTable.getName(), e);
                     return true;
                 }
             } else {
