@@ -75,6 +75,11 @@ void ColumnVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_s
     }
 }
 
+void ColumnVectorBatch::filterOnFields(uint8_t* f_data, uint32_t f_size, uint32_t true_size,
+                                       const std::vector<int>& fields, bool onLazyLoad) {
+    throw ParseError("ColumnVectorBatch::filterOnFields not implemented");
+}
+
 LongVectorBatch::LongVectorBatch(uint64_t _capacity, MemoryPool& pool)
         : ColumnVectorBatch(_capacity, pool), data(pool, _capacity) {
     // PASS
@@ -275,6 +280,19 @@ bool StructVectorBatch::hasVariableLength() {
 void StructVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) {
     ColumnVectorBatch::filter(f_data, f_size, true_size);
     for (ColumnVectorBatch* cvb : fields) {
+        cvb->filter(f_data, f_size, true_size);
+    }
+}
+
+void StructVectorBatch::filterOnFields(uint8_t* f_data, uint32_t f_size, uint32_t true_size,
+                                       const std::vector<int>& positions, bool onLazyLoad) {
+    if (!onLazyLoad) {
+        ColumnVectorBatch::filter(f_data, f_size, true_size);
+    } else {
+        numElements = true_size;
+    }
+    for (int p : positions) {
+        ColumnVectorBatch* cvb = fields[p];
         cvb->filter(f_data, f_size, true_size);
     }
 }

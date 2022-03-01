@@ -10,8 +10,8 @@
 #include "common/global_types.h"
 #include "common/status.h"
 #include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/olap_scan_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/scan_operator.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
@@ -61,8 +61,6 @@ Status OlapScanNode::prepare(RuntimeState* state) {
         _runtime_profile->add_info_string("Predicates", _olap_scan_node.sql_predicates);
     }
     _runtime_state = state;
-
-    RETURN_IF_ERROR(_capture_tablet_rowsets());
 
     return Status::OK();
 }
@@ -325,6 +323,8 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
         _scan_ranges.emplace_back(std::make_unique<TInternalScanRange>(scan_range.scan_range.internal_scan_range));
         COUNTER_UPDATE(_tablet_counter, 1);
     }
+
+    RETURN_IF_ERROR(_capture_tablet_rowsets());
 
     return Status::OK();
 }
@@ -589,20 +589,20 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     OpFactories operators;
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
-    auto scan_operator = std::make_shared<ScanOperatorFactory>(context->next_operator_id(), id(), _olap_scan_node,
-                                                               std::move(_conjunct_ctxs), limit());
+    auto olap_scan_operator = std::make_shared<OlapScanOperatorFactory>(
+            context->next_operator_id(), id(), _olap_scan_node, std::move(_conjunct_ctxs), limit());
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(olap_scan_operator.get(), context, rc_rf_probe_collector);
     auto& morsel_queues = context->fragment_context()->morsel_queues();
-    auto source_id = scan_operator->plan_node_id();
+    auto source_id = olap_scan_operator->plan_node_id();
     DCHECK(morsel_queues.count(source_id));
     auto& morsel_queue = morsel_queues[source_id];
-    // ScanOperator's degree_of_parallelism is not more than the number of morsels
+    // OlapScanOperator's degree_of_parallelism is not more than the number of morsels
     // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
     const auto degree_of_parallelism =
             std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
-    scan_operator->set_degree_of_parallelism(degree_of_parallelism);
-    operators.emplace_back(std::move(scan_operator));
+    olap_scan_operator->set_degree_of_parallelism(degree_of_parallelism);
+    operators.emplace_back(std::move(olap_scan_operator));
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }

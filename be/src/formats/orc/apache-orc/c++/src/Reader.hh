@@ -131,6 +131,8 @@ private:
     uint64_t currentStripe;
     uint64_t lastStripe; // the stripe AFTER the last one
     uint64_t currentRowInStripe;
+    uint64_t lazyLoadLastUsedRowInStripe; // which row in stripe loazy load files are used in last time.
+
     uint64_t rowsInCurrentStripe;
     proto::StripeInformation currentStripeInfo;
     proto::StripeFooter currentStripeFooter;
@@ -179,6 +181,7 @@ private:
      * @param rowGroupEntryId the row group id to seek to
      */
     void seekToRowGroup(uint32_t rowGroupEntryId);
+    void getRowGroupPosition(uint32_t rowGroupEntryId, PositionProviderMap* map);
 
 public:
     /**
@@ -197,7 +200,7 @@ public:
     std::unique_ptr<ColumnVectorBatch> createRowBatch(uint64_t size) const override;
 
     bool next(ColumnVectorBatch& data, ReadPosition* pos) override;
-    void lazyLoadSkip(uint64_t numValues) override;
+    void lazyLoadSeekTo(uint64_t rowInStripe) override;
     void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) override;
 
     CompressionKind getCompression() const;

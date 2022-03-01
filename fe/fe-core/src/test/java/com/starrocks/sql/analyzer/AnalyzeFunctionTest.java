@@ -7,6 +7,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
@@ -81,5 +83,16 @@ public class AnalyzeFunctionTest {
         analyzeFail("select trim(b1) from test_object");
         analyzeFail("select trim(h1) from test_object");
         analyzeFail("select trim(p1) from test_object");
+    }
+
+    @Test
+    public void testToBitMap() {
+        analyzeFail("select to_bitmap(b1) from test_object", "No matching function with signature: to_bitmap(bitmap)");
+        analyzeFail("select to_bitmap(h1) from test_object", "No matching function with signature: to_bitmap(hll)");
+
+        List<String> successColumns = Arrays.asList("ta", "tb", "tc", "td", "te", "tf", "tg", "th", "ti", "tj");
+        for (String column : successColumns) {
+            analyzeSuccess("select to_bitmap(" + column + ") from tall");
+        }
     }
 }

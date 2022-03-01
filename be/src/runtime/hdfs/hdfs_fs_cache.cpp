@@ -3,13 +3,8 @@
 #include "runtime/hdfs/hdfs_fs_cache.h"
 
 #include <memory>
-#include <utility>
 
-#include "common/config.h"
 #include "gutil/strings/substitute.h"
-#ifdef STARROCKS_WITH_AWS
-#include "object_store/s3_object_store.h"
-#endif
 #include "util/hdfs_util.h"
 
 namespace starrocks {
@@ -26,25 +21,6 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
                                                              namenode, get_hdfs_err_msg()));
         }
 
-    } else if (is_s3a_path(nn) || is_oss_path(nn)) {
-#ifdef STARROCKS_WITH_AWS
-        handle->type = HdfsFsHandle::Type::S3;
-        Aws::Client::ClientConfiguration config;
-        config.scheme = Aws::Http::Scheme::HTTP;
-        if (!config::aws_s3_endpoint.empty()) {
-            config.endpointOverride = config::aws_s3_endpoint;
-        }
-        config.maxConnections = config::aws_s3_max_connection;
-
-        S3Credential cred;
-        cred.access_key_id = config::aws_access_key_id;
-        cred.secret_access_key = config::aws_secret_access_key;
-        auto store = std::make_unique<S3ObjectStore>(config);
-        RETURN_IF_ERROR(store->init(&cred, false));
-        handle->object_store = store.release();
-#else
-        return Status::NotSupported("Does not support S3");
-#endif
     } else {
         return Status::InternalError(strings::Substitute("failed to make client, namenode=$0", namenode));
     }
