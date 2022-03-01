@@ -24,9 +24,6 @@ import java.util.Map;
 public class JDBCTable extends Table {
     private static final Logger LOG = LogManager.getLogger(JDBCTable.class);
 
-    private static final String PROPERTY_MISSING_MSG =
-            "JDBC %s is null. Please add properties('%s'='xxx') when create table";
-
     private static final String TABLE = "table";
     private static final String RESOURCE = "resource";
 
@@ -53,12 +50,12 @@ public class JDBCTable extends Table {
 
     private void validate(Map<String, String> properties) throws DdlException {
         if (properties == null) {
-            throw new DdlException("Please set properties of jdbc table, they are: jdbc.database, jdbc.table and jdbc.resource");
+            throw new DdlException("Please set properties of jdbc table, they are: table and resource");
         }
 
         jdbcTable = properties.get(TABLE);
         if (Strings.isNullOrEmpty(jdbcTable)) {
-            throw new DdlException(String.format(PROPERTY_MISSING_MSG, TABLE, TABLE));
+            throw new DdlException("property " + TABLE + " must be set");
         }
 
         resourceName = properties.get(RESOURCE);
