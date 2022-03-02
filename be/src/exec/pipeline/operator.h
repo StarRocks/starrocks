@@ -258,14 +258,14 @@ protected:
     const std::string _name;
     const int32_t _plan_node_id;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
-    RuntimeFilterHub* _runtime_filter_hub;
+    RuntimeFilterHub* _runtime_filter_hub = nullptr;
     std::vector<TupleId> _tuple_ids;
     // a set of TPlanNodeIds of HashJoinNode who generates Local RF that take effects on this operator.
     LocalRFWaitingSet _rf_waiting_set;
     std::once_flag _prepare_runtime_in_filters_once;
     RowDescriptor _row_desc;
     std::vector<ExprContext*> _runtime_in_filters;
-    std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector;
+    std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector = nullptr;
     std::vector<SlotId> _filter_null_value_columns;
     // Mappings from input slot to output slot of ancestor exec nodes (include itself).
     // It is used to rewrite runtime in filters.
