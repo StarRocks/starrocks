@@ -9,7 +9,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
@@ -91,16 +90,10 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
         JoinPredicateUtils.getJoinOnPredicatesColumns(equalOnPredicate, leftChildColumns, rightChildColumns,
                 leftOnPredicateColumns, rightOnPredicateColumns);
         Preconditions.checkState(leftOnPredicateColumns.size() == rightOnPredicateColumns.size());
+        requiredProperties
+                .add(Utils.computeShuffleJoinRequiredProperties(requirementsFromParent, leftOnPredicateColumns,
+                        rightOnPredicateColumns));
 
-        HashDistributionSpec leftDistribution = DistributionSpec.createHashDistributionSpec(
-                new HashDistributionDesc(leftOnPredicateColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
-        HashDistributionSpec rightDistribution = DistributionSpec.createHashDistributionSpec(
-                new HashDistributionDesc(rightOnPredicateColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
-
-        PhysicalPropertySet leftRequiredPropertySet = createPropertySetByDistribution(leftDistribution);
-        PhysicalPropertySet rightRequiredPropertySet = createPropertySetByDistribution(rightDistribution);
-
-        requiredProperties.add(Lists.newArrayList(leftRequiredPropertySet, rightRequiredPropertySet));
         return null;
     }
 
