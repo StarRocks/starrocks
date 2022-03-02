@@ -72,6 +72,13 @@ public:
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_CONCAT_FN)
 #undef DEFINE_ARRAY_CONCAT_FN
 
+#define DEFINE_ARRAY_OVERLAP_FN(NAME, PT)                                                     \
+    static ColumnPtr array_overlap_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayOverlap<PT>::process(context, columns);                                   \
+    }
+    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_OVERLAP_FN)
+#undef DEFINE_ARRAY_OVERLAP_FN
+
 #define DEFINE_ARRAY_SORT_FN(NAME, PT)                                                     \
     static ColumnPtr array_sort_##NAME(FunctionContext* context, const Columns& columns) { \
         return ArraySort<PT>::process(context, columns);                                   \

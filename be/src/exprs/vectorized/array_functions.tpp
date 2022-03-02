@@ -429,6 +429,102 @@ private:
 };
 
 template <PrimitiveType PT>
+class ArrayOverlap {
+public:
+    using CppType = RunTimeCppType<PT>;
+
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        if constexpr (pt_is_largeint<PT>) {
+            return _array_overlap<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
+        } else if constexpr (pt_is_fixedlength<PT>) {
+            return _array_overlap<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
+        } else if constexpr (pt_is_binary<PT>) {
+            return _array_overlap<phmap::flat_hash_set<CppType, SliceHash>>(columns);
+        } else {
+            assert(false);
+        }
+    }
+
+private:
+    template <typename HashSet>
+    static ColumnPtr _array_overlap(const Columns& columns) {
+        size_t chunk_size = columns[0]->size();
+        auto result_column = BooleanColumn::create(chunk_size, 0);
+
+        bool is_nullable = false;
+        bool has_null = false;
+        std::vector<ArrayColumn*> src_columns;
+        src_columns.reserve(columns.size());
+        NullColumnPtr null_result = NullColumn::create();
+        null_result->resize(chunk_size);
+
+        for (int i = 0; i < columns.size(); ++i) {
+            if (columns[i]->is_nullable()) {
+                is_nullable = true;
+                has_null = (columns[i]->has_null() || has_null);
+                const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[i].get());
+                src_columns.emplace_back(down_cast<ArrayColumn*>(src_nullable_column->data_column().get()));
+                null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
+            } else {
+                src_columns.emplace_back(down_cast<ArrayColumn*>(columns[i].get()));
+            }
+        }
+
+        HashSet hash_set;
+        for (size_t i = 0; i < chunk_size; i++) {
+            _array_overlap_item<HashSet>(src_columns, i, &hash_set,
+                                         static_cast<BooleanColumn*>(result_column.get())->get_data().data());
+            hash_set.clear();
+        }
+
+        if (is_nullable) {
+            return NullableColumn::create(result_column, null_result);
+        }
+
+        return result_column;
+    }
+
+    template <typename HashSet>
+    static void _array_overlap_item(const std::vector<ArrayColumn*>& columns, size_t index, HashSet* hash_set,
+                                    uint8_t* data) {
+        bool has_null = false;
+
+        {
+            Datum v = columns[0]->get(index);
+            const auto& items = v.get<DatumArray>();
+            for (const auto& item : items) {
+                if (item.is_null()) {
+                    has_null = true;
+                } else {
+                    hash_set->emplace(item.get<CppType>());
+                }
+            }
+        }
+
+        {
+            Datum v = columns[1]->get(index);
+            const auto& items = v.get<DatumArray>();
+            for (const auto& item : items) {
+                if (item.is_null()) {
+                    if (has_null) {
+                        data[index] = 1;
+                        return;
+                    }
+                } else {
+                    auto iter = hash_set->find(item.get<CppType>());
+                    if (iter != hash_set->end()) {
+                        data[index] = 1;
+                        return;
+                    }
+                }
+            }
+
+            data[index] = 0;
+        }
+    }
+};
+
+template <PrimitiveType PT>
 class ArraySort {
 public:
     using ColumnType = RunTimeColumnType<PT>;
