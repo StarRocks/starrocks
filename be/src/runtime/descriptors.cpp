@@ -235,27 +235,15 @@ JDBCTableDescriptor::JDBCTableDescriptor(const TTableDescriptor& tdesc)
         : TableDescriptor(tdesc),
           _jdbc_driver(tdesc.jdbcTable.jdbc_driver),
           _jdbc_url(tdesc.jdbcTable.jdbc_url),
-          _jdbc_database(tdesc.jdbcTable.jdbc_database),
           _jdbc_table(tdesc.jdbcTable.jdbc_table),
           _jdbc_user(tdesc.jdbcTable.jdbc_user),
-          _jdbc_passwd(tdesc.jdbcTable.jdbc_passwd),
-          _jdbc_properties(tdesc.jdbcTable.jdbc_properties) {}
+          _jdbc_passwd(tdesc.jdbcTable.jdbc_passwd) {}
 
 std::string JDBCTableDescriptor::debug_string() const {
     std::stringstream out;
     out << "JDBCTable(" << TableDescriptor::debug_string() << " jdbc_driver=" << _jdbc_driver
-        << " jdbc_url=" << _jdbc_url << " jdbc_database=" << _jdbc_database << " jdbc_table=" << _jdbc_table
-        << " jdbc_user=" << _jdbc_user << " jdbc_passwd=" << _jdbc_passwd << " jdbc_properties={";
-    if (_jdbc_properties.size() > 0) {
-        auto iter = _jdbc_properties.begin();
-        out << "\"" << iter->first << "\"="
-            << "\"" << iter->second << "\"";
-        for (iter++; iter != _jdbc_properties.end(); iter++) {
-            out << "\"" << iter->first << "\"="
-                << "\"" << iter->second << "\"";
-        }
-    }
-    out << "}";
+        << " jdbc_url=" << _jdbc_url << " jdbc_table=" << _jdbc_table
+        << " jdbc_user=" << _jdbc_user << " jdbc_passwd=" << _jdbc_passwd << "}";
     return out.str();
 }
 

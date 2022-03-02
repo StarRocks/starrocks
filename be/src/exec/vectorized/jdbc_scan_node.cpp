@@ -40,7 +40,7 @@ pipeline::OpFactories JDBCScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     OpFactories operators;
     auto jdbc_scan_operator = std::make_shared<JDBCScanOperatorFactory>(
             context->next_operator_id(), id(), _jdbc_scan_node, std::move(_conjunct_ctxs), limit());
-    jdbc_scan_operator->set_degree_of_parallelism(context->get_dop_of_scan_node(this->id()));
+    jdbc_scan_operator->set_degree_of_parallelism(1);
     operators.emplace_back(std::move(jdbc_scan_operator));
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
