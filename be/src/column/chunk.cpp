@@ -197,6 +197,15 @@ void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t
     }
 }
 
+void Chunk::rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    DCHECK_EQ(_columns.size(), src.columns().size());
+    for (size_t i = 0; i < _columns.size(); ++i) {
+        _columns[i]->reserve(size);
+        _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
+        src.columns()[i].reset();
+    }
+}
+
 size_t Chunk::filter(const Buffer<uint8_t>& selection) {
     for (auto& column : _columns) {
         column->filter(selection);
