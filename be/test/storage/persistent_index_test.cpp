@@ -6,6 +6,7 @@
 
 #include "env/env_memory.h"
 #include "storage/fs/file_block_manager.h"
+#include "storage/fs/fs_util.h"
 #include "storage/storage_engine.h"
 #include "testutil/parallel_test.h"
 #include "util/coding.h"
@@ -237,21 +238,11 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
     // test insert
     ASSERT_TRUE(idx->insert(keys.size(), keys.data(), values.data()).ok());
 
-    auto env = std::make_unique<EnvMemory>();
-    auto block_mgr = std::make_unique<fs::FileBlockManager>(env.get(), fs::BlockManagerOptions());
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions opts({"/index.l1.1.1"});
-    ASSERT_TRUE(block_mgr->create_block(opts, &wblock).ok());
-    auto st = idx->flush_to_immutable_index(idx->size(), EditVersion(1, 1), *wblock);
-    if (!st.ok()) {
-        LOG(WARNING) << st;
-    }
-    ASSERT_TRUE(wblock->finalize().ok());
-    ASSERT_TRUE(wblock->close().ok());
-    wblock.reset();
+    ASSERT_TRUE(idx->flush_to_immutable_index(".", EditVersion(1, 1)).ok());
 
     std::unique_ptr<fs::ReadableBlock> rb;
-    ASSERT_TRUE(block_mgr->open_block(opts.path, &rb).ok());
+    auto block_mgr = fs::fs_util::block_manager();
+    ASSERT_TRUE(block_mgr->open_block("./index.l1.1.1", &rb).ok());
     auto st_load = ImmutableIndex::load(std::move(rb));
     if (!st_load.ok()) {
         LOG(WARNING) << st_load.status();
