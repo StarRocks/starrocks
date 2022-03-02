@@ -55,5 +55,7 @@ public:
 
     static void convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
                                        const Column** columns, int num_cols, int num_rows, std::vector<jobject>* res);
+    static void convert_to_native_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
+                                        const Column** columns, int num_cols, int num_rows, std::vector<jobject>* res);
 };
 } // namespace starrocks::vectorized
