@@ -368,11 +368,10 @@ public class BackendLoadStatistic {
                                List<RootPathLoadStatistic> result, boolean isSupplement) {
         BalanceStatus status = new BalanceStatus(ErrCode.COMMON_ERROR);
         // try choosing path from first to end (low usage to high usage)
-        List<RootPathLoadStatistic> filteredPathStatistics = Lists.newArrayList();
+        List<RootPathLoadStatistic> mediumNotMatchedPath = Lists.newArrayList();
         for (RootPathLoadStatistic pathStatistic : pathStatistics) {
-            // if this is a supplement task, ignore the storage medium
-            if (!isSupplement && pathStatistic.getStorageMedium() != medium) {
-                filteredPathStatistics.add(pathStatistic);
+            if (pathStatistic.getStorageMedium() != medium) {
+                mediumNotMatchedPath.add(pathStatistic);
                 continue;
             }
 
@@ -386,8 +385,9 @@ public class BackendLoadStatistic {
             return BalanceStatus.OK;
         }
 
-        if (!Config.enable_strict_storage_medium_check) {
-            for (RootPathLoadStatistic filteredPathStatistic : filteredPathStatistics) {
+        // if this is a supplement task, ignore the storage medium
+        if (isSupplement || !Config.enable_strict_storage_medium_check) {
+            for (RootPathLoadStatistic filteredPathStatistic : mediumNotMatchedPath) {
                 BalanceStatus bStatus = filteredPathStatistic.isFit(tabletSize, isSupplement);
                 if (!bStatus.ok()) {
                     status.addErrMsgs(bStatus.getErrMsgs());
