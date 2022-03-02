@@ -64,7 +64,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     }
     bool enable_column_expr_predicate = false;
     if (thrift_olap_scan_node.__isset.enable_column_expr_predicate) {
-        enable_column_expr_predicate = true;
+        enable_column_expr_predicate = thrift_olap_scan_node.enable_column_expr_predicate;
     }
     RETURN_IF_ERROR(cm.parse_conjuncts(true, max_scan_key_num, enable_column_expr_predicate));
     RETURN_IF_ERROR(_build_scan_range(_runtime_state));

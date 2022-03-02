@@ -9,6 +9,7 @@
 #include "column/type_traits.h"
 #include "common/global_types.h"
 #include "common/status.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/olap_scan_operator.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exprs/expr_context.h"
@@ -24,7 +25,6 @@
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
-
 namespace starrocks::vectorized {
 
 OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -583,7 +583,29 @@ void OlapScanNode::_close_pending_scanners() {
 }
 
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    return decompose_olap_scan_node_to_pipeline(this, context);
+    ScanNode* scan_node = this;
+    OpFactories operators;
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    auto scan_operator = std::make_shared<pipeline::OlapScanOperatorFactory>(context->next_operator_id(), scan_node);
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
+    auto& morsel_queues = context->fragment_context()->morsel_queues();
+    auto source_id = scan_operator->plan_node_id();
+    DCHECK(morsel_queues.count(source_id));
+    auto& morsel_queue = morsel_queues[source_id];
+    // ScanOperator's degree_of_parallelism is not more than the number of morsels
+    // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
+    const auto degree_of_parallelism =
+            std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
+    scan_operator->set_degree_of_parallelism(degree_of_parallelism);
+    operators.emplace_back(std::move(scan_operator));
+    size_t limit = scan_node->limit();
+    if (limit != -1) {
+        operators.emplace_back(
+                std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), scan_node->id(), limit));
+    }
+    return operators;
 }
 
 } // namespace starrocks::vectorized
