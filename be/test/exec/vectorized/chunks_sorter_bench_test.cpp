@@ -162,10 +162,10 @@ static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, in
 }
 
 static void Bench_fullsort_row_wise(benchmark::State& state) {
-    do_bench(state, 1, 2, state.range(1));
+    do_bench(state, 1, 1, state.range(1));
 }
 static void Bench_fullsort_column_wise(benchmark::State& state) {
-    do_bench(state, 1, 1, state.range(1));
+    do_bench(state, 1, 2, state.range(1));
 }
 static void Bench_topn_row_wise(benchmark::State& state) {
     do_bench(state, 2, 2, state.range(1));
