@@ -47,7 +47,6 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
     auto& sc_map = _second_chance_maps[i];
 
     {
-        // require read lock
         std::shared_lock<std::shared_mutex> read_lock(mutex);
         // lookup query context in context_map
         auto it = context_map.find(query_id);
@@ -57,7 +56,6 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
         }
     }
     {
-        // require write lock
         std::unique_lock<std::shared_mutex> write_lock(mutex);
         // lookup query context in context_map at first
         auto it = context_map.find(query_id);
@@ -114,7 +112,6 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
     auto& context_map = _context_maps[i];
     auto& sc_map = _second_chance_maps[i];
 
-    // require write lock
     std::unique_lock<std::shared_mutex> write_lock(mutex);
 
     // clean expired query contexts in sc_map
