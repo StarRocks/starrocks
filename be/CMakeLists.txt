@@ -465,7 +465,6 @@ set(STARROCKS_LINK_LIBS
     Tools
     Geo
     Plugin
-    ObjectStore
     ${WL_END_GROUP}
 )
 
@@ -613,7 +612,6 @@ add_subdirectory(${SRC_DIR}/geo)
 add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/io)
-add_subdirectory(${SRC_DIR}/object_store)
 add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
