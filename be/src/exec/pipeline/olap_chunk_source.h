@@ -27,28 +27,10 @@ class RuntimeFilterProbeCollector;
 
 namespace pipeline {
 
+class ScanOperator;
 class OlapChunkSource final : public ChunkSource {
 public:
-    OlapChunkSource(MorselPtr&& morsel, int32_t tuple_id, int64_t limit, bool enable_column_expr_predicate,
-                    std::vector<ExprContext*> conjunct_ctxs, std::vector<ExprContext*>& runtime_in_filters,
-                    vectorized::RuntimeFilterProbeCollector* runtime_bloom_filters,
-                    std::vector<std::string> key_column_names, bool skip_aggregation,
-                    std::vector<std::string>* unused_output_columns, RuntimeProfile* runtime_profile)
-            : ChunkSource(std::move(morsel)),
-              _tuple_id(tuple_id),
-              _limit(limit),
-              _enable_column_expr_predicate(enable_column_expr_predicate),
-              _conjunct_ctxs(std::move(conjunct_ctxs)),
-              _runtime_in_filters(runtime_in_filters),
-              _runtime_bloom_filters(*runtime_bloom_filters),
-              _key_column_names(std::move(key_column_names)),
-              _skip_aggregation(skip_aggregation),
-              _unused_output_columns(unused_output_columns),
-              _runtime_profile(runtime_profile) {
-        _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
-        OlapMorsel* olap_morsel = (OlapMorsel*)_morsel.get();
-        _scan_range = olap_morsel->get_scan_range();
-    }
+    OlapChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorized::OlapScanNode* scan_node);
 
     ~OlapChunkSource() override = default;
 
@@ -90,12 +72,11 @@ private:
 
     vectorized::TabletReaderParams _params = {};
 
-    const int32_t _tuple_id;
+    vectorized::OlapScanNode* _scan_node;
     const int64_t _limit; // -1: no limit
-    const bool _enable_column_expr_predicate;
     std::vector<ExprContext*> _conjunct_ctxs;
     const std::vector<ExprContext*>& _runtime_in_filters;
-    const vectorized::RuntimeFilterProbeCollector& _runtime_bloom_filters;
+    const vectorized::RuntimeFilterProbeCollector* _runtime_bloom_filters;
     std::vector<std::string> _key_column_names;
     bool _skip_aggregation;
     TInternalScanRange* _scan_range;

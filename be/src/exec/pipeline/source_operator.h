@@ -26,6 +26,8 @@ public:
 
     virtual void add_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; };
 
+    const MorselQueue* morsel_queue() const { return _morsel_queue; }
+
 protected:
     MorselQueue* _morsel_queue;
     ChunkSourcePtr _chunk_source;
