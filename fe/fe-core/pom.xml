@@ -37,6 +37,7 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
+        <jacoco.version>0.8.5</jacoco.version> 
         <starrocks.thridparty>${basedir}/../../thirdparty</starrocks.thridparty>
         <iceberg.version>0.12.1</iceberg.version>
     </properties>
@@ -535,6 +536,50 @@ under the License.
         <finalName>starrocks-fe</finalName>
 
         <plugins>
+            <!-- fe ut coverage-->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.5</version>
+                <executions>
+                    <execution>
+                        <id>default-prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                        <configuration>
+                            <propertyName>jacocoArgLine</propertyName>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>default-report</id>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>default-check</id>
+                        <goals>
+                             <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                 <rule>
+                                     <element>BUNDLE</element>
+                                     <limits>
+                                         <limit>
+                                             <counter>COMPLEXITY</counter>
+                                             <value>COVEREDRATIO</value>
+                                             <minimum>0.60</minimum>
+                                         </limit>
+                                     </limits>
+                                 </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!--thrift-->
             <plugin>
                 <groupId>org.apache.thrift.tools</groupId>
@@ -637,7 +682,7 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
                     <argLine>
-                        -javaagent:${settings.localRepository}/org/jmockit/jmockit/1.48/jmockit-1.48.jar -Xmx2048m -Duser.timezone=Asia/Shanghai
+                        -javaagent:${settings.localRepository}/org/jmockit/jmockit/1.48/jmockit-1.48.jar -Xmx2048m -Duser.timezone=Asia/Shanghai ${jacocoArgLine}
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
