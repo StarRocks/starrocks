@@ -134,6 +134,10 @@ public:
     static const int32_t s_pseudo_plan_node_id_for_result_sink;
     static const int32_t s_pseudo_plan_node_id_upper_bound;
 
+    RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+    RuntimeProfile* common_metrics() { return _common_metrics.get(); }
+    RuntimeProfile* unique_metrics() { return _unique_metrics.get(); }
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;

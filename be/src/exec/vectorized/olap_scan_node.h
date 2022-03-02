@@ -62,6 +62,8 @@ public:
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
 
+    const TOlapScanNode& thrift_olap_scan_node() const { return _olap_scan_node; }
+
 private:
     friend class TabletScanner;
 
