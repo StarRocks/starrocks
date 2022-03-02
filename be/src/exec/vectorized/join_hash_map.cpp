@@ -459,7 +459,7 @@ JoinHashMapType JoinHashTable::_choose_join_hash_map() {
     size_t size = _table_items->join_keys.size();
     DCHECK_GT(size, 0);
 
-    for (size_t i = 0; i < _table_items->join_keys.size(); i++) {
+    for (size_t i = 0; i < size; i++) {
         if (!_table_items->key_columns[i]->has_null()) {
             _table_items->join_keys[i].is_null_safe_equal = false;
         }
