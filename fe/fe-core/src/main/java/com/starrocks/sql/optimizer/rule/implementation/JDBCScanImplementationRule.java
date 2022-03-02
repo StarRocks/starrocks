@@ -22,7 +22,7 @@ public class JDBCScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJDBCScanOperator logical = (LogicalJDBCScanOperator) input.getOp();
         PhysicalJDBCScanOperator physical = new PhysicalJDBCScanOperator(logical.getTable(),
-                logical.getOutputColumns(), logical.getColRefToColumnMetaMap(),
+                logical.getColRefToColumnMetaMap(),
                 logical.getLimit(),
                 logical.getPredicate(),
                 logical.getProjection());

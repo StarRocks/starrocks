@@ -119,7 +119,11 @@ public class JDBCScanNode extends ScanNode {
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.JDBC_SCAN_NODE;
-        msg.jdbc_scan_node = new TJDBCScanNode(desc.getId().asInt(), tableName, columns, filters);
+        msg.jdbc_scan_node = new TJDBCScanNode();
+        msg.jdbc_scan_node.setTuple_id(desc.getId().asInt());
+        msg.jdbc_scan_node.setTable_name(tableName);
+        msg.jdbc_scan_node.setColumns(columns);
+        msg.jdbc_scan_node.setFilters(filters);
         msg.jdbc_scan_node.setLimit(limit);
     }
 

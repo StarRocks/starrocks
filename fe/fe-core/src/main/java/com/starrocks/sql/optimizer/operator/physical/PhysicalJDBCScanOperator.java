@@ -12,17 +12,15 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
 import java.util.Map;
 
 public class PhysicalJDBCScanOperator extends PhysicalScanOperator {
     public PhysicalJDBCScanOperator(Table table,
-                                    List<ColumnRefOperator> outputColumns,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                     long limit,
                                     ScalarOperator predicate,
                                     Projection projection) {
-        super(OperatorType.PHYSICAL_JDBC_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate,
+        super(OperatorType.PHYSICAL_JDBC_SCAN, table, colRefToColumnMetaMap, limit, predicate,
                 projection);
     }
 
