@@ -257,7 +257,7 @@ void MemTable::_sort(bool is_final) {
         _sort_chunk_by_rows();
     }
     if (is_final) {
-        // No need to reserve, it will be reserve in Chunk::rolling_append_selective,
+        // No need to reserve, it will be reserve in IColumn::append_selective(),
         // Otherwise it will use more peak memory
         _result_chunk = _chunk->clone_empty_with_schema(0);
         _append_to_sorted_chunk<true>(_chunk.get(), _result_chunk.get());
@@ -271,14 +271,14 @@ void MemTable::_sort(bool is_final) {
     _chunk_bytes_usage = 0;
 }
 
-template <bool final>
+template <bool is_final>
 void MemTable::_append_to_sorted_chunk(Chunk* src, Chunk* dest) {
     _selective_values.clear();
     _selective_values.reserve(src->num_rows());
     for (size_t i = 0; i < src->num_rows(); ++i) {
         _selective_values.push_back(_permutations[i].index_in_chunk);
     }
-    if constexpr (final) {
+    if constexpr (is_final) {
         dest->rolling_append_selective(*src, _selective_values.data(), 0, src->num_rows());
     } else {
         dest->append_selective(*src, _selective_values.data(), 0, src->num_rows());
