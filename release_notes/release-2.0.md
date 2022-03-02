@@ -40,7 +40,7 @@
 
 发布日期： 2022年1月21日
 
-### Imporvement
+### Improvement
 
 - 优化StarRocks读取Hive外表时Hive外表隐式数据转换的功能。 [#2829](https://github.com/StarRocks/starrocks/pull/2829)
 - 优化高并发查询场景下，StarRocks CBO优化器采集统计信息时的锁竞争问题。 [#2901](https://github.com/StarRocks/starrocks/pull/2901)
@@ -57,3 +57,19 @@
 ### Behavior Change
 
 - StarRocks支持使用Hive外表访问创建在Hive外表上的Amazon S3外表。由于用于访问Amazon S3外表的jar包较大，因此StarRocks二进制产品包目前暂未包含该jar包。如有需要，请单击[Hive_s3_lib](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz)进行下载。
+
+## 2.0.2
+
+发布日期： 2022年3月2日
+
+### Improvement
+
+- 优化 FE 内存占用。通过设置参数 `label_keep_max_num`，控制一定时间内导入任务保留的最大数量，以避免在高频作业导入时，FE 内存占用过多而出现 Full GC。
+
+### BugFix
+
+- 修复 ColumnDecoder 异常，导致 BE 节点无响应的问题。
+- 修复在导入 JSON 格式数据中设置了 jsonpaths 后不能自动识别 __op 字段的问题。
+- 修复 Broker Load 导入数据过程中因为源数据发生变化而导致 BE 节点无响应的问题。
+- 修复建立物化视图后，部分 SQL 语句报错的问题。
+- 修复查询语句中同时存在低基数全局字典不支持的谓词时，导致查询失败的问题。
