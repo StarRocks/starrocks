@@ -189,8 +189,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
-    public static final String ENABLE_DESC_TBL_CACHE = "enable_desc_tbl_cache";
-
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
 
@@ -484,13 +482,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private boolean singleNodeExecPlan = false;
-
-    @VariableMgr.VarAttr(name = ENABLE_DESC_TBL_CACHE)
-    private boolean enableDescTblCache = false;
-
-    public boolean isEnableDescTblCache() {
-        return enableDescTblCache;
-    }
 
     public long getMaxExecMemByte() {
         return maxExecMemByte;

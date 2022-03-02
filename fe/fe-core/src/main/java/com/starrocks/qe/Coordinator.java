@@ -473,10 +473,8 @@ public class Coordinator {
             // TODO: remove this when load supports pipeline engine.
             boolean isEnablePipelineEngine = ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isEnablePipelineEngine() &&
-                    (fragments.get(0).getSink() instanceof ResultSink);
-            boolean isEnableDescTblCache = isEnablePipelineEngine &&
-                    ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableDescTblCache();
-
+                    fragments.stream().allMatch(PlanFragment::canUsePipeline);
+            
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
                 FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
@@ -486,7 +484,7 @@ public class Coordinator {
                 Preconditions.checkState(instanceNum > 0);
                 List<List<FInstanceExecParam>> infightFInstanceExecParamList = new LinkedList<>();
 
-                if (isEnableDescTblCache) {
+                if (isEnablePipelineEngine) {
                     List<FInstanceExecParam> firstFInstanceParamList = new ArrayList<>();
                     List<FInstanceExecParam> remainingFInstanceParamList = new ArrayList<>();
 
@@ -2062,12 +2060,8 @@ public class Coordinator {
                     SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
 
                     if (isEnablePipelineEngine) {
-                        boolean isPipeline =
-                                fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine();
-                        params.setIs_pipeline(isPipeline);
-                        if (isPipeline) {
-                            params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
-                        }
+                        params.setIs_pipeline(true);
+                        params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
 
                         params.setPipeline_dop(fragment.getPipelineDop());
 
