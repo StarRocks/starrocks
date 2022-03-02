@@ -132,6 +132,32 @@ public:
         return type_dispatch_sortable(desc.sort_type, SingleColumnSorter(), state, column, desc, perm);
     }
 
+    // Sort multiple columns, employ the LSD-like sort algorithm: sort column-wise from right to left
+    // TODO(mofei) optimize it with incremental sort
+    static Status sort_multi_column(RuntimeState* state, Columns columns, std::vector<SingleColumnSortDesc>& descs,
+                                    Permutation& perm) {
+        int num_columns = descs.size();
+        for (int col_index = num_columns - 1; col_index >= 0; col_index--) {
+            Column* column = columns[col_index].get();
+            if (column->is_constant()) {
+                continue;
+            }
+            SingleColumnSortDesc& desc = descs[col_index];
+            desc.nullable = column->is_nullable();
+            desc.stable = col_index != num_columns - 1;
+
+            RETURN_IF_ERROR(sort_single_column(state, column, desc, perm));
+
+            // reset permutation_index
+            const size_t size = perm.size();
+            for (size_t i = 0; i < size; ++i) {
+                perm[i].permutation_index = i;
+            }
+        }
+
+        return Status::OK();
+    }
+
 private:
     // Sort on type-known column, and the column has no NULL value in sorting range.
     template <PrimitiveType PT, bool stable>

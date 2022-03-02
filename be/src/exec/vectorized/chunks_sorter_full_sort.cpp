@@ -194,18 +194,13 @@ Status ChunksSorterFullSort::_sort_by_row_cmp(RuntimeState* state) {
 Status ChunksSorterFullSort::_sort_by_columns(RuntimeState* state) {
     SCOPED_TIMER(_sort_timer);
 
-    if (_get_number_of_order_by_columns() < 1) {
+    int num_columns = _get_number_of_order_by_columns();
+    if (num_columns < 1) {
         return Status::OK();
     }
 
-    // TODO(mofei) optimize it with incremental sort
-    for (int col_index = static_cast<int>(_get_number_of_order_by_columns()) - 1; col_index >= 0; --col_index) {
-        Column* column = _sorted_segment->order_by_columns[col_index].get();
-        if (column->is_constant()) {
-            continue;
-        }
-
-        bool stable = col_index != _get_number_of_order_by_columns() - 1;
+    std::vector<SortHelper::SingleColumnSortDesc> sort_descs;
+    for (int col_index = num_columns - 1; col_index >= 0; --col_index) {
         bool is_asc_order = (_sort_order_flag[col_index] == 1);
         bool is_null_first;
         if (is_asc_order) {
@@ -216,17 +211,16 @@ Status ChunksSorterFullSort::_sort_by_columns(RuntimeState* state) {
 
         ExprContext* expr_ctx = (*_sort_exprs)[col_index];
         PrimitiveType sort_type = expr_ctx->root()->type().type;
-        SortHelper::SingleColumnSortDesc sort_desc{sort_type, stable, column->is_nullable(), is_asc_order,
-                                                   is_null_first};
-        SortHelper::sort_single_column(state, column, sort_desc, _sorted_permutation);
 
-        // reset permutation_index
-        const size_t size = _sorted_permutation.size();
-        for (size_t i = 0; i < size; ++i) {
-            _sorted_permutation[i].permutation_index = i;
-        }
+        SortHelper::SingleColumnSortDesc desc;
+        desc.is_asc = is_asc_order;
+        desc.null_first = is_null_first;
+        desc.sort_type = sort_type;
+
+        sort_descs.emplace_back(desc);
     }
-    return Status::OK();
+
+    return SortHelper::sort_multi_column(state, _sorted_segment->order_by_columns, sort_descs, _sorted_permutation);
 }
 
 void ChunksSorterFullSort::_append_rows_to_chunk(Chunk* dest, Chunk* src, const Permutation& permutation, size_t offset,
