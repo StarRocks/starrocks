@@ -133,7 +133,11 @@ static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, in
         }
 
         for (int i = 0; i < num_chunks; i++) {
-            sorter->update(runtime_state, chunk);
+            // Clone is necessary for HeapSorter
+            auto cloned = chunk->clone_empty();
+            cloned->append_safe(*chunk);
+            ChunkPtr ck(cloned.release());
+            sorter->update(runtime_state, ck);
         }
 
         state.ResumeTiming();
