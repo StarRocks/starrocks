@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -124,7 +125,7 @@ public class LogicalProperty implements Property {
             if (node instanceof LogicalOlapScanOperator) {
                 return ((LogicalOlapScanOperator) node).getSelectedTabletId().size() <= 1;
             } else {
-                return node instanceof LogicalMysqlScanOperator;
+                return node instanceof LogicalMysqlScanOperator || node instanceof LogicalJDBCScanOperator;
             }
         }
 
