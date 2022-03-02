@@ -46,6 +46,48 @@ Status JoinBuildFunc<PT>::construct_hash_table(RuntimeState* state, JoinHashTabl
 }
 
 template <PrimitiveType PT>
+void DirectMappingJoinBuildFunc<PT>::prepare(RuntimeState* runtime, JoinHashTableItems* table_items) {
+    table_items->bucket_size = (int64_t)(std::numeric_limits<CppType>::max()) - (int64_t)(std::numeric_limits<CppType>::min() + 1l);
+    table_items->first.resize(table_items->bucket_size, 0);
+    table_items->next.resize(table_items->row_count + 1, 0);
+}
+
+template <PrimitiveType PT>
+const Buffer<typename DirectMappingJoinBuildFunc<PT>::CppType>& DirectMappingJoinBuildFunc<PT>::get_key_data(
+        const JoinHashTableItems& table_items) {
+    if (table_items.key_columns[0]->is_nullable()) {
+        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0]);
+        return ColumnHelper::as_raw_column<ColumnType>(null_column->data_column())->get_data();
+    }
+
+    return ColumnHelper::as_raw_column<ColumnType>(table_items.key_columns[0])->get_data();
+}
+
+template <PrimitiveType PT>
+Status DirectMappingJoinBuildFunc<PT>::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
+                                                            HashTableProbeState* probe_state) {
+    auto& data = get_key_data(*table_items);
+    if (table_items->key_columns[0]->is_nullable()) {
+        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[0]);
+        auto& null_array = nullable_column->null_column()->get_data();
+        for (size_t i = 1; i < table_items->row_count + 1; i++) {
+            if (null_array[i] == 0) {
+                auto buckets = data[i] - std::numeric_limits<CppType>::min();
+                table_items->next[i] = table_items->first[buckets];
+                table_items->first[buckets] = i;
+            }
+        }
+    } else {
+        for (size_t i = 1; i < table_items->row_count + 1; i++) {
+            auto buckets = data[i] - std::numeric_limits<CppType>::min();
+            table_items->next[i] = table_items->first[buckets];
+            table_items->first[buckets] = i;
+        }
+    }
+    return Status::OK();
+}
+
+template <PrimitiveType PT>
 void FixedSizeJoinBuildFunc<PT>::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
     table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
     table_items->first.resize(table_items->bucket_size, 0);
@@ -135,6 +177,51 @@ void FixedSizeJoinBuildFunc<PT>::_build_nullable_columns(JoinHashTableItems* tab
             table_items->first[probe_state->buckets[i]] = start + i;
         }
     }
+}
+
+template <PrimitiveType PT>
+Status DirectMappingJoinProbeFunc<PT>::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state) {
+    size_t probe_row_count = probe_state->probe_row_count;
+    auto& data = get_key_data(*probe_state);
+
+    if ((*probe_state->key_columns)[0]->is_nullable()) {
+        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[0]);
+
+        if (nullable_column->has_null()) {
+            auto& null_array = nullable_column->null_column()->get_data();
+            for (size_t i = 0; i < probe_row_count; i++) {
+                if (null_array[i] == 0) {
+                    probe_state->next[i] = table_items.first[data[i] - std::numeric_limits<CppType>::min()];
+                } else {
+                    probe_state->next[i] = 0;
+                }
+            }
+            probe_state->null_array = &null_array;
+        } else {
+            for (size_t i = 0; i < probe_row_count; i++) {
+                probe_state->next[i] = table_items.first[data[i] - std::numeric_limits<CppType>::min()];
+            }
+            probe_state->null_array = nullptr;
+        }
+        return Status::OK();
+    }
+
+    for (size_t i = 0; i < probe_row_count; i++) {
+        probe_state->next[i] = table_items.first[data[i] - std::numeric_limits<CppType>::min()];
+    }
+    probe_state->null_array = nullptr;
+    return Status::OK();
+}
+
+template <PrimitiveType PT>
+const Buffer<typename DirectMappingJoinProbeFunc<PT>::CppType>& DirectMappingJoinProbeFunc<PT>::get_key_data(
+        const HashTableProbeState& probe_state) {
+    if ((*probe_state.key_columns)[0]->is_nullable()) {
+        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state.key_columns)[0]);
+        return ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data();
+    }
+
+    return ColumnHelper::as_raw_column<ColumnType>((*probe_state.key_columns)[0])->get_data();
 }
 
 template <PrimitiveType PT>

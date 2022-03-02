@@ -85,6 +85,8 @@ public:
 
     void append(const T value) { _data.emplace_back(value); }
 
+    void append(const Buffer<T>& values) { _data.insert(_data.end(), values.begin(), values.end()); }
+
     void append_datum(const Datum& datum) override { _data.emplace_back(datum.get<ValueType>()); }
 
     void append(const Column& src, size_t offset, size_t count) override;
