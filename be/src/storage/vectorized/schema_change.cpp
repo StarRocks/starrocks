@@ -170,7 +170,6 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
         }                                                                           \
         break;                                                                      \
     }
-
 struct ConvertTypeMapHash {
     size_t operator()(const std::pair<FieldType, FieldType>& pair) const { return (pair.first + 31) ^ pair.second; }
 };
@@ -408,20 +407,45 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
             }
         } else {
             ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-            for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
-                Datum dst_datum;
-                if (_schema_mapping[i].default_value->is_null()) {
-                    dst_datum.set_null();
+            Datum dst_datum;
+            if (_schema_mapping[i].default_value->is_null()) {
+                dst_datum.set_null();
+            } else {
+                Field new_field =
+                        ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
+                const FieldType field_type = new_field.type()->type();
+                std::string tmp = _schema_mapping[i].default_value->to_string();
+                if (field_type == OLAP_FIELD_TYPE_HLL || field_type == OLAP_FIELD_TYPE_OBJECT ||
+                    field_type == OLAP_FIELD_TYPE_PERCENTILE) {
+                    switch (field_type) {
+                    case OLAP_FIELD_TYPE_HLL: {
+                        HyperLogLog hll(tmp);
+                        dst_datum.set_hyperloglog(&hll);
+                        break;
+                    }
+                    case OLAP_FIELD_TYPE_OBJECT: {
+                        BitmapValue bitmap(tmp);
+                        dst_datum.set_bitmap(&bitmap);
+                        break;
+                    }
+                    case OLAP_FIELD_TYPE_PERCENTILE: {
+                        PercentileValue percentile(tmp);
+                        dst_datum.set_percentile(&percentile);
+                        break;
+                    }
+                    default:
+                        LOG(WARNING) << "the column type is wrong. column_type: " << field_type_to_string(field_type);
+                        return false;
+                    }
                 } else {
-                    std::string tmp = _schema_mapping[i].default_value->to_string();
-                    Field new_field =
-                            ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
                     Status st = datum_from_string(new_field.type().get(), &dst_datum, tmp, nullptr);
                     if (!st.ok()) {
                         LOG(WARNING) << "create datum from string failed: status=" << st;
                         return false;
                     }
                 }
+            }
+            for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
                 new_col->append_datum(dst_datum);
             }
         }
@@ -920,9 +944,15 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     if (!base_migration_rlock.owns_lock()) {
         return Status::InternalError("base tablet get migration r_lock failed");
     }
+    if (Tablet::check_migrate(base_tablet)) {
+        return Status::InternalError(Substitute("tablet $0 is doing disk balance", base_tablet->table_id()));
+    }
     std::shared_lock new_migration_rlock(new_tablet->get_migration_lock(), std::try_to_lock);
     if (!new_migration_rlock.owns_lock()) {
         return Status::InternalError("new tablet get migration r_lock failed");
+    }
+    if (Tablet::check_migrate(new_tablet)) {
+        return Status::InternalError(Substitute("tablet $0 is doing disk balance", new_tablet->table_id()));
     }
 
     SchemaChangeParams sc_params;
