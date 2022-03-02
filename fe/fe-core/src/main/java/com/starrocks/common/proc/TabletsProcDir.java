@@ -89,7 +89,6 @@ public class TabletsProcDir implements ProcDirInterface {
                     tabletInfo.add(-1); // replica id
                     tabletInfo.add(-1); // backend id
                     tabletInfo.add(-1); // schema hash
-                    tabletInfo.add(FeConstants.null_string); // host name
                     tabletInfo.add(-1); // version
                     tabletInfo.add(0); // version hash
                     tabletInfo.add(-1); // lst success version
