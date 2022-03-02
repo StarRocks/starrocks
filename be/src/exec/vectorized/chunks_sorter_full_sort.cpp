@@ -114,6 +114,28 @@ Status ChunksSorterFullSort::_sort_chunks(RuntimeState* state) {
     // Step1: construct permutation
     RETURN_IF_ERROR(_build_sorting_data(state));
 
+    std::vector<SortHelper::SortDesc> sort_descs;
+    for (int col_index = 0; col_index < _get_number_of_order_by_columns(); col_index++) {
+        bool is_asc_order = (_sort_order_flag[col_index] == 1);
+        bool is_null_first;
+        if (is_asc_order) {
+            is_null_first = (_null_first_flag[col_index] == -1);
+        } else {
+            is_null_first = (_null_first_flag[col_index] == 1);
+        }
+
+        ExprContext* expr_ctx = (*_sort_exprs)[col_index];
+        PrimitiveType sort_type = expr_ctx->root()->type().type;
+
+        SortHelper::SortDesc desc;
+        desc.is_asc = is_asc_order;
+        desc.null_first = is_null_first;
+        desc.sort_type = sort_type;
+
+        sort_descs.emplace_back(desc);
+    }
+
+    SCOPED_TIMER(_sort_timer);
     // Step2: sort by columns or row
     // For no more than three order-by columns, sorting by columns can benefit from reducing
     // the cost of calling virtual functions of Column::compare_at.
@@ -128,9 +150,9 @@ Status ChunksSorterFullSort::_sort_chunks(RuntimeState* state) {
         }
     }
     if (strategy == ColumnWise) {
-        RETURN_IF_ERROR(_sort_by_columns(state));
+        return SortHelper::sort_multi_column(state, _sorted_segment->order_by_columns, sort_descs, _sorted_permutation);
     } else {
-        RETURN_IF_ERROR(_sort_by_row_cmp(state));
+        return SortHelper::sort_multi_column_rowwise(state, *_sorted_segment, sort_descs, _sorted_permutation);
     }
     return Status::OK();
 }
@@ -147,80 +169,6 @@ Status ChunksSorterFullSort::_build_sorting_data(RuntimeState* state) {
     }
 
     return Status::OK();
-}
-
-// Sort in row style with simplified Permutation struct for the seek of a better cache.
-Status ChunksSorterFullSort::_sort_by_row_cmp(RuntimeState* state) {
-    SCOPED_TIMER(_sort_timer);
-
-    if (_get_number_of_order_by_columns() < 1) {
-        return Status::OK();
-    }
-
-    // In this case, PermutationItem::chunk_index is constantly 0,
-    // and PermutationItem::index_in_chunk is always equal to PermutationItem::permutation_index,
-    // which is the sequence index of the element in the array.
-    // This simplified index array can help the sort routine to get a better performance.
-    const size_t elem_number = _sorted_permutation.size();
-    std::vector<size_t> indices(elem_number);
-    for (size_t i = 0; i < elem_number; ++i) {
-        indices[i] = i;
-    }
-
-    const DataSegment& data_segment = *_sorted_segment;
-    const std::vector<int>& sort_order_flag = _sort_order_flag;
-    const std::vector<int>& null_first_flag = _null_first_flag;
-
-    auto cmp_fn = [&data_segment, &sort_order_flag, &null_first_flag](const size_t& l, const size_t& r) {
-        int c = data_segment.compare_at(l, data_segment, r, sort_order_flag, null_first_flag);
-        if (c == 0) {
-            return l < r;
-        } else {
-            return c < 0;
-        }
-    };
-
-    pdqsort(state->cancelled_ref(), indices.begin(), indices.end(), cmp_fn);
-    RETURN_IF_CANCELLED(state);
-
-    // Set the permutation array to sorted indices.
-    for (size_t i = 0; i < elem_number; ++i) {
-        _sorted_permutation[i].index_in_chunk = _sorted_permutation[i].permutation_index = indices[i];
-    }
-    return Status::OK();
-}
-
-// Sort in column style to avoid calling virtual methods of Column.
-Status ChunksSorterFullSort::_sort_by_columns(RuntimeState* state) {
-    SCOPED_TIMER(_sort_timer);
-
-    int num_columns = _get_number_of_order_by_columns();
-    if (num_columns < 1) {
-        return Status::OK();
-    }
-
-    std::vector<SortHelper::SingleColumnSortDesc> sort_descs;
-    for (int col_index = num_columns - 1; col_index >= 0; --col_index) {
-        bool is_asc_order = (_sort_order_flag[col_index] == 1);
-        bool is_null_first;
-        if (is_asc_order) {
-            is_null_first = (_null_first_flag[col_index] == -1);
-        } else {
-            is_null_first = (_null_first_flag[col_index] == 1);
-        }
-
-        ExprContext* expr_ctx = (*_sort_exprs)[col_index];
-        PrimitiveType sort_type = expr_ctx->root()->type().type;
-
-        SortHelper::SingleColumnSortDesc desc;
-        desc.is_asc = is_asc_order;
-        desc.null_first = is_null_first;
-        desc.sort_type = sort_type;
-
-        sort_descs.emplace_back(desc);
-    }
-
-    return SortHelper::sort_multi_column(state, _sorted_segment->order_by_columns, sort_descs, _sorted_permutation);
 }
 
 void ChunksSorterFullSort::_append_rows_to_chunk(Chunk* dest, Chunk* src, const Permutation& permutation, size_t offset,

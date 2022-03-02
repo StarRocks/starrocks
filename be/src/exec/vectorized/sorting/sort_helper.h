@@ -4,9 +4,11 @@
 
 #include <type_traits>
 
+#include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "gutil/casts.h"
+#include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
@@ -15,6 +17,65 @@ namespace starrocks::vectorized {
 
 class SortHelper {
 public:
+    struct SortDesc {
+        PrimitiveType sort_type;
+        bool nullable;
+        bool stable;
+        bool is_asc;
+        bool null_first;
+    };
+
+    struct ColumnComparator {
+        // Compare function pointer
+        using CompareFunction =
+                std::add_pointer_t<int(Column* lhs, Column* rhs, size_t lhs_index, size_t rhs_index, bool null_first)>;
+        using CompareFunctions = std::vector<CompareFunction>;
+
+        // Compare a single column, use down_cast to avoid virtual function call
+        template <PrimitiveType ptype>
+        static int compare(Column* lhs, Column* rhs, size_t lhs_index, size_t rhs_index, bool null_first) {
+            using ColumnType = RunTimeColumnType<ptype>;
+            auto lhs_column = down_cast<ColumnType*>(lhs);
+            auto rhs_column = down_cast<ColumnType*>(rhs);
+            return lhs_column->compare_at(lhs_index, rhs_index, *rhs_column, null_first);
+        }
+
+        // Compare multiple columns
+        static int compare_multi_column(const Columns& lhs, const Columns& rhs, int lhs_row, int rhs_row,
+                                        const CompareFunctions& cmp_funcs, const std::vector<SortDesc>& sort_descs) {
+            for (int i = 0; i < lhs.size(); i++) {
+                CompareFunction cmp = cmp_funcs[i];
+                int x = cmp(lhs[i].get(), rhs[i].get(), lhs_row, rhs_row, sort_descs[i].null_first);
+                if (x != 0) {
+                    int order = sort_descs[i].is_asc ? 1 : -1;
+                    return x * order;
+                }
+            }
+            return 0;
+        }
+
+        // Build a compare function
+        template <PrimitiveType ptype>
+        CompareFunction operator()() {
+            return &compare<ptype>;
+        }
+
+        // Create a comparator a single column
+        static CompareFunction create_comparator(PrimitiveType ptype) {
+            return type_dispatch_sortable(ptype, ColumnComparator());
+        }
+
+        // Create a comparator for multi columns
+        static CompareFunctions create_comparator(const std::vector<SortDesc>& sort_desc) {
+            std::vector<CompareFunction> res;
+            res.reserve(sort_desc.size());
+            for (auto desc : sort_desc) {
+                res.emplace_back(create_comparator(desc.sort_type));
+            }
+            return res;
+        }
+    };
+
     template <typename CppTypeName>
     struct SortItem {
         CppTypeName value;
@@ -98,17 +159,9 @@ public:
         }
     };
 
-    struct SingleColumnSortDesc {
-        PrimitiveType sort_type;
-        bool nullable;
-        bool stable;
-        bool is_asc;
-        bool null_first;
-    };
-
     struct SingleColumnSorter {
         template <PrimitiveType ptype>
-        Status operator()(RuntimeState* state, Column* column, const SingleColumnSortDesc& desc, Permutation& perm) {
+        Status operator()(RuntimeState* state, Column* column, const SortDesc& desc, Permutation& perm) {
             if (desc.stable) {
                 if (desc.nullable) {
                     return _sort_on_nullable_column<ptype, true>(state, column, desc.is_asc, desc.null_first, perm);
@@ -127,22 +180,25 @@ public:
     };
 
     // Sort a single column
-    static Status sort_single_column(RuntimeState* state, Column* column, const SingleColumnSortDesc& desc,
-                                     Permutation& perm) {
+    static Status sort_single_column(RuntimeState* state, Column* column, const SortDesc& desc, Permutation& perm) {
         return type_dispatch_sortable(desc.sort_type, SingleColumnSorter(), state, column, desc, perm);
     }
 
     // Sort multiple columns, employ the LSD-like sort algorithm: sort column-wise from right to left
     // TODO(mofei) optimize it with incremental sort
-    static Status sort_multi_column(RuntimeState* state, Columns columns, std::vector<SingleColumnSortDesc>& descs,
+    static Status sort_multi_column(RuntimeState* state, Columns columns, const std::vector<SortDesc>& descs,
                                     Permutation& perm) {
         int num_columns = descs.size();
+        if (num_columns < 1) {
+            return Status::OK();
+        }
+
         for (int col_index = num_columns - 1; col_index >= 0; col_index--) {
             Column* column = columns[col_index].get();
             if (column->is_constant()) {
                 continue;
             }
-            SingleColumnSortDesc& desc = descs[col_index];
+            SortDesc desc = descs[col_index];
             desc.nullable = column->is_nullable();
             desc.stable = col_index != num_columns - 1;
 
@@ -156,6 +212,57 @@ public:
         }
 
         return Status::OK();
+    }
+
+    // Sort a DataSegment by row-wise compare
+    static Status sort_multi_column_rowwise(RuntimeState* state, DataSegment& data_segment,
+                                            const std::vector<SortDesc>& sort_descs, Permutation& perm) {
+        int num_columns = data_segment.order_by_columns.size();
+        if (num_columns < 1) {
+            return Status::OK();
+        }
+
+        // In this case, PermutationItem::chunk_index is constantly 0,
+        // and PermutationItem::index_in_chunk is always equal to PermutationItem::permutation_index,
+        // which is the sequence index of the element in the array.
+        // This simplified index array can help the sort routine to get a better performance.
+        const size_t elem_number = perm.size();
+        std::vector<size_t> indices(elem_number);
+        std::iota(indices.begin(), indices.end(), 0);
+
+        ColumnComparator::CompareFunctions cmp_funcs = ColumnComparator::create_comparator(sort_descs);
+
+        // TODO(mofei) simplify the compare
+        auto cmp_fn = [&data_segment, &sort_descs, &cmp_funcs](const size_t& l, const size_t& r) {
+            int c = compare_datasegment(data_segment, data_segment, l, r, sort_descs, cmp_funcs);
+            if (c == 0) {
+                return l < r;
+            } else {
+                return c < 0;
+            }
+        };
+
+        pdqsort(state->cancelled_ref(), indices.begin(), indices.end(), cmp_fn);
+        RETURN_IF_CANCELLED(state);
+
+        // Set the permutation array to sorted indices.
+        for (size_t i = 0; i < elem_number; ++i) {
+            perm[i].index_in_chunk = perm[i].permutation_index = indices[i];
+        }
+        return Status::OK();
+    }
+
+    // Return value:
+    //  < 0: current row precedes the row in the other chunk;
+    // == 0: current row is equal to the row in the other chunk;
+    //  > 0: current row succeeds the row in the other chunk;
+    static int compare_datasegment(const DataSegment& lhs, const DataSegment& rhs, size_t lhs_index, size_t rhs_index,
+                                   const std::vector<SortDesc>& sort_descs,
+                                   const ColumnComparator::CompareFunctions& cmp_funcs) {
+        DCHECK_EQ(lhs.order_by_columns.size(), rhs.order_by_columns.size());
+
+        return ColumnComparator::compare_multi_column(lhs.order_by_columns, rhs.order_by_columns, lhs_index, rhs_index,
+                                                      cmp_funcs, sort_descs);
     }
 
 private:

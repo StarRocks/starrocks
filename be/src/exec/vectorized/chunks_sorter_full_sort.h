@@ -42,8 +42,6 @@ private:
     Status _sort_chunks(RuntimeState* state);
     Status _build_sorting_data(RuntimeState* state);
 
-    Status _sort_by_row_cmp(RuntimeState* state);
-    Status _sort_by_columns(RuntimeState* state);
 
     void _append_rows_to_chunk(Chunk* dest, Chunk* src, const Permutation& permutation, size_t offset, size_t count);
 
