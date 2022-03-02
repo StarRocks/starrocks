@@ -216,6 +216,16 @@ if [ ${FE_MODULES}x != ""x ]; then
     cd ${STARROCKS_HOME}
 fi
 
+# Build JDBC Bridge
+echo "Build JDBC Bridge"
+cd ${STARROCKS_HOME}/jdbc_bridge
+if [ ${CLEAN} -eq 1 ]; then
+    ${MVN_CMD} clean
+fi
+${MVN_CMD} package -DskipTests
+cd ${STARROCKS_HOME}
+
+
 # Clean and prepare output dir
 STARROCKS_OUTPUT=${STARROCKS_HOME}/output/
 mkdir -p ${STARROCKS_OUTPUT}
@@ -263,6 +273,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/udf/*.a ${STARROCKS_OUTPUT}/udf/lib/
     cp -r -p ${STARROCKS_HOME}/be/output/udf/include/* ${STARROCKS_OUTPUT}/udf/include/
     cp -r -p ${STARROCKS_HOME}/gensrc/build/gen_java/udf-class-loader.jar ${STARROCKS_OUTPUT}/be/lib
+    cp -r -p ${STARROCKS_HOME}/jdbc_bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
@@ -274,6 +285,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
     fi
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/aliyun_oss_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
 fi
+
+
 
 cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"
 build-support/gen_notice.py "${STARROCKS_HOME}/licenses,${STARROCKS_HOME}/licenses-binary" "${STARROCKS_OUTPUT}/NOTICE.txt" all
