@@ -69,4 +69,9 @@ public class EmptySetNode extends PlanNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.EMPTY_SET_NODE;
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
 }

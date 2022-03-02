@@ -21,6 +21,9 @@
 
 #include "exec/empty_set_node.h"
 
+#include "exec/pipeline/empty_set_operator.h"
+#include "exec/pipeline/pipeline_builder.h"
+
 namespace starrocks {
 
 EmptySetNode::EmptySetNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -29,6 +32,20 @@ EmptySetNode::EmptySetNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
 Status EmptySetNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     *eos = true;
     return Status::OK();
+}
+
+pipeline::OpFactories EmptySetNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+
+    OpFactories ops;
+    ops.emplace_back(std::make_shared<EmptySetOperatorFactory>(context->next_operator_id(), id()));
+
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(ops.back().get(), context, rc_rf_probe_collector);
+
+    return ops;
 }
 
 } // namespace starrocks
