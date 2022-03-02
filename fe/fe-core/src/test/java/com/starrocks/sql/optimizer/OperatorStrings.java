@@ -228,7 +228,7 @@ public class OperatorStrings {
         @Override
         public OperatorStr visitPhysicalJDBCScan(OptExpression optExpression, Integer step) {
             PhysicalJDBCScanOperator scan = (PhysicalJDBCScanOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("SCAN (");
+            StringBuilder sb = new StringBuilder("JDBC SCAN (");
             sb.append("columns").append(scan.getUsedColumns());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
             sb.append(")");
