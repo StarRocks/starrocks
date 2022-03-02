@@ -348,10 +348,12 @@ public class SelectAnalyzer {
         TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
 
-        if (aggregations.stream().filter(FunctionCallExpr::isDistinct).count() > 1
-                && aggregations.stream().anyMatch(functionCallExpr ->
-                functionCallExpr.getChild(0).getType().isArrayType())) {
-            throw new SemanticException("No matching function with signature: multi_distinct_count(ARRAY)");
+        if (aggregations.stream().filter(FunctionCallExpr::isDistinct).count() > 1) {
+            for (FunctionCallExpr agg : aggregations) {
+                if (agg.isDistinct() && agg.getChildren().size() > 0 && agg.getChild(0).getType().isArrayType()) {
+                    throw new SemanticException("No matching function with signature: multi_distinct_count(ARRAY)");
+                }
+            }
         }
 
         analyzeState.setAggregate(aggregations);
