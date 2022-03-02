@@ -37,18 +37,6 @@
             <artifactId>log4j-slf4j-impl</artifactId>
             <version>${log4j.version}</version>
         </dependency>
-
-        <!-- https://mvnrepository.com/artifact/io.dropwizard.metrics/metrics-core -->
-        <dependency>
-            <groupId>io.dropwizard.metrics</groupId>
-            <artifactId>metrics-core</artifactId>
-            <version>4.0.2</version>
-        </dependency>
-        <dependency>
-            <groupId>org.ini4j</groupId>
-            <artifactId>ini4j</artifactId>
-            <version>0.5.4</version>
-        </dependency>
     </dependencies>
 
     <build>
@@ -58,10 +46,10 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${compiler-plugin.version}</version>
-                <!--configuration>
+                <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
-                </configuration-->
+                </configuration>
             </plugin>
             <!-- copy all dependency libs to target lib dir -->
             <plugin>
@@ -80,7 +68,6 @@
                             <overWriteReleases>false</overWriteReleases>
                             <overWriteSnapshots>false</overWriteSnapshots>
                             <overWriteIfNewer>true</overWriteIfNewer>
-                            <!--skip>${skip.plugin}</skip-->
                         </configuration>
                     </execution>
                 </executions>
