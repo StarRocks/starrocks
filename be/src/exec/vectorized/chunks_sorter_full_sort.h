@@ -35,6 +35,8 @@ public:
     bool pull_chunk(ChunkPtr* chunk) override;
 
     int64_t mem_usage() const override;
+    
+    void set_compare_strategy(CompareStrategy strategy) { _compare_strategy = strategy; }
 
     friend class SortHelper;
 
@@ -45,6 +47,9 @@ private:
 
     void _append_rows_to_chunk(Chunk* dest, Chunk* src, const Permutation& permutation, size_t offset, size_t count);
 
+    // 1: row-wise
+    // 2: column-wise
+    CompareStrategy _compare_strategy = Default;
     ChunkUniquePtr _big_chunk;
     std::unique_ptr<DataSegment> _sorted_segment;
     mutable Permutation _sorted_permutation;
