@@ -152,6 +152,11 @@ public:
     // This function will copy the [3, 2] row of src to this chunk.
     void append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
 
+    // This function will append data from src according to the input indexes.
+    // The columns of src chunk will be destroyed after append。
+    // Peak memory usage can be reduced when src chunk has a large number of rows and columns
+    void rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
+
     // Remove rows from this chunk according to the vector |selection|.
     // The n-th row will be removed if selection[n] is zero.
     // The size of |selection| must be equal to the number of rows.
