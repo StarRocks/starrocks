@@ -20,6 +20,7 @@
 |audit_log_roll_interval|DAY|审计日志拆分的时间间隔, DAY 或者 HOUR|
 |audit_log_delete_age|30d|审计日志删除的间隔|
 |audit_log_roll_mode|TIME-DAY|审计日志拆分模式|
+|label_keep_max_num|1000|一定时间内所保留导入任务的最大数量。<br> 保留时间在label_keep_max_second中进行设置。|
 |label_keep_max_second|259200|label保留时长，默认3天，保留太久会消耗很多内存|
 |history_job_keep_max_second|604800|历史任务最大的保留时长，例如schema change任务，默认7天|
 |label_clean_interval_second|14400|label清理的间隔|
