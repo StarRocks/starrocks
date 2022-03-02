@@ -17,6 +17,11 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
+import com.starrocks.sql.optimizer.base.DistributionProperty;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -527,5 +532,73 @@ public class Utils {
         } catch (Exception ignored) {
         }
         return Optional.empty();
+    }
+
+    // Compute the required properties of shuffle join for children, adjust shuffle columns orders for
+    // respect the required properties from parent.
+    public static List<PhysicalPropertySet> computeShuffleJoinRequiredProperties(PhysicalPropertySet requiredFromParent,
+                                                                                 List<Integer> leftShuffleColumns,
+                                                                                 List<Integer> rightShuffleColumns) {
+        Optional<HashDistributionDesc> requiredShuffleDescOptional =
+                getShuffleJoinHashDistributionDesc(requiredFromParent);
+        if (!requiredShuffleDescOptional.isPresent()) {
+            // required property is not SHUFFLE_JOIN
+            return createShuffleJoinRequiredProperties(leftShuffleColumns, rightShuffleColumns);
+        } else {
+            // required property type is SHUFFLE_JOIN, adjust the required property shuffle columns based on the column
+            // order required by parent
+            HashDistributionDesc requiredShuffleDesc = requiredShuffleDescOptional.get();
+            boolean adjustBasedOnLeft = leftShuffleColumns.size() == requiredShuffleDesc.getColumns().size() &&
+                    leftShuffleColumns.containsAll(requiredShuffleDesc.getColumns()) &&
+                    requiredShuffleDesc.getColumns().containsAll(leftShuffleColumns);
+            boolean adjustBasedOnRight = rightShuffleColumns.size() == requiredShuffleDesc.getColumns().size() &&
+                    rightShuffleColumns.containsAll(requiredShuffleDesc.getColumns()) &&
+                    requiredShuffleDesc.getColumns().containsAll(rightShuffleColumns);
+
+            if (adjustBasedOnLeft || adjustBasedOnRight) {
+                List<Integer> requiredLeft = Lists.newArrayList();
+                List<Integer> requiredRight = Lists.newArrayList();
+
+                for (Integer cid : requiredShuffleDesc.getColumns()) {
+                    int idx = adjustBasedOnLeft ? leftShuffleColumns.indexOf(cid) :
+                            rightShuffleColumns.indexOf(cid);
+                    requiredLeft.add(leftShuffleColumns.get(idx));
+                    requiredRight.add(rightShuffleColumns.get(idx));
+                }
+                return createShuffleJoinRequiredProperties(requiredLeft, requiredRight);
+            } else {
+                return createShuffleJoinRequiredProperties(leftShuffleColumns, rightShuffleColumns);
+            }
+        }
+    }
+
+    private static Optional<HashDistributionDesc> getShuffleJoinHashDistributionDesc(
+            PhysicalPropertySet requiredPropertySet) {
+        if (!requiredPropertySet.getDistributionProperty().isShuffle()) {
+            return Optional.empty();
+        }
+        HashDistributionDesc requireDistributionDesc =
+                ((HashDistributionSpec) requiredPropertySet.getDistributionProperty().getSpec())
+                        .getHashDistributionDesc();
+        if (!HashDistributionDesc.SourceType.SHUFFLE_JOIN.equals(requireDistributionDesc.getSourceType())) {
+            return Optional.empty();
+        }
+
+        return Optional.of(requireDistributionDesc);
+    }
+
+    private static List<PhysicalPropertySet> createShuffleJoinRequiredProperties(List<Integer> leftColumns,
+                                                                                 List<Integer> rightColumns) {
+        HashDistributionSpec leftDistribution = DistributionSpec.createHashDistributionSpec(
+                new HashDistributionDesc(leftColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
+        HashDistributionSpec rightDistribution = DistributionSpec.createHashDistributionSpec(
+                new HashDistributionDesc(rightColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
+
+        PhysicalPropertySet leftRequiredPropertySet =
+                new PhysicalPropertySet(new DistributionProperty(leftDistribution));
+        PhysicalPropertySet rightRequiredPropertySet =
+                new PhysicalPropertySet(new DistributionProperty(rightDistribution));
+
+        return Lists.newArrayList(leftRequiredPropertySet, rightRequiredPropertySet);
     }
 }
