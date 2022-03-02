@@ -492,7 +492,6 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, uint3
     table_items->row_count = row_count;
     table_items->next.resize(row_count + 1);
     table_items->build_pool = std::make_unique<MemPool>();
-    table_items->probe_pool = std::make_unique<MemPool>();
     table_items->search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTimer");
     table_items->output_build_column_timer = ADD_TIMER(_runtime_profile, "OutputBuildColumnTimer");
     table_items->output_probe_column_timer = ADD_TIMER(_runtime_profile, "OutputProbeColumnTimer");
@@ -502,6 +501,7 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, uint3
 void JoinHashMapTest::prepare_probe_state(HashTableProbeState* probe_state, uint32_t probe_row_count) {
     probe_state->probe_row_count = probe_row_count;
     probe_state->cur_probe_index = 0;
+    probe_state->probe_pool = std::make_unique<MemPool>();
     JoinHashMapHelper::prepare_map_index(probe_state, config::vector_chunk_size);
 
     for (size_t i = 0; i < probe_row_count; i++) {
@@ -1094,7 +1094,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.build_pool = std::make_unique<MemPool>();
-    table_items.probe_pool = std::make_unique<MemPool>();
+    probe_state.probe_pool = std::make_unique<MemPool>();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -1123,7 +1123,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
         ASSERT_EQ(found_count, 1);
     }
     table_items.build_pool.reset();
-    table_items.probe_pool.reset();
+    probe_state.probe_pool.reset();
 }
 
 // NOLINTNEXTLINE
@@ -1155,7 +1155,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.next.resize(11);
     table_items.build_pool = std::make_unique<MemPool>();
-    table_items.probe_pool = std::make_unique<MemPool>();
+    probe_state.probe_pool = std::make_unique<MemPool>();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -1194,7 +1194,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
         }
     }
     table_items.build_pool.reset();
-    table_items.probe_pool.reset();
+    probe_state.probe_pool.reset();
 }
 
 // NOLINTNEXTLINE

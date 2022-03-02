@@ -49,7 +49,7 @@ struct HashJoinerParam {
                     const RowDescriptor& probe_row_descriptor, const RowDescriptor& row_descriptor,
                     TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
-                    const std::set<SlotId>& output_slots)
+                    const std::set<SlotId>& output_slots, const TJoinDistributionMode::type distribution_mode)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _node_id(node_id),
@@ -67,10 +67,13 @@ struct HashJoinerParam {
               _probe_node_type(probe_node_type),
               _build_conjunct_ctxs_is_empty(build_conjunct_ctxs_is_empty),
               _build_runtime_filters(build_runtime_filters),
-              _output_slots(output_slots) {}
+              _output_slots(output_slots),
+              _distribution_mode(distribution_mode) {}
+
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
     ~HashJoinerParam() = default;
+
     ObjectPool* _pool;
     const THashJoinNode& _hash_join_node;
     TPlanNodeId _node_id;
@@ -89,6 +92,9 @@ struct HashJoinerParam {
     bool _build_conjunct_ctxs_is_empty;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
     std::set<SlotId> _output_slots;
+
+    const TJoinDistributionMode::type _distribution_mode;
+    bool _is_buildable = false;
 };
 
 class HashJoiner final : public pipeline::ContextWithDependency {
@@ -138,6 +144,10 @@ public:
     size_t get_ht_row_count() { return _ht.get_row_count(); }
 
     Status create_runtime_filters(RuntimeState* state);
+
+    void reference_hash_table(HashJoiner* src_joiner);
+
+    bool is_buildable() const { return _is_buildable; }
 
 private:
     static bool _has_null(const ColumnPtr& column);
@@ -337,13 +347,12 @@ private:
     Columns _key_columns;
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
-    size_t _probe_chunk_count = 0;
-    size_t _output_chunk_count = 0;
 
-    bool _eos = false;
     // hash table doesn't have reserved data
     bool _ht_has_remain = false;
     // right table have not output data for right outer join/right semi join/right anti join/full outer join
+
+    const bool _is_buildable;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _build_ht_timer = nullptr;

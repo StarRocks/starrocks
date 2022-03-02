@@ -106,7 +106,6 @@ struct JoinHashTableItems {
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
 
     std::unique_ptr<MemPool> build_pool = nullptr;
-    std::unique_ptr<MemPool> probe_pool = nullptr;
     std::vector<JoinKeyDesc> join_keys;
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;
@@ -151,6 +150,40 @@ struct HashTableProbeState {
     // cur_probe_index records the position of the last probe
     uint32_t cur_probe_index = 0;
     uint32_t cur_row_match_count = 0;
+
+    std::unique_ptr<MemPool> probe_pool = nullptr;
+
+    HashTableProbeState() = default;
+    ~HashTableProbeState() = default;
+
+    HashTableProbeState(const HashTableProbeState& rhs)
+            : is_nulls(rhs.is_nulls),
+              buckets(rhs.buckets),
+              build_index(rhs.build_index),
+              probe_index(rhs.probe_index),
+              next(rhs.next),
+              probe_slice(rhs.probe_slice),
+              null_array(rhs.null_array),
+              probe_key_column(rhs.probe_key_column == nullptr ? nullptr : rhs.probe_key_column->clone()),
+              key_columns(rhs.key_columns),
+              join_keys(rhs.join_keys),
+              build_match_index(rhs.build_match_index),
+              probe_match_index(rhs.probe_match_index),
+              probe_match_filter(rhs.probe_match_filter),
+              count(rhs.count),
+              probe_row_count(rhs.probe_row_count),
+              match_flag(rhs.match_flag),
+              has_null_build_tuple(rhs.has_null_build_tuple),
+              has_remain(rhs.has_remain),
+              cur_probe_index(rhs.cur_probe_index),
+              cur_row_match_count(rhs.cur_row_match_count),
+              probe_pool(rhs.probe_pool == nullptr ? nullptr : std::make_unique<MemPool>()) {}
+
+    // Disable copy assignment.
+    HashTableProbeState& operator=(const HashTableProbeState& rhs) = delete;
+    // Disable move ctor and assignment.
+    HashTableProbeState(HashTableProbeState&&) = delete;
+    HashTableProbeState& operator=(HashTableProbeState&&) = delete;
 };
 
 struct HashTableParam {
@@ -378,7 +411,7 @@ public:
     static const Buffer<Slice>& get_key_data(const HashTableProbeState& probe_state) { return probe_state.probe_slice; }
 
     static void prepare(RuntimeState* state, JoinHashTableItems* table_items, HashTableProbeState* probe_state) {
-        table_items->probe_pool->clear();
+        probe_state->probe_pool->clear();
         probe_state->probe_slice.resize(probe_state->probe_row_count);
         probe_state->is_nulls.resize(state->chunk_size());
     }
@@ -512,7 +545,19 @@ private:
 
 class JoinHashTable {
 public:
-    ~JoinHashTable();
+    JoinHashTable() = default;
+    ~JoinHashTable() = default;
+
+    // Disable copy ctor and assignment.
+    JoinHashTable(const JoinHashTable&) = delete;
+    JoinHashTable& operator=(const JoinHashTable&) = delete;
+    // Enable move ctor and move assignment.
+    JoinHashTable(JoinHashTable&&) = default;
+    JoinHashTable& operator=(JoinHashTable&&) = default;
+
+    // Clone a new hash table with the same hash table as this,
+    // and the different probe state from this.
+    JoinHashTable clone_readable_table();
 
     void create(const HashTableParam& param);
     void close();
@@ -542,8 +587,8 @@ public:
         if (_table_items->build_pool != nullptr) {
             usage += _table_items->build_pool->total_reserved_bytes();
         }
-        if (_table_items->probe_pool != nullptr) {
-            usage += _table_items->probe_pool->total_reserved_bytes();
+        if (_probe_state->probe_pool != nullptr) {
+            usage += _probe_state->probe_pool->total_reserved_bytes();
         }
         if (_table_items->build_key_column != nullptr) {
             usage += _table_items->build_key_column->memory_usage();
@@ -587,7 +632,7 @@ private:
     JoinHashMapType _hash_map_type = JoinHashMapType::empty;
     bool _need_create_tuple_columns = true;
 
-    std::unique_ptr<JoinHashTableItems> _table_items;
+    std::shared_ptr<JoinHashTableItems> _table_items;
     std::unique_ptr<HashTableProbeState> _probe_state;
 };
 } // namespace starrocks::vectorized
