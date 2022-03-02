@@ -40,11 +40,18 @@ void JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::ve
     PrimitiveType types[num_cols];
     for (int i = 0; i < num_cols; ++i) {
         types[i] = ctx->get_arg_type(i)->type;
-        int buffers_offset = buffers->size();
-        columns[i]->accept(&vistor);
-        int buffers_sz = buffers->size() - buffers_offset;
-        auto arg = helper.create_boxed_array(types[i], num_rows, columns[i]->is_nullable(), &(*buffers)[buffers_offset],
-                                             buffers_sz);
+        jobject arg = nullptr;
+        if (columns[i]->only_null()) {
+            arg = helper.create_array(num_rows);
+        } else {
+            DCHECK(!columns[i]->is_constant());
+            int buffers_offset = buffers->size();
+            columns[i]->accept(&vistor);
+            int buffers_sz = buffers->size() - buffers_offset;
+            arg = helper.create_boxed_array(types[i], num_rows, columns[i]->is_nullable(), &(*buffers)[buffers_offset],
+                                            buffers_sz);
+        }
+
         res->emplace_back(arg);
     }
 }

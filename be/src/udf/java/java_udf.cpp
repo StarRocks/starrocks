@@ -97,7 +97,15 @@ void JVMFunctionHelper::_init() {
     _batch_call = _env->GetStaticMethodID(
             _udf_helper_class, "batchCall",
             "(Ljava/lang/Object;Ljava/lang/reflect/Method;I[Ljava/lang/Object;)[Ljava/lang/Object;");
+    _batch_call_no_args = _env->GetStaticMethodID(_udf_helper_class, "batchCall",
+                                                  "(Ljava/lang/Object;Ljava/lang/reflect/Method;I)[Ljava/lang/Object;");
+    _int_batch_call = _env->GetStaticMethodID(_udf_helper_class, "batchCall",
+                                              "([Ljava/lang/Object;Ljava/lang/reflect/Method;I)[I");
     _direct_buffer_class = _env->FindClass("java/nio/ByteBuffer");
+    _direct_buffer_clear = _env->GetMethodID(_direct_buffer_class, "clear", "()Ljava/nio/Buffer;");
+    DCHECK(_batch_call);
+    DCHECK(_batch_call_no_args);
+    DCHECK(_direct_buffer_clear);
 }
 
 // https://stackoverflow.com/questions/45232522/how-to-set-classpath-of-a-running-jvm-in-cjni
@@ -193,6 +201,10 @@ jmethodID JVMFunctionHelper::getStaticMethod(jclass clazz, const std::string& me
     return _env->GetStaticMethodID(clazz, method.c_str(), sig.c_str());
 }
 
+jobject JVMFunctionHelper::create_array(int sz) {
+    return _env->NewObjectArray(sz, _object_class, nullptr);
+}
+
 jobject JVMFunctionHelper::create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz) {
     jobjectArray input_arr = _env->NewObjectArray(sz, _direct_buffer_class, nullptr);
     for (int i = 0; i < sz; ++i) {
@@ -206,6 +218,11 @@ jobject JVMFunctionHelper::create_boxed_array(int type, int num_rows, bool nulla
     }
     _env->DeleteLocalRef(input_arr);
     return res;
+}
+
+jobject JVMFunctionHelper::create_object_array(jobject o, int num_rows) {
+    jobjectArray res_arr = _env->NewObjectArray(num_rows, _object_array_class, o);
+    return res_arr;
 }
 
 void JVMFunctionHelper::batch_update_single(FunctionContext* ctx, jobject udaf, jobject update, jobject state,
@@ -227,12 +244,20 @@ jobject JVMFunctionHelper::batch_call(FunctionContext* ctx, jobject udf, jobject
                                       int rows) {
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
     auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_call, udf, evaluate, rows, input_arr);
-    if (auto e = _env->ExceptionOccurred()) {
-        LOG(WARNING) << "fail to call batch:" << this->dumpExceptionString(e);
-        ctx->set_error(this->dumpExceptionString(e).c_str());
-        _env->ExceptionClear();
-    }
+    _check_call_exception(ctx);
     _env->DeleteLocalRef(input_arr);
+    return res;
+}
+
+jobject JVMFunctionHelper::batch_call(FunctionContext* ctx, jobject caller, jobject method, int rows) {
+    auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_call_no_args, caller, method, rows);
+    _check_call_exception(ctx);
+    return res;
+}
+
+jobject JVMFunctionHelper::int_batch_call(FunctionContext* ctx, jobject callers, jobject method, int rows) {
+    auto res = _env->CallStaticObjectMethod(_udf_helper_class, _int_batch_call, callers, method, rows);
+    _check_call_exception(ctx);
     return res;
 }
 
@@ -280,6 +305,10 @@ std::string JVMFunctionHelper::to_jni_class_name(const std::string& name) {
     return jni_class_name;
 }
 
+void JVMFunctionHelper::clear(DirectByteBuffer* buffer) {
+    _env->CallNonvirtualVoidMethod(buffer->handle(), _direct_buffer_class, _direct_buffer_clear);
+}
+
 DirectByteBuffer::DirectByteBuffer(void* ptr, int capacity) {
     auto& helper = JVMFunctionHelper::getInstance();
     auto* env = helper.getEnv();
@@ -294,15 +323,6 @@ DirectByteBuffer::~DirectByteBuffer() {
         JNIEnv* env = helper.getEnv();
         env->DeleteLocalRef(_handle);
     }
-}
-
-void DirectByteBuffer::clear() {
-    DCHECK(_handle != nullptr);
-    auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
-    jclass byte_buffer_clazz = env->FindClass(JNI_CLASS_NAME);
-    jmethodID methodID = env->GetMethodID(byte_buffer_clazz, "clear", "()V");
-    env->CallVoidMethod(_handle, methodID);
 }
 
 JVMClass::~JVMClass() {

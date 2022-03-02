@@ -24,7 +24,7 @@ public class UDFHelper {
     public static final int TYPE_ARRAY = 15;
 
     // create boxed array
-    // 
+    //
     public static Object[] createBoxedArray(int type, int numRows, boolean nullable, ByteBuffer... buffer) {
         switch (type) {
             case TYPE_BOOLEAN: {
@@ -265,38 +265,40 @@ public class UDFHelper {
     // TODO: we need to find a more efficient way of calling
     public static void batchUpdateSingle(Object o, Method method, Object state, Object[] column)
             throws InvocationTargetException, IllegalAccessException {
-        Object[][] inputs = (Object[][])column;
+        Object[][] inputs = (Object[][]) column;
         Object[] parameter = new Object[inputs.length + 1];
         int numRows = inputs[0].length;
         parameter[0] = state;
-        for(int i = 0;i < numRows; ++i) {
-            for(int j = 0;j < column.length; ++j) {
+        for (int i = 0; i < numRows; ++i) {
+            for (int j = 0; j < column.length; ++j) {
                 parameter[j + 1] = inputs[j][i];
             }
             method.invoke(o, parameter);
         }
     }
 
+    // batch call void(Object...)
     public static void batchUpdate(Object o, Method method, Object[] column)
             throws InvocationTargetException, IllegalAccessException {
-        Object[][] inputs = (Object[][])column;
-        Object[] parameter = new Object[inputs.length];        
+        Object[][] inputs = (Object[][]) column;
+        Object[] parameter = new Object[inputs.length];
         int numRows = inputs[0].length;
-        for(int i = 0;i < numRows; ++i) {
-            for(int j = 0;j < column.length; ++j) {
+        for (int i = 0; i < numRows; ++i) {
+            for (int j = 0; j < column.length; ++j) {
                 parameter[j] = inputs[j][i];
             }
             method.invoke(o, parameter);
         }
     }
 
-    public static Object[] batchCall(Object o, Method method, int batchSize, Object[] column) 
+    // batch call Object(Object...)
+    public static Object[] batchCall(Object o, Method method, int batchSize, Object[] column)
             throws InvocationTargetException, IllegalAccessException {
-        Object[][] inputs = (Object[][])column;
-        Object[] parameter = new Object[inputs.length];   
-        Object[] res = new Object[batchSize];     
-        for(int i = 0;i < batchSize; ++i) {
-            for(int j = 0;j < column.length; ++j) {
+        Object[][] inputs = (Object[][]) column;
+        Object[] parameter = new Object[inputs.length];
+        Object[] res = new Object[batchSize];
+        for (int i = 0; i < batchSize; ++i) {
+            for (int j = 0; j < column.length; ++j) {
                 parameter[j] = inputs[j][i];
             }
             res[i] = method.invoke(o, parameter);
@@ -304,4 +306,23 @@ public class UDFHelper {
         return res;
     }
 
+    // batch call no arguments function
+    public static Object[] batchCall(Object o, Method method, int batchSize)
+            throws InvocationTargetException, IllegalAccessException {
+        Object[] res = new Object[batchSize];
+        for (int i = 0; i < batchSize; ++i) {
+            res[i] = method.invoke(o);
+        }
+        return res;
+    }
+
+    // batch call int()
+    public static int[] batchCall(Object[] o, Method method, int batchSize)
+            throws InvocationTargetException, IllegalAccessException {
+        int[] res = new int[batchSize];
+        for (int i = 0; i < batchSize; ++i) {
+            res[i] = (int) method.invoke(o[i]);
+        }
+        return res;
+    }
 }

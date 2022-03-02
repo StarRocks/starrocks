@@ -391,7 +391,7 @@ public class CreateFunctionStmt extends DdlStmt {
             // long serializeLength();
             Method method = udafStateClass.getMethod(SERIALIZE_LENGTH_METHOD_NAME, true);
             udafStateClass.checkMethodNonStaticAndPublic(method);
-            udafStateClass.checkReturnJavaType(method, long.class);
+            udafStateClass.checkReturnJavaType(method, int.class);
             udafStateClass.checkArgumentCount(method, 0);
         }
     }

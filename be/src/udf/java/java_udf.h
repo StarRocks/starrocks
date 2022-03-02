@@ -48,8 +48,12 @@ public:
     jstring to_jstring(const std::string& str);
     jmethodID getMethod(jclass clazz, const std::string& method, const std::string& sig);
     jmethodID getStaticMethod(jclass clazz, const std::string& method, const std::string& sig);
+    // create a object array
+    jobject create_array(int sz);
     // convert column data to Java Object Array
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
+    // create object array with the same elements
+    jobject create_object_array(jobject o, int num_rows);
     // batch update input: col1 col2
     void batch_update_single(FunctionContext* ctx, jobject udaf, jobject update, jobject state, jobject* input,
                              int cols);
@@ -58,6 +62,12 @@ public:
 
     // batch call evalute
     jobject batch_call(FunctionContext* ctx, jobject udf, jobject evaluate, jobject* input, int cols, int rows);
+    // batch call no-args function
+    jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, int rows);
+    // batch call int()
+    // callers should be Object[]
+    // return: jobject int[]
+    jobject int_batch_call(FunctionContext* ctx, jobject callers, jobject method, int rows);
 
     DECLARE_NEW_BOX(uint8_t, Boolean)
     DECLARE_NEW_BOX(int8_t, Byte)
@@ -75,6 +85,9 @@ public:
     // replace '.' as '/'
     // eg: java.lang.Integer -> java/lang/Integer
     static std::string to_jni_class_name(const std::string& name);
+
+    // reset Buffer set read/write position to zero
+    void clear(DirectByteBuffer* buffer);
 
     jclass object_class() { return _object_class; }
 
@@ -113,7 +126,10 @@ private:
     jmethodID _batch_update_single;
     jmethodID _batch_update;
     jmethodID _batch_call;
+    jmethodID _batch_call_no_args;
+    jmethodID _int_batch_call;
     jclass _direct_buffer_class;
+    jmethodID _direct_buffer_clear;
 };
 
 // Used for UDAF serialization and deserialization,
@@ -150,8 +166,7 @@ public:
         std::swap(this->_capacity, tmp._capacity);
         return *this;
     }
-    // thread safe
-    void clear();
+
     jobject handle() { return _handle; }
     void* data() { return _data; }
     int capacity() { return _capacity; }
@@ -306,7 +321,7 @@ struct JavaUDAFContext {
     std::unique_ptr<JavaMethodDescriptor> get_values;
 
     std::unique_ptr<DirectByteBuffer> buffer;
-
+    // handle for UDAF object
     jobject handle;
     std::vector<uint8_t> buffer_data;
 

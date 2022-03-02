@@ -60,6 +60,15 @@ struct UDFFunctionCallHelper {
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
         std::vector<const Column*> input_cols;
+
+        for (int i = 0; i < columns.size(); ++i) {
+            if (columns[i]->only_null()) {
+                // we will handle NULL later
+            } else if (columns[i]->is_constant()) {
+                columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, columns[i]);
+            }
+        }
+
         for (auto col : columns) {
             input_cols.emplace_back(col.get());
         }
@@ -175,6 +184,7 @@ Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) 
     // todo: varargs use for allocate slice memory, need compute buffer size
     //  for varargs in vectorized engine?
     _fn_context_index = context->register_func(state, return_type, args_types, 0);
+    context->fn_context(_fn_context_index)->set_is_udf(true);
 
     _func_desc = std::make_shared<JavaUDFContext>();
 
