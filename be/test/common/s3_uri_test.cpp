@@ -68,9 +68,4 @@ PARALLEL_TEST(S3URITest, missing_schema) {
     ASSERT_FALSE(uri.parse("/bucket/puppy.jpg"));
 }
 
-PARALLEL_TEST(S3URITest, missing_bucket) {
-    S3URI uri;
-    ASSERT_FALSE(uri.parse("s3://puppy.jpg"));
-}
-
 } // namespace starrocks
