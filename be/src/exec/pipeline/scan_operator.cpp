@@ -17,8 +17,8 @@ using starrocks::workgroup::WorkGroupManager;
 
 // ========== ScanOperator ==========
 
-ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, std::shared_ptr<ScanNodeInOperator> scan_node)
-        : SourceOperator(factory, id, "olap_scan", scan_node->node()->id()),
+ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node)
+        : SourceOperator(factory, id, "olap_scan", scan_node->id()),
           _scan_node(scan_node),
           _is_io_task_running(MAX_IO_TASKS_PER_OP),
           _chunk_sources(MAX_IO_TASKS_PER_OP) {}
@@ -26,7 +26,6 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, std::shared_ptr
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
-    _state = state;
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
         auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
@@ -37,7 +36,8 @@ Status ScanOperator::prepare(RuntimeState* state) {
                                         _io_threads->get_queue_capacity()));
         }
     }
-    RETURN_IF_ERROR(_scan_node->do_prepare(this));
+
+    RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
 }
@@ -50,12 +50,12 @@ Status ScanOperator::close(RuntimeState* state) {
     }
     for (auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr) {
-            chunk_source->close(_state);
+            chunk_source->close(state);
             chunk_source = nullptr;
         }
     }
 
-    RETURN_IF_ERROR(_scan_node->do_close(this));
+    do_close(state);
     return Operator::close(state);
 }
 
@@ -236,7 +236,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     if (maybe_morsel.has_value()) {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
-        _chunk_sources[chunk_source_index] = _scan_node->create_chunk_source(std::move(morsel), this);
+        _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel));
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;
@@ -251,24 +251,25 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
 // ========== ScanOperatorFactory ==========
 
-ScanOperatorFactory::ScanOperatorFactory(int32_t id, std::shared_ptr<ScanNodeInOperator> scan_node)
-        : SourceOperatorFactory(id, "olap_scan", scan_node->node()->id()), _scan_node(scan_node) {}
+ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
+        : SourceOperatorFactory(id, "olap_scan", scan_node->id()), _scan_node(scan_node) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    const auto& conjunct_ctxs = _scan_node->node()->conjunct_ctxs();
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
-    _scan_node->do_prepare_in_factory(state);
+    RETURN_IF_ERROR(do_prepare(state));
     return Status::OK();
 }
 
 OperatorPtr ScanOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<ScanOperator>(this, _id, _scan_node);
+    return do_create(degree_of_parallelism, driver_sequence);
 }
 
 void ScanOperatorFactory::close(RuntimeState* state) {
-    const auto& conjunct_ctxs = _scan_node->node()->conjunct_ctxs();
+    do_close(state);
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
     Expr::close(conjunct_ctxs, state);
     OperatorFactory::close(state);
 }

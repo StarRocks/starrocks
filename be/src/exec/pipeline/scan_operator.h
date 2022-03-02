@@ -12,23 +12,9 @@ class ScanNode;
 
 namespace pipeline {
 
-class ScanOperator;
-class ScanNodeInOperator {
+class ScanOperator : public SourceOperator {
 public:
-    ScanNodeInOperator(ScanNode* scan_node) : _scan_node(scan_node) {}
-    ScanNode* node() const { return _scan_node; }
-    virtual Status do_prepare(ScanOperator* op) = 0;
-    virtual Status do_close(ScanOperator* op) = 0;
-    virtual Status do_prepare_in_factory(RuntimeState* state) = 0;
-    virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, ScanOperator* op) = 0;
-
-protected:
-    ScanNode* _scan_node;
-};
-
-class ScanOperator final : public SourceOperator {
-public:
-    ScanOperator(OperatorFactory* factory, int32_t id, std::shared_ptr<ScanNodeInOperator> scan_node);
+    ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node);
 
     ~ScanOperator() override = default;
 
@@ -49,6 +35,14 @@ public:
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
+    // interface for different scan node
+    virtual Status do_prepare(RuntimeState* state) = 0;
+    virtual void do_close(RuntimeState* state) = 0;
+    virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel) = 0;
+
+protected:
+    ScanNode* _scan_node = nullptr;
+
 private:
     static constexpr int MAX_IO_TASKS_PER_OP = 4;
 
@@ -60,10 +54,6 @@ private:
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
 
-private:
-    std::shared_ptr<ScanNodeInOperator> _scan_node = nullptr;
-    // TODO(hcf) ugly, remove this later
-    RuntimeState* _state = nullptr;
     bool _is_finished = false;
 
     int32_t _io_task_retry_cnt = 0;
@@ -75,9 +65,9 @@ private:
     workgroup::WorkGroupPtr _workgroup = nullptr;
 };
 
-class ScanOperatorFactory final : public SourceOperatorFactory {
+class ScanOperatorFactory : public SourceOperatorFactory {
 public:
-    ScanOperatorFactory(int32_t id, std::shared_ptr<ScanNodeInOperator> scan_node);
+    ScanOperatorFactory(int32_t id, ScanNode* scan_node);
 
     ~ScanOperatorFactory() override = default;
 
@@ -88,8 +78,13 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-private:
-    std::shared_ptr<ScanNodeInOperator> _scan_node;
+    // interface for different scan node
+    virtual Status do_prepare(RuntimeState* state) = 0;
+    virtual void do_close(RuntimeState* state) = 0;
+    virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
+
+protected:
+    ScanNode* _scan_node;
 };
 
 } // namespace pipeline

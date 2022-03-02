@@ -16,19 +16,29 @@
 #include "storage/tablet.h"
 namespace starrocks::pipeline {
 
-using starrocks::workgroup::WorkGroupManager;
-
-// ========== OlapScanNodeInOperator ==========
-class OlapScanNodeInOperator final : public ScanNodeInOperator {
+class OlapScanOperatorFactory final : public ScanOperatorFactory {
 public:
-    OlapScanNodeInOperator(ScanNode* scan_node) : ScanNodeInOperator(scan_node) {}
-    Status do_prepare(ScanOperator* op) override;
-    Status do_close(ScanOperator* op) override;
-    Status do_prepare_in_factory(RuntimeState* state) override;
-    ChunkSourcePtr create_chunk_source(MorselPtr morsel, ScanOperator* op) override;
+    OlapScanOperatorFactory(int32_t id, ScanNode* scan_node);
+
+    ~OlapScanOperatorFactory() override = default;
+
+    Status do_prepare(RuntimeState* state) override;
+    void do_close(RuntimeState* state) override;
+    OperatorPtr do_create(int32_t dop, int32_t driver_sequence) override;
+};
+
+class OlapScanOperator final : public ScanOperator {
+public:
+    OlapScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node);
+
+    ~OlapScanOperator() override = default;
+
+    Status do_prepare(RuntimeState* state) override;
+    void do_close(RuntimeState* state) override;
+    ChunkSourcePtr create_chunk_source(MorselPtr morsel) override;
 
 private:
-    Status _capture_tablet_rowsets(ScanOperator* op);
+    Status _capture_tablet_rowsets();
 
     // The row sets of tablets will become stale and be deleted, if compaction occurs
     // and these row sets aren't referenced, which will typically happen when the tablets
@@ -37,17 +47,41 @@ private:
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
-Status OlapScanNodeInOperator::do_prepare(ScanOperator* op) {
-    RETURN_IF_ERROR(_capture_tablet_rowsets(op));
+// ==================== OlapScanOperatorFactory ====================
+
+OlapScanOperatorFactory::OlapScanOperatorFactory(int32_t id, ScanNode* scan_node)
+        : ScanOperatorFactory(id, scan_node) {}
+
+Status OlapScanOperatorFactory::do_prepare(RuntimeState* state) {
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    vectorized::OlapScanNode* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
+    const auto& tolap_scan_node = olap_scan_node->thrift_olap_scan_node();
+    auto tuple_desc = state->desc_tbl().get_tuple_descriptor(tolap_scan_node.tuple_id);
+    vectorized::DictOptimizeParser::rewrite_descriptor(state, conjunct_ctxs, tolap_scan_node.dict_string_id_to_int_ids,
+                                                       &(tuple_desc->decoded_slots()));
     return Status::OK();
 }
 
-Status OlapScanNodeInOperator::do_close(ScanOperator* op) {
+void OlapScanOperatorFactory::do_close(RuntimeState*) {}
+
+OperatorPtr OlapScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
+    return std::make_shared<OlapScanOperator>(this, _id, _scan_node);
+}
+
+// ==================== OlapScanOperator ====================
+
+OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node)
+        : ScanOperator(factory, id, scan_node) {}
+
+Status OlapScanOperator::do_prepare(RuntimeState*) {
+    RETURN_IF_ERROR(_capture_tablet_rowsets());
     return Status::OK();
 }
 
-Status OlapScanNodeInOperator::_capture_tablet_rowsets(ScanOperator* op) {
-    const auto& morsels = op->morsel_queue()->morsels();
+void OlapScanOperator::do_close(RuntimeState*) {}
+
+Status OlapScanOperator::_capture_tablet_rowsets() {
+    const auto& morsels = this->morsel_queue()->morsels();
     _tablet_rowsets.resize(morsels.size());
     for (int i = 0; i < morsels.size(); ++i) {
         ScanMorsel* scan_morsel = (ScanMorsel*)morsels[i].get();
@@ -79,28 +113,19 @@ Status OlapScanNodeInOperator::_capture_tablet_rowsets(ScanOperator* op) {
     return Status::OK();
 }
 
-Status OlapScanNodeInOperator::do_prepare_in_factory(RuntimeState* state) {
-    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel) {
     vectorized::OlapScanNode* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
-    const auto& tolap_scan_node = olap_scan_node->thrift_olap_scan_node();
-    auto tuple_desc = state->desc_tbl().get_tuple_descriptor(tolap_scan_node.tuple_id);
-    vectorized::DictOptimizeParser::rewrite_descriptor(state, conjunct_ctxs, tolap_scan_node.dict_string_id_to_int_ids,
-                                                       &(tuple_desc->decoded_slots()));
-    return Status::OK();
+    return std::make_shared<OlapChunkSource>(std::move(morsel), this, olap_scan_node);
 }
 
-ChunkSourcePtr OlapScanNodeInOperator::create_chunk_source(MorselPtr morsel, ScanOperator* op) {
-    vectorized::OlapScanNode* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
-    return std::make_shared<OlapChunkSource>(std::move(morsel), op, olap_scan_node);
-}
+// ===========================================================
 
 OpFactories decompose_olap_scan_node_to_pipeline(ScanNode* scan_node, PipelineBuilderContext* context) {
     OpFactories operators;
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector =
             std::make_shared<RcRfProbeCollector>(1, std::move(scan_node->runtime_filter_collector()));
-    auto scan_node_in_operator = std::make_shared<OlapScanNodeInOperator>(scan_node);
-    auto scan_operator = std::make_shared<ScanOperatorFactory>(context->next_operator_id(), scan_node_in_operator);
+    auto scan_operator = std::make_shared<OlapScanOperatorFactory>(context->next_operator_id(), scan_node);
     // Initialize OperatorFactory's fields involving runtime filters.
     scan_node->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
     auto& morsel_queues = context->fragment_context()->morsel_queues();

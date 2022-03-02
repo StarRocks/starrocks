@@ -29,7 +29,7 @@ OlapChunkSource::OlapChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorize
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
           _runtime_bloom_filters(op->runtime_bloom_filters()),
-          _runtime_profile(op->unique_metrics().get()) {
+          _runtime_profile(op->unique_metrics()) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
