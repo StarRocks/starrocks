@@ -2,7 +2,7 @@
 
 ## 2.0.0
 
-Release date: january 5, 2022
+Release date: January 5, 2022
 
 ### New Feature
 
@@ -35,7 +35,7 @@ Release date: january 5, 2022
 
 ## 2.0.1
 
-Release date: january 21, 2022
+Release date: January 21, 2022
 
 ### Improvement
 
@@ -54,3 +54,21 @@ Release date: january 21, 2022
 ### Behavior Change
 
 StarRocks can use external tables to access Hive and its AWS S3-based external tables. However, the jar file that is used to access S3 data is too large and the binary package of StarRocks does not contain this jar file. If you want to use this jar file, you can download it from [Hive_s3_lib](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz).
+
+## 2.0.2
+
+Release date: March 2, 2022
+
+### Improvement
+
+- Memory usage is optimized. Users can specify the label_keep_max_num parameter to control the maximum number of loading jobs to retain within a period of time. This prevents full GC caused by high memory usage of FE during frequent data loading.
+
+### BugFix
+
+The following bugs are fixed:
+
+- BE nodes fail when the column decoder encounters an exception.
+- Auto __op mapping does not take effect when jsonpaths is specified in the command used for loading JSON data.
+- BE nodes fail because the source data changes during data loading using Broker Load.
+- Some SQL statements report errors after materialized views are created.
+- Query may fail if an SQL clause contains a predicate that supports global dictionary for low-cardinality optimization and a predicate that does not.
