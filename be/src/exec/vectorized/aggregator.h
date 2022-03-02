@@ -139,6 +139,8 @@ public:
     void try_convert_to_two_level_map();
     void try_convert_to_two_level_set();
 
+    Status check_has_error();
+
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
     static constexpr size_t streaming_hash_table_size_threshold = 10000000;

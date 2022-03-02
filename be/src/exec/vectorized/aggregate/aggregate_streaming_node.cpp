@@ -140,7 +140,6 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                                       _aggregator->mem_pool()->total_reserved_bytes());
                     TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
-
                     continue;
                 } else {
                     // TODO: direct call the function may affect the performance of some aggregated cases
@@ -210,10 +209,12 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
 
         COUNTER_SET(_aggregator->rows_returned_counter(), _aggregator->num_rows_returned());
         *eos = true;
+        RETURN_IF_ERROR(_aggregator->check_has_error());
         return Status::OK();
     }
 
     _aggregator->process_limit(chunk);
+    RETURN_IF_ERROR(_aggregator->check_has_error());
 
     DCHECK_CHUNK(*chunk);
     return Status::OK();

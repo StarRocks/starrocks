@@ -4,6 +4,8 @@
 
 #include <cstring>
 #include <memory>
+#include <numeric>
+#include <string>
 #include <vector>
 
 #include "column/binary_column.h"
@@ -67,7 +69,7 @@ public:
             udaf_ctx->buffer =
                     std::make_unique<DirectByteBuffer>(udaf_ctx->buffer_data.data(), udaf_ctx->buffer_data.size());
         }
-
+        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get());
         memcpy(udaf_ctx->buffer_data.data(), slice.get_data(), slice.get_size());
         udaf_ctx->_func->merge(this->data(state).handle, udaf_ctx->buffer->handle());
     }
@@ -93,12 +95,13 @@ public:
             udaf_ctx->buffer =
                     std::make_unique<DirectByteBuffer>(udaf_ctx->buffer_data.data(), udaf_ctx->buffer_data.size());
         }
+        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get());
 
         udaf_ctx->_func->serialize(this->data(state).handle, udaf_ctx->buffer->handle());
         size_t new_size = old_size + serialize_size;
         column->get_bytes().resize(new_size);
         column->get_offset().emplace_back(new_size);
-        memcpy(column->get_bytes().data(), udaf_ctx->buffer_data.data(), serialize_size);
+        memcpy(column->get_bytes().data() + old_size, udaf_ctx->buffer_data.data(), serialize_size);
     }
 
     void finalize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
@@ -109,10 +112,60 @@ public:
         release_jvalue(udaf_ctx->finalize->method_desc[0], val);
     }
 
-    //Now Java UDAF don't Not Support Streaming Aggregate
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override final {
-        DCHECK(false) << "Now Java UDAF Not Support Streaming Mode";
+        auto& helper = JVMFunctionHelper::getInstance();
+        auto* env = helper.getEnv();
+        auto* udf_ctxs = ctx->impl()->udaf_ctxs();
+        // 1 convert input as state
+        // 1.1 create state list
+        auto rets = helper.batch_call(ctx, udf_ctxs->handle, udf_ctxs->create->method, chunk_size);
+        // 1.2 convert input as input array
+        int num_cols = ctx->get_num_args();
+        std::vector<DirectByteBuffer> buffers;
+        std::vector<jobject> args;
+        args.emplace_back(rets);
+        std::vector<const Column*> raw_input_ptrs(src.size());
+        for (int i = 0; i < src.size(); ++i) {
+            raw_input_ptrs[i] = src[i].get();
+        }
+        JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, raw_input_ptrs.data(), num_cols, chunk_size,
+                                                      &args);
+        // 2 batch call update
+        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle, ctx->impl()->udaf_ctxs()->update->method,
+                            args.data(), args.size());
+        // 3 get serialize size
+        jintArray serialize_szs = (jintArray)helper.int_batch_call(
+                ctx, rets, ctx->impl()->udaf_ctxs()->serialize_size->method, chunk_size);
+        int length = env->GetArrayLength(serialize_szs);
+        std::vector<int> slice_sz(length);
+        helper.getEnv()->GetIntArrayRegion(serialize_szs, 0, length, slice_sz.data());
+        int totalLength = std::accumulate(slice_sz.begin(), slice_sz.end(), 0, [](auto l, auto r) { return l + r; });
+        // 4 prepare serialize buffer
+        udf_ctxs->buffer_data.resize(totalLength);
+        udf_ctxs->buffer =
+                std::make_unique<DirectByteBuffer>(udf_ctxs->buffer_data.data(), udf_ctxs->buffer_data.size());
+        // chunk size
+        auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), chunk_size);
+        jobject state_and_buffer[2] = {rets, buffer_array};
+        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle, ctx->impl()->udaf_ctxs()->serialize->method,
+                            state_and_buffer, 2);
+        std::vector<Slice> slices(chunk_size);
+        // 5 ready
+        int offsets = 0;
+        for (int i = 0; i < chunk_size; ++i) {
+            slices[i] = Slice(udf_ctxs->buffer_data.data() + offsets, slice_sz[i]);
+            offsets += slice_sz[i];
+        }
+        // append result to dst column
+        CHECK((*dst)->append_strings(slices));
+        // 6 clean up arrays
+        env->DeleteLocalRef(buffer_array);
+        env->DeleteLocalRef(serialize_szs);
+        for (int i = 0; i < args.size(); ++i) {
+            env->DeleteLocalRef(args[i]);
+        }
+        env->DeleteLocalRef(rets);
     }
 
     // State Data
