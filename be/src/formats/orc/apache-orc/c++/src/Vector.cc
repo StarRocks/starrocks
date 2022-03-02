@@ -29,6 +29,8 @@
 #include "Adaptor.hh"
 #include "orc/Exceptions.hh"
 
+#define DO_FILTER_FIELD(field) (field).filter(f_data, f_size, true_size)
+
 namespace orc {
 
 ColumnVectorBatch::ColumnVectorBatch(uint64_t cap, MemoryPool& pool)
@@ -106,15 +108,13 @@ void LongVectorBatch::clear() {
     numElements = 0;
 }
 
-#define DO_FILTER_FIELD(field) (field).filter(f_data, f_size, true_size)
+uint64_t LongVectorBatch::getMemoryUsage() {
+    return ColumnVectorBatch::getMemoryUsage() + static_cast<uint64_t>(data.capacity() * sizeof(int64_t));
+}
 
 void LongVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) {
     ColumnVectorBatch::filter(f_data, f_size, true_size);
     DO_FILTER_FIELD(data);
-}
-
-uint64_t LongVectorBatch::getMemoryUsage() {
-    return ColumnVectorBatch::getMemoryUsage() + static_cast<uint64_t>(data.capacity() * sizeof(int64_t));
 }
 
 DoubleVectorBatch::DoubleVectorBatch(uint64_t _capacity, MemoryPool& pool)
@@ -157,7 +157,7 @@ StringDictionary::StringDictionary(MemoryPool& pool) : dictionaryBlob(pool), dic
 }
 
 EncodedStringVectorBatch::EncodedStringVectorBatch(uint64_t _capacity, MemoryPool& pool)
-        : StringVectorBatch(_capacity, pool), index(pool, _capacity) {
+        : StringVectorBatch(_capacity, pool), dictionary(), index(pool, _capacity) {
     // PASS
 }
 
@@ -234,16 +234,16 @@ StructVectorBatch::StructVectorBatch(uint64_t cap, MemoryPool& pool) : ColumnVec
 }
 
 StructVectorBatch::~StructVectorBatch() {
-    for (auto& field : this->fields) {
-        delete field;
+    for (uint64_t i = 0; i < this->fields.size(); i++) {
+        delete this->fields[i];
     }
 }
 
 std::string StructVectorBatch::toString() const {
     std::ostringstream buffer;
     buffer << "Struct vector <" << numElements << " of " << capacity << "; ";
-    for (auto field : fields) {
-        buffer << field->toString() << "; ";
+    for (std::vector<ColumnVectorBatch*>::const_iterator ptr = fields.begin(); ptr != fields.end(); ++ptr) {
+        buffer << (*ptr)->toString() << "; ";
     }
     buffer << ">";
     return buffer.str();
@@ -254,23 +254,23 @@ void StructVectorBatch::resize(uint64_t cap) {
 }
 
 void StructVectorBatch::clear() {
-    for (auto& field : fields) {
-        field->clear();
+    for (size_t i = 0; i < fields.size(); i++) {
+        fields[i]->clear();
     }
     numElements = 0;
 }
 
 uint64_t StructVectorBatch::getMemoryUsage() {
     uint64_t memory = ColumnVectorBatch::getMemoryUsage();
-    for (auto& field : fields) {
-        memory += field->getMemoryUsage();
+    for (unsigned int i = 0; i < fields.size(); i++) {
+        memory += fields[i]->getMemoryUsage();
     }
     return memory;
 }
 
 bool StructVectorBatch::hasVariableLength() {
-    for (auto& field : fields) {
-        if (field->hasVariableLength()) {
+    for (unsigned int i = 0; i < fields.size(); i++) {
+        if (fields[i]->hasVariableLength()) {
             return true;
         }
     }
@@ -332,6 +332,7 @@ uint64_t ListVectorBatch::getMemoryUsage() {
 bool ListVectorBatch::hasVariableLength() {
     return true;
 }
+
 void ListVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) {
     throw std::logic_error("ListVectorBatch::filter not supported");
 }
@@ -384,8 +385,8 @@ UnionVectorBatch::UnionVectorBatch(uint64_t cap, MemoryPool& pool)
 }
 
 UnionVectorBatch::~UnionVectorBatch() {
-    for (auto& i : children) {
-        delete i;
+    for (uint64_t i = 0; i < children.size(); i++) {
+        delete children[i];
     }
 }
 
@@ -411,8 +412,8 @@ void UnionVectorBatch::resize(uint64_t cap) {
 }
 
 void UnionVectorBatch::clear() {
-    for (auto& i : children) {
-        i->clear();
+    for (size_t i = 0; i < children.size(); i++) {
+        children[i]->clear();
     }
     numElements = 0;
 }
@@ -421,15 +422,15 @@ uint64_t UnionVectorBatch::getMemoryUsage() {
     uint64_t memory =
             ColumnVectorBatch::getMemoryUsage() +
             static_cast<uint64_t>(tags.capacity() * sizeof(unsigned char) + offsets.capacity() * sizeof(uint64_t));
-    for (auto& i : children) {
-        memory += i->getMemoryUsage();
+    for (size_t i = 0; i < children.size(); ++i) {
+        memory += children[i]->getMemoryUsage();
     }
     return memory;
 }
 
 bool UnionVectorBatch::hasVariableLength() {
-    for (auto& i : children) {
-        if (i->hasVariableLength()) {
+    for (size_t i = 0; i < children.size(); ++i) {
+        if (children[i]->hasVariableLength()) {
             return true;
         }
     }
@@ -531,7 +532,7 @@ Decimal::Decimal(const std::string& str) {
     }
 }
 
-Decimal::Decimal() : value(0) {
+Decimal::Decimal() : value(0), scale(0) {
     // PASS
 }
 

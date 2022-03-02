@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-// https://github.com/apache/orc/tree/main/tools/src/FileMetadata.cc
+//   https://github.com/apache/orc/tree/main/tools/src/FileMetadata.cc
 
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -138,7 +138,8 @@ void printMetadata(std::ostream& out, const char* filename, bool verbose) {
     uint64_t stripeCount = reader->getNumberOfStripes();
     out << "  \"stripe count\": " << stripeCount << ",\n";
     out << "  \"format\": \"" << reader->getFormatVersion().toString() << "\", \"writer version\": \""
-        << orc::writerVersionToString(reader->getWriterVersion()) << "\",\n";
+        << orc::writerVersionToString(reader->getWriterVersion()) << "\", \"software version\": \""
+        << reader->getSoftwareVersion() << "\",\n";
     out << "  \"compression\": \"" << orc::compressionKindToString(reader->getCompression()) << "\",";
     if (reader->getCompression() != orc::CompressionKind_NONE) {
         out << " \"compression block\": " << reader->getCompressionSize() << ",";

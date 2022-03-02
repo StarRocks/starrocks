@@ -22,7 +22,8 @@
 
 #include "orc/ColumnPrinter.hh"
 
-#include <ctime>
+#include <time.h>
+
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -364,7 +365,7 @@ std::string toDecimalString(int64_t value, int32_t scale) {
         buffer << value;
         return buffer.str();
     }
-    std::string sign;
+    std::string sign = "";
     if (value < 0) {
         sign = "-";
         value = -value;

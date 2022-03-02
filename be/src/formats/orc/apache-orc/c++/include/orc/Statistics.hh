@@ -59,7 +59,7 @@ public:
    */
 class BinaryColumnStatistics : public ColumnStatistics {
 public:
-    ~BinaryColumnStatistics() override;
+    virtual ~BinaryColumnStatistics();
 
     /**
      * Check whether column has total length.
@@ -75,7 +75,7 @@ public:
    */
 class BooleanColumnStatistics : public ColumnStatistics {
 public:
-    ~BooleanColumnStatistics() override;
+    virtual ~BooleanColumnStatistics();
 
     /**
      * Check whether column has true/false count.
@@ -92,7 +92,7 @@ public:
    */
 class DateColumnStatistics : public ColumnStatistics {
 public:
-    ~DateColumnStatistics() override;
+    virtual ~DateColumnStatistics();
 
     /**
      * Check whether column has minimum.
@@ -124,7 +124,7 @@ public:
    */
 class DecimalColumnStatistics : public ColumnStatistics {
 public:
-    ~DecimalColumnStatistics() override;
+    virtual ~DecimalColumnStatistics();
 
     /**
      * Check whether column has minimum.
@@ -168,7 +168,7 @@ public:
    */
 class DoubleColumnStatistics : public ColumnStatistics {
 public:
-    ~DoubleColumnStatistics() override;
+    virtual ~DoubleColumnStatistics();
 
     /**
      * Check whether column has minimum.
@@ -215,7 +215,7 @@ public:
    */
 class IntegerColumnStatistics : public ColumnStatistics {
 public:
-    ~IntegerColumnStatistics() override;
+    virtual ~IntegerColumnStatistics();
 
     /**
      * Check whether column has minimum.
@@ -261,7 +261,7 @@ public:
    */
 class StringColumnStatistics : public ColumnStatistics {
 public:
-    ~StringColumnStatistics() override;
+    virtual ~StringColumnStatistics();
 
     /**
      * Check whether column has minimum.
@@ -305,7 +305,7 @@ public:
    */
 class TimestampColumnStatistics : public ColumnStatistics {
 public:
-    ~TimestampColumnStatistics() override;
+    virtual ~TimestampColumnStatistics();
 
     /**
      * Check whether minimum timestamp exists.
@@ -386,9 +386,77 @@ public:
     virtual uint32_t getNumberOfColumns() const = 0;
 };
 
+/**
+   * Statistics for all of collections such as Map and List.
+   */
+class CollectionColumnStatistics : public ColumnStatistics {
+public:
+    virtual ~CollectionColumnStatistics();
+
+    /**
+     * check whether column has minimum number of children
+     * @return true if has minimum children count
+     */
+    virtual bool hasMinimumChildren() const = 0;
+
+    /**
+     * check whether column has maximum number of children
+     * @return true if has maximum children count
+     */
+    virtual bool hasMaximumChildren() const = 0;
+
+    /**
+     * check whether column has total number of children
+     * @return true if has total children count
+     */
+    virtual bool hasTotalChildren() const = 0;
+
+    /**
+     * set hasTotalChildren value
+     * @param newHasTotalChildren hasTotalChildren value
+     */
+    virtual void setHasTotalChildren(bool newHasTotalChildren) = 0;
+
+    /**
+     * Get minimum number of children in the collection.
+     * @return the minimum children count
+     */
+    virtual uint64_t getMinimumChildren() const = 0;
+
+    /**
+     * set new minimum children count
+     * @param min new minimum children count
+     */
+    virtual void setMinimumChildren(uint64_t min) = 0;
+
+    /**
+     * Get maximum number of children in the collection.
+     * @return the maximum children count
+     */
+    virtual uint64_t getMaximumChildren() const = 0;
+
+    /**
+     * set new maximum children count
+     * @param max new maximum children count
+     */
+    virtual void setMaximumChildren(uint64_t max) = 0;
+
+    /**
+     * Get the total number of children in the collection.
+     * @return the total number of children
+     */
+    virtual uint64_t getTotalChildren() const = 0;
+
+    /**
+     * set new total children count
+     * @param newTotalChildrenCount total children count to be set
+     */
+    virtual void setTotalChildren(uint64_t newTotalChildrenCount) = 0;
+};
+
 class StripeStatistics : public Statistics {
 public:
-    ~StripeStatistics() override;
+    virtual ~StripeStatistics();
 
     /**
      * Get the statistics of a given RowIndex entry in a given column.

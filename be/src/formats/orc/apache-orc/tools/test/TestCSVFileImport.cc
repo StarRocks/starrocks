@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-// https://github.com/apache/orc/tree/main/tools/test/TestCSVFileImport.cc
+//   https://github.com/apache/orc/tree/main/tools/test/TestCSVFileImport.cc
 
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -19,6 +19,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#include <fstream>
 
 #include "Adaptor.hh"
 #include "ToolTest.hh"
@@ -52,6 +54,70 @@ TEST(TestCSVFileImport, test10rows) {
             "{\"_a\": 8, \"b_\": \"i\", \"c_col\": 8.8}\n"
             "{\"_a\": 9, \"b_\": \"j\", \"c_col\": 9.9}\n";
     EXPECT_EQ(0, runProgram({pgm2, orcFile}, output, error));
+    EXPECT_EQ(expected, output);
+    EXPECT_EQ("", error);
+}
+
+TEST(TestCSVFileImport, testTimezoneOption) {
+    // create an ORC file from importing the CSV file
+    const std::string pgm1 = findProgram("tools/src/csv-import");
+    const std::string pgm2 = findProgram("tools/src/orc-contents");
+    const std::string csvFile = findExample("TestCSVFileImport.testTimezoneOption.csv");
+    const std::string schema = "'struct<_a:timestamp>'";
+    std::string output;
+    std::string error;
+    {
+        std::string orcFile = "/tmp/test_csv_import_test_timezone_option1.orc";
+        std::string option = "--timezone=America/Los_Angeles";
+        EXPECT_EQ(0, runProgram({pgm1, option, schema, csvFile, orcFile}, output, error));
+        EXPECT_EQ("", error);
+        // verify the ORC file content
+        const std::string expected = "{\"_a\": \"2021-12-26 16:00:00.0\"}\n";
+        EXPECT_EQ(0, runProgram({pgm2, orcFile}, output, error));
+        EXPECT_EQ(expected, output);
+        EXPECT_EQ("", error);
+    }
+    {
+        std::string orcFile = "/tmp/test_csv_import_test_timezone_option2.orc";
+        std::string option = "--timezone=Europe/Paris";
+        EXPECT_EQ(0, runProgram({pgm1, option, schema, csvFile, orcFile}, output, error));
+        EXPECT_EQ("", error);
+        // verify the ORC file content
+        const std::string expected = "{\"_a\": \"2021-12-27 01:00:00.0\"}\n";
+        EXPECT_EQ(0, runProgram({pgm2, orcFile}, output, error));
+        EXPECT_EQ(expected, output);
+        EXPECT_EQ("", error);
+    }
+}
+
+TEST(TestCSVFileImport, testLongString) {
+    // create an ORC file from importing the CSV file
+    const std::string pgm1 = findProgram("tools/src/csv-import");
+    const std::string csvFile = "/tmp/test_csv_import_test_long_string.csv";
+    const std::string orcFile = "/tmp/test_csv_import_test_long_string.orc";
+    const std::string schema = "'struct<_a:string,b_:binary,_c:varchar(10)>'";
+    std::string output;
+    std::string error;
+
+    std::ofstream csvFileStream(csvFile, std::ios::binary | std::ios::out | std::ios::trunc);
+    if (csvFileStream.is_open()) {
+        std::string longStr;
+        longStr.resize(4 * 1024 * 1024 + 1, 'x');
+        csvFileStream << "str1," << longStr << ",var1\n";
+        csvFileStream << "str2," << longStr << ",var2\n";
+        csvFileStream.close();
+    }
+
+    EXPECT_EQ(0, runProgram({pgm1, schema, csvFile, orcFile}, output, error));
+    EXPECT_EQ("", error);
+
+    // verify the ORC file content
+    const std::string pgm2 = findProgram("tools/src/orc-contents");
+    std::string option = "--columns=0,2";
+    const std::string expected =
+            "{\"_a\": \"str1\", \"_c\": \"var1\"}\n"
+            "{\"_a\": \"str2\", \"_c\": \"var2\"}\n";
+    EXPECT_EQ(0, runProgram({pgm2, option, orcFile}, output, error));
     EXPECT_EQ(expected, output);
     EXPECT_EQ("", error);
 }

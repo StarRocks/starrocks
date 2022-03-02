@@ -49,8 +49,8 @@ private:
     uint64_t currentCapacity;
 
     // not implemented
-    DataBuffer(DataBuffer& buffer) = delete;
-    DataBuffer& operator=(DataBuffer& buffer) = delete;
+    DataBuffer(DataBuffer& buffer);
+    DataBuffer& operator=(DataBuffer& buffer);
 
 public:
     DataBuffer(MemoryPool& pool, uint64_t _size = 0);
@@ -71,7 +71,6 @@ public:
 
     void reserve(uint64_t _size);
     void resize(uint64_t _size);
-
     void filter(const uint8_t* f_data, size_t f_size, size_t true_size);
 };
 

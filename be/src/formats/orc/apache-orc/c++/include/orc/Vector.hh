@@ -95,29 +95,29 @@ struct ColumnVectorBatch {
                                 bool onLazyLoad);
 
 private:
-    ColumnVectorBatch(const ColumnVectorBatch&) = delete;
-    ColumnVectorBatch& operator=(const ColumnVectorBatch&) = delete;
+    ColumnVectorBatch(const ColumnVectorBatch&);
+    ColumnVectorBatch& operator=(const ColumnVectorBatch&);
 };
 
 struct LongVectorBatch : public ColumnVectorBatch {
     LongVectorBatch(uint64_t capacity, MemoryPool& pool);
-    ~LongVectorBatch() override;
+    virtual ~LongVectorBatch();
 
     DataBuffer<int64_t> data;
-    std::string toString() const override;
-    void resize(uint64_t capacity) override;
-    void clear() override;
-    uint64_t getMemoryUsage() override;
+    std::string toString() const;
+    void resize(uint64_t capacity);
+    void clear();
+    uint64_t getMemoryUsage();
     void filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) override;
 };
 
 struct DoubleVectorBatch : public ColumnVectorBatch {
     DoubleVectorBatch(uint64_t capacity, MemoryPool& pool);
-    ~DoubleVectorBatch() override;
-    std::string toString() const override;
-    void resize(uint64_t capacity) override;
-    void clear() override;
-    uint64_t getMemoryUsage() override;
+    virtual ~DoubleVectorBatch();
+    std::string toString() const;
+    void resize(uint64_t capacity);
+    void clear();
+    uint64_t getMemoryUsage();
 
     DataBuffer<double> data;
     void filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) override;
@@ -125,11 +125,11 @@ struct DoubleVectorBatch : public ColumnVectorBatch {
 
 struct StringVectorBatch : public ColumnVectorBatch {
     StringVectorBatch(uint64_t capacity, MemoryPool& pool);
-    ~StringVectorBatch() override;
-    std::string toString() const override;
-    void resize(uint64_t capacity) override;
-    void clear() override;
-    uint64_t getMemoryUsage() override;
+    virtual ~StringVectorBatch();
+    std::string toString() const;
+    void resize(uint64_t capacity);
+    void clear();
+    uint64_t getMemoryUsage();
 
     // pointers to the start of each string
     DataBuffer<char*> data;
@@ -169,9 +169,9 @@ struct StringDictionary {
    */
 struct EncodedStringVectorBatch : public StringVectorBatch {
     EncodedStringVectorBatch(uint64_t capacity, MemoryPool& pool);
-    ~EncodedStringVectorBatch() override;
-    std::string toString() const override;
-    void resize(uint64_t capacity) override;
+    virtual ~EncodedStringVectorBatch();
+    std::string toString() const;
+    void resize(uint64_t capacity);
     std::shared_ptr<StringDictionary> dictionary;
 
     // index for dictionary entry
@@ -181,12 +181,12 @@ struct EncodedStringVectorBatch : public StringVectorBatch {
 
 struct StructVectorBatch : public ColumnVectorBatch {
     StructVectorBatch(uint64_t capacity, MemoryPool& pool);
-    ~StructVectorBatch() override;
-    std::string toString() const override;
-    void resize(uint64_t capacity) override;
-    void clear() override;
-    uint64_t getMemoryUsage() override;
-    bool hasVariableLength() override;
+    virtual ~StructVectorBatch();
+    std::string toString() const;
+    void resize(uint64_t capacity);
+    void clear();
+    uint64_t getMemoryUsage();
+    bool hasVariableLength();
 
     std::vector<ColumnVectorBatch*> fields;
     void filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) override;
@@ -196,12 +196,12 @@ struct StructVectorBatch : public ColumnVectorBatch {
 
 struct ListVectorBatch : public ColumnVectorBatch {
     ListVectorBatch(uint64_t capacity, MemoryPool& pool);
-    ~ListVectorBatch() override;
-    std::string toString() const override;
-    void resize(uint64_t capacity) override;
-    void clear() override;
-    uint64_t getMemoryUsage() override;
-    bool hasVariableLength() override;
+    virtual ~ListVectorBatch();
+    std::string toString() const;
+    void resize(uint64_t capacity);
+    void clear();
+    uint64_t getMemoryUsage();
+    bool hasVariableLength();
 
     /**
      * The offset of the first element of each list.
@@ -216,12 +216,12 @@ struct ListVectorBatch : public ColumnVectorBatch {
 
 struct MapVectorBatch : public ColumnVectorBatch {
     MapVectorBatch(uint64_t capacity, MemoryPool& pool);
-    ~MapVectorBatch() override;
-    std::string toString() const override;
-    void resize(uint64_t capacity) override;
-    void clear() override;
-    uint64_t getMemoryUsage() override;
-    bool hasVariableLength() override;
+    virtual ~MapVectorBatch();
+    std::string toString() const;
+    void resize(uint64_t capacity);
+    void clear();
+    uint64_t getMemoryUsage();
+    bool hasVariableLength();
 
     /**
      * The offset of the first element of each map.
@@ -238,12 +238,12 @@ struct MapVectorBatch : public ColumnVectorBatch {
 
 struct UnionVectorBatch : public ColumnVectorBatch {
     UnionVectorBatch(uint64_t capacity, MemoryPool& pool);
-    ~UnionVectorBatch() override;
-    std::string toString() const override;
-    void resize(uint64_t capacity) override;
-    void clear() override;
-    uint64_t getMemoryUsage() override;
-    bool hasVariableLength() override;
+    virtual ~UnionVectorBatch();
+    std::string toString() const;
+    void resize(uint64_t capacity);
+    void clear();
+    uint64_t getMemoryUsage();
+    bool hasVariableLength();
 
     /**
      * For each value, which element of children has the value.
@@ -267,16 +267,16 @@ struct Decimal {
 
     std::string toString(bool trimTrailingZeros = false) const;
     Int128 value;
-    int32_t scale{0};
+    int32_t scale;
 };
 
 struct Decimal64VectorBatch : public ColumnVectorBatch {
     Decimal64VectorBatch(uint64_t capacity, MemoryPool& pool);
-    ~Decimal64VectorBatch() override;
-    std::string toString() const override;
-    void resize(uint64_t capacity) override;
-    void clear() override;
-    uint64_t getMemoryUsage() override;
+    virtual ~Decimal64VectorBatch();
+    std::string toString() const;
+    void resize(uint64_t capacity);
+    void clear();
+    uint64_t getMemoryUsage();
 
     // total number of digits
     int32_t precision;
@@ -299,11 +299,11 @@ protected:
 
 struct Decimal128VectorBatch : public ColumnVectorBatch {
     Decimal128VectorBatch(uint64_t capacity, MemoryPool& pool);
-    ~Decimal128VectorBatch() override;
-    std::string toString() const override;
-    void resize(uint64_t capacity) override;
-    void clear() override;
-    uint64_t getMemoryUsage() override;
+    virtual ~Decimal128VectorBatch();
+    std::string toString() const;
+    void resize(uint64_t capacity);
+    void clear();
+    uint64_t getMemoryUsage();
 
     // total number of digits
     int32_t precision;
@@ -332,11 +332,11 @@ protected:
    */
 struct TimestampVectorBatch : public ColumnVectorBatch {
     TimestampVectorBatch(uint64_t capacity, MemoryPool& pool);
-    ~TimestampVectorBatch() override;
-    std::string toString() const override;
-    void resize(uint64_t capacity) override;
-    void clear() override;
-    uint64_t getMemoryUsage() override;
+    virtual ~TimestampVectorBatch();
+    std::string toString() const;
+    void resize(uint64_t capacity);
+    void clear();
+    uint64_t getMemoryUsage();
 
     // the number of seconds past 1 Jan 1970 00:00 UTC (aka time_t)
     // Note that we always assume data is in GMT timezone; therefore it is
@@ -346,7 +346,6 @@ struct TimestampVectorBatch : public ColumnVectorBatch {
 
     // the nanoseconds of each value
     DataBuffer<int64_t> nanoseconds;
-
     void filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) override;
 };
 

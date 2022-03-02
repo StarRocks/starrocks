@@ -108,6 +108,13 @@ TEST(ColumnStatistics, intColumnStatistics) {
     EXPECT_EQ(std::numeric_limits<int64_t>::min() + 500, other->getSum());
     intStats->merge(*other);
     EXPECT_FALSE(intStats->hasSum());
+
+    std::unique_ptr<IntegerColumnStatisticsImpl> intStats2(new IntegerColumnStatisticsImpl());
+
+    intStats2->update(1, 1);
+    EXPECT_TRUE(intStats2->hasSum());
+    intStats2->update(std::numeric_limits<int64_t>::max(), 3);
+    EXPECT_FALSE(intStats2->hasSum());
 }
 
 TEST(ColumnStatistics, doubleColumnStatistics) {
@@ -476,4 +483,56 @@ TEST(ColumnStatistics, timestampColumnStatisticsProbubuf) {
     EXPECT_EQ(9999, tsStatsFromPb->getMaximumNanos());
 }
 
+TEST(ColumnStatistics, collectionColumnStatistics) {
+    std::unique_ptr<CollectionColumnStatisticsImpl> collectionStats(new CollectionColumnStatisticsImpl());
+
+    // initial state
+    EXPECT_EQ(0, collectionStats->getNumberOfValues());
+    EXPECT_FALSE(collectionStats->hasNull());
+    EXPECT_FALSE(collectionStats->hasMinimumChildren());
+    EXPECT_FALSE(collectionStats->hasMaximumChildren());
+    EXPECT_TRUE(collectionStats->hasTotalChildren());
+    EXPECT_EQ(0, collectionStats->getTotalChildren());
+
+    // normal operations
+    collectionStats->increase(1);
+    EXPECT_EQ(1, collectionStats->getNumberOfValues());
+
+    collectionStats->increase(0);
+    EXPECT_EQ(1, collectionStats->getNumberOfValues());
+
+    collectionStats->increase(9999999999999999l);
+    EXPECT_EQ(10000000000000000l, collectionStats->getNumberOfValues());
+
+    collectionStats->update(10);
+    EXPECT_EQ(10, collectionStats->getMaximumChildren());
+    EXPECT_EQ(10, collectionStats->getMinimumChildren());
+
+    collectionStats->update(20);
+    EXPECT_EQ(20, collectionStats->getMaximumChildren());
+    EXPECT_EQ(10, collectionStats->getMinimumChildren());
+
+    EXPECT_EQ(30, collectionStats->getTotalChildren());
+    // test merge
+    std::unique_ptr<CollectionColumnStatisticsImpl> other(new CollectionColumnStatisticsImpl());
+
+    other->update(40);
+    other->update(30);
+
+    collectionStats->merge(*other);
+    EXPECT_EQ(40, other->getMaximumChildren());
+    EXPECT_EQ(30, other->getMinimumChildren());
+    EXPECT_EQ(40, collectionStats->getMaximumChildren());
+    EXPECT_EQ(10, collectionStats->getMinimumChildren());
+    EXPECT_EQ(100, collectionStats->getTotalChildren());
+
+    // test overflow
+    other->update(std::numeric_limits<uint64_t>::max());
+    EXPECT_FALSE(other->hasTotalChildren());
+    // test merge overflow
+    other->setTotalChildren(std::numeric_limits<uint64_t>::max() - 50);
+    EXPECT_EQ(std::numeric_limits<uint64_t>::max() - 50, other->getTotalChildren());
+    collectionStats->merge(*other);
+    EXPECT_FALSE(collectionStats->hasTotalChildren());
+}
 } // namespace orc

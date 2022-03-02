@@ -23,7 +23,6 @@
 #pragma once
 
 #include <sstream>
-#include <utility>
 
 #include "Timezone.hh"
 #include "TypeImpl.hh"
@@ -39,9 +38,9 @@ namespace orc {
  */
 
 struct StatContext {
-    const bool correctStats{false};
-    const Timezone* const writerTimezone{nullptr};
-    StatContext() {}
+    const bool correctStats;
+    const Timezone* const writerTimezone;
+    StatContext() : correctStats(false), writerTimezone(nullptr) {}
     StatContext(bool cStat, const Timezone* const timezone = nullptr) : correctStats(cStat), writerTimezone(timezone) {}
 };
 
@@ -74,7 +73,7 @@ public:
         _valueCount = 0;
     }
 
-    ~InternalStatisticsImpl() = default;
+    ~InternalStatisticsImpl() {}
 
     // GET / SET _totalLength
     bool hasTotalLength() const { return _hasTotalLength; }
@@ -176,6 +175,7 @@ typedef InternalStatisticsImpl<int32_t> InternalDateStatistics;
 typedef InternalStatisticsImpl<double> InternalDoubleStatistics;
 typedef InternalStatisticsImpl<Decimal> InternalDecimalStatistics;
 typedef InternalStatisticsImpl<std::string> InternalStringStatistics;
+typedef InternalStatisticsImpl<uint64_t> InternalCollectionStatistics;
 
 /**
    * Mutable column statistics for use by the writer.
@@ -208,7 +208,7 @@ private:
 public:
     ColumnStatisticsImpl() { reset(); }
     ColumnStatisticsImpl(const proto::ColumnStatistics& stats);
-    ~ColumnStatisticsImpl() override;
+    virtual ~ColumnStatisticsImpl() override;
 
     uint64_t getNumberOfValues() const override { return _stats.getNumberOfValues(); }
 
@@ -246,7 +246,7 @@ private:
 public:
     BinaryColumnStatisticsImpl() { reset(); }
     BinaryColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    ~BinaryColumnStatisticsImpl() override;
+    virtual ~BinaryColumnStatisticsImpl() override;
 
     uint64_t getNumberOfValues() const override { return _stats.getNumberOfValues(); }
 
@@ -316,7 +316,7 @@ private:
 public:
     BooleanColumnStatisticsImpl() { reset(); }
     BooleanColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    ~BooleanColumnStatisticsImpl() override;
+    virtual ~BooleanColumnStatisticsImpl() override;
 
     bool hasCount() const override { return _hasCount; }
 
@@ -406,7 +406,7 @@ private:
 public:
     DateColumnStatisticsImpl() { reset(); }
     DateColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    ~DateColumnStatisticsImpl() override;
+    virtual ~DateColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -498,7 +498,7 @@ private:
 public:
     DecimalColumnStatisticsImpl() { reset(); }
     DecimalColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    ~DecimalColumnStatisticsImpl() override;
+    virtual ~DecimalColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -660,7 +660,7 @@ private:
 public:
     DoubleColumnStatisticsImpl() { reset(); }
     DoubleColumnStatisticsImpl(const proto::ColumnStatistics& stats);
-    ~DoubleColumnStatisticsImpl() override;
+    virtual ~DoubleColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -789,7 +789,7 @@ private:
 public:
     IntegerColumnStatisticsImpl() { reset(); }
     IntegerColumnStatisticsImpl(const proto::ColumnStatistics& stats);
-    ~IntegerColumnStatisticsImpl() override;
+    virtual ~IntegerColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -846,7 +846,23 @@ public:
         _stats.setSum(sum);
     }
 
-    void update(int64_t value, int repetitions);
+    void update(int64_t value, int repetitions) {
+        _stats.updateMinMax(value);
+
+        if (_stats.hasSum()) {
+            if (repetitions > 1) {
+                _stats.setHasSum(multiplyExact(value, repetitions, &value));
+            }
+
+            if (_stats.hasSum()) {
+                _stats.setHasSum(addExact(_stats.getSum(), value, &value));
+
+                if (_stats.hasSum()) {
+                    _stats.setSum(value);
+                }
+            }
+        }
+    }
 
     void merge(const MutableColumnStatistics& other) override {
         const IntegerColumnStatisticsImpl& intStats = dynamic_cast<const IntegerColumnStatisticsImpl&>(other);
@@ -856,10 +872,10 @@ public:
         // update sum and check overflow
         _stats.setHasSum(_stats.hasSum() && intStats.hasSum());
         if (_stats.hasSum()) {
-            bool wasPositive = _stats.getSum() >= 0;
-            _stats.setSum(_stats.getSum() + intStats.getSum());
-            if ((intStats.getSum() >= 0) == wasPositive) {
-                _stats.setHasSum((_stats.getSum() >= 0) == wasPositive);
+            int64_t value;
+            _stats.setHasSum(addExact(_stats.getSum(), intStats.getSum(), &value));
+            if (_stats.hasSum()) {
+                _stats.setSum(value);
             }
         }
     }
@@ -921,7 +937,7 @@ private:
 public:
     StringColumnStatisticsImpl() { reset(); }
     StringColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    ~StringColumnStatisticsImpl() override;
+    virtual ~StringColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -957,12 +973,12 @@ public:
 
     void setMinimum(std::string minimum) {
         _stats.setHasMinimum(true);
-        _stats.setMinimum(std::move(minimum));
+        _stats.setMinimum(minimum);
     }
 
     void setMaximum(std::string maximum) {
         _stats.setHasMaximum(true);
-        _stats.setMaximum(std::move(maximum));
+        _stats.setMaximum(maximum);
     }
 
     uint64_t getTotalLength() const override {
@@ -1004,7 +1020,7 @@ public:
         _stats.setTotalLength(_stats.getTotalLength() + length);
     }
 
-    void update(const std::string& value) { update(value.c_str(), value.length()); }
+    void update(std::string value) { update(value.c_str(), value.length()); }
 
     void merge(const MutableColumnStatistics& other) override {
         const StringColumnStatisticsImpl& strStats = dynamic_cast<const StringColumnStatisticsImpl&>(other);
@@ -1076,7 +1092,7 @@ private:
 public:
     TimestampColumnStatisticsImpl() { reset(); }
     TimestampColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    ~TimestampColumnStatisticsImpl() override;
+    virtual ~TimestampColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -1288,6 +1304,150 @@ public:
     }
 };
 
+class CollectionColumnStatisticsImpl : public CollectionColumnStatistics, public MutableColumnStatistics {
+private:
+    InternalCollectionStatistics _stats;
+
+public:
+    CollectionColumnStatisticsImpl() { reset(); }
+    CollectionColumnStatisticsImpl(const proto::ColumnStatistics& stats);
+    virtual ~CollectionColumnStatisticsImpl() override;
+
+    bool hasMinimumChildren() const override { return _stats.hasMinimum(); }
+
+    bool hasMaximumChildren() const override { return _stats.hasMaximum(); }
+
+    bool hasTotalChildren() const override { return _stats.hasSum(); }
+
+    void increase(uint64_t count) override { _stats.setNumberOfValues(_stats.getNumberOfValues() + count); }
+
+    uint64_t getNumberOfValues() const override { return _stats.getNumberOfValues(); }
+
+    void setNumberOfValues(uint64_t value) override { _stats.setNumberOfValues(value); }
+
+    bool hasNull() const override { return _stats.hasNull(); }
+
+    void setHasNull(bool hasNull) override { _stats.setHasNull(hasNull); }
+
+    uint64_t getMinimumChildren() const override {
+        if (hasMinimumChildren()) {
+            return _stats.getMinimum();
+        } else {
+            throw ParseError("MinimumChildren is not defined.");
+        }
+    }
+
+    uint64_t getMaximumChildren() const override {
+        if (hasMaximumChildren()) {
+            return _stats.getMaximum();
+        } else {
+            throw ParseError("MaximumChildren is not defined.");
+        }
+    }
+
+    uint64_t getTotalChildren() const override {
+        if (hasTotalChildren()) {
+            return _stats.getSum();
+        } else {
+            throw ParseError("TotalChildren is not defined.");
+        }
+    }
+
+    void setMinimumChildren(uint64_t minimum) override {
+        _stats.setHasMinimum(true);
+        _stats.setMinimum(minimum);
+    }
+
+    void setMaximumChildren(uint64_t maximum) override {
+        _stats.setHasMaximum(true);
+        _stats.setMaximum(maximum);
+    }
+
+    void setTotalChildren(uint64_t sum) override {
+        _stats.setHasSum(true);
+        _stats.setSum(sum);
+    }
+
+    void setHasTotalChildren(bool hasSum) override { _stats.setHasSum(hasSum); }
+
+    void merge(const MutableColumnStatistics& other) override {
+        const CollectionColumnStatisticsImpl& collectionStats =
+                dynamic_cast<const CollectionColumnStatisticsImpl&>(other);
+
+        _stats.merge(collectionStats._stats);
+
+        // hasSumValue here means no overflow
+        _stats.setHasSum(_stats.hasSum() && collectionStats.hasTotalChildren());
+        if (_stats.hasSum()) {
+            uint64_t oldSum = _stats.getSum();
+            _stats.setSum(_stats.getSum() + collectionStats.getTotalChildren());
+            if (oldSum > _stats.getSum()) {
+                _stats.setHasSum(false);
+            }
+        }
+    }
+
+    void reset() override {
+        _stats.reset();
+        setTotalChildren(0);
+    }
+
+    void update(uint64_t value) {
+        _stats.updateMinMax(value);
+        if (_stats.hasSum()) {
+            uint64_t oldSum = _stats.getSum();
+            _stats.setSum(_stats.getSum() + value);
+            if (oldSum > _stats.getSum()) {
+                _stats.setHasSum(false);
+            }
+        }
+    }
+
+    void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
+        pbStats.set_hasnull(_stats.hasNull());
+        pbStats.set_numberofvalues(_stats.getNumberOfValues());
+
+        proto::CollectionStatistics* collectionStats = pbStats.mutable_collectionstatistics();
+        if (_stats.hasMinimum()) {
+            collectionStats->set_minchildren(_stats.getMinimum());
+            collectionStats->set_maxchildren(_stats.getMaximum());
+        } else {
+            collectionStats->clear_minchildren();
+            collectionStats->clear_maxchildren();
+        }
+        if (_stats.hasSum()) {
+            collectionStats->set_totalchildren(_stats.getSum());
+        } else {
+            collectionStats->clear_totalchildren();
+        }
+    }
+
+    std::string toString() const override {
+        std::ostringstream buffer;
+        buffer << "Data type: Collection(LIST|MAP)" << std::endl
+               << "Values: " << getNumberOfValues() << std::endl
+               << "Has null: " << (hasNull() ? "yes" : "no") << std::endl;
+        if (hasMinimumChildren()) {
+            buffer << "MinChildren: " << getMinimumChildren() << std::endl;
+        } else {
+            buffer << "MinChildren is not defined" << std::endl;
+        }
+
+        if (hasMaximumChildren()) {
+            buffer << "MaxChildren: " << getMaximumChildren() << std::endl;
+        } else {
+            buffer << "MaxChildren is not defined" << std::endl;
+        }
+
+        if (hasTotalChildren()) {
+            buffer << "TotalChildren: " << getTotalChildren() << std::endl;
+        } else {
+            buffer << "TotalChildren is not defined" << std::endl;
+        }
+        return buffer.str();
+    }
+};
+
 ColumnStatistics* convertColumnStatistics(const proto::ColumnStatistics& s, const StatContext& statContext);
 
 class StatisticsImpl : public Statistics {
@@ -1295,17 +1455,17 @@ private:
     std::vector<ColumnStatistics*> colStats;
 
     // DELIBERATELY NOT IMPLEMENTED
-    StatisticsImpl(const StatisticsImpl&) = delete;
-    StatisticsImpl& operator=(const StatisticsImpl&) = delete;
+    StatisticsImpl(const StatisticsImpl&);
+    StatisticsImpl& operator=(const StatisticsImpl&);
 
 public:
     StatisticsImpl(const proto::StripeStatistics& stripeStats, const StatContext& statContext);
 
     StatisticsImpl(const proto::Footer& footer, const StatContext& statContext);
 
-    const ColumnStatistics* getColumnStatistics(uint32_t columnId) const override { return colStats[columnId]; }
+    virtual const ColumnStatistics* getColumnStatistics(uint32_t columnId) const override { return colStats[columnId]; }
 
-    ~StatisticsImpl() override;
+    virtual ~StatisticsImpl() override;
 
     uint32_t getNumberOfColumns() const override { return static_cast<uint32_t>(colStats.size()); }
 };
@@ -1316,26 +1476,26 @@ private:
     std::vector<std::vector<std::shared_ptr<const ColumnStatistics> > > rowIndexStats;
 
     // DELIBERATELY NOT IMPLEMENTED
-    StripeStatisticsImpl(const StripeStatisticsImpl&) = delete;
-    StripeStatisticsImpl& operator=(const StripeStatisticsImpl&) = delete;
+    StripeStatisticsImpl(const StripeStatisticsImpl&);
+    StripeStatisticsImpl& operator=(const StripeStatisticsImpl&);
 
 public:
     StripeStatisticsImpl(const proto::StripeStatistics& stripeStats,
                          std::vector<std::vector<proto::ColumnStatistics> >& indexStats,
                          const StatContext& statContext);
 
-    const ColumnStatistics* getColumnStatistics(uint32_t columnId) const override {
+    virtual const ColumnStatistics* getColumnStatistics(uint32_t columnId) const override {
         return columnStats->getColumnStatistics(columnId);
     }
 
     uint32_t getNumberOfColumns() const override { return columnStats->getNumberOfColumns(); }
 
-    const ColumnStatistics* getRowIndexStatistics(uint32_t columnId, uint32_t rowIndex) const override {
+    virtual const ColumnStatistics* getRowIndexStatistics(uint32_t columnId, uint32_t rowIndex) const override {
         // check id indices are valid
         return rowIndexStats[columnId][rowIndex].get();
     }
 
-    ~StripeStatisticsImpl() override;
+    virtual ~StripeStatisticsImpl() override;
 
     uint32_t getNumberOfRowIndexStats(uint32_t columnId) const override {
         return static_cast<uint32_t>(rowIndexStats[columnId].size());

@@ -36,6 +36,8 @@ ColumnStatistics* convertColumnStatistics(const proto::ColumnStatistics& s, cons
         return new IntegerColumnStatisticsImpl(s);
     } else if (s.has_doublestatistics()) {
         return new DoubleColumnStatisticsImpl(s);
+    } else if (s.has_collectionstatistics()) {
+        return new CollectionColumnStatisticsImpl(s);
     } else if (s.has_stringstatistics()) {
         return new StringColumnStatisticsImpl(s, statContext);
     } else if (s.has_bucketstatistics()) {
@@ -66,8 +68,8 @@ StatisticsImpl::StatisticsImpl(const proto::Footer& footer, const StatContext& s
 }
 
 StatisticsImpl::~StatisticsImpl() {
-    for (auto& colStat : colStats) {
-        delete colStat;
+    for (std::vector<ColumnStatistics*>::iterator ptr = colStats.begin(); ptr != colStats.end(); ++ptr) {
+        delete *ptr;
     }
 }
 
@@ -132,6 +134,10 @@ TimestampColumnStatistics::~TimestampColumnStatistics() {
     // PASS
 }
 
+CollectionColumnStatistics::~CollectionColumnStatistics() {
+    // PASS
+}
+
 MutableColumnStatistics::~MutableColumnStatistics() {
     // PASS
 }
@@ -164,16 +170,8 @@ IntegerColumnStatisticsImpl::~IntegerColumnStatisticsImpl() {
     // PASS
 }
 
-void IntegerColumnStatisticsImpl::update(int64_t value, int repetitions) {
-    _stats.updateMinMax(value);
-
-    if (_stats.hasSum()) {
-        bool wasPositive = _stats.getSum() >= 0;
-        _stats.setSum(value * repetitions + _stats.getSum());
-        if ((value >= 0) == wasPositive) {
-            _stats.setHasSum((_stats.getSum() >= 0) == wasPositive);
-        }
-    }
+CollectionColumnStatisticsImpl::~CollectionColumnStatisticsImpl() {
+    // PASS
 }
 
 StringColumnStatisticsImpl::~StringColumnStatisticsImpl() {
@@ -366,6 +364,25 @@ TimestampColumnStatisticsImpl::TimestampColumnStatisticsImpl(const proto::Column
     }
 }
 
+CollectionColumnStatisticsImpl::CollectionColumnStatisticsImpl(const proto::ColumnStatistics& pb) {
+    _stats.setNumberOfValues(pb.numberofvalues());
+    _stats.setHasNull(pb.hasnull());
+    if (!pb.has_collectionstatistics()) {
+        _stats.setMinimum(0);
+        _stats.setMaximum(0);
+        _stats.setSum(0);
+    } else {
+        const proto::CollectionStatistics& stats = pb.collectionstatistics();
+        _stats.setHasMinimum(stats.has_minchildren());
+        _stats.setHasMaximum(stats.has_maxchildren());
+        _stats.setHasSum(stats.has_totalchildren());
+
+        _stats.setMinimum(stats.minchildren());
+        _stats.setMaximum(stats.maxchildren());
+        _stats.setSum(stats.totalchildren());
+    }
+}
+
 std::unique_ptr<MutableColumnStatistics> createColumnStatistics(const Type& type) {
     switch (static_cast<int64_t>(type.getKind())) {
     case BOOLEAN:
@@ -375,9 +392,10 @@ std::unique_ptr<MutableColumnStatistics> createColumnStatistics(const Type& type
     case LONG:
     case SHORT:
         return std::unique_ptr<MutableColumnStatistics>(new IntegerColumnStatisticsImpl());
-    case STRUCT:
     case MAP:
     case LIST:
+        return std::unique_ptr<MutableColumnStatistics>(new CollectionColumnStatisticsImpl());
+    case STRUCT:
     case UNION:
         return std::unique_ptr<MutableColumnStatistics>(new ColumnStatisticsImpl());
     case FLOAT:

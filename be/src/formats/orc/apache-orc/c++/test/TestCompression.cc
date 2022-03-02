@@ -276,6 +276,30 @@ TEST(Compression, lz4_protobuff_compression) {
     protobuff_compression(CompressionKind_LZ4, proto::LZ4);
 }
 
+TEST(Compression, snappy_compress_original_string) {
+    compress_original_string(CompressionKind_SNAPPY);
+}
+
+TEST(Compression, snappy_compress_simple_repeated_string) {
+    compress_simple_repeated_string(CompressionKind_SNAPPY);
+}
+
+TEST(Compression, snappy_compress_two_blocks) {
+    compress_two_blocks(CompressionKind_SNAPPY);
+}
+
+TEST(Compression, snappy_compress_random_letters) {
+    compress_random_letters(CompressionKind_SNAPPY);
+}
+
+TEST(Compression, snappy_compress_random_bytes) {
+    compress_random_bytes(CompressionKind_SNAPPY);
+}
+
+TEST(Compression, snappy_protobuff_compression) {
+    protobuff_compression(CompressionKind_SNAPPY, proto::SNAPPY);
+}
+
 void testSeekDecompressionStream(CompressionKind kind) {
     MemoryOutputStream memStream(DEFAULT_MEM_STREAM_SIZE);
     MemoryPool* pool = getDefaultPool();
@@ -338,5 +362,6 @@ TEST(Compression, seekDecompressionStream) {
     testSeekDecompressionStream(CompressionKind_ZSTD);
     testSeekDecompressionStream(CompressionKind_ZLIB);
     testSeekDecompressionStream(CompressionKind_LZ4);
+    testSeekDecompressionStream(CompressionKind_SNAPPY);
 }
 } // namespace orc

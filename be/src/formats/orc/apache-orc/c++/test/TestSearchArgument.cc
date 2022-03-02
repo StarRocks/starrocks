@@ -435,7 +435,11 @@ TEST(TestSearchArgument, testBadLiteral) {
 }
 
 TEST(TestSearchArgument, testBadLiteralList) {
-    EXPECT_THROW(SearchArgumentFactory::newBuilder()->startAnd().in("x", PredicateDataType::STRING, {}).end().build(),
+    EXPECT_THROW(SearchArgumentFactory::newBuilder()
+                         ->startAnd()
+                         .in("x", PredicateDataType::STRING, {Literal("hi                     ", 23)})
+                         .end()
+                         .build(),
                  std::invalid_argument);
 }
 

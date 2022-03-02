@@ -51,16 +51,15 @@ TEST(TestTimestampStatistics, testOldFile) {
     EXPECT_TRUE(footerColStats->hasLowerBound());
     EXPECT_TRUE(footerColStats->hasUpperBound());
     EXPECT_EQ(
-            "Data type: Timestamp\nValues: 12\nHas null: no\nMinimum is not defined\nLowerBound: "
-            "1994-12-31 07:00:00.688\nMaximum is not defined\nUpperBound: 2037-01-02 09:00:00.1\n",
+            "Data type: Timestamp\nValues: 12\nHas null: no\nMinimum is not defined\nLowerBound: 1994-12-31 "
+            "07:00:00.688\nMaximum is not defined\nUpperBound: 2037-01-02 09:00:00.1\n",
             footerColStats->toString());
 
     EXPECT_TRUE(stripeColStats->hasMinimum());
     EXPECT_TRUE(stripeColStats->hasMaximum());
     EXPECT_EQ(
-            "Data type: Timestamp\nValues: 12\nHas null: no\nMinimum: 1995-01-01 "
-            "00:00:00.688\nLowerBound: 1995-01-01 00:00:00.688\nMaximum: 2037-01-01 "
-            "00:00:00.0\nUpperBound: 2037-01-01 00:00:00.1\n",
+            "Data type: Timestamp\nValues: 12\nHas null: no\nMinimum: 1995-01-01 00:00:00.688\nLowerBound: 1995-01-01 "
+            "00:00:00.688\nMaximum: 2037-01-01 00:00:00.0\nUpperBound: 2037-01-01 00:00:00.1\n",
             stripeColStats->toString());
 }
 

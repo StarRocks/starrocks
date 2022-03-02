@@ -1,6 +1,6 @@
 # This file is made available under Elastic License 2.0.
 # This file is based on code available under the Apache license here:
-# https://github.com/apache/orc/tree/main/tools/test/CMakeLists.txt
+#   https://github.com/apache/orc/tree/main/tools/test/CMakeLists.txt
 
 
 # Licensed under the Apache License, Version 2.0 (the "License");

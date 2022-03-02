@@ -31,6 +31,7 @@
 #include "wrap/orc-proto-wrapper.hh"
 
 namespace orc {
+
 class SargsApplier {
 public:
     SargsApplier(const Type& type, const SearchArgument* searchArgument, uint64_t rowIndexStride,
@@ -38,7 +39,6 @@ public:
 
     SargsApplier(const Type& type, const SearchArgument* searchArgument, RowReaderFilter* RowReaderFilter,
                  uint64_t rowIndexStride, WriterVersion writerVersion);
-
     /**
      * TODO: use proto::RowIndex and proto::BloomFilter to do the evaluation
      * Pick the row groups that we need to load from the current stripe.
@@ -82,12 +82,15 @@ public:
 
 private:
     friend class TestSargsApplier_findColumnTest_Test;
+    friend class TestSargsApplier_findArrayColumnTest_Test;
+    friend class TestSargsApplier_findMapColumnTest_Test;
     static uint64_t findColumn(const Type& type, const std::string& colName);
 
 private:
     const Type& mType;
     const SearchArgument* mSearchArgument;
     RowReaderFilter* mRowReaderFilter;
+
     uint64_t mRowIndexStride;
     WriterVersion mWriterVersion;
     // column ids for each predicate leaf in the search argument

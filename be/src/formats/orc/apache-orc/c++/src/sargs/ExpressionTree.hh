@@ -24,6 +24,7 @@
 
 #include <limits>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "orc/sargs/TruthValue.hh"
@@ -69,7 +70,7 @@ public:
 
     void setLeaf(size_t leaf);
 
-    void addChild(const TreeNode& child);
+    void addChild(TreeNode child);
 
     std::string toString() const;
 

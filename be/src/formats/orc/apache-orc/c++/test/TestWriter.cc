@@ -72,7 +72,7 @@ class WriterTest : public TestWithParam<FileVersion> {
     // You can implement all the usual fixture class members here.
     // To access the test parameter, call GetParam() from class
     // TestWithParam<T>.
-    virtual void SetUp();
+    void SetUp() override;
 
 protected:
     FileVersion fileVersion;
@@ -593,10 +593,10 @@ TEST_P(WriterTest, writeNegativeTimestamp) {
     }
 }
 
-// TODO: Disable the test below for Windows for following reasons:
-// First, the timezone name provided by Windows cannot be used as
-// a parameter to the getTimezoneByName function. Secondly, the
-// function of setting timezone in Windows is different from Linux.
+//TODO: Disable the test below for Windows for following reasons:
+//First, the timezone name provided by Windows cannot be used as
+//a parameter to the getTimezoneByName function. Secondly, the
+//function of setting timezone in Windows is different from Linux.
 #ifndef _MSC_VER
 void testWriteTimestampWithTimezone(FileVersion fileVersion, const char* writerTimezone, const char* readerTimezone,
                                     const std::string& tsStr, int isDst = 0) {
@@ -1350,7 +1350,7 @@ TEST_P(WriterTest, testWriteListColumnWithNull) {
 TEST_P(WriterTest, testWriteNestedStructWithNull) {
     MemoryOutputStream memStream(DEFAULT_MEM_STREAM_SIZE);
     MemoryPool* pool = getDefaultPool();
-    std::unique_ptr<Type> type(Type::buildTypeFromString("struct<struct<bigint>>"));
+    std::unique_ptr<Type> type(Type::buildTypeFromString("struct<col0:struct<col1:bigint>>"));
 
     uint64_t stripeSize = 1024;
     uint64_t compressionBlockSize = 1024;
@@ -1427,7 +1427,7 @@ TEST_P(WriterTest, testWriteNestedStructWithNull) {
 TEST_P(WriterTest, testWriteNestedStructWithNullIndex) {
     MemoryOutputStream memStream(DEFAULT_MEM_STREAM_SIZE);
     MemoryPool* pool = getDefaultPool();
-    std::unique_ptr<Type> type(Type::buildTypeFromString("struct<struct<bigint>>"));
+    std::unique_ptr<Type> type(Type::buildTypeFromString("struct<col0:struct<col1:bigint>>"));
 
     uint64_t stripeSize = 1024;
     uint64_t compressionBlockSize = 1024;

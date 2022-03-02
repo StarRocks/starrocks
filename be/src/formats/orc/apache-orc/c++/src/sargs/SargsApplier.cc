@@ -29,7 +29,8 @@ namespace orc {
 // find column id from column name
 uint64_t SargsApplier::findColumn(const Type& type, const std::string& colName) {
     for (uint64_t i = 0; i != type.getSubtypeCount(); ++i) {
-        if (i < type.getFieldNamesCount() && (type.getFieldName(i) == colName)) {
+        // Only STRUCT type has field names
+        if (type.getKind() == STRUCT && i < type.getFieldNamesCount() && type.getFieldName(i) == colName) {
             return type.getSubtype(i)->getColumnId();
         } else {
             uint64_t ret = findColumn(*type.getSubtype(i), colName);
@@ -59,7 +60,11 @@ SargsApplier::SargsApplier(const Type& type, const SearchArgument* searchArgumen
     const std::vector<PredicateLeaf>& leaves = sargs->getLeaves();
     mFilterColumns.resize(leaves.size(), INVALID_COLUMN_ID);
     for (size_t i = 0; i != mFilterColumns.size(); ++i) {
-        mFilterColumns[i] = findColumn(type, leaves[i].getColumnName());
+        if (leaves[i].hasColumnName()) {
+            mFilterColumns[i] = findColumn(type, leaves[i].getColumnName());
+        } else {
+            mFilterColumns[i] = leaves[i].getColumnId();
+        }
     }
 }
 
@@ -78,7 +83,6 @@ bool SargsApplier::pickRowGroups(uint64_t rowsInStripe, const std::unordered_map
     if (mRowReaderFilter) {
         mRowReaderFilter->onStartingPickRowGroups();
     }
-
     const auto& leaves = dynamic_cast<const SearchArgumentImpl*>(mSearchArgument)->getLeaves();
     std::vector<TruthValue> leafValues(leaves.size(), TruthValue::YES_NO_NULL);
     mHasSelected = false;
@@ -105,6 +109,7 @@ bool SargsApplier::pickRowGroups(uint64_t rowsInStripe, const std::unordered_map
                 leafValues[pred] = leaves[pred].evaluate(mWriterVersion, statistics, bloomFilter.get());
             }
         }
+
         mRowGroups[rowGroup] = isNeeded(mSearchArgument->evaluate(leafValues));
 
         // I guess cost of evaluating search argument is lower than our customized filter.
@@ -113,7 +118,6 @@ bool SargsApplier::pickRowGroups(uint64_t rowsInStripe, const std::unordered_map
             mRowReaderFilter->filterOnPickRowGroup(rowGroup, rowIndexes, bloomFilters)) {
             mRowGroups[rowGroup] = false;
         }
-
         mHasSelected = mHasSelected || mRowGroups[rowGroup];
         mHasSkipped = mHasSkipped || (!mRowGroups[rowGroup]);
     }
@@ -121,7 +125,6 @@ bool SargsApplier::pickRowGroups(uint64_t rowsInStripe, const std::unordered_map
     if (mRowReaderFilter) {
         mRowReaderFilter->onEndingPickRowGroups();
     }
-
     // update stats
     mStats.first = std::accumulate(mRowGroups.cbegin(), mRowGroups.cend(), mStats.first,
                                    [](bool rg, uint64_t s) { return rg ? 1 : 0 + s; });

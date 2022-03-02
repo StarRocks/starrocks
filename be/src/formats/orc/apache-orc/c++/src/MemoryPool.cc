@@ -22,12 +22,9 @@
 
 #include "orc/MemoryPool.hh"
 
-#ifdef __x86_64__
-#include <immintrin.h>
-#endif
+#include <string.h>
 
 #include <cstdlib>
-#include <cstring>
 #include <iostream>
 
 #include "Adaptor.hh"
@@ -120,6 +117,12 @@ inline int CountTrailingZerosNonZero32(uint32_t n) {
     return __builtin_ctz(n);
 }
 
+#ifdef __x86_64__
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+#endif
+
 // it's copied from `filter_range` in column_helper.h with some minor changes.
 template <class T>
 void DataBuffer<T>::filter(const uint8_t* f_data, size_t f_size, size_t true_size) {
@@ -169,7 +172,6 @@ void DataBuffer<T>::filter(const uint8_t* f_data, size_t f_size, size_t true_siz
     // the larger area will be initialized to 0
     currentSize = true_size;
 }
-
 // Specializations for char
 
 template <>
