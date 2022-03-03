@@ -5,16 +5,12 @@ package com.starrocks.catalog;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
-import com.sun.org.apache.bcel.internal.generic.ATHROW;
 import mockit.Expectations;
-import mockit.Mock;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.internal.runners.statements.ExpectException;
 
-import java.io.*;
 import java.util.List;
 import java.util.Map;
 

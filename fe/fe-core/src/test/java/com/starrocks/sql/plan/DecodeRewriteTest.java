@@ -52,8 +52,69 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE lineorder_flat (\n" +
+                "LO_ORDERDATE date NOT NULL COMMENT \"\",\n" +
+                "LO_ORDERKEY int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_LINENUMBER tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "LO_CUSTKEY int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_PARTKEY int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_SUPPKEY int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_ORDERPRIORITY varchar(100) NOT NULL COMMENT \"\",\n" +
+                "LO_SHIPPRIORITY tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "LO_QUANTITY tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "LO_EXTENDEDPRICE int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_ORDTOTALPRICE int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_DISCOUNT tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "LO_REVENUE int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_SUPPLYCOST int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_TAX tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "LO_COMMITDATE date NOT NULL COMMENT \"\",\n" +
+                "LO_SHIPMODE varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_NAME varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_ADDRESS varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_CITY varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_NATION varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_REGION varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_PHONE varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_MKTSEGMENT varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_NAME varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_ADDRESS varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_CITY varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_NATION varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_REGION varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_PHONE varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_NAME varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_MFGR varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_CATEGORY varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_BRAND varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_COLOR varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_TYPE varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_SIZE tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "P_CONTAINER varchar(100) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(LO_ORDERDATE, LO_ORDERKEY)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(LO_ORDERKEY) BUCKETS 48\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
+    }
+
+    @Test
+    public void testOlapScanNodeOutputColumns() throws Exception {
+        connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
+        String sql = "SELECT C_CITY, S_CITY, year(LO_ORDERDATE) as year, sum(LO_REVENUE) AS revenue FROM lineorder_flat " +
+                "WHERE C_CITY in ('UNITED KI1', 'UNITED KI5') AND S_CITY in ( 'UNITED KI1', 'UNITED\n" +
+                "KI5') AND LO_ORDERDATE >= '1997-12-01' AND LO_ORDERDATE <= '1997-12-31' GROUP BY C_CITY, S_CITY, year " +
+                "ORDER BY year ASC, revenue DESC;";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+        connectContext.getSessionVariable().disableTrimOnlyFilteredColumnsInScanStage();
     }
 
     @Test
