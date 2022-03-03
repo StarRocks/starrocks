@@ -141,7 +141,7 @@ Status SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_item
     for (const auto& data_column : data_columns) {
         serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
     }
-    uint8_t* ptr = table_items.probe_pool->allocate(serialize_size);
+    uint8_t* ptr = probe_state->probe_pool->allocate(serialize_size);
     RETURN_IF_UNLIKELY_NULL(ptr, Status::MemoryAllocFailed("alloc mem for hash join probe failed"));
 
     // serialize and init search
@@ -201,7 +201,32 @@ void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& t
     }
 }
 
-JoinHashTable::~JoinHashTable() {}
+JoinHashTable JoinHashTable::clone_readable_table() {
+    JoinHashTable ht;
+
+    ht._hash_map_type = this->_hash_map_type;
+    ht._need_create_tuple_columns = this->_need_create_tuple_columns;
+
+    ht._table_items = this->_table_items;
+    // Clone a new probe state.
+    ht._probe_state = std::make_unique<HashTableProbeState>(*this->_probe_state);
+
+    switch (ht._hash_map_type) {
+    case JoinHashMapType::empty:
+        break;
+#define M(NAME)                                                                                         \
+    case JoinHashMapType::NAME:                                                                         \
+        ht._##NAME = std::make_unique<typename decltype(_##NAME)::element_type>(ht._table_items.get(),  \
+                                                                                ht._probe_state.get()); \
+        break;
+        APPLY_FOR_JOIN_VARIANTS(M)
+#undef M
+    default:
+        DCHECK(false) << "Unsupported hash_map_type";
+    }
+
+    return ht;
+}
 
 void JoinHashTable::close() {
     _table_items.reset();
@@ -210,7 +235,7 @@ void JoinHashTable::close() {
 
 void JoinHashTable::create(const HashTableParam& param) {
     _need_create_tuple_columns = param.need_create_tuple_columns;
-    _table_items = std::make_unique<JoinHashTableItems>();
+    _table_items = std::make_shared<JoinHashTableItems>();
     _probe_state = std::make_unique<HashTableProbeState>();
 
     _table_items->row_count = 0;
@@ -218,7 +243,6 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->need_create_tuple_columns = _need_create_tuple_columns;
     _table_items->build_chunk = std::make_shared<Chunk>();
     _table_items->build_pool = std::make_unique<MemPool>();
-    _table_items->probe_pool = std::make_unique<MemPool>();
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
     _table_items->row_desc = param.row_desc;
@@ -239,6 +263,8 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->output_probe_column_timer = param.output_probe_column_timer;
     _table_items->output_tuple_column_timer = param.output_tuple_column_timer;
     _table_items->join_keys = param.join_keys;
+
+    _probe_state->probe_pool = std::make_unique<MemPool>();
 
     const auto& probe_desc = *param.probe_row_desc;
     for (const auto& tuple_desc : probe_desc.tuple_descriptors()) {
