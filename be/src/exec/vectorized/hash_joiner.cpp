@@ -21,7 +21,7 @@
 
 namespace starrocks::vectorized {
 
-HashJoiner::HashJoiner(const HashJoinerParam& param)
+HashJoiner::HashJoiner(const HashJoinerParam& param, const std::vector<HashJoinerPtr>& read_only_join_probers)
         : _pool(param._pool),
           _join_type(param._hash_join_node.join_op),
           _limit(param._limit),
@@ -38,7 +38,9 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _probe_node_type(param._probe_node_type),
           _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
           _output_slots(param._output_slots),
-          _build_runtime_filters(param._build_runtime_filters) {
+          _build_runtime_filters(param._build_runtime_filters),
+          _is_buildable(param._is_buildable),
+          _read_only_join_probers(read_only_join_probers) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -90,12 +92,17 @@ Status HashJoiner::prepare(RuntimeState* state) {
     _avg_output_chunk_size = ADD_COUNTER(_runtime_profile, "AvgOutputChunkSize", TUnit::UNIT);
     _runtime_profile->add_info_string("JoinType", _get_join_type_str(_join_type));
 
-    HashTableParam param;
-    _init_hash_table_param(&param);
-    _ht.create(param);
+    if (_is_buildable) {
+        HashTableParam param;
+        _init_hash_table_param(&param);
+        _ht.create(param);
 
-    _probe_column_count = _ht.get_probe_column_count();
-    _build_column_count = _ht.get_build_column_count();
+        _probe_column_count = _ht.get_probe_column_count();
+        _build_column_count = _ht.get_build_column_count();
+
+        // The join builder also corresponds to a join prober.
+        _num_unfinished_prober.store(_read_only_join_probers.size() + 1, std::memory_order_release);
+    }
 
     return Status::OK();
 }
@@ -267,6 +274,26 @@ Status HashJoiner::create_runtime_filters(RuntimeState* state) {
     // merge node is waiting for all partitioned runtime filter, so even hash row count is zero
     // we still have to build it.
     return _create_runtime_bloom_filters(state, runtime_join_filter_pushdown_limit);
+}
+
+void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
+    _ht = src_join_builder->_ht.clone_readable_table();
+
+    _probe_column_count = src_join_builder->_probe_column_count;
+    _build_column_count = src_join_builder->_build_column_count;
+}
+
+void HashJoiner::set_builder_finished() {
+    set_finished();
+    for (auto& prober : _read_only_join_probers) {
+        prober->set_finished();
+    }
+}
+
+void HashJoiner::set_prober_finished() {
+    if (--_num_unfinished_prober == 0) {
+        set_finished();
+    }
 }
 
 bool HashJoiner::_has_null(const ColumnPtr& column) {
