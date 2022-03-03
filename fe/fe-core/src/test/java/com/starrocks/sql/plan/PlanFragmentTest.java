@@ -1843,6 +1843,13 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: `ods_order`\n" +
                 "    " +
                         " Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
+
+        sql = "select * from ods_order where order_dt in ('2025-08-08','2025-08-08') or order_dt between '2025-08-01' and '2025-09-05';";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE ((order_dt IN ('2025-08-08', '2025-08-08')) OR ((order_dt >= '2025-08-01') AND (order_dt <= '2025-09-05')))"));
     }
 
     @Test
