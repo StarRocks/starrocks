@@ -445,13 +445,12 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
     return Status::OK();
 }
 
-Status OlapChunkSource::close(RuntimeState* state) {
+void OlapChunkSource::close(RuntimeState* state) {
     _update_counter();
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
     _dict_optimize_parser.close(state);
-    return Status::OK();
 }
 
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {

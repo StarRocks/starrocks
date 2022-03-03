@@ -21,7 +21,7 @@ public:
         _except_ctx->ref();
     }
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool need_input() const override {
         return _except_ctx->is_dependency_finished(_dependency_index) && !(_is_finished || _except_ctx->is_ht_empty());
