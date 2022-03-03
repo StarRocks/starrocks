@@ -373,7 +373,6 @@ private:
     RuntimeProfile::Counter* _copy_right_table_chunk_timer = nullptr;
     RuntimeProfile::Counter* _build_runtime_filter_timer = nullptr;
     RuntimeProfile::Counter* _output_build_column_timer = nullptr;
-    RuntimeProfile::Counter* _build_rows_counter = nullptr;
     RuntimeProfile::Counter* _build_buckets_counter = nullptr;
     RuntimeProfile::Counter* _runtime_filter_num = nullptr;
 

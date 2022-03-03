@@ -69,8 +69,6 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
     _build_ht_timer = ADD_TIMER(runtime_profile, "BuildHashTableTime");
     _build_runtime_filter_timer = ADD_TIMER(runtime_profile, "RuntimeFilterBuildTime");
     _build_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "BuildConjunctEvaluateTime");
-
-    _build_rows_counter = ADD_COUNTER(runtime_profile, "BuildRows", TUnit::UNIT);
     _build_buckets_counter = ADD_COUNTER(runtime_profile, "BuildBuckets", TUnit::UNIT);
     _runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
     runtime_profile->add_info_string("JoinType", _get_join_type_str(_join_type));
@@ -156,7 +154,6 @@ Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk
 Status HashJoiner::build_ht(RuntimeState* state) {
     if (_phase == HashJoinPhase::BUILD) {
         RETURN_IF_ERROR(_build(state));
-        COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
     }
 
