@@ -26,6 +26,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DdlStmt;
@@ -107,6 +108,12 @@ public class StarRocksAssert {
 
     public StarRocksAssert withoutUseDatabase() {
         ctx.setDatabase("");
+        return this;
+    }
+
+    public StarRocksAssert withResource(String sql) throws Exception {
+        CreateResourceStmt createResourceStmt = (CreateResourceStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        Catalog.getCurrentCatalog().getResourceMgr().createResource(createResourceStmt);
         return this;
     }
 
