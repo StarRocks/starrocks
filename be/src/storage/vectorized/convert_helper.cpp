@@ -1053,8 +1053,8 @@ public:
             }
             double origin_value;
             auto v = src_datum.get<CppType>();
-            auto scale_factor = get_scale_factor<int128_t>(ref_column.scale());
-            DecimalV3Cast::to_float<int128_t, double>(v, scale_factor, &origin_value);
+            auto scale_factor = get_scale_factor<CppType>(ref_column.scale());
+            DecimalV3Cast::to_float<CppType, double>(v, scale_factor, &origin_value);
             PercentileValue percentile;
             percentile.add(origin_value);
             dst_datum.set_percentile(&percentile);

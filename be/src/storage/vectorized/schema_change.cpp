@@ -475,7 +475,7 @@ bool ChunkSorter::sort(ChunkPtr& chunk, TabletSharedPtr new_tablet) {
         _chunk_allocator->release(_swap_chunk, _max_allocated_rows);
         Status st = _chunk_allocator->allocate(_swap_chunk, chunk->num_rows(), new_schema);
         if (_swap_chunk == nullptr || !st.ok()) {
-            LOG(WARNING) << "allocate swap chunk for sort failed";
+            LOG(WARNING) << "allocate swap chunk for sort failed: " << st.to_string();
             return false;
         }
         _max_allocated_rows = chunk->num_rows();
@@ -582,7 +582,7 @@ void ChunkMerger::aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, 
 
 bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer) {
     auto process_err = [this] {
-        LOG(WARNING) << "merge chunk failed";
+        VLOG(3) << "merge chunk failed";
         while (this->_heap.size() > 0) {
             this->_heap.pop();
         }
@@ -612,6 +612,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
         tmp_chunk->append(*_heap.top().chunk, _heap.top().row_index, 1);
         nread += 1;
         if (!_pop_heap()) {
+            LOG(WARNING) << "get next chunk from heap failed";
             process_err();
             return false;
         }
@@ -719,7 +720,9 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
         }
         if (!_chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), new_tablet->tablet_meta(),
                                           mem_pool.get())) {
-            LOG(WARNING) << "failed to change data in chunk";
+            std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
+                                             base_tablet->tablet_id(), new_tablet->tablet_id());
+            LOG(WARNING) << err_msg;
             return false;
         }
         if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
@@ -738,11 +741,13 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
     if (base_chunk->num_rows() != 0) {
         if (!_chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), new_tablet->tablet_meta(),
                                           mem_pool.get())) {
-            LOG(WARNING) << "failed to change data in chunk";
+            std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
+                                             base_tablet->tablet_id(), new_tablet->tablet_id());
+            LOG(WARNING) << err_msg;
             return false;
         }
         if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
-            LOG(WARNING) << "failed to write chunk: " << st;
+            LOG(WARNING) << "rowset writer add chunk failed: " << st;
             return false;
         }
     }
@@ -833,14 +838,16 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
         if (!_chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), new_tablet->tablet_meta(),
                                           mem_pool.get())) {
             _chunk_allocator->release(new_chunk, base_chunk->num_rows());
-            LOG(WARNING) << "failed to change data in chunk";
+            std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
+                                             base_tablet->tablet_id(), new_tablet->tablet_id());
+            LOG(WARNING) << err_msg;
             return false;
         }
 
         if (new_chunk->num_rows() > 0) {
             if (!chunk_sorter.sort(new_chunk, new_tablet)) {
                 _chunk_allocator->release(new_chunk, base_chunk->num_rows());
-                LOG(WARNING) << "failed to sort chunk.";
+                LOG(WARNING) << "chunk data sort failed";
                 return false;
             }
         }
