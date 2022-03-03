@@ -111,7 +111,7 @@ public:
     }
 
     Status prepare(RuntimeState* state);
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
     bool need_input() const;
     bool has_output() const;
     bool is_build_done() const { return _phase != HashJoinPhase::BUILD; }

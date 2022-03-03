@@ -23,7 +23,7 @@ public:
 
     virtual Status prepare(RuntimeState* state) = 0;
 
-    virtual Status close(RuntimeState* state) = 0;
+    virtual void close(RuntimeState* state) = 0;
 
     // Return true if eos is not reached
     // Return false if eos is reached or error occurred

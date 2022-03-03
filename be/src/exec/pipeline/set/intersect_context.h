@@ -49,7 +49,7 @@ public:
     // Called in the preparation phase of IntersectBuildSinkOperator.
     Status prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs);
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& dst_exprs);
 

@@ -244,9 +244,9 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     return Status::OK();
 }
 
-Status Aggregator::close(RuntimeState* state) {
+void Aggregator::close(RuntimeState* state) {
     if (_is_closed) {
-        return Status::OK();
+        return;
     }
 
     _is_closed = true;
@@ -284,8 +284,6 @@ Status Aggregator::close(RuntimeState* state) {
         Expr::close(i, state);
     }
     Expr::close(_conjunct_ctxs, state);
-
-    return Status::OK();
 }
 
 bool Aggregator::is_chunk_buffer_empty() {

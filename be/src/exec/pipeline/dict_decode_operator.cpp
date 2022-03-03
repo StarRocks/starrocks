@@ -12,9 +12,8 @@ Status DictDecodeOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status DictDecodeOperator::close(RuntimeState* state) {
+void DictDecodeOperator::close(RuntimeState* state) {
     Operator::close(state);
-    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> DictDecodeOperator::pull_chunk(RuntimeState* state) {

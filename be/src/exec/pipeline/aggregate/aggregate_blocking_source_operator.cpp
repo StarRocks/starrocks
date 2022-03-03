@@ -18,9 +18,9 @@ void AggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
     _aggregator->set_finished();
 }
 
-Status AggregateBlockingSourceOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_aggregator->unref(state));
-    return SourceOperator::close(state);
+void AggregateBlockingSourceOperator::close(RuntimeState* state) {
+    _aggregator->unref(state);
+    SourceOperator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(RuntimeState* state) {

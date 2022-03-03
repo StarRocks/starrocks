@@ -43,7 +43,7 @@ public:
         _intersect_ctx->finish_probe_ht();
     }
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

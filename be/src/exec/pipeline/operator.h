@@ -72,7 +72,7 @@ public:
     // close is used to do the cleanup work
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
-    virtual Status close(RuntimeState* state);
+    virtual void close(RuntimeState* state);
 
     // Whether we could pull chunk from this operator
     virtual bool has_output() const = 0;

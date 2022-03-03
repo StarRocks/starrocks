@@ -33,13 +33,13 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
 
     return _join_builder->prepare(state);
 }
-Status HashJoinBuildOperator::close(RuntimeState* state) {
+void HashJoinBuildOperator::close(RuntimeState* state) {
     for (auto& read_only_join_prober : _read_only_join_probers) {
-        RETURN_IF_ERROR(read_only_join_prober->unref(state));
+        read_only_join_prober->unref(state);
     }
-    RETURN_IF_ERROR(_join_builder->unref(state));
+    _join_builder->unref(state);
 
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* state) {

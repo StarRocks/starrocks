@@ -30,9 +30,9 @@ public:
 
     ~CrossJoinLeftOperator() override = default;
 
-    Status close(RuntimeState* state) override {
-        RETURN_IF_ERROR(_cross_join_context->unref(state));
-        return Operator::close(state);
+    void close(RuntimeState* state) override {
+        _cross_join_context->unref(state);
+        Operator::close(state);
     }
 
     bool is_ready() const override { return _cross_join_context->is_right_finished(); }
