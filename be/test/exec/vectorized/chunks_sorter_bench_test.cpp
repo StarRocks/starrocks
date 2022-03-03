@@ -131,7 +131,7 @@ static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, in
             auto cloned = chunk->clone_empty();
             cloned->append_safe(*chunk);
             ChunkPtr ck(cloned.release());
-            
+
             // TopN Sorter needs timing when updating
             state.ResumeTiming();
             sorter->update(runtime_state, ck);
@@ -167,10 +167,6 @@ static void Bench_fullsort_column_wise(benchmark::State& state) {
 static void Bench_topn_row_wise(benchmark::State& state) {
     do_bench(state, 2, 2, state.range(0), state.range(1));
 }
-static void Bench_topn_column_wise(benchmark::State& state) {
-    do_bench(state, 2, 1, state.range(0), state.range(1));
-}
-
 static void CustomArgs(benchmark::internal::Benchmark* b) {
     // num_chunks
     for (int num_chunks = 64; num_chunks <= 8192; num_chunks *= 8) {
@@ -184,7 +180,6 @@ static void CustomArgs(benchmark::internal::Benchmark* b) {
 BENCHMARK(Bench_fullsort_row_wise)->Apply(CustomArgs);
 BENCHMARK(Bench_fullsort_column_wise)->Apply(CustomArgs);
 BENCHMARK(Bench_topn_row_wise)->Apply(CustomArgs);
-BENCHMARK(Bench_topn_column_wise)->Apply(CustomArgs);
 
 } // namespace starrocks::vectorized
 
