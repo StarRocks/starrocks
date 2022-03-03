@@ -270,4 +270,9 @@ public class MysqlTable extends Table {
             mysqlTableName = Text.readString(in);
         }
     }
+
+    @Override
+    public boolean isSupported() {
+        return true;
+    }
 }

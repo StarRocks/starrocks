@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRul
 import com.starrocks.sql.optimizer.rule.implementation.HudiScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
@@ -125,6 +126,7 @@ public class RuleSet {
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
             new MetaScanImplementationRule(),
+            new JDBCScanImplementationRule(),
             new HashJoinImplementationRule(),
             new HashAggImplementationRule(),
             new ProjectImplementationRule(),
@@ -163,6 +165,7 @@ public class RuleSet {
                 MergeLimitDirectRule.SCHEMA_SCAN,
                 MergeLimitDirectRule.MYSQL_SCAN,
                 MergeLimitDirectRule.ES_SCAN,
+                MergeLimitDirectRule.JDBC_SCAN,
                 MergeLimitDirectRule.WINDOW,
                 MergeLimitDirectRule.JOIN,
                 MergeLimitDirectRule.INTERSECT,
@@ -189,6 +192,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.HIVE_SCAN,
                 PruneHDFSScanColumnRule.ICEBERG_SCAN,
                 PruneHDFSScanColumnRule.HUDI_SCAN,
+                PruneScanColumnRule.JDBC_SCAN,
                 new PruneProjectColumnsRule(),
                 new PruneFilterColumnsRule(),
                 new PruneAggregateColumnsRule(),
@@ -226,6 +230,7 @@ public class RuleSet {
                 MergePredicateRule.HIVE_SCAN,
                 MergePredicateRule.SCHEMA_SCAN,
                 MergePredicateRule.MYSQL_SCAN,
+                MergePredicateRule.JDBC_SCAN,
                 new MergeTwoFiltersRule(),
                 new PushDownPredicateCTEConsumeRule()
         ));

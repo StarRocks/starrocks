@@ -861,6 +861,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return toSql();
     }
 
+    public String toJDBCSQL() {
+        return toSql();
+    }
+
     /**
      * Return a column label for the expression
      */

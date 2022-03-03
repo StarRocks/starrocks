@@ -1848,6 +1848,30 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testJDBCTableFilter() throws Exception {
+        String sql = "select * from test.jdbc_test where a > 10 and b < 'abc' limit 10";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:SCAN JDBC\n" +
+                "     TABLE: `test_table`\n" +
+                "     QUERY: SELECT a, b, c FROM `test_table` WHERE (a > 10) AND (b < 'abc')\n" +
+                "     limit: 10"));
+    }
+
+    @Test
+    public void testJDBCTableAggregation() throws Exception {
+        String sql = "select b, sum(a) from test.jdbc_test group by b";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(a)\n" +
+                "  |  group by: b\n" +
+                "  |  \n" +
+                "  0:SCAN JDBC\n" +
+                "     TABLE: `test_table`\n" +
+                "     QUERY: SELECT a, b FROM `test_table`"));
+    }
+
+    @Test
     public void testSqlSelectLimitSession() throws Exception {
         connectContext.getSessionVariable().setSqlSelectLimit(10);
         String sql = "select * from test_all_type";

@@ -503,4 +503,9 @@ public class HudiTable extends Table {
             }
         }
     }
+
+    @Override
+    public boolean isSupported() {
+        return true;
+    }
 }
