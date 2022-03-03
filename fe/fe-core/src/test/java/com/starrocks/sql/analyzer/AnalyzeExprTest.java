@@ -64,6 +64,12 @@ public class AnalyzeExprTest {
                 "json_query(parse_json({\"a\": 1}), k1)");
     }
 
+    @Test
+    public void testReserved() {
+        analyzeSuccess("select right('asdfasd', 1)");
+        analyzeSuccess("select left('asdfasd', 1)");
+    }
+
     private void testTranslateArrowExprForValue(String sql, String expected) {
         QueryRelation query = analyzeSuccess(sql);
         Assert.assertTrue(query instanceof ValuesRelation);
@@ -78,7 +84,6 @@ public class AnalyzeExprTest {
         Assert.assertEquals(OperatorType.CALL, so.getOpType());
         CallOperator callOperator = (CallOperator) so;
         Assert.assertEquals(expected, callOperator.toString());
-
     }
 
 }

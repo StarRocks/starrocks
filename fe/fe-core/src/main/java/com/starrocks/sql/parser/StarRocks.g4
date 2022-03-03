@@ -425,12 +425,12 @@ nonReserved
     | GLOBAL
     | HASH | HOUR
     | INTERVAL
-    | LAST | LESS | LOCAL | LOGICAL
+    | LAST | LEFT | LESS | LOCAL | LOGICAL
     | MINUTE | MONTH
     | NONE | NULLS
     | OFFSET
     | PRECEDING | PROPERTIES
-    | ROLLUP
+    | ROLLUP | RIGHT
     | SECOND | SESSION | SETS | START
     | TABLES | THAN | TIME | TYPE
     | UNBOUNDED | USER
