@@ -172,6 +172,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+    public boolean canUsePipeline() {
+        return getPlanRoot().canUsePipeLine() && getSink().canUsePipeLine();
+    }
+
     /**
      * Assign ParallelExecNum by PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM in SessionVariable for synchronous request
      * Assign ParallelExecNum by default value for Asynchronous request
