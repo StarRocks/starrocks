@@ -1,10 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
+
 #include <memory>
 #include <vector>
 
 #include "exec/vectorized/hash_joiner.h"
+
 namespace starrocks {
 namespace pipeline {
 
@@ -21,20 +23,20 @@ public:
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state);
 
-    HashJoinerPtr create_probe_hash_joiner(int driver_sequence) {
+    HashJoinerPtr create_prober(int driver_sequence) {
         if (!_hash_joiners[driver_sequence]) {
             _param._is_buildable = is_buildable(driver_sequence);
             _hash_joiners[driver_sequence] = std::make_shared<HashJoiner>(_param);
         }
 
         if (!_hash_joiners[driver_sequence]->is_buildable()) {
-            _only_probe_hash_joiners.emplace_back(_hash_joiners[driver_sequence]);
+            _read_only_probers.emplace_back(_hash_joiners[driver_sequence]);
         }
 
         return _hash_joiners[driver_sequence];
     }
 
-    HashJoinerPtr create_build_hash_joiner(int driver_sequence) {
+    HashJoinerPtr create_builder(int driver_sequence) {
         if (_param._distribution_mode == TJoinDistributionMode::BROADCAST) {
             driver_sequence = BROADCAST_BUILD_DRIVER_SEQUENCE;
         }
@@ -51,7 +53,7 @@ public:
                driver_sequence == BROADCAST_BUILD_DRIVER_SEQUENCE;
     }
 
-    const HashJoiners& get_only_probe_hash_joiners() const { return _only_probe_hash_joiners; }
+    const HashJoiners& get_read_only_probers() const { return _read_only_probers; }
 
 private:
     // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
@@ -60,7 +62,7 @@ private:
 
     starrocks::vectorized::HashJoinerParam _param;
     HashJoiners _hash_joiners;
-    HashJoiners _only_probe_hash_joiners;
+    HashJoiners _read_only_probers;
 };
 
 } // namespace pipeline

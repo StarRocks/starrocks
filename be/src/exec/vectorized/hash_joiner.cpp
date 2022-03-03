@@ -272,11 +272,11 @@ Status HashJoiner::create_runtime_filters(RuntimeState* state) {
     return _create_runtime_bloom_filters(state, runtime_join_filter_pushdown_limit);
 }
 
-void HashJoiner::reference_hash_table(HashJoiner* src_build_joiner) {
-    _ht = src_build_joiner->_ht.clone_readable_table();
+void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
+    _ht = src_join_builder->_ht.clone_readable_table();
 
-    _probe_column_count = src_build_joiner->_probe_column_count;
-    _build_column_count = src_build_joiner->_build_column_count;
+    _probe_column_count = src_join_builder->_probe_column_count;
+    _build_column_count = src_join_builder->_build_column_count;
 }
 
 bool HashJoiner::_has_null(const ColumnPtr& column) {

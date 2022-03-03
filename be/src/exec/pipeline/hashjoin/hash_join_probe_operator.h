@@ -16,7 +16,7 @@ using HashJoiner = starrocks::vectorized::HashJoiner;
 class HashJoinProbeOperator final : public OperatorWithDependency {
 public:
     HashJoinProbeOperator(OperatorFactory* factory, int32_t id, const string& name, int32_t plan_node_id,
-                          HashJoinerPtr probe_hash_joiner, HashJoinerPtr build_hash_joiner);
+                          HashJoinerPtr join_prober, HashJoinerPtr join_builder);
     ~HashJoinProbeOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
@@ -32,18 +32,18 @@ public:
 
     bool is_ready() const override;
     std::string get_name() const override {
-        return strings::Substitute("$0(HashJoiner=$1)", Operator::get_name(), _probe_hash_joiner.get());
+        return strings::Substitute("$0(HashJoiner=$1)", Operator::get_name(), _join_prober.get());
     }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk);
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state);
 
 private:
-    const HashJoinerPtr _probe_hash_joiner;
-    // For non-broadcast join, _build_hash_joiner is identical to _probe_hash_joiner.
-    // For broadcast join, _probe_hash_joiner references the hash table owned by _build_hash_joiner,
-    // so increase the reference number of _build_hash_joiner to prevent it closing early.
-    const HashJoinerPtr _build_hash_joiner;
+    const HashJoinerPtr _join_prober;
+    // For non-broadcast join, _join_builder is identical to _join_prober.
+    // For broadcast join, _join_prober references the hash table owned by _join_builder,
+    // so increase the reference number of _join_builder to prevent it closing early.
+    const HashJoinerPtr _join_builder;
     bool _is_finished = false;
 };
 
