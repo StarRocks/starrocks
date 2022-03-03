@@ -1078,6 +1078,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitFunctionCall(StarRocksParser.FunctionCallContext context) {
         if (context.IF() != null) {
             return new FunctionCallExpr("if", visit(context.expression(), Expr.class));
+        } else if (context.LEFT() != null) {
+            return new FunctionCallExpr("left", visit(context.expression(), Expr.class));
+        } else if (context.RIGHT() != null) {
+            return new FunctionCallExpr("right", visit(context.expression(), Expr.class));
         }
 
         boolean isStar = context.ASTERISK_SYMBOL() != null;
