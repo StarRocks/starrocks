@@ -60,6 +60,17 @@ public:
 
     void set_is_runtime_filter_coordinator(bool flag) { _is_runtime_filter_coordinator = flag; }
 
+    ObjectPool* object_pool() { return &_object_pool; }
+    void set_desc_tbl(DescriptorTbl* desc_tbl) {
+        DCHECK(_desc_tbl == nullptr);
+        _desc_tbl = desc_tbl;
+    }
+
+    DescriptorTbl* desc_tbl() {
+        DCHECK(_desc_tbl != nullptr);
+        return _desc_tbl;
+    }
+
 private:
     ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
@@ -70,6 +81,8 @@ private:
     int64_t _deadline;
     seconds _expire_seconds;
     bool _is_runtime_filter_coordinator = false;
+    ObjectPool _object_pool;
+    DescriptorTbl* _desc_tbl = nullptr;
 };
 
 class QueryContextManager {
