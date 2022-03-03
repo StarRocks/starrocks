@@ -17,7 +17,7 @@ import java.util.Objects;
 
 public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected final Table table;
-    protected final ImmutableList<ColumnRefOperator> outputColumns;
+    protected List<ColumnRefOperator> outputColumns;
     /**
      * ColumnRefMap is the map from column reference to starrocks column in meta
      * The ColumnRefMap contains Scan output columns and predicate used columns
