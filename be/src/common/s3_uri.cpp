@@ -14,7 +14,7 @@ bool S3URI::parse(const char* uri_str) {
         return false;
     }
 
-    _schema = uri.scheme();
+    _scheme = uri.scheme();
 
     const std::string& host = uri.host();
     std::string_view path;
