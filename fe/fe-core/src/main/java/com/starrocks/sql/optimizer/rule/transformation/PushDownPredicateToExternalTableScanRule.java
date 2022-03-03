@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -54,15 +55,14 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
         ScalarOperator pushedPredicate = extractor.getPushPredicate();
         ScalarOperator reservedPredicate = extractor.getReservePredicate();
 
-        boolean newScanPredicateIsSame = (scanPredicate == null && pushedPredicate == null) ||
-                (scanPredicate != null && scanPredicate.equals(pushedPredicate));
-        boolean newFilterPredicateIsSame = (filterPredicate == null && reservedPredicate == null) ||
-                (filterPredicate != null && filterPredicate.equals(reservedPredicate));
+        boolean newScanPredicateIsSame = Objects.equals(scanPredicate, pushedPredicate);
+        boolean newFilterPredicateIsSame = Objects.equals(filterPredicate, reservedPredicate);
 
         if (newScanPredicateIsSame && newFilterPredicateIsSame) {
-            // can't get a new OptExpression
+            // nothing changed after transform
             return new ArrayList<>();
         }
+
         Operator newOperator = builder.withOperator(operator)
                 .setPredicate(pushedPredicate).build();
         LogicalScanOperator scanOperator = (LogicalScanOperator) newOperator;
@@ -78,7 +78,6 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
             *     Scan         Scan(Predicate)
             *
             * */
-            // all predicates can push down
 
             LogicalProjectOperator projectOperator = new LogicalProjectOperator(scanOutput);
 
