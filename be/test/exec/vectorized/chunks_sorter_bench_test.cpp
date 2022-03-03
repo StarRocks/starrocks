@@ -9,6 +9,7 @@
 #include "column/datum_tuple.h"
 #include "common/config.h"
 #include "exec/vectorized/chunk_sorter_heapsorter.h"
+#include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exprs/slot_ref.h"
@@ -17,10 +18,12 @@
 
 namespace starrocks::vectorized {
 
+inline int kTestChunkSize = 4096;
+
 class ChunkSorterBase {
 public:
     void SetUp() {
-        config::vector_chunk_size = 1024;
+        config::vector_chunk_size = 4096;
 
         _runtime_state = _create_runtime_state();
     }
@@ -72,7 +75,14 @@ public:
     std::shared_ptr<RuntimeState> _runtime_state;
 };
 
-static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, int num_chunks, int num_columns) {
+enum SortAlgorithm : int {
+    FullSort = 1,  // ChunksSorterFullSort
+    HeapSort = 2,  // HeapSoreter
+    MergeSort = 3, // ChunksSorterTopN
+};
+
+static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, CompareStrategy strategy, int num_chunks,
+                     int num_columns, int limit = -1) {
     ChunkSorterBase suite;
     suite.SetUp();
 
@@ -105,26 +115,31 @@ static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, in
         std::unique_ptr<ChunksSorter> sorter;
         size_t expected_rows = 0;
         size_t total_rows = chunk->num_rows() * num_chunks;
+        int limit_rows = limit == -1 ? total_rows : std::min(limit, (int)total_rows);
 
-        switch (sorter_type) {
-        case 1: {
+        switch (sorter_algo) {
+        case FullSort: {
             sorter.reset(new ChunksSorterFullSort(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first,
                                                   config::vector_chunk_size));
-            ((ChunksSorterFullSort*)sorter.get())->set_compare_strategy(sort_algo);
             expected_rows = total_rows;
             break;
         }
-        case 2: {
-            // TODO limit
-            int limit_rows = total_rows / 2;
+        case HeapSort: {
             sorter.reset(new HeapChunkSorter(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, 0,
                                              limit_rows, config::vector_chunk_size));
             expected_rows = limit_rows;
             break;
         }
-        default:
-            ASSERT_TRUE(false) << "unknown algorithm " << sort_algo;
+        case MergeSort: {
+            sorter.reset(new ChunksSorterTopn(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, 0,
+                                              limit_rows, config::vector_chunk_size));
+            expected_rows = limit_rows;
+            break;
         }
+        default:
+            ASSERT_TRUE(false) << "unknown algorithm " << (int)sorter_algo;
+        }
+        sorter->set_compare_strategy(strategy);
 
         for (int i = 0; i < num_chunks; i++) {
             // Clone is necessary for HeapSorter
@@ -158,16 +173,29 @@ static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, in
     state.SetItemsProcessed(item_processed);
 }
 
-static void Bench_fullsort_row_wise(benchmark::State& state) {
-    do_bench(state, 1, 1, state.range(0), state.range(1));
+// Sort full data: ORDER BY
+static void BM_fullsort_row_wise(benchmark::State& state) {
+    do_bench(state, FullSort, RowWise, state.range(0), state.range(1));
 }
-static void Bench_fullsort_column_wise(benchmark::State& state) {
-    do_bench(state, 1, 2, state.range(0), state.range(1));
+static void BM_fullsort_column_wise(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnWise, state.range(0), state.range(1));
 }
-static void Bench_topn_row_wise(benchmark::State& state) {
-    do_bench(state, 2, 2, state.range(0), state.range(1));
+static void BM_heapsort_row_wise(benchmark::State& state) {
+    do_bench(state, HeapSort, RowWise, state.range(0), state.range(1));
 }
-static void CustomArgs(benchmark::internal::Benchmark* b) {
+static void BM_mergesort_row_wise(benchmark::State& state) {
+    do_bench(state, MergeSort, RowWise, state.range(0), state.range(1));
+}
+
+// Sort partial data: ORDER BY xxx LIMIT
+static void BM_topn_limit_heapsort(benchmark::State& state) {
+    do_bench(state, HeapSort, RowWise, state.range(0), state.range(1), state.range(2));
+}
+static void BM_topn_limit_mergesort(benchmark::State& state) {
+    do_bench(state, MergeSort, RowWise, state.range(0), state.range(1), state.range(2));
+}
+
+static void CustomArgsFull(benchmark::internal::Benchmark* b) {
     // num_chunks
     for (int num_chunks = 64; num_chunks <= 8192; num_chunks *= 8) {
         // num_columns
@@ -176,10 +204,26 @@ static void CustomArgs(benchmark::internal::Benchmark* b) {
         }
     }
 }
+static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
+    // num_chunks
+    for (int num_chunks = 64; num_chunks <= 8192; num_chunks *= 8) {
+        // num_columns
+        for (int num_columns = 1; num_columns <= 8; num_columns++) {
+            // limit
+            for (int limit = 1; limit <= num_chunks * kTestChunkSize; limit *= 8) {
+                b->Args({num_chunks, num_columns, limit});
+            }
+        }
+    }
+}
 
-BENCHMARK(Bench_fullsort_row_wise)->Apply(CustomArgs);
-BENCHMARK(Bench_fullsort_column_wise)->Apply(CustomArgs);
-BENCHMARK(Bench_topn_row_wise)->Apply(CustomArgs);
+BENCHMARK(BM_fullsort_row_wise)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_column_wise)->Apply(CustomArgsFull);
+BENCHMARK(BM_heapsort_row_wise)->Apply(CustomArgsFull);
+BENCHMARK(BM_mergesort_row_wise)->Apply(CustomArgsFull);
+
+BENCHMARK(BM_topn_limit_heapsort)->Apply(CustomArgsLimit);
+BENCHMARK(BM_topn_limit_mergesort)->Apply(CustomArgsLimit);
 
 } // namespace starrocks::vectorized
 

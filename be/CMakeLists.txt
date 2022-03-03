@@ -650,10 +650,10 @@ FUNCTION(ADD_BE_BENCH TEST_NAME)
     get_filename_component(TEST_FILE_NAME ${TEST_NAME} NAME)
 
     find_package(benchmark)
-    if (NOT BENCHMARK_FOUND)
+    if (NOT ${BENCHMARK_FOUND})
         message(warning "Benchmark library not found")
         return()
-    endif(BENCHMARK_FOUND)
+    endif()
     ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} benchmark)
 

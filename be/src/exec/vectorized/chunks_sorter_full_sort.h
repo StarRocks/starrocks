@@ -38,9 +38,6 @@ public:
 
     friend class SortHelper;
 
-    // for test only
-    void set_compare_strategy(int strategy) { _compare_strategy = strategy; }
-
 private:
     Status _sort_chunks(RuntimeState* state);
     Status _build_sorting_data(RuntimeState* state);
@@ -50,9 +47,6 @@ private:
 
     void _append_rows_to_chunk(Chunk* dest, Chunk* src, const Permutation& permutation, size_t offset, size_t count);
 
-    // 1: row-wise
-    // 2: column-wise
-    int _compare_strategy = 0;
     ChunkUniquePtr _big_chunk;
     std::unique_ptr<DataSegment> _sorted_segment;
     mutable Permutation _sorted_permutation;
