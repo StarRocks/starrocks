@@ -372,6 +372,6 @@ public class Table extends MetaObject implements Writable {
     }
 
     public boolean isSupported() {
-        return false;
+        return true;
     }
 }

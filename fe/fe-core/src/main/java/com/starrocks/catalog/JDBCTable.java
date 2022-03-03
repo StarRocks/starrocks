@@ -106,9 +106,4 @@ public class JDBCTable extends Table {
         jdbcTable = obj.getAsJsonPrimitive(TABLE).getAsString();
         resourceName = obj.getAsJsonPrimitive(RESOURCE).getAsString();
     }
-
-    @Override
-    public boolean isSupported() {
-        return true;
-    }
 }

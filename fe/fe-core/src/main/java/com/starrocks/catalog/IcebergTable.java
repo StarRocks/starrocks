@@ -286,9 +286,4 @@ public class IcebergTable extends Table {
             }
         }
     }
-
-    @Override
-    public boolean isSupported() {
-        return true;
-    }
 }

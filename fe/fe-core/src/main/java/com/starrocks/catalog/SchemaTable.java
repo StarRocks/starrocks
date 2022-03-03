@@ -443,9 +443,4 @@ public class SchemaTable extends Table {
         tTableDescriptor.setSchemaTable(tSchemaTable);
         return tTableDescriptor;
     }
-
-    @Override
-    public boolean isSupported() {
-        return true;
-    }
 }
