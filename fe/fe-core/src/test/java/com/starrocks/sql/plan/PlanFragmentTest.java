@@ -1905,6 +1905,17 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: `test_table`\n" +
                 "     QUERY: SELECT a, b, c FROM `test_table` WHERE (a > 10) AND (b < 'abc')\n" +
                 "     limit: 10"));
+        sql = "select * from test.jdbc_test where a > 10 and length(b) < 20 limit 10";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:SELECT\n" +
+                "  |  predicates: length(b) < 20\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  0:SCAN JDBC\n" +
+                "     TABLE: `test_table`\n" +
+                "     QUERY: SELECT a, b, c FROM `test_table` WHERE (a > 10)"));
+
     }
 
     @Test
