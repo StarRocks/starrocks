@@ -1123,7 +1123,7 @@ TEST_F(TimeFunctionsTest, str_to_date_of_datetimeformat) {
     }
 }
 
-TEST_F(TimeFunctionsTest, date_fomrat) {
+TEST_F(TimeFunctionsTest, date_format) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
 
@@ -1381,6 +1381,56 @@ TEST_F(TimeFunctionsTest, date_fomrat) {
         auto binary_col = down_cast<BinaryColumn*>(result.get());
         ASSERT_EQ(Slice("a"), binary_col->get_slice(0));
         ASSERT_EQ(Slice("b"), binary_col->get_slice(1));
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("", 0), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->impl()->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::date_format(ctx, columns);
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->only_null());
+    }
+    {
+        auto fmt_col = BinaryColumn::create();
+        fmt_col->append_string(std::string(""));
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::date_format(ctx, columns);
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_nullable());
+        ASSERT_EQ(1, result->size());
+        ASSERT_TRUE(result->is_null(0));
+    }
+    {
+        auto string_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("", 0), 1);
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(string_col);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::datetime_format(ctx, columns);
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->only_null());
+    }
+    {
+        auto string_col = BinaryColumn::create();
+        string_col->append_string(std::string(""));
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(string_col);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::datetime_format(ctx, columns);
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_nullable());
+        ASSERT_EQ(1, result->size());
+        ASSERT_TRUE(result->is_null(0));
     }
 }
 
