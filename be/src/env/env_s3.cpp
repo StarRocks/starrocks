@@ -17,6 +17,7 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <aws/transfer/TransferHandle.h>
 #include <fmt/core.h>
+#include <time.h>
 
 #include <limits>
 
@@ -26,6 +27,7 @@
 #include "io/s3_output_stream.h"
 #include "io/s3_random_access_file.h"
 #include "util/hdfs_util.h"
+#include "util/random.h"
 
 namespace starrocks {
 
@@ -121,26 +123,86 @@ private:
     uint64_t _bytes_written;
 };
 
-// TODO: client cache
+bool operator==(const Aws::Client::ClientConfiguration& lhs, const Aws::Client::ClientConfiguration& rhs) {
+    return lhs.endpointOverride == rhs.endpointOverride && lhs.region == rhs.region &&
+           lhs.maxConnections == rhs.maxConnections && lhs.scheme == rhs.scheme;
+}
+
+class S3ClientFactory {
+public:
+    using ClientConfiguration = Aws::Client::ClientConfiguration;
+    using S3Client = Aws::S3::S3Client;
+    using S3ClientPtr = std::shared_ptr<S3Client>;
+
+    static S3ClientFactory& instance() {
+        static S3ClientFactory obj;
+        return obj;
+    }
+
+    ~S3ClientFactory() = default;
+
+    S3ClientFactory(const S3ClientFactory&) = delete;
+    void operator=(const S3ClientFactory&) = delete;
+    S3ClientFactory(S3ClientFactory&&) = delete;
+    void operator=(S3ClientFactory&&) = delete;
+
+    S3ClientPtr new_client(const ClientConfiguration& config);
+
+private:
+    S3ClientFactory();
+
+    constexpr static int kMaxItems = 8;
+
+    std::mutex _lock;
+    int _items;
+    // _configs[i] is the client configuration of |_clients[i].
+    ClientConfiguration _configs[kMaxItems];
+    S3ClientPtr _clients[kMaxItems];
+    Random _rand;
+};
+
+S3ClientFactory::S3ClientFactory() : _items(0), _rand((int)::time(NULL)) {}
+
+S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfiguration& config) {
+    std::lock_guard l(_lock);
+
+    for (size_t i = 0; i < _items; i++) {
+        if (_configs[i] == config) return _clients[i];
+    }
+
+    S3ClientPtr client;
+    const auto& access_key_id = config::object_storage_access_key_id;
+    const auto& secret_access_key = config::object_storage_secret_access_key;
+    if (!access_key_id.empty() && !secret_access_key.empty()) {
+        auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
+        client = std::make_shared<Aws::S3::S3Client>(credentials, config);
+    } else {
+        // if not cred provided, we can use default cred in aws profile.
+        client = std::make_shared<Aws::S3::S3Client>(config);
+    }
+
+    if (UNLIKELY(_items >= kMaxItems)) {
+        int idx = _rand.Uniform(kMaxItems);
+        _configs[idx] = config;
+        _clients[idx] = client;
+    } else {
+        _configs[_items] = config;
+        _clients[_items] = client;
+        _items++;
+    }
+    return client;
+}
+
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
     Aws::Client::ClientConfiguration config;
-    config.scheme = Aws::Http::Scheme::HTTP; // TODO: use the schema in uri
+    config.scheme = Aws::Http::Scheme::HTTP; // TODO: use the scheme in uri
     if (!uri.endpoint().empty()) {
         config.endpointOverride = uri.endpoint();
     } else if (!config::object_storage_endpoint.empty()) {
         config.endpointOverride = config::object_storage_endpoint;
     }
     config.maxConnections = config::object_storage_max_connection;
-    const auto& access_key_id = config::object_storage_access_key_id;
-    const auto& secret_access_key = config::object_storage_secret_access_key;
-    // TODO: support pass access key by URI?
-    if (!access_key_id.empty() && !secret_access_key.empty()) {
-        auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
-        return std::make_shared<Aws::S3::S3Client>(credentials, config);
-    } else {
-        // if not cred provided, we can use default cred in aws profile.
-        return std::make_shared<Aws::S3::S3Client>(config);
-    }
+    return S3ClientFactory::instance().new_client(config);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const RandomAccessFileOptions& opts,
