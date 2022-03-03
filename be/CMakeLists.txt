@@ -643,17 +643,17 @@ ENDFUNCTION()
 
 # Add a benchmark to BE
 FUNCTION(ADD_BE_BENCH TEST_NAME)
+    if (NOT ${WITH_BENCH}) 
+        return()
+    endif()
+    
     set(BUILD_OUTPUT_ROOT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")
     # This gets the directory where the test is from (e.g. 'exprs' or 'runtime')
     get_filename_component(DIR_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
     get_filename_component(TEST_DIR_NAME ${TEST_NAME} PATH)
     get_filename_component(TEST_FILE_NAME ${TEST_NAME} NAME)
 
-    find_package(benchmark)
-    if (NOT ${BENCHMARK_FOUND})
-        message(warning "Benchmark library not found")
-        return()
-    endif()
+    find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} benchmark)
 
