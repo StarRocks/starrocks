@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
@@ -81,6 +82,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
@@ -394,17 +396,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return builder;
     }
 
-    @Override
-    public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
-        return computeMysqlScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
-    }
-
-    @Override
-    public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
-        return computeMysqlScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
-    }
-
-    private Void computeMysqlScanNode(Operator node, ExpressionContext context, Table table,
+    private Void computeNormalExternalTableScanNode(Operator node, ExpressionContext context, Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
         builder.setOutputRowCount(1);
@@ -414,22 +406,23 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
+    public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
     public Void visitLogicalEsScan(LogicalEsScanOperator node, ExpressionContext context) {
-        return computeEsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalEsScan(PhysicalEsScanOperator node, ExpressionContext context) {
-        return computeEsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
-    }
-
-    private Void computeEsScanNode(Operator node, ExpressionContext context, Table table,
-                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
-        builder.setOutputRowCount(1);
-
-        context.setStatistics(builder.build());
-        return visitOperator(node, context);
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
@@ -468,6 +461,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalJDBCScan(LogicalJDBCScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     /**

@@ -13,13 +13,6 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.MysqlTable;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;
@@ -64,12 +57,6 @@ public class AnalyzerUtils {
 
     public static boolean isAggregate(List<FunctionCallExpr> aggregates, List<Expr> groupByExpressions) {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
-    }
-
-    public static boolean isSupportedTable(Table table) {
-        return table instanceof OlapTable || table instanceof HiveTable || table instanceof SchemaTable ||
-                table instanceof MysqlTable || table instanceof EsTable || table instanceof IcebergTable ||
-                table instanceof HudiTable;
     }
 
     //Get all the db used, the query needs to add locks to them

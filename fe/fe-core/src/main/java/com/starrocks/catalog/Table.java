@@ -370,4 +370,8 @@ public class Table extends MetaObject implements Writable {
     // onDrop is called when this table is dropped
     public void onDrop() {
     }
+
+    public boolean isSupported() {
+        return false;
+    }
 }

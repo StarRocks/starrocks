@@ -61,7 +61,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.analyzer.AnalyzerUtils.isSupportedTable;
 import static com.starrocks.sql.analyzer.AnalyzerUtils.verifyNoAggregateFunctions;
 import static com.starrocks.sql.analyzer.AnalyzerUtils.verifyNoGroupingFunctions;
 import static com.starrocks.sql.analyzer.AnalyzerUtils.verifyNoWindowFunctions;
@@ -588,7 +587,7 @@ public class QueryAnalyzer {
                     new Scope(RelationId.of(subqueryRelation), new RelationFields(outputFields.build())));
             return subqueryRelation;
         } else {
-            if (isSupportedTable(table)) {
+            if (table.isSupported()) {
                 ImmutableList.Builder<Field> fields = ImmutableList.builder();
                 ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
                 for (Column column : table.getFullSchema()) {
