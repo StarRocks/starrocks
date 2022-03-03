@@ -62,8 +62,7 @@ struct CompactionCandidateComparator {
     bool operator()(const CompactionCandidate& left, const CompactionCandidate& right) const {
         int64_t left_score = static_cast<int64_t>(left.tablet->compaction_score(left.level) * 100);
         int64_t right_score = static_cast<int64_t>(right.tablet->compaction_score(right.level) * 100);
-        return left_score > right_score ||
-               (left_score == right_score && left.level < right.level) ||
+        return left_score > right_score || (left_score == right_score && left.level < right.level) ||
                (left_score == right_score && left.level == right.level &&
                 left.tablet->tablet_id() < right.tablet->tablet_id());
     }
