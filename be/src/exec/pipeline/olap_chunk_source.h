@@ -77,8 +77,6 @@ private:
     std::vector<ExprContext*> _conjunct_ctxs;
     const std::vector<ExprContext*>& _runtime_in_filters;
     const vectorized::RuntimeFilterProbeCollector* _runtime_bloom_filters;
-    std::vector<std::string> _key_column_names;
-    bool _skip_aggregation;
     TInternalScanRange* _scan_range;
 
     Status _status = Status::OK();
