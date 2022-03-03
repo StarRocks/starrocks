@@ -60,7 +60,7 @@ public class CacheDictManager implements IDictManager {
                                     columnIdentifier.getColumnName());
                             // check TStatisticData is not empty, There may be no such column Statistics in BE
                             if (!statisticData.isEmpty()) {
-                                return Optional.of(deserializeColumnDict(statisticData.get(0)));
+                                return deserializeColumnDict(statisticData.get(0));
                             } else {
                                 return Optional.empty();
                             }
@@ -89,10 +89,12 @@ public class CacheDictManager implements IDictManager {
                             List<TStatisticData> statisticData = queryDictSync(dbId, tableId, columns);
                             // check TStatisticData is not empty, There may be no such column Statistics in BE
                             if (!statisticData.isEmpty()) {
-                                for (TStatisticData data : statisticData) {
-                                    ColumnDict columnDict = deserializeColumnDict(data);
-                                    result.put(new ColumnIdentifier(data.tableId, data.columnName),
-                                            Optional.of(columnDict));
+                                Preconditions.checkState(statisticData.size() == columns.size());
+                                for (int i = 0; i < columns.size(); ++i) {
+                                    TStatisticData data = statisticData.get(i);
+                                    String columnName = columns.get(i);
+                                    result.put(new ColumnIdentifier(tableId, columnName),
+                                            deserializeColumnDict(data));
                                 }
                             } else {
                                 // put null for cache key which can't get TStatisticData from BE
@@ -121,7 +123,7 @@ public class CacheDictManager implements IDictManager {
             .maximumSize(Config.statistic_cache_columns)
             .buildAsync(dictLoader);
 
-    private ColumnDict deserializeColumnDict(TStatisticData statisticData) {
+    private Optional<ColumnDict> deserializeColumnDict(TStatisticData statisticData) {
         if (statisticData.dict == null) {
             throw new RuntimeException("Collect dict error in BE");
         }
@@ -132,6 +134,7 @@ public class CacheDictManager implements IDictManager {
             ColumnIdentifier columnIdentifier = new ColumnIdentifier(statisticData.tableId, statisticData.columnName);
             if (dictSize > 256) {
                 noDictStringColumns.add(columnIdentifier);
+                return Optional.empty();
             } else {
                 int dictDataSize = 0;
                 for (int i = 0; i < dictSize; i++) {
@@ -149,6 +152,7 @@ public class CacheDictManager implements IDictManager {
                 // Additional 32 bytes reserved for security.
                 if (dictDataSize > DICT_PAGE_MAX_SIZE - 32) {
                     noDictStringColumns.add(columnIdentifier);
+                    return Optional.empty();
                 }
             }
             
@@ -157,7 +161,7 @@ public class CacheDictManager implements IDictManager {
                 dicts.put(tGlobalDict.strings.get(i), tGlobalDict.ids.get(i));
             }
         }
-        return new ColumnDict(dicts.build(), statisticData.meta_version);
+        return Optional.of(new ColumnDict(dicts.build(), statisticData.meta_version));
     }
 
     @Override
