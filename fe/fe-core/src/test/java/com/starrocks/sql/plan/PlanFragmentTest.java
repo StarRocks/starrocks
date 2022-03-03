@@ -1800,6 +1800,48 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: `ods_order`\n" +
                 "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07') AND (order_no = 'p')\n" +
                 "     limit: 10"));
+
+        sql = "select * from ods_order where order_dt = '2025-08-07' and length(order_no) > 10 limit 10;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:SELECT\n" +
+                "  |  predicates: length(order_no) > 10\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
+
+        sql = "select * from ods_order where order_dt = '2025-08-08' or length(order_no) > 10 limit 10;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:SELECT\n" +
+                "  |  predicates: (order_dt = '2025-08-08') OR (length(order_no) > 10)\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
+
+        sql = "select * from ods_order where order_dt = '2025-08-07' and (length(order_no) > 10 or order_no = 'p');";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:SELECT\n" +
+                "  |  predicates: (length(order_no) > 10) OR (order_no = 'p')\n" +
+                "  |  \n" +
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
+        sql = "select * from ods_order where not (order_dt = '2025-08-07' and length(order_no) > 10)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:SELECT\n" +
+                "  |  predicates: (order_dt != '2025-08-07') OR (length(order_no) <= 10)\n" +
+                "  |  \n" +
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "    " +
+                        " Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
     }
 
     @Test

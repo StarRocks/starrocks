@@ -229,8 +229,6 @@ public class RuleSet {
 
                 MergePredicateRule.HIVE_SCAN,
                 MergePredicateRule.SCHEMA_SCAN,
-                MergePredicateRule.MYSQL_SCAN,
-                MergePredicateRule.JDBC_SCAN,
                 new MergeTwoFiltersRule(),
                 new PushDownPredicateCTEConsumeRule()
         ));
