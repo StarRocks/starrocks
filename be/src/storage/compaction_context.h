@@ -19,9 +19,10 @@ class CompactionTask;
 
 const double COMPACTION_SCORE_THRESHOLD = 0.999;
 
+// rowsets here can never overlap
 struct RowsetComparator {
     bool operator()(const Rowset* left, const Rowset* right) const {
-        return left->start_version() < right->start_version() && left->end_version() < right->start_version();
+        return left->start_version() < right->start_version();
     }
 };
 
@@ -31,14 +32,6 @@ struct CompactionContext {
     double compaction_scores[LEVEL_NUMBER - 1];
     TabletSharedPtr tablet;
     int8_t current_level = -1;
-
-    /*
-    double get_score() {
-        if (current_level < 0 || current_level > 1) {
-            return 0;
-        }
-        return compaction_scores[current_level];
-    }*/
 
     bool need_compaction(uint8_t level) { return compaction_scores[level] > COMPACTION_SCORE_THRESHOLD; }
 
