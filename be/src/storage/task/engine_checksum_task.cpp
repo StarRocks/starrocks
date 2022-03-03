@@ -102,7 +102,6 @@ Status EngineChecksumTask::_compute_checksum() {
         return st;
     }
 
-    uint32_t num_rows = 0;
     int64_t checksum = 0;
 
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, reader_params.chunk_size);
@@ -118,7 +117,6 @@ Status EngineChecksumTask::_compute_checksum() {
         }
 #endif
 
-        num_rows = chunk->num_rows();
         for (auto& column : chunk->columns()) {
             checksum ^= column->xor_checksum();
         }

@@ -820,7 +820,7 @@ PARALLEL_TEST(ArrayColumnTest, test_xor_checksum) {
     auto* offsets = down_cast<UInt32Column*>(c0->offsets_column().get());
     auto* elements = down_cast<Int32Column*>(c0->elements_column().get());
 
-    // insert [1, 2, 3], [4, 5, 6]
+    // insert [1, 2, 3], [4, 5, 6, 7]
     elements->append(1);
     elements->append(2);
     elements->append(3);
@@ -829,10 +829,12 @@ PARALLEL_TEST(ArrayColumnTest, test_xor_checksum) {
     elements->append(4);
     elements->append(5);
     elements->append(6);
-    offsets->append(6);
+    elements->append(7);
+    elements->append(8);
+    offsets->append(8);
 
     int64_t checksum = c0->xor_checksum();
-    int64_t expected_checksum = 7;
+    int64_t expected_checksum = 14;
 
     ASSERT_EQ(checksum, expected_checksum);
 }
