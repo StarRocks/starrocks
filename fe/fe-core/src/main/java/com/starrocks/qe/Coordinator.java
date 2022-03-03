@@ -474,7 +474,7 @@ public class Coordinator {
             boolean isEnablePipelineEngine = ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isEnablePipelineEngine() &&
                     fragments.stream().allMatch(PlanFragment::canUsePipeline);
-            
+
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
                 FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
@@ -516,8 +516,10 @@ public class Coordinator {
                         continue;
                     }
 
+                    Map<TUniqueId, TNetworkAddress> instanceId2Host =
+                            fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams = params.toThrift(backendId,
-                            fInstanceExecParamList, descTable, isEnablePipelineEngine);
+                            instanceId2Host.keySet(), descTable, isEnablePipelineEngine);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
                     boolean needCheckBackendState = false;
@@ -528,10 +530,10 @@ public class Coordinator {
                         needCheckBackendState = true;
                     }
 
-                    int instanceId = 0;
                     for (TExecPlanFragmentParams tParam : tParams) {
                         // TODO: pool of pre-formatted BackendExecStates?
-                        BackendExecState execState = new BackendExecState(fragment.getFragmentId(), instanceId++,
+                        TNetworkAddress host = instanceId2Host.get(tParam.params.fragment_instance_id);
+                        BackendExecState execState = new BackendExecState(fragment.getFragmentId(), host,
                                 profileFragmentId, tParam, this.addressToBackendID);
                         backendExecStates.add(execState);
                         if (needCheckBackendState) {
@@ -1781,7 +1783,6 @@ public class Coordinator {
     public class BackendExecState {
         TExecPlanFragmentParams rpcParams;
         PlanFragmentId fragmentId;
-        int instanceId;
         boolean initiated;
         boolean done;
         boolean hasCanceled;
@@ -1791,19 +1792,17 @@ public class Coordinator {
         Backend backend;
         long lastMissingHeartbeatTime = -1;
 
-        public BackendExecState(PlanFragmentId fragmentId, int instanceId, int profileFragmentId,
+        public BackendExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
                                 TExecPlanFragmentParams rpcParams, Map<TNetworkAddress, Long> addressToBackendID) {
             this.profileFragmentId = profileFragmentId;
             this.fragmentId = fragmentId;
-            this.instanceId = instanceId;
             this.rpcParams = rpcParams;
             this.initiated = false;
             this.done = false;
-            this.address = fragmentExecParamsMap.get(fragmentId).instanceExecParams.get(instanceId).host;
+            this.address = host;
             this.backend = idToBackend.get(addressToBackendID.get(address));
 
-            String name = "Instance " + DebugUtil.printId(fragmentExecParamsMap.get(fragmentId)
-                    .instanceExecParams.get(instanceId).instanceId) + " (host=" + address + ")";
+            String name = "Instance " + DebugUtil.printId(rpcParams.params.fragment_instance_id) + " (host=" + address + ")";
             this.profile = new RuntimeProfile(name);
             this.hasCanceled = false;
             this.lastMissingHeartbeatTime = backend.getLastMissingHeartbeatTime();
@@ -1962,7 +1961,7 @@ public class Coordinator {
         }
 
         List<TExecPlanFragmentParams> toThrift(int backendNum,
-                                               List<FInstanceExecParam> fInstanceExecParamList,
+                                               Set<TUniqueId> inFlightInstanceIds,
                                                TDescriptorTable descTable,
                                                boolean isEnablePipelineEngine) throws Exception {
             // add instance number in file name prefix when export job
@@ -1985,13 +1984,15 @@ public class Coordinator {
             }
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
-            int startIdx = backendNum;
-            for (int i = 0; i < fInstanceExecParamList.size(); ++i) {
-                final FInstanceExecParam instanceExecParam = fInstanceExecParamList.get(i);
+            for (int i = 0; i < instanceExecParams.size(); ++i) {
+                final FInstanceExecParam instanceExecParam = instanceExecParams.get(i);
+                if (!inFlightInstanceIds.contains(instanceExecParam.instanceId)) {
+                    continue;
+                }
                 TExecPlanFragmentParams params = new TExecPlanFragmentParams();
 
                 if (exportSink != null && fileNamePrefix != null) {
-                    exportSink.setFileNamePrefix(fileNamePrefix + (startIdx + i) + "_");
+                    exportSink.setFileNamePrefix(fileNamePrefix + i + "_");
                 }
 
                 params.setProtocol_version(InternalServiceVersion.V1);
