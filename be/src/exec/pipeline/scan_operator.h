@@ -87,5 +87,8 @@ protected:
     ScanNode* _scan_node;
 };
 
+pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,
+                                                      pipeline::PipelineBuilderContext* context);
+
 } // namespace pipeline
 } // namespace starrocks

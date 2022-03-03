@@ -274,4 +274,32 @@ void ScanOperatorFactory::close(RuntimeState* state) {
     OperatorFactory::close(state);
 }
 
+// ====================
+
+pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> scan_operator,
+                                                      ScanNode* scan_node, pipeline::PipelineBuilderContext* context) {
+    OpFactories operators;
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector =
+            std::make_shared<RcRfProbeCollector>(1, std::move(scan_node->runtime_filter_collector()));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    scan_node->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
+    auto& morsel_queues = context->fragment_context()->morsel_queues();
+    auto source_id = scan_operator->plan_node_id();
+    DCHECK(morsel_queues.count(source_id));
+    auto& morsel_queue = morsel_queues[source_id];
+    // ScanOperator's degree_of_parallelism is not more than the number of morsels
+    // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
+    const auto degree_of_parallelism =
+            std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
+    scan_operator->set_degree_of_parallelism(degree_of_parallelism);
+    operators.emplace_back(std::move(scan_operator));
+    size_t limit = scan_node->limit();
+    if (limit != -1) {
+        operators.emplace_back(
+                std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), scan_node->id(), limit));
+    }
+    return operators;
+}
+
 } // namespace starrocks::pipeline

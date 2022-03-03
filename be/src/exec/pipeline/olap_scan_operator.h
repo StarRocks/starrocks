@@ -4,10 +4,10 @@
 
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan_operator.h"
-#include "exec/scan_node.h"
 
 namespace starrocks {
 
+class ScanNode;
 class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
 
