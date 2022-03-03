@@ -60,6 +60,6 @@ ALTER TABLE example_db.my_table SET ("bloom_filter_columns" = "k1,k2,k3");
 
 ## 注意事项
 
-* 不支持对Tinyint、Float、Double 类型的列建Bloom Filter索引。
+* 不支持对Tinyint、Float、Double、Decimal 类型的列建Bloom Filter索引。
 * Bloom Filter索引只对in和=过滤查询有加速效果。
 * 如果要查看某个查询是否命中了Bloom Filter索引，可以通过查询的Profile信息查看（TODO：加上查看Profile的链接）。
