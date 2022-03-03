@@ -66,7 +66,7 @@ void HashJoinProbeOperator::set_finishing(RuntimeState* state) {
 
 void HashJoinProbeOperator::set_finished(RuntimeState* state) {
     _join_prober->enter_eos_phase();
-    _join_prober->set_finished();
+    _join_builder->set_prober_finished();
 }
 
 bool HashJoinProbeOperator::is_ready() const {

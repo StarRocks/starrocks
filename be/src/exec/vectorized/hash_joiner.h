@@ -25,6 +25,9 @@ namespace vectorized {
 class ColumnRef;
 class RuntimeFilterBuildDescriptor;
 
+class HashJoiner;
+using HashJoinerPtr = std::shared_ptr<HashJoiner>;
+
 // HashJoiner works in four consecutive phases, each phase has its own allowed operations.
 // 1.BUILD: building ht from right child is outstanding, and probe operations is disallowed. EOS from right child
 //   indicates that building ht should be finalized.
@@ -99,7 +102,7 @@ struct HashJoinerParam {
 
 class HashJoiner final : public pipeline::ContextWithDependency {
 public:
-    explicit HashJoiner(const HashJoinerParam& param);
+    explicit HashJoiner(const HashJoinerParam& param, const std::vector<HashJoinerPtr>& read_only_join_probers);
 
     ~HashJoiner() {
         if (_runtime_state != nullptr) {
@@ -149,6 +152,9 @@ public:
 
     bool is_buildable() const { return _is_buildable; }
 
+    void set_builder_finished();
+    void set_prober_finished();
+
 private:
     static bool _has_null(const ColumnPtr& column);
 
@@ -192,7 +198,7 @@ private:
              _join_type == TJoinOp::RIGHT_SEMI_JOIN || _join_type == TJoinOp::RIGHT_ANTI_JOIN ||
              _join_type == TJoinOp::RIGHT_OUTER_JOIN)) {
             _phase = HashJoinPhase::EOS;
-            set_finished();
+            set_builder_finished();
         }
 
         if (_ht.get_row_count() > 0) {
@@ -205,7 +211,7 @@ private:
                 // TODO: This reserved field will be removed in the implementation mechanism in the future.
                 // at that time, you can directly use Column::has_null() to judge
                 _phase = HashJoinPhase::EOS;
-                set_finished();
+                set_builder_finished();
             }
         }
     }
@@ -353,6 +359,9 @@ private:
     // right table have not output data for right outer join/right semi join/right anti join/full outer join
 
     const bool _is_buildable;
+    // These two fields are for hash join builder.
+    const std::vector<HashJoinerPtr>& _read_only_join_probers;
+    std::atomic<size_t> _num_unfinished_prober = 0;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _build_ht_timer = nullptr;

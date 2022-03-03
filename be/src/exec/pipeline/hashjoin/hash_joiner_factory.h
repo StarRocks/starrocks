@@ -26,7 +26,7 @@ public:
     HashJoinerPtr create_prober(int driver_sequence) {
         if (!_hash_joiners[driver_sequence]) {
             _param._is_buildable = is_buildable(driver_sequence);
-            _hash_joiners[driver_sequence] = std::make_shared<HashJoiner>(_param);
+            _hash_joiners[driver_sequence] = std::make_shared<HashJoiner>(_param, _read_only_probers);
         }
 
         if (!_hash_joiners[driver_sequence]->is_buildable()) {
@@ -42,7 +42,7 @@ public:
         }
         if (!_hash_joiners[driver_sequence]) {
             _param._is_buildable = true;
-            _hash_joiners[driver_sequence] = std::make_shared<HashJoiner>(_param);
+            _hash_joiners[driver_sequence] = std::make_shared<HashJoiner>(_param, _read_only_probers);
         }
 
         return _hash_joiners[driver_sequence];
