@@ -10,8 +10,10 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -78,13 +80,17 @@ public class ScalarOperatorsReuseRule implements PhysicalOperatorTreeRewriteRule
             if (hasRewritten) {
                 Map<ColumnRefOperator, ScalarOperator> newMap =
                         Maps.newTreeMap(Comparator.comparingInt(ColumnRefOperator::getId));
+                // Apply to normalize rule to eliminate invalid ColumnRef usage for in-predicate
+                ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+                List<ScalarOperatorRewriteRule> rules = Arrays.asList(new NormalizePredicateRule());
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : columnRefMap.entrySet()) {
                     ScalarOperator rewriteOperator =
                             ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(kv.getValue(), commonSubOperators);
+                    rewriteOperator = rewriter.rewrite(rewriteOperator, rules);
 
                     if (rewriteOperator.isColumnRef() && newMap.containsValue(rewriteOperator)) {
                         // must avoid multi columnRef: columnRef
-                        // @TODO: remove it if BE support COW column
+                        //@TODO(hechenfeng): remove it if BE support COW column
                         newMap.put(kv.getKey(), kv.getValue());
                     } else {
                         newMap.put(kv.getKey(), rewriteOperator);
@@ -95,7 +101,8 @@ public class ScalarOperatorsReuseRule implements PhysicalOperatorTreeRewriteRule
                         Maps.newTreeMap(Comparator.comparingInt(ColumnRefOperator::getId));
                 for (Map.Entry<ScalarOperator, ColumnRefOperator> kv : commonSubOperators.entrySet()) {
                     Preconditions.checkState(!newMap.containsKey(kv.getValue()));
-                    newCommonMap.put(kv.getValue(), kv.getKey());
+                    ScalarOperator rewrittenOperator = rewriter.rewrite(kv.getKey(), rules);
+                    newCommonMap.put(kv.getValue(), rewrittenOperator);
                 }
 
                 return new Projection(newMap, newCommonMap);
