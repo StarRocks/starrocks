@@ -318,8 +318,6 @@ void Aggregator::close(RuntimeState* state) {
     } else {
         agg_close();
     }
-
-    return Status::OK();
 }
 
 bool Aggregator::is_chunk_buffer_empty() {
