@@ -72,17 +72,11 @@ public:
     std::shared_ptr<RuntimeState> _runtime_state;
 };
 
-static void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
-    for (ExprContext* ctx : exprs) {
-        delete ctx;
-    }
-    exprs.clear();
-}
-
-static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, int num_columns) {
+static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, int num_chunks, int num_columns) {
     ChunkSorterBase suite;
     suite.SetUp();
 
+    // TODO more data type
     const auto& int_type_desc = TypeDescriptor(TYPE_INT);
     // const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     Columns columns;
@@ -104,7 +98,7 @@ static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, in
     auto chunk = std::make_shared<Chunk>(columns, map);
 
     RuntimeState* runtime_state = suite._runtime_state.get();
-    int num_chunks = state.range(0);
+    int64_t item_processed = 0;
     for (auto _ : state) {
         state.PauseTiming();
 
@@ -122,7 +116,7 @@ static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, in
         }
         case 2: {
             // TODO limit
-            int limit_rows = std::min(1000, int(total_rows));
+            int limit_rows = total_rows / 2;
             sorter.reset(new HeapChunkSorter(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, 0,
                                              limit_rows, config::vector_chunk_size));
             expected_rows = limit_rows;
@@ -137,12 +131,16 @@ static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, in
             auto cloned = chunk->clone_empty();
             cloned->append_safe(*chunk);
             ChunkPtr ck(cloned.release());
+            
+            // TopN Sorter needs timing when updating
+            state.ResumeTiming();
             sorter->update(runtime_state, ck);
+            state.PauseTiming();
         }
 
         state.ResumeTiming();
         sorter->done(suite._runtime_state.get());
-        state.SetItemsProcessed(total_rows);
+        item_processed += total_rows;
         state.PauseTiming();
 
         bool eos = false;
@@ -155,28 +153,27 @@ static void do_bench(benchmark::State& state, int sorter_type, int sort_algo, in
         }
         ASSERT_TRUE(eos);
         ASSERT_EQ(expected_rows, actual_rows);
-        state.counters["rows_sorted"] += actual_rows;
     }
-
-    clear_sort_exprs(sort_exprs);
+    state.counters["rows_sorted"] += item_processed;
+    state.SetItemsProcessed(item_processed);
 }
 
 static void Bench_fullsort_row_wise(benchmark::State& state) {
-    do_bench(state, 1, 1, state.range(1));
+    do_bench(state, 1, 1, state.range(0), state.range(1));
 }
 static void Bench_fullsort_column_wise(benchmark::State& state) {
-    do_bench(state, 1, 2, state.range(1));
+    do_bench(state, 1, 2, state.range(0), state.range(1));
 }
 static void Bench_topn_row_wise(benchmark::State& state) {
-    do_bench(state, 2, 2, state.range(1));
+    do_bench(state, 2, 2, state.range(0), state.range(1));
 }
 static void Bench_topn_column_wise(benchmark::State& state) {
-    do_bench(state, 2, 1, state.range(1));
+    do_bench(state, 2, 1, state.range(0), state.range(1));
 }
 
 static void CustomArgs(benchmark::internal::Benchmark* b) {
     // num_chunks
-    for (int num_chunks = 1; num_chunks <= 8192; num_chunks *= 8) {
+    for (int num_chunks = 64; num_chunks <= 8192; num_chunks *= 8) {
         // num_columns
         for (int num_columns = 1; num_columns <= 8; num_columns++) {
             b->Args({num_chunks, num_columns});
