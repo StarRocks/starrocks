@@ -5827,12 +5827,14 @@ public class PlanFragmentTest extends PlanTestBase {
                         " FROM test_in_pred_norm",
                 "<slot 7> : ((5: c4 = 8: cast) OR (5: c4 = '1970-02-01')) AND ((6: c5 = 8: cast) OR (6: c5 = '1970-02-01'))");
 
-        testPlanContains("SELECT " +
-                        "c4 IN ('292278994-08-17', '1970-02-01') AND c4 IN ('292278994-08-18', '1970-02-01') AND " +
-                        "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-18', '1970-02-01') AND " +
-                        "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-17', '1970-02-01')  " +
-                        " FROM test_in_pred_norm",
-                "<slot 7> : (((5: c4 = 9: cast) OR (5: c4 = '1970-02-01')) AND ((5: c4 = 8: cast) OR (5: c4 = '1970-02-01'))) AND (((6: c5 = 9: cast) OR (6: c5 = '1970-02-01')) AND ((6: c5 = 8: cast) OR (6: c5 = '1970-02-01')))");
+        String plan = getFragmentPlan("SELECT " +
+                "c4 IN ('292278994-08-17', '1970-02-01') AND c4 IN ('292278994-08-18', '1970-02-01') AND " +
+                "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-18', '1970-02-01') AND " +
+                "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-17', '1970-02-01')  " +
+                " FROM test_in_pred_norm");
+        Assert.assertTrue("plan is " + plan, plan.contains("common expressions:"));
+        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 8> "));
+        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 9> "));
     }
 
     @Test
