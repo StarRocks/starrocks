@@ -21,6 +21,13 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.catalog.Catalog;
+import com.starrocks.journal.bdbje.BDBJEJournal;
+import com.starrocks.journal.bdbje.Timestamp;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.Test;
 
 import java.io.File;
@@ -97,13 +104,29 @@ public class EditLogTest {
         }
     }
 
-    @Test
-    public void testWriteLog() throws IOException {
+    @Test(expected = IllegalStateException.class)
+    public void testWriteLogOnNonMasterNode(@Mocked Catalog catalog) {
+        // mock BDBJEJournal constructor
+        new MockUp<BDBJEJournal>() {
+            @Mock
+            public void $init(String nodeName) {
 
-    }
+            }
+        };
 
-    @Test
-    public void test() {
+        new Expectations() {
+            {
+                Catalog.getCurrentCatalog();
+                result = catalog;
+                minTimes = 0;
 
+                catalog.isMaster();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        EditLog editLog = new EditLog("node1");
+        editLog.logTimestamp(new Timestamp());
     }
 }
