@@ -80,6 +80,8 @@ public:
     Status publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                        const Version& version);
 
+    Status persist_tablet_related_txns(std::vector<TabletSharedPtr> tablets);
+
     // publish_txn for updatable tablet
     Status publish_txn2(TTransactionId transaction_id, TPartitionId partition_id, const TabletSharedPtr& tablet,
                         int64_t version);

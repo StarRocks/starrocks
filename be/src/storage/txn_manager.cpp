@@ -323,6 +323,19 @@ Status TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId part
     }
 }
 
+Status TxnManager::persist_tablet_related_txns(std::vector<TabletSharedPtr> tablets) {
+    std::unordered_set<std::string> persited;
+    for (auto& tablet : tablets) {
+        auto path = tablet->data_dir()->path();
+        // skip persisted meta.
+        if (persited.find(path) != persited.end()) continue;
+
+        RETURN_IF_ERROR(tablet->data_dir()->get_meta()->flush());
+        persited.insert(path);
+    }
+    return Status::OK();
+}
+
 // txn could be rollbacked if it does not have related rowset
 // if the txn has related rowset then could not rollback it, because it
 // may be committed in another thread and our current thread meets errors when writing to data file

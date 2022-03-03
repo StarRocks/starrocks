@@ -64,6 +64,7 @@ namespace starrocks {
 const uint32_t TASK_FINISH_MAX_RETRY = 3;
 const uint32_t PUBLISH_VERSION_MAX_RETRY = 3;
 const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
+const size_t PUBLISH_VERSION_BATCH_SIZE = 10;
 
 std::atomic_ulong TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
 std::mutex TaskWorkerPool::_s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
@@ -786,6 +787,9 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
         // wait until that all jobs in threadpool are done.
         threadpool->wait();
 
+        std::vector<TabletSharedPtr> tablets;
+        tablets.reserve(tablet_infos.size());
+
         // check status.
         for (size_t i = 0; i < tablet_infos.size(); ++i) {
             const auto& tablet_info = tablet_infos[i];
@@ -797,8 +801,13 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
                     error_status = status;
                 }
             }
+
+            // collect related tablets.
+            auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_info.tablet_id,
+                                                                                  tablet_info.tablet_uid);
+            tablets.push_back(tablet);
         }
-        *tablet_n += tablet_infos.size();
+        StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
     }
     return error_status;
 }
@@ -814,12 +823,14 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
                     // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
                     // But it seems that there's no limit for the number of tablets of a partition.
                     // Since a large queue size brings a little overhead, a big one is chosen here.
-                    .set_max_queue_size(256)
+                    .set_max_queue_size(2048)
                     .build(&threadpool);
+    assert(st.ok());
+
+    std::vector<TAgentTaskRequest> task_requests;
+    std::vector<TFinishTaskRequest> finish_task_requests;
 
     while (true) {
-        TAgentTaskRequest agent_task_req;
-        TPublishVersionRequest publish_version_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -829,54 +840,65 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
                 break;
             }
 
-            agent_task_req = worker_pool_this->_tasks.front();
-            publish_version_req = agent_task_req.publish_version_req;
-            worker_pool_this->_tasks.pop_front();
-        }
-
-        StarRocksMetrics::instance()->publish_task_request_total.increment(1);
-        LOG(INFO) << "get publish version task, signature:" << agent_task_req.signature;
-
-        std::vector<TTabletId> error_tablet_ids;
-        uint32_t retry_time = 0;
-        Status status;
-
-        size_t tablet_n = 0;
-        while (retry_time < PUBLISH_VERSION_MAX_RETRY) {
-            error_tablet_ids.clear();
-            status = _publish_version_in_parallel(arg_this, threadpool, publish_version_req, &tablet_n,
-                                                  &error_tablet_ids);
-            if (status.ok()) {
-                break;
-            } else {
-                LOG(WARNING) << "publish version error, retry. [transaction_id=" << publish_version_req.transaction_id
-                             << ", error_tablets_size=" << error_tablet_ids.size() << "]";
-                ++retry_time;
-                SleepFor(MonoDelta::FromSeconds(1));
+            while (!worker_pool_this->_tasks.empty() && task_requests.size() < PUBLISH_VERSION_BATCH_SIZE) {
+                task_requests.push_back(worker_pool_this->_tasks.front());
+                worker_pool_this->_tasks.pop_front();
             }
         }
 
-        TFinishTaskRequest finish_task_request;
-        if (!status.ok()) {
-            StarRocksMetrics::instance()->publish_task_failed_total.increment(1);
-            // if publish failed, return failed, FE will ignore this error and
-            // check error tablet ids and FE will also republish this task
-            LOG(WARNING) << "Fail to publish version. signature:" << agent_task_req.signature
-                         << " related tablet num: " << tablet_n;
-            finish_task_request.__set_error_tablet_ids(error_tablet_ids);
-        } else {
-            LOG(INFO) << "publish_version success. signature:" << agent_task_req.signature
-                      << " related tablet num: " << tablet_n;
+        for (auto& publish_version_task : task_requests) {
+            StarRocksMetrics::instance()->publish_task_request_total.increment(1);
+            LOG(INFO) << "get publish version task, signature:" << publish_version_task.signature;
+
+            auto& publish_version_req = publish_version_task.publish_version_req;
+            std::vector<TTabletId> error_tablet_ids;
+            uint32_t retry_time = 0;
+            Status status;
+
+            size_t tablet_n = 0;
+            while (retry_time < PUBLISH_VERSION_MAX_RETRY) {
+                error_tablet_ids.clear();
+                status = _publish_version_in_parallel(arg_this, threadpool, publish_version_req, &tablet_n,
+                                                      &error_tablet_ids);
+                if (status.ok()) {
+                    break;
+                } else {
+                    LOG(WARNING) << "publish version error, retry. [transaction_id="
+                                 << publish_version_req.transaction_id
+                                 << ", error_tablets_size=" << error_tablet_ids.size() << "]";
+                    ++retry_time;
+                    SleepFor(MonoDelta::FromSeconds(1));
+                }
+            }
+
+            TFinishTaskRequest finish_task_request;
+            if (!status.ok()) {
+                StarRocksMetrics::instance()->publish_task_failed_total.increment(1);
+                // if publish failed, return failed, FE will ignore this error and
+                // check error tablet ids and FE will also republish this task
+                LOG(WARNING) << "Fail to publish version. signature:" << publish_version_task.signature
+                             << " related tablet num: " << tablet_n;
+                finish_task_request.__set_error_tablet_ids(error_tablet_ids);
+            } else {
+                LOG(INFO) << "publish_version success. signature:" << publish_version_task.signature
+                          << " related tablet num: " << tablet_n;
+            }
+
+            status.to_thrift(&finish_task_request.task_status);
+            finish_task_request.__set_backend(worker_pool_this->_backend);
+            finish_task_request.__set_task_type(publish_version_task.task_type);
+            finish_task_request.__set_signature(publish_version_task.signature);
+            finish_task_request.__set_report_version(_s_report_version);
+
+            finish_task_requests.emplace_back(std::move(finish_task_request));
         }
 
-        status.to_thrift(&finish_task_request.task_status);
-        finish_task_request.__set_backend(worker_pool_this->_backend);
-        finish_task_request.__set_task_type(agent_task_req.task_type);
-        finish_task_request.__set_signature(agent_task_req.signature);
-        finish_task_request.__set_report_version(_s_report_version);
-
-        worker_pool_this->_finish_task(finish_task_request);
-        worker_pool_this->_remove_task_info(agent_task_req.task_type, agent_task_req.signature);
+        for (auto& finish_task_request : finish_task_requests) {
+            worker_pool_this->_finish_task(finish_task_request);
+            worker_pool_this->_remove_task_info(finish_task_request.task_type, finish_task_request.signature);
+        }
+        task_requests.clear();
+        finish_task_requests.clear();
     }
     threadpool->shutdown();
     return (void*)nullptr;
