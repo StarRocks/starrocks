@@ -94,18 +94,9 @@ public class DecodeRewriteTest extends PlanTestBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(LO_ORDERDATE, LO_ORDERKEY)\n" +
                 "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE(LO_ORDERDATE)\n" +
-                "(PARTITION p1 VALUES [('0000-01-01'), ('1993-01-01')),\n" +
-                "PARTITION p2 VALUES [('1993-01-01'), ('1994-01-01')),\n" +
-                "PARTITION p3 VALUES [('1994-01-01'), ('1995-01-01')),\n" +
-                "PARTITION p4 VALUES [('1995-01-01'), ('1996-01-01')),\n" +
-                "PARTITION p5 VALUES [('1996-01-01'), ('1997-01-01')),\n" +
-                "PARTITION p6 VALUES [('1997-01-01'), ('1998-01-01')),\n" +
-                "PARTITION p7 VALUES [('1998-01-01'), ('1999-01-01')))\n" +
                 "DISTRIBUTED BY HASH(LO_ORDERKEY) BUCKETS 48\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"colocate_with\" = \"groupxx1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
@@ -123,6 +114,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "ORDER BY year ASC, revenue DESC;";
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+        connectContext.getSessionVariable().disableTrimOnlyFilteredColumnsInScanStage();
     }
 
     @Test
