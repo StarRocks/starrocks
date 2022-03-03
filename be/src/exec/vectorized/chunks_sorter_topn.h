@@ -40,6 +40,7 @@ public:
     bool pull_chunk(ChunkPtr* chunk) override;
 
     int64_t mem_usage() const override { return _raw_chunks.mem_usage() + _merged_segment.mem_usage(); }
+
 private:
     inline size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
 

@@ -197,7 +197,7 @@ static void BM_topn_limit_mergesort(benchmark::State& state) {
 
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
     // num_chunks
-    for (int num_chunks = 64; num_chunks <= 8192; num_chunks *= 8) {
+    for (int num_chunks = 64; num_chunks <= 4096; num_chunks *= 8) {
         // num_columns
         for (int num_columns = 1; num_columns <= 8; num_columns++) {
             b->Args({num_chunks, num_columns});
@@ -206,7 +206,7 @@ static void CustomArgsFull(benchmark::internal::Benchmark* b) {
 }
 static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
     // num_chunks
-    for (int num_chunks = 64; num_chunks <= 8192; num_chunks *= 8) {
+    for (int num_chunks = 1024; num_chunks <= 4096; num_chunks *= 4) {
         // num_columns
         for (int num_columns = 1; num_columns <= 8; num_columns++) {
             // limit
