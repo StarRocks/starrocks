@@ -26,7 +26,7 @@ protected:
     }
 
     int open_for_write(const char* path) {
-        int fd = ::open(path, O_WRONLY | O_CREAT | O_TRUNC);
+        int fd = ::open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
         PLOG_IF(FATAL, fd < 0) << "Fail to open " << path << " for write";
         return fd;
     }
