@@ -36,8 +36,10 @@ public:
     struct LazyLoadContext {
         std::vector<SlotDescriptor*> active_load_slots;
         std::vector<int> active_load_indices;
+        std::vector<int> active_load_orc_positions;
         std::vector<SlotDescriptor*> lazy_load_slots;
         std::vector<int> lazy_load_indices;
+        std::vector<int> lazy_load_orc_positions;
     };
 
     // src slot descriptors should exactly matches columns in row readers.
@@ -107,8 +109,9 @@ public:
     StatusOr<ChunkPtr> get_chunk();
     StatusOr<ChunkPtr> get_active_chunk();
     void lazy_read_next(size_t numValues);
-    void lazy_skip_next(size_t numValues);
-    StatusOr<ChunkPtr> get_lazy_chunk(Filter* filter, size_t chunk_size);
+    void lazy_seek_to(uint64_t rowInStripe);
+    void lazy_filter_on_cvb(Filter* filter);
+    StatusOr<ChunkPtr> get_lazy_chunk();
 
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);

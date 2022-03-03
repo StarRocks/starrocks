@@ -657,11 +657,11 @@ CONF_Bool(use_hdfs_pread, "true");
 // default: true
 CONF_Bool(rewrite_partial_segment, "true");
 
-// Properties to access aws s3.
-CONF_String(aws_access_key_id, "");
-CONF_String(aws_secret_access_key, "");
-CONF_String(aws_s3_endpoint, "");
-CONF_Int64(aws_s3_max_connection, "102400");
+// Properties to access object storage
+CONF_String(object_storage_access_key_id, "");
+CONF_String(object_storage_secret_access_key, "");
+CONF_String(object_storage_endpoint, "");
+CONF_Int64(object_storage_max_connection, "102400");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 

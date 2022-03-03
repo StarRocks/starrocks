@@ -19,10 +19,12 @@ set(EXEC_FILES
         ./column/vectorized_schema_test.cpp
         ./common/config_test.cpp
         ./common/status_test.cpp
+        ./common/s3_uri_test.cpp
         ./env/compressed_file_test.cpp
         ./env/env_broker_test.cpp
         ./env/env_posix_test.cpp
         ./env/env_memory_test.cpp
+        ./env/env_s3_test.cpp
         ./env/output_stream_wrapper_test.cpp
         ./exec/buffered_reader_test.cpp
         ./exec/es_query_builder_test.cpp
@@ -38,6 +40,7 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
+        ./exec/pipeline/query_context_manger_test.cpp
         ./exec/parquet/parquet_schema_test.cpp
         ./exec/parquet/encoding_test.cpp
         ./exec/parquet/page_reader_test.cpp
@@ -116,7 +119,6 @@ set(EXEC_FILES
         ./io/fd_random_access_file_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_random_access_file_test.cpp
-        ./object_store/s3_object_store_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp

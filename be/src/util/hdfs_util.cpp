@@ -64,6 +64,18 @@ std::string get_bucket_from_namenode(const std::string& namenode) {
     return namenode.substr(n, n2 - n);
 }
 
+std::string get_endpoint_from_oss_bucket(const std::string& default_bucket, std::string* bucket) {
+    auto endpoint_start_index = bucket->find('.');
+    if (endpoint_start_index == std::string::npos) {
+        return default_bucket;
+    }
+    endpoint_start_index = endpoint_start_index + 1;
+    auto endpoint_end_index = bucket->size();
+    std::string endpoint = bucket->substr(endpoint_start_index, endpoint_end_index - endpoint_start_index + 1);
+    *bucket = bucket->substr(0, endpoint_start_index - 1);
+    return endpoint;
+}
+
 static bool is_specific_path(const char* path, const char* specific_prefix) {
     size_t prefix_len = strlen(specific_prefix);
     return strncmp(path, specific_prefix, prefix_len) == 0;

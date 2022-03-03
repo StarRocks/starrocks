@@ -33,9 +33,9 @@ void AggregateDistinctStreamingSourceOperator::set_finished(RuntimeState* state)
     _aggregator->set_finished();
 }
 
-Status AggregateDistinctStreamingSourceOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_aggregator->unref(state));
-    return SourceOperator::close(state);
+void AggregateDistinctStreamingSourceOperator::close(RuntimeState* state) {
+    _aggregator->unref(state);
+    SourceOperator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_chunk(RuntimeState* state) {

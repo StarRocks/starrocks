@@ -222,7 +222,7 @@ public class QueryAnalyzerV2 {
                     viewRelation.setAlias(tableName);
                     return viewRelation;
                 } else {
-                    if (AnalyzerUtils.isSupportedTable(table)) {
+                    if (table.isSupported()) {
                         tableRelation.setTable(table);
                         return tableRelation;
                     } else {

@@ -33,7 +33,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     std::shared_ptr<IntersectContext> _intersect_ctx;

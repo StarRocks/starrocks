@@ -99,11 +99,11 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     }
 
     public PhysicalPropertySet computeColocateJoinOutputProperty(HashDistributionSpec leftScanDistributionSpec,
-                                                                 HashDistributionSpec rightScanDistributionSpec,
-                                                                 List<Integer> leftShuffleColumns,
-                                                                 List<Integer> rightShuffleColumns) {
+                                                                 HashDistributionSpec rightScanDistributionSpec) {
         DistributionSpec.PropertyInfo leftInfo = leftScanDistributionSpec.getPropertyInfo();
         DistributionSpec.PropertyInfo rightInfo = rightScanDistributionSpec.getPropertyInfo();
+        List<Integer> leftShuffleColumns = leftScanDistributionSpec.getShuffleColumns();
+        List<Integer> rightShuffleColumns = rightScanDistributionSpec.getShuffleColumns();
 
         ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
         long leftTableId = leftInfo.tableId;
@@ -282,8 +282,8 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
 
     // compute the distribution property info, just compute the nullable columns now
     public PhysicalPropertySet computeHashJoinDistributionPropertyInfo(PhysicalHashJoinOperator node,
-                                                                   PhysicalPropertySet physicalPropertySet,
-                                                                   ExpressionContext context) {
+                                                                       PhysicalPropertySet physicalPropertySet,
+                                                                       ExpressionContext context) {
         DistributionSpec.PropertyInfo propertyInfo =
                 physicalPropertySet.getDistributionProperty().getSpec().getPropertyInfo();
 
@@ -331,6 +331,17 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
         JoinPredicateUtils.getJoinOnPredicatesColumns(equalOnPredicate, leftChildColumns, rightChildColumns,
                 leftOnPredicateColumns, rightOnPredicateColumns);
         Preconditions.checkState(leftOnPredicateColumns.size() == rightOnPredicateColumns.size());
+        // Get required properties for children.
+        List<PhysicalPropertySet> requiredProperties =
+                Utils.computeShuffleJoinRequiredProperties(requirements, leftOnPredicateColumns,
+                        rightOnPredicateColumns);
+        Preconditions.checkState(requiredProperties.size() == 2);
+        List<Integer> leftShuffleColumns =
+                ((HashDistributionSpec) requiredProperties.get(0).getDistributionProperty().getSpec())
+                        .getShuffleColumns();
+        List<Integer> rightShuffleColumns =
+                ((HashDistributionSpec) requiredProperties.get(1).getDistributionProperty().getSpec())
+                        .getShuffleColumns();
 
         DistributionProperty leftChildDistributionProperty = leftChildOutputProperty.getDistributionProperty();
         DistributionProperty rightChildDistributionProperty = rightChildOutputProperty.getDistributionProperty();
@@ -346,40 +357,39 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
             // 2.1 respect the hint
             if ("SHUFFLE".equalsIgnoreCase(hint)) {
                 if (leftDistributionDesc.isLocalShuffle()) {
-                    enforceChildShuffleDistribution(leftOnPredicateColumns, leftChild, leftChildOutputProperty, 0);
+                    enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
                 }
                 if (rightDistributionDesc.isLocalShuffle()) {
-                    enforceChildShuffleDistribution(rightOnPredicateColumns, rightChild, rightChildOutputProperty, 1);
+                    enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
                 }
                 return computeHashJoinDistributionPropertyInfo(node,
-                        computeShuffleJoinOutputProperty(leftOnPredicateColumns, rightOnPredicateColumns), context);
+                        computeShuffleJoinOutputProperty(leftShuffleColumns, rightShuffleColumns), context);
             }
 
             if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isLocalShuffle()) {
                 // colocate join
                 if (!"BUCKET".equalsIgnoreCase(hint) &&
-                        canColocateJoin(leftDistributionSpec, rightDistributionSpec, leftOnPredicateColumns,
-                                rightOnPredicateColumns)) {
+                        canColocateJoin(leftDistributionSpec, rightDistributionSpec, leftShuffleColumns,
+                                rightShuffleColumns)) {
                     return computeHashJoinDistributionPropertyInfo(node,
-                            computeColocateJoinOutputProperty(leftDistributionSpec, rightDistributionSpec,
-                                    leftOnPredicateColumns, rightOnPredicateColumns), context);
+                            computeColocateJoinOutputProperty(leftDistributionSpec, rightDistributionSpec), context);
                 } else {
-                    transToBucketShuffleJoin(leftDistributionDesc, leftOnPredicateColumns, rightOnPredicateColumns);
+                    transToBucketShuffleJoin(leftDistributionDesc, leftShuffleColumns, rightShuffleColumns);
                     return computeHashJoinDistributionPropertyInfo(node, leftChildOutputProperty, context);
                 }
             } else if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isJoinShuffle()) {
                 // bucket join
-                transToBucketShuffleJoin(leftDistributionDesc, leftOnPredicateColumns, rightOnPredicateColumns);
+                transToBucketShuffleJoin(leftDistributionDesc, leftShuffleColumns, rightShuffleColumns);
                 return computeHashJoinDistributionPropertyInfo(node, leftChildOutputProperty, context);
             } else if (leftDistributionDesc.isJoinShuffle() && rightDistributionDesc.isLocalShuffle()) {
                 // coordinator can not bucket shuffle data from left to right, so we need to adjust to shuffle join
-                enforceChildShuffleDistribution(rightOnPredicateColumns, rightChild, rightChildOutputProperty, 1);
+                enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
                 return computeHashJoinDistributionPropertyInfo(node,
-                        computeShuffleJoinOutputProperty(leftOnPredicateColumns, rightOnPredicateColumns), context);
+                        computeShuffleJoinOutputProperty(leftShuffleColumns, rightShuffleColumns), context);
             } else if (leftDistributionDesc.isJoinShuffle() && rightDistributionDesc.isJoinShuffle()) {
                 // shuffle join
                 return computeHashJoinDistributionPropertyInfo(node,
-                        computeShuffleJoinOutputProperty(leftOnPredicateColumns, rightOnPredicateColumns), context);
+                        computeShuffleJoinOutputProperty(leftShuffleColumns, rightShuffleColumns), context);
             } else {
                 Preconditions.checkState(false, "Children output property distribution error");
                 return PhysicalPropertySet.EMPTY;
@@ -390,35 +400,31 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
         }
     }
 
-    private PhysicalPropertySet computeShuffleJoinOutputProperty(List<Integer> leftOnPredicateColumns,
-                                                                 List<Integer> rightOnPredicateColumns) {
+    private PhysicalPropertySet computeShuffleJoinOutputProperty(List<Integer> leftShuffleColumns,
+                                                                 List<Integer> rightShuffleColumns) {
         Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleJoinDesc();
         if (!requiredShuffleDesc.isPresent()) {
             return PhysicalPropertySet.EMPTY;
         }
         HashDistributionSpec leftShuffleDistribution = DistributionSpec.createHashDistributionSpec(
-                new HashDistributionDesc(leftOnPredicateColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
+                new HashDistributionDesc(leftShuffleColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
         HashDistributionSpec rightShuffleDistribution = DistributionSpec.createHashDistributionSpec(
-                new HashDistributionDesc(rightOnPredicateColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
+                new HashDistributionDesc(rightShuffleColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
 
         // TODO(ywb): check columns satisfy here instead of enforce phase because there need to compute equivalence columns，
         // we will do this later
-        Preconditions.checkState(leftOnPredicateColumns.size() == rightOnPredicateColumns.size());
+        Preconditions.checkState(leftShuffleColumns.size() == rightShuffleColumns.size());
         // Hash shuffle columns must keep same
         List<Integer> requiredColumns = requiredShuffleDesc.get().getColumns();
-        boolean checkLeft = leftOnPredicateColumns.containsAll(requiredColumns) &&
-                leftOnPredicateColumns.size() == requiredColumns.size();
-        boolean checkRight = rightOnPredicateColumns.containsAll(requiredColumns) &&
-                rightOnPredicateColumns.size() == requiredColumns.size();
+        boolean checkLeft = leftShuffleColumns.containsAll(requiredColumns) &&
+                leftShuffleColumns.size() == requiredColumns.size();
+        boolean checkRight = rightShuffleColumns.containsAll(requiredColumns) &&
+                rightShuffleColumns.size() == requiredColumns.size();
 
-        // @Todo: Modify PlanFragmentBuilder to support complex query
-        // Different joins maybe different on-clause predicate order, so the order of shuffle key is different,
-        // and unfortunately PlanFragmentBuilder doesn't support adjust the order of join shuffle key,
-        // so we must check the shuffle order strict
         if (checkLeft || checkRight) {
             for (int i = 0; i < requiredColumns.size(); i++) {
-                checkLeft &= requiredColumns.get(i).equals(leftOnPredicateColumns.get(i));
-                checkRight &= requiredColumns.get(i).equals(rightOnPredicateColumns.get(i));
+                checkLeft &= requiredColumns.get(i).equals(leftShuffleColumns.get(i));
+                checkRight &= requiredColumns.get(i).equals(rightShuffleColumns.get(i));
             }
         }
 

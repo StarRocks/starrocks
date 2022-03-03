@@ -1225,7 +1225,7 @@ public class Catalog {
         LOG.info("get helper nodes: {}", helperNodes);
     }
 
-    private void transferToMaster() {
+    private void transferToMaster(FrontendNodeType oldType) {
         // stop replayer
         if (replayer != null) {
             replayer.exit();
@@ -1258,52 +1258,61 @@ public class Catalog {
 
         editLog.rollEditLog();
 
-        // Log meta_version
-        int communityMetaVersion = MetaContext.get().getMetaVersion();
-        int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
-        if (communityMetaVersion < FeConstants.meta_version ||
-                starrocksMetaVersion < FeConstants.starrocks_meta_version) {
-            editLog.logMetaVersion(new MetaVersion(FeConstants.meta_version, FeConstants.starrocks_meta_version));
-            MetaContext.get().setMetaVersion(FeConstants.meta_version);
-            MetaContext.get().setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+        // Set the feType to MASTER before writing edit log, because the feType must be Master when writing edit log.
+        // It will be set to the old type if any error happens in the following procedure
+        feType = FrontendNodeType.MASTER;
+        try {
+            // Log meta_version
+            int communityMetaVersion = MetaContext.get().getMetaVersion();
+            int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
+            if (communityMetaVersion < FeConstants.meta_version ||
+                    starrocksMetaVersion < FeConstants.starrocks_meta_version) {
+                editLog.logMetaVersion(new MetaVersion(FeConstants.meta_version, FeConstants.starrocks_meta_version));
+                MetaContext.get().setMetaVersion(FeConstants.meta_version);
+                MetaContext.get().setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+            }
+
+            // Log the first frontend
+            if (isFirstTimeStartUp) {
+                // if isFirstTimeStartUp is true, frontends must contains this Node.
+                Frontend self = frontends.get(nodeName);
+                Preconditions.checkNotNull(self);
+                // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
+                editLog.logAddFirstFrontend(self);
+            }
+
+            if (!isDefaultClusterCreated) {
+                initDefaultCluster();
+            }
+
+            // MUST set master ip before starting checkpoint thread.
+            // because checkpoint thread need this info to select non-master FE to push image
+            this.masterIp = FrontendOptions.getLocalHostAddress();
+            this.masterRpcPort = Config.rpc_port;
+            this.masterHttpPort = Config.http_port;
+            MasterInfo info = new MasterInfo(this.masterIp, this.masterHttpPort, this.masterRpcPort);
+            editLog.logMasterInfo(info);
+
+            // start all daemon threads that only running on MASTER FE
+            startMasterOnlyDaemonThreads();
+            // start other daemon threads that should running on all FE
+            startNonMasterDaemonThreads();
+
+            MetricRepo.init();
+
+            canRead.set(true);
+            isReady.set(true);
+
+            String msg = "master finished to replay journal, can write now.";
+            Util.stdoutWithTime(msg);
+            LOG.info(msg);
+            // for master, there are some new thread pools need to register metric
+            ThreadPoolManager.registerAllThreadPoolMetric();
+        } catch (Throwable t) {
+            LOG.warn("transfer to master failed with error", t);
+            feType = oldType;
+            throw t;
         }
-
-        // Log the first frontend
-        if (isFirstTimeStartUp) {
-            // if isFirstTimeStartUp is true, frontends must contains this Node.
-            Frontend self = frontends.get(nodeName);
-            Preconditions.checkNotNull(self);
-            // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
-            editLog.logAddFirstFrontend(self);
-        }
-
-        if (!isDefaultClusterCreated) {
-            initDefaultCluster();
-        }
-
-        // MUST set master ip before starting checkpoint thread.
-        // because checkpoint thread need this info to select non-master FE to push image
-        this.masterIp = FrontendOptions.getLocalHostAddress();
-        this.masterRpcPort = Config.rpc_port;
-        this.masterHttpPort = Config.http_port;
-        MasterInfo info = new MasterInfo(this.masterIp, this.masterHttpPort, this.masterRpcPort);
-        editLog.logMasterInfo(info);
-
-        // start all daemon threads that only running on MASTER FE
-        startMasterOnlyDaemonThreads();
-        // start other daemon threads that should running on all FE
-        startNonMasterDaemonThreads();
-
-        MetricRepo.init();
-
-        canRead.set(true);
-        isReady.set(true);
-
-        String msg = "master finished to replay journal, can write now.";
-        Util.stdoutWithTime(msg);
-        LOG.info(msg);
-        // for master, there are some new thread pools need to register metric
-        ThreadPoolManager.registerAllThreadPoolMetric();
     }
 
     // start all daemon threads only running on Master
@@ -2422,7 +2431,7 @@ public class Catalog {
                         case INIT: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMaster();
+                                    transferToMaster(feType);
                                     break;
                                 }
                                 case FOLLOWER:
@@ -2440,7 +2449,7 @@ public class Catalog {
                         case UNKNOWN: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMaster();
+                                    transferToMaster(feType);
                                     break;
                                 }
                                 case FOLLOWER:
@@ -2456,7 +2465,7 @@ public class Catalog {
                         case FOLLOWER: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMaster();
+                                    transferToMaster(feType);
                                     break;
                                 }
                                 case UNKNOWN: {
@@ -3102,6 +3111,9 @@ public class Catalog {
             return;
         } else if (engineName.equalsIgnoreCase("hudi")) {
             createHudiTable(db, stmt);
+            return;
+        } else if (engineName.equalsIgnoreCase("jdbc")) {
+            createJDBCTable(db, stmt);
             return;
         } else {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
@@ -4382,6 +4394,36 @@ public class Catalog {
         LOG.info("Successfully create table[{}-{}]", tableName, tableId);
     }
 
+    private void createJDBCTable(Database db, CreateTableStmt stmt) throws DdlException {
+        String tableName = stmt.getTableName();
+        List<Column> columns = stmt.getColumns();
+        Map<String, String> properties = stmt.getProperties();
+        long tableId = getNextId();
+        JDBCTable jdbcTable = new JDBCTable(tableId, tableName, columns, properties);
+
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire catalog lock. Try again");
+        }
+
+        try {
+            if (getDb(db.getFullName()) == null) {
+                throw new DdlException("database has been dropped when creating table");
+            }
+            if (!db.createTableWithLock(jdbcTable, false)) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("create table [{}] which already exists", tableName);
+                    return;
+                }
+            }
+        } finally {
+            unlock();
+        }
+
+        LOG.info("successfully create jdbc table[{}-{}]", tableName, tableId);
+    }
+
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
                                   List<String> createRollupStmt, boolean separatePartition,
                                   boolean hidePassword) {
@@ -4407,7 +4449,7 @@ public class Catalog {
         sb.append("CREATE ");
         if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
                 || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE
-                || table.getType() == TableType.OLAP_EXTERNAL) {
+                || table.getType() == TableType.OLAP_EXTERNAL || table.getType() == TableType.JDBC) {
             sb.append("EXTERNAL ");
         }
         sb.append("TABLE ");
@@ -4625,6 +4667,17 @@ public class Catalog {
             sb.append("\"table\" = \"").append(hiveTable.getHiveTable()).append("\",\n");
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\",\n");
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+            sb.append("\n)");
+        } else if (table.getType() == TableType.JDBC) {
+            JDBCTable jdbcTable = (JDBCTable)  table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
+            sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
             sb.append("\n)");
         }
         sb.append(";");

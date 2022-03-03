@@ -612,4 +612,9 @@ public class HiveTable extends Table {
             Catalog.getCurrentCatalog().getMetastoreEventsProcessor().unregisterTable(this);
         }
     }
+
+    @Override
+    public boolean isSupported() {
+        return true;
+    }
 }

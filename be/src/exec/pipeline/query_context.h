@@ -48,6 +48,7 @@ public:
         return now > _deadline;
     }
 
+    bool is_dead() { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
     // add expired seconds to deadline
     void extend_lifetime() {
         _deadline = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _expire_seconds).count();
@@ -75,15 +76,17 @@ class QueryContextManager {
     DECLARE_SINGLETON(QueryContextManager);
 
 public:
+#ifdef BE_TEST
+    explicit QueryContextManager(int);
+#endif
     QueryContext* get_or_register(const TUniqueId& query_id);
     QueryContextPtr get(const TUniqueId& query_id);
-    QueryContextPtr remove(const TUniqueId& query_id);
+    void remove(const TUniqueId& query_id);
 
 private:
-    //TODO(by satanson)
-    // A multi-shard map may be more efficient
-    std::mutex _lock;
-    std::unordered_map<TUniqueId, QueryContextPtr> _contexts;
+    std::vector<std::shared_mutex> _mutexes;
+    std::vector<std::unordered_map<TUniqueId, QueryContextPtr>> _context_maps;
+    std::vector<std::unordered_map<TUniqueId, QueryContextPtr>> _second_chance_maps;
 };
 
 } // namespace pipeline

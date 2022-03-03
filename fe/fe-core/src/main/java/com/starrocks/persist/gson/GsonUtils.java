@@ -59,6 +59,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;
 import com.starrocks.catalog.IcebergResource;
+import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OdbcCatalogResource;
 import com.starrocks.catalog.PseudoType;
@@ -126,7 +127,8 @@ public class GsonUtils {
             .registerSubtype(HiveResource.class, HiveResource.class.getSimpleName())
             .registerSubtype(IcebergResource.class, IcebergResource.class.getSimpleName())
             .registerSubtype(HudiResource.class, HudiResource.class.getSimpleName())
-            .registerSubtype(OdbcCatalogResource.class, OdbcCatalogResource.class.getSimpleName());
+            .registerSubtype(OdbcCatalogResource.class, OdbcCatalogResource.class.getSimpleName())
+            .registerSubtype(JDBCResource.class, JDBCResource.class.getSimpleName());
 
     // runtime adapter for class "AlterJobV2"
     private static final RuntimeTypeAdapterFactory<AlterJobV2> alterJobV2TypeAdapterFactory = RuntimeTypeAdapterFactory

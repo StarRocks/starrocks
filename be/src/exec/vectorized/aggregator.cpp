@@ -4,7 +4,9 @@
 
 #include "common/status.h"
 #include "exprs/anyval_util.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -242,9 +244,9 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     return Status::OK();
 }
 
-Status Aggregator::close(RuntimeState* state) {
+void Aggregator::close(RuntimeState* state) {
     if (_is_closed) {
-        return Status::OK();
+        return;
     }
 
     _is_closed = true;
@@ -282,8 +284,6 @@ Status Aggregator::close(RuntimeState* state) {
         Expr::close(i, state);
     }
     Expr::close(_conjunct_ctxs, state);
-
-    return Status::OK();
 }
 
 bool Aggregator::is_chunk_buffer_empty() {
@@ -530,6 +530,15 @@ void Aggregator::try_convert_to_two_level_set() {
         CONVERT_TO_TWO_LEVEL_SET(phase1_slice_two_level, phase1_slice);
         CONVERT_TO_TWO_LEVEL_SET(phase2_slice_two_level, phase2_slice);
     }
+}
+
+Status Aggregator::check_has_error() {
+    for (const auto* ctx : _agg_fn_ctxs) {
+        if (ctx->has_error()) {
+            return Status::RuntimeError(ctx->error_msg());
+        }
+    }
+    return Status::OK();
 }
 
 #undef CONVERT_TO_TWO_LEVEL

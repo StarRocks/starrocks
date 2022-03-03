@@ -92,6 +92,7 @@ public class CreateTableStmt extends DdlStmt {
         engineNames.add("hive");
         engineNames.add("iceberg");
         engineNames.add("hudi");
+        engineNames.add("jdbc");
     }
 
     // for backup. set to -1 for normal use
@@ -267,7 +268,7 @@ public class CreateTableStmt extends DdlStmt {
         // analyze key desc
         if (!(engineName.equals("mysql") || engineName.equals("broker") ||
                 engineName.equals("hive") || engineName.equals("iceberg")) ||
-                engineName.equals("hudi")) {
+                engineName.equals("hudi") || engineName.equals("jdbc")) {
             // olap table
             if (keysDesc == null) {
                 List<String> keysColumnNames = Lists.newArrayList();

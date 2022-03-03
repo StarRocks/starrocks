@@ -31,6 +31,8 @@ class EmptySetNode final : public ExecNode {
 public:
     EmptySetNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
+
+    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 };
 
 } // namespace starrocks

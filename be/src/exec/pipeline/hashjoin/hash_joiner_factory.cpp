@@ -4,6 +4,7 @@
 
 namespace starrocks {
 namespace pipeline {
+
 Status HashJoinerFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_param._build_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_param._probe_expr_ctxs, state));

@@ -53,7 +53,7 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
 Morsels convert_scan_range_to_morsel(const std::vector<TScanRangeParams>& scan_ranges, int node_id) {
     Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
-        morsels.emplace_back(std::make_unique<OlapMorsel>(node_id, scan_range));
+        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
     }
     return morsels;
 }
@@ -227,7 +227,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                   << " fragment_instance_id=" << print_id(params.fragment_instance_id);
         const bool is_root = pipeline->is_root();
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
-        // at present, only ScanOperator need a MorselQueue attached.
+        // at present, only OlapScanOperator need a MorselQueue attached.
         setup_profile_hierarchy(runtime_state, pipeline);
         if (pipeline->source_operator_factory()->with_morsels()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();

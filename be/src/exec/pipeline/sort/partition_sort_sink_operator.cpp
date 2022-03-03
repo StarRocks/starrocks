@@ -25,9 +25,9 @@ Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status PartitionSortSinkOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_sort_context->unref(state));
-    return Operator::close(state);
+void PartitionSortSinkOperator::close(RuntimeState* state) {
+    _sort_context->unref(state);
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeState* state) {

@@ -68,7 +68,7 @@ public:
     Status open(RuntimeState* state);
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile, MemTracker* mem_tracker);
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     std::unique_ptr<MemPool>& mem_pool() { return _mem_pool; };
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
@@ -138,6 +138,8 @@ public:
     // two level hash map is better in large data set.
     void try_convert_to_two_level_map();
     void try_convert_to_two_level_set();
+
+    Status check_has_error();
 
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache

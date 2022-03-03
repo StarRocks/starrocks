@@ -259,13 +259,14 @@ void UnionNode::_move_passthrough_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chun
     }
 }
 
-void UnionNode::_move_materialize_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chunk) {
+Status UnionNode::_move_materialize_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chunk) {
     for (size_t i = 0; i < _child_expr_lists[_child_idx].size(); i++) {
         auto* dest_slot = _tuple_desc->slots()[i];
         ColumnPtr column = _child_expr_lists[_child_idx][i]->evaluate(src_chunk.get());
-
         _move_column(dest_chunk, column, dest_slot, src_chunk->num_rows());
     }
+    RETURN_IF_HAS_ERROR(_child_expr_lists[_child_idx]);
+    return Status::OK();
 }
 
 Status UnionNode::_move_const_chunk(ChunkPtr& dest_chunk) {
@@ -276,6 +277,7 @@ Status UnionNode::_move_const_chunk(ChunkPtr& dest_chunk) {
         _move_column(dest_chunk, column, dest_slot, 1);
     }
 
+    RETURN_IF_HAS_ERROR(_const_expr_lists[_const_expr_list_idx]);
     return Status::OK();
 }
 

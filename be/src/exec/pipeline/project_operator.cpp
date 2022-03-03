@@ -14,8 +14,8 @@ Status ProjectOperator::prepare(RuntimeState* state) {
     return Operator::prepare(state);
 }
 
-Status ProjectOperator::close(RuntimeState* state) {
-    return Operator::close(state);
+void ProjectOperator::close(RuntimeState* state) {
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) {

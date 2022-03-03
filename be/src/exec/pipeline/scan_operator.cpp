@@ -3,25 +3,29 @@
 #include "exec/pipeline/scan_operator.h"
 
 #include "column/chunk.h"
-#include "exec/pipeline/olap_chunk_source.h"
+#include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/vectorized/olap_scan_node.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
-#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
-#include "storage/rowset/rowset.h"
-#include "storage/storage_engine.h"
-#include "storage/tablet.h"
 
 namespace starrocks::pipeline {
 
 using starrocks::workgroup::WorkGroupManager;
 
+// ========== ScanOperator ==========
+
+ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node)
+        : SourceOperator(factory, id, "olap_scan", scan_node->id()),
+          _scan_node(scan_node),
+          _is_io_task_running(MAX_IO_TASKS_PER_OP),
+          _chunk_sources(MAX_IO_TASKS_PER_OP) {}
+
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
-    _state = state;
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
         auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
@@ -33,17 +37,12 @@ Status ScanOperator::prepare(RuntimeState* state) {
         }
     }
 
-    RETURN_IF_ERROR(_capture_tablet_rowsets());
-
-    // init filtered_ouput_columns
-    for (const auto& col_name : _olap_scan_node.unused_output_column_name) {
-        _unused_output_columns.emplace_back(col_name);
-    }
+    RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
 }
 
-Status ScanOperator::close(RuntimeState* state) {
+void ScanOperator::close(RuntimeState* state) {
     DCHECK(_num_running_io_tasks == 0);
 
     if (_workgroup == nullptr) {
@@ -51,12 +50,13 @@ Status ScanOperator::close(RuntimeState* state) {
     }
     for (auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr) {
-            chunk_source->close(_state);
+            chunk_source->close(state);
             chunk_source = nullptr;
         }
     }
 
-    return Operator::close(state);
+    do_close(state);
+    Operator::close(state);
 }
 
 bool ScanOperator::has_output() const {
@@ -236,75 +236,41 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     if (maybe_morsel.has_value()) {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
-
-        bool enable_column_expr_predicate = false;
-        if (_olap_scan_node.__isset.enable_column_expr_predicate) {
-            enable_column_expr_predicate = _olap_scan_node.enable_column_expr_predicate;
-        }
-
-        _chunk_sources[chunk_source_index] = std::make_shared<OlapChunkSource>(
-                std::move(morsel), _olap_scan_node.tuple_id, _limit, enable_column_expr_predicate, _conjunct_ctxs,
-                runtime_in_filters(), runtime_bloom_filters(), _olap_scan_node.key_column_name,
-                _olap_scan_node.is_preaggregation, &_unused_output_columns, _unique_metrics.get());
+        _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel));
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;
             _is_finished = true;
             return status;
         }
-
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
     }
 
     return Status::OK();
 }
 
-Status ScanOperator::_capture_tablet_rowsets() {
-    const auto& morsels = _morsel_queue->morsels();
-    _tablet_rowsets.resize(morsels.size());
-    for (int i = 0; i < morsels.size(); ++i) {
-        OlapMorsel* olap_morsel = (OlapMorsel*)morsels[i].get();
-        auto* scan_range = olap_morsel->get_scan_range();
+// ========== ScanOperatorFactory ==========
 
-        // Get version.
-        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
-
-        // Get tablet.
-        TTabletId tablet_id = scan_range->tablet_id;
-        std::string err;
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
-        if (!tablet) {
-            std::stringstream ss;
-            SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
-            ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-               << ", reason=" << err;
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
-        }
-
-        // Capture row sets of this version tablet.
-        {
-            std::shared_lock l(tablet->get_header_lock());
-            RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
-        }
-    }
-
-    return Status::OK();
-}
+ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
+        : SourceOperatorFactory(id, "olap_scan", scan_node->id()), _scan_node(scan_node) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
-
-    auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
-    vectorized::DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, _olap_scan_node.dict_string_id_to_int_ids,
-                                                       &(tuple_desc->decoded_slots()));
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+    RETURN_IF_ERROR(do_prepare(state));
     return Status::OK();
 }
 
+OperatorPtr ScanOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    return do_create(degree_of_parallelism, driver_sequence);
+}
+
 void ScanOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_conjunct_ctxs, state);
+    do_close(state);
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    Expr::close(conjunct_ctxs, state);
     OperatorFactory::close(state);
 }
 

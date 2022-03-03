@@ -159,6 +159,9 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     _aggregator->process_limit(chunk);
 
     DCHECK_CHUNK(*chunk);
+
+    RETURN_IF_ERROR(_aggregator->check_has_error());
+
     return Status::OK();
 }
 
