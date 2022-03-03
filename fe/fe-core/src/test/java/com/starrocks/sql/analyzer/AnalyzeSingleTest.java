@@ -310,6 +310,9 @@ public class AnalyzeSingleTest {
         analyzeFail("select max(TIMEDIFF(NULL, NULL)) from t0");
         analyzeSuccess("select abs(TIMEDIFF(NULL, NULL)) from t0");
         analyzeFail(" SELECT t0.v1 FROM t0 GROUP BY t0.v1 HAVING ((MAX(TIMEDIFF(NULL, NULL))) IS NULL)");
+
+        analyzeSuccess("select right('foo', 1)");
+        analyzeSuccess("select left('foo', 1)");
     }
 
     @Test

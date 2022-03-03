@@ -299,6 +299,8 @@ primaryExpression
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
     | IF '(' (expression (',' expression)*)? ')'                                          #functionCall
+    | LEFT '(' expression ',' expression ')'                                              #functionCall
+    | RIGHT '(' expression ',' expression ')'                                             #functionCall
     | qualifiedName '(' ASTERISK_SYMBOL ')' over?                                         #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
     | windowFunction over                                                                 #windowFunctionCall

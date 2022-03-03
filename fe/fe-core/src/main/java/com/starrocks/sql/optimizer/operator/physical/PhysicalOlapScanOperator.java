@@ -111,6 +111,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         this.dictStringIdToIntIds = dictStringIdToIntIds;
     }
 
+    public void setOutputColumns(List<ColumnRefOperator> outputColumns) {
+        this.outputColumns = outputColumns;
+    }
+
     public boolean canDoReplicatedJoin() {
         return Utils.canDoReplicatedJoin((OlapTable) table, selectedIndexId, selectedPartitionId, selectedTabletId);
     }
