@@ -823,6 +823,7 @@ under the License.
                     <failsOnError>true</failsOnError>
                     <linkXRef>false</linkXRef>
                     <excludes>**/sql/parser/gen/**</excludes>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
                 </configuration>
                 <executions>
                     <execution>
