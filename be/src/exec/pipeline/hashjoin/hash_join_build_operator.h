@@ -27,7 +27,7 @@ public:
     ~HashJoinBuildOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool has_output() const override {
         CHECK(false) << "has_output not supported in HashJoinBuildOperator";

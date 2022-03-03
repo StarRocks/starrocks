@@ -22,9 +22,8 @@ Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
+void ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
     Operator::close(state);
-    return Status::OK();
 }
 
 bool ExchangeMergeSortSourceOperator::has_output() const {

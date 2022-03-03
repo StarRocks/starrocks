@@ -12,13 +12,13 @@ HashJoinProbeOperator::HashJoinProbeOperator(OperatorFactory* factory, int32_t i
           _join_prober(std::move(join_prober)),
           _join_builder(std::move(join_builder)) {}
 
-Status HashJoinProbeOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_join_prober->unref(state));
+void HashJoinProbeOperator::close(RuntimeState* state) {
+    _join_prober->unref(state);
     if (_join_builder != _join_prober) {
-        RETURN_IF_ERROR(_join_builder->unref(state));
+        _join_builder->unref(state);
     }
 
-    return OperatorWithDependency::close(state);
+    OperatorWithDependency::close(state);
 }
 
 Status HashJoinProbeOperator::prepare(RuntimeState* state) {

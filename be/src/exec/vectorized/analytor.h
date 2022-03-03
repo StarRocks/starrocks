@@ -47,7 +47,7 @@ public:
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     enum FrameType {
         Unbounded,               // BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING

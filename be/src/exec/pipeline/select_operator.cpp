@@ -12,8 +12,8 @@ Status SelectOperator::prepare(RuntimeState* state) {
     return Operator::prepare(state);
 }
 
-Status SelectOperator::close(RuntimeState* state) {
-    return Operator::close(state);
+void SelectOperator::close(RuntimeState* state) {
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {

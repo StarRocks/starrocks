@@ -31,7 +31,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool has_output() const override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
