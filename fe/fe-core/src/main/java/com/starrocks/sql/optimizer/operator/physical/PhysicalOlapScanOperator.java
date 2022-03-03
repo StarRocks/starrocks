@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -109,6 +110,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public void setDictStringIdToIntIds(Map<Integer, Integer> dictStringIdToIntIds) {
         this.dictStringIdToIntIds = dictStringIdToIntIds;
+    }
+
+    public void setOutputColumns(List<ColumnRefOperator> outputColumns) {
+        this.outputColumns = outputColumns;
     }
 
     public boolean canDoReplicatedJoin() {
