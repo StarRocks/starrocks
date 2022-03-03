@@ -719,7 +719,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     });
     std::string l0_index_file_name = _get_l0_index_file_name(_path, start_version);
     RETURN_IF_ERROR(block_mgr->open_block(l0_index_file_name, &rblock));
-    // Assuming that the snapshot is alaways at the beginning of index file,
+    // Assuming that the snapshot is always at the beginning of index file,
     // if not, we can't call phmap.load() directly because phmap.load() alaways
     // reads the contents of the file from the beginning
     phmap::BinaryInputArchive ar_in(l0_index_file_name.data());
