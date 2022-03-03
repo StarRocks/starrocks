@@ -98,11 +98,17 @@ public class JDBCTable extends Table {
         Text.writeString(out, obj.toString());
     }
 
+    @Override
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         String jsonStr = Text.readString(in);
         JsonObject obj = JsonParser.parseString(jsonStr).getAsJsonObject();
         jdbcTable = obj.getAsJsonPrimitive(TABLE).getAsString();
         resourceName = obj.getAsJsonPrimitive(RESOURCE).getAsString();
+    }
+
+    @Override
+    public boolean isSupported() {
+        return true;
     }
 }
