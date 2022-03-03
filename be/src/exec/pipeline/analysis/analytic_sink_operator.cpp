@@ -38,9 +38,9 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status AnalyticSinkOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_analytor->unref(state));
-    return Operator::close(state);
+void AnalyticSinkOperator::close(RuntimeState* state) {
+    _analytor->unref(state);
+    Operator::close(state);
 }
 
 void AnalyticSinkOperator::set_finishing(RuntimeState* state) {

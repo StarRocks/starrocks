@@ -241,9 +241,8 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
     return chunk;
 }
 
-Status HashJoiner::close(RuntimeState* state) {
+void HashJoiner::close(RuntimeState* state) {
     _ht.close();
-    return Status::OK();
 }
 
 Status HashJoiner::create_runtime_filters(RuntimeState* state) {

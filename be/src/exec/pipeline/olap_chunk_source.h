@@ -36,7 +36,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool has_next_chunk() const override;
 

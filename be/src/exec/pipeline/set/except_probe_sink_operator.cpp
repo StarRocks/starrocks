@@ -4,9 +4,9 @@
 
 namespace starrocks::pipeline {
 
-Status ExceptProbeSinkOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_except_ctx->unref(state));
-    return Operator::close(state);
+void ExceptProbeSinkOperator::close(RuntimeState* state) {
+    _except_ctx->unref(state);
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> ExceptProbeSinkOperator::pull_chunk(RuntimeState* state) {

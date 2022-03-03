@@ -30,7 +30,7 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ResultSinkOperator::close(RuntimeState* state) {
+void ResultSinkOperator::close(RuntimeState* state) {
     Status st;
     // Close the writer
     if (_writer != nullptr) {
@@ -57,7 +57,6 @@ Status ResultSinkOperator::close(RuntimeState* state) {
     }
 
     Operator::close(state);
-    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> ResultSinkOperator::pull_chunk(RuntimeState* state) {

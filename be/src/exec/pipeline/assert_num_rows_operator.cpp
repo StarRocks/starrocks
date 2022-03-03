@@ -24,8 +24,8 @@ Status AssertNumRowsOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status AssertNumRowsOperator::close(RuntimeState* state) {
-    return Operator::close(state);
+void AssertNumRowsOperator::close(RuntimeState* state) {
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> AssertNumRowsOperator::pull_chunk(RuntimeState* state) {

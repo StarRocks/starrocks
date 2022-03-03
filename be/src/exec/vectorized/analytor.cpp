@@ -273,9 +273,9 @@ Status Analytor::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status Analytor::close(RuntimeState* state) {
+void Analytor::close(RuntimeState* state) {
     if (_is_closed) {
-        return Status::OK();
+        return;
     }
 
     _is_closed = true;
@@ -299,8 +299,6 @@ Status Analytor::close(RuntimeState* state) {
     for (const auto& i : _agg_expr_ctxs) {
         Expr::close(i, state);
     }
-
-    return Status::OK();
 }
 
 bool Analytor::is_chunk_buffer_empty() {

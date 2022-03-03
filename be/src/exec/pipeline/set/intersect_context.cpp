@@ -19,12 +19,10 @@ Status IntersectContext::prepare(RuntimeState* state, const std::vector<ExprCont
     return Status::OK();
 }
 
-Status IntersectContext::close(RuntimeState* state) {
+void IntersectContext::close(RuntimeState* state) {
     if (_build_pool != nullptr) {
         _build_pool->free_all();
     }
-
-    return Status::OK();
 }
 
 Status IntersectContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,
