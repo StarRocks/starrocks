@@ -28,6 +28,7 @@ add_library(Common STATIC
   statusor.cpp
   logconfig.cpp
   configbase.cpp
+  s3_uri.cpp
 )
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")

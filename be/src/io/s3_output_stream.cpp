@@ -62,6 +62,10 @@ StatusOr<OutputStream::Position> S3OutputStream::get_direct_buffer_and_advance(i
 }
 
 Status S3OutputStream::close() {
+    if (_client == nullptr) {
+        return Status::OK();
+    }
+
     if (_upload_id.empty()) {
         RETURN_IF_ERROR(singlepart_upload());
     } else {
