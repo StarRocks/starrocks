@@ -265,7 +265,7 @@ public class PlanFragmentBuilder {
                 }
 
                 // we only support single pred like: a = xx, single pre can push down to scan node
-                // complex pred like: a + b = xx, can push down to scan node yet
+                // complex pred like: a + b = xx, can not push down to scan node yet
                 // so the columns in complex pred, it useful for the stage after scan
                 Set<Integer> singlePredColumnIds = new HashSet<Integer>();
                 Set<Integer> complexPredColumnIds = new HashSet<Integer>();
