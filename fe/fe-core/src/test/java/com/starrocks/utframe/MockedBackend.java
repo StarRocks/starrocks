@@ -23,7 +23,6 @@ package com.starrocks.utframe;
 
 import com.google.common.collect.Queues;
 import com.starrocks.common.ClientPool;
-import com.starrocks.common.ThriftServer;
 import com.starrocks.master.MasterImpl;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
@@ -80,15 +79,7 @@ import com.starrocks.thrift.TTransmitDataResult;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.thrift.TProcessor;
-import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.server.TServer;
-import org.apache.thrift.server.TSimpleServer;
-import org.apache.thrift.transport.TServerSocket;
-import org.apache.thrift.transport.TTransportException;
 
-import java.io.IOException;
-import java.net.ServerSocket;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -164,26 +155,6 @@ public class MockedBackend {
 
     public int getHttpPort() {
         return httpPort;
-    }
-
-    private static class MockThriftServer extends ThriftServer {
-        public MockThriftServer(TProcessor processor) {
-            super(0, processor);
-            setType(ThriftServerType.SIMPLE);
-        }
-
-        @Override
-        protected void createSimpleServer() throws TTransportException {
-            try {
-                ServerSocket ss = new ServerSocket(0);
-                TServer.Args args = new TServer.Args(new TServerSocket(ss)).protocolFactory(
-                        new TBinaryProtocol.Factory()).processor(this.getProcessor());
-                setServer(new TSimpleServer(args));
-                setPort(ss.getLocalPort());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
     }
 
     private static class MockHeatBeatClient extends HeartbeatService.Client {
