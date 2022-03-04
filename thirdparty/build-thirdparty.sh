@@ -758,6 +758,9 @@ build_vpack() {
     make -j$PARALLEL && make install
 }
 
+export CXXFLAGS="-fno-omit-frame-pointer ${CXXFLAGS}"
+export CFLAGS="-fno-omit-frame-pointer ${CFLAGS}"
+
 build_libevent
 build_zlib
 build_lz4
