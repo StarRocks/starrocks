@@ -191,16 +191,17 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _stats.column_convert_ns);
 
-    const auto& parquet_profile = profile->parquet_profile;
-
-    COUNTER_UPDATE(parquet_profile->value_decode_timer, _stats.value_decode_ns);
-    COUNTER_UPDATE(parquet_profile->level_decode_timer, _stats.level_decode_ns);
-    COUNTER_UPDATE(parquet_profile->page_read_timer, _stats.page_read_ns);
-    COUNTER_UPDATE(parquet_profile->footer_read_timer, _stats.footer_read_ns);
-    COUNTER_UPDATE(parquet_profile->column_reader_init_timer, _stats.column_reader_init_ns);
-    COUNTER_UPDATE(parquet_profile->group_chunk_read_timer, _stats.group_chunk_read_ns);
-    COUNTER_UPDATE(parquet_profile->group_dict_filter_timer, _stats.group_dict_filter_ns);
-    COUNTER_UPDATE(parquet_profile->group_dict_decode_timer, _stats.group_dict_decode_ns);
+    HdfsParquetProfile* parquet_profile = profile->parquet_profile;
+    if (parquet_profile != nullptr) {
+        COUNTER_UPDATE(parquet_profile->value_decode_timer, _stats.value_decode_ns);
+        COUNTER_UPDATE(parquet_profile->level_decode_timer, _stats.level_decode_ns);
+        COUNTER_UPDATE(parquet_profile->page_read_timer, _stats.page_read_ns);
+        COUNTER_UPDATE(parquet_profile->footer_read_timer, _stats.footer_read_ns);
+        COUNTER_UPDATE(parquet_profile->column_reader_init_timer, _stats.column_reader_init_ns);
+        COUNTER_UPDATE(parquet_profile->group_chunk_read_timer, _stats.group_chunk_read_ns);
+        COUNTER_UPDATE(parquet_profile->group_dict_filter_timer, _stats.group_dict_filter_ns);
+        COUNTER_UPDATE(parquet_profile->group_dict_decode_timer, _stats.group_dict_decode_ns);
+    }
 #endif
 }
 
