@@ -51,8 +51,8 @@ public class HiveResource extends Resource {
         this.properties = properties;
     }
 
-    protected Map<String, String> getProperties(){
-        return this.properties ;
+    protected Map<String, String> getProperties() {
+        return this.properties;
     }
 
     @Override

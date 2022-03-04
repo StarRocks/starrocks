@@ -61,7 +61,6 @@ public class ResourceMgr implements Writable {
     @SerializedName(value = "nameToResource")
     private final Hashtable<String, Resource> nameToResource = new Hashtable<>();
     private final ResourceProcNode procNode = new ResourceProcNode();
-    private final String TYPE = "type";
 
     public ResourceMgr() {
     }
@@ -122,10 +121,10 @@ public class ResourceMgr implements Writable {
 
         if (resource instanceof HiveResource) {
             // update the properties
-            Map<String,String> properties = ((HiveResource)resource).getProperties();
+            Map<String, String> properties = ((HiveResource) resource).getProperties();
             for (Map.Entry<String, String> entry : stmt.getProperties().entrySet()) {
-                String key = entry.getKey() ;
-                if (!properties.containsKey(key)){
+                String key = entry.getKey();
+                if (!properties.containsKey(key)) {
                     throw new DdlException("Property(" + key + ") does not support");
                 }
                 properties.put(key, entry.getValue());
@@ -133,14 +132,14 @@ public class ResourceMgr implements Writable {
             resource.setProperties(properties);
 
             // update the nameToResource
-            nameToResource.put(name,resource);
+            nameToResource.put(name, resource);
 
             // drop the cache
             Catalog.getCurrentCatalog().getHiveRepository().clearCache(resource.getName());
 
             // update edit log
             Catalog.getCurrentCatalog().getEditLog().logCreateResource(resource);
-        }else{
+        } else {
             throw new DdlException("Alter resource statement only support external hive now");
         }
     }

@@ -226,7 +226,7 @@ public class DdlExecutor {
             catalog.getResourceMgr().createResource((CreateResourceStmt) ddlStmt);
         } else if (ddlStmt instanceof DropResourceStmt) {
             catalog.getResourceMgr().dropResource((DropResourceStmt) ddlStmt);
-        }else if (ddlStmt instanceof AlterResourceStmt) {
+        } else if (ddlStmt instanceof AlterResourceStmt) {
             catalog.getResourceMgr().alterResource((AlterResourceStmt) ddlStmt);
         } else if (ddlStmt instanceof CancelExportStmt) {
             catalog.getExportMgr().cancelExportJob((CancelExportStmt) ddlStmt);
