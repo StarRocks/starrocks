@@ -12,6 +12,7 @@
 #include "runtime/primitive_type_infra.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/predicate_parser.h"
+#include <variant>
 
 namespace starrocks {
 namespace vectorized {
@@ -513,7 +514,7 @@ struct ColumnRangeBuilder {
                 full_range.set_scale(slot->type().scale);
             }
             ColumnValueRangeType& v = LookupOrInsert(column_value_ranges, col_name, full_range);
-            RangeType& range = boost::get<ColumnValueRange<value_type>>(v);
+            RangeType& range = std::get<ColumnValueRange<value_type>>(v);
             if constexpr (pt_is_decimal<limit_type>) {
                 range.set_precision(slot->type().precision);
                 range.set_scale(slot->type().scale);
@@ -546,8 +547,9 @@ Status OlapScanConjunctsManager::build_olap_filters() {
 
     for (auto iter : column_value_ranges) {
         std::vector<TCondition> filters;
-        boost::apply_visitor([&](auto&& range) { range.to_olap_filter(filters); }, iter.second);
-        bool empty_range = boost::apply_visitor([](auto&& range) { return range.is_empty_value_range(); }, iter.second);
+        std::visit([&](auto&& range) { range.to_olap_filter(filters); }, iter.second);
+        bool empty_range = std::visit([](auto&& range) { return range.is_empty_value_range(); }, iter.secon
+d);
         if (empty_range) {
             return Status::EndOfFile("EOF, Filter by always false condition");
         }
@@ -604,7 +606,7 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
     if (conditional_key_columns > 1) {
         for (int i = 0; i < conditional_key_columns && !scan_keys.has_range_value(); ++i) {
             ExtendScanKeyVisitor visitor(&scan_keys, max_scan_key_num);
-            if (!boost::apply_visitor(visitor, column_value_ranges[ref_key_column_names[i]]).ok()) {
+            if (!std::visit(visitor, column_value_ranges[ref_key_column_names[i]]).ok()) {
                 break;
             }
         }
