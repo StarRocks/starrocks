@@ -30,7 +30,7 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
     if (s.size == 0 && n == 0) {
         // Has reached the end of file and the buffer is empty.
         return Status::EndOfFile(_file->filename());
-    } else if (s.size == 0 && _buff.position()[n - 1] != _record_delimiter[0]) {
+    } else if (s.size == 0 && _buff.find(_record_delimiter, n - _record_delimiter.size()) == nullptr) {
         // Has reached the end of file but still no record delimiter found, which
         // is valid, according the RFC, add the record delimiter ourself.
         for (char ch : _record_delimiter) {
