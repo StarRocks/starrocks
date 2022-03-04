@@ -3,6 +3,7 @@
 #pragma once
 
 #include "exec/vectorized/chunks_sorter.h"
+#include "gtest/gtest_prod.h"
 
 namespace starrocks {
 class ExprContext;
