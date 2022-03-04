@@ -10,7 +10,7 @@ Status CSVReader::next_record(Record* record) {
     }
     char* d;
     size_t pos = 0;
-    while ((d = _buff.find(_record_delimiter[0], pos)) == nullptr) {
+    while ((d = _buff.find(_record_delimiter, pos)) == nullptr) {
         pos = _buff.available();
         _buff.compact();
         if (_buff.free_space() == 0) {
