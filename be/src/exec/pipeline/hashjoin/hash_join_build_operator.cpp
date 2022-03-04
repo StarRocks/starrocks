@@ -31,7 +31,9 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
         read_only_join_prober->ref();
     }
 
-    return _join_builder->prepare(state);
+    RETURN_IF_ERROR(_join_builder->prepare_builder(state, _unique_metrics.get()));
+
+    return Status::OK();
 }
 void HashJoinBuildOperator::close(RuntimeState* state) {
     for (auto& read_only_join_prober : _read_only_join_probers) {

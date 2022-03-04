@@ -29,11 +29,7 @@ Status HashJoinProbeOperator::prepare(RuntimeState* state) {
     }
     _join_prober->ref();
 
-    // The buildable hash joiner is prepared in HashJoinBuildOperator::prepare,
-    // while the read only hash joiner is prepared in HashJoinProbeOperator::prepare.
-    if (!_join_prober->is_buildable()) {
-        RETURN_IF_ERROR(_join_prober->prepare(state));
-    }
+    RETURN_IF_ERROR(_join_prober->prepare_prober(state, _unique_metrics.get()));
 
     return Status::OK();
 }

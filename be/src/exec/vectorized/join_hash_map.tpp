@@ -276,7 +276,7 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
                                                     bool* has_remain) {
     _probe_state->key_columns = &key_columns;
     {
-        SCOPED_TIMER(_table_items->search_ht_timer);
+        SCOPED_TIMER(_probe_state->search_ht_timer);
         RETURN_IF_ERROR(_search_ht(state, probe_chunk));
         if (_probe_state->count <= 0) {
             *has_remain = false;
@@ -292,7 +292,7 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
         // don't need output the real probe column
         {
             // output default values for probe-columns as placeholder.
-            SCOPED_TIMER(_table_items->output_probe_column_timer);
+            SCOPED_TIMER(_probe_state->output_probe_column_timer);
             if (!_table_items->with_other_conjunct) {
                 RETURN_IF_ERROR(_probe_null_output(chunk, _probe_state->count));
             } else {
@@ -304,7 +304,7 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
             RETURN_IF_ERROR(_build_output(chunk));
         }
         {
-            SCOPED_TIMER(_table_items->output_tuple_column_timer);
+            SCOPED_TIMER(_probe_state->output_tuple_column_timer);
             if (_table_items->need_create_tuple_columns) {
                 _build_tuple_output(chunk);
             }
@@ -316,7 +316,7 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
         // anti anti join without other join conjunct
         // don't need output the real build column
         {
-            SCOPED_TIMER(_table_items->output_probe_column_timer);
+            SCOPED_TIMER(_probe_state->output_probe_column_timer);
             RETURN_IF_ERROR(_probe_output(probe_chunk, chunk));
         }
         {
@@ -329,14 +329,14 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
             }
         }
         {
-            SCOPED_TIMER(_table_items->output_tuple_column_timer);
+            SCOPED_TIMER(_probe_state->output_tuple_column_timer);
             if (_table_items->need_create_tuple_columns) {
                 _probe_tuple_output(probe_chunk, chunk);
             }
         }
     } else {
         {
-            SCOPED_TIMER(_table_items->output_probe_column_timer);
+            SCOPED_TIMER(_probe_state->output_probe_column_timer);
             RETURN_IF_ERROR(_probe_output(probe_chunk, chunk));
         }
         {
@@ -344,7 +344,7 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
             RETURN_IF_ERROR(_build_output(chunk));
         }
         {
-            SCOPED_TIMER(_table_items->output_tuple_column_timer);
+            SCOPED_TIMER(_probe_state->output_tuple_column_timer);
             if (_table_items->need_create_tuple_columns) {
                 _probe_tuple_output(probe_chunk, chunk);
                 _build_tuple_output(chunk);
