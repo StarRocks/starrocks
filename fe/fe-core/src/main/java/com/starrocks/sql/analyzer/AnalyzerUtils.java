@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 
 import java.util.List;
@@ -100,6 +101,12 @@ public class AnalyzerUtils {
         }
 
         @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            visit(node.getQuery());
+            return null;
+        }
+
+        @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
             if (node.hasWithClause()) {
                 node.getRelations().forEach(this::visit);
@@ -160,6 +167,12 @@ public class AnalyzerUtils {
         @Override
         public Void visitQueryStatement(QueryStatement node, Void context) {
             return visit(node.getQueryRelation());
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            visit(node.getQuery());
+            return null;
         }
 
         @Override
