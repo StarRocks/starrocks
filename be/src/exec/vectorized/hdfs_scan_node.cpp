@@ -58,14 +58,9 @@ HdfsScanNode::HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
         : ScanNode(pool, tnode, descs) {}
 
 Status HdfsScanNode::_init_table() {
-    if (dynamic_cast<const HdfsTableDescriptor*>(_tuple_desc->table_desc())) {
-        _hdfs_table = dynamic_cast<const HdfsTableDescriptor*>(_tuple_desc->table_desc());
-    } else if (dynamic_cast<const IcebergTableDescriptor*>(_tuple_desc->table_desc())) {
-        _iceberg_table = dynamic_cast<const IcebergTableDescriptor*>(_tuple_desc->table_desc());
-    } else if (dynamic_cast<const HudiTableDescriptor*>(_tuple_desc->table_desc())) {
-        _hudi_table = dynamic_cast<const HudiTableDescriptor*>(_tuple_desc->table_desc());
-    } else {
-        return Status::RuntimeError("invalid table type");
+    _lake_table = dynamic_cast<const LakeTableDescriptor*>(_tuple_desc->table_desc());
+    if (_lake_table == nullptr) {
+        return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi table are supported");
     }
     return Status::OK();
 }
@@ -94,15 +89,10 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     const auto& slots = _tuple_desc->slots();
     for (size_t i = 0; i < slots.size(); i++) {
-        if (_hdfs_table != nullptr && _hdfs_table->is_partition_col(slots[i])) {
+        if (_lake_table != nullptr && _lake_table->is_partition_col(slots[i])) {
             _partition_slots.push_back(slots[i]);
             _partition_index_in_chunk.push_back(i);
-            _partition_index_in_hdfs_partition_columns.push_back(_hdfs_table->get_partition_col_index(slots[i]));
-            _has_partition_columns = true;
-        } else if (_hudi_table != nullptr && _hudi_table->is_partition_col(slots[i])) {
-            _partition_slots.push_back(slots[i]);
-            _partition_index_in_chunk.push_back(i);
-            _partition_index_in_hdfs_partition_columns.push_back(_hudi_table->get_partition_col_index(slots[i]));
+            _partition_index_in_hdfs_partition_columns.push_back(_lake_table->get_partition_col_index(slots[i]));
             _has_partition_columns = true;
         } else {
             _materialize_slots.push_back(slots[i]);
@@ -163,8 +153,7 @@ Status HdfsScanNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
 
     _pre_process_conjunct_ctxs();
-    if (_hdfs_table != nullptr) _init_partition_expr_map();
-    if (_hudi_table != nullptr) _init_hudi_partition_expr_map();
+    if (_lake_table != nullptr) _init_partition_values_map();
 
     for (auto& scan_range : _scan_ranges) {
         RETURN_IF_ERROR(_find_and_insert_hdfs_file(scan_range));
@@ -585,13 +574,13 @@ Status HdfsScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     return Status::OK();
 }
 
-void HdfsScanNode::_init_partition_expr_map() {
+void HdfsScanNode::_init_partition_values_map() {
     if (_scan_ranges.empty()) {
         return;
     }
 
     for (auto& scan_range : _scan_ranges) {
-        auto* partition_desc = _hdfs_table->get_partition(scan_range.partition_id);
+        auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
 
         if (_partition_values_map.find(scan_range.partition_id) == _partition_values_map.end()) {
             _partition_values_map[scan_range.partition_id] = partition_desc->partition_key_value_evals();
@@ -603,31 +592,6 @@ void HdfsScanNode::_init_partition_expr_map() {
         while (it != _partition_values_map.end()) {
             if (_filter_partition(it->second)) {
                 _partition_values_map.erase(it++);
-            } else {
-                it++;
-            }
-        }
-    }
-}
-
-void HdfsScanNode::_init_hudi_partition_expr_map() {
-    if (_scan_ranges.empty()) {
-        return;
-    }
-
-    for (auto& scan_range : _scan_ranges) {
-        auto* partition_desc = _hudi_table->get_partition(scan_range.partition_id);
-
-        if (_partition_values_map.find(scan_range.partition_id) == _partition_values_map.end()) {
-            _partition_values_map[scan_range.partition_id] = partition_desc->partition_key_value_evals();
-        }
-    }
-
-    if (_has_partition_columns && _has_partition_conjuncts) {
-        auto it = _partition_values_map.begin();
-        while (it != _partition_values_map.end()) {
-            if (_filter_partition(it->second)) {
-                it = _partition_values_map.erase(it);
             } else {
                 it++;
             }
@@ -663,14 +627,12 @@ bool HdfsScanNode::_filter_partition(const std::vector<ExprContext*>& partition_
 }
 
 Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range) {
-    if ((_hdfs_table != nullptr || _hudi_table != nullptr) &&
-        (_partition_values_map.find(scan_range.partition_id) == _partition_values_map.end())) {
-        // partition has been filtered
-        return Status::OK();
-    }
-
     std::string scan_range_path = scan_range.full_path;
-    if (_hdfs_table != nullptr || _hudi_table != nullptr) {
+    if (_lake_table != nullptr && _lake_table->has_partition()) {
+        if (_partition_values_map.find(scan_range.partition_id) == _partition_values_map.end()) {
+            // partition has been filtered
+            return Status::OK();
+        }
         scan_range_path = scan_range.relative_path;
     }
 
@@ -686,18 +648,8 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
 
     COUNTER_UPDATE(_scan_files_counter, 1);
     std::string native_file_path = scan_range.full_path;
-    if (_hdfs_table != nullptr) {
-        auto* partition_desc = _hdfs_table->get_partition(scan_range.partition_id);
-
-        SCOPED_TIMER(_open_file_timer);
-
-        std::filesystem::path file_path(partition_desc->location());
-        file_path /= scan_range.relative_path;
-        native_file_path = file_path.native();
-    }
-
-    if (_hudi_table != nullptr) {
-        auto* partition_desc = _hudi_table->get_partition(scan_range.partition_id);
+    if (_lake_table != nullptr) {
+        auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
 
         SCOPED_TIMER(_open_file_timer);
 
