@@ -249,6 +249,7 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
     scanner_params.open_limit = hdfs_file_desc.open_limit;
+    scanner_params.profile = &_profile;
 
     HdfsScanner* scanner = nullptr;
     if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::PARQUET) {

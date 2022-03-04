@@ -165,7 +165,7 @@ void HdfsScanner::update_hdfs_counter() {
     std::unique_ptr<NumericStatistics> statistics = std::move(res).value();
     if (statistics == nullptr || statistics->size() == 0) return;
 
-    RuntimeProfile* profile = _scanner_params.parent_profile->runtime_profile;
+    RuntimeProfile* profile = _scanner_params.profile->runtime_profile;
     [[maybe_unused]] auto&& toplev = ADD_TIMER(profile, kHdfsIOProfileSectionPrefix);
     for (int64_t i = 0, sz = statistics->size(); i < sz; i++) {
         auto&& name = statistics->name(i);
@@ -179,7 +179,7 @@ void HdfsScanner::update_counter() {
 
     update_hdfs_counter();
 
-    HdfsScanProfile* profile = _scanner_params.parent_profile;
+    HdfsScanProfile* profile = _scanner_params.profile;
     COUNTER_UPDATE(profile->scan_timer, _stats.scan_ns);
     COUNTER_UPDATE(profile->reader_init_timer, _stats.reader_init_ns);
 

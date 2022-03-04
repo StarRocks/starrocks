@@ -108,7 +108,7 @@ struct HdfsScannerParams {
 
     std::vector<std::string>* hive_column_names;
 
-    HdfsScanProfile* parent_profile = nullptr;
+    HdfsScanProfile* profile = nullptr;
 
     std::atomic<int32_t>* open_limit;
 };
