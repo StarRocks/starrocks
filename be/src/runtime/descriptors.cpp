@@ -105,76 +105,7 @@ std::string TableDescriptor::debug_string() const {
     return out.str();
 }
 
-IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc)
-        : TableDescriptor(tdesc), _table_location(tdesc.icebergTable.location), _columns(tdesc.icebergTable.columns) {}
-
-HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
-        : TableDescriptor(tdesc),
-          _columns(tdesc.hudiTable.columns),
-          _partition_columns(tdesc.hudiTable.partition_columns) {
-    for (const auto& entry : tdesc.hudiTable.partitions) {
-        auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.hudiTable, entry.second));
-        _partition_id_to_desc_map[entry.first] = partition;
-    }
-    _table_location = tdesc.hudiTable.location;
-}
-
-bool HudiTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
-    return get_partition_col_index(slot) >= 0;
-}
-
-int HudiTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) const {
-    int idx = 0;
-    for (const auto& partition_column : _partition_columns) {
-        if (partition_column.column_name == slot->col_name()) {
-            return idx;
-        }
-        ++idx;
-    }
-    return -1;
-}
-
-HdfsPartitionDescriptor* HudiTableDescriptor::get_partition(int64_t partition_id) const {
-    auto it = _partition_id_to_desc_map.find(partition_id);
-    if (it == _partition_id_to_desc_map.end()) {
-        return nullptr;
-    }
-    return it->second;
-}
-
-HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
-        : TableDescriptor(tdesc),
-          _columns(tdesc.hdfsTable.columns),
-          _partition_columns(tdesc.hdfsTable.partition_columns) {
-    for (const auto& entry : tdesc.hdfsTable.partitions) {
-        auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.hdfsTable, entry.second));
-        _partition_id_to_desc_map[entry.first] = partition;
-    }
-    _hdfs_base_dir = tdesc.hdfsTable.hdfs_base_dir;
-}
-
-bool HdfsTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
-    return get_partition_col_index(slot) >= 0;
-}
-
-int HdfsTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) const {
-    int idx = 0;
-    for (const auto& partition_column : _partition_columns) {
-        if (partition_column.column_name == slot->col_name()) {
-            return idx;
-        }
-        ++idx;
-    }
-    return -1;
-}
-
-HdfsPartitionDescriptor* HdfsTableDescriptor::get_partition(int64_t partition_id) const {
-    auto it = _partition_id_to_desc_map.find(partition_id);
-    if (it == _partition_id_to_desc_map.end()) {
-        return nullptr;
-    }
-    return it->second;
-}
+// ============== HDFS Table Descriptor ============
 
 HdfsPartitionDescriptor::HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition)
         : _file_format(thrift_partition.file_format),
@@ -190,6 +121,62 @@ Status HdfsPartitionDescriptor::create_part_key_exprs(ObjectPool* pool, int32_t 
     RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals));
     return Status::OK();
 }
+
+HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HdfsBaseTableDescriptor(tdesc, pool) {
+    _hdfs_base_dir = tdesc.hdfsTable.hdfs_base_dir;
+    _columns = tdesc.hdfsTable.columns;
+    _partition_columns = tdesc.hdfsTable.partition_columns;
+    for (const auto& entry : tdesc.hdfsTable.partitions) {
+        auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.hdfsTable, entry.second));
+        _partition_id_to_desc_map[entry.first] = partition;
+    }
+}
+
+IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HdfsBaseTableDescriptor(tdesc, pool) {
+    _table_location = tdesc.icebergTable.location;
+    _columns = tdesc.icebergTable.columns;
+}
+
+HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HdfsBaseTableDescriptor(tdesc, pool) {
+    _table_location = tdesc.hudiTable.location;
+    _columns = tdesc.hudiTable.columns;
+    _partition_columns = tdesc.hudiTable.partition_columns;
+    for (const auto& entry : tdesc.hudiTable.partitions) {
+        auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.hudiTable, entry.second));
+        _partition_id_to_desc_map[entry.first] = partition;
+    }
+}
+
+HdfsBaseTableDescriptor::HdfsBaseTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : TableDescriptor(tdesc) {}
+
+bool HdfsBaseTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
+    return get_partition_col_index(slot) >= 0;
+}
+
+HdfsPartitionDescriptor* HdfsBaseTableDescriptor::get_partition(int64_t partition_id) const {
+    auto it = _partition_id_to_desc_map.find(partition_id);
+    if (it == _partition_id_to_desc_map.end()) {
+        return nullptr;
+    }
+    return it->second;
+}
+
+int HdfsBaseTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) const {
+    int idx = 0;
+    for (const auto& partition_column : _partition_columns) {
+        if (partition_column.column_name == slot->col_name()) {
+            return idx;
+        }
+        ++idx;
+    }
+    return -1;
+}
+
+// =============================================
 
 OlapTableDescriptor::OlapTableDescriptor(const TTableDescriptor& tdesc) : TableDescriptor(tdesc) {}
 
@@ -530,7 +517,7 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
             break;
         }
         case TTableType::ICEBERG_TABLE: {
-            desc = pool->add(new IcebergTableDescriptor(tdesc));
+            desc = pool->add(new IcebergTableDescriptor(tdesc, pool));
             break;
         }
         case TTableType::HUDI_TABLE: {

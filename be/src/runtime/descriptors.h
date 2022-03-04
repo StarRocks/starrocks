@@ -162,6 +162,8 @@ private:
     int _num_clustering_cols;
 };
 
+// ============== HDFS Table Descriptor ============
+
 class HdfsPartitionDescriptor {
 public:
     HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition);
@@ -186,16 +188,13 @@ private:
     std::vector<ExprContext*> _partition_key_value_evals;
 };
 
-class HdfsTableDescriptor : public TableDescriptor {
+class HdfsBaseTableDescriptor : public TableDescriptor {
 public:
-    HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
-    ~HdfsTableDescriptor() override = default;
-
-    bool is_partition_col(const SlotDescriptor* slot) const;
-    int get_partition_col_index(const SlotDescriptor* slot) const;
-    HdfsPartitionDescriptor* get_partition(int64_t partition_id) const;
-
-    const std::string& hdfs_base_dir() const { return _hdfs_base_dir; }
+    HdfsBaseTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    virtual bool has_partition() const = 0;
+    virtual bool is_partition_col(const SlotDescriptor* slot) const;
+    virtual int get_partition_col_index(const SlotDescriptor* slot) const;
+    virtual HdfsPartitionDescriptor* get_partition(int64_t partition_id) const;
 
     Status create_key_exprs(ObjectPool* pool, int32_t chunk_size) {
         for (auto& part : _partition_id_to_desc_map) {
@@ -204,47 +203,36 @@ public:
         return Status::OK();
     }
 
-private:
+protected:
     std::string _hdfs_base_dir;
     std::vector<TColumn> _columns;
     std::vector<TColumn> _partition_columns;
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
-};
-
-class IcebergTableDescriptor : public TableDescriptor {
-public:
-    IcebergTableDescriptor(const TTableDescriptor& tdesc);
-    ~IcebergTableDescriptor() override = default;
-
-private:
     std::string _table_location;
-    std::vector<TColumn> _columns;
 };
 
-class HudiTableDescriptor : public TableDescriptor {
+class HdfsTableDescriptor : public HdfsBaseTableDescriptor {
+public:
+    HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~HdfsTableDescriptor() override = default;
+    bool has_partition() const override { return true; }
+};
+
+class IcebergTableDescriptor : public HdfsBaseTableDescriptor {
+public:
+    IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~IcebergTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
+};
+
+class HudiTableDescriptor : public HdfsBaseTableDescriptor {
 public:
     HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~HudiTableDescriptor() override = default;
-
-    bool is_partition_col(const SlotDescriptor* slot) const;
-    int get_partition_col_index(const SlotDescriptor* slot) const;
-    HdfsPartitionDescriptor* get_partition(int64_t partition_id) const;
-
-    const std::string& hdfs_base_dir() const { return _table_location; }
-
-    Status create_key_exprs(ObjectPool* pool, int32_t chunk_size) {
-        for (auto& part : _partition_id_to_desc_map) {
-            RETURN_IF_ERROR(part.second->create_part_key_exprs(pool, chunk_size));
-        }
-        return Status::OK();
-    }
-
-private:
-    std::string _table_location;
-    std::vector<TColumn> _columns;
-    std::vector<TColumn> _partition_columns;
-    std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
+    bool has_partition() const override { return true; }
 };
+
+// ===========================================
 
 class OlapTableDescriptor : public TableDescriptor {
 public:

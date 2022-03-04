@@ -82,7 +82,7 @@ private:
     void _pre_process_conjunct_ctxs();
 
     Status _start_scan_thread(RuntimeState* state);
-    void _init_partition_expr_map();
+    void _init_partition_values_map();
     void _init_hudi_partition_expr_map();
     bool _filter_partition(const std::vector<ExprContext*>& partition_exprs);
     Status _find_and_insert_hdfs_file(const THdfsScanRange& scan_range);
@@ -137,9 +137,7 @@ private:
 
     std::vector<THdfsScanRange> _scan_ranges;
     std::vector<HdfsFileDesc*> _hdfs_files;
-    const HdfsTableDescriptor* _hdfs_table = nullptr;
-    const IcebergTableDescriptor* _iceberg_table = nullptr;
-    const HudiTableDescriptor* _hudi_table = nullptr;
+    const HdfsBaseTableDescriptor* _hdfs_table = nullptr;
     std::vector<std::string> _hive_column_names;
 
     std::unique_ptr<MemPool> _mem_pool;
