@@ -30,7 +30,7 @@ public:
         int num_rows = columns[0]->size();
         int num_args = ctx->get_num_args();
         if (UNLIKELY(frame_start > std::numeric_limits<int32_t>::max() ||
-                     frame_end > std::numeric_limits<int32_t>::min())) {
+                     frame_end > std::numeric_limits<int32_t>::max())) {
             ctx->set_error(fmt::format("too big window: start:{}, end:{}", frame_start, frame_end).c_str());
         }
 
