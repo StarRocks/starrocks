@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "cctz/time_zone.h"
+#include "common/constexpr.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
