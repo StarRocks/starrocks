@@ -21,7 +21,7 @@
 
 package com.starrocks.persist;
 
-import com.sleepycat.je.rep.ReplicaWriteException;
+import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.alter.DecommissionBackendJob;
@@ -861,10 +861,11 @@ public class EditLog {
 
         long start = System.currentTimeMillis();
 
+        Preconditions.checkState(Catalog.getCurrentCatalog().isMaster(),
+                "non-master fe can not write bdb log");
+
         try {
             journal.write(op, writable);
-        } catch (ReplicaWriteException e) {
-            throw e;
         } catch (Exception e) {
             LOG.error("Fatal Error : write stream Exception", e);
             System.exit(-1);
