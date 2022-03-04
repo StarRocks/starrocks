@@ -37,7 +37,7 @@ IF (WITH_HDFS)
     )
 endif()
 
-add_library(Udf udf.cpp udf_ir.cpp ${UDF_FILES})
+add_library(Udf udf.cpp udf_ir.cpp java/utils.cpp ${UDF_FILES})
 add_library(StarRocksUdf udf.cpp udf_ir.cpp)
 set_target_properties(StarRocksUdf PROPERTIES COMPILE_FLAGS "-DSTARROCKS_UDF_SDK_BUILD")
 

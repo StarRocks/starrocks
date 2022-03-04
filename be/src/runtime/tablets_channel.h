@@ -107,7 +107,7 @@ private:
 
     struct Sender {
         std::mutex lock;
-        int64_t next_seq = 0; // NOTE: -1 means this sender has closed
+        int64_t next_seq = 0;
         bool closed = false;
     };
 

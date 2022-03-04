@@ -48,6 +48,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
@@ -169,7 +170,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitQueryStatement(StarRocksParser.QueryStatementContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(context.query());
-        return new QueryStatement(queryRelation);
+        QueryStatement queryStatement = new QueryStatement(queryRelation);
+        if (context.outfile() != null) {
+            queryStatement.setOutFileClause((OutFileClause) visit(context.outfile()));
+        }
+        return queryStatement;
     }
 
     @Override
@@ -343,6 +348,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new Property(
                 ((StringLiteral) visit(context.key)).getStringValue(),
                 ((StringLiteral) visit(context.value)).getStringValue());
+    }
+
+    @Override
+    public ParseNode visitOutfile(StarRocksParser.OutfileContext context) {
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        String format = null;
+        if (context.fileFormat() != null) {
+            if (context.fileFormat().identifier() != null) {
+                format = ((Identifier) visit(context.fileFormat().identifier())).getValue();
+            } else if (context.fileFormat().string() != null) {
+                format = ((StringLiteral) visit(context.fileFormat().string())).getStringValue();
+            }
+        }
+
+        return new OutFileClause(
+                ((StringLiteral) visit(context.file)).getStringValue(),
+                format,
+                properties);
     }
 
     @Override
@@ -828,8 +858,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitPartitionNames(StarRocksParser.PartitionNamesContext context) {
         List<Identifier> identifierList = visit(context.identifier(), Identifier.class);
-
-        return new PartitionNames(false, identifierList.stream().map(Identifier::getValue).collect(toList()));
+        return new PartitionNames(context.TEMPORARY() != null,
+                identifierList.stream().map(Identifier::getValue).collect(toList()));
     }
 
     // ------------------------------------------- SubQuery ------------------------------------------

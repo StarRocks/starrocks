@@ -196,6 +196,8 @@ private:
     // order_by_exprs are empty.
     TTupleId _buffered_tuple_id = 0;
 
+    bool _has_udaf = false;
+
     void _update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                      int64_t frame_end);
     // lead and lag function is special, the frame_start and frame_end

@@ -228,6 +228,14 @@ JoinHashTable JoinHashTable::clone_readable_table() {
     return ht;
 }
 
+void JoinHashTable::set_probe_profile(RuntimeProfile::Counter* search_ht_timer,
+                                      RuntimeProfile::Counter* output_probe_column_timer,
+                                      RuntimeProfile::Counter* output_tuple_column_timer) {
+    _probe_state->search_ht_timer = search_ht_timer;
+    _probe_state->output_probe_column_timer = output_probe_column_timer;
+    _probe_state->output_tuple_column_timer = output_tuple_column_timer;
+}
+
 void JoinHashTable::close() {
     _table_items.reset();
     _probe_state.reset();
@@ -258,13 +266,13 @@ void JoinHashTable::create(const HashTableParam& param) {
         _table_items->left_to_nullable = true;
         _table_items->right_to_nullable = true;
     }
-    _table_items->search_ht_timer = param.search_ht_timer;
     _table_items->output_build_column_timer = param.output_build_column_timer;
-    _table_items->output_probe_column_timer = param.output_probe_column_timer;
-    _table_items->output_tuple_column_timer = param.output_tuple_column_timer;
     _table_items->join_keys = param.join_keys;
 
     _probe_state->probe_pool = std::make_unique<MemPool>();
+    _probe_state->search_ht_timer = param.search_ht_timer;
+    _probe_state->output_probe_column_timer = param.output_probe_column_timer;
+    _probe_state->output_tuple_column_timer = param.output_tuple_column_timer;
 
     const auto& probe_desc = *param.probe_row_desc;
     for (const auto& tuple_desc : probe_desc.tuple_descriptors()) {

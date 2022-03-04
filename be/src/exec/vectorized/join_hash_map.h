@@ -108,10 +108,7 @@ struct JoinHashTableItems {
     std::unique_ptr<MemPool> build_pool = nullptr;
     std::vector<JoinKeyDesc> join_keys;
 
-    RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
-    RuntimeProfile::Counter* output_probe_column_timer = nullptr;
-    RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
 };
 
 struct HashTableProbeState {
@@ -153,6 +150,10 @@ struct HashTableProbeState {
 
     std::unique_ptr<MemPool> probe_pool = nullptr;
 
+    RuntimeProfile::Counter* search_ht_timer = nullptr;
+    RuntimeProfile::Counter* output_probe_column_timer = nullptr;
+    RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
+
     HashTableProbeState() = default;
     ~HashTableProbeState() = default;
 
@@ -177,7 +178,10 @@ struct HashTableProbeState {
               has_remain(rhs.has_remain),
               cur_probe_index(rhs.cur_probe_index),
               cur_row_match_count(rhs.cur_row_match_count),
-              probe_pool(rhs.probe_pool == nullptr ? nullptr : std::make_unique<MemPool>()) {}
+              probe_pool(rhs.probe_pool == nullptr ? nullptr : std::make_unique<MemPool>()),
+              search_ht_timer(rhs.search_ht_timer),
+              output_probe_column_timer(rhs.output_probe_column_timer),
+              output_tuple_column_timer(rhs.output_tuple_column_timer) {}
 
     // Disable copy assignment.
     HashTableProbeState& operator=(const HashTableProbeState& rhs) = delete;
@@ -558,6 +562,8 @@ public:
     // Clone a new hash table with the same hash table as this,
     // and the different probe state from this.
     JoinHashTable clone_readable_table();
+    void set_probe_profile(RuntimeProfile::Counter* search_ht_timer, RuntimeProfile::Counter* output_probe_column_timer,
+                           RuntimeProfile::Counter* output_tuple_column_timer);
 
     void create(const HashTableParam& param);
     void close();

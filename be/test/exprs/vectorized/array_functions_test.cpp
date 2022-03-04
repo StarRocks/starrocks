@@ -5,6 +5,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <unordered_set>
+
 namespace starrocks::vectorized {
 
 namespace {
@@ -3840,6 +3842,170 @@ TEST_F(ArrayFunctionsTest, array_overlap_varchar) {
     ASSERT_TRUE(v->get_data()[2]);
     ASSERT_FALSE(v->get_data()[3]);
     ASSERT_TRUE(v->get_data()[4]);
+}
+
+TEST_F(ArrayFunctionsTest, array_intersect_int) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
+    src_column->append_datum(DatumArray{(int32_t)8});
+    src_column->append_datum(DatumArray{(int32_t)4, (int32_t)1});
+    src_column->append_datum(Datum());
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_column2->append_datum(DatumArray{(int32_t)(5), (int32_t)(6)});
+    src_column2->append_datum(DatumArray{(int32_t)(2)});
+    src_column2->append_datum(DatumArray{(int32_t)(4), (int32_t)(3), (int32_t)(2), (int32_t)(1)});
+    src_column2->append_datum(DatumArray{(int32_t)(4), (int32_t)(9)});
+
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_column3->append_datum(DatumArray{(int32_t)(5)});
+    src_column3->append_datum(DatumArray{(int32_t)(2), (int32_t)(8)});
+    src_column3->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
+    src_column3->append_datum(DatumArray{(int32_t)(100)});
+
+    ArrayIntersect<PrimitiveType::TYPE_INT> intersect;
+    auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
+
+    ASSERT_EQ(dest_column->size(), 4);
+    _check_array<int32_t>({(int32_t)(5)}, dest_column->get(0).get_array());
+    _check_array<int32_t>({}, dest_column->get(1).get_array());
+    _check_array<int32_t>({(int32_t)(4), (int32_t)(1)}, dest_column->get(2).get_array());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+}
+
+TEST_F(ArrayFunctionsTest, array_intersect_int_with_not_null) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    src_column->append_datum(DatumArray{(int32_t)(5), (int32_t)(3), (int32_t)(6)});
+    src_column->append_datum(DatumArray{(int32_t)(8)});
+    src_column->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
+    src_column->append_datum(DatumArray{(int32_t)(4), (int32_t)(22), Datum()});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    src_column2->append_datum(DatumArray{(int32_t)(5), (int32_t)(6)});
+    src_column2->append_datum(DatumArray{(int32_t)(2)});
+    src_column2->append_datum(DatumArray{(int32_t)(4), (int32_t)(3), (int32_t)(2), (int32_t)(1)});
+    src_column2->append_datum(DatumArray{(int32_t)(4), Datum(), (int32_t)(22), (int32_t)(66)});
+
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    src_column3->append_datum(DatumArray{(int32_t)(5)});
+    src_column3->append_datum(DatumArray{(int32_t)(2), (int32_t)(8)});
+    src_column3->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
+    src_column3->append_datum(DatumArray{(int32_t)(4), Datum(), (int32_t)(2), (int32_t)(22), (int32_t)(1)});
+
+    ArrayIntersect<PrimitiveType::TYPE_INT> intersect;
+    auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
+
+    ASSERT_EQ(dest_column->size(), 4);
+    _check_array<int32_t>({(int32_t)(5)}, dest_column->get(0).get_array());
+    _check_array<int32_t>({}, dest_column->get(1).get_array());
+
+    {
+        std::unordered_set<int32_t> set_expect = {4, 1};
+        std::unordered_set<int32_t> set_actual;
+        auto result_array = dest_column->get(2).get_array();
+        for (int i = 0; i < result_array.size(); ++i) {
+            set_actual.insert(result_array[i].get_int32());
+        }
+        ASSERT_TRUE(set_expect == set_actual);
+    }
+
+    {
+        std::unordered_set<int32_t> set_expect = {4, 22};
+        std::unordered_set<int32_t> set_actual;
+        size_t null_values = 0;
+        auto result_array = dest_column->get(3).get_array();
+        for (int i = 0; i < result_array.size(); ++i) {
+            if (result_array[i].is_null()) {
+                ++null_values;
+            } else {
+                set_actual.insert(result_array[i].get_int32());
+            }
+        }
+        ASSERT_TRUE(set_expect == set_actual);
+        ASSERT_EQ(null_values, 1);
+    }
+}
+
+TEST_F(ArrayFunctionsTest, array_intersect_varchar) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
+    src_column->append_datum(DatumArray{Slice("8")});
+    src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
+    src_column->append_datum(Datum());
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
+    src_column2->append_datum(DatumArray{Slice("2")});
+    src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
+    src_column2->append_datum(DatumArray{Slice("4"), Slice("9")});
+
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    src_column3->append_datum(DatumArray{Slice("5")});
+    src_column3->append_datum(DatumArray{Slice("2"), Slice("8")});
+    src_column3->append_datum(DatumArray{Slice("4"), Slice("1")});
+    src_column3->append_datum(DatumArray{Slice("100")});
+
+    ArrayIntersect<PrimitiveType::TYPE_VARCHAR> intersect;
+    auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
+
+    ASSERT_EQ(dest_column->size(), 4);
+    _check_array<Slice>({Slice("5")}, dest_column->get(0).get_array());
+    _check_array<Slice>({}, dest_column->get(1).get_array());
+    _check_array<Slice>({Slice("4"), Slice("1")}, dest_column->get(2).get_array());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+}
+
+TEST_F(ArrayFunctionsTest, array_intersect_varchar_with_not_null) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
+    src_column->append_datum(DatumArray{Slice("8")});
+    src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
+    src_column->append_datum(DatumArray{Slice("4"), Slice("22"), Datum()});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
+    src_column2->append_datum(DatumArray{Slice("2")});
+    src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
+    src_column2->append_datum(DatumArray{Slice("4"), Datum(), Slice("22"), Slice("66")});
+
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    src_column3->append_datum(DatumArray{Slice("5")});
+    src_column3->append_datum(DatumArray{Slice("2"), Slice("8")});
+    src_column3->append_datum(DatumArray{Slice("4"), Slice("1")});
+    src_column3->append_datum(DatumArray{Slice("4"), Datum(), Slice("2"), Slice("22"), Slice("1")});
+
+    ArrayIntersect<PrimitiveType::TYPE_VARCHAR> intersect;
+    auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
+
+    ASSERT_EQ(dest_column->size(), 4);
+    _check_array<Slice>({Slice("5")}, dest_column->get(0).get_array());
+    _check_array<Slice>({}, dest_column->get(1).get_array());
+
+    {
+        std::unordered_set<std::string> set_expect = {"4", "1"};
+        std::unordered_set<std::string> set_actual;
+        auto result_array = dest_column->get(2).get_array();
+        for (int i = 0; i < result_array.size(); ++i) {
+            set_actual.insert(result_array[i].get_slice().to_string());
+        }
+        ASSERT_TRUE(set_expect == set_actual);
+    }
+
+    {
+        std::unordered_set<std::string> set_expect = {"4", "22"};
+        std::unordered_set<std::string> set_actual;
+        size_t null_values = 0;
+        auto result_array = dest_column->get(3).get_array();
+        for (int i = 0; i < result_array.size(); ++i) {
+            if (result_array[i].is_null()) {
+                ++null_values;
+            } else {
+                set_actual.insert(result_array[i].get_slice().to_string());
+            }
+        }
+        ASSERT_TRUE(set_expect == set_actual);
+        ASSERT_EQ(null_values, 1);
+    }
 }
 
 // NOLINTNEXTLINE

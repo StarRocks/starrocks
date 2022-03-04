@@ -10,15 +10,19 @@
 #include "storage/edit_version.h"
 #include "storage/fs/block_manager.h"
 #include "util/phmap/phmap.h"
+#include "util/phmap/phmap_dump.h"
 
 namespace starrocks {
 
 using IndexValue = uint64_t;
 static constexpr IndexValue NullIndexValue = -1;
 
+uint64_t key_index_hash(const void* data, size_t len);
+
 struct KeysInfo {
     std::vector<uint32_t> key_idxes;
     std::vector<uint64_t> hashes;
+    size_t size() const { return key_idxes.size(); }
 };
 
 class MutableIndex {
@@ -84,6 +88,19 @@ public:
     virtual Status erase(size_t n, const void* keys, IndexValue* old_values, KeysInfo* not_found,
                          size_t* num_found) = 0;
 
+    // get dump size of hashmap
+    virtual size_t dump_bound() = 0;
+
+    virtual bool dump(phmap::BinaryOutputArchive& ar_out) = 0;
+
+    virtual bool load_snapshot(phmap::BinaryInputArchive& ar_in) = 0;
+
+    // [not thread-safe]
+    virtual size_t size() = 0;
+
+    // [not thread-safe]
+    virtual size_t capacity() = 0;
+
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 };
 
@@ -99,6 +116,29 @@ public:
 
     // batch check key existence
     Status check_not_exist(size_t n, const void* keys);
+
+    static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<fs::ReadableBlock>&& rb);
+
+private:
+    Status _get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values,
+                         size_t* num_found) const;
+
+    Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info) const;
+
+    std::unique_ptr<fs::ReadableBlock> _rb;
+    EditVersion _version;
+    size_t _size = 0;
+    size_t _fixed_key_size = 0;
+    size_t _fixed_value_size = 0;
+
+    struct ShardInfo {
+        uint64_t offset;
+        uint64_t bytes;
+        uint32_t npage;
+        uint32_t size;
+    };
+
+    std::vector<ShardInfo> _shards;
 };
 
 // A persistent primary index contains an in-memory L0 and an on-SSD/NVMe L1,
@@ -112,7 +152,8 @@ public:
 //   if (pi.upsert(upsert_keys, values, old_values))
 //   pi.erase(delete_keys, old_values)
 //   pi.commit()
-// If any error occurred between prepare and commit, abort should be called, the
+//   pi.on_commited()
+// If any error occurred between prepare and on_commited, abort should be called, the
 // index maybe corrupted, currently for simplicity, the whole index is cleared and rebuilt.
 class PersistentIndex {
 public:
@@ -147,6 +188,9 @@ public:
     // commit modification
     Status commit(PersistentIndexMetaPB* index_meta);
 
+    // apply modification
+    Status on_commited();
+
     // batch index operations
 
     // batch get
@@ -175,8 +219,23 @@ public:
     // |old_values|: return old values if key exist, or set to NullValue if not
     Status erase(size_t n, const void* keys, IndexValue* old_values);
 
+    size_t mutable_index_size();
+
+    size_t mutable_index_capacity();
+
 private:
     std::string _get_l0_index_file_name(std::string& dir, const EditVersion& version);
+
+    size_t _dump_bound();
+
+    bool _dump(phmap::BinaryOutputArchive& ar_out);
+
+    // check _l0 should dump as snapshot or not
+    bool _can_dump_directly();
+
+    bool _load_snapshot(phmap::BinaryInputArchive& ar_in);
+
+    Status _delete_expired_index_file(const EditVersion& version);
 
     // batch append wal
     // |n|: size of key/value array
@@ -198,6 +257,8 @@ private:
     uint64_t _offset = 0;
     uint32_t _page_size = 0;
     std::unique_ptr<fs::WritableBlock> _index_block;
+
+    bool _dump_snapshot = false;
 };
 
 } // namespace starrocks

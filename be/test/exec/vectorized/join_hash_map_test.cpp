@@ -67,7 +67,7 @@ private:
     // used for build func
     void prepare_table_items(JoinHashTableItems* table_items, uint32_t row_count);
 
-    static void prepare_probe_state(HashTableProbeState* probe_state, uint32_t probe_row_count);
+    void prepare_probe_state(HashTableProbeState* probe_state, uint32_t probe_row_count);
     static void prepare_build_data(Buffer<int32_t>* build_data, uint32_t batch_count);
     static void prepare_probe_data(Buffer<int32_t>* probe_data, uint32_t probe_row_count);
 
@@ -492,16 +492,16 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, uint3
     table_items->row_count = row_count;
     table_items->next.resize(row_count + 1);
     table_items->build_pool = std::make_unique<MemPool>();
-    table_items->search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTimer");
     table_items->output_build_column_timer = ADD_TIMER(_runtime_profile, "OutputBuildColumnTimer");
-    table_items->output_probe_column_timer = ADD_TIMER(_runtime_profile, "OutputProbeColumnTimer");
-    table_items->output_tuple_column_timer = ADD_TIMER(_runtime_profile, "OutputTupleColumnTimer");
 }
 
 void JoinHashMapTest::prepare_probe_state(HashTableProbeState* probe_state, uint32_t probe_row_count) {
     probe_state->probe_row_count = probe_row_count;
     probe_state->cur_probe_index = 0;
     probe_state->probe_pool = std::make_unique<MemPool>();
+    probe_state->search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTimer");
+    probe_state->output_probe_column_timer = ADD_TIMER(_runtime_profile, "OutputProbeColumnTimer");
+    probe_state->output_tuple_column_timer = ADD_TIMER(_runtime_profile, "OutputTupleColumnTimer");
     JoinHashMapHelper::prepare_map_index(probe_state, config::vector_chunk_size);
 
     for (size_t i = 0; i < probe_row_count; i++) {

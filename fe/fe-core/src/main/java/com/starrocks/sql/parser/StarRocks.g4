@@ -85,9 +85,16 @@ columnNameWithComment
     : identifier string?
     ;
 
+outfile
+    : INTO OUTFILE file=string fileFormat? properties?
+    ;
+
+fileFormat
+    : FORMAT AS (identifier | string)
+    ;
 
 queryStatement
-    : query;
+    : query outfile?;
 
 query
     : withClause? queryNoWith
@@ -221,7 +228,7 @@ relationPrimary
     ;
 
 partitionNames
-    : (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
     ;
 
 expressionsWithDefault
@@ -422,7 +429,7 @@ nonReserved
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COSTS
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING
+    | FILTER | FIRST | FOLLOWING | FORMAT
     | GLOBAL
     | HASH | HOUR
     | INTERVAL
@@ -433,7 +440,7 @@ nonReserved
     | PRECEDING | PROPERTIES
     | ROLLUP
     | SECOND | SESSION | SETS | START
-    | TABLES | THAN | TIME | TYPE
+    | TABLES | TEMPORARY | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
     | YEAR

@@ -5811,10 +5811,8 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testInPredicateNormalize() throws Exception {
-        //        connectContext.setDatabase("default_cluster:test");
-
         starRocksAssert.withTable("create table test_in_pred_norm" +
-                "(c0 INT, c1 INT, c2 INT, c3 INT) " +
+                "(c0 INT, c1 INT, c2 INT, c3 INT, c4 DATE, c5 DATE) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
 
@@ -5838,6 +5836,29 @@ public class PlanFragmentTest extends PlanTestBase {
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (0, c1) ", "1: c0 != 0, 1: c0 != 2: c1");
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (0, c1, c2) ",
                 "1: c0 != 0, 1: c0 != 2: c1, 1: c0 != 3: c2");
+
+        // contains cast expression
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('1970-01-01', '1970-01-01', '1970-02-01') ",
+                "c4 IN ('1970-01-01', '1970-01-01', '1970-02-01')");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('292278994-08-17', '1970-01-01', '1970-02-01') ",
+                "c4 IN (CAST('292278994-08-17' AS DATE), '1970-01-01', '1970-02-01')");
+
+        // common expression
+        testPlanContains("SELECT " +
+                        "c4 IN ('292278994-08-17', '1970-02-01') AND " +
+                        "c5 IN ('292278994-08-17', '1970-02-01') AND " +
+                        "c5 IN ('292278994-08-17', '1970-02-01')  " +
+                        " FROM test_in_pred_norm",
+                "<slot 7> : ((5: c4 = 8: cast) OR (5: c4 = '1970-02-01')) AND ((6: c5 = 8: cast) OR (6: c5 = '1970-02-01'))");
+
+        String plan = getFragmentPlan("SELECT " +
+                "c4 IN ('292278994-08-17', '1970-02-01') AND c4 IN ('292278994-08-18', '1970-02-01') AND " +
+                "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-18', '1970-02-01') AND " +
+                "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-17', '1970-02-01')  " +
+                " FROM test_in_pred_norm");
+        Assert.assertTrue("plan is " + plan, plan.contains("common expressions:"));
+        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 8> "));
+        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 9> "));
     }
 
     @Test
