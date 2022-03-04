@@ -59,6 +59,8 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     size_t chunk_size = chunk->num_rows();
     _analytor->update_input_rows(chunk_size);
 
+    _analytor->remove_unused_buffer_values(state);
+
     for (size_t i = 0; i < _analytor->agg_fn_ctxs().size(); i++) {
         for (size_t j = 0; j < _analytor->agg_expr_ctxs()[i].size(); j++) {
             ColumnPtr column = _analytor->agg_expr_ctxs()[i][j]->evaluate(chunk.get());
