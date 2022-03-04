@@ -226,7 +226,10 @@ StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const WritableF
     if (!uri.parse(fname)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", fname));
     }
-    if (opts.mode != Env::CREATE_OR_OPEN_WITH_TRUNCATE) {
+    // NOTE: if the open mode is MUST_CREATE, technology we should send a head object request first
+    // before creating the S3OutputStream, but since this API only used in test environment now,
+    // here we assume that the caller can ensure that the file does not exist by themself.
+    if (opts.mode != Env::CREATE_OR_OPEN_WITH_TRUNCATE && opts.mode != Env::MUST_CREATE) {
         return Status::NotSupported(fmt::format("EnvS3 does not support open mode {}", opts.mode));
     }
     auto client = new_s3client(uri);
