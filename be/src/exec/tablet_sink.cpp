@@ -127,6 +127,9 @@ void NodeChannel::open() {
         request.set_load_mem_limit(_parent->_load_mem_limit);
     }
     request.set_load_channel_timeout_s(_parent->_load_channel_timeout_s);
+    // when load coordinator BE have upgrade to 2.1 but other BE still in 2.0 or previous
+    // we need use is_vectorized to make other BE open vectorized delta writer
+    request.set_is_vectorized(true);
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
