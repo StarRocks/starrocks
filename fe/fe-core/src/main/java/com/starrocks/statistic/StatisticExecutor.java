@@ -128,7 +128,7 @@ public class StatisticExecutor {
         }
 
         try {
-            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true);
+            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true, true);
             List<TResultBatch> sqlResult = executeStmt(context, execPlan);
             return deserializerStatisticData(sqlResult);
         } catch (Exception e) {
@@ -141,6 +141,7 @@ public class StatisticExecutor {
         return queryDictSync(dbId, tableId, ImmutableList.of(column));
     }
 
+    // If you call this function, you must ensure that the db lock is added
     public static List<TStatisticData> queryDictSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         if (dbId == -1) {
             return Collections.emptyList();
@@ -181,7 +182,7 @@ public class StatisticExecutor {
         }
 
         try {
-            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true);
+            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true, false);
             List<TResultBatch> sqlResult = executeStmt(context, execPlan);
             LOG.warn("Parse success {}", sql);
             return deserializerStatisticData(sqlResult);
@@ -285,7 +286,7 @@ public class StatisticExecutor {
         }
 
         try {
-            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, false);
+            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, false, true);
             List<TResultBatch> sqlResult = executeStmt(context, execPlan);
 
             CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
@@ -305,12 +306,14 @@ public class StatisticExecutor {
     }
 
     private static ExecPlan getExecutePlan(Map<String, Database> dbs, ConnectContext context,
-                                           StatementBase parsedStmt, boolean isStatistic) {
+                                           StatementBase parsedStmt, boolean isStatistic, boolean isLockDb) {
         SessionVariable sessionVariable = context.getSessionVariable();
         ExecPlan execPlan;
         try {
-            lock(dbs);
-
+            if (isLockDb) { 
+                lock(dbs);
+            }
+            
             Analyzer analyzer = new Analyzer(context.getCatalog(), context);
             QueryRelation query = (QueryRelation) analyzer.analyze(parsedStmt);
 
@@ -330,7 +333,9 @@ public class StatisticExecutor {
                     .createStatisticPhysicalPlan(optimizedPlan, plannerContext, context, logicalPlan.getOutputColumn(),
                             columnRefFactory, isStatistic);
         } finally {
-            unLock(dbs);
+            if (isLockDb) { 
+                unLock(dbs); 
+            }
         }
         return execPlan;
     }

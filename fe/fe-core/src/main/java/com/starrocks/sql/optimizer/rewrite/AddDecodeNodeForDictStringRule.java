@@ -57,6 +57,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -353,8 +354,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     newColRefToColumnMetaMap.remove(stringColumn);
                     newColRefToColumnMetaMap.put(newDictColumn, newColumn);
 
-                    ColumnDict dict = IDictManager.getInstance().getGlobalDict(tableId, stringColumn.getName());
-                    globalDicts.add(new Pair<>(newDictColumn.getId(), dict));
+                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, stringColumn.getName());
+                    if (dict != null && dict.isPresent()) {
+                        globalDicts.add(new Pair<>(newDictColumn.getId(), dict.get()));
+                    }
 
                     context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
                     context.hasEncoded = true;

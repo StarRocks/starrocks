@@ -60,6 +60,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public class LoadingTaskPlanner {
@@ -118,8 +119,10 @@ public class LoadingTaskPlanner {
 
             if (col.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(table.getId(),
                     col.getName())) {
-                ColumnDict dict = IDictManager.getInstance().getGlobalDict(table.getId(), col.getName());
-                globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict));
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(table.getId(), col.getName());
+                if (dict != null && dict.isPresent()) {
+                    globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict.get()));
+                }
             }
         }
         if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
