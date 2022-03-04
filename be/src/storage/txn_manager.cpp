@@ -326,11 +326,18 @@ Status TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId part
 Status TxnManager::persist_tablet_related_txns(std::vector<TabletSharedPtr> tablets) {
     std::unordered_set<std::string> persited;
     for (auto& tablet : tablets) {
+        if (tablet == nullptr) {
+            continue;
+        }
         auto path = tablet->data_dir()->path();
         // skip persisted meta.
         if (persited.find(path) != persited.end()) continue;
 
-        RETURN_IF_ERROR(tablet->data_dir()->get_meta()->flush());
+        auto st = tablet->data_dir()->get_meta()->flush();
+        if (!st.ok()) {
+            LOG(WARNING) << "Failed to persist tablet meta, tablet_id: " << tablet->table_id() << " res: " << st;
+            return st;
+        }
         persited.insert(path);
     }
     return Status::OK();

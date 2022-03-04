@@ -708,7 +708,8 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 }
 
 Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_ptr<ThreadPool>& threadpool,
-                                                    const TPublishVersionRequest publish_version_req, size_t* tablet_n,
+                                                    const TPublishVersionRequest publish_version_req,
+                                                    std::set<TTabletId>* tablet_ids, size_t* tablet_n,
                                                     std::vector<TTabletId>* error_tablet_ids) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
     int64_t transaction_id = publish_version_req.transaction_id;
@@ -787,9 +788,6 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
         // wait until that all jobs in threadpool are done.
         threadpool->wait();
 
-        std::vector<TabletSharedPtr> tablets;
-        tablets.reserve(tablet_infos.size());
-
         // check status.
         for (size_t i = 0; i < tablet_infos.size(); ++i) {
             const auto& tablet_info = tablet_infos[i];
@@ -801,13 +799,8 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
                     error_status = status;
                 }
             }
-
-            // collect related tablets.
-            auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_info.tablet_id,
-                                                                                  tablet_info.tablet_uid);
-            tablets.push_back(tablet);
+            tablet_ids->insert(tablet_info.tablet_id);
         }
-        StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
     }
     return error_status;
 }
@@ -829,6 +822,8 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
 
     std::vector<TAgentTaskRequest> task_requests;
     std::vector<TFinishTaskRequest> finish_task_requests;
+    std::set<TTabletId> tablet_ids;
+    std::vector<TabletSharedPtr> tablets;
 
     while (true) {
         {
@@ -841,14 +836,17 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
             }
 
             while (!worker_pool_this->_tasks.empty() && task_requests.size() < PUBLISH_VERSION_BATCH_SIZE) {
+                // collect some publish version tasks as a group.
                 task_requests.push_back(worker_pool_this->_tasks.front());
                 worker_pool_this->_tasks.pop_front();
             }
         }
 
-        for (auto& publish_version_task : task_requests) {
+        for (size_t i = 0; i < task_requests.size(); ++i) {
+            auto& publish_version_task = task_requests[i];
             StarRocksMetrics::instance()->publish_task_request_total.increment(1);
-            LOG(INFO) << "get publish version task, signature:" << publish_version_task.signature;
+            LOG(INFO) << "get publish version task, signature:" << publish_version_task.signature << " index: " << i
+                      << " group size: " << task_requests.size();
 
             auto& publish_version_req = publish_version_task.publish_version_req;
             std::vector<TTabletId> error_tablet_ids;
@@ -858,7 +856,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
             size_t tablet_n = 0;
             while (retry_time < PUBLISH_VERSION_MAX_RETRY) {
                 error_tablet_ids.clear();
-                status = _publish_version_in_parallel(arg_this, threadpool, publish_version_req, &tablet_n,
+                status = _publish_version_in_parallel(arg_this, threadpool, publish_version_req, &tablet_ids, &tablet_n,
                                                       &error_tablet_ids);
                 if (status.ok()) {
                     break;
@@ -893,6 +891,21 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
             finish_task_requests.emplace_back(std::move(finish_task_request));
         }
 
+        // persist all related meta once in a group.
+        tablets.reserve(tablet_ids.size());
+        for (const auto tablet_id : tablet_ids) {
+            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+            if (tablet != nullptr) {
+                tablets.push_back(tablet);
+            }
+        }
+
+        (void)StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
+
+        tablet_ids.clear();
+        tablets.clear();
+
+        // notify FE when all tasks of group have been finished.
         for (auto& finish_task_request : finish_task_requests) {
             worker_pool_this->_finish_task(finish_task_request);
             worker_pool_this->_remove_task_info(finish_task_request.task_type, finish_task_request.signature);
@@ -902,7 +915,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
     }
     threadpool->shutdown();
     return (void*)nullptr;
-}
+} // namespace starrocks
 
 void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_this) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
