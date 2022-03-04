@@ -117,7 +117,7 @@ bool NullableColumn::append_nulls(size_t count) {
     return true;
 }
 
-bool NullableColumn::append_strings(const std::vector<Slice>& strs) {
+bool NullableColumn::append_strings(const Buffer<Slice>& strs) {
     if (_data_column->append_strings(strs)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
         return true;
@@ -126,7 +126,7 @@ bool NullableColumn::append_strings(const std::vector<Slice>& strs) {
     return false;
 }
 
-bool NullableColumn::append_strings_overflow(const std::vector<Slice>& strs, size_t max_length) {
+bool NullableColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
     if (_data_column->append_strings_overflow(strs, max_length)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
         return true;
@@ -135,7 +135,7 @@ bool NullableColumn::append_strings_overflow(const std::vector<Slice>& strs, siz
     return false;
 }
 
-bool NullableColumn::append_continuous_strings(const std::vector<Slice>& strs) {
+bool NullableColumn::append_continuous_strings(const Buffer<Slice>& strs) {
     if (_data_column->append_continuous_strings(strs)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
         return true;
@@ -256,7 +256,7 @@ const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
     return pos;
 }
 
-void NullableColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+void NullableColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
     }
