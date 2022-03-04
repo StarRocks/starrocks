@@ -509,6 +509,7 @@ public class Coordinator {
                     descTable.setTupleDescriptors(Collections.emptyList());
                     if (isFirst) {
                         descTable = this.descTable;
+                        descTable.setIs_cached(false);
                         isFirst = false;
                     }
 
