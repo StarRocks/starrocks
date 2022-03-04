@@ -144,7 +144,7 @@ public:
     // This function will copy the [3, 2] row of src to this column.
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
-    virtual void append_selective(const Column& src, const std::vector<uint32_t>& indexes) {
+    virtual void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
         return append_selective(src, indexes.data(), 0, indexes.size());
     }
 
@@ -157,19 +157,19 @@ public:
 
     // Append multiple strings into this column.
     // Return false if the column is not a binary column.
-    [[nodiscard]] virtual bool append_strings(const std::vector<Slice>& strs) = 0;
+    [[nodiscard]] virtual bool append_strings(const Buffer<Slice>& strs) = 0;
 
     // Like append_strings. To achieve higher performance, this function will read 16 bytes out of
     // bounds. So the caller must make sure that no invalid address access exception occurs for
     // out-of-bounds reads
-    [[nodiscard]] virtual bool append_strings_overflow(const std::vector<Slice>& strs, size_t max_length) {
+    [[nodiscard]] virtual bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
         return false;
     }
 
     // Like `append_strings` but the corresponding storage of each slice is adjacent to the
     // next one's, the implementation can take advantage of this feature, e.g, copy the whole
     // memory at once.
-    [[nodiscard]] virtual bool append_continuous_strings(const std::vector<Slice>& strs) {
+    [[nodiscard]] virtual bool append_continuous_strings(const Buffer<Slice>& strs) {
         return append_strings(strs);
     }
 
@@ -253,7 +253,7 @@ public:
     // deserialize one data and append to this column
     virtual const uint8_t* deserialize_and_append(const uint8_t* pos) = 0;
 
-    virtual void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) = 0;
+    virtual void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) = 0;
 
     // One element serialize_size
     virtual uint32_t serialize_size(size_t idx) const = 0;
