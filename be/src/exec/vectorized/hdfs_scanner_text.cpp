@@ -108,9 +108,7 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_create_or_reinit_reader());
-#ifndef BE_TEST
-    SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
-#endif
+    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto slot = _scanner_params.materialize_slots[i];
         ConverterPtr conv = csv::get_converter(slot->type(), true);
@@ -124,7 +122,6 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
 }
 
 void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
-    update_counter();
     _reader.reset();
 }
 

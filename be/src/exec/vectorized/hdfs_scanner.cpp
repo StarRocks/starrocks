@@ -12,8 +12,15 @@
 
 #include "env/env_hdfs.h"
 #include "exec/vectorized/hdfs_scan_node.h"
+#include "exec/vectorized/hdfs_scanner_parquet.h"
 
 namespace starrocks::vectorized {
+
+HdfsScanner::~HdfsScanner() {
+    if (_runtime_state != nullptr) {
+        close(_runtime_state);
+    }
+}
 
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _runtime_state = runtime_state;
@@ -94,9 +101,7 @@ void HdfsScanner::_build_file_read_param() {
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_CANCELLED(_runtime_state);
-#ifndef BE_TEST
-    SCOPED_TIMER(_scanner_params.parent->_scan_timer);
-#endif
+    SCOPED_RAW_TIMER(&_stats.scan_ns);
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
         if (!_conjunct_ctxs.empty()) {
@@ -134,6 +139,7 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     if (_is_closed) {
         return;
     }
+    update_counter();
     Expr::close(_conjunct_ctxs, runtime_state);
     Expr::close(_min_max_conjunct_ctxs, runtime_state);
     for (auto& it : _conjunct_ctxs_by_slot) {
@@ -155,7 +161,7 @@ uint64_t HdfsScanner::exit_pending_queue() {
     return _pending_queue_sw.reset();
 }
 
-void HdfsScanner::update_counter() {
+void HdfsScanner::update_hdfs_counter() {
     static const char* const kHdfsIOProfileSectionPrefix = "HdfsIO";
     if (_file == nullptr) return;
 
@@ -165,13 +171,43 @@ void HdfsScanner::update_counter() {
     std::unique_ptr<NumericStatistics> statistics = std::move(res).value();
     if (statistics == nullptr || statistics->size() == 0) return;
 
-    auto&& profile = _scanner_params.parent->runtime_profile();
+    RuntimeProfile* profile = _scanner_params.parent_profile->runtime_profile;
     [[maybe_unused]] auto&& toplev = ADD_TIMER(profile, kHdfsIOProfileSectionPrefix);
     for (int64_t i = 0, sz = statistics->size(); i < sz; i++) {
         auto&& name = statistics->name(i);
         auto&& counter = ADD_CHILD_COUNTER(profile, name, TUnit::UNIT, kHdfsIOProfileSectionPrefix);
         COUNTER_UPDATE(counter, statistics->value(i));
     }
+}
+
+void HdfsScanner::update_counter() {
+#ifndef BE_TEST
+
+    update_hdfs_counter();
+
+    HdfsScanProfile* profile = _scanner_params.parent_profile;
+    COUNTER_UPDATE(profile->scan_timer, _stats.scan_ns);
+    COUNTER_UPDATE(profile->reader_init_timer, _stats.reader_init_ns);
+
+    COUNTER_UPDATE(profile->rows_read_counter, _stats.raw_rows_read);
+    COUNTER_UPDATE(profile->bytes_read_counter, _stats.bytes_read);
+    COUNTER_UPDATE(profile->expr_filter_timer, _stats.expr_filter_ns);
+    COUNTER_UPDATE(profile->io_timer, _stats.io_ns);
+    COUNTER_UPDATE(profile->io_counter, _stats.io_count);
+    COUNTER_UPDATE(profile->column_read_timer, _stats.column_read_ns);
+    COUNTER_UPDATE(profile->column_convert_timer, _stats.column_convert_ns);
+
+    const auto& parquet_profile = profile->parquet_profile;
+
+    COUNTER_UPDATE(parquet_profile->value_decode_timer, _stats.value_decode_ns);
+    COUNTER_UPDATE(parquet_profile->level_decode_timer, _stats.level_decode_ns);
+    COUNTER_UPDATE(parquet_profile->page_read_timer, _stats.page_read_ns);
+    COUNTER_UPDATE(parquet_profile->footer_read_timer, _stats.footer_read_ns);
+    COUNTER_UPDATE(parquet_profile->column_reader_init_timer, _stats.column_reader_init_ns);
+    COUNTER_UPDATE(parquet_profile->group_chunk_read_timer, _stats.group_chunk_read_ns);
+    COUNTER_UPDATE(parquet_profile->group_dict_filter_timer, _stats.group_dict_filter_ns);
+    COUNTER_UPDATE(parquet_profile->group_dict_decode_timer, _stats.group_dict_decode_ns);
+#endif
 }
 
 void HdfsFileReaderParam::set_columns_from_file(const std::unordered_set<std::string>& names) {
