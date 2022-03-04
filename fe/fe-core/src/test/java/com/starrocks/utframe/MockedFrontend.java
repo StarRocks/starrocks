@@ -25,11 +25,19 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
-import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.util.JdkUtils;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.journal.Journal;
+import com.starrocks.journal.JournalFactory;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LoggerContext;
 
 import java.io.File;
 import java.io.IOException;
@@ -39,6 +47,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /*
  * This class is used to start a Frontend process locally, for unit test.
@@ -78,8 +88,6 @@ public class MockedFrontend {
     // the min set of fe.conf.
     private static final Map<String, String> MIN_FE_CONF;
 
-    private Map<String, String> finalFeConf;
-
     static {
         MIN_FE_CONF = Maps.newHashMap();
         MIN_FE_CONF.put("sys_log_level", "INFO");
@@ -89,6 +97,11 @@ public class MockedFrontend {
         MIN_FE_CONF.put("edit_log_port", "9010");
         MIN_FE_CONF.put("priority_networks", "127.0.0.1/24");
         MIN_FE_CONF.put("sys_log_verbose_modules", "org");
+
+        // UT don't need log
+        LoggerContext context = (LoggerContext) LogManager.getContext(false);
+        context.getConfiguration().getRootLogger().setLevel(Level.WARN);
+        context.start();
     }
 
     private static class SingletonHolder {
@@ -99,11 +112,9 @@ public class MockedFrontend {
         return SingletonHolder.INSTANCE;
     }
 
-    public int getRpcPort() {
-        return Integer.valueOf(finalFeConf.get("rpc_port"));
-    }
-
     private boolean isInit = false;
+
+    private final Lock initLock = new ReentrantLock();
 
     // init the fe process. This must be called before starting the frontend process.
     // 1. check if all neccessary environment variables are set.
@@ -111,6 +122,7 @@ public class MockedFrontend {
     // 3. init fe.conf
     //      The content of "fe.conf" is a merge set of input `feConf` and MIN_FE_CONF
     public void init(String runningDir, Map<String, String> feConf) throws EnvVarNotSetException, IOException {
+        initLock.lock();
         if (isInit) {
             return;
         }
@@ -135,10 +147,11 @@ public class MockedFrontend {
         initFeConf(runningDir + "/conf/", feConf);
 
         isInit = true;
+        initLock.unlock();
     }
 
     private void initFeConf(String confDir, Map<String, String> feConf) throws IOException {
-        finalFeConf = Maps.newHashMap(MIN_FE_CONF);
+        Map<String, String> finalFeConf = Maps.newHashMap(MIN_FE_CONF);
         // these 2 configs depends on running dir, so set them here.
         finalFeConf.put("LOG_DIR", this.runningDir + "/log");
         finalFeConf.put("meta_dir", this.runningDir + "/starrocks-meta");
@@ -201,8 +214,6 @@ public class MockedFrontend {
                     throw new IllegalArgumentException("Java version doesn't match");
                 }
 
-                Log4jConfig.initLogging();
-
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
@@ -210,7 +221,23 @@ public class MockedFrontend {
                 ExecuteEnv.setup();
 
                 // init catalog and wait it be ready
+                new MockUp<JournalFactory>() {
+                    @Mock
+                    public Journal create(String name) {
+                        return new MockJournal();
+                    }
+                };
+
+                new MockUp<NetUtils>() {
+                    @Mock
+                    public boolean isPortUsing(String host, int port) {
+                        return false;
+                    }
+                };
+
                 Catalog.getCurrentCatalog().initialize(args);
+                Catalog.getCurrentCatalog().notifyNewFETypeTransfer(FrontendNodeType.MASTER);
+
                 Catalog.getCurrentCatalog().waitForReady();
 
                 while (true) {
@@ -224,9 +251,12 @@ public class MockedFrontend {
 
     // must call init() before start.
     public void start(String[] args) throws FeStartException, NotInitException {
+        initLock.lock();
         if (!isInit) {
             throw new NotInitException("fe process is not initialized");
         }
+        initLock.unlock();
+
         Thread feThread = new Thread(new FERunnable(this, args), FE_PROCESS);
         feThread.start();
         waitForCatalogReady();

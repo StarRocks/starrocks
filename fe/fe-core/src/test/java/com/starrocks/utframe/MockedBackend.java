@@ -21,18 +21,71 @@
 
 package com.starrocks.utframe;
 
-import com.baidu.bjf.remoting.protobuf.utils.JDKCompilerHelper;
-import com.baidu.bjf.remoting.protobuf.utils.compiler.JdkCompiler;
-import com.baidu.jprotobuf.pbrpc.transport.RpcServer;
-import com.starrocks.common.ThriftServer;
-import com.starrocks.common.util.JdkUtils;
+import com.google.common.collect.Queues;
+import com.starrocks.common.ClientPool;
+import com.starrocks.master.MasterImpl;
+import com.starrocks.proto.PCancelPlanFragmentRequest;
+import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PProxyRequest;
+import com.starrocks.proto.PProxyResult;
+import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.proto.PStatus;
+import com.starrocks.proto.PTriggerProfileReportResult;
+import com.starrocks.rpc.BackendServiceProxy;
+import com.starrocks.rpc.PBackendService;
+import com.starrocks.rpc.PExecPlanFragmentRequest;
+import com.starrocks.rpc.PFetchDataRequest;
+import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
+import com.starrocks.thrift.TAgentPublishRequest;
+import com.starrocks.thrift.TAgentResult;
+import com.starrocks.thrift.TAgentTaskRequest;
+import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TBackendInfo;
+import com.starrocks.thrift.TCancelPlanFragmentParams;
+import com.starrocks.thrift.TCancelPlanFragmentResult;
+import com.starrocks.thrift.TDeleteEtlFilesRequest;
+import com.starrocks.thrift.TEtlState;
+import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TExecPlanFragmentResult;
+import com.starrocks.thrift.TExportState;
+import com.starrocks.thrift.TExportStatusResult;
+import com.starrocks.thrift.TExportTaskRequest;
+import com.starrocks.thrift.TFetchDataParams;
+import com.starrocks.thrift.TFetchDataResult;
+import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.THeartbeatResult;
+import com.starrocks.thrift.TMasterInfo;
+import com.starrocks.thrift.TMiniLoadEtlStatusRequest;
+import com.starrocks.thrift.TMiniLoadEtlStatusResult;
+import com.starrocks.thrift.TMiniLoadEtlTaskRequest;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.utframe.MockedBackendFactory.BeThriftService;
-import org.apache.thrift.TProcessor;
+import com.starrocks.thrift.TRoutineLoadTask;
+import com.starrocks.thrift.TScanBatchResult;
+import com.starrocks.thrift.TScanCloseParams;
+import com.starrocks.thrift.TScanCloseResult;
+import com.starrocks.thrift.TScanNextBatchParams;
+import com.starrocks.thrift.TScanOpenParams;
+import com.starrocks.thrift.TScanOpenResult;
+import com.starrocks.thrift.TSnapshotRequest;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTabletStatResult;
+import com.starrocks.thrift.TTransmitDataParams;
+import com.starrocks.thrift.TTransmitDataResult;
+import com.starrocks.thrift.TUniqueId;
+import mockit.Mock;
+import mockit.MockUp;
 
-import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /*
  * Mocked Backend
@@ -47,94 +100,276 @@ import java.io.IOException;
  * In MockedBackendFactory, there default rpc service for above 3 rpc services.
  */
 public class MockedBackend {
+    private static final AtomicInteger basePort = new AtomicInteger(8000);
 
-    private ThriftServer heartbeatServer;
-    private ThriftServer beThriftServer;
-    private RpcServer rpcServer;
+    private final String host;
+    private final int brpcPort;
+    private final int heartBeatPort;
+    private final int beThriftPort;
+    private final int httpPort;
 
-    private String host;
-    private int heartbeatPort;
-    private int thriftPort;
-    private int brpcPort;
-    private int httpPort;
-    // the fe address: fe host and fe rpc port.
-    // This must be set explicitly after creating mocked Backend
-    private TNetworkAddress feAddress;
+    final MockHeatBeatClient heatBeatClient;
 
-    static {
-        int javaRuntimeVersion = JdkUtils.getJavaVersionAsInteger(System.getProperty("java.version"));
-        JDKCompilerHelper
-                .setCompiler(new JdkCompiler(JdkCompiler.class.getClassLoader(), String.valueOf(javaRuntimeVersion)));
-    }
+    final MockBeThriftClient thriftClient;
 
-    public MockedBackend(String host, int heartbeatPort, int thriftPort, int brpcPort, int httpPort,
-                         HeartbeatService.Iface hbService,
-                         BeThriftService backendService,
-                         Object pBackendService) throws IOException {
+    private final MockPBackendService pbService;
 
+    public MockedBackend(String host) throws Exception {
         this.host = host;
-        this.heartbeatPort = heartbeatPort;
-        this.thriftPort = thriftPort;
-        this.brpcPort = brpcPort;
-        this.httpPort = httpPort;
+        brpcPort = basePort.getAndIncrement();
+        heartBeatPort = basePort.getAndIncrement();
+        beThriftPort = basePort.getAndIncrement();
+        httpPort = basePort.getAndIncrement();
 
-        createHeartbeatService(heartbeatPort, hbService);
-        createBeThriftService(thriftPort, backendService);
-        createBrpcService(brpcPort, pBackendService);
+        heatBeatClient = new MockHeatBeatClient(beThriftPort, httpPort, brpcPort);
+        thriftClient = new MockBeThriftClient(this);
+        pbService = new MockPBackendService();
 
-        backendService.setBackend(this);
-        backendService.init();
-    }
+        ((MockGenericPool) ClientPool.heartbeatPool).register(this);
+        ((MockGenericPool) ClientPool.backendPool).register(this);
 
-    public void setFeAddress(TNetworkAddress feAddress) {
-        this.feAddress = feAddress;
-    }
+        new MockUp<BackendServiceProxy>() {
+            @Mock
+            protected synchronized PBackendService getProxy(TNetworkAddress address) {
+                return pbService;
+            }
+        };
 
-    public TNetworkAddress getFeAddress() {
-        return feAddress;
     }
 
     public String getHost() {
         return host;
     }
 
-    public int getHeartbeatPort() {
-        return heartbeatPort;
+    public int getBrpcPort() {
+        return brpcPort;
+    }
+
+    public int getHeartBeatPort() {
+        return heartBeatPort;
     }
 
     public int getBeThriftPort() {
-        return thriftPort;
-    }
-
-    public int getBrpcPort() {
-        return brpcPort;
+        return beThriftPort;
     }
 
     public int getHttpPort() {
         return httpPort;
     }
 
-    public void start() throws IOException {
-        heartbeatServer.start();
-        System.out.println("Be heartbeat service is started with port: " + heartbeatPort);
-        beThriftServer.start();
-        System.out.println("Be thrift service is started with port: " + thriftPort);
-        rpcServer.start(brpcPort);
-        System.out.println("Be brpc service is started with port: " + brpcPort);
+    private static class MockHeatBeatClient extends HeartbeatService.Client {
+        private final int brpcPort;
+        private final int beThriftPort;
+        private final int httpPort;
+
+        public MockHeatBeatClient(int beThriftPort, int beHttpPort, int beBrpcPort) {
+            super(null);
+            this.brpcPort = beBrpcPort;
+            this.beThriftPort = beThriftPort;
+            this.httpPort = beHttpPort;
+        }
+
+        @Override
+        public THeartbeatResult heartbeat(TMasterInfo master_info) {
+            TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
+            backendInfo.setBrpc_port(brpcPort);
+            return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
+        }
+
+        @Override
+        public void send_heartbeat(TMasterInfo master_info) {
+        }
+
+        @Override
+        public THeartbeatResult recv_heartbeat() {
+            TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
+            backendInfo.setBrpc_port(brpcPort);
+            return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
+        }
     }
 
-    private void createHeartbeatService(int heartbeatPort, HeartbeatService.Iface serviceImpl) throws IOException {
-        TProcessor tprocessor = new HeartbeatService.Processor<>(serviceImpl);
-        heartbeatServer = new ThriftServer(heartbeatPort, tprocessor);
+    private static class MockBeThriftClient extends BackendService.Client {
+        // task queue to save all agent tasks coming from Frontend
+        private final BlockingQueue<TAgentTaskRequest> taskQueue = Queues.newLinkedBlockingQueue();
+        private final TBackend tBackend;
+        private long reportVersion = 0;
+        private final MasterImpl master = new MasterImpl();
+
+        public MockBeThriftClient(MockedBackend backend) {
+            super(null);
+
+            tBackend = new TBackend(backend.getHost(), backend.getBeThriftPort(), backend.getHttpPort());
+            new Thread(() -> {
+                while (true) {
+                    try {
+                        TAgentTaskRequest request = taskQueue.take();
+                        TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
+                                request.getTask_type(), request.getSignature(), new TStatus(TStatusCode.OK));
+                        finishTaskRequest.setReport_version(++reportVersion);
+                        master.finishTask(finishTaskRequest);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }).start();
+        }
+
+        @Override
+        public TExecPlanFragmentResult exec_plan_fragment(TExecPlanFragmentParams params) {
+            return null;
+        }
+
+        @Override
+        public TCancelPlanFragmentResult cancel_plan_fragment(TCancelPlanFragmentParams params) {
+            return null;
+        }
+
+        @Override
+        public TTransmitDataResult transmit_data(TTransmitDataParams params) {
+            return null;
+        }
+
+        @Override
+        public TFetchDataResult fetch_data(TFetchDataParams params) {
+            return null;
+        }
+
+        @Override
+        public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) {
+            taskQueue.addAll(tasks);
+            return new TAgentResult(new TStatus(TStatusCode.OK));
+        }
+
+        @Override
+        public TAgentResult make_snapshot(TSnapshotRequest snapshot_request) {
+            return new TAgentResult(new TStatus(TStatusCode.OK));
+        }
+
+        @Override
+        public TAgentResult release_snapshot(String snapshot_path) {
+            return new TAgentResult(new TStatus(TStatusCode.OK));
+        }
+
+        @Override
+        public TAgentResult publish_cluster_state(TAgentPublishRequest request) {
+            return new TAgentResult(new TStatus(TStatusCode.OK));
+        }
+
+        @Override
+        public TAgentResult submit_etl_task(TMiniLoadEtlTaskRequest request) {
+            return new TAgentResult(new TStatus(TStatusCode.OK));
+        }
+
+        @Override
+        public TMiniLoadEtlStatusResult get_etl_status(TMiniLoadEtlStatusRequest request) {
+            return new TMiniLoadEtlStatusResult(new TStatus(TStatusCode.OK), TEtlState.FINISHED);
+        }
+
+        @Override
+        public TAgentResult delete_etl_files(TDeleteEtlFilesRequest request) {
+            return new TAgentResult(new TStatus(TStatusCode.OK));
+        }
+
+        @Override
+        public TStatus submit_export_task(TExportTaskRequest request) {
+            return new TStatus(TStatusCode.OK);
+        }
+
+        @Override
+        public TExportStatusResult get_export_status(TUniqueId task_id) {
+            return new TExportStatusResult(new TStatus(TStatusCode.OK), TExportState.FINISHED);
+        }
+
+        @Override
+        public TStatus erase_export_task(TUniqueId task_id) {
+            return new TStatus(TStatusCode.OK);
+        }
+
+        @Override
+        public TTabletStatResult get_tablet_stat() {
+            while (true) {
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            //            return new TTabletStatResult(Maps.newHashMap());
+        }
+
+        @Override
+        public TStatus submit_routine_load_task(List<TRoutineLoadTask> tasks) {
+            return new TStatus(TStatusCode.OK);
+        }
+
+        @Override
+        public TScanOpenResult open_scanner(TScanOpenParams params) {
+            return null;
+        }
+
+        @Override
+        public TScanBatchResult get_next(TScanNextBatchParams params) {
+            return null;
+        }
+
+        @Override
+        public TScanCloseResult close_scanner(TScanCloseParams params) {
+            return null;
+        }
     }
 
-    private void createBeThriftService(int beThriftPort, BackendService.Iface serviceImpl) throws IOException {
-        TProcessor tprocessor = new BackendService.Processor<>(serviceImpl);
-        beThriftServer = new ThriftServer(beThriftPort, tprocessor);
-    }
+    private static class MockPBackendService implements PBackendService {
+        private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    private void createBrpcService(int brpcPort, Object pBackendServiceImpl) {
-        rpcServer = new RpcServer();
-        rpcServer.registerService(pBackendServiceImpl);
+        @Override
+        public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
+            return executor.submit(() -> {
+                PExecPlanFragmentResult result = new PExecPlanFragmentResult();
+                PStatus pStatus = new PStatus();
+                pStatus.statusCode = 0;
+                result.status = pStatus;
+                return result;
+            });
+        }
+
+        @Override
+        public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(PCancelPlanFragmentRequest request) {
+            return executor.submit(() -> {
+                PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
+                PStatus pStatus = new PStatus();
+                pStatus.statusCode = 0;
+                result.status = pStatus;
+                return result;
+            });
+        }
+
+        @Override
+        public Future<PFetchDataResult> fetchDataAsync(PFetchDataRequest request) {
+            return executor.submit(() -> {
+                PFetchDataResult result = new PFetchDataResult();
+                PStatus pStatus = new PStatus();
+                pStatus.statusCode = 0;
+
+                PQueryStatistics pQueryStatistics = new PQueryStatistics();
+                pQueryStatistics.scanRows = 0L;
+                pQueryStatistics.scanBytes = 0L;
+
+                result.status = pStatus;
+                result.packetSeq = 0L;
+                result.queryStatistics = pQueryStatistics;
+                result.eos = true;
+                return result;
+            });
+        }
+
+        @Override
+        public Future<PTriggerProfileReportResult> triggerProfileReport(PTriggerProfileReportRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PProxyResult> getInfo(PProxyRequest request) {
+            return null;
+        }
     }
 }
