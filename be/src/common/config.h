@@ -177,6 +177,7 @@ CONF_mInt32(doris_scanner_thread_pool_thread_num, "48");
 CONF_Int32(doris_scanner_thread_pool_queue_size, "102400");
 // Number of etl thread pool size.
 CONF_Int32(etl_thread_pool_size, "8");
+CONF_Int32(udf_thread_pool_size, "1");
 // Number of etl thread pool size.
 CONF_Int32(etl_thread_pool_queue_size, "256");
 // Port on which to run StarRocks test backend.

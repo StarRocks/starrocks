@@ -9,6 +9,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/vectorized/function_helper.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 /**
@@ -69,9 +70,9 @@ public:
 
     Status prepare(TableFunctionState* state) const override { return Status::OK(); }
 
-    Status open(TableFunctionState* state) const override { return Status::OK(); };
+    Status open(RuntimeState* runtime_state, TableFunctionState* state) const override { return Status::OK(); };
 
-    Status close(TableFunctionState* state) const override {
+    Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
         delete state;
         return Status::OK();
     }

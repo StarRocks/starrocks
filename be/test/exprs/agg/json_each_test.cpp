@@ -5,6 +5,7 @@
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/table_function_factory.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "testutil/function_utils.h"
 
@@ -16,6 +17,7 @@ public:
         const TableFunction* func =
                 get_table_function("json_each", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_JSON}, TFunctionBinaryType::BUILTIN);
 
+        RuntimeState* rt_state = nullptr;
         // input
         auto json_column = JsonColumn::create();
         json_column->append(JsonValue::parse(input).value());
@@ -26,7 +28,7 @@ public:
         // execute
         ASSERT_OK(func->init({}, &func_state));
         func_state->set_params(input_columns);
-        ASSERT_OK(func->open(func_state));
+        ASSERT_OK(func->open(rt_state, func_state));
         auto [result_columns, offset_column] = func->process(func_state, &eos);
 
         // check
@@ -44,7 +46,7 @@ public:
         }
 
         // close
-        func->close(func_state);
+        func->close(rt_state, func_state);
     }
 };
 
