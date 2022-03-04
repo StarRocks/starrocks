@@ -236,7 +236,7 @@ expression
     : booleanExpression                                                                   #expressionDefault
     | (NOT | LOGICAL_NOT) expression                                                      #logicalNot
     | left=expression operator=AND right=expression                                       #logicalBinary
-    | left=expression operator=OR right=expression                                        #logicalBinary
+    | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
     ;
 
 booleanExpression
@@ -265,7 +265,6 @@ valueExpression
       right = valueExpression                                                             #arithmeticBinary
     | left = valueExpression operator =
         (PLUS_SYMBOL | MINUS_SYMBOL) right=valueExpression                                #arithmeticBinary
-    | left = valueExpression CONCAT_SYMBOL right = valueExpression                        #concatenation
     ;
 
 primaryExpression

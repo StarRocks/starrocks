@@ -78,6 +78,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -116,6 +117,12 @@ import java.util.stream.Collectors;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
+    private long sqlMode;
+
+    public AstBuilder(long sqlMode) {
+        this.sqlMode = sqlMode;
+    }
+
     @Override
     public ParseNode visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         return visit(context.statement());
@@ -882,7 +889,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitLogicalBinary(StarRocksParser.LogicalBinaryContext context) {
         Expr left = (Expr) visit(context.left);
         Expr right = (Expr) visit(context.right);
-        return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right);
+
+        if (context.operator.getType() == StarRocksLexer.LOGICAL_OR) {
+            if ((this.sqlMode & SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0) {
+                return new CompoundPredicate(CompoundPredicate.Operator.OR, left, right);
+            } else {
+                return new FunctionCallExpr("concat", new FunctionParams(Lists.newArrayList(left, right)));
+            }
+        } else {
+            return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right);
+        }
     }
 
     private static CompoundPredicate.Operator getLogicalBinaryOperator(Token token) {
@@ -1181,12 +1197,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     new FunctionParams(false, visit(context.expression(), Expr.class)));
         }
         throw new ParsingException("Unknown window function " + context.name.getText());
-    }
-
-    @Override
-    public ParseNode visitConcatenation(StarRocksParser.ConcatenationContext context) {
-        return new FunctionCallExpr("concat",
-                new FunctionParams(Lists.newArrayList(visit(context.valueExpression(), Expr.class))));
     }
 
     @Override

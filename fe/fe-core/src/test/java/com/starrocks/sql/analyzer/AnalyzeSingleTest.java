@@ -1,6 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -13,6 +17,7 @@ import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeSingleTest {
     // use a unique dir so that it won't be conflict with other unit test which
@@ -388,4 +393,24 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select 1,2,3 from dual");
         analyzeFail("select * from dual", "No tables used");
     }
+
+    @Test
+    public void testSqlMode() {
+        ConnectContext connectContext = getConnectContext();
+        analyzeFail("select 'a' || 'b' from t0",
+                "Operand '('a') OR ('b')' part of predicate ''a'' should return type 'BOOLEAN'");
+
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select true || false from t0",
+                connectContext).get(0);
+        Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
+        analyzer.analyze(statementBase);
+        Assert.assertEquals("SELECT (TRUE) OR (FALSE) FROM `default_cluster:test`.`t0`"
+                ,AST2SQL.toString(statementBase));
+
+        connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select 'a' || 'b' from t0",
+                connectContext).get(0);
+        analyzer.analyze(statementBase);
+        Assert.assertEquals("SELECT concat('a', 'b') FROM `default_cluster:test`.`t0`"
+                ,AST2SQL.toString(statementBase));    }
 }

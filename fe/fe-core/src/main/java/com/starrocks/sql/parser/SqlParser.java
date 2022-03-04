@@ -27,14 +27,14 @@ public class SqlParser {
 
         for (String sql : splitSql) {
             try {
-                StarRocksLexer lexer =
-                        new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+                StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
                 CommonTokenStream tokenStream = new CommonTokenStream(lexer);
                 StarRocksParser parser = new StarRocksParser(tokenStream);
                 parser.removeErrorListeners();
                 parser.addErrorListener(new ErrorHandler());
                 StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-                statements.add((StatementBase) new AstBuilder().visitSingleStatement(sqlStatements.singleStatement(0)));
+                statements.add((StatementBase) new AstBuilder(session.getSessionVariable().getSqlMode())
+                        .visitSingleStatement(sqlStatements.singleStatement(0)));
             } catch (ParsingException parsingException) {
                 StatementBase statement = parseWithOldParser(sql, session);
                 if (statement instanceof QueryStatement
