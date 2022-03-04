@@ -445,6 +445,9 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     _num_rows_written = 0;
     _total_data_size = 0;
     _total_index_size = 0;
+    if (_rowset_txn_meta_pb) {
+        _rowset_txn_meta_pb->clear_partial_rowset_footers();
+    }
 
     // since the segment already NONOVERLAPPING here, make the _create_segment_writer
     // method to create segment data files, rather than temporary segment files.
