@@ -37,14 +37,14 @@ public:
     const FieldPtr& field(size_t idx) const;
     const Fields& fields() const { return _fields; }
 
-    std::vector<std::string> field_names() const;
+    Buffer<std::string> field_names() const;
 
     // return null if name not found
     FieldPtr get_field_by_name(const std::string& name) const;
 
     size_t get_field_index_by_name(const std::string& name) const;
 
-    void convert_to(Schema* new_schema, const std::vector<FieldType>& new_types) const {
+    void convert_to(Schema* new_schema, const Buffer<FieldType>& new_types) const {
         // fields
         int num_fields = _fields.size();
         new_schema->_fields.resize(num_fields);
