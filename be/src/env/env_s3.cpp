@@ -17,6 +17,7 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <aws/transfer/TransferHandle.h>
 #include <fmt/core.h>
+#include <stdlib.h>
 #include <time.h>
 
 #include <limits>
@@ -194,7 +195,14 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 }
 
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
-    Aws::Client::ClientConfiguration config;
+    // Since aws sdk has changed the Aws::Client::ClientConfiguration default constructor to
+    // search for the region (where as before 1.8 it has been hard coded default of "us-east-1").
+    // Part of that change is looking through the ec2 metadata, which can take a long time.
+    // By having AWS_EC2_METADATA_DISABLED it avoids doing this search.
+    // For more details, please refer https://github.com/aws/aws-sdk-cpp/issues/1440
+    setenv("AWS_EC2_METADATA_DISABLED", "true", 1);
+    Aws::Client::ClientConfiguration config("default");
+    setenv("AWS_EC2_METADATA_DISABLED", "false", 1);
     config.scheme = Aws::Http::Scheme::HTTP; // TODO: use the scheme in uri
     if (!uri.endpoint().empty()) {
         config.endpointOverride = uri.endpoint();
