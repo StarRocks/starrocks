@@ -34,9 +34,8 @@ public:
 
         std::random_device dev;
         std::mt19937 rng(dev());
-        std::uniform_int_distribution<std::mt19937::result_type> uniform_int(1,
-                                                                             1000000); // distribution in range [1, 6]
-        std::poisson_distribution<std::mt19937::result_type> poisson_int(1000000);     // distribution in range [1, 6]
+        std::uniform_int_distribution<std::mt19937::result_type> uniform_int(1, 1'000'000 * std::pow(2, slot_index));
+        std::poisson_distribution<std::mt19937::result_type> poisson_int(1000000);
         static std::string alphanum =
                 "0123456789"
                 "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
