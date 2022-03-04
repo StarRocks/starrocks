@@ -26,6 +26,8 @@
 #include <sstream>
 #include <string>
 
+#include "common/constexpr.h"
+
 namespace starrocks {
 
 // The block size of the column storage file, which may be loaded into memory in its entirety, needs to be strictly controlled, defined here as 256MB
@@ -70,9 +72,6 @@ static const uint64_t GB_EXCHANGE_BYTE = 1024 * 1024 * 1024;
 
 // bloom filter fpp
 static const double BLOOM_FILTER_DEFAULT_FPP = 0.05;
-
-// default value of chunk_size, it's a value decided at compile time
-static const int32_t DEFAULT_CHUNK_SIZE = 4096;
 
 #define OLAP_GOTO(label) goto label
 
