@@ -53,7 +53,7 @@ const FieldPtr& Schema::field(size_t idx) const {
     return _fields[idx];
 }
 
-std::vector<std::string> Schema::field_names() const {
+Buffer<std::string> Schema::field_names() const {
     std::vector<std::string> names;
     names.reserve(_fields.size());
     for (const auto& field : _fields) {
