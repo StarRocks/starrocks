@@ -109,6 +109,8 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
 
     RuntimeState* runtime_state = suite._runtime_state.get();
     int64_t item_processed = 0;
+    int64_t data_size = 0;
+    int64_t mem_usage = 0;
     for (auto _ : state) {
         state.PauseTiming();
 
@@ -132,7 +134,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
         }
         case MergeSort: {
             sorter.reset(new ChunksSorterTopn(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, 0,
-                                              limit_rows, config::vector_chunk_size));
+                                              limit_rows));
             expected_rows = limit_rows;
             break;
         }
@@ -141,6 +143,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
         }
         sorter->set_compare_strategy(strategy);
 
+        int64_t iteration_data_size = 0;
         for (int i = 0; i < num_chunks; i++) {
             // Clone is necessary for HeapSorter
             auto cloned = chunk->clone_empty();
@@ -148,15 +151,19 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
             ChunkPtr ck(cloned.release());
 
             // TopN Sorter needs timing when updating
+            iteration_data_size += ck->bytes_usage();
             state.ResumeTiming();
             sorter->update(runtime_state, ck);
             state.PauseTiming();
+            mem_usage = std::max(mem_usage, sorter->mem_usage());
         }
+        data_size = std::max(data_size, iteration_data_size);
 
         state.ResumeTiming();
         sorter->done(suite._runtime_state.get());
         item_processed += total_rows;
         state.PauseTiming();
+        mem_usage = std::max(mem_usage, sorter->mem_usage());
 
         bool eos = false;
         size_t actual_rows = 0;
@@ -170,6 +177,8 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
         ASSERT_EQ(expected_rows, actual_rows);
     }
     state.counters["rows_sorted"] += item_processed;
+    state.counters["data_size"] += data_size;
+    state.counters["mem_usage"] = mem_usage;
     state.SetItemsProcessed(item_processed);
 }
 
@@ -197,7 +206,7 @@ static void BM_topn_limit_mergesort(benchmark::State& state) {
 
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
     // num_chunks
-    for (int num_chunks = 64; num_chunks <= 4096; num_chunks *= 8) {
+    for (int num_chunks = 64; num_chunks <= 32768; num_chunks *= 8) {
         // num_columns
         for (int num_columns = 1; num_columns <= 8; num_columns++) {
             b->Args({num_chunks, num_columns});
@@ -206,7 +215,7 @@ static void CustomArgsFull(benchmark::internal::Benchmark* b) {
 }
 static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
     // num_chunks
-    for (int num_chunks = 1024; num_chunks <= 4096; num_chunks *= 4) {
+    for (int num_chunks = 1024; num_chunks <= 32768; num_chunks *= 4) {
         // num_columns
         for (int num_columns = 1; num_columns <= 8; num_columns++) {
             // limit

@@ -83,7 +83,7 @@ while true; do
         --help) HELP=1 ; shift ;; 
         --with-aws) WITH_AWS=ON; shift ;;
         --with-hdfs) WITH_HDFS=ON; shift ;;
-        --with-bench) WITH_BNECH=ON; shift ;;
+        --with-bench) WITH_BENCH=ON; shift ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac

@@ -643,7 +643,8 @@ ENDFUNCTION()
 
 # Add a benchmark to BE
 FUNCTION(ADD_BE_BENCH TEST_NAME)
-    if (NOT ${WITH_BENCH}) 
+
+    if (${WITH_BENCH} STREQUAL "OFF")
         return()
     endif()
     
