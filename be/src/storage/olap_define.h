@@ -72,7 +72,7 @@ static const uint64_t GB_EXCHANGE_BYTE = 1024 * 1024 * 1024;
 static const double BLOOM_FILTER_DEFAULT_FPP = 0.05;
 
 // default value of chunk_size, it's a value decided at compile time
-static const int32_t DEFAULT_CHUNK_SIZE = 4096;
+constexpr const int32_t DEFAULT_CHUNK_SIZE = 4096;
 
 #define OLAP_GOTO(label) goto label
 

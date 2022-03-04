@@ -275,8 +275,6 @@ private:
 
     Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result);
 
-    static const int DEFAULT_CHUNK_SIZE = 4096;
-
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some of object in _obj_pool will use profile when deconstructing.
     std::shared_ptr<RuntimeProfile> _profile;
