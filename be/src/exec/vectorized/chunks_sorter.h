@@ -265,6 +265,12 @@ struct DataSegment {
 };
 using DataSegments = std::vector<DataSegment>;
 
+enum CompareStrategy {
+    Default = 0,
+    RowWise = 1,
+    ColumnWise = 2,
+};
+
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorter {
 public:
@@ -312,6 +318,9 @@ public:
 
     virtual int64_t mem_usage() const = 0;
 
+    // For test only
+    void set_compare_strategy(CompareStrategy cmp) { _compare_strategy = cmp; }
+
 protected:
     inline size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
@@ -332,6 +341,8 @@ protected:
     RuntimeProfile::Counter* _output_timer = nullptr;
 
     std::atomic<bool> _is_sink_complete = false;
+
+    CompareStrategy _compare_strategy = Default;
 };
 
 } // namespace starrocks::vectorized
