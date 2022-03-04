@@ -16,7 +16,7 @@ Status AssertNumRowsOperator::prepare(RuntimeState* state) {
 
     for (const auto& desc : _factory->row_desc()->tuple_descriptors()) {
         for (const auto& slot : desc->slots()) {
-            chunk->append_column(ColumnHelper::create_const_null_column(1), slot->id());
+            chunk->append_column(ColumnHelper::create_column(slot->type(), true, false, 1), slot->id());
         }
     }
 
