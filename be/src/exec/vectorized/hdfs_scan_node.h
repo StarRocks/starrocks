@@ -137,7 +137,7 @@ private:
 
     std::vector<THdfsScanRange> _scan_ranges;
     std::vector<HdfsFileDesc*> _hdfs_files;
-    const HdfsBaseTableDescriptor* _hdfs_table = nullptr;
+    const LakeTableDescriptor* _lake_table = nullptr;
     std::vector<std::string> _hive_column_names;
 
     std::unique_ptr<MemPool> _mem_pool;

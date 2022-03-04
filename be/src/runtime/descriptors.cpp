@@ -123,8 +123,8 @@ Status HdfsPartitionDescriptor::create_part_key_exprs(ObjectPool* pool, int32_t 
 }
 
 HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
-        : HdfsBaseTableDescriptor(tdesc, pool) {
-    _hdfs_base_dir = tdesc.hdfsTable.hdfs_base_dir;
+        : LakeTableDescriptor(tdesc, pool) {
+    _hdfs_base_path = tdesc.hdfsTable.hdfs_base_dir;
     _columns = tdesc.hdfsTable.columns;
     _partition_columns = tdesc.hdfsTable.partition_columns;
     for (const auto& entry : tdesc.hdfsTable.partitions) {
@@ -134,13 +134,13 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
 }
 
 IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
-        : HdfsBaseTableDescriptor(tdesc, pool) {
+        : LakeTableDescriptor(tdesc, pool) {
     _table_location = tdesc.icebergTable.location;
     _columns = tdesc.icebergTable.columns;
 }
 
 HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
-        : HdfsBaseTableDescriptor(tdesc, pool) {
+        : LakeTableDescriptor(tdesc, pool) {
     _table_location = tdesc.hudiTable.location;
     _columns = tdesc.hudiTable.columns;
     _partition_columns = tdesc.hudiTable.partition_columns;
@@ -150,14 +150,13 @@ HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     }
 }
 
-HdfsBaseTableDescriptor::HdfsBaseTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
-        : TableDescriptor(tdesc) {}
+LakeTableDescriptor::LakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
 
-bool HdfsBaseTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
+bool LakeTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
     return get_partition_col_index(slot) >= 0;
 }
 
-HdfsPartitionDescriptor* HdfsBaseTableDescriptor::get_partition(int64_t partition_id) const {
+HdfsPartitionDescriptor* LakeTableDescriptor::get_partition(int64_t partition_id) const {
     auto it = _partition_id_to_desc_map.find(partition_id);
     if (it == _partition_id_to_desc_map.end()) {
         return nullptr;
@@ -165,7 +164,7 @@ HdfsPartitionDescriptor* HdfsBaseTableDescriptor::get_partition(int64_t partitio
     return it->second;
 }
 
-int HdfsBaseTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) const {
+int LakeTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) const {
     int idx = 0;
     for (const auto& partition_column : _partition_columns) {
         if (partition_column.column_name == slot->col_name()) {
