@@ -115,6 +115,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
@@ -171,7 +172,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (limit != Operator.DEFAULT_LIMIT && limit < statistics.getOutputRowCount()) {
             statisticsBuilder.setOutputRowCount(limit);
         }
-        if (context.getChildrenStatistics().stream().anyMatch(Statistics::isTableRowCountMayInaccurate)) {
+        // CTE consumer has children but the children do not estimate the statistics, so here need to filter null
+        if (context.getChildrenStatistics().stream().filter(Objects::nonNull)
+                .anyMatch(Statistics::isTableRowCountMayInaccurate)) {
             statisticsBuilder.setTableRowCountMayInaccurate(true);
         }
 
@@ -345,12 +348,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     table.getTableLevelColumnStats(requiredColumns.stream().
                             map(ColumnRefOperator::getName).collect(Collectors.toList()));
             List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
-                            computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
+                    computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                     .collect(Collectors.toList());
             columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                            new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                                    hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                                    hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
+                    new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                            hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                            hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
                     .collect(Collectors.toList());
         } catch (Exception e) {
             LOG.warn("Hudi table {} get column failed. error : {}", table.getName(), e);
@@ -395,7 +398,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void computeNormalExternalTableScanNode(Operator node, ExpressionContext context, Table table,
-                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+                                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
         builder.setOutputRowCount(1);
 
