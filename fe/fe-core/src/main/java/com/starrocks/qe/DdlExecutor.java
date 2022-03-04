@@ -29,6 +29,7 @@ import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterClusterStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
+import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -225,6 +226,8 @@ public class DdlExecutor {
             catalog.getResourceMgr().createResource((CreateResourceStmt) ddlStmt);
         } else if (ddlStmt instanceof DropResourceStmt) {
             catalog.getResourceMgr().dropResource((DropResourceStmt) ddlStmt);
+        }else if (ddlStmt instanceof AlterResourceStmt) {
+            catalog.getResourceMgr().alterResource((AlterResourceStmt) ddlStmt);
         } else if (ddlStmt instanceof CancelExportStmt) {
             catalog.getExportMgr().cancelExportJob((CancelExportStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateAnalyzeJobStmt) {
