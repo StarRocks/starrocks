@@ -59,6 +59,12 @@ std::atomic<int32_t>* OpenLimitAllocator::allocate(const std::string& key) {
 HdfsScanNode::HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {}
 
+HdfsScanNode::~HdfsScanNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
+
 Status HdfsScanNode::_init_table() {
     _lake_table = dynamic_cast<const LakeTableDescriptor*>(_tuple_desc->table_desc());
     if (_lake_table == nullptr) {
@@ -80,8 +86,7 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _has_partition_conjuncts = true;
     }
 
-    _tuple_id = hdfs_scan_node.tuple_id;
-    _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
+    _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
     RETURN_IF_ERROR(_init_table());
 
     if (hdfs_scan_node.__isset.min_max_tuple_id) {
@@ -248,6 +253,7 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
     HdfsScanner* scanner = nullptr;
     if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::PARQUET) {
         _profile.parquet_profile = _pool->add(new HdfsParquetProfile());
+        _profile.parquet_profile->init(_runtime_profile.get());
         scanner = _pool->add(new HdfsParquetScanner());
     } else if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::ORC) {
         scanner = _pool->add(new HdfsOrcScanner());

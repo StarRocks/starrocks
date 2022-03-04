@@ -16,12 +16,6 @@
 
 namespace starrocks::vectorized {
 
-HdfsScanner::~HdfsScanner() {
-    if (_runtime_state != nullptr) {
-        close(_runtime_state);
-    }
-}
-
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _runtime_state = runtime_state;
     _scanner_params = scanner_params;

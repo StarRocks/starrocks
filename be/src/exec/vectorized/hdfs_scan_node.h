@@ -28,11 +28,7 @@ struct HdfsFileDesc {
 class HdfsScanNode final : public starrocks::ScanNode {
 public:
     HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~HdfsScanNode() override {
-        if (runtime_state() != nullptr) {
-            close(runtime_state());
-        }
-    }
+    ~HdfsScanNode() override;
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
@@ -94,7 +90,6 @@ private:
 
     Status _init_table();
 
-    int _tuple_id = 0;
     const TupleDescriptor* _tuple_desc = nullptr;
 
     int _min_max_tuple_id = 0;
@@ -131,10 +126,6 @@ private:
     std::vector<HdfsFileDesc*> _hdfs_files;
     const LakeTableDescriptor* _lake_table = nullptr;
     std::vector<std::string> _hive_column_names;
-
-    // std::unique_ptr<MemPool> _mem_pool;
-
-    bool _eos = false;
 
     std::mutex _mtx;
     Stack<ChunkPtr> _chunk_pool;

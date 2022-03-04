@@ -47,8 +47,7 @@ struct HdfsScanStats {
 
 class HdfsParquetProfile;
 
-class HdfsScanProfile {
-public:
+struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
 
     RuntimeProfile::Counter* rows_read_counter = nullptr;
@@ -178,7 +177,7 @@ inline bool atomic_cas(std::atomic_bool* lvalue, std::atomic_bool* rvalue, bool 
 class HdfsScanner {
 public:
     HdfsScanner() = default;
-    virtual ~HdfsScanner();
+    virtual ~HdfsScanner() = default;
 
     Status open(RuntimeState* runtime_state);
     void close(RuntimeState* runtime_state) noexcept;

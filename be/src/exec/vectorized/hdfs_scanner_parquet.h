@@ -31,7 +31,11 @@ private:
 class HdfsParquetScanner final : public HdfsScanner {
 public:
     HdfsParquetScanner() = default;
-    ~HdfsParquetScanner() override = default;
+    ~HdfsParquetScanner() override {
+        if (_runtime_state != nullptr) {
+            close(_runtime_state);
+        }
+    }
 
     Status do_open(RuntimeState* runtime_state) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
