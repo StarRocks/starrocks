@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "cctz/time_zone.h"
+#include "common/constexpr.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
@@ -274,8 +275,6 @@ private:
     Status create_error_log_file();
 
     Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result);
-
-    static const int DEFAULT_CHUNK_SIZE = 2048;
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some of object in _obj_pool will use profile when deconstructing.
