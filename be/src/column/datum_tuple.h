@@ -13,7 +13,7 @@ class Schema;
 class DatumTuple {
 public:
     DatumTuple() = default;
-    explicit DatumTuple(std::vector<Datum> datums) : _datums(std::move(datums)) {}
+    explicit DatumTuple(Buffer<Datum> datums) : _datums(std::move(datums)) {}
 
     size_t size() const { return _datums.size(); }
 
@@ -31,10 +31,10 @@ public:
 
     int compare(const Schema& schema, const DatumTuple& rhs) const;
 
-    const std::vector<Datum>& datums() const { return _datums; }
+    const Buffer<Datum>& datums() const { return _datums; }
 
 private:
-    std::vector<Datum> _datums;
+    Buffer<Datum> _datums;
 };
 
 } // namespace starrocks::vectorized
