@@ -38,7 +38,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 // For syntax select * from tbl INTO OUTFILE xxxx
-public class OutFileClause {
+public class OutFileClause implements ParseNode {
     private static final Logger LOG = LogManager.getLogger(OutFileClause.class);
 
     private static final String BROKER_PROP_PREFIX = "broker.";
