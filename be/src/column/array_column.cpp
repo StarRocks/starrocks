@@ -144,7 +144,7 @@ Status ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
     }
 
     if (!need_resize) {
-        std::vector<uint32_t> element_idxes;
+        Buffer<uint32_t> element_idxes;
         for (size_t i = 0; i < replace_num; ++i) {
             size_t element_count = src_offsets.get_data()[i + 1] - src_offsets.get_data()[i];
             size_t element_offset = _offsets->get_data()[indexes[i]];
@@ -230,7 +230,7 @@ void ArrayColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, s
     }
 }
 
-void ArrayColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+void ArrayColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     reserve(chunk_size);
     for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
