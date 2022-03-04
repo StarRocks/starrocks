@@ -42,12 +42,13 @@ public class ExternalTablePredicateExtractor {
             CompoundPredicateOperator operator = (CompoundPredicateOperator) op;
             switch (operator.getCompoundType()) {
                 case AND: {
+                    List<ScalarOperator> conjuncts = Utils.extractConjuncts(operator);
                     // for CNF, we can push down each predicate independently
-                    for (ScalarOperator child : operator.getChildren()) {
-                        if (child.accept(new CanFullyPushDownVisitor(), null)) {
-                            pushedPredicates.add(child);
+                    for (ScalarOperator conjunct : conjuncts) {
+                        if (conjunct.accept(new CanFullyPushDownVisitor(), null)) {
+                            pushedPredicates.add(conjunct);
                         } else {
-                            reservedPredicates.add(child);
+                            reservedPredicates.add(conjunct);
                         }
                     }
                     return;

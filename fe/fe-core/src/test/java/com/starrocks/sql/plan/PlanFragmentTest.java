@@ -1850,6 +1850,16 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  0:SCAN MYSQL\n" +
                 "     TABLE: `ods_order`\n" +
                 "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE ((order_dt IN ('2025-08-08', '2025-08-08')) OR ((order_dt >= '2025-08-01') AND (order_dt <= '2025-09-05')))"));
+
+        sql = "select * from ods_order where (order_dt = '2025-08-07' and length(order_no) > 10) and org_order_no = 'p';";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:SELECT\n" +
+                "  |  predicates: length(order_no) > 10\n" +
+                "  |  \n" +
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07') AND (org_order_no = 'p')"));
+
     }
 
     @Test
