@@ -354,8 +354,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 + "    HASH_PARTITIONED: 2: v2\n"
                 + "\n"
                 + "  0:OlapScanNode"));
-        Catalog.getCurrentSystemInfo().dropBackend(10002);
-        Catalog.getCurrentSystemInfo().dropBackend(10003);
+        UtFrameUtils.dropMockBackend(10002);
+        UtFrameUtils.dropMockBackend(10003);
     }
 
     @Test

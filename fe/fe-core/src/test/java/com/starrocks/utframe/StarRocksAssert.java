@@ -82,6 +82,10 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withDatabase(String dbName) throws Exception {
+        DropDbStmt dropDbStmt =
+                (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt("drop database if exists " + dbName + ";", ctx);
+        Catalog.getCurrentCatalog().dropDb(dropDbStmt);
+        
         CreateDbStmt createDbStmt =
                 (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt("create database " + dbName + ";", ctx);
         Catalog.getCurrentCatalog().createDb(createDbStmt);

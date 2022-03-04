@@ -49,7 +49,7 @@ import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
-import com.starrocks.journal.bdbje.BDBJEJournal;
+import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteInfo;
@@ -82,25 +82,21 @@ import java.util.List;
 public class EditLog {
     public static final Logger LOG = LogManager.getLogger(EditLog.class);
 
-    private EditLogOutputStream editStream = null;
+    private final EditLogOutputStream editStream = null;
 
     private long txId = 0;
 
     private long numTransactions;
     private long totalTimeTransactions;
 
-    private Journal journal;
+    private final Journal journal;
 
     public EditLog(String nodeName) {
-        journal = new BDBJEJournal(nodeName);
+        journal = JournalFactory.create(nodeName);
     }
 
     public long getMaxJournalId() {
         return journal.getMaxJournalId();
-    }
-
-    public long getMinJournalId() {
-        return journal.getMinJournalId();
     }
 
     public JournalCursor read(long fromId, long toId) {
@@ -135,13 +131,13 @@ public class EditLog {
         try {
             switch (opCode) {
                 case OperationType.OP_SAVE_NEXTID: {
-                    String idString = ((Text) journal.getData()).toString();
+                    String idString = journal.getData().toString();
                     long id = Long.parseLong(idString);
                     catalog.setNextId(id + 1);
                     break;
                 }
                 case OperationType.OP_SAVE_TRANSACTION_ID: {
-                    String idString = ((Text) journal.getData()).toString();
+                    String idString = journal.getData().toString();
                     long id = Long.parseLong(idString);
                     Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().initTransactionId(id + 1);
                     break;

@@ -80,7 +80,7 @@ public class BackendServiceProxy {
         return SingletonHolder.INSTANCE;
     }
 
-    private synchronized PBackendService getProxy(TNetworkAddress address) {
+    protected synchronized PBackendService getProxy(TNetworkAddress address) {
         PBackendService service = serviceMap.get(address);
         if (service != null) {
             return service;
