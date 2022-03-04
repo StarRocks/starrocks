@@ -84,7 +84,7 @@ Status TableFunctionNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(child(0)->open(state));
-    RETURN_IF_ERROR(_table_function->open(_table_function_state));
+    RETURN_IF_ERROR(_table_function->open(state, _table_function_state));
     return Status::OK();
 }
 
@@ -210,7 +210,7 @@ Status TableFunctionNode::close(RuntimeState* state) {
         return Status::OK();
     }
     if (_table_function != nullptr) {
-        RETURN_IF_ERROR(_table_function->close(_table_function_state));
+        RETURN_IF_ERROR(_table_function->close(state, _table_function_state));
     }
     return ExecNode::close(state);
 }

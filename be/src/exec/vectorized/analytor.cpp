@@ -15,6 +15,7 @@
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "udf/java/utils.h"
 #include "udf/udf.h"
 #include "util/runtime_profile.h"
 
@@ -256,19 +257,33 @@ Status Analytor::open(RuntimeState* state) {
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
     }
-#ifdef STARROCKS_WITH_HDFS
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
-            const auto& fn = _fns[i];
-            auto st = vectorized::window_init_jvm_context(fn.id, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                          _agg_fn_ctxs[i]);
-            RETURN_IF_ERROR(st);
-        }
-    }
-#endif
 
-    vectorized::AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-    _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
+    _has_udaf = std::any_of(_fns.begin(), _fns.end(),
+                            [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
+
+    auto create_fn_states = [this]() {
+#ifdef STARROCKS_WITH_HDFS
+        for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+            if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                const auto& fn = _fns[i];
+                auto st = vectorized::window_init_jvm_context(fn.id, fn.hdfs_location, fn.checksum,
+                                                              fn.aggregate_fn.symbol, _agg_fn_ctxs[i]);
+                RETURN_IF_ERROR(st);
+            }
+        }
+#endif
+        vectorized::AggDataPtr agg_states =
+                _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
+        return Status::OK();
+    };
+
+    if (_has_udaf) {
+        auto promise_st = call_function_in_pthread(state, create_fn_states);
+        RETURN_IF_ERROR(promise_st->get_future().get());
+    } else {
+        RETURN_IF_ERROR(create_fn_states());
+    }
 
     return Status::OK();
 }
@@ -280,24 +295,34 @@ void Analytor::close(RuntimeState* state) {
 
     _is_closed = true;
 
-    for (auto* ctx : _agg_fn_ctxs) {
-        if (ctx != nullptr && ctx->impl()) {
-            ctx->impl()->close();
+    auto agg_close = [this, state]() {
+        for (auto* ctx : _agg_fn_ctxs) {
+            if (ctx != nullptr && ctx->impl()) {
+                ctx->impl()->close();
+            }
         }
-    }
 
-    // Note: we must free agg_states before _mem_pool free_all;
-    _managed_fn_states.clear();
-    _managed_fn_states.shrink_to_fit();
+        // Note: we must free agg_states before _mem_pool free_all;
+        _managed_fn_states.clear();
+        _managed_fn_states.shrink_to_fit();
 
-    if (_mem_pool != nullptr) {
-        _mem_pool->free_all();
-    }
+        if (_mem_pool != nullptr) {
+            _mem_pool->free_all();
+        }
 
-    Expr::close(_order_ctxs, state);
-    Expr::close(_partition_ctxs, state);
-    for (const auto& i : _agg_expr_ctxs) {
-        Expr::close(i, state);
+        Expr::close(_order_ctxs, state);
+        Expr::close(_partition_ctxs, state);
+        for (const auto& i : _agg_expr_ctxs) {
+            Expr::close(i, state);
+        }
+        return Status::OK();
+    };
+
+    if (_has_udaf) {
+        auto promise_st = call_function_in_pthread(state, agg_close);
+        promise_st->get_future().get();
+    } else {
+        agg_close();
     }
 }
 
