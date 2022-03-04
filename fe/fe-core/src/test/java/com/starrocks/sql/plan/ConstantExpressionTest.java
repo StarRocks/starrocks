@@ -35,7 +35,7 @@ public class ConstantExpressionTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.startFEServer(runningDir);
+        UtFrameUtils.createMinStarRocksCluster(runningDir);
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setQueryId(UUIDUtil.genUUID());
     }

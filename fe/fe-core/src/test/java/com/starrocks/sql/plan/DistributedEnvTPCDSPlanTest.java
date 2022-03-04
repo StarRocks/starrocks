@@ -4,8 +4,10 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -32,6 +34,16 @@ public class DistributedEnvTPCDSPlanTest extends TPCDSPlanTestBase {
 
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        try {
+            UtFrameUtils.dropMockBackend(10002);
+            UtFrameUtils.dropMockBackend(10003);
+        } catch (DdlException e) {
+            e.printStackTrace();
+        }
     }
 
     @Test
