@@ -2,8 +2,10 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.DdlException;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
 public class DistributedEnvPlanTestBase extends PlanTestBase {
@@ -128,5 +130,15 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
 
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        try {
+            UtFrameUtils.dropMockBackend(10002);
+            UtFrameUtils.dropMockBackend(10003);
+        } catch (DdlException e) {
+            e.printStackTrace();
+        }
     }
 }
