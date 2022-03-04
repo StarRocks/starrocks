@@ -692,4 +692,17 @@ vectorized_functions = [
     [150219, 'array_overlap', 'BOOLEAN',    ['ARRAY_DOUBLE', 'ARRAY_DOUBLE'],      'ArrayFunctions::array_overlap_double'],
     [150220, 'array_overlap', 'BOOLEAN', ['ARRAY_DECIMALV2', 'ARRAY_DECIMALV2'],   'ArrayFunctions::array_overlap_decimalv2'],
     [150221, 'array_overlap', 'BOOLEAN',   ['ARRAY_VARCHAR', 'ARRAY_VARCHAR'],     'ArrayFunctions::array_overlap_varchar'],
+
+    [150230, 'array_intersect', 'ARRAY_DATE',      ['ARRAY_DATE', "..."],        'ArrayFunctions::array_intersect_date'],
+    [150231, 'array_intersect', 'ARRAY_DATETIME',  ['ARRAY_DATETIME', "..."],    'ArrayFunctions::array_intersect_datetime'],
+    [150232, 'array_intersect', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN', "..."],     'ArrayFunctions::array_intersect_boolean'],
+    [150233, 'array_intersect', 'ARRAY_TINYINT',   ['ARRAY_TINYINT', "..."],     'ArrayFunctions::array_intersect_tinyint'],
+    [150234, 'array_intersect', 'ARRAY_SMALLINT',  ['ARRAY_SMALLINT', "..."],    'ArrayFunctions::array_intersect_smallint'],
+    [150235, 'array_intersect', 'ARRAY_INT',       ['ARRAY_INT', "..."],         'ArrayFunctions::array_intersect_int'],
+    [150236, 'array_intersect', 'ARRAY_BIGINT',    ['ARRAY_BIGINT', "..."],      'ArrayFunctions::array_intersect_bigint'],
+    [150237, 'array_intersect', 'ARRAY_LARGEINT',  ['ARRAY_LARGEINT', "..."],    'ArrayFunctions::array_intersect_largeint'],
+    [150238, 'array_intersect', 'ARRAY_FLOAT',     ['ARRAY_FLOAT', "..."],       'ArrayFunctions::array_intersect_float'],
+    [150239, 'array_intersect', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE', "..."],      'ArrayFunctions::array_intersect_double'],
+    [150240, 'array_intersect', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2', "..."],   'ArrayFunctions::array_intersect_decimalv2'],
+    [150241, 'array_intersect', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', "..."],     'ArrayFunctions::array_intersect_varchar'],
 ]
