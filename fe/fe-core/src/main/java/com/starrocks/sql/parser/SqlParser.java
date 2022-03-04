@@ -6,6 +6,7 @@ import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.SqlScanner;
@@ -13,7 +14,6 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.QueryStatement;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 
@@ -37,7 +37,7 @@ public class SqlParser {
                 statements.add((StatementBase) new AstBuilder().visitSingleStatement(sqlStatements.singleStatement(0)));
             } catch (ParsingException parsingException) {
                 StatementBase statement = parseWithOldParser(sql, session);
-                if (statement instanceof QueryStatement
+                if (statement instanceof QueryStmt
                         || statement instanceof InsertStmt
                         || statement instanceof CreateTableAsSelectStmt
                         || statement instanceof CreateViewStmt
