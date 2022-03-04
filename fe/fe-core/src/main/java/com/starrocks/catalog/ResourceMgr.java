@@ -107,7 +107,7 @@ public class ResourceMgr implements Writable {
     }
 
     /**
-     * alter resource statement only support hive now .
+     * alter resource statement only support external hive now .
      * @param stmt
      * @throws DdlException
      */
@@ -126,7 +126,7 @@ public class ResourceMgr implements Writable {
             for (Map.Entry<String, String> entry : stmt.getProperties().entrySet()) {
                 String key = entry.getKey() ;
                 if (!properties.containsKey(key)){
-                    throw new DdlException("Property(" + key + ") does not exist");
+                    throw new DdlException("Property(" + key + ") does not support");
                 }
                 properties.put(key, entry.getValue());
             }
