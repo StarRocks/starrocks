@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.common.DdlException;
@@ -57,10 +58,10 @@ public class ResourceMgr implements Writable {
             .add("Name").add("ResourceType").add("Key").add("Value")
             .build();
 
-    // { resourceName -> Resource}
     @SerializedName(value = "nameToResource")
     private final Hashtable<String, Resource> nameToResource = new Hashtable<>();
     private final ResourceProcNode procNode = new ResourceProcNode();
+    private final String TYPE = "type";
 
     public ResourceMgr() {
     }
@@ -102,6 +103,45 @@ public class ResourceMgr implements Writable {
     private void onDropResource(Resource resource) {
         if (resource instanceof HiveResource) {
             Catalog.getCurrentCatalog().getHiveRepository().clearCache(resource.getName());
+        }
+    }
+
+    /**
+     * alter resource statement only support hive now .
+     * @param stmt
+     * @throws DdlException
+     */
+    public void alterResource(AlterResourceStmt stmt) throws DdlException {
+        String name = stmt.getResourceName();
+
+        //check if the target resource exists .
+        Resource resource = nameToResource.get(name);
+        if (resource == null) {
+            throw new DdlException("Resource(" + name + ") does not exist");
+        }
+
+        if (resource instanceof HiveResource) {
+            // update the properties
+            Map<String,String> properties = ((HiveResource)resource).getProperties();
+            for (Map.Entry<String, String> entry : stmt.getProperties().entrySet()) {
+                String key = entry.getKey() ;
+                if (!properties.containsKey(key)){
+                    throw new DdlException("Property(" + key + ") does not exist");
+                }
+                properties.put(key, entry.getValue());
+            }
+            resource.setProperties(properties);
+
+            // update the nameToResource
+            nameToResource.put(name,resource);
+
+            // drop the cache
+            Catalog.getCurrentCatalog().getHiveRepository().clearCache(resource.getName());
+
+            // update edit log
+            Catalog.getCurrentCatalog().getEditLog().logCreateResource(resource);
+        }else{
+            throw new DdlException("Alter resource statement only support external hive now");
         }
     }
 

@@ -30,9 +30,6 @@ import static com.starrocks.common.util.Util.validateMetastoreUris;
 public class HiveResource extends Resource {
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
 
-    @SerializedName(value = "metastoreURIs")
-    private String metastoreURIs;
-
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
@@ -45,20 +42,27 @@ public class HiveResource extends Resource {
     protected void setProperties(Map<String, String> properties) throws DdlException {
         Preconditions.checkState(properties != null);
 
-        metastoreURIs = properties.get(HIVE_METASTORE_URIS);
+        String metastoreURIs = properties.get(HIVE_METASTORE_URIS);
         if (StringUtils.isBlank(metastoreURIs)) {
             throw new DdlException(HIVE_METASTORE_URIS + " must be set in properties");
         }
         validateMetastoreUris(metastoreURIs);
+
+        this.properties = properties;
+    }
+
+    protected Map<String, String> getProperties(){
+        return this.properties ;
     }
 
     @Override
     protected void getProcNodeData(BaseProcResult result) {
-        String lowerCaseType = type.name().toLowerCase();
-        result.addRow(Lists.newArrayList(name, lowerCaseType, HIVE_METASTORE_URIS, metastoreURIs));
+        String lowerCaseType = super.type.name().toLowerCase();
+        result.addRow(Lists.newArrayList(super.name, lowerCaseType,
+                HIVE_METASTORE_URIS, this.properties.get(HIVE_METASTORE_URIS)));
     }
 
     public String getHiveMetastoreURIs() {
-        return metastoreURIs;
+        return this.properties.get(HIVE_METASTORE_URIS);
     }
 }
