@@ -171,7 +171,14 @@ public class StreamLoadScanNode extends LoadScanNode {
         }
         if (streamLoadTask.getRowDelimiter() != null) {
             String sep = streamLoadTask.getRowDelimiter().getRowDelimiter();
-            params.setRow_delimiter(sep.getBytes(StandardCharsets.UTF_8)[0]);
+            byte[] setBytes = sep.getBytes(StandardCharsets.UTF_8);
+            params.setRow_delimiter(setBytes[0]);
+            if (sep.length() > 50) {
+                throw new UserException("the row delimiter is limited to a maximum of 50 bytes");
+            }
+            if (setBytes.length > 1) {
+                params.setMulti_row_delimiter(sep);
+            }
         } else {
             params.setRow_delimiter((byte) '\n');
         }

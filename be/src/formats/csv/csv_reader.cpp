@@ -10,7 +10,7 @@ Status CSVReader::next_record(Record* record) {
     }
     char* d;
     size_t pos = 0;
-    while ((d = _buff.find(_record_delimiter, pos)) == nullptr) {
+    while ((d = _buff.find(_record_delimiter[0], pos)) == nullptr) {
         pos = _buff.available();
         _buff.compact();
         if (_buff.free_space() == 0) {
@@ -20,9 +20,9 @@ Status CSVReader::next_record(Record* record) {
     }
     size_t l = d - _buff.position();
     *record = Record(_buff.position(), l);
-    _buff.skip(l + 1);
+    _buff.skip(l + _record_delimiter.size());
     //               ^^ skip record delimiter.
-    _parsed_bytes += l + 1;
+    _parsed_bytes += l + _record_delimiter.size();
     return Status::OK();
 }
 

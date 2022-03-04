@@ -30,23 +30,28 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
     if (s.size == 0 && n == 0) {
         // Has reached the end of file and the buffer is empty.
         return Status::EndOfFile(_file->filename());
-    } else if (s.size == 0 && _buff.position()[n - 1] != _record_delimiter) {
+    } else if (s.size == 0 && _buff.position()[n - 1] != _record_delimiter[0]) {
         // Has reached the end of file but still no record delimiter found, which
         // is valid, according the RFC, add the record delimiter ourself.
-        _buff.append(_record_delimiter);
+        for (char ch : _record_delimiter) {
+            _buff.append(ch);
+        }
     }
     return Status::OK();
 }
 
 CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                        ScannerCounter* counter)
-        : FileScanner(state, profile, scan_range.params, counter),
-          _scan_range(scan_range),
-          _record_delimiter(scan_range.params.row_delimiter) {
+        : FileScanner(state, profile, scan_range.params, counter), _scan_range(scan_range) {
     if (scan_range.params.__isset.multi_column_separator) {
         _field_delimiter = scan_range.params.multi_column_separator;
     } else {
         _field_delimiter = scan_range.params.column_separator;
+    }
+    if (scan_range.params.__isset.multi_row_delimiter) {
+        _record_delimiter = scan_range.params.multi_row_delimiter;
+    } else {
+        _record_delimiter = scan_range.params.row_delimiter;
     }
 }
 
