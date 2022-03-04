@@ -2,6 +2,12 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
@@ -20,14 +26,8 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 public class PruneHDFSScanColumnRuleTest {
-    private PruneHDFSScanColumnRule icebergRule = PruneHDFSScanColumnRule.ICEBERG_SCAN;
+    private final PruneHDFSScanColumnRule icebergRule = PruneHDFSScanColumnRule.ICEBERG_SCAN;
 
     ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, Type.INT, "id", true);
     ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, Type.STRING, "name", true);
@@ -39,14 +39,14 @@ public class PruneHDFSScanColumnRuleTest {
 
     @Test
     public void transformIcebergWithPredicate(@Mocked IcebergTable table,
-                                 @Mocked OptimizerContext context,
-                                 @Mocked TaskContext taskContext) {
+                                              @Mocked OptimizerContext context,
+                                              @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
-                        new LogicalIcebergScanOperator(table, Table.TableType.ICEBERG,
-                                scanColumnMap, Maps.newHashMap(), -1,
-                                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
-                                        new ColumnRefOperator(1, Type.INT, "id", true),
-                                        ConstantOperator.createInt(1))));
+                new LogicalIcebergScanOperator(table, Table.TableType.ICEBERG,
+                        scanColumnMap, Maps.newHashMap(), -1,
+                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                                new ColumnRefOperator(1, Type.INT, "id", true),
+                                ConstantOperator.createInt(1))));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);
@@ -59,11 +59,11 @@ public class PruneHDFSScanColumnRuleTest {
 
     @Test
     public void transformIcebergWithNoScanColumn(@Mocked IcebergTable table,
-                                              @Mocked OptimizerContext context,
-                                              @Mocked TaskContext taskContext) {
+                                                 @Mocked OptimizerContext context,
+                                                 @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
-                        new LogicalIcebergScanOperator(table, Table.TableType.ICEBERG,
-                                scanColumnMap, Maps.newHashMap(), -1, null));
+                new LogicalIcebergScanOperator(table, Table.TableType.ICEBERG,
+                        scanColumnMap, Maps.newHashMap(), -1, null));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);
@@ -78,17 +78,19 @@ public class PruneHDFSScanColumnRuleTest {
                                     ColumnRefSet requiredOutputColumns,
                                     List<TaskContext> taskContextList,
                                     TaskContext taskContext) {
-        new Expectations() { {
-            context.getTaskContext();
-            minTimes = 0;
-            result = taskContextList;
+        new Expectations() {
+            {
+                context.getTaskContext();
+                minTimes = 0;
+                result = taskContextList;
 
-            taskContext.getRequiredColumns();
-            minTimes = 0;
-            result = requiredOutputColumns;
-        }};
+                taskContext.getRequiredColumns();
+                minTimes = 0;
+                result = requiredOutputColumns;
+            }
+        };
         List<OptExpression> list = icebergRule.transform(scan, context);
-        Map<ColumnRefOperator, Column> transferMap = ((LogicalIcebergScanOperator)list.get(0)
+        Map<ColumnRefOperator, Column> transferMap = ((LogicalIcebergScanOperator) list.get(0)
                 .getOp()).getColRefToColumnMetaMap();
         Assert.assertEquals(transferMap.size(), 1);
         Assert.assertEquals(transferMap.get(intColumnOperator).getName(), "id");

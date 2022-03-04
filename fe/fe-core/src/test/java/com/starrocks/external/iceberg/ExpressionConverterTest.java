@@ -2,8 +2,24 @@
 
 package com.starrocks.external.iceberg;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.InPredicate;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.LikePredicate;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -14,14 +30,13 @@ import org.apache.iceberg.expressions.Expressions;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 public class ExpressionConverterTest {
 
-    @Mocked Column col;
+    @Mocked
+    Column col;
 
-    @Mocked SlotDescriptor desc;
+    @Mocked
+    SlotDescriptor desc;
 
     @Test
     public void testToIcebergExpression() throws AnalysisException {
@@ -54,7 +69,7 @@ public class ExpressionConverterTest {
         DateLiteral dateLiteral = (DateLiteral) LiteralExpr.create("2018-10-18", Type.DATE);
         long epochDay = dateLiteral.toLocalDateTime().toLocalDate().toEpochDay();
 
-        convertedExpression= converter.convert(new BinaryPredicate(BinaryPredicate.Operator.EQ, ref, dateLiteral));
+        convertedExpression = converter.convert(new BinaryPredicate(BinaryPredicate.Operator.EQ, ref, dateLiteral));
         expectedExpression = Expressions.equal("col_name", epochDay);
         Assert.assertEquals("Generated equal expression should be correct",
                 expectedExpression.toString(), convertedExpression.toString());
@@ -108,7 +123,7 @@ public class ExpressionConverterTest {
         inListExpr.add(new StringLiteral("5678"));
         inListExpr.add(new StringLiteral("1314"));
         inListExpr.add(new StringLiteral("8972"));
-        List<String> inList = inListExpr.stream().map(s ->((StringLiteral) s).getUnescapedValue()).collect(Collectors.toList());
+        List<String> inList = inListExpr.stream().map(s -> ((StringLiteral) s).getUnescapedValue()).collect(Collectors.toList());
 
         convertedExpression = converter.convert(new InPredicate(ref, inListExpr, false));
         expectedExpression = Expressions.in("col_name", inList);

@@ -2,14 +2,14 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import static org.junit.Assert.assertEquals;
+
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
 
 public class SimplifiedPredicateRuleTest {
     private static final ConstantOperator OI_NULL = ConstantOperator.createNull(Type.INT);
@@ -20,7 +20,7 @@ public class SimplifiedPredicateRuleTest {
     private static final ConstantOperator OB_FALSE = ConstantOperator.createBoolean(false);
     private static final ConstantOperator OB_TRUE = ConstantOperator.createBoolean(true);
 
-    private SimplifiedPredicateRule rule = new SimplifiedPredicateRule();
+    private final SimplifiedPredicateRule rule = new SimplifiedPredicateRule();
 
     @Test
     public void applyCaseWhen() {

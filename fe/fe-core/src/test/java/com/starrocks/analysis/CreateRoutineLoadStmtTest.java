@@ -21,9 +21,13 @@
 
 package com.starrocks.analysis;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -44,16 +48,11 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 public class CreateRoutineLoadStmtTest {
 
     private static final Logger LOG = LogManager.getLogger(CreateRoutineLoadStmtTest.class);
 
-    private static String runningDir = "fe/mocked/CreateRoutineLoadStmtTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/CreateRoutineLoadStmtTest/" + UUID.randomUUID() + "/";
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -188,11 +187,11 @@ public class CreateRoutineLoadStmtTest {
         Assert.assertEquals(createRoutineLoadStmt.getJsonPaths(), "[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]");
 
         String selectSQL = "SELECT \"Pat O\"\"Hanrahan & <Matthew Eldridge]\"\"\";";
-        SelectStmt selectStmt = (SelectStmt)UtFrameUtils.parseStmtWithNewAnalyzer(selectSQL, ctx);
+        SelectStmt selectStmt = (SelectStmt) UtFrameUtils.parseStmtWithNewAnalyzer(selectSQL, ctx);
 
         Expr expr = selectStmt.getSelectList().getItems().get(0).getExpr();
         Assert.assertTrue(expr instanceof StringLiteral);
-        StringLiteral stringLiteral = (StringLiteral)expr;
+        StringLiteral stringLiteral = (StringLiteral) expr;
         Assert.assertEquals(stringLiteral.getValue(), "Pat O\"Hanrahan & <Matthew Eldridge]\"");
 
     }

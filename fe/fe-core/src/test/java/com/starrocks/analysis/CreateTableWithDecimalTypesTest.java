@@ -2,6 +2,9 @@
 
 package com.starrocks.analysis;
 
+import java.util.List;
+import java.util.UUID;
+
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
@@ -15,12 +18,9 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.util.List;
-import java.util.UUID;
-
 public class CreateTableWithDecimalTypesTest {
-    private static String runningDir =
-            "fe/mocked/CreateTableWithDecimalTypesTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir =
+            "fe/mocked/CreateTableWithDecimalTypesTest/" + UUID.randomUUID() + "/";
     private static StarRocksAssert starRocksAssert;
 
     @Rule
@@ -172,11 +172,7 @@ public class CreateTableWithDecimalTypesTest {
     }
 
     public void createTableFail(boolean enableDecimalV3, String columnType) throws Exception {
-        if (enableDecimalV3) {
-            Config.enable_decimal_v3 = true;
-        } else {
-            Config.enable_decimal_v3 = false;
-        }
+        Config.enable_decimal_v3 = enableDecimalV3;
         String createTableSql = "" +
                 "CREATE TABLE if not exists db1.decimalv3_table\n" +
                 "(\n" +

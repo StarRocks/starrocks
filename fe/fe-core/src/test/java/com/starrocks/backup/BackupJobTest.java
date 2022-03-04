@@ -21,6 +21,16 @@
 
 package com.starrocks.backup;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.FileVisitOption;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
@@ -57,31 +67,21 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.FileVisitOption;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
-
 public class BackupJobTest {
 
     private BackupJob job;
     private Database db;
 
-    private long dbId = 1;
-    private long tblId = 2;
-    private long partId = 3;
-    private long idxId = 4;
-    private long tabletId = 5;
-    private long backendId = 10000;
-    private long version = 6;
+    private final long dbId = 1;
+    private final long tblId = 2;
+    private final long partId = 3;
+    private final long idxId = 4;
+    private final long tabletId = 5;
+    private final long backendId = 10000;
+    private final long version = 6;
 
-    private long repoId = 20000;
-    private AtomicLong id = new AtomicLong(50000);
+    private final long repoId = 20000;
+    private final AtomicLong id = new AtomicLong(50000);
 
     @Mocked
     private Catalog catalog;
@@ -117,7 +117,7 @@ public class BackupJobTest {
     @Mocked
     private EditLog editLog;
 
-    private Repository repo = new Repository(repoId, "repo", false, "my_repo",
+    private final Repository repo = new Repository(repoId, "repo", false, "my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
 
     @BeforeClass
@@ -133,7 +133,7 @@ public class BackupJobTest {
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
         if (backupDir.exists()) {
             Files.walk(BackupHandler.BACKUP_ROOT_DIR,
-                    FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
+                            FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
                     .forEach(File::delete);
         }
     }

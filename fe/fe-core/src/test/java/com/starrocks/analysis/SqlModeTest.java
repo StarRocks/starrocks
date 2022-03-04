@@ -21,12 +21,12 @@
 
 package com.starrocks.analysis;
 
+import java.io.StringReader;
+
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.SqlModeHelper;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.StringReader;
 
 public class SqlModeTest {
 
@@ -34,7 +34,7 @@ public class SqlModeTest {
 
     @Test
     public void testScannerConstructor() {
-        String stmt = new String("SELECT * FROM db1.tbl1 WHERE name = 'BILL GATES'");
+        String stmt = "SELECT * FROM db1.tbl1 WHERE name = 'BILL GATES'";
         SqlParser parser = new SqlParser(new SqlScanner(new StringReader(stmt)));
         SelectStmt selectStmt = null;
         try {
@@ -56,7 +56,7 @@ public class SqlModeTest {
     @Test
     public void testPipesAsConcatMode() {
         // Mode Active
-        String stmt = new String("SELECT 'a' || 'b' || 'c'");
+        String stmt = "SELECT 'a' || 'b' || 'c'";
         SqlParser parser = new SqlParser(new SqlScanner(new StringReader(stmt), SqlModeHelper.MODE_PIPES_AS_CONCAT));
         SelectStmt selectStmt = null;
         try {
@@ -87,7 +87,7 @@ public class SqlModeTest {
     @Test
     public void testPipesAsConcatModeNull() {
         // Mode Active
-        String stmt = new String("SELECT ('10' || 'xy' > 1) + 2");
+        String stmt = "SELECT ('10' || 'xy' > 1) + 2";
         SqlParser parser = new SqlParser(new SqlScanner(new StringReader(stmt), SqlModeHelper.MODE_PIPES_AS_CONCAT));
         SelectStmt parsedStmt = null;
         try {

@@ -21,6 +21,9 @@
 
 package com.starrocks.common.proc;
 
+import java.util.Arrays;
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -32,9 +35,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.Arrays;
-import java.util.List;
 
 public class DbsProcDirTest {
     private Database db1;

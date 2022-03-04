@@ -21,6 +21,8 @@
 
 package com.starrocks.analysis;
 
+import java.util.UUID;
+
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
@@ -32,10 +34,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.util.UUID;
-
 public class SelectStmtTest {
-    private static String runningDir = "fe/mocked/DemoTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/DemoTest/" + UUID.randomUUID() + "/";
     private static StarRocksAssert starRocksAssert;
 
     @Rule

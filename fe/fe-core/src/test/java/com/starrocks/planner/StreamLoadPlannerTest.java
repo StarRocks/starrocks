@@ -21,6 +21,10 @@
 
 package com.starrocks.planner;
 
+import java.io.StringReader;
+import java.util.Arrays;
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
@@ -46,10 +50,6 @@ import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.StringReader;
-import java.util.Arrays;
-import java.util.List;
 
 public class StreamLoadPlannerTest {
     @Injectable
@@ -150,12 +150,12 @@ public class StreamLoadPlannerTest {
 
     @Test
     public void testParseStmt() throws Exception {
-        String sql = new String("COLUMNS (k1, k2, k3=abc(), k4=default_value())");
+        String sql = "COLUMNS (k1, k2, k3=abc(), k4=default_value())";
         SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
         ImportColumnsStmt columnsStmt = (ImportColumnsStmt) SqlParserUtils.getFirstStmt(parser);
         Assert.assertEquals(4, columnsStmt.getColumns().size());
 
-        sql = new String("WHERE k1 > 2 and k3 < 4");
+        sql = "WHERE k1 > 2 and k3 < 4";
         parser = new SqlParser(new SqlScanner(new StringReader(sql)));
         ImportWhereStmt whereStmt = (ImportWhereStmt) SqlParserUtils.getFirstStmt(parser);
         Assert.assertTrue(whereStmt.getExpr() instanceof CompoundPredicate);

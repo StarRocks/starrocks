@@ -21,6 +21,19 @@
 
 package com.starrocks.persist.gson;
 
+import java.io.DataInput;
+import java.io.DataInputStream;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.HashMultimap;
@@ -36,19 +49,6 @@ import com.starrocks.persist.gson.GsonSerializationTest.Key.MyEnum;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 
 /*
  * This unit test provides examples about how to make a class serializable.
@@ -67,7 +67,7 @@ import java.util.Set;
  *
  */
 public class GsonSerializationTest {
-    private static String fileName = "./GsonSerializationTest";
+    private static final String fileName = "./GsonSerializationTest";
 
     public static class OrigClassA implements Writable {
         @SerializedName(value = "classA1")

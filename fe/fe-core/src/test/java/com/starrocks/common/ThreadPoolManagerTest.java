@@ -21,13 +21,13 @@
 
 package com.starrocks.common;
 
+import java.util.List;
+import java.util.concurrent.ThreadPoolExecutor;
+
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.List;
-import java.util.concurrent.ThreadPoolExecutor;
 
 public class ThreadPoolManagerTest {
 

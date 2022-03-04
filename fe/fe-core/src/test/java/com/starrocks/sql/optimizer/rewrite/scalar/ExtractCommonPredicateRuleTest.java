@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import static org.junit.Assert.assertEquals;
+
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -10,8 +12,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
 
 public class ExtractCommonPredicateRuleTest {
 

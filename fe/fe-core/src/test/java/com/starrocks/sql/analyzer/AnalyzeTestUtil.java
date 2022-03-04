@@ -16,7 +16,7 @@ public class AnalyzeTestUtil {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
-    private static String DB_NAME = "test";
+    private static final String DB_NAME = "test";
 
     public static void init() throws Exception {
         // create connect context

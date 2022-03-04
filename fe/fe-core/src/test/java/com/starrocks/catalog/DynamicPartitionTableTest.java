@@ -21,6 +21,8 @@
 
 package com.starrocks.catalog;
 
+import java.util.UUID;
+
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -35,10 +37,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.util.UUID;
-
 public class DynamicPartitionTableTest {
-    private static String runningDir = "fe/mocked/DynamicPartitionTableTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/DynamicPartitionTableTest/" + UUID.randomUUID() + "/";
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;

@@ -2,6 +2,8 @@
 
 package com.starrocks.external.iceberg;
 
+import java.util.Map;
+
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -15,8 +17,6 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.Map;
 
 
 public class IcebergHiveCatalogTest {
@@ -39,12 +39,12 @@ public class IcebergHiveCatalogTest {
         };
 
         new MockUp<CatalogUtil>() {
-          @Mock
-          public Catalog loadCatalog(String impl, String catalogName,
-                                     Map<String, String> properties,
-                                     Configuration hadoopConf) {
-              return hiveCatalog;
-          }
+            @Mock
+            public Catalog loadCatalog(String impl, String catalogName,
+                                       Map<String, String> properties,
+                                       Configuration hadoopConf) {
+                return hiveCatalog;
+            }
         };
 
         IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030");

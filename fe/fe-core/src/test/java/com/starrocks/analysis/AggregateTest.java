@@ -21,6 +21,8 @@
 
 package com.starrocks.analysis;
 
+import java.util.UUID;
+
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -31,13 +33,11 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.UUID;
-
 public class AggregateTest {
 
-    private static String baseDir = "fe";
-    private static String runningDir = baseDir + "/mocked/AggregateTest/"
-            + UUID.randomUUID().toString() + "/";
+    private static final String baseDir = "fe";
+    private static final String runningDir = baseDir + "/mocked/AggregateTest/"
+            + UUID.randomUUID() + "/";
     private static final String TABLE_NAME = "table1";
     private static final String DB_NAME = "db1";
     private static StarRocksAssert starRocksAssert;

@@ -21,16 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
-import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -40,6 +30,16 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+
+import com.google.common.base.Predicate;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
+import mockit.Mocked;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 public class MysqlTableTest {
     private List<Column> columns;
@@ -118,11 +118,7 @@ public class MysqlTableTest {
         Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
             @Override
             public boolean apply(String s) {
-                if (s.equalsIgnoreCase("host")) {
-                    return false;
-                } else {
-                    return true;
-                }
+                return !s.equalsIgnoreCase("host");
             }
         });
         new MysqlTable(1000, "mysqlTable", columns, pro);
@@ -134,11 +130,7 @@ public class MysqlTableTest {
         Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
             @Override
             public boolean apply(String s) {
-                if (s.equalsIgnoreCase("port")) {
-                    return false;
-                } else {
-                    return true;
-                }
+                return !s.equalsIgnoreCase("port");
             }
         });
         new MysqlTable(1000, "mysqlTable", columns, pro);
@@ -166,11 +158,7 @@ public class MysqlTableTest {
         Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
             @Override
             public boolean apply(String s) {
-                if (s.equalsIgnoreCase("user")) {
-                    return false;
-                } else {
-                    return true;
-                }
+                return !s.equalsIgnoreCase("user");
             }
         });
         new MysqlTable(1000, "mysqlTable", columns, pro);
@@ -182,11 +170,7 @@ public class MysqlTableTest {
         Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
             @Override
             public boolean apply(String s) {
-                if (s.equalsIgnoreCase("password")) {
-                    return false;
-                } else {
-                    return true;
-                }
+                return !s.equalsIgnoreCase("password");
             }
         });
         new MysqlTable(1000, "mysqlTable", columns, pro);
@@ -198,11 +182,7 @@ public class MysqlTableTest {
         Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
             @Override
             public boolean apply(String s) {
-                if (s.equalsIgnoreCase("database")) {
-                    return false;
-                } else {
-                    return true;
-                }
+                return !s.equalsIgnoreCase("database");
             }
         });
         new MysqlTable(1000, "mysqlTable", columns, pro);
@@ -214,11 +194,7 @@ public class MysqlTableTest {
         Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
             @Override
             public boolean apply(String s) {
-                if (s.equalsIgnoreCase("table")) {
-                    return false;
-                } else {
-                    return true;
-                }
+                return !s.equalsIgnoreCase("table");
             }
         });
         new MysqlTable(1000, "mysqlTable", columns, pro);

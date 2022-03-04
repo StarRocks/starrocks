@@ -2,6 +2,10 @@
 
 package com.starrocks.analysis;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -18,12 +22,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
-
 public class SelectStmtWithDecimalTypesTest {
-    private static String runningDir = "fe/mocked/DecimalDemoTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/DecimalDemoTest/" + UUID.randomUUID() + "/";
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext ctx;
     @Rule
@@ -792,9 +792,9 @@ public class SelectStmtWithDecimalTypesTest {
             for (int i = 0; i < items.size(); ++i) {
                 Expr expr = items.get(i).getExpr();
                 Assert.assertEquals(expr.type, decimal128p38s9);
-                Assert.assertEquals(((FunctionCallExpr) expr).fn.getArgs()[0], decimal128p38s9);
-                Assert.assertEquals(((FunctionCallExpr) expr).fn.getReturnType(), decimal128p38s9);
-                Assert.assertEquals(((AggregateFunction) ((FunctionCallExpr) expr).fn).getIntermediateType(),
+                Assert.assertEquals(expr.fn.getArgs()[0], decimal128p38s9);
+                Assert.assertEquals(expr.fn.getReturnType(), decimal128p38s9);
+                Assert.assertEquals(((AggregateFunction) expr.fn).getIntermediateType(),
                         Type.VARCHAR);
                 Assert.assertEquals(expr.getChild(0).type, decimal128p38s9);
             }

@@ -21,6 +21,10 @@
 
 package com.starrocks.qe;
 
+import java.io.IOException;
+import java.net.URL;
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
@@ -66,10 +70,6 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
-
-import java.io.IOException;
-import java.net.URL;
-import java.util.List;
 
 public class ShowExecutorTest {
     private ConnectContext ctx;
@@ -517,7 +517,7 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testHelp() throws AnalysisException, IOException, UserException {
+    public void testHelp() throws IOException, UserException {
         HelpModule module = new HelpModule();
         URL help = getClass().getClassLoader().getResource("test-help-resource-show-help.zip");
         module.setUpByZip(help.getPath());

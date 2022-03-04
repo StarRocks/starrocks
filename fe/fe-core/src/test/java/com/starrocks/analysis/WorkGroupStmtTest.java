@@ -1,5 +1,13 @@
 package com.starrocks.analysis;
 
+import java.util.Iterator;
+import java.util.List;
+import java.util.Random;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
@@ -9,19 +17,11 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Iterator;
-import java.util.List;
-import java.util.Random;
-import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
 public class WorkGroupStmtTest {
     private static final Pattern idPattern = Pattern.compile("\\bid=(\\b\\d+\\b)");
-    private static String runningDir = "fe/mocked/WorkGroupStmtTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/WorkGroupStmtTest/" + UUID.randomUUID() + "/";
     private static StarRocksAssert starRocksAssert;
-    private String createRg1Sql = "create resource_group rg1\n" +
+    private final String createRg1Sql = "create resource_group rg1\n" +
             "to\n" +
             "    (user='rg1_user1', role='rg1_role1', query_type in ('select', 'insert'), source_ip='192.168.2.1/24'),\n" +
             "    (user='rg1_user2', query_type in ('mv'), source_ip='192.168.3.1/24'),\n" +
@@ -33,7 +33,7 @@ public class WorkGroupStmtTest {
             "    'concurrency_limit' = '11',\n" +
             "    'type' = 'normal'\n" +
             ");";
-    private String createRg2Sql = "create resource_group rg2\n" +
+    private final String createRg2Sql = "create resource_group rg2\n" +
             "to\n" +
             "    (role='rg2_role1', query_type in ('select', 'insert'), source_ip='192.168.5.1/24'),\n" +
             "    (role='rg2_role2', source_ip='192.168.6.1/24'),\n" +
@@ -44,7 +44,7 @@ public class WorkGroupStmtTest {
             "    'concurrency_limit' = '20',\n" +
             "    'type' = 'realtime'\n" +
             ");";
-    private String createRg3Sql = "create resource_group rg3\n" +
+    private final String createRg3Sql = "create resource_group rg3\n" +
             "to\n" +
             "    (query_type in ('select', 'insert'), source_ip='192.168.6.1/24'),\n" +
             "    (query_type in ('select', 'insert'))\n" +
@@ -54,7 +54,7 @@ public class WorkGroupStmtTest {
             "    'concurrency_limit' = '10',\n" +
             "    'type' = 'normal'\n" +
             ");";
-    private String createRg4Sql = "create resource_group rg4\n" +
+    private final String createRg4Sql = "create resource_group rg4\n" +
             "to\n" +
             "     (source_ip='192.168.7.1/24')\n" +
             "with (\n" +
@@ -95,14 +95,14 @@ public class WorkGroupStmtTest {
     }
 
     private void createResourceGroups() throws Exception {
-        String[] sqls = new String[]{createRg1Sql, createRg2Sql, createRg3Sql, createRg4Sql};
+        String[] sqls = new String[] {createRg1Sql, createRg2Sql, createRg3Sql, createRg4Sql};
         for (String sql : sqls) {
             starRocksAssert.executeWorkGroupDdlSql(sql);
         }
     }
 
     private void dropResourceGroups() throws Exception {
-        String[] rgNames = new String[]{"rg1", "rg2", "rg3", "rg4"};
+        String[] rgNames = new String[] {"rg1", "rg2", "rg3", "rg4"};
         for (String name : rgNames) {
             starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE_GROUP " + name);
         }
@@ -250,7 +250,7 @@ public class WorkGroupStmtTest {
                 "   'concurrency_limit'='23',\n" +
                 "   'cpu_core_limit'='13'\n" +
                 ")";
-        String[] sqls = new String[]{alterRg1Sql, alterRg2Sql, alterRg2Sql, alterRg3Sql, alterRg4Sql};
+        String[] sqls = new String[] {alterRg1Sql, alterRg2Sql, alterRg2Sql, alterRg3Sql, alterRg4Sql};
         for (String sql : sqls) {
             starRocksAssert.executeWorkGroupDdlSql(sql);
         }

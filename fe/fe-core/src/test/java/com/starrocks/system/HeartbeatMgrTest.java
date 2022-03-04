@@ -144,7 +144,7 @@ public class HeartbeatMgrTest {
 
         Assert.assertTrue(response instanceof BrokerHbResponse);
         BrokerHbResponse hbResponse = (BrokerHbResponse) response;
-        System.out.println(hbResponse.toString());
+        System.out.println(hbResponse);
         Assert.assertEquals(HbStatus.OK, hbResponse.getStatus());
     }
 

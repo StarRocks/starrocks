@@ -17,17 +17,17 @@
 
 package plugin;
 
-import com.starrocks.plugin.Plugin;
-import com.starrocks.plugin.PluginContext;
-import com.starrocks.plugin.PluginInfo;
-
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.starrocks.plugin.Plugin;
+import com.starrocks.plugin.PluginContext;
+import com.starrocks.plugin.PluginInfo;
+
 public class PluginTest extends Plugin {
 
-    private Map<String, String> map = new HashMap<>();
+    private final Map<String, String> map = new HashMap<>();
 
     @Override
     public void init(PluginInfo info, PluginContext ctx) {

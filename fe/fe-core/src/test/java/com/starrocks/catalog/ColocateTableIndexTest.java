@@ -21,14 +21,14 @@
 
 package com.starrocks.catalog;
 
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
+
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArraySet;
 
 public class ColocateTableIndexTest {
 

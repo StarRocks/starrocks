@@ -21,6 +21,8 @@
 
 package com.starrocks.sql.optimizer;
 
+import java.util.UUID;
+
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
@@ -32,12 +34,10 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.UUID;
-
 public class MVRewriteTest {
-    private static String baseDir = "fe";
-    private static String runningDir = baseDir + "/mocked/MaterializedViewFunctionTest/"
-            + UUID.randomUUID().toString() + "/";
+    private static final String baseDir = "fe";
+    private static final String runningDir = baseDir + "/mocked/MaterializedViewFunctionTest/"
+            + UUID.randomUUID() + "/";
     private static final String EMPS_TABLE_NAME = "emps";
     private static final String EMPS_MV_NAME = "emps_mv";
     private static final String HR_DB_NAME = "db1";
@@ -129,7 +129,7 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createMVSQL);
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
 
-        query = "select * from ( select *,'v1' as vid from " + EMPS_TABLE_NAME + ") T"  + " where vid='v1'";
+        query = "select * from ( select *,'v1' as vid from " + EMPS_TABLE_NAME + ") T" + " where vid='v1'";
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
     }
 

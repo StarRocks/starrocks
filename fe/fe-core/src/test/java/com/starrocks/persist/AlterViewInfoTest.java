@@ -21,6 +21,13 @@
 
 package com.starrocks.persist;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
@@ -29,15 +36,8 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-
 public class AlterViewInfoTest {
-    private static String fileName = "./AlterViewInfoTest";
+    private static final String fileName = "./AlterViewInfoTest";
 
     private final long dbId = 10000L;
     private final long tableId = 30000L;

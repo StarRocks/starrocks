@@ -47,7 +47,7 @@ public class UseStmtTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         UseStmt stmt = new UseStmt("testDb");
         stmt.analyze(analyzer);
 
@@ -56,7 +56,7 @@ public class UseStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testNoDb() throws UserException, AnalysisException {
+    public void testNoDb() throws UserException {
         UseStmt stmt = new UseStmt("");
         stmt.analyze(analyzer);
 

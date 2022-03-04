@@ -21,6 +21,8 @@
 
 package com.starrocks.planner;
 
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CastExpr;
@@ -63,8 +65,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.List;
 
 public class StreamLoadScanNodeTest {
     private static final Logger LOG = LogManager.getLogger(StreamLoadScanNodeTest.class);
@@ -172,11 +172,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         TStreamLoadPutRequest request = getBaseRequest();
@@ -216,11 +212,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         TStreamLoadPutRequest request = getBaseRequest();
@@ -236,7 +228,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testBadColumns() throws UserException, UserException {
+    public void testBadColumns() throws UserException {
         Analyzer analyzer = new Analyzer(catalog, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -246,11 +238,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         TStreamLoadPutRequest request = getBaseRequest();
@@ -266,7 +254,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
-    public void testColumnsNormal() throws UserException, UserException {
+    public void testColumnsNormal() throws UserException {
         Analyzer analyzer = new Analyzer(catalog, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -276,11 +264,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         new Expectations() {
@@ -321,11 +305,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
         TDescriptorTable tableDesc = descTbl.toThrift();
         TSlotDescriptor slotDesc = tableDesc.getSlotDescriptors().get(2);
@@ -347,11 +327,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         new Expectations() {{
@@ -397,11 +373,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         new Expectations() {
@@ -452,11 +424,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         TStreamLoadPutRequest request = getBaseRequest();
@@ -472,7 +440,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = UserException.class)
-    public void testUnsupportedFType() throws UserException, UserException {
+    public void testUnsupportedFType() throws UserException {
         Analyzer analyzer = new Analyzer(catalog, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -482,11 +450,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         TStreamLoadPutRequest request = getBaseRequest();
@@ -502,7 +466,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = UserException.class)
-    public void testColumnsUnknownRef() throws UserException, UserException {
+    public void testColumnsUnknownRef() throws UserException {
         Analyzer analyzer = new Analyzer(catalog, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -512,11 +476,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         new Expectations() {
@@ -551,7 +511,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
-    public void testWhereNormal() throws UserException, UserException {
+    public void testWhereNormal() throws UserException {
         Analyzer analyzer = new Analyzer(catalog, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -561,11 +521,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         new Expectations() {
@@ -601,7 +557,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testWhereBad() throws UserException, UserException {
+    public void testWhereBad() throws UserException {
         Analyzer analyzer = new Analyzer(catalog, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -611,11 +567,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         new Expectations() {
@@ -654,7 +606,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = UserException.class)
-    public void testWhereUnknownRef() throws UserException, UserException {
+    public void testWhereUnknownRef() throws UserException {
         Analyzer analyzer = new Analyzer(catalog, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -664,11 +616,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         new Expectations() {
@@ -714,11 +662,7 @@ public class StreamLoadScanNodeTest {
             SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
             slot.setColumn(column);
             slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
+            slot.setIsNullable(column.isAllowNull());
         }
 
         TStreamLoadPutRequest request = getBaseRequest();

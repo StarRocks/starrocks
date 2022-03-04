@@ -2,6 +2,10 @@
 
 package com.starrocks.analysis;
 
+import java.util.List;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -14,21 +18,14 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-
+import com.starrocks.qe.SessionVariable;
 import mockit.Expectations;
 import mockit.Mock;
-import mockit.Mocked;
 import mockit.MockUp;
-
-import com.starrocks.qe.SessionVariable;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
 
 public class ExportStmtTest {
     private String path;

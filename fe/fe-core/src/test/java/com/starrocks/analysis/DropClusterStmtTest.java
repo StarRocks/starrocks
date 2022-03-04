@@ -63,7 +63,7 @@ public class DropClusterStmtTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         final DropClusterStmt stmt = new DropClusterStmt(true, "testCluster");
 
         stmt.analyze(analyzer);
@@ -72,7 +72,7 @@ public class DropClusterStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testFailed() throws UserException, AnalysisException {
+    public void testFailed() throws UserException {
         DropClusterStmt stmt = new DropClusterStmt(false, "");
 
         stmt.analyze(analyzer);

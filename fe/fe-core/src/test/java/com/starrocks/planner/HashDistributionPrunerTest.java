@@ -21,6 +21,11 @@
 
 package com.starrocks.planner;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -33,11 +38,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 public class HashDistributionPrunerTest {
 

@@ -1,5 +1,9 @@
 package com.starrocks.load.routineload;
 
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -11,10 +15,6 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 public class KafkaTaskInfoTest {
 

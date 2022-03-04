@@ -47,7 +47,7 @@ public class DropDbStmtTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         DropDbStmt stmt = new DropDbStmt(false, "test", true);
 
         stmt.analyze(analyzer);
@@ -56,7 +56,7 @@ public class DropDbStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testFailed() throws UserException, AnalysisException {
+    public void testFailed() throws UserException {
         DropDbStmt stmt = new DropDbStmt(false, "", true);
 
         stmt.analyze(analyzer);
@@ -64,7 +64,7 @@ public class DropDbStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testNoPriv() throws UserException, AnalysisException {
+    public void testNoPriv() throws UserException {
         DropDbStmt stmt = new DropDbStmt(false, "", true);
 
         stmt.analyze(AccessTestUtil.fetchBlockAnalyzer());

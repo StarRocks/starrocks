@@ -21,6 +21,11 @@
 
 package com.starrocks.mysql;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.nio.channels.SocketChannel;
+
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import mockit.Delegate;
@@ -31,11 +36,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.nio.channels.SocketChannel;
 
 public class MysqlServerTest {
     private static final Logger LOG = LoggerFactory.getLogger(MysqlServerTest.class);

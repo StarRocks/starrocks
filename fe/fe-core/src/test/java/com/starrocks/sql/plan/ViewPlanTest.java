@@ -2,13 +2,13 @@
 
 package com.starrocks.sql.plan;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class ViewPlanTest extends PlanTestBase {
     private final static AtomicInteger INDEX = new AtomicInteger(0);
@@ -742,7 +742,8 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql151() throws Exception {
-        String sql = "select * from t1 inner join t3 on t1.v4 = t3.v1 right semi join test_all_type as a on t3.v1 = a.t1a and 1 > 2;";
+        String sql =
+                "select * from t1 inner join t3 on t1.v4 = t3.v1 right semi join test_all_type as a on t3.v1 = a.t1a and 1 > 2;";
         testView(sql);
     }
 

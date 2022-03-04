@@ -1,6 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import java.io.File;
+import java.util.List;
+import java.util.UUID;
+
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
+
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -13,18 +21,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.util.List;
-import java.util.UUID;
-
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
-
 public class AnalyzeSetOperationTest {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeSetOperation/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/AnalyzeSetOperation/" + UUID.randomUUID() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {

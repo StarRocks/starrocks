@@ -21,10 +21,6 @@
 
 package com.starrocks.external.elasticsearch;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.Test;
-
 import java.io.IOException;
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -34,6 +30,10 @@ import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.assertEquals;
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
 
 /**
  * Check that internal queries are correctly converted to ES search query (as JSON)

@@ -2,6 +2,12 @@
 
 package com.starrocks.external.hive;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executors;
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -17,24 +23,17 @@ import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.FileWriter;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Executors;
-
 public class HiveMetaCacheTest {
-    private List<Column> partColumns = Lists.newArrayList(new Column("k1", Type.INT),
+    private final List<Column> partColumns = Lists.newArrayList(new Column("k1", Type.INT),
             new Column("k2", Type.INT),
             new Column("k3", Type.INT));
-    private List<String> partColumnNames = Lists.newArrayList("k1", "k2", "k3");
+    private final List<String> partColumnNames = Lists.newArrayList("k1", "k2", "k3");
 
     private int clientMethodGetPartitionKeysCalledTimes = 0;
     private int clientMethodGetPartitionCalledTimes = 0;
     private int clientMethodGetTableStatsCalledTimes = 0;
     private int clientMethodGetPartitionStatsCalledTimes = 0;
-    private String partitionPath = "hdfs://nameservice1/hive/db/tbl/k1=1/k2=1/k3=3";
+    private final String partitionPath = "hdfs://nameservice1/hive/db/tbl/k1=1/k2=1/k3=3";
 
     @Test
     public void testGetPartitionKeys() throws Exception {

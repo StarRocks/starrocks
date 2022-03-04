@@ -1,6 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import java.io.File;
+import java.util.UUID;
+
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -8,16 +14,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.util.UUID;
-
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
-
 public class AnalyzeSingleTest {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeSingle/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/AnalyzeSingle/" + UUID.randomUUID() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -62,7 +62,7 @@ public class AnalyzeSingleTest {
 
         analyzeSuccess("select v1 from t0 temporary partition(t1,t2)");
         analyzeFail("SELECT v1,v2,v3 FROM t0 INTO OUTFILE \"hdfs://path/to/result_\""
-                        + "FORMAT AS PARQUET PROPERTIES" +
+                + "FORMAT AS PARQUET PROPERTIES" +
                 "(\"broker.name\" = \"my_broker\"," +
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");", "Only support CSV format");

@@ -21,6 +21,25 @@
 
 package com.starrocks.utframe;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.io.StringReader;
+import java.net.ServerSocket;
+import java.nio.channels.FileLock;
+import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
+
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -79,25 +98,6 @@ import com.starrocks.utframe.MockedFrontend.NotInitException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.FileUtils;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.io.StringReader;
-import java.net.ServerSocket;
-import java.nio.channels.FileLock;
-import java.nio.file.Files;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
-
-import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
-
 public class UtFrameUtils {
     public static final String createStatisticsTableStmt = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -127,7 +127,7 @@ public class UtFrameUtils {
             ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
-            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/");
+            startFEServer("fe/mocked/test/" + UUID.randomUUID() + "/");
             addMockBackend(10001);
 
             // sleep to wait first heartbeat

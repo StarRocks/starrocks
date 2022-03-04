@@ -21,15 +21,15 @@
 
 package com.starrocks.persist;
 
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 
+import org.junit.Assert;
+import org.junit.Test;
+
 public class StorageTest {
-    private String meta = "storageTestDir/";
+    private final String meta = "storageTestDir/";
 
     public void mkdir() {
         File dir = new File(meta);
@@ -104,7 +104,7 @@ public class StorageTest {
         Assert.assertEquals(1, storage1.getClusterID());
         Assert.assertEquals("test", storage1.getMetaDir());
 
-        Storage storage2 = new Storage(1, "token", 2,  "test");
+        Storage storage2 = new Storage(1, "token", 2, "test");
         Assert.assertEquals(1, storage2.getClusterID());
         Assert.assertEquals(2, storage2.getImageJournalId());
         Assert.assertEquals("test", storage2.getMetaDir());

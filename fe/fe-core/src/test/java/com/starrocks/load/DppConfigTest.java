@@ -21,6 +21,13 @@
 
 package com.starrocks.load;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.util.Map;
+
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.Catalog;
@@ -32,13 +39,6 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.util.Map;
 
 public class DppConfigTest {
     private FakeCatalog fakeCatalog;

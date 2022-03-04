@@ -2,6 +2,9 @@
 
 package com.starrocks.sql.optimizer.rule;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.Memo;
@@ -12,9 +15,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 
 public class BinderTest {
 

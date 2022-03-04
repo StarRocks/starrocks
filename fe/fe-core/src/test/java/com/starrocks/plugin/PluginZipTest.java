@@ -21,12 +21,6 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.common.UserException;
-import mockit.Expectations;
-import org.apache.commons.io.FileUtils;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.FileSystems;
@@ -36,6 +30,12 @@ import java.nio.file.Path;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+
+import com.starrocks.common.UserException;
+import mockit.Expectations;
+import org.apache.commons.io.FileUtils;
+import org.junit.Before;
+import org.junit.Test;
 
 public class PluginZipTest {
 
@@ -63,7 +63,7 @@ public class PluginZipTest {
                     result = PluginTestUtil.openTestFile("source/test.zip");
 
                     zip.getInputStreamFromUrl("source/test.zip.md5");
-                    result = new ByteArrayInputStream(new String("7529db41471ec72e165f96fe9fb92742").getBytes());
+                    result = new ByteArrayInputStream("7529db41471ec72e165f96fe9fb92742".getBytes());
                 }
             };
 
@@ -109,7 +109,7 @@ public class PluginZipTest {
                     result = PluginTestUtil.openTestFile("source/test.zip");
 
                     zip.getInputStreamFromUrl("source/test.zip.md5");
-                    result = new ByteArrayInputStream(new String("asdfas").getBytes());
+                    result = new ByteArrayInputStream("asdfas".getBytes());
                 }
             };
 

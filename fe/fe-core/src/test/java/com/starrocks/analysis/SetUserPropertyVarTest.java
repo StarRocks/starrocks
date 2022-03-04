@@ -36,7 +36,7 @@ public class SetUserPropertyVarTest {
     }
 
     @Test
-    public void testNormal() throws AnalysisException, UserException {
+    public void testNormal() throws UserException {
         SetUserPropertyVar var = new SetUserPropertyVar("quota.normal", "1000");
         var.analyze(analyzer, true);
         Assert.assertEquals("quota.normal", var.getPropertyKey());
@@ -49,7 +49,7 @@ public class SetUserPropertyVarTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testUnknownProperty() throws UserException, AnalysisException {
+    public void testUnknownProperty() throws UserException {
         SetUserPropertyVar var = new SetUserPropertyVar("unknown_property", "1000");
         var.analyze(analyzer, true);
         Assert.fail("No exception throws.");

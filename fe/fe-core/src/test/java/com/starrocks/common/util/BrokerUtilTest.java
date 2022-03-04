@@ -21,6 +21,14 @@
 
 package com.starrocks.common.util;
 
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
@@ -56,13 +64,6 @@ import mockit.Mocked;
 import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.UnsupportedEncodingException;
-import java.util.Collections;
-import java.util.List;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 public class BrokerUtilTest {
 
@@ -181,7 +182,7 @@ public class BrokerUtilTest {
         String dppResultStr = "{'normal_rows': 10, 'abnormal_rows': 0, 'failed_reason': 'etl job failed'}";
         TBrokerReadResponse readResponse = new TBrokerReadResponse();
         readResponse.opStatus = status;
-        readResponse.setData(dppResultStr.getBytes("UTF-8"));
+        readResponse.setData(dppResultStr.getBytes(StandardCharsets.UTF_8));
 
         FsBroker fsBroker = new FsBroker("127.0.0.1", 99999);
 
@@ -222,7 +223,7 @@ public class BrokerUtilTest {
 
         BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
         byte[] data = BrokerUtil.readFile(filePath, brokerDesc);
-        String readStr = new String(data, "UTF-8");
+        String readStr = new String(data, StandardCharsets.UTF_8);
         Assert.assertEquals(dppResultStr, readStr);
     }
 
@@ -272,7 +273,7 @@ public class BrokerUtilTest {
         };
 
         BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
-        byte[] configs = "{'label': 'label0'}".getBytes("UTF-8");
+        byte[] configs = "{'label': 'label0'}".getBytes(StandardCharsets.UTF_8);
         String destFilePath = "hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/configs/jobconfig.json";
         try {
             BrokerUtil.writeFile(configs, destFilePath, brokerDesc);

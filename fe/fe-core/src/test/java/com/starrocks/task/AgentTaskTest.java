@@ -21,6 +21,15 @@
 
 package com.starrocks.task;
 
+import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import com.google.common.collect.Range;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.catalog.AggregateType;
@@ -44,42 +53,33 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 public class AgentTaskTest {
 
     private AgentBatchTask agentBatchTask;
 
-    private long backendId1 = 1000L;
-    private long backendId2 = 1001L;
+    private final long backendId1 = 1000L;
+    private final long backendId2 = 1001L;
 
-    private long dbId = 10000L;
-    private long tableId = 20000L;
-    private long partitionId = 20000L;
-    private long indexId1 = 30000L;
-    private long indexId2 = 30001L;
+    private final long dbId = 10000L;
+    private final long tableId = 20000L;
+    private final long partitionId = 20000L;
+    private final long indexId1 = 30000L;
+    private final long indexId2 = 30001L;
 
-    private long tabletId1 = 40000L;
-    private long tabletId2 = 40001L;
+    private final long tabletId1 = 40000L;
+    private final long tabletId2 = 40001L;
 
-    private long replicaId1 = 50000L;
-    private long replicaId2 = 50001L;
+    private final long replicaId1 = 50000L;
+    private final long replicaId2 = 50001L;
 
-    private short shortKeyNum = (short) 2;
-    private int schemaHash1 = 60000;
-    private int schemaHash2 = 60001;
-    private long version = 1L;
+    private final short shortKeyNum = (short) 2;
+    private final int schemaHash1 = 60000;
+    private final int schemaHash2 = 60001;
+    private final long version = 1L;
 
-    private TStorageType storageType = TStorageType.COLUMN;
+    private final TStorageType storageType = TStorageType.COLUMN;
     private List<Column> columns;
-    private MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<Long, Long>(3);
+    private final MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<Long, Long>(3);
 
     private Range<PartitionKey> range1;
     private Range<PartitionKey> range2;

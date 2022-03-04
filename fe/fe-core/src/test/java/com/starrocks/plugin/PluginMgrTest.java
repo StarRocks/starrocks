@@ -21,14 +21,6 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.io.DataOutputBuffer;
-import com.starrocks.utframe.UtFrameUtils;
-import org.apache.commons.io.FileUtils;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -41,9 +33,17 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.starrocks.common.Config;
+import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.utframe.UtFrameUtils;
+import org.apache.commons.io.FileUtils;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+
 public class PluginMgrTest {
 
-    private static String runningDir = "fe/mocked/PluginMgrTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/PluginMgrTest/" + UUID.randomUUID() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {

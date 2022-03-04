@@ -21,13 +21,6 @@
 
 package com.starrocks.persist;
 
-import com.google.common.collect.Maps;
-import com.starrocks.analysis.CreateRoutineLoadStmt;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
-import com.starrocks.common.AnalysisException;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -36,8 +29,15 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Map;
 
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.CreateRoutineLoadStmt;
+import com.starrocks.analysis.RoutineLoadDataSourceProperties;
+import com.starrocks.common.AnalysisException;
+import org.junit.Assert;
+import org.junit.Test;
+
 public class AlterRoutineLoadOperationLogTest {
-    private static String fileName = "./AlterRoutineLoadOperationLogTest";
+    private static final String fileName = "./AlterRoutineLoadOperationLogTest";
 
     @Test
     public void testSerialzeAlterViewInfo() throws IOException, AnalysisException {

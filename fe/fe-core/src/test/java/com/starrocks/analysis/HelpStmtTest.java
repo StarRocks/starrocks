@@ -29,7 +29,7 @@ public class HelpStmtTest {
     @Test
     public void testNormal() throws AnalysisException {
         HelpStmt stmt = new HelpStmt("contents");
-        stmt.analyze((Analyzer) null);
+        stmt.analyze(null);
         Assert.assertEquals("contents", stmt.getMask());
         Assert.assertEquals("HELP contents", stmt.toString());
 
@@ -41,7 +41,7 @@ public class HelpStmtTest {
     @Test(expected = AnalysisException.class)
     public void testEmpty() throws AnalysisException {
         HelpStmt stmt = new HelpStmt("");
-        stmt.analyze((Analyzer) null);
+        stmt.analyze(null);
         Assert.fail("No exception throws.");
     }
 }

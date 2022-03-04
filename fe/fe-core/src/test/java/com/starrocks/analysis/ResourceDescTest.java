@@ -21,6 +21,8 @@
 
 package com.starrocks.analysis;
 
+import java.util.Map;
+
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ResourceMgr;
@@ -33,8 +35,6 @@ import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.Map;
 
 public class ResourceDescTest {
 

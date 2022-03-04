@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.optimizer;
 
+import static org.junit.Assert.assertEquals;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
@@ -14,8 +16,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
 
 public class MemoTest {
     @Test

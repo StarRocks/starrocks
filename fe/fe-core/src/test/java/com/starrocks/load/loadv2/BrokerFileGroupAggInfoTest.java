@@ -21,6 +21,9 @@
 
 package com.starrocks.load.loadv2;
 
+import java.util.List;
+import java.util.Map;
+
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -29,9 +32,6 @@ import com.starrocks.load.BrokerFileGroupAggInfo;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.List;
-import java.util.Map;
 
 public class BrokerFileGroupAggInfoTest {
 

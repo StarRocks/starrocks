@@ -21,6 +21,9 @@
 
 package com.starrocks.analysis;
 
+import java.util.LinkedList;
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BrokerMgr;
@@ -47,9 +50,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
-
-import java.util.LinkedList;
-import java.util.List;
 
 public class AccessTestUtil {
     private static FakeEditLog fakeEditLog;

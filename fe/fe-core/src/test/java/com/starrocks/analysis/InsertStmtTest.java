@@ -21,6 +21,11 @@
 
 package com.starrocks.analysis;
 
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -40,13 +45,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.StringReader;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
 public class InsertStmtTest {
-    private static String runningDir = "fe/mocked/DemoTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/DemoTest/" + UUID.randomUUID() + "/";
     private static StarRocksAssert starRocksAssert;
 
     @AfterClass

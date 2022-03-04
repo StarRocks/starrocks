@@ -21,6 +21,12 @@
 
 package com.starrocks.load.routineload;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -57,26 +63,20 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 public class KafkaRoutineLoadJobTest {
     private static final Logger LOG = LogManager.getLogger(KafkaRoutineLoadJobTest.class);
 
-    private String jobName = "job1";
-    private String dbName = "db1";
-    private LabelName labelName = new LabelName(dbName, jobName);
-    private String tableNameString = "table1";
-    private String topicName = "topic1";
-    private String serverAddress = "http://127.0.0.1:8080";
-    private String kafkaPartitionString = "1,2,3";
+    private final String jobName = "job1";
+    private final String dbName = "db1";
+    private final LabelName labelName = new LabelName(dbName, jobName);
+    private final String tableNameString = "table1";
+    private final String topicName = "topic1";
+    private final String serverAddress = "http://127.0.0.1:8080";
+    private final String kafkaPartitionString = "1,2,3";
 
     private PartitionNames partitionNames;
 
-    private ColumnSeparator columnSeparator = new ColumnSeparator(",");
+    private final ColumnSeparator columnSeparator = new ColumnSeparator(",");
 
     @Mocked
     ConnectContext connectContext;

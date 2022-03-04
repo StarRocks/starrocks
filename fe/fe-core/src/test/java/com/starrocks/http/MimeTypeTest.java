@@ -21,10 +21,10 @@
 
 package com.starrocks.http;
 
+import javax.activation.MimetypesFileTypeMap;
+
 import org.junit.Assert;
 import org.junit.Test;
-
-import javax.activation.MimetypesFileTypeMap;
 
 public class MimeTypeTest {
 

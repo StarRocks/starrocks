@@ -21,11 +21,12 @@
 
 package com.starrocks.mysql;
 
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
+
 import com.starrocks.common.AnalysisException;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.UnsupportedEncodingException;
 
 public class MysqlPasswordTest {
     @Test
@@ -54,11 +55,11 @@ public class MysqlPasswordTest {
 
         Assert.assertTrue(MysqlPassword.checkScramble(codePass,
                 publicSeed,
-                MysqlPassword.getSaltFromPassword("*6C8989366EAF75BB670AD8EA7A7FC1176A95CEF4".getBytes("UTF-8"))));
+                MysqlPassword.getSaltFromPassword("*6C8989366EAF75BB670AD8EA7A7FC1176A95CEF4".getBytes(StandardCharsets.UTF_8))));
 
         Assert.assertFalse(MysqlPassword.checkScramble(codePass,
                 publicSeed,
-                MysqlPassword.getSaltFromPassword("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32".getBytes("UTF-8"))));
+                MysqlPassword.getSaltFromPassword("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32".getBytes(StandardCharsets.UTF_8))));
     }
 
     @Test

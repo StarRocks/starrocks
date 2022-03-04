@@ -22,6 +22,8 @@
 
 package com.starrocks.load.loadv2;
 
+import java.util.Map;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LoadStmt;
@@ -36,7 +38,6 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.task.MasterTask;
 import com.starrocks.task.MasterTaskExecutor;
 import com.starrocks.thrift.TUniqueId;
@@ -49,8 +50,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.Map;
 
 public class LoadJobTest {
 

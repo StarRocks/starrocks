@@ -2,6 +2,16 @@
 
 package com.starrocks.sql.plan;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -22,18 +32,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 public class ReplayFromDumpTest {
-    public static String runningDir = "fe/mocked/ReplayFromDumpTest/" + UUID.randomUUID().toString() + "/";
+    public static String runningDir = "fe/mocked/ReplayFromDumpTest/" + UUID.randomUUID() + "/";
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
@@ -94,7 +94,7 @@ public class ReplayFromDumpTest {
         String originCostPlan = Stream.of(getModelContent(filename, "fragment statistics").split("\n")).
                 filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
         String replayCostPlan = Stream.of(
-                PlanTestBase.format(getCostPlanFragment(dumpString, getTestSessionVariable()).second).split("\n"))
+                        PlanTestBase.format(getCostPlanFragment(dumpString, getTestSessionVariable()).second).split("\n"))
                 .filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
         Assert.assertEquals(originCostPlan, replayCostPlan);
     }
@@ -349,11 +349,11 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/count_distinct_limit"), null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
-               "  |  STREAMING\n" +
-               "  |  output: multi_distinct_count(5: lo_suppkey)"));
+                "  |  STREAMING\n" +
+                "  |  output: multi_distinct_count(5: lo_suppkey)"));
         Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)\n" +
-               "  |  output: multi_distinct_count(18: count)\n" +
-               "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
+                "  |  output: multi_distinct_count(18: count)\n" +
+                "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
     }
 
     @Test

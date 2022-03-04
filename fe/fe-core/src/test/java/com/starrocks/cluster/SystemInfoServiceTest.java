@@ -21,6 +21,14 @@
 
 package com.starrocks.cluster;
 
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.Analyzer;
@@ -41,14 +49,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.BufferedInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-
 public class SystemInfoServiceTest {
 
     @Mocked
@@ -64,7 +64,7 @@ public class SystemInfoServiceTest {
 
     private String hostPort;
 
-    private long backendId = 10000L;
+    private final long backendId = 10000L;
 
     @Before
     public void setUp() throws IOException {
@@ -185,19 +185,19 @@ public class SystemInfoServiceTest {
     @Test(expected = AnalysisException.class)
     public void validHostAndPortTest1() throws Exception {
         createHostAndPort(1);
-        systemInfoService.validateHostAndPort(hostPort);
+        SystemInfoService.validateHostAndPort(hostPort);
     }
 
     @Test(expected = AnalysisException.class)
     public void validHostAndPortTest3() throws Exception {
         createHostAndPort(3);
-        systemInfoService.validateHostAndPort(hostPort);
+        SystemInfoService.validateHostAndPort(hostPort);
     }
 
     @Test
     public void validHostAndPortTest4() throws Exception {
         createHostAndPort(4);
-        systemInfoService.validateHostAndPort(hostPort);
+        SystemInfoService.validateHostAndPort(hostPort);
     }
 
     @Test

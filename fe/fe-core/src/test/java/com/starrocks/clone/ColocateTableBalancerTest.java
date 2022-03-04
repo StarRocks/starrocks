@@ -21,6 +21,11 @@
 
 package com.starrocks.clone;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -41,13 +46,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 public class ColocateTableBalancerTest {
-    private ColocateTableBalancer balancer = ColocateTableBalancer.getInstance();
+    private final ColocateTableBalancer balancer = ColocateTableBalancer.getInstance();
 
     private Backend backend1;
     private Backend backend2;
@@ -147,7 +147,7 @@ public class ColocateTableBalancerTest {
 
         List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
         List<Long> allAvailBackendIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
-        boolean changed = (Boolean) Deencapsulation
+        boolean changed = Deencapsulation
                 .invoke(balancer, "relocateAndBalance", groupId, new HashSet<Long>(), allAvailBackendIds,
                         colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         List<List<Long>> expected = Lists.partition(
@@ -160,7 +160,7 @@ public class ColocateTableBalancerTest {
                 Lists.newArrayList(9L, 8L, 7L, 8L, 6L, 5L, 9L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L));
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
         balancedBackendsPerBucketSeq.clear();
-        changed = (Boolean) Deencapsulation
+        changed = Deencapsulation
                 .invoke(balancer, "relocateAndBalance", groupId, new HashSet<Long>(), allAvailBackendIds,
                         colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         System.out.println(balancedBackendsPerBucketSeq);
@@ -509,7 +509,7 @@ public class ColocateTableBalancerTest {
         List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
         Set<Long> unavailableBeIds = Sets.newHashSet(9L);
         List<Long> allAvailBackendIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L);
-        boolean changed = (Boolean) Deencapsulation
+        boolean changed = Deencapsulation
                 .invoke(balancer, "relocateAndBalance", groupId, unavailableBeIds, allAvailBackendIds,
                         colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
         System.out.println(balancedBackendsPerBucketSeq);

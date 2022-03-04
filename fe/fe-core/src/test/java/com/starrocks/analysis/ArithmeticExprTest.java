@@ -1,13 +1,13 @@
 package com.starrocks.analysis;
 
+import java.io.IOException;
+
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.IOException;
 
 public class ArithmeticExprTest {
     @Test

@@ -130,7 +130,7 @@ public class ShowDataStmtTest {
     }
 
     @Test
-    public void testNormal() throws AnalysisException, UserException {
+    public void testNormal() throws UserException {
         ShowDataStmt stmt = new ShowDataStmt(null, null);
         stmt.analyze(analyzer);
         Assert.assertEquals("SHOW DATA FROM `testCluster:testDb`", stmt.toString());

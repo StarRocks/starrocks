@@ -1,5 +1,9 @@
 package com.starrocks.sql.plan;
 
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FunctionSet;
@@ -9,10 +13,6 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.List;
 
 public class CastExprPruneTest extends PlanTestBase {
     @BeforeClass
@@ -93,7 +93,7 @@ public class CastExprPruneTest extends PlanTestBase {
         final Catalog catalog = connectContext.getCatalog();
         final Field functionSetField = Catalog.class.getDeclaredField("functionSet");
         functionSetField.setAccessible(true);
-        final FunctionSet functionSet = (FunctionSet)functionSetField.get(catalog);
+        final FunctionSet functionSet = (FunctionSet) functionSetField.get(catalog);
 
 
         {

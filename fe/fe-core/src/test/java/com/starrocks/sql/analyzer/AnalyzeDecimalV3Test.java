@@ -1,8 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import java.io.StringReader;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -19,7 +23,6 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -33,13 +36,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.io.StringReader;
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
-
 public class AnalyzeDecimalV3Test {
-    private static String runningDir = "fe/mocked/AnalyzeDecimalV3Test/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/AnalyzeDecimalV3Test/" + UUID.randomUUID() + "/";
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext ctx;
     @Rule
@@ -386,7 +384,7 @@ public class AnalyzeDecimalV3Test {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
             ScalarOperator op =
-                    ((LogicalOperator) logicalPlan.getRoot().inputAt(0).inputAt(0).inputAt(0).getOp()).getPredicate();
+                    logicalPlan.getRoot().inputAt(0).inputAt(0).inputAt(0).getOp().getPredicate();
 
             ScalarOperator expr0 = op.getChild(0).getChild(0);
             ScalarOperator expr1 = op.getChild(1).getChild(0);
@@ -798,16 +796,16 @@ public class AnalyzeDecimalV3Test {
 
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
-            List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
+            List<Expr> items = queryRelation.getOutputExpr();
 
             Assert.assertEquals(items.size(), 24);
             Type decimal128p38s9 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
             for (int i = 0; i < items.size(); ++i) {
                 Expr expr = items.get(i);
                 Assert.assertEquals(expr.getType(), decimal128p38s9);
-                Assert.assertEquals(((FunctionCallExpr) expr).getFn().getArgs()[0], decimal128p38s9);
-                Assert.assertEquals(((FunctionCallExpr) expr).getFn().getReturnType(), decimal128p38s9);
-                Assert.assertEquals(((AggregateFunction) ((FunctionCallExpr) expr).getFn()).getIntermediateType(),
+                Assert.assertEquals(expr.getFn().getArgs()[0], decimal128p38s9);
+                Assert.assertEquals(expr.getFn().getReturnType(), decimal128p38s9);
+                Assert.assertEquals(((AggregateFunction) expr.getFn()).getIntermediateType(),
                         Type.VARCHAR);
                 Assert.assertEquals(expr.getChild(0).getType(), decimal128p38s9);
             }
@@ -825,7 +823,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
-            List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
+            List<Expr> items = queryRelation.getOutputExpr();
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
@@ -851,7 +849,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
-            List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
+            List<Expr> items = queryRelation.getOutputExpr();
             Assert.assertEquals(items.get(0).getType(), Type.BIGINT);
         }
     }
@@ -870,7 +868,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
-            List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
+            List<Expr> items = queryRelation.getOutputExpr();
             Assert.assertEquals(items.get(0).getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 9));
             Assert.assertEquals(items.get(1).getType(),
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 10));

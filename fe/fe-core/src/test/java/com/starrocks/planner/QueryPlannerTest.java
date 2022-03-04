@@ -21,6 +21,11 @@
 
 package com.starrocks.planner;
 
+import java.io.File;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
@@ -37,19 +42,14 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 public class QueryPlannerTest {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/QueryPlannerTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/QueryPlannerTest/" + UUID.randomUUID() + "/";
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
-    private static String DB_NAME = "test";
+    private static final String DB_NAME = "test";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -150,16 +150,17 @@ public class QueryPlannerTest {
         Assert.assertEquals(SqlBlackList.getInstance().sqlBlackListMap.entrySet().size(), 1);
         long id = -1;
         for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
-        id = entry.getValue().id;
+            id = entry.getValue().id;
             Assert.assertEquals("select k1 from .+", entry.getKey());
         }
 
         String sql = "select k1 from test.baseall";
         StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, sql);
         stmtExecutor2.execute();
-        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin", connectContext.getState().getErrorMessage());
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
 
-        String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
+        String deleteBlackListSql = "delete sqlblacklist " + id;
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
         stmtExecutor3.execute();
         Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
@@ -185,9 +186,10 @@ public class QueryPlannerTest {
         String sql = "select k1 from test.baseall where k1 > 0";
         StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, sql);
         stmtExecutor2.execute();
-        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin", connectContext.getState().getErrorMessage());
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
 
-        String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
+        String deleteBlackListSql = "delete sqlblacklist " + id;
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
         stmtExecutor3.execute();
         Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());

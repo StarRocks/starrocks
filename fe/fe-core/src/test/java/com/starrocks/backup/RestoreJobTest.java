@@ -21,6 +21,13 @@
 
 package com.starrocks.backup;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.Adler32;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
@@ -63,25 +70,18 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.zip.Adler32;
-
 public class RestoreJobTest {
 
     private Database db;
     private BackupJobInfo jobInfo;
     private RestoreJob job;
-    private String label = "test_label";
+    private final String label = "test_label";
 
-    private AtomicLong id = new AtomicLong(50000);
+    private final AtomicLong id = new AtomicLong(50000);
 
     private OlapTable expectedRestoreTbl;
 
-    private long repoId = 20000;
+    private final long repoId = 20000;
 
     @Mocked
     private Catalog catalog;
@@ -120,7 +120,7 @@ public class RestoreJobTest {
     private SystemInfoService systemInfoService;
 
     @Injectable
-    private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
+    private final Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
 
     private BackupMeta backupMeta;

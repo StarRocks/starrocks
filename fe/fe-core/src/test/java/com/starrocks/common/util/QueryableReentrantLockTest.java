@@ -21,14 +21,14 @@
 
 package com.starrocks.common.util;
 
+import java.util.concurrent.TimeUnit;
+
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.concurrent.TimeUnit;
-
 public class QueryableReentrantLockTest {
 
-    private QueryableReentrantLock lock = new QueryableReentrantLock(true);
+    private final QueryableReentrantLock lock = new QueryableReentrantLock(true);
 
     @Test
     public void test() throws InterruptedException {

@@ -21,6 +21,12 @@
 
 package com.starrocks.catalog;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.thrift.TStorageMedium;
@@ -29,12 +35,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 
 public class TabletTest {
 

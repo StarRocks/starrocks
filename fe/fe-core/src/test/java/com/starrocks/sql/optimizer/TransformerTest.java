@@ -1,6 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.StringReader;
+import java.util.UUID;
+
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
@@ -21,21 +28,14 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ErrorCollector;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.StringReader;
-import java.util.UUID;
-
 public class TransformerTest {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/TransformerTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/TransformerTest/" + UUID.randomUUID() + "/";
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
-    private static String DB_NAME = "test";
+    private static final String DB_NAME = "test";
 
     @Rule
     public ErrorCollector collector = new ErrorCollector();

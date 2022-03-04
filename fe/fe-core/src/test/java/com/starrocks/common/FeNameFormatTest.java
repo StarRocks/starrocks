@@ -21,9 +21,9 @@
 
 package com.starrocks.common;
 
-import org.junit.Test;
-
 import java.util.Random;
+
+import org.junit.Test;
 
 public class FeNameFormatTest {
 

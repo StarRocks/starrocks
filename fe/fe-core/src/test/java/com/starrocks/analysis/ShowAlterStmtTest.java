@@ -24,7 +24,6 @@ package com.starrocks.analysis;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FakeCatalog;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.system.SystemInfoService;
@@ -70,7 +69,7 @@ public class ShowAlterStmtTest {
     }
 
     @Test
-    public void testAlterStmt1() throws UserException, AnalysisException {
+    public void testAlterStmt1() throws UserException {
         ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.COLUMN, null, null,
                 null, null);
         stmt.analyzeSyntax(analyzer);
@@ -78,25 +77,25 @@ public class ShowAlterStmtTest {
     }
 
     @Test
-    public void testAlterStmt2() throws UserException, AnalysisException {
+    public void testAlterStmt2() throws UserException {
         SlotRef slotRef = new SlotRef(null, "TableName");
         StringLiteral stringLiteral = new StringLiteral("abc");
         BinaryPredicate binaryPredicate = new BinaryPredicate(Operator.EQ, slotRef, stringLiteral);
         ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.COLUMN, null, binaryPredicate, null,
                 new LimitElement(1, 2));
         stmt.analyzeSyntax(analyzer);
-        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `testDb` WHERE `TableName` = \'abc\' LIMIT 1, 2",
+        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `testDb` WHERE `TableName` = 'abc' LIMIT 1, 2",
                 stmt.toString());
     }
 
     @Test
-    public void testAlterStmt3() throws UserException, AnalysisException {
+    public void testAlterStmt3() throws UserException {
         SlotRef slotRef = new SlotRef(null, "CreateTime");
         StringLiteral stringLiteral = new StringLiteral("2019-12-04");
         BinaryPredicate binaryPredicate = new BinaryPredicate(Operator.EQ, slotRef, stringLiteral);
         ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.COLUMN, null, binaryPredicate, null, null);
         stmt.analyzeSyntax(analyzer);
-        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `testDb` WHERE `CreateTime` = \'2019-12-04 00:00:00\'",
+        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `testDb` WHERE `CreateTime` = '2019-12-04 00:00:00'",
                 stmt.toString());
     }
 }

@@ -21,6 +21,8 @@
 
 package com.starrocks.analysis;
 
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.Catalog;
@@ -33,8 +35,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
 
 public class GrantStmtTest {
     private Analyzer analyzer;
@@ -81,7 +81,7 @@ public class GrantStmtTest {
     }
 
     @Test
-    public void testNormal() throws AnalysisException, UserException {
+    public void testNormal() throws UserException {
         GrantStmt stmt;
 
         List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.ALL);
@@ -112,7 +112,7 @@ public class GrantStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testUserFail() throws AnalysisException, UserException {
+    public void testUserFail() throws UserException {
         GrantStmt stmt;
 
         List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.ALL);

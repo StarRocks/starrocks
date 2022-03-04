@@ -21,6 +21,9 @@
 
 package com.starrocks.qe;
 
+import java.nio.channels.SocketChannel;
+import java.util.List;
+
 import com.starrocks.catalog.Catalog;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -31,9 +34,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.nio.channels.SocketChannel;
-import java.util.List;
 
 public class ConnectContextTest {
     @Mocked
@@ -129,7 +129,7 @@ public class ConnectContextTest {
         Assert.assertEquals("testCluster", row.get(3));
         Assert.assertEquals("testDb", row.get(4));
         Assert.assertEquals("Ping", row.get(5));
-        Assert.assertEquals(Long.toString((currentTimeMillis-ctx.getStartTime()) / 1000), row.get(6));
+        Assert.assertEquals(Long.toString((currentTimeMillis - ctx.getStartTime()) / 1000), row.get(6));
         Assert.assertEquals("", row.get(7));
         Assert.assertEquals("", row.get(8));
 

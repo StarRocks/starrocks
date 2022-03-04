@@ -1,6 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import java.io.File;
+import java.util.UUID;
+
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -8,16 +14,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.util.UUID;
-
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
-
 public class AnalyzeCTETest {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeCTE/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/AnalyzeCTE/" + UUID.randomUUID() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {

@@ -29,7 +29,7 @@ public class ShowEnginesStmtTest {
     @Test
     public void testNormal() {
         ShowEnginesStmt stmt = new ShowEnginesStmt();
-        stmt.analyze((Analyzer) null);
+        stmt.analyze(null);
         Assert.assertEquals("SHOW ENGINES", stmt.toString());
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);

@@ -2,6 +2,15 @@
 
 package com.starrocks.sql.optimizer;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.CreateDbStmt;
@@ -32,15 +41,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 public class UtilsTest {
     private static final String DEFAULT_CREATE_TABLE_TEMPLATE = ""
             + "CREATE TABLE IF NOT EXISTS `table_statistic_v1` (\n"
@@ -66,7 +66,7 @@ public class UtilsTest {
             + "\"storage_format\" = \"V2\"\n"
             + ");";
 
-    private static String runningDir = "fe/mocked/UtilsTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/UtilsTest/" + UUID.randomUUID() + "/";
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -268,10 +268,10 @@ public class UtilsTest {
     public void testCapableSemiReorder() {
         OptExpression root = OptExpression.create(
                 new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
-                    OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
-                            OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
-                            OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
-                    OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
+                OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
+                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
+                        OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
+                OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
 
         Assert.assertFalse(Utils.capableSemiReorder(root, false, 0, 1));
         Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 2));
@@ -279,13 +279,14 @@ public class UtilsTest {
 
         root = OptExpression.create(
                 new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
-                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
-                        OptExpression.create(new LogicalProjectOperator(Maps.newHashMap()),
+                OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
+                OptExpression.create(new LogicalProjectOperator(Maps.newHashMap()),
+                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
                                 OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
-                                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
-                                                OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null)),
-                                                OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
-                                        OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())))),
+                                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null)),
+                                        OptExpression.create(
+                                                new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
+                                OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())))),
                 OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
 
         Assert.assertFalse(Utils.capableSemiReorder(root, false, 0, 0));

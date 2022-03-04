@@ -2,6 +2,9 @@
 
 package com.starrocks.analysis;
 
+import java.io.File;
+import java.util.UUID;
+
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -11,11 +14,8 @@ import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.util.UUID;
-
 public class DateTruncTest {
-    private static String runningDir = "fe/mocked/DateTruncTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/DateTruncTest/" + UUID.randomUUID() + "/";
     private static ConnectContext ctx;
 
     @After

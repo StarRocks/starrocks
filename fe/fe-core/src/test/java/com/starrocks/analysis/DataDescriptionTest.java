@@ -21,6 +21,8 @@
 
 package com.starrocks.analysis;
 
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.common.AnalysisException;
@@ -34,8 +36,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
 
 public class DataDescriptionTest {
 
@@ -110,7 +110,7 @@ public class DataDescriptionTest {
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null, false,
-                Lists.newArrayList((Expr) predicate));
+                Lists.newArrayList(predicate));
         desc.analyze("testDb");
         String sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (k2, k3)"
                 + " SET (`k1` = alignment_timestamp('day', `k2`))";
@@ -125,7 +125,7 @@ public class DataDescriptionTest {
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null,
-                false, Lists.newArrayList((Expr) predicate));
+                false, Lists.newArrayList(predicate));
         desc.analyze("testDb");
         sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (k2, k3)"
                 + " SET (`k1` = replace_value('-', '10'))";
@@ -140,7 +140,7 @@ public class DataDescriptionTest {
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null, false,
-                Lists.newArrayList((Expr) predicate));
+                Lists.newArrayList(predicate));
         desc.analyze("testDb");
         sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (k2, k3)"
                 + " SET (`k1` = replace_value('', NULL))";

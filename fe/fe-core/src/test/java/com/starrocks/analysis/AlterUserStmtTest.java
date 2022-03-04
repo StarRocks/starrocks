@@ -30,7 +30,7 @@ public class AlterUserStmtTest {
 
     @Test
     public void testToString(@Injectable Analyzer analyzer,
-                             @Mocked Auth auth) throws UserException, AnalysisException {
+                             @Mocked Auth auth) throws UserException {
 
         new Expectations() {
             {
@@ -119,7 +119,7 @@ public class AlterUserStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testEmptyUser(@Injectable Analyzer analyzer) throws UserException, AnalysisException {
+    public void testEmptyUser(@Injectable Analyzer analyzer) throws UserException {
         new Expectations() {
             {
                 analyzer.getClusterName();
@@ -132,7 +132,7 @@ public class AlterUserStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testBadPass(@Injectable Analyzer analyzer) throws UserException, AnalysisException {
+    public void testBadPass(@Injectable Analyzer analyzer) throws UserException {
         new Expectations() {
             {
                 analyzer.getClusterName();
@@ -145,7 +145,7 @@ public class AlterUserStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testInvalidAuthPlugin(@Injectable Analyzer analyzer) throws UserException, AnalysisException {
+    public void testInvalidAuthPlugin(@Injectable Analyzer analyzer) throws UserException {
         new Expectations() {
             {
                 analyzer.getClusterName();

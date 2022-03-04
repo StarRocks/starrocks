@@ -2,6 +2,12 @@
 
 package com.starrocks.sql.optimizer;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+
 import com.google.common.collect.ImmutableList;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
@@ -34,12 +40,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.Collectors;
 
 public class OperatorStrings {
     public String printOperator(OptExpression root) {
@@ -280,7 +280,7 @@ public class OperatorStrings {
             OperatorStr right = visit(optExpression.getInputs().get(1), step + 1);
 
             PhysicalHashJoinOperator join = (PhysicalHashJoinOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("").append(join.getJoinType()).append(" (");
+            StringBuilder sb = new StringBuilder().append(join.getJoinType()).append(" (");
             sb.append("join-predicate [").append(join.getOnPredicate()).append("] ");
             sb.append("post-join-predicate [").append(join.getPredicate()).append("]");
             sb.append(")");

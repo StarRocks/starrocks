@@ -2,6 +2,15 @@
 
 package com.starrocks.sql.optimizer;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
@@ -52,15 +61,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.spark_project.guava.collect.Maps;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-
 public class OptimizerTaskTest {
     private ColumnRefFactory columnRefFactory;
     private ColumnRefOperator column1;
@@ -88,7 +88,7 @@ public class OptimizerTaskTest {
             call.getFunction();
             minTimes = 0;
             result = AggregateFunction.createBuiltin("sum",
-                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+                    Lists.newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
         }};
 
         columnRefFactory = new ColumnRefFactory();
@@ -685,7 +685,7 @@ public class OptimizerTaskTest {
                 call.getFunction();
                 minTimes = 0;
                 result = AggregateFunction.createBuiltin("sum",
-                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+                        Lists.newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
             }
         };
 
@@ -1123,7 +1123,7 @@ public class OptimizerTaskTest {
 
                 call.getFunction();
                 result = AggregateFunction.createBuiltin("sum",
-                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+                        Lists.newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
                 minTimes = 0;
             }
         };
@@ -1200,7 +1200,7 @@ public class OptimizerTaskTest {
 
             call.getFunction();
             result = AggregateFunction.createBuiltin("count",
-                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+                    Lists.newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
             minTimes = 0;
         }};
 

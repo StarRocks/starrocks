@@ -21,12 +21,12 @@
 
 package com.starrocks.metric;
 
+import java.util.List;
+
 import com.starrocks.common.FeConstants;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.List;
 
 public class MetricsTest {
 
@@ -44,13 +44,13 @@ public class MetricsTest {
             GaugeMetric<Long> gm = (GaugeMetric<Long>) metric;
             String metricName = gm.getLabels().get(0).getValue();
             if (metricName.equals("tcp_retrans_segs")) {
-                Assert.assertEquals(Long.valueOf(826271L), (Long) gm.getValue());
+                Assert.assertEquals(Long.valueOf(826271L), gm.getValue());
             } else if (metricName.equals("tcp_in_errs")) {
-                Assert.assertEquals(Long.valueOf(12712L), (Long) gm.getValue());
+                Assert.assertEquals(Long.valueOf(12712L), gm.getValue());
             } else if (metricName.equals("tcp_in_segs")) {
-                Assert.assertEquals(Long.valueOf(1034019111L), (Long) gm.getValue());
+                Assert.assertEquals(Long.valueOf(1034019111L), gm.getValue());
             } else if (metricName.equals("tcp_out_segs")) {
-                Assert.assertEquals(Long.valueOf(1166716939L), (Long) gm.getValue());
+                Assert.assertEquals(Long.valueOf(1166716939L), gm.getValue());
             } else {
                 Assert.fail();
             }

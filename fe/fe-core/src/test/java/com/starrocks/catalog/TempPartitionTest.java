@@ -21,6 +21,17 @@
 
 package com.starrocks.catalog;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -28,7 +39,6 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -48,22 +58,11 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 public class TempPartitionTest {
 
-    private static String tempPartitionFile = "./TempPartitionTest";
-    private static String tblFile = "./tblFile";
-    private static String runningDir = "fe/mocked/TempPartitionTest/" + UUID.randomUUID().toString() + "/";
+    private static final String tempPartitionFile = "./TempPartitionTest";
+    private static final String tblFile = "./tblFile";
+    private static final String runningDir = "fe/mocked/TempPartitionTest/" + UUID.randomUUID() + "/";
 
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
@@ -94,7 +93,7 @@ public class TempPartitionTest {
     private List<List<String>> checkShowPartitionsResultNum(String tbl, boolean isTemp, int expected) throws Exception {
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
         ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseAndAnalyzeStmt(showStr, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, (ShowStmt) showStmt);
+        ShowExecutor executor = new ShowExecutor(ctx, showStmt);
         ShowResultSet showResultSet = executor.execute();
         List<List<String>> rows = showResultSet.getResultRows();
         Assert.assertEquals(expected, rows.size());
@@ -121,7 +120,7 @@ public class TempPartitionTest {
             throws Exception {
         String showStr = "show tablet from " + tbl + (isTemp ? " temporary" : "") + " partition (" + partitions + ");";
         ShowTabletStmt showStmt = (ShowTabletStmt) UtFrameUtils.parseAndAnalyzeStmt(showStr, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, (ShowStmt) showStmt);
+        ShowExecutor executor = new ShowExecutor(ctx, showStmt);
         ShowResultSet showResultSet = executor.execute();
         List<List<String>> rows = showResultSet.getResultRows();
         if (expected != -1) {
@@ -144,7 +143,7 @@ public class TempPartitionTest {
         partNameToTabletId.clear();
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
         ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseAndAnalyzeStmt(showStr, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, (ShowStmt) showStmt);
+        ShowExecutor executor = new ShowExecutor(ctx, showStmt);
         ShowResultSet showResultSet = executor.execute();
         List<List<String>> rows = showResultSet.getResultRows();
         Map<Long, String> partIdToName = Maps.newHashMap();

@@ -21,14 +21,14 @@
 
 package com.starrocks.load;
 
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+
+import org.junit.Assert;
+import org.junit.Test;
 
 public class FailMsgTest {
 

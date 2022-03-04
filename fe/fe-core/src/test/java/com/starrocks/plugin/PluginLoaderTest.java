@@ -21,13 +21,6 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.common.UserException;
-import com.starrocks.common.util.DigitalVersion;
-import com.starrocks.plugin.PluginInfo.PluginType;
-import org.apache.commons.io.FileUtils;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Map;
@@ -35,6 +28,13 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+
+import com.starrocks.common.UserException;
+import com.starrocks.common.util.DigitalVersion;
+import com.starrocks.plugin.PluginInfo.PluginType;
+import org.apache.commons.io.FileUtils;
+import org.junit.Before;
+import org.junit.Test;
 
 public class PluginLoaderTest {
 

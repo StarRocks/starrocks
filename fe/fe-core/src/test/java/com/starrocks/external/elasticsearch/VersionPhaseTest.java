@@ -21,6 +21,11 @@
 
 package com.starrocks.external.elasticsearch;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertTrue;
+
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Type;
@@ -28,11 +33,6 @@ import com.starrocks.common.ExceptionChecker;
 import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.junit.Assert.assertTrue;
 
 public class VersionPhaseTest extends EsTestCase {
 

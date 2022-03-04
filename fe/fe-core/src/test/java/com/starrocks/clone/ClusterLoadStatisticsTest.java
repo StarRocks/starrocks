@@ -21,6 +21,9 @@
 
 package com.starrocks.clone;
 
+import java.util.List;
+import java.util.Map;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
@@ -35,9 +38,6 @@ import com.starrocks.thrift.TStorageMedium;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
-import java.util.Map;
 
 public class ClusterLoadStatisticsTest {
 

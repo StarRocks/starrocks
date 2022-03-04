@@ -21,6 +21,14 @@
 
 package com.starrocks.transaction;
 
+import java.lang.reflect.InvocationTargetException;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
@@ -39,14 +47,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.lang.reflect.InvocationTargetException;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-
 public class DatabaseTransactionMgrTest {
 
     @Rule
@@ -61,7 +61,7 @@ public class DatabaseTransactionMgrTest {
     private static Catalog slaveCatalog;
     private static Map<String, Long> lableToTxnId;
 
-    private TransactionState.TxnCoordinator transactionSource =
+    private final TransactionState.TxnCoordinator transactionSource =
             new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe");
 
     @Before

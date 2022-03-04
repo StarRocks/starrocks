@@ -21,6 +21,10 @@
 
 package com.starrocks.alter;
 
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AlterTableStmt;
@@ -39,13 +43,9 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 public class BatchRollupJobTest {
 
-    private static String runningDir = "fe/mocked/BatchRollupJobTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/BatchRollupJobTest/" + UUID.randomUUID() + "/";
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 

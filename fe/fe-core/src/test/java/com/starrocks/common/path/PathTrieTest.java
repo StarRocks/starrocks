@@ -21,12 +21,12 @@
 
 package com.starrocks.common.path;
 
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.util.Map;
 
 import static com.google.common.collect.Maps.newHashMap;
+
+import org.junit.Assert;
+import org.junit.Test;
 
 public class PathTrieTest {
     @Test

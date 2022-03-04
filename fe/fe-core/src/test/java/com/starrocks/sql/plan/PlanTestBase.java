@@ -2,6 +2,21 @@
 
 package com.starrocks.sql.plan;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -24,25 +39,10 @@ import org.junit.Rule;
 import org.junit.rules.ErrorCollector;
 import org.junit.rules.ExpectedException;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 public class PlanTestBase {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
-    public static String runningDir = "fe/mocked/PlanTest/" + UUID.randomUUID().toString() + "/";
+    public static String runningDir = "fe/mocked/PlanTest/" + UUID.randomUUID() + "/";
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
@@ -480,14 +480,14 @@ public class PlanTestBase {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         starRocksAssert.withTable("CREATE TABLE test.bitmap_table (\n" +
-                "  `id` int(11) NULL COMMENT \"\",\n" +
-                "  `id2` bitmap bitmap_union NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "AGGREGATE KEY(`id`)\n" +
-                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                " \"replication_num\" = \"1\"\n" +
-                ");")
+                        "  `id` int(11) NULL COMMENT \"\",\n" +
+                        "  `id2` bitmap bitmap_union NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "AGGREGATE KEY(`id`)\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        " \"replication_num\" = \"1\"\n" +
+                        ");")
                 .withTable("CREATE TABLE test.bitmap_table_2 (\n" +
                         "  `id` int(11) NULL COMMENT \"\",\n" +
                         "  `id2` bitmap bitmap_union NULL\n" +
@@ -992,7 +992,7 @@ public class PlanTestBase {
                                 connectContext.getSessionVariable().setUseNthExecPlan(0);
                             }
                         } catch (Error error) {
-                            collector.addError(new Throwable("\n" + sql.toString(), error));
+                            collector.addError(new Throwable("\n" + sql, error));
                         }
 
                         hasResult = false;

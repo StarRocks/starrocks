@@ -21,6 +21,8 @@
 
 package com.starrocks.analysis;
 
+import java.io.StringReader;
+
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
@@ -29,8 +31,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.io.StringReader;
 
 public class SetOperationStmtTest {
     private Analyzer analyzer;

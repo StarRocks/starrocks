@@ -2,6 +2,11 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -22,11 +27,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Test;
-
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.assertEquals;
 
 public class PushDownAggRuleTest {
 
@@ -67,13 +67,13 @@ public class PushDownAggRuleTest {
 
         assertEquals(OperatorType.LOGICAL_AGGR, list.get(0).getOp().getOpType());
         assertEquals(OperatorType.COMPOUND,
-                ((LogicalAggregationOperator) list.get(0).getOp()).getPredicate().getOpType());
-        assertEquals(1, ((LogicalAggregationOperator) list.get(0).getOp()).getPredicate().getChildren().size());
+                list.get(0).getOp().getPredicate().getOpType());
+        assertEquals(1, list.get(0).getOp().getPredicate().getChildren().size());
 
         assertEquals(OperatorType.LOGICAL_FILTER, list.get(0).getInputs().get(0).getOp().getOpType());
 
         assertEquals(BinaryPredicateOperator.BinaryType.EQ,
-                ((BinaryPredicateOperator) ((LogicalFilterOperator) list.get(0).getInputs().get(0).getOp())
+                ((BinaryPredicateOperator) list.get(0).getInputs().get(0).getOp()
                         .getPredicate()).getBinaryType());
     }
 }

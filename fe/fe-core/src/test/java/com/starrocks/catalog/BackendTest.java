@@ -21,14 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.common.FeConstants;
-import com.starrocks.system.Backend;
-import com.starrocks.thrift.TDisk;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -39,14 +31,22 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.common.FeConstants;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TDisk;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
 public class BackendTest {
     private Backend backend;
-    private long backendId = 9999;
-    private String host = "myhost";
-    private int heartbeatPort = 21234;
-    private int bePort = 21235;
-    private int httpPort = 21237;
-    private int beRpcPort = 21238;
+    private final long backendId = 9999;
+    private final String host = "myhost";
+    private final int heartbeatPort = 21234;
+    private final int bePort = 21235;
+    private final int httpPort = 21237;
+    private final int beRpcPort = 21238;
 
     private Catalog catalog;
 

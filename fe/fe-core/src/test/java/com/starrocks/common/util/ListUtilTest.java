@@ -21,13 +21,13 @@
 
 package com.starrocks.common.util;
 
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
-
-import java.util.List;
 
 public class ListUtilTest {
 

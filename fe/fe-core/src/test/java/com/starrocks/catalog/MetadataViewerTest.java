@@ -21,6 +21,10 @@
 
 package com.starrocks.catalog;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.analysis.PartitionNames;
@@ -34,10 +38,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.List;
 
 public class MetadataViewerTest {
 

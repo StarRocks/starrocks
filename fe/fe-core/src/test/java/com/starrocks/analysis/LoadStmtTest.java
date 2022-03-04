@@ -21,6 +21,8 @@
 
 package com.starrocks.analysis;
 
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ResourceMgr;
@@ -37,8 +39,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
 
 public class LoadStmtTest {
     private List<DataDescription> dataDescriptions;
@@ -76,7 +76,7 @@ public class LoadStmtTest {
     @Test
     public void testNormal(@Injectable DataDescription desc, @Mocked Catalog catalog,
                            @Injectable ResourceMgr resourceMgr, @Injectable Auth auth)
-            throws UserException, AnalysisException {
+            throws UserException {
         List<DataDescription> dataDescriptionList = Lists.newArrayList();
         dataDescriptionList.add(desc);
         String resourceName = "spark0";
@@ -117,7 +117,7 @@ public class LoadStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testNoData() throws UserException, AnalysisException {
+    public void testNoData() throws UserException {
         new Expectations() {
             {
                 desc.analyze(anyString);

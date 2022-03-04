@@ -21,6 +21,10 @@
 
 package com.starrocks.analysis;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
+
 import com.google.common.base.Strings;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -29,10 +33,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.nio.ByteBuffer;
 
 public class DecimalLiteralTest {
 
@@ -236,7 +236,7 @@ public class DecimalLiteralTest {
 
     @Test
     public void testCheckLiteralOverflowFail() throws AnalysisException {
-        BigDecimal decimal32Values[] = {
+        BigDecimal[] decimal32Values = {
                 new BigDecimal("2147483.6476"),
                 new BigDecimal("-2147483.6489"),
                 new BigDecimal("2147483.648"),
@@ -247,10 +247,11 @@ public class DecimalLiteralTest {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec32, decimal32p4s3);
                 Assert.fail("should throw exception");
-            } catch (Exception ignored){}
+            } catch (Exception ignored) {
+            }
         }
 
-        BigDecimal decimal64Values[] = {
+        BigDecimal[] decimal64Values = {
                 new BigDecimal("9223372036854.775808"),
                 new BigDecimal("9223372036854.7758085"),
                 new BigDecimal("-9223372036854.775809"),
@@ -261,10 +262,11 @@ public class DecimalLiteralTest {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec64, decimal64p10s6);
                 Assert.fail("should throw exception");
-            }catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         }
 
-        BigDecimal decimal128Values[] = {
+        BigDecimal[] decimal128Values = {
                 new BigDecimal("1701411834604692317316873037.15884105728"),
                 new BigDecimal("1701411834604692317316873037.158841057285"),
                 new BigDecimal("-1701411834604692317316873037.15884105729"),
@@ -275,13 +277,14 @@ public class DecimalLiteralTest {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec128, decimal128p36s11);
                 Assert.fail("should throw exception");
-            }catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         }
     }
 
     @Test
     public void testCheckLiteralOverflowSuccess() throws AnalysisException {
-        BigDecimal decimal32Values[] = {
+        BigDecimal[] decimal32Values = {
                 new BigDecimal("2147483.647"),
                 new BigDecimal("2147483.6474"),
                 new BigDecimal("2147483.6465"),
@@ -297,12 +300,12 @@ public class DecimalLiteralTest {
         for (BigDecimal dec32 : decimal32Values) {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec32, decimal32p4s3);
-            }catch (Exception ignored) {
+            } catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
         }
 
-        BigDecimal decimal64Values[] = {
+        BigDecimal[] decimal64Values = {
                 new BigDecimal("9223372036854.775807"),
                 new BigDecimal("9223372036854.7758074"),
                 new BigDecimal("9223372036854.7758065"),
@@ -317,12 +320,12 @@ public class DecimalLiteralTest {
         for (BigDecimal dec64 : decimal64Values) {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec64, decimal64p10s6);
-            }catch (Exception ignored) {
+            } catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
         }
 
-        BigDecimal decimal128Values[] = {
+        BigDecimal[] decimal128Values = {
                 new BigDecimal("1701411834604692317316873037.15884105727"),
                 new BigDecimal("1701411834604692317316873037.158841057274"),
                 new BigDecimal("1701411834604692317316873037.158841057265"),
@@ -337,7 +340,7 @@ public class DecimalLiteralTest {
         for (BigDecimal dec128 : decimal128Values) {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec128, decimal128p36s11);
-            }catch (Exception ignored) {
+            } catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
         }
@@ -345,7 +348,7 @@ public class DecimalLiteralTest {
 
     @Test
     public void testCheckLiteralOverflowInDecimalStyleFail() throws AnalysisException {
-        BigDecimal decimal32Values[] = {
+        BigDecimal[] decimal32Values = {
                 new BigDecimal("100000.0000"),
                 new BigDecimal("99999.99995"),
                 new BigDecimal("-100000.0000"),
@@ -360,7 +363,7 @@ public class DecimalLiteralTest {
             }
         }
 
-        BigDecimal decimal64Values[] = {
+        BigDecimal[] decimal64Values = {
                 new BigDecimal("1000000000000.000000"),
                 new BigDecimal("999999999999.9999995"),
                 new BigDecimal("-1000000000000.000000"),
@@ -375,7 +378,7 @@ public class DecimalLiteralTest {
             }
         }
 
-        BigDecimal decimal128Values[] = {
+        BigDecimal[] decimal128Values = {
                 new BigDecimal("1000000000000000000000000000.00000000000"),
                 new BigDecimal("999999999999999999999999999.999999999995"),
                 new BigDecimal("-1000000000000000000000000000.00000000000"),
@@ -393,7 +396,7 @@ public class DecimalLiteralTest {
 
     @Test
     public void testCheckLiteralOverflowInDecimalStyleSuccess() throws AnalysisException {
-        BigDecimal decimal32Values[] = {
+        BigDecimal[] decimal32Values = {
                 new BigDecimal("99999.99994"),
                 new BigDecimal("99999.9999"),
                 new BigDecimal("99999.999"),
@@ -413,7 +416,7 @@ public class DecimalLiteralTest {
             }
         }
 
-        BigDecimal decimal64Values[] = {
+        BigDecimal[] decimal64Values = {
                 new BigDecimal("999999999999.9999994"),
                 new BigDecimal("999999999999.999999"),
                 new BigDecimal("999999999999.99999"),
@@ -433,7 +436,7 @@ public class DecimalLiteralTest {
             }
         }
 
-        BigDecimal decimal128Values[] = {
+        BigDecimal[] decimal128Values = {
                 new BigDecimal("999999999999999999999999999.999999999994"),
                 new BigDecimal("999999999999999999999999999.99999999999"),
                 new BigDecimal("999999999999999999999999999.9999999999"),
@@ -456,7 +459,7 @@ public class DecimalLiteralTest {
 
     @Test
     public void testPackDecimal() {
-        BigInteger[] bigIntegers = new BigInteger[]{
+        BigInteger[] bigIntegers = new BigInteger[] {
                 BigInteger.ZERO,
                 BigInteger.ONE,
                 BigInteger.ONE.shiftLeft(31).subtract(BigInteger.ONE),

@@ -21,6 +21,8 @@
 
 package com.starrocks.qe;
 
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
@@ -30,7 +32,6 @@ import com.starrocks.analysis.SetPassVar;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
@@ -39,8 +40,6 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
 
 public class SetExecutorTest {
     private Analyzer analyzer;
@@ -82,7 +81,7 @@ public class SetExecutorTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException, DdlException {
+    public void testNormal() throws UserException {
         List<SetVar> vars = Lists.newArrayList();
         vars.add(new SetPassVar(new UserIdentity("testUser", "%"), "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B"));
         vars.add(new SetNamesVar("utf8"));

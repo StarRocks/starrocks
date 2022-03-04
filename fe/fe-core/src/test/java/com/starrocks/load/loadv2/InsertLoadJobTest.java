@@ -21,6 +21,8 @@
 
 package com.starrocks.load.loadv2;
 
+import java.util.Set;
+
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -31,8 +33,6 @@ import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.Set;
 
 public class InsertLoadJobTest {
 

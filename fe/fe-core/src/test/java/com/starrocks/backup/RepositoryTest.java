@@ -21,6 +21,18 @@
 
 package com.starrocks.backup;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.sql.Timestamp;
+import java.util.List;
+import java.util.Map;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ShowRepositoriesStmt;
@@ -37,25 +49,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.sql.Timestamp;
-import java.util.List;
-import java.util.Map;
-
 public class RepositoryTest {
 
     private Repository repo;
-    private long repoId = 10000;
-    private String name = "repo";
-    private String location = "bos://backup-cmy";
-    private String brokerName = "broker";
+    private final long repoId = 10000;
+    private final String name = "repo";
+    private final String location = "bos://backup-cmy";
+    private final String brokerName = "broker";
 
     private SnapshotInfo info;
 

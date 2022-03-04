@@ -21,16 +21,16 @@
 
 package com.starrocks.http;
 
+import java.io.IOException;
+
+import static org.junit.Assert.assertTrue;
+
 import okhttp3.Request;
 import okhttp3.Response;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.IOException;
-
-import static org.junit.Assert.assertTrue;
 
 public class TableSchemaActionTest extends StarRocksHttpTestCase {
 

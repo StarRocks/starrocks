@@ -21,39 +21,39 @@
 
 package com.starrocks.analysis;
 
+import java.io.StringReader;
+import java.lang.reflect.Method;
+
 import com.starrocks.common.util.SqlParserUtils;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.StringReader;
-import java.lang.reflect.Method;
 
 public class AdminShowReplicaTest {
 
     @Test
     public void testShowReplicaStatus() {
-        String stmt = new String("ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status = 'ok'");
+        String stmt = "ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status = 'ok'";
         testAnalyzeWhere(stmt, true);
 
-        stmt = new String("ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status != 'ok'");
+        stmt = "ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status != 'ok'";
         testAnalyzeWhere(stmt, true);
 
-        stmt = new String("ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status = 'dead'");
+        stmt = "ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status = 'dead'";
         testAnalyzeWhere(stmt, true);
 
-        stmt = new String("ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status != 'VERSION_ERROR'");
+        stmt = "ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status != 'VERSION_ERROR'";
         testAnalyzeWhere(stmt, true);
 
-        stmt = new String("ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status = 'MISSING'");
+        stmt = "ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status = 'MISSING'";
         testAnalyzeWhere(stmt, true);
 
-        stmt = new String("ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status = 'missing'");
+        stmt = "ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status = 'missing'";
         testAnalyzeWhere(stmt, true);
 
-        stmt = new String("ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status != 'what'");
+        stmt = "ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status != 'what'";
         testAnalyzeWhere(stmt, false);
 
-        stmt = new String("ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status = 'how'");
+        stmt = "ADMIN SHOW REPLICA STATUS FROM db.tbl1 WHERE status = 'how'";
         testAnalyzeWhere(stmt, false);
     }
 

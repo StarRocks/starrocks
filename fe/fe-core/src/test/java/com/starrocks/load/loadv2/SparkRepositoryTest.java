@@ -1,5 +1,7 @@
 package com.starrocks.load.loadv2;
 
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
@@ -16,8 +18,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
 
 public class SparkRepositoryTest {
     private SparkRepository repository;

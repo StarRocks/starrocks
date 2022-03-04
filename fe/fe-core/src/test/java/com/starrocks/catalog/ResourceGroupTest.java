@@ -21,17 +21,17 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.common.DdlException;
-import com.starrocks.thrift.TResourceGroup;
-import com.starrocks.thrift.TResourceType;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+
+import com.starrocks.common.DdlException;
+import com.starrocks.thrift.TResourceGroup;
+import com.starrocks.thrift.TResourceType;
+import org.junit.Assert;
+import org.junit.Test;
 
 public class ResourceGroupTest {
     @Test

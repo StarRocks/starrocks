@@ -21,6 +21,8 @@
 
 package com.starrocks.qe;
 
+import java.util.List;
+
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
@@ -40,8 +42,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.List;
 
 public class VariableMgrTest {
     private static final Logger LOG = LoggerFactory.getLogger(VariableMgrTest.class);

@@ -21,6 +21,12 @@
 
 package com.starrocks.persist;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
@@ -30,16 +36,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-
 public class FsBrokerTest {
 
-    private static String fileName1 = "./FsBrokerTest1";
-    private static String fileName2 = "./FsBrokerTest2";
+    private static final String fileName1 = "./FsBrokerTest1";
+    private static final String fileName2 = "./FsBrokerTest2";
 
     @BeforeClass
     public static void setup() {

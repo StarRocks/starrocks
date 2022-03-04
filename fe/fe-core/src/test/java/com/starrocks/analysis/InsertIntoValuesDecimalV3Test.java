@@ -2,6 +2,9 @@
 
 package com.starrocks.analysis;
 
+import java.util.List;
+import java.util.UUID;
+
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
@@ -20,11 +23,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.util.List;
-import java.util.UUID;
-
 public class InsertIntoValuesDecimalV3Test {
-    private static String runningDir = "fe/mocked/InsertIntoValuesDecimalV3/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/InsertIntoValuesDecimalV3/" + UUID.randomUUID() + "/";
     private static StarRocksAssert starRocksAssert;
 
     @Rule

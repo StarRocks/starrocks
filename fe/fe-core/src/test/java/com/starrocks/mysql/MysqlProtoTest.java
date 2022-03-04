@@ -21,6 +21,12 @@
 
 package com.starrocks.mysql;
 
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -35,11 +41,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
-
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.nio.ByteBuffer;
-import java.util.List;
 
 public class MysqlProtoTest {
     private static final Logger LOG = org.slf4j.LoggerFactory.getLogger(MysqlProtoTest.class);
@@ -261,7 +262,7 @@ public class MysqlProtoTest {
         serializer.writeInt8(1234567898);
         serializer.writeVInt(1111123452);
         // string
-        serializer.writeBytes("hello".getBytes("utf-8"));
+        serializer.writeBytes("hello".getBytes(StandardCharsets.UTF_8));
         serializer.writeLenEncodedString("world");
         serializer.writeNulTerminateString("i have dream");
         serializer.writeEofString("you have dream too");

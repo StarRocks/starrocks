@@ -21,6 +21,8 @@
 
 package com.starrocks.common.proc;
 
+import java.util.Map;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -36,8 +38,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.Map;
 
 public class BackendProcNodeTest {
     private Backend b1;

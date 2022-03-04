@@ -67,7 +67,8 @@ public class ColumnDefTest {
         Assert.assertEquals("`col` int(11) NOT NULL DEFAULT \"10\" COMMENT \"\"", column.toSql());
 
         // agg
-        column = new ColumnDef("col", floatCol, false, AggregateType.SUM, false, new DefaultValueDef(true, new StringLiteral("10")), "");
+        column = new ColumnDef("col", floatCol, false, AggregateType.SUM, false,
+                new DefaultValueDef(true, new StringLiteral("10")), "");
         column.analyze(true);
         Assert.assertEquals("10", column.getDefaultValue());
         Assert.assertEquals(AggregateType.SUM, column.getAggregateType());
@@ -112,7 +113,8 @@ public class ColumnDefTest {
 
     @Test(expected = AnalysisException.class)
     public void testArrayDefaultValue() throws AnalysisException {
-        ColumnDef column = new ColumnDef("col", arrayIntCol, false, null, true, new DefaultValueDef(true, new StringLiteral("[1]")), "");
+        ColumnDef column =
+                new ColumnDef("col", arrayIntCol, false, null, true, new DefaultValueDef(true, new StringLiteral("[1]")), "");
         column.analyze(true);
     }
 
@@ -124,15 +126,18 @@ public class ColumnDefTest {
 
     @Test
     public void testBooleanDefaultValue() throws AnalysisException {
-        ColumnDef column1 = new ColumnDef("col", booleanCol, true, null, true, new DefaultValueDef(true, new StringLiteral("1")), "");
+        ColumnDef column1 =
+                new ColumnDef("col", booleanCol, true, null, true, new DefaultValueDef(true, new StringLiteral("1")), "");
         column1.analyze(true);
         Assert.assertEquals("1", column1.getDefaultValue());
 
-        ColumnDef column2 = new ColumnDef("col", booleanCol, true, null, true, new DefaultValueDef(true, new StringLiteral("true")), "");
+        ColumnDef column2 =
+                new ColumnDef("col", booleanCol, true, null, true, new DefaultValueDef(true, new StringLiteral("true")), "");
         column2.analyze(true);
         Assert.assertEquals("true", column2.getDefaultValue());
 
-        ColumnDef column3 = new ColumnDef("col", booleanCol, true, null, true, new DefaultValueDef(true, new StringLiteral("10")), "");
+        ColumnDef column3 =
+                new ColumnDef("col", booleanCol, true, null, true, new DefaultValueDef(true, new StringLiteral("10")), "");
         try {
             column3.analyze(true);
         } catch (AnalysisException e) {

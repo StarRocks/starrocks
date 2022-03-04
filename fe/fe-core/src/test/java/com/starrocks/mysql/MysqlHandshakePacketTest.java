@@ -21,14 +21,14 @@
 
 package com.starrocks.mysql;
 
+import java.nio.ByteBuffer;
+
 import com.google.common.primitives.Bytes;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.nio.ByteBuffer;
 
 public class MysqlHandshakePacketTest {
     private byte[] buf;

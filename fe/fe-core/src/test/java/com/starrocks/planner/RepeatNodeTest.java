@@ -21,6 +21,12 @@
 
 package com.starrocks.planner;
 
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.AccessTestUtil;
@@ -40,18 +46,12 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
-
 public class RepeatNodeTest {
     private Analyzer analyzer;
     private RepeatNode node;
     private TupleDescriptor virtualTuple;
-    private List<Set<SlotId>> groupingIdList = new ArrayList<>();
-    private List<List<Long>> groupingList = new ArrayList<>();
+    private final List<Set<SlotId>> groupingIdList = new ArrayList<>();
+    private final List<List<Long>> groupingList = new ArrayList<>();
     private ConnectContext connectContext;
 
     @Before

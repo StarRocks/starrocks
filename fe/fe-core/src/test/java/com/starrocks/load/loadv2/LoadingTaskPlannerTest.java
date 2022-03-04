@@ -21,6 +21,11 @@
 
 package com.starrocks.load.loadv2;
 
+import java.io.StringReader;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -74,11 +79,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.io.StringReader;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
 
 public class LoadingTaskPlannerTest {
     private long jobId;
@@ -339,7 +339,7 @@ public class LoadingTaskPlannerTest {
 
     @Test
     public void testPartialUpdatePlan(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService,
-                                   @Injectable Database db, @Injectable OlapTable table) throws Exception {
+                                      @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));

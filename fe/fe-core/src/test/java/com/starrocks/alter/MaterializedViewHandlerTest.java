@@ -21,6 +21,8 @@
 
 package com.starrocks.alter;
 
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.MVColumnItem;
@@ -37,8 +39,6 @@ import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.List;
 
 public class MaterializedViewHandlerTest {
     @Test

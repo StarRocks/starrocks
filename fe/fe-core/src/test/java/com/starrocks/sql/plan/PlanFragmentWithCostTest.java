@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.plan;
 
+import java.util.ArrayList;
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
@@ -19,8 +21,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.ArrayList;
 
 public class PlanFragmentWithCostTest extends PlanTestBase {
 

@@ -21,6 +21,8 @@
 
 package com.starrocks.analysis;
 
+import java.util.UUID;
+
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -31,10 +33,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.util.UUID;
-
 public class AdminSetConfigStmtTest {
-    private static String runningDir = "fe/mocked/AdminSetConfigStmtTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/AdminSetConfigStmtTest/" + UUID.randomUUID() + "/";
 
     private static ConnectContext connectContext;
 

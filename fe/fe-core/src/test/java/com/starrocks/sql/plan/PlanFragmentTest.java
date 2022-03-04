@@ -2,6 +2,9 @@
 
 package com.starrocks.sql.plan;
 
+import java.util.HashMap;
+import java.util.List;
+
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
@@ -38,9 +41,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.util.HashMap;
-import java.util.List;
-
 public class PlanFragmentTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -50,9 +50,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
         starRocksAssert.withTable("create table test.colocate1\n" +
-                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
-                "properties(\"replication_num\" = \"1\"," +
-                "\"colocate_with\" = \"group1\");")
+                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                        "properties(\"replication_num\" = \"1\"," +
+                        "\"colocate_with\" = \"group1\");")
                 .withTable("create table test.colocate2\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
                         "properties(\"replication_num\" = \"1\"," +
@@ -1863,12 +1863,12 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(a)\n" +
-                "  |  group by: b\n" +
-                "  |  \n" +
-                "  0:SCAN JDBC\n" +
-                "     TABLE: `test_table`\n" +
-                "     QUERY: SELECT a, b FROM `test_table`"));
+                        "  |  output: sum(a)\n" +
+                        "  |  group by: b\n" +
+                        "  |  \n" +
+                        "  0:SCAN JDBC\n" +
+                        "     TABLE: `test_table`\n" +
+                        "     QUERY: SELECT a, b FROM `test_table`"));
     }
 
     @Test
@@ -4567,7 +4567,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE"));
 
-        sql = "select * from (select * from (select * from t0 limit 0) t intersect select * from t1 intersect select * from t2) as xx";
+        sql =
+                "select * from (select * from (select * from t0 limit 0) t intersect select * from t1 intersect select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
@@ -5965,9 +5966,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "    EXCHANGE ID: 05\n" +
                 "    HASH_PARTITIONED: 9: v9, 7: v7, 8: v8"));
 
-        sql = "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
-                "(select v7, v8, v1 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
-                "on a.v2 = b.v8 and a.v1 = b.v7";
+        sql =
+                "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+                        "(select v7, v8, v1 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
+                        "on a.v2 = b.v8 and a.v1 = b.v7";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("12:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
@@ -5989,9 +5991,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "    HASH_PARTITIONED: 2: v2, 1: v1"));
 
         // check can not adjust column orders
-        sql = "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
-                "(select v7, v8, v1, v2 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
-                "on a.v2 = b.v8 and a.v4 = b.v8";
+        sql =
+                "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+                        "(select v7, v8, v1, v2 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
+                        "on a.v2 = b.v8 and a.v4 = b.v8";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
@@ -6013,9 +6016,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "    HASH_PARTITIONED: 10: v1, 11: v2"));
 
         // check can not adjust column orders
-        sql = "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
-                "(select v7, v8, v1, v2 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
-                "on a.v2 = b.v8 and a.v4 = b.v1";
+        sql =
+                "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+                        "(select v7, v8, v1, v2 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
+                        "on a.v2 = b.v8 and a.v4 = b.v1";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +

@@ -21,13 +21,13 @@
 
 package com.starrocks.http;
 
+import java.io.IOException;
+
 import okhttp3.Request;
 import okhttp3.Response;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.IOException;
 
 public class TableRowCountActionTest extends StarRocksHttpTestCase {
     private static final String PATH_URI = "/_count";

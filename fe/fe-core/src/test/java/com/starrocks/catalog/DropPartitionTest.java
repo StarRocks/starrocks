@@ -21,6 +21,10 @@
 
 package com.starrocks.catalog;
 
+import java.io.File;
+import java.util.List;
+import java.util.UUID;
+
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -34,12 +38,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.util.List;
-import java.util.UUID;
-
 public class DropPartitionTest {
-    private static String runningDir = "fe/mocked/DropPartitionTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/DropPartitionTest/" + UUID.randomUUID() + "/";
 
     private static ConnectContext connectContext;
 

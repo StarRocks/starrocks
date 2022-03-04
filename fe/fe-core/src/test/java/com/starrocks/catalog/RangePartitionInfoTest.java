@@ -21,6 +21,10 @@
 
 package com.starrocks.catalog;
 
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionKeyDesc.PartitionRangeType;
@@ -30,10 +34,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
 
 public class RangePartitionInfoTest {
 

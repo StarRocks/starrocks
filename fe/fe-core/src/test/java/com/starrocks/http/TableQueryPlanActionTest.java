@@ -21,6 +21,10 @@
 
 package com.starrocks.http;
 
+import java.io.IOException;
+import java.util.Base64;
+import java.util.Objects;
+
 import com.starrocks.thrift.TQueryPlanInfo;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -31,10 +35,6 @@ import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.io.IOException;
-import java.util.Base64;
-import java.util.Objects;
 
 public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
 
@@ -86,12 +86,12 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
     @Test
     public void testNoSqlFailure() throws IOException {
         RequestBody body = RequestBody
-            .create(JSON, "{}");
+                .create(JSON, "{}");
         Request request = new Request.Builder()
-            .post(body)
-            .addHeader("Authorization", rootAuth)
-            .url(URI + PATH_URI)
-            .build();
+                .post(body)
+                .addHeader("Authorization", rootAuth)
+                .url(URI + PATH_URI)
+                .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = Objects.requireNonNull(response.body()).string();
         System.out.println(respStr);

@@ -1,6 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import java.io.File;
+import java.util.UUID;
+
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TablePattern;
@@ -15,12 +18,9 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.util.UUID;
-
 public class PrivilegeCheckerTest {
 
-    private static String runningDir = "fe/mocked/AnalyzeSubquery/" + UUID.randomUUID() + "/";
+    private static final String runningDir = "fe/mocked/AnalyzeSubquery/" + UUID.randomUUID() + "/";
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
     private static Auth auth;

@@ -21,16 +21,16 @@
 
 package com.starrocks.analysis;
 
-import org.junit.Test;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+
+import org.junit.Test;
 
 public class ShowVariablesStmtTest {
     @Test
     public void testNormal() {
         ShowVariablesStmt stmt = new ShowVariablesStmt(null, null);
-        stmt.analyze((Analyzer) null);
+        stmt.analyze(null);
         assertEquals("SHOW DEFAULT VARIABLES", stmt.toString());
         assertEquals(2, stmt.getMetaData().getColumnCount());
         assertEquals("Variable_name", stmt.getMetaData().getColumn(0).getName());
@@ -39,7 +39,7 @@ public class ShowVariablesStmtTest {
         assertEquals(SetType.DEFAULT, stmt.getType());
 
         stmt = new ShowVariablesStmt(SetType.GLOBAL, "abc");
-        stmt.analyze((Analyzer) null);
+        stmt.analyze(null);
         assertEquals("SHOW GLOBAL VARIABLES LIKE 'abc'", stmt.toString());
         assertEquals(2, stmt.getMetaData().getColumnCount());
         assertEquals("Variable_name", stmt.getMetaData().getColumn(0).getName());

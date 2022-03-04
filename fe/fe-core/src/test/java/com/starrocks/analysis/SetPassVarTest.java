@@ -52,7 +52,7 @@ public class SetPassVarTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         SetPassVar stmt;
 
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';
@@ -87,7 +87,7 @@ public class SetPassVarTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testBadPassword() throws UserException, AnalysisException {
+    public void testBadPassword() throws UserException {
         SetPassVar stmt;
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), "*88EEBAHD913688E7278E2AD071FDB5E76D76D34B");

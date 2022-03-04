@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
@@ -47,7 +46,7 @@ public class ShowUserPropertyStmtTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         ShowUserPropertyStmt stmt = new ShowUserPropertyStmt("testUser", "%load_cluster%");
         stmt.analyze(analyzer);
         Assert.assertEquals("SHOW PROPERTY FOR 'testCluster:testUser' LIKE '%load_cluster%'", stmt.toString());

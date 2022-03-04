@@ -28,7 +28,7 @@ import org.junit.Test;
 
 public class RestoreFileMappingTest {
 
-    private RestoreFileMapping fileMapping = new RestoreFileMapping();
+    private final RestoreFileMapping fileMapping = new RestoreFileMapping();
     private IdChain src;
     private IdChain dest;
 

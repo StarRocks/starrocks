@@ -67,7 +67,7 @@ public class DropTableStmtTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         DropTableStmt stmt = new DropTableStmt(false, tbl, true);
         stmt.analyze(analyzer);
         Assert.assertEquals("testCluster:db1", stmt.getDbName());
@@ -76,7 +76,7 @@ public class DropTableStmtTest {
     }
 
     @Test
-    public void testDefaultNormal() throws UserException, AnalysisException {
+    public void testDefaultNormal() throws UserException {
         DropTableStmt stmt = new DropTableStmt(false, noDbTbl, true);
         stmt.analyze(analyzer);
         Assert.assertEquals("testCluster:testDb", stmt.getDbName());
@@ -85,14 +85,14 @@ public class DropTableStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testNoDbFail() throws UserException, AnalysisException {
+    public void testNoDbFail() throws UserException {
         DropTableStmt stmt = new DropTableStmt(false, noDbTbl, true);
         stmt.analyze(noDbAnalyzer);
         Assert.fail("No Exception throws.");
     }
 
     @Test(expected = AnalysisException.class)
-    public void testNoTableFail() throws UserException, AnalysisException {
+    public void testNoTableFail() throws UserException {
         DropTableStmt stmt = new DropTableStmt(false, new TableName("db1", ""), true);
         stmt.analyze(noDbAnalyzer);
         Assert.fail("No Exception throws.");

@@ -21,6 +21,9 @@
 
 package com.starrocks.catalog;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.alter.RollupJob;
@@ -34,12 +37,9 @@ import com.starrocks.transaction.TransactionState;
 import mockit.Mock;
 import mockit.MockUp;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class FakeEditLog extends MockUp<EditLog> {
 
-    private Map<Long, TransactionState> allTransactionState = new HashMap<>();
+    private final Map<Long, TransactionState> allTransactionState = new HashMap<>();
 
     @Mock
     public void $init(String nodeName) {

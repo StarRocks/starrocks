@@ -2,6 +2,12 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
@@ -16,12 +22,6 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.junit.Test;
-
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 public class ColumnFilterConverterTest {
 
@@ -76,14 +76,16 @@ public class ColumnFilterConverterTest {
     public void testIsNullOnCastColumn() {
         {
             // cast(c0 as smallint) is null.
-            IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(false, new CastOperator(Type.SMALLINT, new ColumnRefOperator(1, Type.INT, "c0", true)));
+            IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(false,
+                    new CastOperator(Type.SMALLINT, new ColumnRefOperator(1, Type.INT, "c0", true)));
             List<ScalarOperator> list = Lists.newArrayList(isNullPredicate);
             Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
             assertEquals(result.size(), 0);
         }
         {
             // c0 is null.
-            IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(false, new ColumnRefOperator(1, Type.INT, "c0", true));
+            IsNullPredicateOperator isNullPredicate =
+                    new IsNullPredicateOperator(false, new ColumnRefOperator(1, Type.INT, "c0", true));
             List<ScalarOperator> list = Lists.newArrayList(isNullPredicate);
             Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
             assertEquals(result.size(), 1);

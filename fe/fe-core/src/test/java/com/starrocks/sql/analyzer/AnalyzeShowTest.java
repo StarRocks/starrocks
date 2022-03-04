@@ -2,17 +2,17 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.utframe.UtFrameUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
 import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
 public class AnalyzeShowTest {
     // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeShow/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/AnalyzeShow/" + UUID.randomUUID() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {

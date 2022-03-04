@@ -1,6 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.load;
 
+import java.util.List;
+import java.util.UUID;
+
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -11,12 +14,9 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.List;
-import java.util.UUID;
-
 public class DeletePruneTest {
 
-    private static String runningDir = "fe/mocked/DeletePruneTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/DeletePruneTest/" + UUID.randomUUID() + "/";
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;

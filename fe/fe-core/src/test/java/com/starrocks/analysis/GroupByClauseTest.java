@@ -21,13 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Multimap;
-import com.starrocks.common.AnalysisException;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -35,6 +28,13 @@ import java.util.BitSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
+import com.starrocks.common.AnalysisException;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 public class GroupByClauseTest {
 

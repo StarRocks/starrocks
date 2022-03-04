@@ -21,6 +21,16 @@
 
 package com.starrocks.persist.gson;
 
+import java.io.DataInput;
+import java.io.DataInputStream;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Map;
+
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -32,16 +42,6 @@ import com.starrocks.persist.gson.GsonUtils.PostProcessTypeAdapterFactory;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.Map;
 
 /*
  * This unit test shows how to serialize and deserialize inherited class.
@@ -58,7 +58,7 @@ import java.util.Map;
  *
  */
 public class GsonDerivedClassSerializationTest {
-    private static String fileName = "./GsonDerivedClassSerializationTest";
+    private static final String fileName = "./GsonDerivedClassSerializationTest";
 
     @After
     public void tearDown() {
@@ -141,14 +141,14 @@ public class GsonDerivedClassSerializationTest {
         }
     }
 
-    private static RuntimeTypeAdapterFactory<ParentClass> runtimeTypeAdapterFactory = RuntimeTypeAdapterFactory
+    private static final RuntimeTypeAdapterFactory<ParentClass> runtimeTypeAdapterFactory = RuntimeTypeAdapterFactory
             // the "clazz" is a custom defined name
             .of(ParentClass.class, "clazz")
             // register 2 derived classes, the second parameter will be the value of "clazz"
             .registerSubtype(ChildClassA.class, ChildClassA.class.getSimpleName())
             .registerSubtype(ChildClassB.class, ChildClassB.class.getSimpleName());
 
-    private static Gson TEST_GSON = new GsonBuilder()
+    private static final Gson TEST_GSON = new GsonBuilder()
             .addSerializationExclusionStrategy(new HiddenAnnotationExclusionStrategy())
             .enableComplexMapKeySerialization()
             // register the RuntimeTypeAdapterFactory
@@ -172,7 +172,7 @@ public class GsonDerivedClassSerializationTest {
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         ParentClass parentClass = ParentClass.read(in);
         Assert.assertTrue(parentClass instanceof ChildClassA);
-        Assert.assertEquals(1, ((ChildClassA) parentClass).flag);
+        Assert.assertEquals(1, parentClass.flag);
         Assert.assertEquals("A", ((ChildClassA) parentClass).tagA);
         Assert.assertEquals("after post", ((ChildClassA) parentClass).postTagA);
     }
@@ -193,7 +193,7 @@ public class GsonDerivedClassSerializationTest {
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         ParentClass parentClass = ParentClass.read(in);
         Assert.assertTrue(parentClass instanceof ChildClassB);
-        Assert.assertEquals(2, ((ChildClassB) parentClass).flag);
+        Assert.assertEquals(2, parentClass.flag);
         Assert.assertEquals(2, ((ChildClassB) parentClass).mapB.size());
         Assert.assertEquals("B1", ((ChildClassB) parentClass).mapB.get(1L));
         Assert.assertEquals("B2", ((ChildClassB) parentClass).mapB.get(2L));
@@ -214,7 +214,7 @@ public class GsonDerivedClassSerializationTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         WrapperClass readWrapperClass = WrapperClass.read(in);
-        Assert.assertEquals(1, ((ChildClassA) readWrapperClass.clz).flag);
+        Assert.assertEquals(1, readWrapperClass.clz.flag);
     }
 
 }

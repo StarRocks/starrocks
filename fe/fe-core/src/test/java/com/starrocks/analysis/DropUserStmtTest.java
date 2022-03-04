@@ -47,7 +47,7 @@ public class DropUserStmtTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         DropUserStmt stmt = new DropUserStmt(new UserIdentity("user", "%"));
         stmt.analyze(analyzer);
         Assert.assertEquals("DROP USER 'testCluster:user'@'%'", stmt.toString());
@@ -55,7 +55,7 @@ public class DropUserStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testNoUser() throws UserException, AnalysisException {
+    public void testNoUser() throws UserException {
         DropUserStmt stmt = new DropUserStmt(new UserIdentity("", "%"));
         stmt.analyze(analyzer);
         Assert.fail("No Exception throws.");

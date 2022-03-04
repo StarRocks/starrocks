@@ -24,7 +24,6 @@ package com.starrocks.analysis;
 import com.starrocks.analysis.ShowAlterStmt.AlterType;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FakeCatalog;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import mockit.Expectations;
@@ -72,7 +71,7 @@ public class CancelAlterStmtTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         fakeCatalog = new FakeCatalog();
         FakeCatalog.setCatalog(catalog);
         // cancel alter column

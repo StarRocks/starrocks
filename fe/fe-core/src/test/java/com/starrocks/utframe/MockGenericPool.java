@@ -2,6 +2,8 @@
 
 package com.starrocks.utframe;
 
+import java.util.Map;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.common.GenericPool;
@@ -9,8 +11,6 @@ import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
-
-import java.util.Map;
 
 public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> extends GenericPool<VALUE> {
     protected Map<TNetworkAddress, MockedBackend> backendMap = Maps.newConcurrentMap();

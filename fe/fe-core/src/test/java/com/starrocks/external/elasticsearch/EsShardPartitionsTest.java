@@ -21,13 +21,13 @@
 
 package com.starrocks.external.elasticsearch;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.CatalogTestUtil;
 import com.starrocks.catalog.EsTable;
 import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 
 public class EsShardPartitionsTest extends EsTestCase {
 

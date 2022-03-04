@@ -21,6 +21,12 @@
 
 package com.starrocks.catalog;
 
+import java.io.File;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
@@ -38,21 +44,15 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.io.File;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 public class ColocateTableTest {
-    private static String runningDir = "fe/mocked/ColocateTableTest" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/ColocateTableTest" + UUID.randomUUID() + "/";
 
     private static ConnectContext connectContext;
-    private static String dbName = "testDb";
-    private static String fullDbName = "default_cluster:" + dbName;
-    private static String tableName1 = "t1";
-    private static String tableName2 = "t2";
-    private static String groupName = "group1";
+    private static final String dbName = "testDb";
+    private static final String fullDbName = "default_cluster:" + dbName;
+    private static final String tableName1 = "t1";
+    private static final String tableName2 = "t2";
+    private static final String groupName = "group1";
     private static StarRocksAssert starRocksAssert;
 
     @Rule

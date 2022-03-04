@@ -21,16 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
-import com.starrocks.common.jmockit.Deencapsulation;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -40,6 +30,15 @@ import java.io.FileOutputStream;
 import static com.starrocks.analysis.ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
 import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NOT_SET;
 import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
+
+import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 public class ColumnTest {
 

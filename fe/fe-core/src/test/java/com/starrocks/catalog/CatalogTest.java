@@ -21,19 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.alter.AlterJob;
-import com.starrocks.alter.AlterJob.JobType;
-import com.starrocks.alter.SchemaChangeJob;
-import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.cluster.Cluster;
-import com.starrocks.common.FeConstants;
-import com.starrocks.load.Load;
-import com.starrocks.meta.MetaContext;
-import mockit.Expectations;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -47,6 +34,19 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+
+import com.starrocks.alter.AlterJob;
+import com.starrocks.alter.AlterJob.JobType;
+import com.starrocks.alter.SchemaChangeJob;
+import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.cluster.Cluster;
+import com.starrocks.common.FeConstants;
+import com.starrocks.load.Load;
+import com.starrocks.meta.MetaContext;
+import mockit.Expectations;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 public class CatalogTest {
 

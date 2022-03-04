@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import java.time.LocalDateTime;
+
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -10,8 +12,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.time.LocalDateTime;
 
 public class PredicateStatisticsCalculatorTest {
     @Test

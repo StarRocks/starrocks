@@ -21,13 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.PartitionValue;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -37,6 +30,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.TimeZone;
+
+import com.starrocks.analysis.PartitionValue;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 public class PartitionKeyTest {
 
@@ -128,26 +128,26 @@ public class PartitionKeyTest {
 
         // case8
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("127"), new PartitionValue("32767"),
-                new PartitionValue("2147483647"), new PartitionValue("9223372036854775807"),
-                new PartitionValue("170141183460469231731687303715884105727"),
-                new PartitionValue("9999-12-31"), new PartitionValue("9999-12-31 23:59:59")),
+                        new PartitionValue("2147483647"), new PartitionValue("9223372036854775807"),
+                        new PartitionValue("170141183460469231731687303715884105727"),
+                        new PartitionValue("9999-12-31"), new PartitionValue("9999-12-31 23:59:59")),
                 allColumns);
         pk2 = PartitionKey.createInfinityPartitionKey(allColumns, true);
         Assert.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
 
         // case9
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("-128"), new PartitionValue("-32768"),
-                new PartitionValue("-2147483648"), new PartitionValue("-9223372036854775808"),
-                new PartitionValue("-170141183460469231731687303715884105728"),
-                new PartitionValue("0000-01-01"), new PartitionValue("0000-01-01 00:00:00")),
+                        new PartitionValue("-2147483648"), new PartitionValue("-9223372036854775808"),
+                        new PartitionValue("-170141183460469231731687303715884105728"),
+                        new PartitionValue("0000-01-01"), new PartitionValue("0000-01-01 00:00:00")),
                 allColumns);
         pk2 = PartitionKey.createInfinityPartitionKey(allColumns, false);
         Assert.assertTrue(pk1.equals(pk2) && pk1.compareTo(pk2) == 0);
 
         // case10
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("-128"), new PartitionValue("-32768"),
-                new PartitionValue("0"), new PartitionValue("-9223372036854775808"),
-                new PartitionValue("0"), new PartitionValue("1970-01-01"), new PartitionValue("1970-01-01 00:00:00")),
+                        new PartitionValue("0"), new PartitionValue("-9223372036854775808"),
+                        new PartitionValue("0"), new PartitionValue("1970-01-01"), new PartitionValue("1970-01-01 00:00:00")),
                 allColumns);
         pk2 = PartitionKey.createInfinityPartitionKey(allColumns, false);
         Assert.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == 1);

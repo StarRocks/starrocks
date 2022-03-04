@@ -21,10 +21,6 @@
 
 package com.starrocks.load;
 
-import com.starrocks.thrift.TEtlState;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -32,6 +28,10 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.Map;
 import java.util.TreeMap;
+
+import com.starrocks.thrift.TEtlState;
+import org.junit.Assert;
+import org.junit.Test;
 
 public class EtlJobStatusTest {
 

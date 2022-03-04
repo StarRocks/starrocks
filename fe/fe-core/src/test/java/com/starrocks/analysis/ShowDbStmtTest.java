@@ -21,14 +21,13 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class ShowDbStmtTest {
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         final Analyzer analyzer = AccessTestUtil.fetchBlockAnalyzer();
         ShowDbStmt stmt = new ShowDbStmt(null);
         stmt.analyze(analyzer);

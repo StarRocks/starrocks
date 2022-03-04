@@ -21,6 +21,9 @@
 
 package com.starrocks.bdb;
 
+import java.io.File;
+import java.io.IOException;
+
 import com.sleepycat.bind.tuple.TupleBinding;
 import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseConfig;
@@ -40,15 +43,12 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.io.IOException;
-
 public class BDBToolTest {
 
     private static Environment env;
-    private static String path = "./bdb";
+    private static final String path = "./bdb";
     private static Database db;
-    private static String dbName = "12345";
+    private static final String dbName = "12345";
 
     @BeforeClass
     public static void setEnv() {

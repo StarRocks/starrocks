@@ -21,6 +21,9 @@
 
 package com.starrocks.catalog;
 
+import java.io.File;
+import java.util.UUID;
+
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.common.AnalysisException;
@@ -34,11 +37,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.util.UUID;
-
 public class CreateTableTest {
-    private static String runningDir = "fe/mocked/CreateTableTest2/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/CreateTableTest2/" + UUID.randomUUID() + "/";
 
     private static ConnectContext connectContext;
 

@@ -21,20 +21,20 @@
 
 package com.starrocks.common;
 
-import org.apache.commons.codec.digest.DigestUtils;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 
+import org.apache.commons.codec.digest.DigestUtils;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
 public class MD5Test {
 
-    private static String fileName = "job_info.txt";
+    private static final String fileName = "job_info.txt";
 
     @BeforeClass
     public static void createFile() {

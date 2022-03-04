@@ -2,6 +2,15 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import java.io.File;
+import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -41,19 +50,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.time.LocalDateTime;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.stream.Collectors;
-
 public class StatisticsCalculatorTest {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/StatisticsCalculatorTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/StatisticsCalculatorTest/" + UUID.randomUUID() + "/";
     private static ConnectContext connectContext;
     private static OptimizerContext optimizerContext;
     private static ColumnRefFactory columnRefFactory;
@@ -194,7 +194,7 @@ public class StatisticsCalculatorTest {
         LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
                 Maps.newHashMap(), Maps.newHashMap(),
                 null, -1, null,
-                ((OlapTable) table).getBaseIndexId(),
+                table.getBaseIndexId(),
                 partitionIds,
                 null,
                 Lists.newArrayList(),
@@ -383,7 +383,7 @@ public class StatisticsCalculatorTest {
                 new LogicalOlapScanOperator(table,
                         ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
                         ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date), null, -1, null,
-                        ((OlapTable) table).getBaseIndexId(),
+                        table.getBaseIndexId(),
                         partitionIds,
                         null,
                         Lists.newArrayList(),
@@ -412,7 +412,7 @@ public class StatisticsCalculatorTest {
                 new LogicalOlapScanOperator(table,
                         ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
                         ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date), null, -1, null,
-                        ((OlapTable) table).getBaseIndexId(),
+                        table.getBaseIndexId(),
                         partitionIds,
                         null,
                         Lists.newArrayList(),

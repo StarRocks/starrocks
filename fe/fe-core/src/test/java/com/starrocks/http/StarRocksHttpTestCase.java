@@ -21,6 +21,13 @@
 
 package com.starrocks.http;
 
+import java.net.ServerSocket;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
 import com.google.common.collect.Lists;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -66,13 +73,6 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
-import java.net.ServerSocket;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
 abstract public class StarRocksHttpTestCase {
 
     public OkHttpClient networkClient = new OkHttpClient.Builder()
@@ -87,19 +87,19 @@ abstract public class StarRocksHttpTestCase {
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
 
-    private static long testBackendId1 = 1000;
-    private static long testBackendId2 = 1001;
-    private static long testBackendId3 = 1002;
+    private static final long testBackendId1 = 1000;
+    private static final long testBackendId2 = 1001;
+    private static final long testBackendId3 = 1002;
 
-    private static long testReplicaId1 = 2000;
-    private static long testReplicaId2 = 2001;
-    private static long testReplicaId3 = 2002;
+    private static final long testReplicaId1 = 2000;
+    private static final long testReplicaId2 = 2001;
+    private static final long testReplicaId3 = 2002;
 
-    private static long testDbId = 100L;
-    private static long testTableId = 200L;
-    private static long testPartitionId = 201L;
+    private static final long testDbId = 100L;
+    private static final long testTableId = 200L;
+    private static final long testPartitionId = 201L;
     public static long testIndexId = testTableId; // the base indexid == tableid
-    private static long tabletId = 400L;
+    private static final long tabletId = 400L;
 
     public static long testStartVersion = 12;
     public static int testSchemaHash = 93423942;

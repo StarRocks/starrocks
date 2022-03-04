@@ -21,12 +21,6 @@
 
 package com.starrocks.persist;
 
-import com.google.common.collect.Lists;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
-import org.junit.After;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -35,8 +29,14 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 
+import com.google.common.collect.Lists;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
+import org.junit.After;
+import org.junit.Test;
+
 public class GlobalVarPersistInfoTest {
-    private static String fileName = "./GlobalVarPersistInfoTest";
+    private static final String fileName = "./GlobalVarPersistInfoTest";
 
     @After
     public void tearDown() {

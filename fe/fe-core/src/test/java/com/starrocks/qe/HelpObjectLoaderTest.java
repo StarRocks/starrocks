@@ -21,15 +21,15 @@
 
 package com.starrocks.qe;
 
-import com.google.common.collect.Lists;
-import com.starrocks.common.UserException;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.IOException;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.List;
+
+import com.google.common.collect.Lists;
+import com.starrocks.common.UserException;
+import org.junit.Assert;
+import org.junit.Test;
 
 public class HelpObjectLoaderTest {
 

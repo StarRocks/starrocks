@@ -28,13 +28,13 @@ public class KillStmtTest {
     @Test
     public void testNormal() {
         KillStmt stmt = new KillStmt(false, 1);
-        stmt.analyze((Analyzer) null);
+        stmt.analyze(null);
         Assert.assertEquals("KILL QUERY 1", stmt.toString());
         Assert.assertEquals(false, stmt.isConnectionKill());
         Assert.assertEquals(1, stmt.getConnectionId());
 
         stmt = new KillStmt(true, 2);
-        stmt.analyze((Analyzer) null);
+        stmt.analyze(null);
         Assert.assertEquals(true, stmt.isConnectionKill());
         Assert.assertEquals(2, stmt.getConnectionId());
         Assert.assertEquals("KILL 2", stmt.toString());

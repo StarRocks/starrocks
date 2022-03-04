@@ -47,7 +47,7 @@ public class CreateDbStmtTest {
     }
 
     @Test
-    public void testAnalyzeNormal() throws UserException, AnalysisException {
+    public void testAnalyzeNormal() throws UserException {
         CreateDbStmt dbStmt = new CreateDbStmt(false, "test");
         dbStmt.analyze(analyzer);
         Assert.assertEquals("testCluster:test", dbStmt.getFullDbName());
@@ -55,7 +55,7 @@ public class CreateDbStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testAnnlyzeWithException() throws UserException, AnalysisException {
+    public void testAnnlyzeWithException() throws UserException {
         CreateDbStmt stmt = new CreateDbStmt(false, "");
         stmt.analyze(analyzer);
         Assert.fail("no exception");

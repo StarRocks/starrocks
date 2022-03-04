@@ -2,10 +2,10 @@
 
 package com.starrocks.sql.plan;
 
-import org.junit.Test;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+
+import org.junit.Test;
 
 public class AggTableTest extends PlanTestBase {
     public static void assertTestAggOFF(String sql, String reason) {

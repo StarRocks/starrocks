@@ -1,5 +1,11 @@
 package com.starrocks.load;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
@@ -45,12 +51,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-
 public class DeleteHandlerTest {
 
     private DeleteHandler deleteHandler;
@@ -81,8 +81,8 @@ public class DeleteHandlerTest {
     Analyzer analyzer;
 
     private GlobalTransactionMgr globalTransactionMgr;
-    private TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
-    private ConnectContext connectContext = new ConnectContext();
+    private final TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
+    private final ConnectContext connectContext = new ConnectContext();
 
     @Before
     public void setUp() {

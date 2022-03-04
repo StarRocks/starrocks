@@ -1,12 +1,5 @@
 package com.starrocks.persist;
 
-import com.google.common.collect.Lists;
-import com.starrocks.catalog.DataProperty;
-import com.starrocks.common.AnalysisException;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -15,8 +8,15 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.DataProperty;
+import com.starrocks.common.AnalysisException;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Test;
+
 public class BatchModifyPartitionsInfoTest {
-    private static String fileName = "./BatchModifyPartitionsInfoTest";
+    private static final String fileName = "./BatchModifyPartitionsInfoTest";
 
     private final long DB_ID = 10000L;
     private final long TB_ID = 30000L;

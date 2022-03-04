@@ -2,17 +2,6 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.DateTimeException;
@@ -24,6 +13,17 @@ import java.util.Locale;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 public class ScalarOperatorFunctionsTest {
     private ConstantOperator O_DT_20101102_183010;
@@ -192,7 +192,7 @@ public class ScalarOperatorFunctionsTest {
 
         assertEquals("2001-01-09",
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2001, 1, 9, 13, 4, 5)),
-                        ConstantOperator.createVarchar("%Y-%m-%d"))
+                                ConstantOperator.createVarchar("%Y-%m-%d"))
                         .getVarchar());
         assertEquals("5",
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 21, 13, 4, 5)),

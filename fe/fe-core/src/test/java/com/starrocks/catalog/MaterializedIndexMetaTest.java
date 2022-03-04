@@ -21,6 +21,15 @@
 
 package com.starrocks.catalog;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ColumnDef;
@@ -40,18 +49,9 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-
 public class MaterializedIndexMetaTest {
 
-    private static String fileName = "./MaterializedIndexMetaSerializeTest";
+    private static final String fileName = "./MaterializedIndexMetaSerializeTest";
 
     @After
     public void tearDown() {

@@ -21,6 +21,20 @@
 
 package com.starrocks.backup;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.file.FileVisitOption;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BackupStmt;
@@ -63,20 +77,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.file.FileVisitOption;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-
 public class BackupHandlerTest {
 
     private BackupHandler handler;
@@ -94,9 +94,9 @@ public class BackupHandlerTest {
 
     private File rootDir;
 
-    private String tmpPath = "./tmp" + System.currentTimeMillis();
+    private final String tmpPath = "./tmp" + System.currentTimeMillis();
 
-    private TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
+    private final TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
 
     @Before
     public void setUp() {
@@ -153,7 +153,7 @@ public class BackupHandlerTest {
         if (rootDir != null) {
             try {
                 Files.walk(Paths.get(Config.tmp_dir),
-                        FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
+                                FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
                         .forEach(File::delete);
             } catch (IOException e) {
                 // TODO Auto-generated catch block

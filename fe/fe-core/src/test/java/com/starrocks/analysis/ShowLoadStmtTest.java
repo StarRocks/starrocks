@@ -73,14 +73,14 @@ public class ShowLoadStmtTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         ShowLoadStmt stmt = new ShowLoadStmt(null, null, null, null);
         stmt.analyze(analyzer);
         Assert.assertEquals("SHOW LOAD FROM `testCluster:testDb`", stmt.toString());
     }
 
     @Test(expected = AnalysisException.class)
-    public void testNoDb() throws UserException, AnalysisException {
+    public void testNoDb() throws UserException {
         new Expectations(analyzer) {
             {
                 analyzer.getDefaultDb();
@@ -99,7 +99,7 @@ public class ShowLoadStmtTest {
     }
 
     @Test
-    public void testWhere() throws UserException, AnalysisException {
+    public void testWhere() throws UserException {
         ShowLoadStmt stmt = new ShowLoadStmt(null, null, null, null);
         stmt.analyze(analyzer);
         Assert.assertEquals("SHOW LOAD FROM `testCluster:testDb`", stmt.toString());
@@ -109,12 +109,12 @@ public class ShowLoadStmtTest {
         BinaryPredicate binaryPredicate = new BinaryPredicate(Operator.EQ, slotRef, stringLiteral);
         stmt = new ShowLoadStmt(null, binaryPredicate, null, new LimitElement(10));
         stmt.analyze(analyzer);
-        Assert.assertEquals("SHOW LOAD FROM `testCluster:testDb` WHERE `label` = \'abc\' LIMIT 10", stmt.toString());
+        Assert.assertEquals("SHOW LOAD FROM `testCluster:testDb` WHERE `label` = 'abc' LIMIT 10", stmt.toString());
 
         LikePredicate likePredicate = new LikePredicate(com.starrocks.analysis.LikePredicate.Operator.LIKE,
                 slotRef, stringLiteral);
         stmt = new ShowLoadStmt(null, likePredicate, null, new LimitElement(10));
         stmt.analyze(analyzer);
-        Assert.assertEquals("SHOW LOAD FROM `testCluster:testDb` WHERE `label` LIKE \'abc\' LIMIT 10", stmt.toString());
+        Assert.assertEquals("SHOW LOAD FROM `testCluster:testDb` WHERE `label` LIKE 'abc' LIMIT 10", stmt.toString());
     }
 }

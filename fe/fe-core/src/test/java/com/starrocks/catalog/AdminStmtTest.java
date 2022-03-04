@@ -21,6 +21,15 @@
 
 package com.starrocks.catalog;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
+
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.CreateDbStmt;
@@ -37,20 +46,11 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.List;
-import java.util.UUID;
-
 public class AdminStmtTest {
 
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AdminStmtTest/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/AdminStmtTest/" + UUID.randomUUID() + "/";
 
     private static ConnectContext connectContext;
 

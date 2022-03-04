@@ -2,6 +2,12 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+import java.util.List;
+import java.util.Map;
+
+import static junit.framework.TestCase.assertTrue;
+import static org.junit.Assert.assertEquals;
+
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -14,12 +20,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
-import java.util.Map;
-
-import static junit.framework.TestCase.assertTrue;
-import static org.junit.Assert.assertEquals;
 
 public class ScalarOperatorsReuseTest {
     private static final Logger LOG = LogManager.getLogger(ScalarOperatorsReuseTest.class);

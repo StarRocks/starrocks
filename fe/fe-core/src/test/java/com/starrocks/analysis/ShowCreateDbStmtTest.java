@@ -45,7 +45,7 @@ public class ShowCreateDbStmtTest {
     }
 
     @Test
-    public void testNormal() throws AnalysisException, UserException {
+    public void testNormal() throws UserException {
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testDb");
         stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(true));
         Assert.assertEquals("testCluster:testDb", stmt.getDb());
@@ -54,7 +54,7 @@ public class ShowCreateDbStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testEmptyDb() throws AnalysisException, UserException {
+    public void testEmptyDb() throws UserException {
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("");
         stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));
         Assert.fail("No exception throws.");

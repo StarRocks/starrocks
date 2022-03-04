@@ -21,10 +21,6 @@
 
 package com.starrocks.catalog;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -33,8 +29,12 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Test;
+
 public class TablePropertyTest {
-    private static String fileName = "./TablePropertyTest";
+    private static final String fileName = "./TablePropertyTest";
 
     @After
     public void tearDown() {

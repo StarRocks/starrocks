@@ -2,6 +2,9 @@
 
 package com.starrocks.external.hive;
 
+import java.util.List;
+import java.util.Map;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -13,11 +16,8 @@ import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.List;
-import java.util.Map;
-
 public class UtilsTest {
-    private List<Column> partColumns = Lists.newArrayList(new Column("k1", Type.INT),
+    private final List<Column> partColumns = Lists.newArrayList(new Column("k1", Type.INT),
             new Column("k2", ScalarType.createVarcharType(10)),
             new Column("k3", Type.DOUBLE),
             new Column("k4", Type.INT));
