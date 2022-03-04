@@ -809,6 +809,7 @@ public class Catalog {
         // we already set these variables in constructor. but Catalog is a singleton class.
         // so they may be set before Config is initialized.
         // set them here again to make sure these variables use values in fe.conf.
+
         setMetaDir();
 
         // 0. get local node and helper node info
@@ -827,11 +828,12 @@ public class Catalog {
             File newMeta = new File(newDefaultMetaDir);
             if (oldMeta.exists() && newMeta.exists()) {
                 LOG.error("New default meta dir: {} and Old default meta dir: {} are both present. " +
-                        "Please make sure {} has the latest data, and remove the another one.",
+                                "Please make sure {} has the latest data, and remove the another one.",
                         newDefaultMetaDir, oldDefaultMetaDir, newDefaultMetaDir);
                 System.exit(-1);
             }
         }
+
         File meta = new File(metaDir);
         if (!meta.exists()) {
             // If metaDir is not the default config, it means the user has specified the other directory
@@ -877,6 +879,7 @@ public class Catalog {
         // 3. Load image first and replay edits
         this.editLog = new EditLog(nodeName);
         loadImage(this.imageDir); // load image file
+
         editLog.open(); // open bdb env
         this.globalTransactionMgr.setEditLog(editLog);
         this.idGenerator.setEditLog(editLog);
@@ -3129,10 +3132,12 @@ public class Catalog {
             } finally {
                 db.readUnlock();
             }
-            StatementBase statementBase = SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+            StatementBase statementBase =
+                    SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
             if (statementBase instanceof CreateTableStmt) {
                 CreateTableStmt parsedCreateTableStmt =
-                        (CreateTableStmt) SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+                        (CreateTableStmt) SqlParserUtils
+                                .parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
                 parsedCreateTableStmt.setTableName(stmt.getTableName());
                 if (stmt.isSetIfNotExists()) {
                     parsedCreateTableStmt.setIfNotExists();
@@ -3151,7 +3156,8 @@ public class Catalog {
             throws DdlException, AnalysisException {
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
         if (partitionDesc instanceof SingleRangePartitionDesc) {
-            addPartitions(db, tableName, ImmutableList.of((SingleRangePartitionDesc) partitionDesc), addPartitionClause);
+            addPartitions(db, tableName, ImmutableList.of((SingleRangePartitionDesc) partitionDesc),
+                    addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
             db.readLock();
             RangePartitionInfo rangePartitionInfo;
@@ -3307,10 +3313,12 @@ public class Catalog {
 
                 copiedTable.getPartitionInfo().setDataProperty(partitionId, dataProperty);
                 copiedTable.getPartitionInfo().setTabletType(partitionId, singleRangePartitionDesc.getTabletType());
-                copiedTable.getPartitionInfo().setReplicationNum(partitionId, singleRangePartitionDesc.getReplicationNum());
+                copiedTable.getPartitionInfo()
+                        .setReplicationNum(partitionId, singleRangePartitionDesc.getReplicationNum());
                 copiedTable.getPartitionInfo().setIsInMemory(partitionId, singleRangePartitionDesc.isInMemory());
 
-                Partition partition = createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
+                Partition partition =
+                        createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
 
                 partitionList.add(partition);
                 tabletIdSetForAll.addAll(tabletIdSet);
@@ -3632,9 +3640,11 @@ public class Catalog {
             MaterializedIndexMeta indexMeta = table.getIndexIdToMeta().get(indexId);
 
             // create tablets
-            TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
-                    storageMedium);
-            createTablets(db.getClusterName(), index, ReplicaState.NORMAL, distributionInfo, partition.getVisibleVersion(),
+            TabletMeta tabletMeta =
+                    new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
+                            storageMedium);
+            createTablets(db.getClusterName(), index, ReplicaState.NORMAL, distributionInfo,
+                    partition.getVisibleVersion(),
                     replicationNum, tabletMeta, tabletIdSet);
             if (index.getId() != table.getBaseIndexId()) {
                 // add rollup index to partition
@@ -3716,7 +3726,8 @@ public class Catalog {
                     }
                     List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
                     for (CreateReplicaTask task : tasks) {
-                        List<Long> signatures = taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
+                        List<Long> signatures =
+                                taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
                         signatures.add(task.getSignature());
                     }
                     sendCreateReplicaTasks(tasks, countDownLatch);
@@ -3941,7 +3952,7 @@ public class Catalog {
         double bfFpp = 0;
         try {
             bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
-                olapTable.getKeysType() == KeysType.PRIMARY_KEYS);
+                    olapTable.getKeysType() == KeysType.PRIMARY_KEYS);
             if (bfColumns != null && bfColumns.isEmpty()) {
                 bfColumns = null;
             }
@@ -4115,13 +4126,15 @@ public class Catalog {
                         }
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                                 DataProperty.DEFAULT_DATA_PROPERTY);
-                        DynamicPartitionUtil.checkAndSetDynamicPartitionBuckets(properties, distributionDesc.getBuckets());
+                        DynamicPartitionUtil
+                                .checkAndSetDynamicPartitionBuckets(properties, distributionDesc.getBuckets());
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
                         if (olapTable.dynamicPartitionExists() && olapTable.getColocateGroup() != null) {
                             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
-                            if (info.getBucketNum() != olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
+                            if (info.getBucketNum() !=
+                                    olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
                                 throw new DdlException("dynamic_partition.buckets should equal the distribution buckets"
-                                                       + " if creating a colocate table");
+                                        + " if creating a colocate table");
                             }
                         }
                         if (hasMedium) {
@@ -4163,7 +4176,8 @@ public class Catalog {
                 createTblSuccess = db.createTableWithLock(olapTable, false);
                 if (!createTblSuccess) {
                     if (!stmt.isSetIfNotExists()) {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                        ErrorReport
+                                .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
                     } else {
                         LOG.info("Create table[{}] which already exists", tableName);
                         return;
@@ -4557,7 +4571,6 @@ public class Catalog {
             sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
 
-
             // storage media
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
@@ -4660,7 +4673,7 @@ public class Catalog {
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {
-            JDBCTable jdbcTable = (JDBCTable)  table;
+            JDBCTable jdbcTable = (JDBCTable) table;
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
@@ -6056,7 +6069,7 @@ public class Catalog {
 
         Table table = db.getTable(tableName);
         if (table == null) {
-            throw new DdlException("the DB " + dbName +  " table: " + tableName + "isn't  exist"); 
+            throw new DdlException("the DB " + dbName + " table: " + tableName + "isn't  exist");
         }
 
         if (table instanceof OlapTable) {
@@ -6067,7 +6080,8 @@ public class Catalog {
             } else {
                 property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
             }
-            ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
+            ModifyTablePropertyOperationLog info =
+                    new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
             editLog.logSetHasForbitGlobalDict(info);
         }
     }
@@ -6964,7 +6978,8 @@ public class Catalog {
                 partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
-                Partition newPartition = createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
+                Partition newPartition =
+                        createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
                 newPartitions.add(newPartition);
             }
             buildPartitions(db, copiedTbl, newPartitions);
