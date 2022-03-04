@@ -239,6 +239,8 @@ private:
 
     std::vector<uint8_t> _streaming_selection;
 
+    bool _has_udaf = false;
+
     RuntimeProfile::Counter* _get_results_timer{};
     RuntimeProfile::Counter* _agg_compute_timer{};
     RuntimeProfile::Counter* _streaming_timer{};

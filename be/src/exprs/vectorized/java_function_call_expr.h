@@ -5,6 +5,7 @@
 
 #include "common/object_pool.h"
 #include "exprs/expr.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 struct JavaUDFContext;
@@ -24,6 +25,7 @@ public:
 
 private:
     void _call_udf_close();
+    RuntimeState* _runtime_state;
     std::shared_ptr<JavaUDFContext> _func_desc;
     std::shared_ptr<UDFFunctionCallHelper> _call_helper;
     bool _is_returning_random_value;
