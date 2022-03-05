@@ -82,36 +82,14 @@ void DecimalV3Column<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) 
 }
 
 template <typename T>
-int64_t DecimalV3Column<T>::xor_checksum() const {
+int64_t DecimalV3Column<T>::xor_checksum(uint32_t from, uint32_t to) const {
     // The XOR of DecimalV3Column
     // XOR all the decimals one by one
     auto& data = this->get_data();
     int64_t xor_checksum = 0;
-    size_t num = data.size();
     const T* src = reinterpret_cast<const T*>(data.data());
 
-#ifdef __AVX2__
-    __m256i avx2_checksum = _mm256_setzero_si256();
-    constexpr size_t AVX2_SIZE = sizeof(__m256i);
-    size_t step = AVX2_SIZE / sizeof(T);
-    while (num >= step) {
-        const __m256i left = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
-        avx2_checksum = _mm256_xor_si256(left, avx2_checksum);
-        src += step;
-        num -= step;
-    }
-    T* checksum_vec = reinterpret_cast<T*>(&avx2_checksum);
-    for (size_t i = 0; i < step; ++i) {
-        if constexpr (std::is_same_v<T, int128_t>) {
-            xor_checksum ^= (checksum_vec[i] >> 64);
-            xor_checksum ^= (checksum_vec[i] & ULLONG_MAX);
-        } else {
-            xor_checksum ^= checksum_vec[i];
-        }
-    }
-#endif
-
-    for (size_t i = 0; i < num; ++i) {
+    for (size_t i = from; i < to; ++i) {
         if constexpr (std::is_same_v<T, int128_t>) {
             xor_checksum ^= (src[i] >> 64);
             xor_checksum ^= (src[i] & ULLONG_MAX);

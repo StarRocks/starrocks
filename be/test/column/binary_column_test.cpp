@@ -536,7 +536,7 @@ PARALLEL_TEST(BinaryColumnTest, test_xor_checksum) {
         str.append(std::to_string(i));
     }
     column->append(str);
-    int64_t checksum = column->xor_checksum();
+    int64_t checksum = column->xor_checksum(0, 1001);
     int64_t expected_checksum = 3546653113525744178L;
     ASSERT_EQ(checksum, expected_checksum);
 }
