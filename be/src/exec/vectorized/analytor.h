@@ -4,7 +4,6 @@
 
 #include <queue>
 
-#include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Types_types.h"
@@ -34,7 +33,7 @@ using Analytors = std::vector<AnalytorPtr>;
 
 // Component used to do analytic processing
 // it contains common data struct and algorithm of analysis
-class Analytor final : public pipeline::ContextWithDependency {
+class Analytor {
     friend class ManagedFunctionStates;
 
 public:
@@ -47,7 +46,7 @@ public:
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
-    void close(RuntimeState* state) override;
+    void close(RuntimeState* state);
 
     enum FrameType {
         Unbounded,               // BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
@@ -56,8 +55,6 @@ public:
         Sliding                  // ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
     };
 
-    bool is_sink_complete() { return _is_sink_complete.load(std::memory_order_acquire); }
-    void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
     bool is_chunk_buffer_empty();
     vectorized::ChunkPtr poll_chunk_buffer();
     void offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk);
@@ -133,8 +130,6 @@ private:
     // The open phase still relies on the TFunction object for some initialization operations
     std::vector<TFunction> _fns;
 
-    // only used in pipeline engine
-    std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
     std::queue<vectorized::ChunkPtr> _buffer;
     std::mutex _buffer_mutex;
@@ -234,19 +229,4 @@ private:
     Analytor* _agg_node;
 };
 
-class AnalytorFactory;
-using AnalytorFactoryPtr = std::shared_ptr<AnalytorFactory>;
-class AnalytorFactory {
-public:
-    AnalytorFactory(size_t dop, const TPlanNode& tnode, const RowDescriptor& child_row_desc,
-                    const TupleDescriptor* result_tuple_desc)
-            : _analytors(dop), _tnode(tnode), _child_row_desc(child_row_desc), _result_tuple_desc(result_tuple_desc) {}
-    AnalytorPtr create(int i);
-
-private:
-    Analytors _analytors;
-    const TPlanNode& _tnode;
-    const RowDescriptor& _child_row_desc;
-    const TupleDescriptor* _result_tuple_desc;
-};
 } // namespace starrocks

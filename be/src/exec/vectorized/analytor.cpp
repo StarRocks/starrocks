@@ -594,10 +594,4 @@ int64_t Analytor::_find_first_not_equal(vectorized::Column* column, int64_t star
     return end - 1;
 }
 
-AnalytorPtr AnalytorFactory::create(int i) {
-    if (!_analytors[i]) {
-        _analytors[i] = std::make_shared<Analytor>(_tnode, _child_row_desc, _result_tuple_desc);
-    }
-    return _analytors[i];
-}
 } // namespace starrocks

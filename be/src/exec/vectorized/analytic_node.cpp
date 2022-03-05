@@ -8,8 +8,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "exec/pipeline/analysis/analytic_sink_operator.h"
-#include "exec/pipeline/analysis/analytic_source_operator.h"
+#include "exec/pipeline/analysis/analytic_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -347,42 +346,26 @@ Status AnalyticNode::_fetch_next_chunk(RuntimeState* state) {
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > AnalyticNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
 
+    OpFactories ops = _children[0]->decompose_to_pipeline(context);
     // analytic's dop must be 1 if with no partition clause
     if (_tnode.analytic_node.partition_exprs.empty()) {
-        operators_with_sink =
-                context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_with_sink);
+        ops = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops);
     }
-    auto degree_of_parallelism =
-            down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
 
-    // shared by sink operator and source operator
-    AnalytorFactoryPtr analytor_factory =
-            std::make_shared<AnalytorFactory>(degree_of_parallelism, _tnode, child(0)->row_desc(), _result_tuple_desc);
+    ops.emplace_back(std::make_shared<AnalyticOperatorFactory>(context->next_operator_id(), id(), _tnode,
+                                                               child(0)->row_desc(), _result_tuple_desc));
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
-
-    operators_with_sink.emplace_back(
-            std::make_shared<AnalyticSinkOperatorFactory>(context->next_operator_id(), id(), _tnode, analytor_factory));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(operators_with_sink.back().get(), context, rc_rf_probe_collector);
-    context->add_pipeline(operators_with_sink);
+    this->init_runtime_filter_for_operator(ops.back().get(), context, rc_rf_probe_collector);
 
-    OpFactories operators_with_source;
-    auto source_operator =
-            std::make_shared<AnalyticSourceOperatorFactory>(context->next_operator_id(), id(), analytor_factory);
-    // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
-
-    source_operator->set_degree_of_parallelism(degree_of_parallelism);
-    operators_with_source.push_back(std::move(source_operator));
     if (limit() != -1) {
-        operators_with_source.emplace_back(
-                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+        ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
-    return operators_with_source;
+
+    return ops;
 }
 
 } // namespace starrocks::vectorized

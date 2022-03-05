@@ -1,12 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "analytic_sink_operator.h"
+#include "analytic_operator.h"
 
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
-Status AnalyticSinkOperator::prepare(RuntimeState* state) {
+Status AnalyticOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     // _analytor is shared by sink operator and source operator
     // we must only prepare it at sink operator
@@ -16,45 +16,44 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
     TAnalyticWindow window = _tnode.analytic_node.window;
 
     if (!_tnode.analytic_node.__isset.window) {
-        _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_unbounded_frame;
+        _process_by_partition = &AnalyticOperator::_process_by_partition_for_unbounded_frame;
     } else if (window.type == TAnalyticWindowType::RANGE) {
         // RANGE windows must have UNBOUNDED PRECEDING
         // RANGE window end bound must be CURRENT ROW or UNBOUNDED FOLLOWING
         if (!window.__isset.window_end) {
-            _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_unbounded_frame;
+            _process_by_partition = &AnalyticOperator::_process_by_partition_for_unbounded_frame;
         } else {
-            _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_range_frame;
+            _process_by_partition = &AnalyticOperator::_process_by_partition_for_unbounded_preceding_range_frame;
         }
     } else {
         if (!window.__isset.window_start && !window.__isset.window_end) {
-            _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_unbounded_frame;
+            _process_by_partition = &AnalyticOperator::_process_by_partition_for_unbounded_frame;
         } else if (!window.__isset.window_start && window.window_end.type == TAnalyticWindowBoundaryType::CURRENT_ROW) {
-            _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_frame;
+            _process_by_partition = &AnalyticOperator::_process_by_partition_for_unbounded_preceding_rows_frame;
         } else {
-            _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_sliding_frame;
+            _process_by_partition = &AnalyticOperator::_process_by_partition_for_sliding_frame;
         }
     }
 
     return Status::OK();
 }
 
-void AnalyticSinkOperator::close(RuntimeState* state) {
-    _analytor->unref(state);
+void AnalyticOperator::close(RuntimeState* state) {
+    _analytor->close(state);
     Operator::close(state);
 }
 
-void AnalyticSinkOperator::set_finishing(RuntimeState* state) {
+void AnalyticOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     _analytor->input_eos() = true;
     _process_by_partition_if_necessary();
-    _analytor->sink_complete();
 }
 
-StatusOr<vectorized::ChunkPtr> AnalyticSinkOperator::pull_chunk(RuntimeState* state) {
-    return Status::InternalError("Not support");
+StatusOr<vectorized::ChunkPtr> AnalyticOperator::pull_chunk(RuntimeState* state) {
+    return _analytor->poll_chunk_buffer();
 }
 
-Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status AnalyticOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     _analytor->input_chunk_first_row_positions().emplace_back(_analytor->input_rows());
     size_t chunk_size = chunk->num_rows();
     _analytor->update_input_rows(chunk_size);
@@ -90,7 +89,7 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     return _process_by_partition_if_necessary();
 }
 
-Status AnalyticSinkOperator::_process_by_partition_if_necessary() {
+Status AnalyticOperator::_process_by_partition_if_necessary() {
     while (_analytor->has_output()) {
         int64_t found_partition_end = _analytor->find_partition_end();
         // Only process after all the data in a partition is reached
@@ -122,7 +121,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary() {
     return Status::OK();
 }
 
-void AnalyticSinkOperator::_process_by_partition_for_unbounded_frame(size_t chunk_size, bool is_new_partition) {
+void AnalyticOperator::_process_by_partition_for_unbounded_frame(size_t chunk_size, bool is_new_partition) {
     if (is_new_partition) {
         _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(),
                                        _analytor->partition_start(), _analytor->partition_end());
@@ -140,8 +139,8 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_frame(size_t chun
     _analytor->update_current_row_position(_analytor->window_result_position() - get_value_start);
 }
 
-void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_range_frame(size_t chunk_size,
-                                                                                     bool is_new_partition) {
+void AnalyticOperator::_process_by_partition_for_unbounded_preceding_range_frame(size_t chunk_size,
+                                                                                 bool is_new_partition) {
     while (_analytor->current_row_position() < _analytor->partition_end() &&
            _analytor->window_result_position() < chunk_size) {
         if (_analytor->current_row_position() >= _analytor->peer_group_end()) {
@@ -166,8 +165,8 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_range_f
     }
 }
 
-void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_frame(size_t chunk_size,
-                                                                                    bool is_new_partition) {
+void AnalyticOperator::_process_by_partition_for_unbounded_preceding_rows_frame(size_t chunk_size,
+                                                                                bool is_new_partition) {
     while (_analytor->current_row_position() < _analytor->partition_end() &&
            _analytor->window_result_position() < chunk_size) {
         _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(),
@@ -183,7 +182,7 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_fr
     }
 }
 
-void AnalyticSinkOperator::_process_by_partition_for_sliding_frame(size_t chunk_size, bool is_new_partition) {
+void AnalyticOperator::_process_by_partition_for_sliding_frame(size_t chunk_size, bool is_new_partition) {
     while (_analytor->current_row_position() < _analytor->partition_end() &&
            _analytor->window_result_position() < chunk_size) {
         _analytor->reset_window_state();
