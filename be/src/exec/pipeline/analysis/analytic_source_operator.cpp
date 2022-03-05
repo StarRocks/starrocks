@@ -5,7 +5,7 @@
 namespace starrocks::pipeline {
 
 bool AnalyticSourceOperator::has_output() const {
-    return _analytor->is_sink_complete() && !_analytor->is_chunk_buffer_empty();
+    return !_analytor->is_chunk_buffer_empty();
 }
 
 bool AnalyticSourceOperator::is_finished() const {
