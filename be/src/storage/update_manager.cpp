@@ -54,7 +54,7 @@ UpdateManager::~UpdateManager() {
 }
 
 Status UpdateManager::init() {
-    auto st = ThreadPoolBuilder("UpdateApplyThreadPool").build(&_apply_thread_pool);
+    auto st = ThreadPoolBuilder("update_apply").build(&_apply_thread_pool);
     return st;
 }
 
