@@ -59,10 +59,11 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
     if (_assertion == TAssertion::LE && _num_rows_returned == 0) {
         _input_chunks.clear();
 
-        vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+        chunk = std::make_shared<vectorized::Chunk>();
         for (const auto& desc : row_desc().tuple_descriptors()) {
             for (const auto& slot : desc->slots()) {
-                chunk->append_column(ColumnHelper::create_const_null_column(_desired_num_rows), slot->id());
+                chunk->append_column(ColumnHelper::create_column(slot->type(), true, false, _desired_num_rows),
+                                     slot->id());
             }
         }
 
