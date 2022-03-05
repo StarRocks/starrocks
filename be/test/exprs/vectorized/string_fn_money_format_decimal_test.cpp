@@ -19,7 +19,8 @@ void test_money_format_decimal(TestArray const& test_cases, int precision, int s
     using CppType = RunTimeCppType<Type>;
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::create_decimalv3_type(Type, precision, scale))};
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types)));
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context(std::move(arg_types), FunctionContext::TypeDesc{}));
     Columns columns;
     auto rows_num = test_cases.size();
     auto money_column = ColumnType::create(precision, scale);
