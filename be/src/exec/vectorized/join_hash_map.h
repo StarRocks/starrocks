@@ -332,6 +332,7 @@ public:
     }
     static Status construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
                                        HashTableProbeState* probe_state);
+
 private:
     static void _build_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
                                const Columns& data_columns, uint32_t start, uint32_t count);
