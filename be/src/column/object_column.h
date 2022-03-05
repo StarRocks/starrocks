@@ -126,6 +126,8 @@ public:
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
+    int64_t xor_checksum() const override;
+
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
     std::string get_name() const override { return std::string{"object"}; }

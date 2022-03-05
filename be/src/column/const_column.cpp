@@ -45,6 +45,11 @@ void ConstColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     DCHECK(false) << "Const column shouldn't call crc32 hash";
 }
 
+int64_t ConstColumn::xor_checksum() const {
+    DCHECK(false) << "Const column shouldn't call xor_checksum";
+    return 0;
+}
+
 size_t ConstColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
     size_t count = SIMD::count_nonzero(&filter[from], to - from);
     this->resize(from + count);
