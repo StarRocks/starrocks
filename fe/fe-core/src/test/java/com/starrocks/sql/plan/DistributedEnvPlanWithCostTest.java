@@ -81,13 +81,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testCountDistinctWithGroupHighCountLowCHAR() throws Exception {
         String sql = "select count(distinct P_BRAND) from part group by P_PARTKEY;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("1:AGGREGATE (update serialize)\n"
-                + "  |  STREAMING\n"
-                + "  |  group by: 1: P_PARTKEY, 4: P_BRAND"));
-        Assert.assertTrue(planFragment.contains("2:AGGREGATE (merge serialize)\n"
-                + "  |  group by: 1: P_PARTKEY, 4: P_BRAND"));
-        Assert.assertTrue(planFragment.contains("3:AGGREGATE (update finalize)\n"
-                + "  |  output: count(4: P_BRAND)"));
+        Assert.assertTrue(planFragment.contains(" 1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(4: P_BRAND)"));
     }
 
     @Test
