@@ -15,7 +15,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
-#include "io/s3_random_access_file.h"
+#include "io/s3_input_stream.h"
 #include "testutil/assert.h"
 
 namespace starrocks::io {
@@ -109,7 +109,7 @@ TEST_F(S3OutputStreamTest, test_singlepart_upload) {
     const char* kObjectName = "test_singlepart_upload";
     delete_object(kObjectName);
     S3OutputStream os(g_s3client, kBucketName, kObjectName, 1024, 1024);
-    S3RandomAccessFile is(g_s3client, kBucketName, kObjectName);
+    S3InputStream is(g_s3client, kBucketName, kObjectName);
 
     std::string s1("first line of singlepart upload\n");
     std::string s2("second line of singlepart upload\n");
@@ -131,7 +131,7 @@ TEST_F(S3OutputStreamTest, test_multipart_upload) {
     const char* kObjectName = "test_multipart_upload";
     delete_object(kObjectName);
     S3OutputStream os(g_s3client, kBucketName, kObjectName, 12, /*5MB=*/5 * 1024 * 1024);
-    S3RandomAccessFile is(g_s3client, kBucketName, kObjectName);
+    S3InputStream is(g_s3client, kBucketName, kObjectName);
 
     std::string s1("first line of multipart upload\n");
     std::string s2("second line of multipart upload\n");
@@ -153,7 +153,7 @@ TEST_F(S3OutputStreamTest, test_skip) {
     const char* kObjectName = "test_multipart_upload";
     delete_object(kObjectName);
     S3OutputStream os(g_s3client, kBucketName, kObjectName, 1024, 1024);
-    S3RandomAccessFile is(g_s3client, kBucketName, kObjectName);
+    S3InputStream is(g_s3client, kBucketName, kObjectName);
 
     ASSERT_OK(os.write("abc", 3));
     ASSERT_OK(os.skip(2));
@@ -171,7 +171,7 @@ TEST_F(S3OutputStreamTest, test_get_direct_buffer_and_advance) {
     const char* kObjectName = "test_get_direct_buffer_and_advance";
     delete_object(kObjectName);
     S3OutputStream os(g_s3client, kBucketName, kObjectName, 1024, 1024);
-    S3RandomAccessFile is(g_s3client, kBucketName, kObjectName);
+    S3InputStream is(g_s3client, kBucketName, kObjectName);
 
     ASSERT_OK(os.write("abc", 3));
     ASSIGN_OR_ABORT(uint8_t * buf, os.get_direct_buffer_and_advance(3));

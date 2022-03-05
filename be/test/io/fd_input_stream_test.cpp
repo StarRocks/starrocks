@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "io/fd_random_access_file.h"
+#include "io/fd_input_stream.h"
 
 #include <fcntl.h>
 #include <gtest/gtest.h>
@@ -38,9 +38,9 @@ static void pwrite_or_die(int fd, const void* buff, size_t count, off_t offset) 
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(FdRandomAccessFileTest, test_read_empty) {
+PARALLEL_TEST(FdInputStreamTest, test_read_empty) {
     int fd = open_temp_file();
-    FdRandomAccessFile in(fd);
+    FdInputStream in(fd);
     in.set_close_on_delete(true);
 
     char buff[1];
@@ -51,11 +51,11 @@ PARALLEL_TEST(FdRandomAccessFileTest, test_read_empty) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(FdRandomAccessFileTest, test_read) {
+PARALLEL_TEST(FdInputStreamTest, test_read) {
     int fd = open_temp_file();
     pwrite_or_die(fd, "0123456789", 10, 0);
 
-    FdRandomAccessFile in(fd);
+    FdInputStream in(fd);
     in.set_close_on_delete(true);
     ASSERT_EQ(10, *in.get_size());
     ASSERT_EQ(0, *in.position());
@@ -76,11 +76,11 @@ PARALLEL_TEST(FdRandomAccessFileTest, test_read) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(FdRandomAccessFileTest, test_read_at) {
+PARALLEL_TEST(FdInputStreamTest, test_read_at) {
     int fd = open_temp_file();
     pwrite_or_die(fd, "0123456789", 10, 0);
 
-    FdRandomAccessFile in(fd);
+    FdInputStream in(fd);
     in.set_close_on_delete(true);
     ASSERT_EQ(10, *in.get_size());
     ASSERT_EQ(0, *in.position());
@@ -103,11 +103,11 @@ PARALLEL_TEST(FdRandomAccessFileTest, test_read_at) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(FdRandomAccessFileTest, test_seek) {
+PARALLEL_TEST(FdInputStreamTest, test_seek) {
     int fd = open_temp_file();
     pwrite_or_die(fd, "0123456789", 10, 0);
 
-    FdRandomAccessFile in(fd);
+    FdInputStream in(fd);
     in.set_close_on_delete(true);
     ASSERT_EQ(10, *in.get_size());
     ASSERT_EQ(0, *in.position());
@@ -134,12 +134,12 @@ PARALLEL_TEST(FdRandomAccessFileTest, test_seek) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(FdRandomAccessFileTest, test_skip) {
+PARALLEL_TEST(FdInputStreamTest, test_skip) {
     int fd = open_temp_file();
     pwrite_or_die(fd, "0123456789", 10, 0);
 
     char buff[10];
-    FdRandomAccessFile in(fd);
+    FdInputStream in(fd);
     in.set_close_on_delete(true);
     ASSERT_OK(in.skip(2));
     ASSERT_EQ(2, *in.read(buff, 2));
@@ -152,12 +152,12 @@ PARALLEL_TEST(FdRandomAccessFileTest, test_skip) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(FdRandomAccessFileTest, test_op_after_close) {
+PARALLEL_TEST(FdInputStreamTest, test_op_after_close) {
     int fd = open_temp_file();
     pwrite_or_die(fd, "0123456789", 10, 0);
 
     char buff[10];
-    FdRandomAccessFile in(fd);
+    FdInputStream in(fd);
     ASSERT_OK(in.close());
 
     auto res = in.read(buff, 2);

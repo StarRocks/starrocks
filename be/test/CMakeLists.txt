@@ -114,11 +114,11 @@ set(EXEC_FILES
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
-        ./io/array_random_access_file_test.cpp
+        io/array_input_stream_test.cpp
         ./io/fd_output_stream_test.cpp
-        ./io/fd_random_access_file_test.cpp
+        io/fd_input_stream_test.cpp
         ./io/s3_output_stream_test.cpp
-        ./io/s3_random_access_file_test.cpp
+        io/s3_input_stream_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
