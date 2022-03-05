@@ -359,4 +359,13 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(4: t0d)"));
     }
+
+    @Test
+    public void testLocalAggregateWithoutTableRowCount() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_without_table_rowcount"), null, TExplainLevel.NORMAL);
+        // check local aggregate
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(4: lo_partkey)"));
+    }
 }

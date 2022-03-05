@@ -605,7 +605,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
         sql = "select count(distinct O_ORDERKEY) from orders group by O_CUSTKEY, O_ORDERDATE";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge serialize)"));
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
     }
 
     @Test
