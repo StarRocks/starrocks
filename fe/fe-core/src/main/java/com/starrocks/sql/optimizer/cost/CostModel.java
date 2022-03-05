@@ -187,6 +187,10 @@ public class CostModel {
         public CostEstimate computeAggFunExtraCost(PhysicalHashAggregateOperator node, Statistics statistics,
                                                    Statistics inputStatistics) {
             CostEstimate costEstimate = CostEstimate.zero();
+            // If the statistics with inaccurate row count，It don't need to compute the extra cost.
+            if (statistics.isTableRowCountMayInaccurate()) {
+                return costEstimate;
+            }
             int distinctCount =
                     node.getAggregations().values().stream().filter(aggregation -> isDistinctAggFun(aggregation, node))
                             .collect(Collectors.toList()).size();
