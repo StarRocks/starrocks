@@ -351,4 +351,12 @@ public class ReplayFromDumpTest {
                "  |  output: multi_distinct_count(18: count)\n" +
                "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
     }
+
+    @Test
+    public void testLogicalAggWithOneTablet() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_with_one_tablet"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(4: t0d)"));
+    }
 }
