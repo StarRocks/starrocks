@@ -1317,7 +1317,7 @@ std::shared_ptr<CompactionTask> Tablet::get_compaction(int8_t level, bool create
 
 std::vector<CompactionCandidate> Tablet::_get_compaction_candidates() {
     std::vector<CompactionCandidate> candidates;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < LEVEL_NUMBER - 1; i++) {
         if (_need_compaction_unlock(i)) {
             CompactionCandidate candidate;
             candidate.tablet = std::static_pointer_cast<Tablet>(shared_from_this());
@@ -1347,12 +1347,16 @@ bool Tablet::_need_compaction_unlock(uint8_t level) const {
 }
 
 bool Tablet::_need_compaction_unlock() const {
-    return _need_compaction_unlock(0) || _need_compaction_unlock(1);
+    bool ret = false;
+    for (int i = 0; i < LEVEL_NUMBER - 1; i++) {
+        ret |= _need_compaction_unlock(i);
+    }
+    return  ret;
 }
 
 void Tablet::stop_compaction() {
     std::unique_lock wrlock(_meta_lock);
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < LEVEL_NUMBER - 1; i++) {
         if (_compaction_tasks[i]) {
             _compaction_tasks[i]->stop();
             _compaction_tasks[i].reset();
