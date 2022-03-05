@@ -41,7 +41,6 @@ TEST_F(EnvS3Test, write_and_read) {
     ASSERT_EQ(sizeof("hello world!"), wf->size() + 1);
 
     char buf[1024];
-    Slice s(buf, 1024);
     ASSIGN_OR_ABORT(auto rf, env.new_random_access_file(uri));
     ASSIGN_OR_ABORT(auto nr, rf->read_at(0, buf, sizeof(buf)));
     ASSERT_EQ("hello world!", std::string_view(buf, nr));
