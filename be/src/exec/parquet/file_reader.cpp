@@ -75,8 +75,7 @@ Status FileReader::_parse_footer() {
     uint64_t to_read = std::min(_file_size, footer_buf_size);
     {
         SCOPED_RAW_TIMER(&_param.stats->footer_read_ns);
-        Slice slice(footer_buf, to_read);
-        RETURN_IF_ERROR(_file->read_at(_file_size - to_read, slice));
+        RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
     }
     // check magic
     RETURN_IF_ERROR(_check_magic(footer_buf + to_read - 4));
@@ -96,8 +95,7 @@ Status FileReader::_parse_footer() {
         footer_buf = new uint8[to_read];
         {
             SCOPED_RAW_TIMER(&_param.stats->footer_read_ns);
-            Slice slice(footer_buf, to_read);
-            RETURN_IF_ERROR(_file->read_at(_file_size - to_read, slice));
+            RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
         }
     }
 

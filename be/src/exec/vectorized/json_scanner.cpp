@@ -664,14 +664,13 @@ Status JsonReader::_read_and_parse_json() {
 #ifdef BE_TEST
 
     [[maybe_unused]] size_t message_size = 0;
-    Slice result(_buf.data(), _buf_size);
-    RETURN_IF_ERROR(_file->read(&result));
-    if (result.size == 0) {
+    ASSIGN_OR_RETURN(auto nread, _file->read(_buf.data(), _buf_size));
+    if (nread == 0) {
         return Status::EndOfFile("EOF of reading file");
     }
 
-    data = reinterpret_cast<uint8_t*>(result.data);
-    length = result.size;
+    data = reinterpret_cast<uint8_t*>(_buf.data());
+    length = nread;
 
 #else
 

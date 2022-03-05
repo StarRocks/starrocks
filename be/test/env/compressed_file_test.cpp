@@ -8,6 +8,7 @@
 
 #include "env/env_memory.h"
 #include "exec/decompressor.h"
+#include "testutil/assert.h"
 #include "util/block_compression.h"
 #include "util/random.h"
 
@@ -55,15 +56,11 @@ protected:
         std::string own_buff(t.read_buff_len, '\0');
         decompressed_data.reserve(t.data.size);
 
-        Slice buff(own_buff);
-
-        Status st = f->read(&buff);
-        while (st.ok() && buff.size > 0) {
-            decompressed_data.append(buff.data, buff.size);
-            buff = Slice(own_buff);
-            st = f->read(&buff);
+        ASSIGN_OR_ABORT(auto nread, f->read(own_buff.data(), own_buff.size()));
+        while (nread > 0) {
+            decompressed_data.append(own_buff.data(), nread);
+            ASSIGN_OR_ABORT(nread, f->read(own_buff.data(), own_buff.size()));
         }
-        ASSERT_TRUE(st.ok()) << st.to_string();
         ASSERT_EQ(t.data, decompressed_data);
     }
 };
