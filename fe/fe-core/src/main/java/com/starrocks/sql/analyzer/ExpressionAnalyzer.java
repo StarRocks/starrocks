@@ -461,25 +461,26 @@ public class ExpressionAnalyzer {
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
 
             Function fn;
-            if (node.getFnName().getFunction().equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
+            String fnName = node.getFnName().getFunction();
+            if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
                 fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
-                fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
-                        argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 if (fn instanceof AggregateFunction) {
                     throw new SemanticException("Time Type can not used in %s function",
-                            node.getFnName().getFunction());
+                            fnName);
                 }
-            } else if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
+            } else if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3) ||
+                    // truncate have only decimal version
+                    FunctionSet.TRUNCATE_DECIMAL.equalsIgnoreCase(fnName)) {
                 fn = getDecimalV3Function(node, argumentTypes);
-            } else if ("str_to_date".equalsIgnoreCase(node.getFnName().getFunction())) {
+            } else if (FunctionSet.STR_TO_DATE.equalsIgnoreCase(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
             } else {
-                fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
-                        argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
 
             if (fn == null) {
@@ -488,7 +489,7 @@ public class ExpressionAnalyzer {
 
             if (fn == null) {
                 throw new SemanticException("No matching function with signature: %s(%s).",
-                        node.getFnName().getFunction(),
+                        fnName,
                         node.getParams().isStar() ? "*" : Joiner.on(", ")
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
             }
@@ -502,7 +503,7 @@ public class ExpressionAnalyzer {
                 if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
                         !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
                     throw new SemanticException("No matching function with signature: %s(%s).",
-                            node.getFnName().getFunction(),
+                            fnName,
                             node.getParams().isStar() ? "*" : Joiner.on(", ")
                                     .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
                 }
@@ -553,40 +554,38 @@ public class ExpressionAnalyzer {
 
         Function getDecimalV3Function(FunctionCallExpr node, Type[] argumentTypes) {
             Function fn;
-            Type commonType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argumentTypes, node.getFnName());
-            fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
-                    argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            String fnName = node.getFnName().getFunction();
+            Type commonType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argumentTypes, fnName);
+            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {
                 fn = getUdfFunction(node.getFnName(), argumentTypes);
             }
 
             if (fn == null) {
-                throw new SemanticException("No matching function with signature: %s(%s).",
-                        node.getFnName().getFunction(),
+                throw new SemanticException("No matching function with signature: %s(%s).", fnName,
                         node.getParams().isStar() ? "*" : Joiner.on(", ")
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
             }
 
-            if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_FUNCTION.contains(node.getFnName().getFunction())) {
+            if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_FUNCTION.contains(fnName)) {
                 Type argType = node.getChild(0).getType();
                 // stddev/variance always use decimal128(38,9) to computing result.
                 if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_VARIANCE_STDDEV_TYPE
-                        .contains(node.getFnName().getFunction()) && argType.isDecimalV3()) {
+                        .contains(fnName) && argType.isDecimalV3()) {
                     argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
                     node.setChild(0, TypeManager.addCastExpr(node.getChild(0), argType));
                 }
                 fn = DecimalV3FunctionAnalyzer
                         .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
-            } else if (
-                    DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(node.getFnName().getFunction()) ||
-                            DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET
-                                    .contains(node.getFnName().getFunction()) ||
-                            node.getFnName().getFunction().equalsIgnoreCase("if")) {
+            } else if (DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(fnName) ||
+                    DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) ||
+                    FunctionSet.IF.equalsIgnoreCase(fnName) ||
+                    FunctionSet.TRUNCATE_DECIMAL.equalsIgnoreCase(fnName)) {
                 // DecimalV3 types in resolved fn's argument should be converted into commonType so that right CastExprs
                 // are interpolated into FunctionCallExpr's children whose type does match the corresponding argType of fn.
                 List<Type> argTypes;
-                if (node.getFnName().getFunction().equalsIgnoreCase("money_format")) {
+                if (FunctionSet.MONEY_FORMAT.equalsIgnoreCase(fnName)) {
                     argTypes = Arrays.asList(argumentTypes);
                 } else {
                     argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
@@ -596,7 +595,12 @@ public class ExpressionAnalyzer {
                 Type returnType = fn.getReturnType();
                 // Decimal v3 function return type maybe need change
                 if (returnType.isDecimalV3() && commonType.isValid()) {
-                    returnType = commonType;
+                    if (FunctionSet.TRUNCATE_DECIMAL.equalsIgnoreCase(fnName)) {
+                        // Function truncate_decimal may change the scale, we need to calculate the scale of the return type
+                        returnType = DecimalV3FunctionAnalyzer.getReturnTypeOfTruncate(node, argTypes);
+                    } else {
+                        returnType = commonType;
+                    }
                 }
                 ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
                         fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),

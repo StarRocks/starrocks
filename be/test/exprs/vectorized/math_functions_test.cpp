@@ -21,29 +21,29 @@ TEST_F(VecMathFunctionsTest, truncateTest) {
     {
         Columns columns;
 
-        auto tc1 = DoubleColumn::create();
-        auto tc2 = Int32Column::create();
+        auto c0 = DoubleColumn::create();
+        auto c1 = Int32Column::create();
 
         double dous[] = {2341.2341111, 4999.90134, 2144.2855, 934.12439};
         int ints[] = {2, 3, 1, 4};
 
-        double res[] = {2341.23, 4999.901, 2144.2, 934.1243};
+        double expected_res[] = {2341.23, 4999.901, 2144.2, 934.1243};
 
         for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
-            tc1->append(dous[i]);
-            tc2->append(ints[i]);
+            c0->append(dous[i]);
+            c1->append(ints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(c0);
+        columns.emplace_back(c1);
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = MathFunctions::truncate(ctx.get(), columns);
+        ColumnPtr res = MathFunctions::truncate(ctx.get(), columns);
 
-        auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
+        auto* raw_res = ColumnHelper::cast_to<TYPE_DOUBLE>(res)->get_data().data();
 
-        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
-            ASSERT_EQ(res[i], v->get_data()[i]);
+        for (int i = 0; i < sizeof(expected_res) / sizeof(expected_res[0]); ++i) {
+            ASSERT_EQ(expected_res[i], raw_res[i]);
         }
     }
 }
@@ -52,19 +52,180 @@ TEST_F(VecMathFunctionsTest, truncateNanTest) {
     {
         Columns columns;
 
-        auto tc1 = DoubleColumn::create();
-        auto tc2 = Int32Column::create();
+        auto c0 = DoubleColumn::create();
+        auto c1 = Int32Column::create();
 
-        tc1->append(0);
-        tc2->append(1591994755);
+        c0->append(0);
+        c1->append(1591994755);
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(c0);
+        columns.emplace_back(c1);
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = MathFunctions::truncate(ctx.get(), columns);
+        ColumnPtr res = MathFunctions::truncate(ctx.get(), columns);
 
-        ASSERT_EQ(true, result->is_null(0));
+        ASSERT_EQ(true, res->is_null(0));
+    }
+}
+
+TEST_F(VecMathFunctionsTest, truncateDecimalTest) {
+    {
+        Columns columns;
+
+        auto c0 = DecimalV3Column<int128_t>::create(10, 2);
+        auto c1 = Int32Column::create();
+
+        int128_t value;
+        std::string str = "18450.76";
+        DecimalV3Cast::from_string<int128_t>(&value, 10, 2, str.c_str(), str.length());
+
+        c0->append(value);
+        c1->append(2);
+
+        columns.emplace_back(c0);
+        columns.emplace_back(ConstColumn::create(c1, 1));
+
+        FunctionContext::TypeDesc return_type;
+        return_type.precision = decimal_precision_limit<int128_t>;
+        return_type.scale = 2;
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+                std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
+        auto res = ColumnHelper::cast_to<TYPE_DECIMAL128>(MathFunctions::truncate_decimal128(ctx.get(), columns));
+
+        ASSERT_EQ(decimal_precision_limit<int128_t>, res->precision());
+        ASSERT_EQ(2, res->scale());
+        ASSERT_EQ("18450.76",
+                  DecimalV3Cast::to_string<int128_t>(res->get_data()[0], decimal_precision_limit<int128_t>, 2));
+    }
+}
+
+TEST_F(VecMathFunctionsTest, truncateDecimalNullTest) {
+    {
+        Columns columns;
+
+        auto c0 = DecimalV3Column<int128_t>::create(1, 1);
+        NullColumnPtr c0_null = NullColumn::create();
+        auto c1 = Int32Column::create();
+
+        c0->append(0);
+        c0_null->append(1);
+        c1->append(3);
+
+        columns.emplace_back(NullableColumn::create(c0, c0_null));
+        columns.emplace_back(ConstColumn::create(c1, 1));
+
+        FunctionContext::TypeDesc return_type;
+        return_type.precision = decimal_precision_limit<int128_t>;
+        return_type.scale = 3;
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+                std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
+        auto res = MathFunctions::truncate_decimal128(ctx.get(), columns);
+
+        ASSERT_TRUE(res->is_nullable());
+    }
+}
+
+TEST_F(VecMathFunctionsTest, truncateDecimalOverflowTest) {
+    {
+        Columns columns;
+
+        auto c0 = DecimalV3Column<int128_t>::create(10, 3);
+        auto c1 = Int32Column::create();
+
+        int128_t value;
+        std::string str = "123.555";
+        DecimalV3Cast::from_string<int128_t>(&value, 10, 3, str.c_str(), str.length());
+
+        c0->append(value);
+        c1->append(38);
+
+        columns.emplace_back(c0);
+        columns.emplace_back(ConstColumn::create(c1, 1));
+
+        FunctionContext::TypeDesc return_type;
+        return_type.precision = decimal_precision_limit<int128_t>;
+        return_type.scale = decimal_precision_limit<int128_t>;
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+                std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
+        auto res = MathFunctions::truncate_decimal128(ctx.get(), columns);
+
+        ASSERT_TRUE(res->is_nullable());
+    }
+}
+
+TEST_F(VecMathFunctionsTest, truncateDecimalScaleExpandTest) {
+    {
+        Columns columns;
+
+        auto c0 = DecimalV3Column<int128_t>::create(1, 1);
+        auto c1 = Int32Column::create();
+
+        int128_t value;
+        std::string str = "0.1";
+        DecimalV3Cast::from_string<int128_t>(&value, 5, 1, str.c_str(), str.length());
+
+        c0->append(value);
+        c1->append(100);
+
+        columns.emplace_back(c0);
+        columns.emplace_back(ConstColumn::create(c1, 1));
+
+        FunctionContext::TypeDesc return_type;
+        return_type.precision = decimal_precision_limit<int128_t>;
+        return_type.scale = decimal_precision_limit<int128_t>;
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+                std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
+        auto res = ColumnHelper::cast_to<TYPE_DECIMAL128>(MathFunctions::truncate_decimal128(ctx.get(), columns));
+
+        ASSERT_EQ(decimal_precision_limit<int128_t>, res->precision());
+        ASSERT_EQ(decimal_precision_limit<int128_t>, res->scale());
+        ASSERT_EQ("0.10000000000000000000000000000000000000",
+                  DecimalV3Cast::to_string<int128_t>(res->get_data()[0], decimal_precision_limit<int128_t>,
+                                                     decimal_precision_limit<int128_t>));
+    }
+}
+
+TEST_F(VecMathFunctionsTest, truncateDecimalByColTest) {
+    {
+        Columns columns;
+
+        auto c0 = DecimalV3Column<int128_t>::create(15, 5);
+        auto c1 = Int32Column::create();
+
+        int128_t value;
+        std::string str = "123.45678";
+        DecimalV3Cast::from_string<int128_t>(&value, 15, 5, str.c_str(), str.length());
+
+        for (int i = 0; i <= 6; i++) {
+            c0->append(value);
+            c1->append(i);
+        }
+
+        columns.emplace_back(c0);
+        columns.emplace_back(c1);
+
+        FunctionContext::TypeDesc return_type;
+        return_type.precision = decimal_precision_limit<int128_t>;
+        return_type.scale = 5;
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+                std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
+        auto res = ColumnHelper::cast_to<TYPE_DECIMAL128>(MathFunctions::truncate_decimal128(ctx.get(), columns));
+
+        ASSERT_EQ(decimal_precision_limit<int128_t>, res->precision());
+        ASSERT_EQ(5, res->scale());
+        ASSERT_EQ("123", DecimalV3Cast::to_string<int128_t>(res->get_data()[0], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.40000",
+                  DecimalV3Cast::to_string<int128_t>(res->get_data()[1], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.45000",
+                  DecimalV3Cast::to_string<int128_t>(res->get_data()[2], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.45600",
+                  DecimalV3Cast::to_string<int128_t>(res->get_data()[3], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.45670",
+                  DecimalV3Cast::to_string<int128_t>(res->get_data()[4], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.45678",
+                  DecimalV3Cast::to_string<int128_t>(res->get_data()[5], decimal_precision_limit<int128_t>, 5));
+        ASSERT_EQ("123.45678",
+                  DecimalV3Cast::to_string<int128_t>(res->get_data()[6], decimal_precision_limit<int128_t>, 5));
     }
 }
 
@@ -388,31 +549,40 @@ TEST_F(VecMathFunctionsTest, Conv_intTest) {
         auto tc2 = Int8Column::create();
         auto tc3 = Int8Column::create();
 
-        int64_t bigints[] = {1, 2, 35,
-                             10, 10, 10, 10, 3, 3,
-                             99999999, 99999999, 99999999, 99999999,
-                             -99999999, -99999999, -99999999, -99999999,
-                             4294967296,4294967296,4294967296,4294967296,
-                             -4294967296,-4294967296,-4294967296,-4294967296};
-        int8_t baseints[] = {10, 10, 10,
-                             2, 2, -2, -2, -2, -2,
-                             -16, -16, 16, 16,
-                             -16, -16, 16, 16,
-                             -16, -16, 16, 16,
-                             -16, -16, -16, -16};
-        int8_t destints[] = {10, 16, 36,
-                             10, -10, 10, -10, 10, 10,
-                             10, -10, 10, -10,
-                             10, -10, 10, -10,
-                             10, -10, 10, -10,
-                             10, -10, 10, -10};
+        int64_t bigints[] = {1,           2,           35,          10,         10,         10,         10,
+                             3,           3,           99999999,    99999999,   99999999,   99999999,   -99999999,
+                             -99999999,   -99999999,   -99999999,   4294967296, 4294967296, 4294967296, 4294967296,
+                             -4294967296, -4294967296, -4294967296, -4294967296};
+        int8_t baseints[] = {10,  10,  10, 2,  2,   -2,  -2, -2, -2,  -16, -16, 16, 16,
+                             -16, -16, 16, 16, -16, -16, 16, 16, -16, -16, -16, -16};
+        int8_t destints[] = {10, 16,  36, 10,  -10, 10,  -10, 10,  10, 10,  -10, 10, -10,
+                             10, -10, 10, -10, 10,  -10, 10,  -10, 10, -10, 10,  -10};
 
-        std::string results[] = {"1", "2", "Z",
-                                 "2", "2", "2", "2", "0", "0",
-                                 "2576980377", "2576980377", "2576980377", "2576980377",
-                                 "18446744071132571239", "-2576980377", "18446744071132571239", "-2576980377",
-                                 "285960729238", "285960729238", "285960729238", "285960729238",
-                                 "18446743787748822378", "-285960729238", "18446743787748822378", "-285960729238"};
+        std::string results[] = {"1",
+                                 "2",
+                                 "Z",
+                                 "2",
+                                 "2",
+                                 "2",
+                                 "2",
+                                 "0",
+                                 "0",
+                                 "2576980377",
+                                 "2576980377",
+                                 "2576980377",
+                                 "2576980377",
+                                 "18446744071132571239",
+                                 "-2576980377",
+                                 "18446744071132571239",
+                                 "-2576980377",
+                                 "285960729238",
+                                 "285960729238",
+                                 "285960729238",
+                                 "285960729238",
+                                 "18446743787748822378",
+                                 "-285960729238",
+                                 "18446743787748822378",
+                                 "-285960729238"};
 
         for (int i = 0; i < sizeof(bigints) / sizeof(bigints[0]); ++i) {
             tc1->append(bigints[i]);
@@ -443,40 +613,79 @@ TEST_F(VecMathFunctionsTest, Conv_stringTest) {
         auto tc2 = Int8Column::create();
         auto tc3 = Int8Column::create();
 
-        std::string bigints[] = {"1", "2", "35", "1000", "103", "114", "18446744073709551617",
-                                 "10", "10", "10", "10",
-                                 "-9223372036854775808", "-9223372036854775808", "-9223372036854775808", "-9223372036854775808",
-                                 "9223372036854775808", "9223372036854775808", "9223372036854775808", "9223372036854775808",
-                                 "-9223372036854775809", "-9223372036854775809", "-9223372036854775809", "-9223372036854775809",
-                                 "18446744073709551616", "18446744073709551616", "18446744073709551616", "18446744073709551616",
-                                 "-18446744073709551616", "-18446744073709551616", "-18446744073709551616", "-18446744073709551616",
-                                 "de0b6b3a7640000", "8ac7230489e80000", "a"
-                                 };
-        int8_t baseints[] = {10, 10, 10, 8, 35, 35, 10,
-                             -2, -2, 2, 2,
-                             -10, -10, 10, 10,
-                             -10, -10, 10, 10,
-                             -10, -10, 10, 10,
-                             -10, -10, 10, 10,
-                             -10, -10, 10, 10,
-                             16, 16, 10};
-        int8_t destints[] = {10, 16, 36, 10, 10, 10, 10,
-                             10, -10, 10, -10,
-                             10, -10, 10, -10,
-                             10, -10, 10, -10,
-                             10, -10, 10, -10,
-                             10, -10, 10, -10,
-                             10, -10, 10, -10,
-                             10, 10, 10};
+        std::string bigints[] = {"1",
+                                 "2",
+                                 "35",
+                                 "1000",
+                                 "103",
+                                 "114",
+                                 "18446744073709551617",
+                                 "10",
+                                 "10",
+                                 "10",
+                                 "10",
+                                 "-9223372036854775808",
+                                 "-9223372036854775808",
+                                 "-9223372036854775808",
+                                 "-9223372036854775808",
+                                 "9223372036854775808",
+                                 "9223372036854775808",
+                                 "9223372036854775808",
+                                 "9223372036854775808",
+                                 "-9223372036854775809",
+                                 "-9223372036854775809",
+                                 "-9223372036854775809",
+                                 "-9223372036854775809",
+                                 "18446744073709551616",
+                                 "18446744073709551616",
+                                 "18446744073709551616",
+                                 "18446744073709551616",
+                                 "-18446744073709551616",
+                                 "-18446744073709551616",
+                                 "-18446744073709551616",
+                                 "-18446744073709551616",
+                                 "de0b6b3a7640000",
+                                 "8ac7230489e80000",
+                                 "a"};
+        int8_t baseints[] = {10, 10, 10,  8,   35, 35, 10,  -2,  -2, 2,  2,   -10, -10, 10, 10, -10, -10,
+                             10, 10, -10, -10, 10, 10, -10, -10, 10, 10, -10, -10, 10,  10, 16, 16,  10};
+        int8_t destints[] = {10, 16,  36, 10,  10, 10,  10, 10,  -10, 10,  -10, 10,  -10, 10,  -10, 10, -10,
+                             10, -10, 10, -10, 10, -10, 10, -10, 10,  -10, 10,  -10, 10,  -10, 10,  10, 10};
 
-        std::string results[] = {"1", "2", "Z", "512", "1228", "1264", "18446744073709551615",
-                                 "2", "2", "2", "2",
-                                 "9223372036854775808", "-9223372036854775808", "9223372036854775808", "-9223372036854775808",
-                                 "9223372036854775807", "9223372036854775807", "9223372036854775808", "-9223372036854775808",
-                                 "9223372036854775808", "-9223372036854775808", "9223372036854775807", "9223372036854775807",
-                                 "9223372036854775807", "9223372036854775807", "18446744073709551615", "-1",
-                                 "9223372036854775808", "-9223372036854775808", "0", "0",
-                                 "1000000000000000000", "10000000000000000000", "0"};
+        std::string results[] = {"1",
+                                 "2",
+                                 "Z",
+                                 "512",
+                                 "1228",
+                                 "1264",
+                                 "18446744073709551615",
+                                 "2",
+                                 "2",
+                                 "2",
+                                 "2",
+                                 "9223372036854775808",
+                                 "-9223372036854775808",
+                                 "9223372036854775808",
+                                 "-9223372036854775808",
+                                 "9223372036854775807",
+                                 "9223372036854775807",
+                                 "9223372036854775808",
+                                 "-9223372036854775808",
+                                 "9223372036854775808",
+                                 "-9223372036854775808",
+                                 "9223372036854775807",
+                                 "9223372036854775807",
+                                 "9223372036854775807",
+                                 "9223372036854775807",
+                                 "18446744073709551615",
+                                 "-1",
+                                 "9223372036854775808",
+                                 "-9223372036854775808",
+                                 "0",
+                                 "0",
+                                 "1000000000000000000",
+                                 "10000000000000000000",
+                                 "0"};
 
         for (int i = 0; i < sizeof(bigints) / sizeof(bigints[0]); ++i) {
             tc1->append(bigints[i]);

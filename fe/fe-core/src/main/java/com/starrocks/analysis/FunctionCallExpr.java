@@ -657,7 +657,7 @@ public class FunctionCallExpr extends Expr {
             argTypes[i] = this.children.get(i).getType();
         }
 
-        Type decimalReturnType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argTypes, fnName);
+        Type decimalReturnType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argTypes, fnName.getFunction());
         analyzeBuiltinAggFunction();
 
         if (fnName.getFunction().equalsIgnoreCase("sum")) {

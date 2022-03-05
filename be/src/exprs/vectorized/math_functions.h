@@ -167,6 +167,12 @@ public:
     DEFINE_VECTORIZED_FN(truncate);
 
     /**
+     * @param: [DecimalV3Column<int128_t>, IntColumn]
+     * @return: DecimalV3Column<int128_t>
+     */
+    DEFINE_VECTORIZED_FN(truncate_decimal128);
+
+    /**
     * @param: [DoubleColumn]
     * @return: DoubleColumn
     */
@@ -445,6 +451,22 @@ public:
         return result.build(ColumnHelper::is_all_const(columns));
     }
 
+    // Specifically, keep_scale means whether to keep the original scale of lv
+    // Given an example
+    //      col1 - decimal(38,4)      col2 - (int)
+    //      1.2345                   3
+    //      1.2300                   1
+    // The return type is decimal(38, 4), and the result of truncate by col2 are list as follows
+    //      without_compensate
+    //      1.23 decimal(38,2) <==> 0.1234 decimal(38,4)
+    //      1.2  decimal(38,1) <==> 0.0012 decimal(38,4)
+    // So we need to compensate
+    //      with_compensate = without_compensate * 10^(4 - col)
+    //      1.2340          = 0.1234             * 10
+    //      1.2000          = 0.0012             * 1000
+    template <bool keep_scale>
+    static void decimal_truncate(const int128_t& lv, const int32_t& l_scale, const int32_t& rv, int128_t* res,
+                                 bool* is_over_flow);
     static double double_round(double value, int64_t dec, bool dec_unsigned, bool truncate);
     static bool decimal_in_base_to_decimal(int64_t src_num, int8_t src_base, int64_t* result);
     static bool handle_parse_result(int8_t dest_base, int64_t* num, StringParser::ParseResult parse_res);

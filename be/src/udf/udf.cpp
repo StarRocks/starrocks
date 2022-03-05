@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "runtime/decimal_value.h"
 #include "runtime/decimalv2_value.h"
+#include "runtime/types.h"
 #include "storage/hll.h"
 
 // Be careful what this includes since this needs to be linked into the UDF's
@@ -197,9 +198,10 @@ FunctionContext* FunctionContext::create_test_context() {
     return context;
 }
 
-FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& arg_types) {
+FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& arg_types, const TypeDesc& return_type) {
     FunctionContext* context = FunctionContext::create_test_context();
     context->impl()->_arg_types = std::move(arg_types);
+    context->impl()->_return_type = return_type;
     return context;
 }
 
