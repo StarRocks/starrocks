@@ -54,6 +54,9 @@ public class FunctionSet {
     public static final String MIN = "min";
     public static final String SUM = "sum";
     public static final String AVG = "avg";
+    public static final String TRUNCATE_DECIMAL = "truncate_decimal";
+    public static final String MONEY_FORMAT = "money_format";
+    public static final String STR_TO_DATE = "str_to_date";
     public static final String HLL_UNION = "hll_union";
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String HLL_RAW_AGG = "hll_raw_agg";
@@ -181,27 +184,27 @@ public class FunctionSet {
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
     public final ImmutableSet<String> couldApplyDictOptimizationFunctions = ImmutableSet.of(
-           "append_trailing_char_if_absent",
-           "concat",
-           "concat_ws",
-           "hex",
-           "left",
-           "like",
-           "lower",
-           "lpad",
-           "ltrim",
-           "regexp_extract",
-           "regexp_replace",
-           "repeat",
-           "reverse",
-           "right",
-           "rpad",
-           "rtrim",
-           "split_part",
-           "substr",
-           "substring",
-           "trim",
-           "upper");
+            "append_trailing_char_if_absent",
+            "concat",
+            "concat_ws",
+            "hex",
+            "left",
+            "like",
+            "lower",
+            "lpad",
+            "ltrim",
+            "regexp_extract",
+            "regexp_replace",
+            "repeat",
+            "reverse",
+            "right",
+            "rpad",
+            "rtrim",
+            "split_part",
+            "substr",
+            "substring",
+            "trim",
+            "upper");
 
     public static final Set<String> alwaysReturnNonNullableFunctions =
             ImmutableSet.<String>builder()

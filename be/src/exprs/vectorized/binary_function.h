@@ -167,8 +167,8 @@ public:
             return ColumnHelper::create_const_null_column(v1->size());
         }
 
-        const ColumnPtr& data1 = FunctionHelper::get_real_data_column(v1);
-        const ColumnPtr& data2 = FunctionHelper::get_real_data_column(v2);
+        const ColumnPtr& data1 = FunctionHelper::get_data_column_of_nullable(v1);
+        const ColumnPtr& data2 = FunctionHelper::get_data_column_of_nullable(v2);
 
         ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(data1, data2);
         if (v1->has_null() || v2->has_null()) {
@@ -215,7 +215,8 @@ public:
                 null_flags = RunTimeColumnType<TYPE_NULL>::create();
                 null_flags->resize(data->size());
             }
-            const auto& real_data = ColumnHelper::cast_to_raw<ResultType>(FunctionHelper::get_real_data_column(data));
+            const auto& real_data =
+                    ColumnHelper::cast_to_raw<ResultType>(FunctionHelper::get_data_column_of_nullable(data));
 
             // Avoid calling virtual fuctions `size` in for loop
             const auto size = data->size();
@@ -294,8 +295,8 @@ public:
             }
         }
 
-        const ColumnPtr& data1 = FunctionHelper::get_real_data_column(v1);
-        const ColumnPtr& data2 = FunctionHelper::get_real_data_column(v2);
+        const ColumnPtr& data1 = FunctionHelper::get_data_column_of_nullable(v1);
+        const ColumnPtr& data2 = FunctionHelper::get_data_column_of_nullable(v2);
 
         ColumnPtr produce_null = PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(data1, data2);
 
