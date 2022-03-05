@@ -331,7 +331,7 @@ private:
 };
 
 // clang-format off
-typedef boost::variant<
+typedef std::variant<
         ColumnValueRange<int8_t>,
         ColumnValueRange<uint8_t>,  // vectorized boolean
         ColumnValueRange<int16_t>,
