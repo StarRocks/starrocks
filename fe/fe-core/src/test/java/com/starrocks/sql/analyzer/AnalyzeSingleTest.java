@@ -414,7 +414,7 @@ public class AnalyzeSingleTest {
                 "Operand '('a') OR ('b')' part of predicate ''a'' should return type 'BOOLEAN'");
 
         StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select true || false from t0",
-                connectContext).get(0);
+                connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
         analyzer.analyze(statementBase);
         Assert.assertEquals("SELECT (TRUE) OR (FALSE) FROM `default_cluster:test`.`t0`"
@@ -422,7 +422,7 @@ public class AnalyzeSingleTest {
 
         connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
         statementBase = com.starrocks.sql.parser.SqlParser.parse("select 'a' || 'b' from t0",
-                connectContext).get(0);
+                connectContext.getSessionVariable().getSqlMode()).get(0);
         analyzer.analyze(statementBase);
         Assert.assertEquals("SELECT concat('a', 'b') FROM `default_cluster:test`.`t0`"
                 ,AST2SQL.toString(statementBase));    }

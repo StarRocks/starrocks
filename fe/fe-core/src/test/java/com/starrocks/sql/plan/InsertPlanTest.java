@@ -332,7 +332,7 @@ public class InsertPlanTest extends PlanTestBase {
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
-        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext).get(0);
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
         connectContext.getDumpInfo().setOriginStmt(originStmt);
         ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
 

@@ -13,7 +13,6 @@ import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.SqlParserUtils;
-import com.starrocks.qe.ConnectContext;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 
@@ -21,7 +20,7 @@ import java.io.StringReader;
 import java.util.List;
 
 public class SqlParser {
-    public static List<StatementBase> parse(String originSql, ConnectContext session) {
+    public static List<StatementBase> parse(String originSql, long sqlMode) {
         List<String> splitSql = splitSQL(originSql);
         List<StatementBase> statements = Lists.newArrayList();
 
@@ -33,10 +32,10 @@ public class SqlParser {
                 parser.removeErrorListeners();
                 parser.addErrorListener(new ErrorHandler());
                 StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-                statements.add((StatementBase) new AstBuilder(session.getSessionVariable().getSqlMode())
+                statements.add((StatementBase) new AstBuilder(sqlMode)
                         .visitSingleStatement(sqlStatements.singleStatement(0)));
             } catch (ParsingException parsingException) {
-                StatementBase statement = parseWithOldParser(sql, session);
+                StatementBase statement = parseWithOldParser(sql, sqlMode);
                 if (statement instanceof QueryStmt
                         || statement instanceof InsertStmt
                         || statement instanceof CreateTableAsSelectStmt
@@ -53,8 +52,8 @@ public class SqlParser {
         return statements;
     }
 
-    private static StatementBase parseWithOldParser(String originStmt, ConnectContext session) {
-        SqlScanner input = new SqlScanner(new StringReader(originStmt), session.getSessionVariable().getSqlMode());
+    private static StatementBase parseWithOldParser(String originStmt, long sqlMode) {
+        SqlScanner input = new SqlScanner(new StringReader(originStmt), sqlMode);
         com.starrocks.analysis.SqlParser parser = new com.starrocks.analysis.SqlParser(input);
         try {
             return SqlParserUtils.getFirstStmt(parser);
