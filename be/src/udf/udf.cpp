@@ -145,6 +145,31 @@ bool FunctionContextImpl::check_local_allocations_empty() {
     return false;
 }
 
+void FunctionContextImpl::set_error(const char* error_msg) {
+    std::string* null_error_msg = nullptr;
+    if (_optional_error_msg.compare_exchange_strong(null_error_msg, &_error_msg)) {
+        _error_msg = error_msg;
+        std::stringstream ss;
+        ss << "UDF ERROR: " << error_msg;
+        if (_state != nullptr) {
+            _state->set_process_status(ss.str());
+        }
+    }
+}
+
+bool FunctionContextImpl::has_error() {
+    return _optional_error_msg.load() != nullptr;
+}
+
+const char* FunctionContextImpl::error_msg() {
+    std::string* s = _optional_error_msg.load();
+    if (s != nullptr) {
+        return s->c_str();
+    } else {
+        return nullptr;
+    }
+}
+
 starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
         RuntimeState* state, MemPool* pool, const starrocks_udf::FunctionContext::TypeDesc& return_type,
         const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size, bool debug) {
@@ -246,7 +271,7 @@ FunctionContext::UniqueId FunctionContext::query_id() const {
 }
 
 bool FunctionContext::has_error() const {
-    return !_impl->_error_msg.empty();
+    return _impl->has_error();
 }
 
 const char* FunctionContext::error_msg() const {
@@ -322,19 +347,7 @@ void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
 }
 
 void FunctionContext::set_error(const char* error_msg) {
-    if (_impl->_error_msg.empty()) {
-        _impl->_error_msg = error_msg;
-        std::stringstream ss;
-        ss << "UDF ERROR: " << error_msg;
-
-        if (_impl->_state != nullptr) {
-            _impl->_state->set_process_status(ss.str());
-        }
-    }
-}
-
-void FunctionContext::clear_error_msg() {
-    _impl->_error_msg.clear();
+    _impl->set_error(error_msg);
 }
 
 bool FunctionContext::add_warning(const char* warning_msg) {

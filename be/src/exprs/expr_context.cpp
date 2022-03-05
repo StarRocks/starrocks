@@ -185,12 +185,6 @@ std::string ExprContext::get_error_msg() const {
     return "";
 }
 
-void ExprContext::clear_error_msg() {
-    for (auto fn_ctx : _fn_contexts) {
-        fn_ctx->clear_error_msg();
-    }
-}
-
 ColumnPtr ExprContext::evaluate(vectorized::Chunk* chunk) {
     return evaluate(_root, chunk);
 }

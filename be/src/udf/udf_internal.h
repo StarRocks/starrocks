@@ -107,6 +107,9 @@ public:
     bool check_local_allocations_empty();
 
     RuntimeState* state() { return _state; }
+    void set_error(const char* error_msg);
+    bool has_error();
+    const char* error_msg();
 
 #ifdef STARROCKS_WITH_HDFS
     vectorized::JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
@@ -149,6 +152,7 @@ private:
 
     // Empty if there's no error
     std::string _error_msg;
+    std::atomic<std::string*> _optional_error_msg{nullptr};
 
     // The number of warnings reported.
     int64_t _num_warnings;
