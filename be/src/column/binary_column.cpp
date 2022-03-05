@@ -466,8 +466,8 @@ int64_t BinaryColumn::xor_checksum() const {
         }
         int64_t* checksum_vec = reinterpret_cast<int64_t*>(&avx2_checksum);
         size_t eight_byte_step = sizeof(__m256i) / sizeof(int64_t);
-        for (size_t i = 0; i < eight_byte_step; ++i) {
-            xor_checksum ^= checksum_vec[i];
+        for (size_t j = 0; j < eight_byte_step; ++j) {
+            xor_checksum ^= checksum_vec[j];
         }
 #endif
 
@@ -476,8 +476,8 @@ int64_t BinaryColumn::xor_checksum() const {
             src += 8;
             num -= 8;
         }
-        for (size_t i = 0; i < num; ++i) {
-            xor_checksum ^= src[i];
+        for (size_t j = 0; j < num; ++j) {
+            xor_checksum ^= src[j];
         }
     }
 
