@@ -470,7 +470,9 @@ public:
     //      with_compensate = without_compensate * 10^(4 - col)
     //      1.2340          = 0.1234             * 10
     //      1.2000          = 0.0012             * 1000
-    static int128_t decimal_truncate(const int128_t& lv, const int32_t& l_scale, const int32_t& rv, bool keep_scale);
+    template <bool keep_scale>
+    static void decimal_truncate(const int128_t& lv, const int32_t& l_scale, const int32_t& rv, int128_t* res,
+                                 bool* is_over_flow);
     static double double_round(double value, int64_t dec, bool dec_unsigned, bool truncate);
     static bool decimal_in_base_to_decimal(int64_t src_num, int8_t src_base, int64_t* result);
     static bool handle_parse_result(int8_t dest_base, int64_t* num, StringParser::ParseResult parse_res);

@@ -409,8 +409,10 @@ std::string MathFunctions::decimal_to_base(int64_t src_num, int8_t dest_base) {
     return std::string(buf + max_digits - result_len, result_len);
 }
 
-int128_t MathFunctions::decimal_truncate(const int128_t& lv, const int32_t& l_scale, const int32_t& rv,
-                                         bool keep_scale) {
+template <bool keep_scale>
+void MathFunctions::decimal_truncate(const int128_t& lv, const int32_t& l_scale, const int32_t& rv, int128_t* res,
+                                     bool* is_over_flow) {
+    *is_over_flow = false;
     int32_t dec = rv;
     if (dec < 0) {
         dec = 0;
@@ -420,81 +422,117 @@ int128_t MathFunctions::decimal_truncate(const int128_t& lv, const int32_t& l_sc
         dec = max_precision;
     }
     int32_t scale_diff = dec - l_scale;
-    int128_t result;
     if (scale_diff > 0) {
         if (keep_scale) {
-            result = lv;
+            // Up scale and down scale can offset when keep scale is set
+            // E.g. 1.2345 --(scale up by 2)--> 1.234500 --(scale down by 2) --> 1.2345
+            *res = lv;
         } else {
-            DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, true, true>(
-                    lv, get_scale_factor<int128_t>(scale_diff), &result);
+            (*is_over_flow) |= DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, true, true>(
+                    lv, get_scale_factor<int128_t>(scale_diff), res);
         }
     } else if (scale_diff < 0) {
-        DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, false, true>(
-                lv, get_scale_factor<int128_t>(-scale_diff), &result);
+        // Up scale and down scale cannot offset when keep scale is set
+        // E.g. 1.2345 --(scale down by 2)--> 1.23 --(scale up by 2) --> 1.2300
+        (*is_over_flow) |= DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, false, true>(
+                lv, get_scale_factor<int128_t>(-scale_diff), res);
         if (keep_scale) {
-            int128_t new_result;
-            DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, true, true>(
-                    result, get_scale_factor<int128_t>(-scale_diff), &new_result);
-            result = new_result;
+            int128_t new_res;
+            (*is_over_flow) |= DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, true, true>(
+                    *res, get_scale_factor<int128_t>(-scale_diff), &new_res);
+            *res = new_res;
         }
     } else {
-        result = lv;
+        *res = lv;
     }
-    return result;
 }
 
 ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     const auto& type = context->get_return_type();
 
-    ColumnPtr maybe_nullable_c1 = columns[0];
-    ColumnPtr maybe_nullable_c2 = columns[1];
-    if (maybe_nullable_c1->only_null() || maybe_nullable_c2->only_null()) {
-        return ColumnHelper::create_const_null_column(maybe_nullable_c1->size());
+    ColumnPtr c0 = columns[0];
+    ColumnPtr c1 = columns[1];
+    if (c0->only_null() || c1->only_null()) {
+        return ColumnHelper::create_const_null_column(c0->size());
     }
 
-    // Unpack nullable
-    ColumnPtr maybe_const_c1 = FunctionHelper::get_data_column_of_nullable(maybe_nullable_c1);
-    ColumnPtr maybe_const_c2 = FunctionHelper::get_data_column_of_nullable(maybe_nullable_c2);
+    NullColumnPtr null_flags;
+    bool has_null = false;
+    if (c0->has_null() || c1->has_null()) {
+        has_null = true;
+        null_flags = FunctionHelper::union_nullable_column(c0, c1);
+    } else {
+        null_flags = NullColumn::create();
+        null_flags->reserve(c0->size());
+        null_flags->append_default(c0->size());
+    }
 
-    const bool c1_is_const = maybe_const_c1->is_constant();
-    const bool c2_is_const = maybe_const_c2->is_constant();
+    const bool c0_is_const = c0->is_constant();
+    const bool c1_is_const = c1->is_constant();
 
     // Unpack const
-    ColumnPtr c1 = FunctionHelper::get_data_column_of_const(maybe_const_c1);
-    ColumnPtr c2 = FunctionHelper::get_data_column_of_const(maybe_const_c2);
-    ColumnPtr c3 = RunTimeColumnType<TYPE_DECIMAL128>::create(type.precision, type.scale);
-    c3->resize_uninitialized(c1->size());
+    c0 = FunctionHelper::get_data_column_of_const(c0);
+    c1 = FunctionHelper::get_data_column_of_const(c1);
 
-    const int32_t original_scale = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c1)->scale();
+    // Unpack nullable
+    c0 = FunctionHelper::get_data_column_of_nullable(c0);
+    c1 = FunctionHelper::get_data_column_of_nullable(c1);
 
-    int128_t* raw_c1 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c1)->get_data().data();
-    int32_t* raw_c2 = ColumnHelper::cast_to_raw<TYPE_INT>(c2)->get_data().data();
-    int128_t* raw_c3 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c3)->get_data().data();
+    ColumnPtr res = RunTimeColumnType<TYPE_DECIMAL128>::create(type.precision, type.scale);
+    res->resize_uninitialized(c0->size());
 
-    const int size = c1->size();
+    const int32_t original_scale = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->scale();
+
+    int128_t* raw_c1 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->get_data().data();
+    int32_t* raw_c2 = ColumnHelper::cast_to_raw<TYPE_INT>(c1)->get_data().data();
+    int128_t* raw_res = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(res)->get_data().data();
+    uint8_t* raw_null_flags = null_flags->get_data().data();
+
+    const int size = c0->size();
+
     // If c2 is not const, than we need to keep the originl scale
-    if (c1_is_const && c2_is_const) {
-        raw_c3[0] = MathFunctions::decimal_truncate(raw_c1[0], original_scale, raw_c2[0], false);
-        c3 = ConstColumn::create(c3, c3->size());
+    // TODO(hcf) For truncate(v, d), we also to keep the scale if d is constant
+    if (c0_is_const && c1_is_const) {
+        bool is_over_flow;
+        MathFunctions::decimal_truncate<false>(raw_c1[0], original_scale, raw_c2[0], &raw_res[0], &is_over_flow);
+        res = ConstColumn::create(res, res->size());
+        if (is_over_flow) {
+            has_null = true;
+            raw_null_flags[0] = 1;
+        }
+    } else if (c0_is_const) {
+        for (auto i = 0; i < size; i++) {
+            bool is_over_flow;
+            MathFunctions::decimal_truncate<true>(raw_c1[0], original_scale, raw_c2[i], &raw_res[i], &is_over_flow);
+            if (is_over_flow) {
+                has_null = true;
+                raw_null_flags[i] = 1;
+            }
+        }
     } else if (c1_is_const) {
         for (auto i = 0; i < size; i++) {
-            raw_c3[i] = MathFunctions::decimal_truncate(raw_c1[0], original_scale, raw_c2[i], true);
-        }
-    } else if (c2_is_const) {
-        for (auto i = 0; i < size; i++) {
-            raw_c3[i] = MathFunctions::decimal_truncate(raw_c1[i], original_scale, raw_c2[0], false);
+            bool is_over_flow;
+            MathFunctions::decimal_truncate<false>(raw_c1[i], original_scale, raw_c2[0], &raw_res[i], &is_over_flow);
+            if (is_over_flow) {
+                has_null = true;
+                raw_null_flags[i] = 1;
+            }
         }
     } else {
         for (auto i = 0; i < size; i++) {
-            raw_c3[i] = MathFunctions::decimal_truncate(raw_c1[i], original_scale, raw_c2[i], true);
+            bool is_over_flow;
+            MathFunctions::decimal_truncate<true>(raw_c1[i], original_scale, raw_c2[i], &raw_res[i], &is_over_flow);
+            if (is_over_flow) {
+                has_null = true;
+                raw_null_flags[i] = 1;
+            }
         }
     }
 
-    if (maybe_nullable_c1->has_null() || maybe_nullable_c2->has_null()) {
-        NullColumnPtr null_flags = FunctionHelper::union_nullable_column(maybe_nullable_c1, maybe_nullable_c2);
-        return NullableColumn::create(std::move(c3), std::move(null_flags));
+    if (has_null) {
+        return NullableColumn::create(std::move(res), std::move(null_flags));
     } else {
-        return c3;
+        return res;
     }
 }
 
