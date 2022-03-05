@@ -11,6 +11,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -26,6 +27,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.ViewRelation;
 
 import java.util.List;
 import java.util.Map;
@@ -102,8 +104,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitSubquery(SubqueryRelation node, Void context) {
-            visit(node.getQuery());
-            return null;
+            return visit(node.getQuery());
+        }
+
+        public Void visitView(ViewRelation node, Void context) {
+            getDB(node.getName());
+            return visit(node.getQuery(), context);
         }
 
         @Override
@@ -129,7 +135,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            String dbName = node.getName().getDb();
+            getDB(node.getName());
+            return null;
+        }
+
+        private void getDB(TableName tableName) {
+            String dbName = tableName.getDb();
             if (Strings.isNullOrEmpty(dbName)) {
                 dbName = session.getDatabase();
             } else {
@@ -139,7 +150,6 @@ public class AnalyzerUtils {
             Database db = session.getCatalog().getDb(dbName);
 
             dbs.put(dbName, db);
-            return null;
         }
     }
 
@@ -171,8 +181,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitSubquery(SubqueryRelation node, Void context) {
-            visit(node.getQuery());
-            return null;
+            return visit(node.getQuery());
+        }
+
+
+        public Void visitView(ViewRelation node, Void context) {
+            return visit(node.getQuery(), context);
         }
 
         @Override
