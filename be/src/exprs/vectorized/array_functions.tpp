@@ -139,8 +139,9 @@ private:
             const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
             const auto* src_data_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column().get());
 
-            dest_column = NullableColumn::create(ArrayColumn::create(dest_column_data, UInt32Column::create(src_data_column->offsets())),
-                                                            NullColumn::create());
+            dest_column = NullableColumn::create(
+                    ArrayColumn::create(dest_column_data, UInt32Column::create(src_data_column->offsets())),
+                    NullColumn::create());
 
             auto& dest_nullable_column = down_cast<NullableColumn&>(*dest_column);
             auto& dest_null_data = down_cast<NullableColumn&>(*dest_column).null_column_data();
