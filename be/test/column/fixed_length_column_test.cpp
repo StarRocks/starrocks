@@ -541,4 +541,16 @@ TEST(FixedLengthColumnTest, test_update_rows) {
     }
 }
 
+TEST(FixedLengthColumnTest, test_xor_checksum) {
+    auto column = FixedLengthColumn<int32_t>::create();
+    for (int i = 0; i <= 100; i++) {
+        column->append(i);
+    }
+
+    int64_t checksum = column->xor_checksum();
+    int64_t expected_checksum = 100;
+
+    ASSERT_EQ(checksum, expected_checksum);
+}
+
 } // namespace starrocks::vectorized
