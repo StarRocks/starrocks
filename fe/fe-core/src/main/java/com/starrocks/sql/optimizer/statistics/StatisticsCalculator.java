@@ -99,6 +99,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
@@ -151,32 +152,27 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             statistics = estimateStatistics(ImmutableList.of(predicate), statistics);
         }
 
+        Statistics.Builder statisticsBuilder = Statistics.buildFrom(statistics);
         if (limit != -1 && limit < statistics.getOutputRowCount()) {
-            statistics = Statistics.buildFrom(statistics).setOutputRowCount(limit).build();
+            statisticsBuilder.setOutputRowCount(limit);
+        }
+        // CTE consumer has children but the children do not estimate the statistics, so here need to filter null
+        if (context.getChildrenStatistics().stream().filter(Objects::nonNull)
+                .anyMatch(Statistics::isTableRowCountMayInaccurate)) {
+            statisticsBuilder.setTableRowCountMayInaccurate(true);
         }
 
         Projection projection = node.getProjection();
         if (projection != null) {
-            Statistics.Builder pruneBuilder = Statistics.builder();
-            pruneBuilder.addColumnStatistics(statistics.getColumnStatistics());
-            pruneBuilder.setOutputRowCount(statistics.getOutputRowCount());
-
+            Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
             for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
-                // derive stats from child
-                // use clone here because it will be rewrite later
-                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator).clone();
-
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(
-                        projection.getCommonSubOperatorMap(), true);
-                mapOperator = mapOperator.accept(rewriter, null);
-                pruneBuilder.addColumnStatistic(columnRefOperator,
-                        ExpressionStatisticCalculator.calculate(mapOperator, pruneBuilder.build()));
+                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
+                statisticsBuilder.addColumnStatistic(columnRefOperator,
+                        ExpressionStatisticCalculator.calculate(mapOperator, statisticsBuilder.build()));
             }
 
-            context.setStatistics(pruneBuilder.build());
-        } else {
-            context.setStatistics(statistics);
         }
+        context.setStatistics(statisticsBuilder.build());
         return null;
     }
 
@@ -262,9 +258,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                             computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                     .collect(Collectors.toList());
             columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                            new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                                    hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                                    hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
+                    new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                            hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                            hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
                     .collect(Collectors.toList());
         } catch (Exception e) {
             LOG.warn("hive table {} get column failed. error : {}", table.getName(), e);
