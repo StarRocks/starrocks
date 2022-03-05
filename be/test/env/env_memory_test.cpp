@@ -25,10 +25,8 @@ public:
 
     std::string read_len(size_t len) {
         std::string buff(len, '\0');
-        Slice s(buff);
-        Status st = _file->read(&s);
-        CHECK(st.ok()) << st.to_string();
-        buff.resize(s.size);
+        ASSIGN_OR_ABORT(auto n, _file->read(buff.data(), buff.size()));
+        buff.resize(n);
         return buff;
     }
 
@@ -418,24 +416,24 @@ TEST_F(EnvMemoryTest, test_random_access_file) {
     auto f = *_env->new_random_access_file("/a.txt");
 
     uint64_t size = 0;
-    EXPECT_STATUS(Status::OK(), f->size(&size));
+    ASSERT_OK(f->size(&size));
     EXPECT_EQ(content.size(), size);
 
     std::string buff(4, '\0');
     Slice slice(buff);
-    EXPECT_STATUS(Status::OK(), f->read_at(0, slice));
+    ASSERT_OK(f->read_at_fully(0, slice.data, slice.size));
     EXPECT_EQ("stay", slice);
 
-    EXPECT_STATUS(Status::OK(), f->read_at(5, slice));
+    ASSERT_OK(f->read_at_fully(5, slice.data, slice.size));
     EXPECT_EQ("hung", slice);
 
-    EXPECT_STATUS(Status::OK(), f->read(17, &slice));
+    ASSIGN_OR_ABORT(slice.size, f->read_at(17, slice.data, slice.size));
     EXPECT_EQ("fool", slice);
 
-    EXPECT_STATUS(Status::OK(), f->read(21, &slice));
+    ASSIGN_OR_ABORT(slice.size, f->read_at(21, slice.data, slice.size));
     EXPECT_EQ("ish", slice);
 
-    EXPECT_STATUS(Status::IOError(""), f->read_at(22, slice));
+    EXPECT_STATUS(Status::EndOfFile(""), f->read_at_fully(22, slice.data, slice.size));
 }
 
 } // namespace starrocks

@@ -23,26 +23,20 @@ public:
 
     ~RandomAccessFileWrapper() override = default;
 
-    Status read(uint64_t offset, Slice* res) const override {
-        Status st;
-        {
-            SCOPED_RAW_TIMER(&_stats->io_ns);
-            _stats->io_count += 1;
-            st = _file->read(offset, res);
-            _stats->bytes_read += res->size;
-        }
-        return st;
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _file->read_at(offset, data, size));
+        _stats->bytes_read += nread;
+        return nread;
     }
 
-    Status read_at(uint64_t offset, const Slice& result) const override {
-        Status st;
-        {
-            SCOPED_RAW_TIMER(&_stats->io_ns);
-            _stats->io_count += 1;
-            st = _file->read_at(offset, result);
-            _stats->bytes_read += result.size;
-        }
-        return st;
+    Status read_at_fully(int64_t offset, void* data, int64_t size) const override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        RETURN_IF_ERROR(_file->read_at_fully(offset, data, size));
+        _stats->bytes_read += size;
+        return Status::OK();
     }
 
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {

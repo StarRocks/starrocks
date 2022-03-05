@@ -214,13 +214,12 @@ StatusOr<int64_t> FileUtils::copy(SequentialFile* src, WritableFile* dest, size_
     std::unique_ptr<char[]> guard(buf);
     int64_t ncopy = 0;
     while (true) {
-        Slice read_buf(buf, buff_size);
-        RETURN_IF_ERROR(src->read(&read_buf));
-        if (read_buf.size == 0) {
+        ASSIGN_OR_RETURN(auto nread, src->read(buf, buff_size));
+        if (nread == 0) {
             break;
         }
-        ncopy += read_buf.size;
-        RETURN_IF_ERROR(dest->append(read_buf));
+        ncopy += nread;
+        RETURN_IF_ERROR(dest->append(Slice(buf, nread)));
     }
     return ncopy;
 }
