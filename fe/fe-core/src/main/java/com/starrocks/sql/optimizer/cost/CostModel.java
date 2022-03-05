@@ -215,12 +215,6 @@ public class CostModel {
                         rowSize = rowSize + 16;
                     }
 
-                    // only when distinct count == 1, consider to avoid OOM
-                    // because of distinct count more than 1, we must use multi_distinct function
-                    if (distinctCount == 1 && (buckets >= 15000000 && rowSize >= 20)) {
-                        return CostEstimate.infinite();
-                    }
-
                     double hashSetSize;
                     if (distinctColumnStats.isUnknown()) {
                         hashSetSize = rowSize * inputStatistics.getOutputRowCount() / statistics.getOutputRowCount();
