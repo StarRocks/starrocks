@@ -1351,7 +1351,7 @@ bool Tablet::_need_compaction_unlock() const {
     for (int i = 0; i < LEVEL_NUMBER - 1; i++) {
         ret |= _need_compaction_unlock(i);
     }
-    return  ret;
+    return ret;
 }
 
 void Tablet::stop_compaction() {
