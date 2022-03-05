@@ -7,9 +7,11 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 DIAGNOSTIC_POP
 
 #include "common/config.h"
+#include "util/monotime.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
+const int64_t RETRY_INTERVAL_MS = 50;
 
 // Used to run bthread::ExecutionQueue task in pthread instead of bthread.
 // Reference: https://github.com/apache/incubator-brpc/blob/master/docs/cn/execution_queue.md
@@ -28,7 +30,13 @@ public:
     }
 
     int submit(void* (*fn)(void*), void* args) override {
-        auto st = _thread_pool->submit_func([=]() { fn(args); });
+        Status st;
+        while (true) {
+            st = _thread_pool->submit_func([=]() { fn(args); });
+            if (!st.is_service_unavailable()) break;
+            LOG(INFO) << "async_delta_writer is busy, retry after ms: " << RETRY_INTERVAL_MS;
+            SleepFor(MonoDelta::FromMilliseconds(RETRY_INTERVAL_MS));
+        }
         LOG_IF(WARNING, !st.ok()) << st;
         return st.ok() ? 0 : -1;
     }
