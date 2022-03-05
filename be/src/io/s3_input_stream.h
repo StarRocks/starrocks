@@ -7,7 +7,7 @@
 #include <memory>
 #include <string>
 
-#include "io/random_access_file.h"
+#include "io/seekable_input_stream.h"
 
 namespace Aws::S3 {
 class S3Client;
@@ -15,24 +15,24 @@ class S3Client;
 
 namespace starrocks::io {
 
-class S3RandomAccessFile final : public RandomAccessFile {
+class S3InputStream final : public SeekableInputStream {
 public:
-    explicit S3RandomAccessFile(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object)
+    explicit S3InputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object)
             : _s3client(std::move(client)),
               _bucket(std::move(bucket)),
               _object(std::move(object)),
               _offset(0),
               _size(-1) {}
 
-    ~S3RandomAccessFile() override = default;
+    ~S3InputStream() override = default;
 
     // Disallow copy and assignment
-    S3RandomAccessFile(const S3RandomAccessFile&) = delete;
-    void operator=(const S3RandomAccessFile&) = delete;
+    S3InputStream(const S3InputStream&) = delete;
+    void operator=(const S3InputStream&) = delete;
 
     // Disallow move ctor and move assignment, because no usage now
-    S3RandomAccessFile(S3RandomAccessFile&&) = delete;
-    void operator=(S3RandomAccessFile&&) = delete;
+    S3InputStream(S3InputStream&&) = delete;
+    void operator=(S3InputStream&&) = delete;
 
     StatusOr<int64_t> read(void* data, int64_t count) override;
 

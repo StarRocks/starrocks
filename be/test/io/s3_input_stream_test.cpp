@@ -2,7 +2,7 @@
 
 #ifdef STARROCKS_WITH_AWS
 
-#include "io/s3_random_access_file.h"
+#include "io/s3_input_stream.h"
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
@@ -28,11 +28,11 @@ static void init_bucket();
 static void destroy_bucket();
 static void destroy_s3client();
 
-class S3RandomAccessFileTest : public testing::Test {
+class S3InputStreamTest : public testing::Test {
 public:
-    S3RandomAccessFileTest() {}
+    S3InputStreamTest() {}
 
-    ~S3RandomAccessFileTest() override = default;
+    ~S3InputStreamTest() override = default;
 
     static void SetUpTestCase();
 
@@ -44,17 +44,17 @@ public:
 
     void TearDown() override {}
 
-    std::unique_ptr<S3RandomAccessFile> new_random_access_file();
+    std::unique_ptr<S3InputStream> new_random_access_file();
 };
 
-void S3RandomAccessFileTest::SetUpTestCase() {
+void S3InputStreamTest::SetUpTestCase() {
     Aws::InitAPI(Aws::SDKOptions());
     init_s3client();
     init_bucket();
     put_object("0123456789");
 }
 
-void S3RandomAccessFileTest::TearDownTestCase() {
+void S3InputStreamTest::TearDownTestCase() {
     destroy_bucket();
     destroy_s3client();
     Aws::ShutdownAPI(Aws::SDKOptions());
@@ -117,11 +117,11 @@ void destroy_s3client() {
     g_s3client.reset();
 }
 
-std::unique_ptr<S3RandomAccessFile> S3RandomAccessFileTest::new_random_access_file() {
-    return std::make_unique<S3RandomAccessFile>(g_s3client, kBucketName, kObjectName);
+std::unique_ptr<S3InputStream> S3InputStreamTest::new_random_access_file() {
+    return std::make_unique<S3InputStream>(g_s3client, kBucketName, kObjectName);
 }
 
-void S3RandomAccessFileTest::put_object(const std::string& object_content) {
+void S3InputStreamTest::put_object(const std::string& object_content) {
     std::shared_ptr<Aws::IOStream> stream = Aws::MakeShared<Aws::StringStream>("", object_content);
 
     Aws::S3::Model::PutObjectRequest request;
@@ -133,7 +133,7 @@ void S3RandomAccessFileTest::put_object(const std::string& object_content) {
     CHECK(outcome.IsSuccess()) << outcome.GetError().GetMessage();
 }
 
-TEST_F(S3RandomAccessFileTest, test_read) {
+TEST_F(S3InputStreamTest, test_read) {
     auto f = new_random_access_file();
     char buf[6];
     ASSIGN_OR_ABORT(auto r, f->read(buf, sizeof(buf)));
@@ -149,7 +149,7 @@ TEST_F(S3RandomAccessFileTest, test_read) {
     ASSERT_EQ(10, *f->position());
 }
 
-TEST_F(S3RandomAccessFileTest, test_skip) {
+TEST_F(S3InputStreamTest, test_skip) {
     auto f = new_random_access_file();
     char buf[6];
     ASSERT_OK(f->skip(2));
@@ -160,7 +160,7 @@ TEST_F(S3RandomAccessFileTest, test_skip) {
     ASSERT_EQ(0, r);
 }
 
-TEST_F(S3RandomAccessFileTest, test_seek) {
+TEST_F(S3InputStreamTest, test_seek) {
     auto f = new_random_access_file();
     char buf[6];
     ASSIGN_OR_ABORT(auto p, f->seek(2, SEEK_CUR));
@@ -195,7 +195,7 @@ TEST_F(S3RandomAccessFileTest, test_seek) {
     ASSERT_EQ("", std::string_view(buf, r));
 }
 
-TEST_F(S3RandomAccessFileTest, test_read_at) {
+TEST_F(S3InputStreamTest, test_read_at) {
     auto f = new_random_access_file();
     char buf[6];
     ASSIGN_OR_ABORT(auto r, f->read_at(3, buf, sizeof(buf)));
