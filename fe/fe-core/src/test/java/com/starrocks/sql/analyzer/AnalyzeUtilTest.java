@@ -27,15 +27,15 @@ public class AnalyzeUtilTest {
     public void testSubQuery() throws Exception {
         String sql;
         sql = "select count(*) from (select v1 from t0 group by v1) tx";
-        List<StatementBase> statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext());
+        List<StatementBase> statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
         Map<String, Database> stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
         Assert.assertEquals(1, stringDatabaseMap.size());
         sql = "select count(*) from (select * from tarray, unnest(v3))";
-        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext());
+        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
         stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
         Assert.assertEquals(1, stringDatabaseMap.size());
         sql = "with mview as (select count(*) from t0) select * from mview";
-        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext());
+        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
         stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
         Assert.assertEquals(1, stringDatabaseMap.size());
         // test view
@@ -45,7 +45,7 @@ public class AnalyzeUtilTest {
         CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, AnalyzeTestUtil.getConnectContext());
         Catalog.getCurrentCatalog().createView(createTableStmt);
         sql = "select v1 from basic";
-        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext());
+        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
         final ConnectContext session = AnalyzeTestUtil.getConnectContext();
         com.starrocks.sql.analyzer.Analyzer analyzer =
                 new com.starrocks.sql.analyzer.Analyzer(session.getCatalog(), session);
