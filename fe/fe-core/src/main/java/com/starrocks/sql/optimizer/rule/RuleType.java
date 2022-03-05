@@ -42,6 +42,12 @@ public enum RuleType {
     TF_PUSH_DOWN_AGG_TO_META_SCAN,
     TF_MERGE_PREDICATE_SCAN,
     TF_MERGE_TWO_FILTERS,
+<<<<<<< HEAD
+=======
+    TF_PUSH_DOWN_PREDICATE_CTE_CONSUME,
+    TF_PUSH_DOWN_PREDICATE_TO_EXTERNAL_TABLE_SCAN,
+
+>>>>>>> 9351c372 (Fix predicates pushdown in external tables (#3803))
     TF_CAST_TO_EMPTY,
     TF_ADD_PROJECT_JOIN,
 

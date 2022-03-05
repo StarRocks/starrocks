@@ -87,6 +87,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateProjectR
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRepeatRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateTableFunctionRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateToExternalTableScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
@@ -205,8 +206,15 @@ public class RuleSet {
                 new PushDownPredicateRepeatRule(),
                 MergePredicateRule.HIVE_SCAN,
                 MergePredicateRule.SCHEMA_SCAN,
+<<<<<<< HEAD
                 MergePredicateRule.MYSQL_SCAN,
                 new MergeTwoFiltersRule()
+=======
+                PushDownPredicateToExternalTableScanRule.MYSQL_SCAN,
+                PushDownPredicateToExternalTableScanRule.JDBC_SCAN,
+                new MergeTwoFiltersRule(),
+                new PushDownPredicateCTEConsumeRule()
+>>>>>>> 9351c372 (Fix predicates pushdown in external tables (#3803))
         ));
 
         rewriteRules.put(RuleSetType.SUBQUERY_REWRITE, ImmutableList.of(
