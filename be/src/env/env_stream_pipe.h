@@ -15,7 +15,8 @@ public:
     explicit StreamPipeSequentialFile(std::shared_ptr<StreamLoadPipe> file);
     ~StreamPipeSequentialFile() override;
 
-    Status read(Slice* result) override;
+    StatusOr<int64_t> read(void* data, int64_t size) override;
+
     Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding = 0);
 
     Status skip(uint64_t n) override;

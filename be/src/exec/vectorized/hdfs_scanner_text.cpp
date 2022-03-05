@@ -63,18 +63,9 @@ Status HdfsScannerCSVReader::_fill_buffer() {
         size_t slice_len = _remain_length;
         s = Slice(_buff.limit(), std::min(_buff.free_space(), slice_len));
     }
-    Status st = _file->read(_offset, &s);
+    ASSIGN_OR_RETURN(s.size, _file->read_at(_offset, s.data, s.size));
     _offset += s.size;
     _remain_length -= s.size;
-    // According to the specification of `Env::read`, when reached the end of
-    // a file, the returned status will be OK instead of EOF, but here we check
-    // EOF also for safety.
-    if (st.is_end_of_file()) {
-        s.size = 0;
-    } else if (!st.ok()) {
-        LOG(WARNING) << "Status is not ok " << st.get_error_msg();
-        return st;
-    }
     _buff.add_limit(s.size);
     auto n = _buff.available();
     if (s.size == 0 && n == 0) {

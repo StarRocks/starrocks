@@ -33,6 +33,7 @@
 
 #include "env/env.h"
 #include "gutil/strings/util.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 #include "util/logging.h"
 
@@ -58,7 +59,7 @@ TEST(ZipUtilTest, basic) {
 
     char f[11];
     Slice slice(f, 11);
-    file->read_at(0, slice);
+    ASSIGN_OR_ABORT(slice.size, file->read_at(0, slice.data, slice.size));
 
     ASSERT_EQ("hello world", slice.to_string());
 
@@ -89,7 +90,7 @@ TEST(ZipUtilTest, dir) {
 
     char f[4];
     Slice slice(f, 4);
-    file->read_at(0, slice);
+    file->read_at_fully(0, slice.data, slice.size);
 
     ASSERT_EQ("test", slice.to_string());
 

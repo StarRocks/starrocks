@@ -63,7 +63,7 @@ TEST_F(OutputStreamWrapperTest, test_write) {
     ASSERT_TRUE(st.ok()) << st;
     ASSERT_EQ(21, size);
 
-    st = rf->read_at(0, slice);
+    st = rf->read_at_fully(0, slice.data, slice.size);
     ASSERT_TRUE(st.ok()) << st;
     ASSERT_EQ("10 hello world! apple", buff);
 }

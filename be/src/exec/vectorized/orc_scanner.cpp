@@ -52,7 +52,7 @@ public:
             throw orc::ParseError("Buffer is null");
         }
 
-        Status status = _file->read_at(offset, Slice((char*)buf, length));
+        Status status = _file->read_at_fully(offset, buf, length);
         if (!status.ok()) {
             auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
             throw orc::ParseError(msg);

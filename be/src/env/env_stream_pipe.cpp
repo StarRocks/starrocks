@@ -14,9 +14,11 @@ StreamPipeSequentialFile::~StreamPipeSequentialFile() {
     _file->close();
 }
 
-Status StreamPipeSequentialFile::read(Slice* result) {
+StatusOr<int64_t> StreamPipeSequentialFile::read(void* data, int64_t size) {
     bool eof = false;
-    return _file->read(reinterpret_cast<uint8_t*>(result->data), &(result->size), &eof);
+    size_t nread = size;
+    RETURN_IF_ERROR(_file->read(static_cast<uint8_t*>(data), &nread, &eof));
+    return nread;
 }
 
 Status StreamPipeSequentialFile::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding) {
