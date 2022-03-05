@@ -39,7 +39,7 @@ public class AlterResourceStmt extends DdlStmt {
     private final String resourceName;
     private final Map<String, String> properties;
 
-    public AlterResourceStmt(String resourceName,Map<String, String> properties) {
+    public AlterResourceStmt(String resourceName, Map<String, String> properties) {
         this.resourceName = resourceName;
         this.properties = properties;
     }
