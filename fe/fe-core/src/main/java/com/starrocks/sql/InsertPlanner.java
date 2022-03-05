@@ -56,7 +56,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
+
 
 public class InsertPlanner {
     public ExecPlan plan(Relation relation, ConnectContext session) {
@@ -120,8 +122,10 @@ public class InsertPlanner {
             slotDescriptor.setColumn(column);
             slotDescriptor.setIsNullable(column.isAllowNull());
             if (column.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
-                ColumnDict dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
-                globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), dict));
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                if (dict != null && dict.isPresent()) {
+                    globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), dict.get()));
+                }
             }
         }
         olapTuple.computeMemLayout();

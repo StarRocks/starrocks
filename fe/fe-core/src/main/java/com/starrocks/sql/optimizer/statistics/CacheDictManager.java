@@ -258,10 +258,8 @@ public class CacheDictManager implements IDictManager {
     }
 
     @Override
-    public ColumnDict getGlobalDict(long tableId, String columnName) {
+    public Optional<ColumnDict> getGlobalDict(long tableId, String columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
-        Optional<ColumnDict> dict = dictStatistics.synchronous().get(columnIdentifier);
-        Preconditions.checkArgument(dict != null && dict.isPresent());
-        return dict.get();
+        return dictStatistics.synchronous().get(columnIdentifier);
     }
 }
