@@ -11,7 +11,7 @@ DIAGNOSTIC_POP
 #include "util/threadpool.h"
 
 namespace starrocks {
-const int64_t RETRY_INTERVAL_MS = 50;
+const int64_t kRetryIntervalMs = 50;
 
 // Used to run bthread::ExecutionQueue task in pthread instead of bthread.
 // Reference: https://github.com/apache/incubator-brpc/blob/master/docs/cn/execution_queue.md
