@@ -1,10 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "io/array_random_access_file.h"
+#include "io/array_input_stream.h"
 
 namespace starrocks::io {
 
-StatusOr<int64_t> ArrayRandomAccessFile::read(void* data, int64_t count) {
+StatusOr<int64_t> ArrayInputStream::read(void* data, int64_t count) {
     if (count < 0) {
         return Status::InvalidArgument("negative count");
     }
@@ -14,7 +14,7 @@ StatusOr<int64_t> ArrayRandomAccessFile::read(void* data, int64_t count) {
     return n;
 }
 
-StatusOr<int64_t> ArrayRandomAccessFile::read_at(int64_t offset, void* data, int64_t count) {
+StatusOr<int64_t> ArrayInputStream::read_at(int64_t offset, void* data, int64_t count) {
     if (count < 0) {
         return Status::InvalidArgument("negative count");
     }
@@ -26,7 +26,7 @@ StatusOr<int64_t> ArrayRandomAccessFile::read_at(int64_t offset, void* data, int
     return n;
 }
 
-StatusOr<int64_t> ArrayRandomAccessFile::seek(int64_t offset, int whence) {
+StatusOr<int64_t> ArrayInputStream::seek(int64_t offset, int whence) {
     int64_t pos = 0;
     if (whence == SEEK_SET) {
         pos = offset;
@@ -44,7 +44,7 @@ StatusOr<int64_t> ArrayRandomAccessFile::seek(int64_t offset, int whence) {
     return _offset;
 }
 
-Status ArrayRandomAccessFile::skip(int64_t count) {
+Status ArrayInputStream::skip(int64_t count) {
     if (UNLIKELY(count > std::numeric_limits<int64_t>::max() - _offset)) {
         _offset = _size;
         return Status::OK();
@@ -56,7 +56,7 @@ Status ArrayRandomAccessFile::skip(int64_t count) {
     return Status::OK();
 }
 
-StatusOr<std::string_view> ArrayRandomAccessFile::peak(int64_t nbytes) {
+StatusOr<std::string_view> ArrayInputStream::peak(int64_t nbytes) {
     int64_t n = std::min(_size - _offset, nbytes);
     return std::string_view(reinterpret_cast<const char*>(_data) + _offset, n);
 }
