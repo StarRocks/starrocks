@@ -14,23 +14,23 @@ namespace starrocks {
 void CompactionTask::run() {
     LOG(INFO) << "start compaction. task_id:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id
               << ", algorithm:" << CompactionUtils::compaction_algorithm_to_string(_task_info.algorithm)
-              << ", compaction_level:" << (int)_task_info.compaction_level
+              << ", compaction_type:" << _task_info.compaction_type
               << ", compaction_score:" << _task_info.compaction_score
               << ", output_version:" << _task_info.output_version << ", input rowsets size:" << _input_rowsets.size();
     _task_info.start_time = UnixMillis();
     scoped_refptr<Trace> trace(new Trace);
     SCOPED_CLEANUP({
         uint64_t time_s = _watch.elapsed_time() / 1e9;
-        if ((compaction_level() == 0 && time_s > config::cumulative_compaction_trace_threshold) ||
-            (compaction_level() == 1 && time_s > config::base_compaction_trace_threshold)) {
+        if ((compaction_type() == CUMULATIVE_COMPACTION && time_s > config::cumulative_compaction_trace_threshold) ||
+            (compaction_type() == BASE_COMPACTION && time_s > config::base_compaction_trace_threshold)) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
     ADOPT_TRACE(trace.get());
-    TRACE("[Compaction] start to perform compaction. task_id:$0, tablet:$1, algorithm::$2, compaction_level:$3, "
+    TRACE("[Compaction] start to perform compaction. task_id:$0, tablet:$1, algorithm::$2, compaction_type:$3, "
           "compaction_score:$4",
           _task_info.task_id, _task_info.tablet_id,
-          CompactionUtils::compaction_algorithm_to_string(_task_info.algorithm), (int)_task_info.compaction_level,
+          CompactionUtils::compaction_algorithm_to_string(_task_info.algorithm), _task_info.compaction_type,
           _task_info.compaction_score);
     std::stringstream ss;
     ss << "output version:" << _task_info.output_version << ", input versions size:" << _input_rowsets.size()
@@ -56,9 +56,9 @@ void CompactionTask::run() {
             set_compaction_task_state(COMPACTION_FAILED);
         }
         // reset compaction before judge need_compaction again
-        // because if there is a compaction task for one level in a tablet,
-        // it will not be able to run another one for that level
-        _tablet->reset_compaction(compaction_level());
+        // because if there is a compaction task for one compaction type in a tablet,
+        // it will not be able to run another one for that type
+        _tablet->reset_compaction(compaction_type());
         _task_info.end_time = UnixMillis();
         CompactionManager::instance()->unregister_task(this);
         // compaction context has been updated when commit
@@ -109,14 +109,14 @@ bool CompactionTask::should_stop() const {
 void CompactionTask::_success_callback() {
     set_compaction_task_state(COMPACTION_SUCCESS);
     // for compatible, update compaction time
-    if (_task_info.compaction_level == 0) {
+    if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
         _tablet->set_last_cumu_compaction_success_time(UnixMillis());
     } else {
         _tablet->set_last_base_compaction_success_time(UnixMillis());
     }
 
     // for compatible
-    if (_task_info.compaction_level == 0) {
+    if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
         StarRocksMetrics::instance()->cumulative_compaction_deltas_total.increment(_input_rowsets.size());
         StarRocksMetrics::instance()->cumulative_compaction_bytes_total.increment(_task_info.input_rowsets_size);
     } else {
@@ -136,7 +136,7 @@ void CompactionTask::_success_callback() {
 
 void CompactionTask::_failure_callback() {
     set_compaction_task_state(COMPACTION_FAILED);
-    if (_task_info.compaction_level == 0) {
+    if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
         _tablet->set_last_cumu_compaction_failure_time(UnixMillis());
     } else {
         _tablet->set_last_base_compaction_failure_time(UnixMillis());

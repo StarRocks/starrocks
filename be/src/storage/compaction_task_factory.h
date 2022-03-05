@@ -17,12 +17,12 @@ class CompactionTaskFactory {
 public:
     CompactionTaskFactory(Version output_version, const TabletSharedPtr& tablet,
                           std::vector<RowsetSharedPtr>&& input_rowsets, double compaction_score,
-                          uint8_t compaction_level)
+                          CompactionType compaction_type)
             : _output_version(output_version),
               _tablet(tablet),
               _input_rowsets(std::move(input_rowsets)),
               _compaction_score(compaction_score),
-              _compaction_level(compaction_level) {}
+              _compaction_type(compaction_type) {}
     ~CompactionTaskFactory() = default;
 
     std::shared_ptr<CompactionTask> create_compaction_task();
@@ -32,7 +32,7 @@ private:
     TabletSharedPtr _tablet;
     std::vector<RowsetSharedPtr> _input_rowsets;
     double _compaction_score;
-    uint8_t _compaction_level;
+    CompactionType _compaction_type;
 };
 
 } // namespace starrocks

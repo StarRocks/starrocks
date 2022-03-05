@@ -27,14 +27,13 @@ TEST(CompactionManagerTest, test_candidates) {
         tablet->set_data_dir(&data_dir);
         std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
         compaction_context->tablet = tablet;
-        compaction_context->current_level = 0;
         // for i == 9 and i == 10, compaction scores are equal
         if (i == 10) {
-            compaction_context->compaction_scores[0] = 10;
+            compaction_context->cumulative_score = 10;
         } else {
-            compaction_context->compaction_scores[0] = 1 + i;
+            compaction_context->cumulative_score = 1 + i;
         }
-        compaction_context->compaction_scores[1] = 1 + 0.5 * i;
+        compaction_context->base_score = 1 + 0.5 * i;
         tablet->set_compaction_context(compaction_context);
         tablets.push_back(tablet);
     }
@@ -53,15 +52,16 @@ TEST(CompactionManagerTest, test_candidates) {
         ASSERT_EQ(9, candidate_1.tablet->tablet_id());
         CompactionCandidate candidate_2 = CompactionManager::instance()->pick_candidate();
         ASSERT_EQ(10, candidate_2.tablet->tablet_id());
-        ASSERT_EQ(candidate_1.tablet->compaction_score(0), candidate_2.tablet->compaction_score(0));
-        double last_score = candidate_2.tablet->compaction_score(0);
+        ASSERT_EQ(candidate_1.tablet->compaction_score(CUMULATIVE_COMPACTION),
+                  candidate_2.tablet->compaction_score(CUMULATIVE_COMPACTION));
+        double last_score = candidate_2.tablet->compaction_score(CUMULATIVE_COMPACTION);
         while (true) {
             CompactionCandidate candidate = CompactionManager::instance()->pick_candidate();
             if (!candidate.is_valid()) {
                 break;
             }
-            ASSERT_LE(candidate.tablet->compaction_score(candidate.level), last_score);
-            last_score = candidate.tablet->compaction_score(candidate.level);
+            ASSERT_LE(candidate.tablet->compaction_score(candidate.type), last_score);
+            last_score = candidate.tablet->compaction_score(candidate.type);
         }
     }
 
@@ -85,7 +85,7 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
     DataDir data_dir("./data_dir");
     // generate compaction task
     config::max_compaction_task_num = 2;
-    config::max_compaction_task_per_disk = config::max_compaction_task_num;
+    config::cumulative_compaction_num_threads_per_disk = config::max_compaction_task_num;
     for (int i = 0; i < config::max_compaction_task_num + 1; i++) {
         TabletSharedPtr tablet = std::make_shared<Tablet>();
         TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
@@ -94,15 +94,15 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
         tablet->set_data_dir(&data_dir);
         std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
         compaction_context->tablet = tablet;
-        compaction_context->current_level = 0;
-        compaction_context->compaction_scores[0] = 1 + i;
-        compaction_context->compaction_scores[1] = 1 + 0.5 * i;
+        compaction_context->chosen_compaction_type = CUMULATIVE_COMPACTION;
+        compaction_context->cumulative_score = 1 + i;
+        compaction_context->base_score = 1 + 0.5 * i;
         tablet->set_compaction_context(compaction_context);
         tablets.push_back(tablet);
         std::shared_ptr<MockCompactionTask> task = std::make_shared<MockCompactionTask>();
         task->set_tablet(tablet);
         task->set_task_id(i);
-        task->set_compaction_level(0);
+        task->set_compaction_type(CUMULATIVE_COMPACTION);
         tasks.emplace_back(std::move(task));
     }
 
@@ -114,12 +114,13 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
     ASSERT_FALSE(ret);
 
     ASSERT_EQ(config::max_compaction_task_num, CompactionManager::instance()->running_tasks_num());
-    ASSERT_EQ(config::max_compaction_task_num, CompactionManager::instance()->running_tasks_num_for_level(0));
-    ASSERT_EQ(0, CompactionManager::instance()->running_tasks_num_for_level(1));
+    ASSERT_EQ(config::max_compaction_task_num,
+              CompactionManager::instance()->running_tasks_num_for_type(CUMULATIVE_COMPACTION));
+    ASSERT_EQ(0, CompactionManager::instance()->running_tasks_num_for_type(BASE_COMPACTION));
     CompactionManager::instance()->clear_tasks();
     ASSERT_EQ(0, CompactionManager::instance()->running_tasks_num());
 
-    config::max_compaction_task_per_disk = 1;
+    config::cumulative_compaction_num_threads_per_disk = 1;
     for (int i = 0; i < config::max_compaction_task_num; i++) {
         bool ret = CompactionManager::instance()->register_task(tasks[i].get());
         if (i == 0) {
@@ -132,6 +133,7 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
     CompactionManager::instance()->clear_tasks();
     ASSERT_EQ(0, CompactionManager::instance()->running_tasks_num());
 
+    config::cumulative_compaction_num_threads_per_disk = 4;
     config::max_cumulative_compaction_task = 1;
     for (int i = 0; i < config::max_cumulative_compaction_task; i++) {
         bool ret = CompactionManager::instance()->register_task(tasks[i].get());
@@ -142,12 +144,13 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
     ASSERT_FALSE(ret);
 
     ASSERT_EQ(config::max_cumulative_compaction_task, CompactionManager::instance()->running_tasks_num());
-    ASSERT_EQ(1, CompactionManager::instance()->running_tasks_num_for_level(0));
+    ASSERT_EQ(1, CompactionManager::instance()->running_tasks_num_for_type(CUMULATIVE_COMPACTION));
     CompactionManager::instance()->clear_tasks();
 
+    config::base_compaction_num_threads_per_disk = 4;
     config::max_base_compaction_task = 1;
     for (int i = 0; i < config::max_base_compaction_task + 1; i++) {
-        tasks[i]->set_compaction_level(1);
+        tasks[i]->set_compaction_type(BASE_COMPACTION);
         bool ret = CompactionManager::instance()->register_task(tasks[i].get());
         if (i < config::max_base_compaction_task) {
             ASSERT_TRUE(ret);
@@ -156,7 +159,7 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
         }
     }
     ASSERT_EQ(config::max_base_compaction_task, CompactionManager::instance()->running_tasks_num());
-    ASSERT_EQ(1, CompactionManager::instance()->running_tasks_num_for_level(1));
+    ASSERT_EQ(1, CompactionManager::instance()->running_tasks_num_for_type(BASE_COMPACTION));
     for (int i = 0; i < tablets.size(); i++) {
         std::unique_ptr<CompactionContext> compaction_context;
         tablets[i]->set_compaction_context(compaction_context);

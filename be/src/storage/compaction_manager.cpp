@@ -85,23 +85,33 @@ bool CompactionManager::register_task(CompactionTask* compaction_task) {
                      << config::max_compaction_task_num;
         return false;
     }
-    if (compaction_task->compaction_level() == 0 && config::max_cumulative_compaction_task >= 0 &&
-        _level_to_task_num_map[0] >= config::max_cumulative_compaction_task) {
-        LOG(WARNING) << "register compaction task failed for cumulative limit:"
-                     << config::max_cumulative_compaction_task;
-        return false;
-    } else if (compaction_task->compaction_level() == 1 && config::max_base_compaction_task >= 0 &&
-               _level_to_task_num_map[1] >= config::max_base_compaction_task) {
-        LOG(WARNING) << "register compaction task failed for base limit:" << config::max_base_compaction_task;
-        return false;
-    }
     TabletSharedPtr& tablet = compaction_task->tablet();
     DataDir* data_dir = tablet->data_dir();
-    if (config::max_compaction_task_per_disk >= 0 &&
-        _data_dir_to_task_num_map[data_dir] >= config::max_compaction_task_per_disk) {
-        LOG(WARNING) << "register compaction task failed for disk's running tasks reach limit:"
-                     << config::max_compaction_task_per_disk;
-        return false;
+    if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
+        if (config::max_cumulative_compaction_task >= 0 &&
+            _type_to_task_num_map[CUMULATIVE_COMPACTION] >= config::max_cumulative_compaction_task) {
+            LOG(WARNING) << "register compaction task failed for cumulative limit:"
+                         << config::max_cumulative_compaction_task;
+            return false;
+        }
+        if (config::cumulative_compaction_num_threads_per_disk >= 0 &&
+            _data_dir_to_cumulative_task_num_map[data_dir] >= config::cumulative_compaction_num_threads_per_disk) {
+            LOG(WARNING) << "register compaction task failed for disk's running cumulative tasks reach limit:"
+                         << config::cumulative_compaction_num_threads_per_disk;
+            return false;
+        }
+    } else if (compaction_task->compaction_type() == BASE_COMPACTION) {
+        if (config::max_base_compaction_task >= 0 &&
+            _type_to_task_num_map[BASE_COMPACTION] >= config::max_base_compaction_task) {
+            LOG(WARNING) << "register compaction task failed for base limit:" << config::max_base_compaction_task;
+            return false;
+        }
+        if (config::cumulative_compaction_num_threads_per_disk >= 0 &&
+            _data_dir_to_base_task_num_map[data_dir] >= config::cumulative_compaction_num_threads_per_disk) {
+            LOG(WARNING) << "register compaction task failed for disk's running cumulative tasks reach limit:"
+                         << config::cumulative_compaction_num_threads_per_disk;
+            return false;
+        }
     }
     auto p = _running_tasks.insert(compaction_task);
     if (!p.second) {
@@ -110,8 +120,12 @@ bool CompactionManager::register_task(CompactionTask* compaction_task) {
                      << ", tablet:" << tablet->tablet_id();
         return false;
     }
-    _level_to_task_num_map[compaction_task->compaction_level()]++;
-    _data_dir_to_task_num_map[data_dir]++;
+    _type_to_task_num_map[compaction_task->compaction_type()]++;
+    if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
+        _data_dir_to_cumulative_task_num_map[data_dir]++;
+    } else {
+        _data_dir_to_base_task_num_map[data_dir]++;
+    }
     return true;
 }
 
@@ -124,16 +138,21 @@ void CompactionManager::unregister_task(CompactionTask* compaction_task) {
     if (size > 0) {
         TabletSharedPtr& tablet = compaction_task->tablet();
         DataDir* data_dir = tablet->data_dir();
-        _level_to_task_num_map[compaction_task->compaction_level()]--;
-        _data_dir_to_task_num_map[data_dir]--;
+        _type_to_task_num_map[compaction_task->compaction_type()]--;
+        if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
+            _data_dir_to_cumulative_task_num_map[data_dir]--;
+        } else {
+            _data_dir_to_base_task_num_map[data_dir]--;
+        }
     }
 }
 
 void CompactionManager::clear_tasks() {
     std::lock_guard lg(_tasks_mutex);
     _running_tasks.clear();
-    _data_dir_to_task_num_map.clear();
-    _level_to_task_num_map.clear();
+    _data_dir_to_cumulative_task_num_map.clear();
+    _data_dir_to_base_task_num_map.clear();
+    _type_to_task_num_map.clear();
 }
 
 void CompactionManager::_notify_schedulers() {

@@ -56,14 +56,19 @@ public:
         return _running_tasks.size();
     }
 
-    uint16_t running_tasks_num_for_dir(DataDir* data_dir) {
+    uint16_t running_cumulative_tasks_num_for_dir(DataDir* data_dir) {
         std::lock_guard lg(_tasks_mutex);
-        return _data_dir_to_task_num_map[data_dir];
+        return _data_dir_to_cumulative_task_num_map[data_dir];
     }
 
-    uint16_t running_tasks_num_for_level(uint8_t level) {
+    uint16_t running_base_tasks_num_for_dir(DataDir* data_dir) {
         std::lock_guard lg(_tasks_mutex);
-        return _level_to_task_num_map[level];
+        return _data_dir_to_base_task_num_map[data_dir];
+    }
+
+    uint16_t running_tasks_num_for_type(CompactionType type) {
+        std::lock_guard lg(_tasks_mutex);
+        return _type_to_task_num_map[type];
     }
 
     uint64_t next_compaction_task_id() { return ++_next_task_id; }
@@ -84,8 +89,9 @@ private:
     std::mutex _tasks_mutex;
     std::atomic<uint64_t> _next_task_id;
     std::unordered_set<CompactionTask*> _running_tasks;
-    std::unordered_map<DataDir*, uint16_t> _data_dir_to_task_num_map;
-    std::unordered_map<uint8_t, uint16_t> _level_to_task_num_map;
+    std::unordered_map<DataDir*, uint16_t> _data_dir_to_cumulative_task_num_map;
+    std::unordered_map<DataDir*, uint16_t> _data_dir_to_base_task_num_map;
+    std::unordered_map<CompactionType, uint16_t> _type_to_task_num_map;
     PriorityThreadPool _update_candidate_pool;
 
     std::mutex _scheduler_mutex;

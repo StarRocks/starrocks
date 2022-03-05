@@ -70,7 +70,7 @@ struct CompactionTaskInfo {
     size_t merged_rows;
     size_t filtered_rows;
     size_t output_num_rows;
-    int8_t compaction_level;
+    CompactionType compaction_type;
 
     // for vertical compaction
     size_t column_group_size;
@@ -102,7 +102,7 @@ struct CompactionTaskInfo {
         ss << ", compaction score:" << compaction_score;
         ss << ", algorithm:" << CompactionUtils::compaction_algorithm_to_string(algorithm);
         ss << ", state:" << compaction_state_to_string(state);
-        ss << ", compaction_level:" << (int32_t)compaction_level;
+        ss << ", compaction_type:" << compaction_type;
         ss << ", output_version:" << output_version;
         ss << ", start_time:" << ToStringFromUnixMillis(start_time);
         ss << ", end_time:" << ToStringFromUnixMillis(end_time);
@@ -166,9 +166,9 @@ public:
 
     size_t input_rowsets_size() const { return _task_info.input_rowsets_size; }
 
-    void set_compaction_level(int8_t compaction_level) { _task_info.compaction_level = compaction_level; }
+    void set_compaction_type(CompactionType type) { _task_info.compaction_type = type; }
 
-    int8_t compaction_level() const { return _task_info.compaction_level; }
+    CompactionType compaction_type() const { return _task_info.compaction_type; }
 
     void set_tablet(const TabletSharedPtr& tablet) {
         _tablet = tablet;
@@ -220,7 +220,7 @@ protected:
     virtual Status run_impl() = 0;
 
     void _try_lock() {
-        if (_task_info.compaction_level == 0) {
+        if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
             _compaction_lock = std::unique_lock(_tablet->get_cumulative_lock(), std::try_to_lock);
         } else {
             _compaction_lock = std::unique_lock(_tablet->get_base_lock(), std::try_to_lock);

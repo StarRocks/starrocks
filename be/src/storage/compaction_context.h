@@ -5,13 +5,11 @@
 #include <set>
 #include <vector>
 
+#include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
 
 namespace starrocks {
-
-class RowsetReleaseGuard;
-class CompactionTask;
 
 #ifndef LEVEL_NUMBER
 #define LEVEL_NUMBER 3
@@ -29,11 +27,20 @@ struct RowsetComparator {
 struct CompactionContext {
     // sort rowsets by version
     std::set<Rowset*, RowsetComparator> rowset_levels[LEVEL_NUMBER];
-    double compaction_scores[LEVEL_NUMBER - 1];
+    double cumulative_score = 0;
+    double base_score = 0;
     TabletSharedPtr tablet;
-    int8_t current_level = -1;
+    CompactionType chosen_compaction_type = INVALID_COMPACTION;
 
-    bool need_compaction(uint8_t level) { return compaction_scores[level] > COMPACTION_SCORE_THRESHOLD; }
+    bool need_compaction(CompactionType compaction_type) {
+        if (compaction_type == BASE_COMPACTION) {
+            return base_score > COMPACTION_SCORE_THRESHOLD;
+        } else if (compaction_type == CUMULATIVE_COMPACTION) {
+            return cumulative_score > COMPACTION_SCORE_THRESHOLD;
+        } else {
+            return false;
+        }
+    }
 
     std::string to_string() const;
 };
