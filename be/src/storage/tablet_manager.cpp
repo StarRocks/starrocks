@@ -760,7 +760,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
         return Status::NotFound("header file not exist");
     }
 
-    TabletMetaSharedPtr tablet_meta(new TabletMeta());
+    auto tablet_meta = TabletMeta::create(_mem_tracker);
     if (!tablet_meta->create_from_file(meta_path).ok()) {
         LOG(WARNING) << "Fail to load tablet_meta. file_path=" << meta_path;
         return Status::InternalError("fail to create tablet meta from file");
