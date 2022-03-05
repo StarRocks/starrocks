@@ -57,7 +57,7 @@ Status HdfsRandomAccessFile::read_at_fully(int64_t offset, void* data, int64_t s
     if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
         return Status::NotSupported("read size is greater than std::numeric_limits<tSize>::max()");
     }
-    tSize r = hdfsPreadFully(_fs, _file, offset, data, static_cast <tSize>(size));
+    tSize r = hdfsPreadFully(_fs, _file, offset, data, static_cast<tSize>(size));
     if (UNLIKELY(r == -1)) {
         return Status::IOError(fmt::format("fail to hdfsPreadFully {}: {}", _file_name, get_hdfs_err_msg()));
     }
