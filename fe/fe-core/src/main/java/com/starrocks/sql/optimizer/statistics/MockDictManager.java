@@ -4,6 +4,9 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableMap;
 
+import java.util.Optional;
+
+
 public class MockDictManager implements IDictManager {
     private static final ImmutableMap<String, Integer> mockDict = ImmutableMap.of("mock", 1);
 
@@ -41,7 +44,7 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public ColumnDict getGlobalDict(long tableId, String columnName) {
-        return columnDict;
+    public Optional<ColumnDict> getGlobalDict(long tableId, String columnName) {
+        return Optional.of(columnDict);
     }
 }
