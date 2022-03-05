@@ -335,17 +335,19 @@ void Analytor::get_window_function_result(int32_t start, int32_t end) {
     }
 }
 
-bool Analytor::is_partition_finished() {
+bool Analytor::is_partition_finished(int64_t found_partition_end) {
     if (_input_eos) {
         return true;
     }
 
-    // No partition or hasn't fecth one chunk
-    if (_partition_ctxs.empty() || _partition_end == 0) {
+    // There is no partition, or it hasn't fetched any chunk.
+    if (_partition_ctxs.empty() || found_partition_end == 0) {
         return false;
     }
 
-    return _current_row_position >= _partition_end;
+    // If found_partition_end == _partition_columns[0]->size(),
+    // the next chunk maybe also belongs to the current partition.
+    return found_partition_end != _partition_columns[0]->size();
 }
 
 Status Analytor::output_result_chunk(vectorized::ChunkPtr* chunk) {
