@@ -32,10 +32,6 @@ public class MergePredicateRule extends TransformationRule {
             new MergePredicateRule(OperatorType.LOGICAL_HIVE_SCAN);
     public static final MergePredicateRule SCHEMA_SCAN =
             new MergePredicateRule(OperatorType.LOGICAL_SCHEMA_SCAN);
-    public static final MergePredicateRule MYSQL_SCAN =
-            new MergePredicateRule(OperatorType.LOGICAL_MYSQL_SCAN);
-    public static final MergePredicateRule JDBC_SCAN =
-            new MergePredicateRule(OperatorType.LOGICAL_JDBC_SCAN);
 
     public MergePredicateRule(OperatorType type) {
         super(RuleType.TF_MERGE_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER, type));
