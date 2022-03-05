@@ -337,4 +337,13 @@ public class ReplayFromDumpTest {
                 "  |  <dict id 42> : <string id 18>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
+
+    @Test
+    public void testLocalAggregateWithoutTableRowCount() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_without_table_rowcount"), null, TExplainLevel.NORMAL);
+        // check local aggregate
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(4: lo_partkey)"));
+    }
 }
