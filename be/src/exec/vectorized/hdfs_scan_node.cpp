@@ -251,8 +251,6 @@ Status HdfsScanNode::_create_and_init_scanner(RuntimeState* state, const HdfsFil
 
     HdfsScanner* scanner = nullptr;
     if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::PARQUET) {
-        _profile.parquet_profile = _pool->add(new HdfsParquetProfile());
-        _profile.parquet_profile->init(_runtime_profile.get());
         scanner = _pool->add(new HdfsParquetScanner());
     } else if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::ORC) {
         scanner = _pool->add(new HdfsOrcScanner());
@@ -700,6 +698,7 @@ void HdfsScanNode::_update_status(const Status& status) {
 
 void HdfsScanNode::_init_counter() {
     _profile.runtime_profile = _runtime_profile.get();
+    _profile.pool = _pool;
 
     // inherited from scan node.
     _profile.rows_read_counter = _rows_read_counter;

@@ -49,6 +49,7 @@ class HdfsParquetProfile;
 
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
+    ObjectPool* pool = nullptr;
 
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* bytes_read_counter = nullptr;
@@ -215,6 +216,7 @@ public:
     virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
+    virtual void do_update_counter(HdfsScanProfile* profile);
 
     void enter_pending_queue();
     // how long it stays inside pending queue.
@@ -226,7 +228,7 @@ private:
     bool _keep_priority = false;
     void _build_file_read_param();
     MonotonicStopWatch _pending_queue_sw;
-    void update_hdfs_counter();
+    void update_hdfs_counter(HdfsScanProfile* profile);
 
 protected:
     std::atomic_bool _pending_token = false;
