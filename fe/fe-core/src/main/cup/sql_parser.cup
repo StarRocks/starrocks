@@ -829,7 +829,7 @@ alter_stmt ::=
     /* resource */
     | KW_ALTER KW_RESOURCE ident_or_text:resourceName opt_properties:properties
     {:
-        RESULT = new AlterResourceStmt(resourceName,properties);
+        RESULT = new AlterResourceStmt(resourceName, properties);
     :}
     | alter_resource_group_stmt:stmt
     {:
