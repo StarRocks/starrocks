@@ -366,7 +366,8 @@ public class StatisticExecutor {
     }
 
     public static StatementBase parseSQL(String sql, ConnectContext context) throws Exception {
-        StatementBase parsedStmt =  com.starrocks.sql.parser.SqlParser.parse(sql, context).get(0);
+        StatementBase parsedStmt = com.starrocks.sql.parser.SqlParser.parse(sql,
+                context.getSessionVariable().getSqlMode()).get(0);
         parsedStmt.setOrigStmt(new OriginStatement(sql, 0));
         return parsedStmt;
     }

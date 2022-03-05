@@ -151,7 +151,7 @@ public class AnalyzeTestUtil {
 
     public static QueryRelation analyzeSuccess(String originStmt) {
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext).get(0);
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
             return (QueryRelation) analyzer.analyze(statementBase);
         } catch (Exception ex) {
@@ -163,7 +163,7 @@ public class AnalyzeTestUtil {
 
     public static InsertRelation analyzeSuccessUseInsert(String originStmt) {
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext).get(0);
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
             return (InsertRelation) analyzer.analyze(statementBase);
         } catch (Exception ex) {
@@ -179,7 +179,7 @@ public class AnalyzeTestUtil {
 
     public static void analyzeFail(String originStmt, String exceptMessage) {
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext).get(0);
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
             analyzer.analyze(statementBase);
             Assert.fail("Miss semantic error exception");
