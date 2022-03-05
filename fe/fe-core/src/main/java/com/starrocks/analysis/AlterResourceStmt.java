@@ -71,7 +71,7 @@ public class AlterResourceStmt extends DdlStmt {
 
         // not allow to modify the resource type
         if (properties.get(TYPE) != null) {
-            throw  new AnalysisException("Not allow to modify the resource type ! ");
+            throw new AnalysisException("Not allow to modify the resource type");
         }
 
     }
