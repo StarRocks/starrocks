@@ -3,6 +3,8 @@
 
 #include "exec/vectorized/olap_scan_prepare.h"
 
+#include <variant>
+
 #include "column/type_traits.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "gutil/map_util.h"
@@ -12,7 +14,7 @@
 #include "runtime/primitive_type_infra.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/predicate_parser.h"
-#include <variant>
+
 
 namespace starrocks {
 namespace vectorized {
