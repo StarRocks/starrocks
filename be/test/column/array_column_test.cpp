@@ -814,6 +814,31 @@ PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
     ASSERT_EQ(hash_value_overflow, hash_value_overflow_test[2]);
 }
 
+PARALLEL_TEST(ArrayColumnTest, test_xor_checksum) {
+    auto c0 = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+
+    auto* offsets = down_cast<UInt32Column*>(c0->offsets_column().get());
+    auto* elements = down_cast<Int32Column*>(c0->elements_column().get());
+
+    // insert [1, 2, 3], [4, 5, 6, 7]
+    elements->append(1);
+    elements->append(2);
+    elements->append(3);
+    offsets->append(3);
+
+    elements->append(4);
+    elements->append(5);
+    elements->append(6);
+    elements->append(7);
+    elements->append(8);
+    offsets->append(8);
+
+    int64_t checksum = c0->xor_checksum();
+    int64_t expected_checksum = 14;
+
+    ASSERT_EQ(checksum, expected_checksum);
+}
+
 PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
     auto offsets = UInt32Column::create();
     auto elements = Int32Column::create();
