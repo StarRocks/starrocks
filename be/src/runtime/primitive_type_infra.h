@@ -7,7 +7,6 @@
 
 // Infra to build the type system:
 // 1. Macro `APPLY_FOR*` to build generic codes
-// 2. Macro `TYPE_DISPATCH*` to dispatch type
 // 2. Function `field_type_dispatch*` to dynamic dispatch with better customlization
 
 namespace starrocks {
@@ -68,26 +67,6 @@ namespace starrocks {
     M(DECIMAL64)                        \
     M(DECIMAL128)                       \
     M(JSON)
-
-#define TYPE_DISPATCH_CAST_TYPE(TEMPLATEF_FUNC, typeFrom, typeTo, ...)        \
-    [&]() {                                                                   \
-        switch (typeFrom) {                                                   \
-            TYPE_DISPATCH_PREDICATE_TYPE(TEMPLATE_FUNC, typeTo, __VA_ARGS__); \
-        default:;                                                             \
-        }                                                                     \
-    }
-
-#define TYPE_DISPATCH_ALL_WITH_NULL(TEMPLATE_FUNC, typeKind, ...)             \
-    [&]() {                                                                   \
-        switch (typeKind) {                                                   \
-            TYPE_DISPTACH_IN_PREDIACTE(TEMPLATE_FUNC, typeKind, __VA_ARGS__); \
-        case TYPE_NULL:                                                       \
-            return TEMPLATE_FUNC<TYPE_NULL>(__VA_ARGS__);                     \
-        default:                                                              \
-            CHECK(false) << "Unknown type: " << typeKind;                     \
-            __builtin_unreachable();                                          \
-        }                                                                     \
-    }();
 
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \
