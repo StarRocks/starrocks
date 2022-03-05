@@ -484,6 +484,16 @@ public class Coordinator {
                 Preconditions.checkState(instanceNum > 0);
                 List<List<FInstanceExecParam>> infightFInstanceExecParamList = new LinkedList<>();
 
+                // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
+                // shuffle partitions'ordinals in DataStreamSink. backendIds of Fragment instances that
+                // contains shuffle join determine the ordinals of GRF components in the GRF. For a
+                // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
+                // should have the same ordinals. so here assign monotonic unique backendIds to
+                // Fragment instances to keep consistent order with Fragment instances in
+                // FragmentExecParams.instanceExecParams.
+                for (FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
+                    fInstanceExecParam.backendId = backendId++;
+                }
                 if (isEnablePipelineEngine) {
                     List<FInstanceExecParam> firstFInstanceParamList = new ArrayList<>();
                     List<FInstanceExecParam> remainingFInstanceParamList = new ArrayList<>();
@@ -519,8 +529,8 @@ public class Coordinator {
 
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
-                    List<TExecPlanFragmentParams> tParams = params.toThrift(backendId,
-                            instanceId2Host.keySet(), descTable, isEnablePipelineEngine);
+                    List<TExecPlanFragmentParams> tParams =
+                            params.toThrift(instanceId2Host.keySet(), descTable, isEnablePipelineEngine);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
                     boolean needCheckBackendState = false;
@@ -545,8 +555,6 @@ public class Coordinator {
                             }
                         }
                         futures.add(Pair.create(execState, execState.execRemoteFragmentAsync()));
-
-                        backendId++;
                     }
                     for (Pair<BackendExecState, Future<PExecPlanFragmentResult>> pair : futures) {
                         TStatusCode code;
@@ -1746,6 +1754,8 @@ public class Coordinator {
 
         Set<Integer> bucketSeqSet = Sets.newHashSet();
 
+        int backendId;
+
         FragmentExecParams fragmentExecParams;
 
         public void addBucketSeq(int bucketSeq) {
@@ -1961,8 +1971,7 @@ public class Coordinator {
             this.fragment = fragment;
         }
 
-        List<TExecPlanFragmentParams> toThrift(int backendNum,
-                                               Set<TUniqueId> inFlightInstanceIds,
+        List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
                                                TDescriptorTable descTable,
                                                boolean isEnablePipelineEngine) throws Exception {
             // add instance number in file name prefix when export job
@@ -2038,7 +2047,7 @@ public class Coordinator {
                     params.params.setRuntime_filter_params(runtimeFilterParams);
                 }
                 params.setCoord(coordAddress);
-                params.setBackend_num(backendNum++);
+                params.setBackend_num(instanceExecParam.backendId);
                 params.setQuery_globals(queryGlobals);
                 if (isEnablePipelineEngine) {
                     params.setQuery_options(new TQueryOptions(queryOptions));
