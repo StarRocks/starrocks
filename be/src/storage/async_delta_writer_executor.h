@@ -17,14 +17,14 @@ const int64_t RETRY_INTERVAL_MS = 50;
 // Reference: https://github.com/apache/incubator-brpc/blob/master/docs/cn/execution_queue.md
 class AsyncDeltaWriterExecutor : public bthread::Executor {
 public:
-    Status init() {
+    Status init(int max_queue_size = 40960) {
         if (_thread_pool != nullptr) {
             return Status::InternalError("already initialized");
         }
         return ThreadPoolBuilder("delta_writer")
                 .set_min_threads(config::number_tablet_writer_threads / 2)
                 .set_max_threads(std::max<int>(1, config::number_tablet_writer_threads))
-                .set_max_queue_size(40960)
+                .set_max_queue_size(max_queue_size)
                 .set_idle_timeout(MonoDelta::FromMilliseconds(5 * 60 * 1000))
                 .build(&_thread_pool);
     }
