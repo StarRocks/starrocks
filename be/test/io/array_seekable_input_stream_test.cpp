@@ -1,10 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "io/array_random_access_file.h"
-
 #include <gtest/gtest.h>
 
 #include "common/logging.h"
+#include "io/array_random_access_file.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 
@@ -13,7 +12,7 @@ namespace starrocks::io {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayRandomAccessFileTest, test_read) {
     std::string s("0123456789");
-    ArrayRandomAccessFile in(s.data(), static_cast<int64_t>(s.size()));
+    ArraySeekableInputStream in(s.data(), static_cast<int64_t>(s.size()));
     ASSERT_EQ(10, *in.get_size());
 
     char buff[10];
@@ -31,7 +30,7 @@ PARALLEL_TEST(ArrayRandomAccessFileTest, test_read) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayRandomAccessFileTest, test_read_empty) {
     std::string s("");
-    ArrayRandomAccessFile in(s.data(), static_cast<int64_t>(s.size()));
+    ArraySeekableInputStream in(s.data(), static_cast<int64_t>(s.size()));
     ASSERT_EQ(0, *in.get_size());
 
     char buff[2];
@@ -42,7 +41,7 @@ PARALLEL_TEST(ArrayRandomAccessFileTest, test_read_empty) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayRandomAccessFileTest, test_read_invalid_count) {
     std::string s("01234");
-    ArrayRandomAccessFile in(s.data(), static_cast<int64_t>(s.size()));
+    ArraySeekableInputStream in(s.data(), static_cast<int64_t>(s.size()));
     char buff[2];
     ASSERT_ERROR(in.read(buff, -1));
     ASSERT_ERROR(in.read_at(0, buff, -1));
@@ -51,7 +50,7 @@ PARALLEL_TEST(ArrayRandomAccessFileTest, test_read_invalid_count) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayRandomAccessFileTest, test_read_at_invalid_offset) {
     std::string s("01234");
-    ArrayRandomAccessFile in(s.data(), static_cast<int64_t>(s.size()));
+    ArraySeekableInputStream in(s.data(), static_cast<int64_t>(s.size()));
     char buff[2];
     ASSERT_ERROR(in.read_at(-1, buff, 2));
     ASSERT_ERROR(in.read_at(6, buff, 2));
@@ -60,7 +59,7 @@ PARALLEL_TEST(ArrayRandomAccessFileTest, test_read_at_invalid_offset) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayRandomAccessFileTest, test_read_at) {
     std::string s("0123456789");
-    ArrayRandomAccessFile in(s.data(), static_cast<int64_t>(s.size()));
+    ArraySeekableInputStream in(s.data(), static_cast<int64_t>(s.size()));
     ASSERT_EQ(10, *in.get_size());
 
     char buff[10];
@@ -79,7 +78,7 @@ PARALLEL_TEST(ArrayRandomAccessFileTest, test_read_at) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayRandomAccessFileTest, test_seek_and_peak) {
     std::string s("0123456789");
-    ArrayRandomAccessFile in(s.data(), static_cast<int64_t>(s.size()));
+    ArraySeekableInputStream in(s.data(), static_cast<int64_t>(s.size()));
 
     ASSERT_TRUE(in.allows_peak());
 

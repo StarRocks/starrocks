@@ -25,18 +25,18 @@
 #include "common/s3_uri.h"
 #include "gutil/strings/substitute.h"
 #include "io/s3_output_stream.h"
-#include "io/s3_random_access_file.h"
+#include "io/s3_seekable_input_stream.h"
 #include "util/hdfs_util.h"
 #include "util/random.h"
 
 namespace starrocks {
 
-// Wrap a `starrocks::io::RandomAccessFile` into `starrocks::RandomAccessFile`.
+// Wrap a `starrocks::io::SeekableInputStream` into `starrocks::RandomAccessFile`.
 // this wrapper will be deleted after we merged `starrocks::RandomAccessFile` and
 // `starrocks::io:RandomAccessFile` into one class,
 class RandomAccessFileAdapter : public RandomAccessFile {
 public:
-    explicit RandomAccessFileAdapter(std::unique_ptr<io::RandomAccessFile> input, std::string path)
+    explicit RandomAccessFileAdapter(std::unique_ptr<io::SeekableInputStream> input, std::string path)
             : _input(std::move(input)), _object_path(std::move(path)), _object_size(0) {}
 
     ~RandomAccessFileAdapter() override = default;
@@ -48,7 +48,7 @@ public:
     const std::string& file_name() const override { return _object_path; }
 
 private:
-    std::unique_ptr<io::RandomAccessFile> _input;
+    std::unique_ptr<io::SeekableInputStream> _input;
     std::string _object_path;
     mutable uint64_t _object_size;
 };
@@ -209,8 +209,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
     auto client = new_s3client(uri);
-    auto input_file = std::make_unique<io::S3RandomAccessFile>(std::move(client), uri.bucket(), uri.key());
-    return std::make_unique<RandomAccessFileAdapter>(std::move(input_file), path);
+    auto input_stream = std::make_unique<io::S3SeekableInputStream>(std::move(client), uri.bucket(), uri.key());
+    return std::make_unique<RandomAccessFileAdapter>(std::move(input_stream), path);
 }
 
 StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const std::string& fname) {

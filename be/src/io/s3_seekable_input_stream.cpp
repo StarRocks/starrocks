@@ -2,7 +2,7 @@
 
 #ifdef STARROCKS_WITH_AWS
 
-#include "io/s3_random_access_file.h"
+#include "io/s3_seekable_input_stream.h"
 
 #include <aws/core/Aws.h>
 #include <aws/s3/S3Client.h>
@@ -12,15 +12,15 @@
 
 namespace starrocks::io {
 
-StatusOr<int64_t> S3RandomAccessFile::read(void* data, int64_t count) {
-    ASSIGN_OR_RETURN(auto nread, S3RandomAccessFile::read_at(_offset, data, count));
+StatusOr<int64_t> S3SeekableInputStream::read(void* data, int64_t count) {
+    ASSIGN_OR_RETURN(auto nread, S3SeekableInputStream::read_at(_offset, data, count));
     _offset += nread;
     return nread;
 }
 
-StatusOr<int64_t> S3RandomAccessFile::read_at(int64_t offset, void* out, int64_t count) {
+StatusOr<int64_t> S3SeekableInputStream::read_at(int64_t offset, void* out, int64_t count) {
     if (UNLIKELY(_size == -1)) {
-        ASSIGN_OR_RETURN(_size, S3RandomAccessFile::get_size());
+        ASSIGN_OR_RETURN(_size, S3SeekableInputStream::get_size());
     }
     if (offset < 0) {
         return Status::InvalidArgument(fmt::format("Invalid offset {}", offset));
@@ -44,21 +44,21 @@ StatusOr<int64_t> S3RandomAccessFile::read_at(int64_t offset, void* out, int64_t
     }
 }
 
-Status S3RandomAccessFile::skip(int64_t count) {
+Status S3SeekableInputStream::skip(int64_t count) {
     if (UNLIKELY(_size == -1)) {
-        ASSIGN_OR_RETURN(_size, S3RandomAccessFile::get_size());
+        ASSIGN_OR_RETURN(_size, S3SeekableInputStream::get_size());
     }
     _offset = std::min(_offset + count, _size);
     return Status::OK();
 }
 
-StatusOr<int64_t> S3RandomAccessFile::seek(int64_t offset, int whence) {
+StatusOr<int64_t> S3SeekableInputStream::seek(int64_t offset, int whence) {
     if (whence == SEEK_CUR) {
         _offset = _offset + offset;
     } else if (whence == SEEK_SET) {
         _offset = offset;
     } else if (whence == SEEK_END) {
-        ASSIGN_OR_RETURN(auto length, S3RandomAccessFile::get_size());
+        ASSIGN_OR_RETURN(auto length, S3SeekableInputStream::get_size());
         _offset = length + offset;
     } else {
         return Status::InvalidArgument("Invalid `whence` passed to seek");
@@ -66,11 +66,11 @@ StatusOr<int64_t> S3RandomAccessFile::seek(int64_t offset, int whence) {
     return _offset;
 }
 
-StatusOr<int64_t> S3RandomAccessFile::position() {
+StatusOr<int64_t> S3SeekableInputStream::position() {
     return _offset;
 }
 
-StatusOr<int64_t> S3RandomAccessFile::get_size() {
+StatusOr<int64_t> S3SeekableInputStream::get_size() {
     if (_size == -1) {
         Aws::S3::Model::HeadObjectRequest request;
         request.SetBucket(_bucket);

@@ -2,7 +2,7 @@
 
 #ifdef STARROCKS_WITH_AWS
 
-#include "io/s3_random_access_file.h"
+#include "io/s3_seekable_input_stream.h"
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
@@ -44,7 +44,7 @@ public:
 
     void TearDown() override {}
 
-    std::unique_ptr<S3RandomAccessFile> new_random_access_file();
+    std::unique_ptr<S3SeekableInputStream> new_random_access_file();
 };
 
 void S3RandomAccessFileTest::SetUpTestCase() {
@@ -117,8 +117,8 @@ void destroy_s3client() {
     g_s3client.reset();
 }
 
-std::unique_ptr<S3RandomAccessFile> S3RandomAccessFileTest::new_random_access_file() {
-    return std::make_unique<S3RandomAccessFile>(g_s3client, kBucketName, kObjectName);
+std::unique_ptr<S3SeekableInputStream> S3RandomAccessFileTest::new_random_access_file() {
+    return std::make_unique<S3SeekableInputStream>(g_s3client, kBucketName, kObjectName);
 }
 
 void S3RandomAccessFileTest::put_object(const std::string& object_content) {

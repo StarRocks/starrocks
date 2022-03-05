@@ -17,16 +17,16 @@ namespace starrocks::io {
         if (UNLIKELY(is_closed)) return Status::InternalError("file has been close()d"); \
     } while (0)
 
-FdRandomAccessFile::FdRandomAccessFile(int fd) : _fd(fd), _errno(0), _close_on_delete(false), _is_closed(false) {}
+FdSeekableInputStream::FdSeekableInputStream(int fd) : _fd(fd), _errno(0), _close_on_delete(false), _is_closed(false) {}
 
-FdRandomAccessFile::~FdRandomAccessFile() {
+FdSeekableInputStream::~FdSeekableInputStream() {
     if (_close_on_delete) {
         auto st = close();
         LOG_IF(ERROR, !st.ok()) << "close() failed: " << st;
     }
 }
 
-Status FdRandomAccessFile::close() {
+Status FdSeekableInputStream::close() {
     CHECK_IS_CLOSED(_is_closed);
     int res;
     RETRY_ON_EINTR(res, ::close(_fd));
@@ -37,7 +37,7 @@ Status FdRandomAccessFile::close() {
     return Status::OK();
 }
 
-StatusOr<int64_t> FdRandomAccessFile::read(void* data, int64_t count) {
+StatusOr<int64_t> FdSeekableInputStream::read(void* data, int64_t count) {
     CHECK_IS_CLOSED(_is_closed);
     ssize_t res;
     RETRY_ON_EINTR(res, ::read(_fd, static_cast<char*>(data), count));
@@ -48,7 +48,7 @@ StatusOr<int64_t> FdRandomAccessFile::read(void* data, int64_t count) {
     return res;
 }
 
-StatusOr<int64_t> FdRandomAccessFile::read_at(int64_t offset, void* data, int64_t count) {
+StatusOr<int64_t> FdSeekableInputStream::read_at(int64_t offset, void* data, int64_t count) {
     CHECK_IS_CLOSED(_is_closed);
     ssize_t res;
     RETRY_ON_EINTR(res, ::pread(_fd, static_cast<char*>(data), count, offset));
@@ -59,7 +59,7 @@ StatusOr<int64_t> FdRandomAccessFile::read_at(int64_t offset, void* data, int64_
     return res;
 }
 
-StatusOr<int64_t> FdRandomAccessFile::seek(int64_t offset, int whence) {
+StatusOr<int64_t> FdSeekableInputStream::seek(int64_t offset, int whence) {
     CHECK_IS_CLOSED(_is_closed);
     off_t res = ::lseek(_fd, offset, whence);
     if (res < 0) {
@@ -69,7 +69,7 @@ StatusOr<int64_t> FdRandomAccessFile::seek(int64_t offset, int whence) {
     return res;
 }
 
-Status FdRandomAccessFile::skip(int64_t count) {
+Status FdSeekableInputStream::skip(int64_t count) {
     CHECK_IS_CLOSED(_is_closed);
     off_t res = lseek(_fd, count, SEEK_CUR);
     if (res < 0) {
@@ -79,11 +79,11 @@ Status FdRandomAccessFile::skip(int64_t count) {
     return Status::OK();
 }
 
-StatusOr<std::string_view> FdRandomAccessFile::peak(int64_t nbytes) {
-    return Status::NotSupported("FdRandomAccessFile::peak()");
+StatusOr<std::string_view> FdSeekableInputStream::peak(int64_t nbytes) {
+    return Status::NotSupported("FdSeekableInputStream::peak()");
 }
 
-StatusOr<int64_t> FdRandomAccessFile::get_size() {
+StatusOr<int64_t> FdSeekableInputStream::get_size() {
     CHECK_IS_CLOSED(_is_closed);
     struct stat st;
     auto res = ::fstat(_fd, &st);
@@ -94,7 +94,7 @@ StatusOr<int64_t> FdRandomAccessFile::get_size() {
     return st.st_size;
 }
 
-StatusOr<int64_t> FdRandomAccessFile::position() {
+StatusOr<int64_t> FdSeekableInputStream::position() {
     CHECK_IS_CLOSED(_is_closed);
     return seek(0, SEEK_CUR);
 }

@@ -2,21 +2,21 @@
 
 #pragma once
 
-#include "io/random_access_file.h"
+#include "io/seekable_input_stream.h"
 
 namespace starrocks::io {
 
 // A RandomAccessFile which reads from a file descriptor.
-class FdRandomAccessFile : public RandomAccessFile {
+class FdSeekableInputStream : public SeekableInputStream {
 public:
-    explicit FdRandomAccessFile(int fd);
+    explicit FdSeekableInputStream(int fd);
 
-    ~FdRandomAccessFile() override;
+    ~FdSeekableInputStream() override;
 
-    FdRandomAccessFile(const FdRandomAccessFile&) = delete;
-    FdRandomAccessFile(FdRandomAccessFile&&) = delete;
-    void operator=(const FdRandomAccessFile&) = delete;
-    void operator=(FdRandomAccessFile&&) = delete;
+    FdSeekableInputStream(const FdSeekableInputStream&) = delete;
+    FdSeekableInputStream(FdSeekableInputStream&&) = delete;
+    void operator=(const FdSeekableInputStream&) = delete;
+    void operator=(FdSeekableInputStream&&) = delete;
 
     StatusOr<int64_t> read(void* data, int64_t count) override;
 
