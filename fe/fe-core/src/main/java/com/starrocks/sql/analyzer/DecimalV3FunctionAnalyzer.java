@@ -11,6 +11,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 
 import java.util.Arrays;
@@ -147,8 +149,9 @@ public class DecimalV3FunctionAnalyzer {
         } else if (Expr.containsSlotRef(secondArg)) {
             returnScale = originalScale;
         } else {
-            throw new IllegalArgumentException(
-                    "Second arg of function truncate_decimal must be int literal or slotRef expression.");
+            throw new StarRocksPlannerException(
+                    "Second arg of function truncate_decimal must be int literal or slotRef expression.",
+                    ErrorType.USER_ERROR);
         }
 
         return ScalarType.createType(returnPrimitiveType, -1, returnPrecision,

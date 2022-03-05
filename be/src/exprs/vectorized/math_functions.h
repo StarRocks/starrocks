@@ -2,9 +2,6 @@
 
 #pragma once
 
-#include <column/vectorized_fwd.h>
-#include <util/decimal_types.h>
-
 #include <cmath>
 
 #include "column/column.h"
