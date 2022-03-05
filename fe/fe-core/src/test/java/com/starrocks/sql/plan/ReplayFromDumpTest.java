@@ -373,4 +373,12 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(4: lo_partkey)"));
     }
+
+    @Test
+    public void testLogicalAggWithOneTablet() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_with_one_tablet"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(4: t0d)"));
+    }
 }
