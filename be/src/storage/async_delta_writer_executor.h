@@ -34,7 +34,7 @@ public:
         while (true) {
             st = _thread_pool->submit_func([=]() { fn(args); });
             if (!st.is_service_unavailable()) break;
-            LOG(INFO) << "async_delta_writer is busy, retry after ms: " << RETRY_INTERVAL_MS;
+            LOG(INFO) << "async_delta_writer is busy, retry after " << RETRY_INTERVAL_MS << "ms";
             SleepFor(MonoDelta::FromMilliseconds(RETRY_INTERVAL_MS));
         }
         LOG_IF(WARNING, !st.ok()) << st;
