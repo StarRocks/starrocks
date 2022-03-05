@@ -149,6 +149,10 @@ public class AnalyzeTestUtil {
         return connectContext;
     }
 
+    public static StarRocksAssert getStarRocksAssert() {
+        return starRocksAssert;
+    }
+
     public static QueryRelation analyzeSuccess(String originStmt) {
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
