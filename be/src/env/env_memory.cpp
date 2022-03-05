@@ -28,24 +28,22 @@ public:
 
     ~MemoryRandomAccessFile() override = default;
 
-    Status read(uint64_t offset, Slice* res) const override {
-        const std::string& data = _inode->data;
-        if (offset >= data.size()) {
-            res->size = 0;
-            return Status::OK();
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override {
+        const std::string& content = _inode->data;
+        if (offset >= content.size()) {
+            return 0;
         }
-        size_t to_read = std::min<size_t>(res->size, data.size() - offset);
-        memcpy(res->data, data.data() + offset, to_read);
-        res->size = to_read;
-        return Status::OK();
+        size_t nread = std::min<size_t>(size, content.size() - offset);
+        memcpy(data, content.data() + offset, nread);
+        return nread;
     }
 
-    Status read_at(uint64_t offset, const Slice& result) const override {
-        const std::string& data = _inode->data;
-        if (offset + result.size > data.size()) {
-            return Status::IOError("Cannot read required bytes");
+    Status read_at_fully(int64_t offset, void* data, int64_t size) const override {
+        const std::string& content = _inode->data;
+        if (offset + size > content.size()) {
+            return Status::EndOfFile("Cannot read required number of bytes");
         }
-        memcpy(result.data, data.data() + offset, result.size);
+        memcpy(data, content.data() + offset, size);
         return Status::OK();
     }
 
@@ -84,12 +82,10 @@ public:
 
     ~MemorySequentialFile() override = default;
 
-    Status read(Slice* res) override {
-        Status st = _random_file.read(_offset, res);
-        if (st.ok()) {
-            _offset += res->size;
-        }
-        return st;
+    StatusOr<int64_t> read(void* data, int64_t size) override {
+        ASSIGN_OR_RETURN(auto nread, _random_file.read_at(_offset, data, size));
+        _offset += nread;
+        return nread;
     }
 
     const std::string& filename() const override { return _random_file.file_name(); }
@@ -630,8 +626,7 @@ Status EnvMemory::read_file(const std::string& path, std::string* content) {
     uint64_t size = 0;
     RETURN_IF_ERROR(f->size(&size));
     raw::make_room(content, size);
-    Slice buff(*content);
-    return f->read_at(0, buff);
+    return f->read_at_fully(0, content->data(), content->size());
 }
 
 } // namespace starrocks

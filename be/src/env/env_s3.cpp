@@ -41,8 +41,8 @@ public:
 
     ~RandomAccessFileAdapter() override = default;
 
-    Status read(uint64_t offset, Slice* res) const override;
-    Status read_at(uint64_t offset, const Slice& res) const override;
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override;
+    Status read_at_fully(int64_t offset, void* data, int64_t size) const override;
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
     Status size(uint64_t* size) const override;
     const std::string& file_name() const override { return _object_path; }
@@ -53,20 +53,17 @@ private:
     mutable uint64_t _object_size;
 };
 
-Status RandomAccessFileAdapter::read(uint64_t offset, Slice* res) const {
-    if (UNLIKELY(offset > std::numeric_limits<int64_t>::max())) return Status::NotSupported("offset overflow");
-    ASSIGN_OR_RETURN(res->size, _input->read_at(static_cast<int64_t>(offset), res->data, res->size));
-    return Status::OK();
+StatusOr<int64_t> RandomAccessFileAdapter::read_at(int64_t offset, void* data, int64_t size) const {
+    return _input->read_at(offset, data, size);
 }
 
-Status RandomAccessFileAdapter::read_at(uint64_t offset, const Slice& res) const {
-    if (UNLIKELY(offset > std::numeric_limits<int64_t>::max())) return Status::NotSupported("offset overflow");
-    return _input->read_at_fully(static_cast<int64_t>(offset), res.data, res.size);
+Status RandomAccessFileAdapter::read_at_fully(int64_t offset, void* data, int64_t size) const {
+    return _input->read_at_fully(offset, data, size);
 }
 
 Status RandomAccessFileAdapter::readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const {
     for (size_t i = 0; i < res_cnt; i++) {
-        RETURN_IF_ERROR(RandomAccessFileAdapter::read_at(offset, res[i]));
+        RETURN_IF_ERROR(RandomAccessFileAdapter::read_at_fully(offset, res[i].data, res[i].size));
         offset += res[i].size;
     }
     return Status::OK();

@@ -17,8 +17,8 @@ public:
     MockFile() = default;
     ~MockFile() override = default;
 
-    Status read(uint64_t offset, Slice* res) const override { return Status::OK(); }
-    Status read_at(uint64_t offset, const Slice& result) const override { return Status::OK(); }
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override { return size; }
+    Status read_at_fully(int64_t offset, void* data, int64_t size) const override { return Status::OK(); }
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override { return Status::OK(); }
     Status size(uint64_t* size) const override { return Status::OK(); }
     const std::string& file_name() const override { return _file; }

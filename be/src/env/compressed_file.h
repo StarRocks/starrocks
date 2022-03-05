@@ -19,7 +19,7 @@ public:
               _decompressor(std::move(decompressor)),
               _compressed_buff(BitUtil::round_up(compressed_data_cache_size, CACHELINE_SIZE)) {}
 
-    Status read(Slice* result) override;
+    StatusOr<int64_t> read(void* data, int64_t size) override;
 
     Status skip(uint64_t n) override;
 
@@ -53,12 +53,10 @@ private:
                 return Status::InternalError("reached the buffer limit");
             }
             Slice buff(write_buffer());
-            Status st = f->read(&buff);
-            if (st.ok()) {
-                if (buff.size == 0) return Status::EndOfFile("read empty from " + f->filename());
-                _limit += buff.size;
-            }
-            return st;
+            ASSIGN_OR_RETURN(buff.size, f->read(buff.data, buff.size));
+            if (buff.size == 0) return Status::EndOfFile("read empty from " + f->filename());
+            _limit += buff.size;
+            return Status::OK();
         }
 
         inline size_t available() const { return _limit - _offset; }
