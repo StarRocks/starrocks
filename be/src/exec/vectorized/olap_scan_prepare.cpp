@@ -15,7 +15,6 @@
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/predicate_parser.h"
 
-
 namespace starrocks {
 namespace vectorized {
 
