@@ -3,6 +3,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.Constants;
 
@@ -82,5 +83,10 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         job.setStatus(Constants.ScheduleStatus.PENDING);
 
         return job;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateAnalyzeJobStatement(this, context);
     }
 }

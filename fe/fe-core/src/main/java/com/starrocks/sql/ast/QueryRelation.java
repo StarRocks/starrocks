@@ -77,6 +77,10 @@ public abstract class QueryRelation extends Relation {
         return limit.getOffset();
     }
 
+    public boolean hasOffset() {
+        return limit != null && limit.hasOffset();
+    }
+
     public boolean hasWithClause() {
         return !cteRelations.isEmpty();
     }

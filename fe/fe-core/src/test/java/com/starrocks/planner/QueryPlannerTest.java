@@ -30,6 +30,7 @@ import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -155,7 +156,8 @@ public class QueryPlannerTest {
         }
 
         String sql = "select k1 from test.baseall";
-        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, sql);
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statement);
         stmtExecutor2.execute();
         Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin", connectContext.getState().getErrorMessage());
 
@@ -183,7 +185,8 @@ public class QueryPlannerTest {
         }
 
         String sql = "select k1 from test.baseall where k1 > 0";
-        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, sql);
+        StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statementBase);
         stmtExecutor2.execute();
         Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin", connectContext.getState().getErrorMessage());
 

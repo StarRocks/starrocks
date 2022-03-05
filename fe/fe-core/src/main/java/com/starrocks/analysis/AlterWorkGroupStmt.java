@@ -7,6 +7,7 @@ import com.starrocks.catalog.WorkGroup;
 import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.Relation;
 
 import java.util.ArrayList;
@@ -43,7 +44,7 @@ public class AlterWorkGroupStmt extends DdlStmt {
         return this.name;
     }
 
-    public Relation analyze() {
+    public void analyze() {
         if (cmd instanceof AddClassifiers) {
             AddClassifiers addClassifiers = (AddClassifiers) cmd;
             List<WorkGroupClassifier> classifierList = new ArrayList<>();
@@ -65,7 +66,6 @@ public class AlterWorkGroupStmt extends DdlStmt {
                         "At least one of ('cpu_core_limit', 'mem_limit', 'concurrency_limit' should be specified");
             }
         }
-        return null;
     }
 
     public List<WorkGroupClassifier> getNewAddedClassifiers() {
@@ -113,5 +113,10 @@ public class AlterWorkGroupStmt extends DdlStmt {
         public AlterProperties(Map<String, String> properties) {
             this.properties = properties;
         }
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAlterWorkGroupStatement(this, context);
     }
 }

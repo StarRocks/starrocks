@@ -44,8 +44,6 @@ public class AnalyzeStmtTest {
 
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
         StatementBase statementBase = null;
         try {
             statementBase = SqlParserUtils.getFirstStmt(parser);
@@ -59,7 +57,7 @@ public class AnalyzeStmtTest {
             }
         }
 
-        analyzer.analyze(statementBase);
+        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
 
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) statementBase;
         Assert.assertEquals(4, analyzeStmt.getColumnNames().size());
@@ -72,8 +70,6 @@ public class AnalyzeStmtTest {
 
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
         StatementBase statementBase = null;
         try {
             statementBase = SqlParserUtils.getFirstStmt(parser);
@@ -86,7 +82,7 @@ public class AnalyzeStmtTest {
                 throw new AnalysisException(errorMessage, e);
             }
         }
-        analyzer.analyze(statementBase);
+        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) statementBase;
 
         Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
@@ -99,11 +95,9 @@ public class AnalyzeStmtTest {
 
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
         StatementBase statementBase = null;
         statementBase = SqlParserUtils.getFirstStmt(parser);
-        analyzer.analyze(statementBase);
+        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) statementBase;
 
         Assert.assertEquals(1, analyzeStmt.getProperties().size());

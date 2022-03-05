@@ -197,11 +197,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
 
-        List<Identifier> columns = null;
-        if (context.columnAliases() != null) {
-            columns = visit(context.columnAliases().identifier(), Identifier.class);
-        }
-
         QueryStatement queryStatement;
         if (context.VALUES() != null) {
             List<ValueList> rowValues = visit(context.expressionsWithDefault(), ValueList.class);
@@ -216,10 +211,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             queryStatement = (QueryStatement) visit(context.queryStatement());
         }
 
+        List<String> targetColumnNames = null;
+        if (context.columnAliases() != null) {
+            // StarRocks tables are not case-sensitive, so targetColumnNames are converted
+            // to lowercase characters to facilitate subsequent matching.
+            List<Identifier> targetColumnNamesIdentifiers =
+                    visitIfPresent(context.columnAliases().identifier(), Identifier.class);
+            if (targetColumnNamesIdentifiers != null) {
+                targetColumnNames = targetColumnNamesIdentifiers.stream()
+                        .map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+            }
+        }
+
         return new InsertStmt(
                 new InsertTarget(targetTableName, null),
                 context.lable == null ? null : context.lable.getText(),
-                columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
+                targetColumnNames,
                 queryStatement,
                 Lists.newArrayList());
     }
@@ -1331,7 +1338,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             quotedString = context.DOUBLE_QUOTED_TEXT().getText();
         }
 
-        return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1)));
+        return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1))
+                .replace("\"\"", "\""));
     }
 
     private static String escapeBackSlash(String str) {
