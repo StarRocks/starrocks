@@ -25,6 +25,7 @@
 #include <cstring>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -151,8 +152,8 @@ private:
     starrocks_udf::FunctionContext::StarRocksVersion _version;
 
     // Empty if there's no error
+    std::mutex _error_msg_mutex;
     std::string _error_msg;
-    std::atomic<std::string*> _optional_error_msg{nullptr};
 
     // The number of warnings reported.
     int64_t _num_warnings;

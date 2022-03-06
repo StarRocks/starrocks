@@ -146,8 +146,8 @@ bool FunctionContextImpl::check_local_allocations_empty() {
 }
 
 void FunctionContextImpl::set_error(const char* error_msg) {
-    std::string* null_error_msg = nullptr;
-    if (_optional_error_msg.compare_exchange_strong(null_error_msg, &_error_msg)) {
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    if (_error_msg.empty()) {
         _error_msg = error_msg;
         std::stringstream ss;
         ss << "UDF ERROR: " << error_msg;
@@ -158,13 +158,14 @@ void FunctionContextImpl::set_error(const char* error_msg) {
 }
 
 bool FunctionContextImpl::has_error() {
-    return _optional_error_msg.load() != nullptr;
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    return !_error_msg.empty();
 }
 
 const char* FunctionContextImpl::error_msg() {
-    std::string* s = _optional_error_msg.load();
-    if (s != nullptr) {
-        return s->c_str();
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    if (!_error_msg.empty()) {
+        return _error_msg.c_str();
     } else {
         return nullptr;
     }
