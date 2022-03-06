@@ -184,6 +184,7 @@ public:
     void close(RuntimeState* runtime_state) noexcept;
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
+    void cleanup();
 
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }
     void set_keep_priority(bool v) { _keep_priority = v; }

@@ -9,11 +9,7 @@ namespace starrocks::vectorized {
 class HdfsParquetScanner final : public HdfsScanner {
 public:
     HdfsParquetScanner() = default;
-    ~HdfsParquetScanner() override {
-        if (_runtime_state != nullptr) {
-            close(_runtime_state);
-        }
-    }
+    ~HdfsParquetScanner() override { cleanup(); }
 
     Status do_open(RuntimeState* runtime_state) override;
     void do_close(RuntimeState* runtime_state) noexcept override;

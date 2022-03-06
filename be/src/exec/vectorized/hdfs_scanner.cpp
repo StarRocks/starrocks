@@ -2,17 +2,7 @@
 
 #include "exec/vectorized/hdfs_scanner.h"
 
-#include <hdfs/hdfs.h>
-#include <unistd.h>
-
-#include <algorithm>
-#include <memory>
-#include <mutex>
-#include <thread>
-
-#include "env/env_hdfs.h"
 #include "exec/vectorized/hdfs_scan_node.h"
-#include "exec/vectorized/hdfs_scanner_parquet.h"
 
 namespace starrocks::vectorized {
 
@@ -144,6 +134,12 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     _is_closed = true;
     if (_is_open && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
+    }
+}
+
+void HdfsScanner::cleanup() {
+    if (_runtime_state != nullptr) {
+        close(_runtime_state);
     }
 }
 
