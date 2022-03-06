@@ -355,9 +355,9 @@ intervalField
     ;
 
 type
-    : arrayType
-    | baseType ('(' typeParameter (',' typeParameter)* ')')?
+    : baseType
     | decimalType ('(' precision=typeParameter (',' scale=typeParameter)? ')')?
+    | arrayType
     ;
 
 arrayType
@@ -365,11 +365,29 @@ arrayType
     ;
 
 typeParameter
-    : INTEGER_VALUE | type
+    : INTEGER_VALUE
     ;
 
 baseType
-    : identifier
+    : BOOLEAN
+    | TINYINT
+    | SMALLINT
+    | INT
+    | INTEGER
+    | BIGINT
+    | LARGEINT
+    | FLOAT
+    | DOUBLE
+    | DATE
+    | DATETIME
+    | TIME
+    | CHAR typeParameter?
+    | VARCHAR typeParameter?
+    | STRING
+    | BITMAP
+    | HLL
+    | PERCENTILE
+    | JSON
     ;
 
 decimalType

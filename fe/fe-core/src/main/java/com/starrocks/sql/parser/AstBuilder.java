@@ -118,7 +118,7 @@ import java.util.stream.Collectors;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
-    private long sqlMode;
+    private final long sqlMode;
 
     public AstBuilder(long sqlMode) {
         this.sqlMode = sqlMode;
@@ -1526,75 +1526,52 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     private Type getType(StarRocksParser.TypeContext type) {
         if (type.baseType() != null) {
-            String signature = type.baseType().getText();
-            if (!type.typeParameter().isEmpty()) {
-                if (signature.equalsIgnoreCase("VARCHAR")) {
-                    if (type.typeParameter().size() > 1) {
-                        throw new SemanticException("VARCHAR can not contains multi type parameter");
-                    }
-
-                    if (type.typeParameter(0).INTEGER_VALUE() != null) {
-                        return ScalarType.createVarcharType(
-                                Integer.parseInt(type.typeParameter(0).INTEGER_VALUE().toString()));
-                    } else {
-                        throw new SemanticException("VARCHAR type parameter mush be integer");
-                    }
-                } else if (signature.equalsIgnoreCase("CHAR")) {
-                    if (type.typeParameter().size() > 1) {
-                        throw new SemanticException("CHAR can not contains multi type parameter");
-                    }
-                    if (type.typeParameter(0).INTEGER_VALUE() != null) {
-                        return ScalarType.createCharType(
-                                Integer.parseInt(type.typeParameter(0).INTEGER_VALUE().toString()));
-                    } else {
-                        throw new SemanticException("CHAR type parameter mush be integer");
-                    }
-                } else if (signature.equalsIgnoreCase("DECIMAL")) {
-                    throw new IllegalArgumentException("Unsupported type specification: " + type.getText());
-                }
-
-                throw new IllegalArgumentException("Unsupported type specification: " + type.getText());
-            }
-
-            if (signature.equalsIgnoreCase("BOOLEAN")) {
+            if (type.baseType().BOOLEAN() != null) {
                 return Type.BOOLEAN;
-            } else if (signature.equalsIgnoreCase("TINYINT")) {
+            } else if (type.baseType().TINYINT() != null) {
                 return Type.TINYINT;
-            } else if (signature.equalsIgnoreCase("SMALLINT")) {
+            } else if (type.baseType().SMALLINT() != null) {
                 return Type.SMALLINT;
-            } else if (signature.equalsIgnoreCase("INT") || signature.equalsIgnoreCase("INTEGER")) {
+            } else if (type.baseType().INT() != null || type.baseType().INTEGER() != null) {
                 return Type.INT;
-            } else if (signature.equalsIgnoreCase("BIGINT")) {
+            } else if (type.baseType().BIGINT() != null) {
                 return Type.BIGINT;
-            } else if (signature.equalsIgnoreCase("LARGEINT")) {
+            } else if (type.baseType().LARGEINT() != null) {
                 return Type.LARGEINT;
-            } else if (signature.equalsIgnoreCase("FLOAT")) {
+            } else if (type.baseType().FLOAT() != null) {
                 return Type.FLOAT;
-            } else if (signature.equalsIgnoreCase("DOUBLE")) {
+            } else if (type.baseType().DOUBLE() != null) {
                 return Type.DOUBLE;
-            } else if (signature.equalsIgnoreCase("DECIMAL")) {
-                return ScalarType.createUnifiedDecimalType(10, 0);
-            } else if (signature.equalsIgnoreCase("DATE")) {
+            } else if (type.baseType().DATE() != null) {
                 return Type.DATE;
-            } else if (signature.equalsIgnoreCase("DATETIME")) {
+            } else if (type.baseType().DATETIME() != null) {
                 return Type.DATETIME;
-            } else if (signature.equalsIgnoreCase("TIME")) {
+            } else if (type.baseType().TIME() != null) {
                 return Type.TIME;
-            } else if (signature.equalsIgnoreCase("VARCHAR")) {
-                return Type.VARCHAR;
-            } else if (signature.equalsIgnoreCase("CHAR")) {
-                return Type.CHAR;
-            } else if (signature.equalsIgnoreCase("STRING")) {
+            } else if (type.baseType().VARCHAR() != null) {
+                if (type.baseType().typeParameter() != null) {
+                    return ScalarType.createVarcharType(Integer.parseInt(type.baseType().typeParameter().INTEGER_VALUE().toString()));
+                } else {
+                    return Type.VARCHAR;
+                }
+            } else if (type.baseType().CHAR() != null) {
+                if (type.baseType().typeParameter() != null) {
+                    return ScalarType.createCharType(
+                            Integer.parseInt(type.baseType().typeParameter().INTEGER_VALUE().toString()));
+                } else {
+                    return Type.CHAR;
+                }
+            } else if (type.baseType().STRING() != null) {
                 ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
                 stringType.setAssignedStrLenInColDefinition();
                 return stringType;
-            } else if (signature.equalsIgnoreCase("BITMAP")) {
+            } else if (type.baseType().BITMAP() != null) {
                 return Type.BITMAP;
-            } else if (signature.equalsIgnoreCase("HLL")) {
+            } else if (type.baseType().HLL() != null) {
                 return Type.HLL;
-            } else if (signature.equalsIgnoreCase("PERCENTILE")) {
+            } else if (type.baseType().PERCENTILE() != null) {
                 return Type.PERCENTILE;
-            } else if (signature.equalsIgnoreCase("JSON")) {
+            } else if (type.baseType().JSON() != null) {
                 return Type.JSON;
             }
 
