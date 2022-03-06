@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "runtime/primitive_type.h"
+#include "runtime/types.h"
 
 // This is the only StarRocks header required to develop UDFs and UDAs. This header
 // contains the types that need to be used and the FunctionContext object. The context
@@ -214,7 +215,7 @@ public:
     // Create a test FunctionContext object. The caller is responsible for calling delete
     // on it. This context has additional debugging validation enabled.
     static FunctionContext* create_test_context();
-    static FunctionContext* create_test_context(std::vector<FunctionContext::TypeDesc>&& arg_types);
+    static FunctionContext* create_test_context(std::vector<TypeDesc>&& arg_types, const TypeDesc& return_type);
 
     ~FunctionContext();
 

@@ -2,22 +2,22 @@
 
 #pragma once
 
-#include "io/random_access_file.h"
+#include "io/seekable_input_stream.h"
 
 namespace starrocks::io {
 
 // A RandomAccessFile backed by an in-memory array of bytes.
-class ArrayRandomAccessFile : public RandomAccessFile {
+class ArrayInputStream : public SeekableInputStream {
 public:
     // The input array must outlive the stream.
-    explicit ArrayRandomAccessFile(const void* data, int64_t size) : _data(data), _size(size), _offset(0) {}
+    explicit ArrayInputStream(const void* data, int64_t size) : _data(data), _size(size), _offset(0) {}
 
-    ~ArrayRandomAccessFile() override = default;
+    ~ArrayInputStream() override = default;
 
-    ArrayRandomAccessFile(const ArrayRandomAccessFile&) = delete;
-    ArrayRandomAccessFile(ArrayRandomAccessFile&&) = delete;
-    void operator=(const ArrayRandomAccessFile&) = delete;
-    void operator=(ArrayRandomAccessFile&&) = delete;
+    ArrayInputStream(const ArrayInputStream&) = delete;
+    ArrayInputStream(ArrayInputStream&&) = delete;
+    void operator=(const ArrayInputStream&) = delete;
+    void operator=(ArrayInputStream&&) = delete;
 
     StatusOr<int64_t> read(void* data, int64_t count) override;
 
