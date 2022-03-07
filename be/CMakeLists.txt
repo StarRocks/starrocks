@@ -187,10 +187,8 @@ set_target_properties(thriftnb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 add_library(mysql STATIC IMPORTED)
 set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/mariadb/libmariadbclient.a)
 
-if (WITH_HDFS)
-    add_library(hdfs STATIC IMPORTED)
-    set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
-endif()
+add_library(hdfs STATIC IMPORTED)
+set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
 
 add_library(crypto STATIC IMPORTED)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
@@ -338,10 +336,6 @@ elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
 endif()
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}  -Wno-attributes -DS2_USE_GFLAGS -DS2_USE_GLOG")
 
-if (WITH_HDFS)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_HDFS")
-endif()
-
 if (WITH_AWS)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_AWS")
 endif()
@@ -472,18 +466,18 @@ set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     mysql
 )
 
-if (WITH_HDFS)
-    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        hdfs
-        jvm
-    )
-    set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
-    add_library(jvm SHARED IMPORTED)
-    FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/jre/lib/*/libjvm.so)
-    set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
-    include_directories(${JAVA_HOME}/include)
-    include_directories(${JAVA_HOME}/include/linux)
-endif()
+
+set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+    hdfs
+    jvm
+)
+set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
+add_library(jvm SHARED IMPORTED)
+FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/jre/lib/*/libjvm.so)
+set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
+include_directories(${JAVA_HOME}/include)
+include_directories(${JAVA_HOME}/include/linux)
+
 
 if (WITH_AWS)
     set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
