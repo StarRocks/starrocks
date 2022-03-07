@@ -1550,7 +1550,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return Type.TIME;
             } else if (type.baseType().VARCHAR() != null) {
                 if (type.baseType().typeParameter() != null) {
-                    return ScalarType.createVarcharType(Integer.parseInt(type.baseType().typeParameter().INTEGER_VALUE().toString()));
+                    return ScalarType.createVarcharType(
+                            Integer.parseInt(type.baseType().typeParameter().INTEGER_VALUE().toString()));
                 } else {
                     return Type.VARCHAR;
                 }
