@@ -239,18 +239,6 @@ struct JoinKeyHash<Slice> {
     std::size_t operator()(const Slice& slice) const { return crc_hash_32(slice.data, slice.size, CRC_SEED); }
 };
 
-template <typename T>
-struct JoinKeyEqual {
-    bool operator()(const T& x, const T& y) const { return x == y; }
-};
-
-template <>
-struct JoinKeyEqual<Slice> {
-    bool operator()(const Slice& x, const Slice& y) const {
-        return (x.size == y.size) && (memcmp(x.data, y.data, x.size) == 0);
-    }
-};
-
 class JoinHashMapHelper {
 public:
     // maxinum bucket size
@@ -369,6 +357,8 @@ public:
     static Status lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
 
     static const Buffer<CppType>& get_key_data(const HashTableProbeState& probe_state);
+
+    static bool equal(const CppType& x, const CppType& y) { return x == y; }
 };
 
 template <PrimitiveType PT>
@@ -389,6 +379,8 @@ public:
         return ColumnHelper::as_raw_column<ColumnType>(probe_state.probe_key_column)->get_data();
     }
 
+    static bool equal(const CppType& x, const CppType& y) { return x == y; }
+
 private:
     static void _probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
                               const Columns& data_columns);
@@ -407,6 +399,8 @@ public:
     }
 
     static Status lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
+
+    static bool equal(const Slice& x, const Slice& y) { return x == y; }
 
 private:
     static void _probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
