@@ -27,7 +27,7 @@ public:
     Status read_at_fully(int64_t offset, void* data, int64_t size) const override;
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
     Status size(uint64_t* size) const override;
-    const std::string& file_name() const override { return _file_name; }
+    const std::string& filename() const override { return _file_name; }
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override;
 
 private:

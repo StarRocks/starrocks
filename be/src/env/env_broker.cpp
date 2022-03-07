@@ -204,7 +204,7 @@ public:
         return Status::OK();
     }
 
-    const std::string& file_name() const override { return _path; }
+    const std::string& filename() const override { return _path; }
 
 private:
     TNetworkAddress _broker;
@@ -230,7 +230,7 @@ public:
         return Status::OK();
     }
 
-    const std::string& filename() const override { return _file->file_name(); }
+    const std::string& filename() const override { return _file->filename(); }
 
 private:
     std::unique_ptr<RandomAccessFile> _file;
