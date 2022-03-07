@@ -59,8 +59,12 @@ public class HashDistributionDesc {
         return this.sourceType == SourceType.SHUFFLE_JOIN;
     }
 
-    public boolean isAggregateShuffle() {
-        return this.sourceType == SourceType.SHUFFLE_AGG;
+    public boolean isShuffleEnforce() {
+        return this.sourceType == SourceType.SHUFFLE_ENFORCE;
+    }
+
+    public boolean isBucketJoin() {
+        return this.sourceType == sourceType.BUCKET_JOIN;
     }
 
     @Override

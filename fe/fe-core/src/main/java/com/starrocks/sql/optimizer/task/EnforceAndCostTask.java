@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -153,11 +154,17 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
             // Successfully optimize all child group
             if (curChildIndex == groupExpression.getInputs().size()) {
+                // before we compute the property, here need to make sure that the plan is legal
+                ChildOutputPropertyGuarantor childOutputPropertyGuarantor = new ChildOutputPropertyGuarantor(context);
+                curTotalCost = childOutputPropertyGuarantor
+                        .enforceLegalChildOutputProperty(context.getRequiredProperty(), groupExpression,
+                                childrenBestExprList, requiredProperties, childrenOutputProperties, curTotalCost);
+
                 // compute the output property
                 OutputPropertyDeriver outputPropertyDeriver = new OutputPropertyDeriver(context);
                 Pair<PhysicalPropertySet, Double> outputPropertyWithCost = outputPropertyDeriver
                         .getOutputPropertyWithCost(context.getRequiredProperty(), groupExpression, childrenBestExprList,
-                                requiredProperties, childrenOutputProperties, curTotalCost);
+                                childrenOutputProperties, curTotalCost);
                 PhysicalPropertySet outputProperty = outputPropertyWithCost.first;
                 curTotalCost = outputPropertyWithCost.second;
                 if (curTotalCost > context.getUpperBoundCost()) {
@@ -221,7 +228,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 && childCost == Double.POSITIVE_INFINITY) {
             List<PhysicalPropertySet> childInputProperties =
                     childBestExpr.getInputProperties(inputProperty);
-            childBestExpr.setPropertyWithCost(inputProperty, childInputProperties, 0);
+            childBestExpr.updatePropertyWithCost(inputProperty, childInputProperties, 0);
         }
 
         // if this groupExpression can only do Broadcast, don't need to check the broadcastRowCountLimit
@@ -350,7 +357,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                                      PhysicalPropertySet outputProperty,
                                      PhysicalPropertySet requiredProperty,
                                      List<PhysicalPropertySet> inputProperties) {
-        if (groupExpression.setPropertyWithCost(requiredProperty, inputProperties, curTotalCost)) {
+        if (groupExpression.updatePropertyWithCost(requiredProperty, inputProperties, curTotalCost)) {
             // Each group expression need to record the outputProperty satisfy what requiredProperty,
             // because group expression can generate multi outputProperty. eg. Join may have shuffle local
             // and shuffle join two types outputProperty.
@@ -452,7 +459,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 insertEnforceExpression(enforcer, groupExpression.getGroup());
         curTotalCost += CostModel.calculateCost(enforcer);
 
-        if (enforcer.setPropertyWithCost(newOutputProperty, Lists.newArrayList(oldOutputProperty), curTotalCost)) {
+        if (enforcer.updatePropertyWithCost(newOutputProperty, Lists.newArrayList(oldOutputProperty), curTotalCost)) {
             enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, context.getRequiredProperty());
         }
         groupExpression.getGroup().setBestExpression(enforcer, curTotalCost, newOutputProperty);
