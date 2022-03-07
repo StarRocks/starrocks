@@ -271,7 +271,8 @@ valueExpression
         PERCENT_SYMBOL | INT_DIV | BITAND| BITOR | BITXOR)
       right = valueExpression                                                             #arithmeticBinary
     | left = valueExpression operator =
-        (PLUS_SYMBOL | MINUS_SYMBOL) right=valueExpression                                #arithmeticBinary
+        (PLUS_SYMBOL | MINUS_SYMBOL) right = valueExpression                              #arithmeticBinary
+    | left = valueExpression CONCAT right = valueExpression                               #concat
     ;
 
 primaryExpression
