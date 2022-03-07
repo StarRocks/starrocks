@@ -71,7 +71,6 @@ public:
 
     void reserve(uint64_t _size);
     void resize(uint64_t _size);
-
     void filter(const uint8_t* f_data, size_t f_size, size_t true_size);
 };
 

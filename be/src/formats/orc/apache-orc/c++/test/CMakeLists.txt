@@ -2,6 +2,7 @@
 # This file is based on code available under the Apache license here:
 #   https://github.com/apache/orc/tree/main/c++/test/CMakeLists.txt
 
+
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -39,6 +40,7 @@ add_executable (orc-test
   TestDictionaryEncoding.cc
   TestDriver.cc
   TestInt128.cc
+  TestMurmur3.cc
   TestPredicateLeaf.cc
   TestPredicatePushdown.cc
   TestReader.cc
@@ -49,11 +51,9 @@ add_executable (orc-test
   TestSearchArgument.cc
   TestStripeIndexStatistics.cc
   TestTimestampStatistics.cc
-  TestTimestampTZ.cc
   TestTimezone.cc
   TestType.cc
   TestWriter.cc
-  TestLazyLoad.cc
 )
 
 target_link_libraries (orc-test

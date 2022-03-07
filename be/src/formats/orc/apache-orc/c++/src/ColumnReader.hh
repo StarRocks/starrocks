@@ -165,7 +165,6 @@ public:
    * Create a reader for the given stripe.
    */
 std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& stripe);
-
 // collect string dictionary from column reader
 void collectStringDictionary(ColumnReader* reader, std::unordered_map<uint64_t, StringDictionary*>& coll);
 } // namespace orc

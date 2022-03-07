@@ -31,7 +31,7 @@
 
 namespace orc {
 StreamsFactory::~StreamsFactory() {
-    // PASS
+    //PASS
 }
 
 class StreamsFactoryImpl : public StreamsFactory {
@@ -792,7 +792,7 @@ public:
         size_t length;
     };
 
-    SortedStringDictionary() {}
+    SortedStringDictionary() : totalLength(0) {}
 
     // insert a new string into dictionary, return its insertion order
     size_t insert(const char* data, size_t len);
@@ -827,7 +827,7 @@ private:
 
     std::map<DictEntry, size_t, LessThan> dict;
     std::vector<std::vector<char>> data;
-    uint64_t totalLength{0};
+    uint64_t totalLength;
 
     // use friend class here to avoid being bothered by const function calls
     friend class StringColumnWriter;
@@ -842,7 +842,7 @@ size_t SortedStringDictionary::insert(const char* str, size_t len) {
     auto ret = dict.insert({DictEntry(str, len), dict.size()});
     if (ret.second) {
         // make a copy to internal storage
-        data.emplace_back(len);
+        data.push_back(std::vector<char>(len));
         memcpy(data.back().data(), str, len);
         // update dictionary entry to link pointer to internal storage
         DictEntry* entry = const_cast<DictEntry*>(&(ret.first->first));
@@ -1842,7 +1842,7 @@ Decimal128ColumnWriter::Decimal128ColumnWriter(const Type& type, const StreamsFa
 }
 
 // Zigzag encoding moves the sign bit to the least significant bit using the
-// expression (val << 1) ^ (val >> 63) and derives its name from the fact that
+// expression (val « 1) ^ (val » 63) and derives its name from the fact that
 // positive and negative numbers alternate once encoded.
 Int128 zigZagInt128(const Int128& value) {
     bool isNegative = value < 0;
@@ -1966,6 +1966,11 @@ void ListColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_
     if (listBatch == nullptr) {
         throw InvalidArgument("Failed to cast to ListVectorBatch");
     }
+    CollectionColumnStatisticsImpl* collectionStats =
+            dynamic_cast<CollectionColumnStatisticsImpl*>(colIndexStatistics.get());
+    if (collectionStats == nullptr) {
+        throw InvalidArgument("Failed to cast to CollectionColumnStatisticsImpl");
+    }
 
     ColumnWriter::add(rowBatch, offset, numValues, incomingMask);
 
@@ -1988,20 +1993,21 @@ void ListColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_
 
     if (enableIndex) {
         if (!notNull) {
-            colIndexStatistics->increase(numValues);
+            collectionStats->increase(numValues);
         } else {
             uint64_t count = 0;
             for (uint64_t i = 0; i < numValues; ++i) {
                 if (notNull[i]) {
                     ++count;
+                    collectionStats->update(static_cast<uint64_t>(offsets[i]));
                     if (enableBloomFilter) {
                         bloomFilter->addLong(offsets[i]);
                     }
                 }
             }
-            colIndexStatistics->increase(count);
+            collectionStats->increase(count);
             if (count < numValues) {
-                colIndexStatistics->setHasNull(true);
+                collectionStats->setHasNull(true);
             }
         }
     }
@@ -2169,6 +2175,11 @@ void MapColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t
     if (mapBatch == nullptr) {
         throw InvalidArgument("Failed to cast to MapVectorBatch");
     }
+    CollectionColumnStatisticsImpl* collectionStats =
+            dynamic_cast<CollectionColumnStatisticsImpl*>(colIndexStatistics.get());
+    if (collectionStats == nullptr) {
+        throw InvalidArgument("Failed to cast to CollectionColumnStatisticsImpl");
+    }
 
     ColumnWriter::add(rowBatch, offset, numValues, incomingMask);
 
@@ -2195,20 +2206,21 @@ void MapColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t
 
     if (enableIndex) {
         if (!notNull) {
-            colIndexStatistics->increase(numValues);
+            collectionStats->increase(numValues);
         } else {
             uint64_t count = 0;
             for (uint64_t i = 0; i < numValues; ++i) {
                 if (notNull[i]) {
                     ++count;
+                    collectionStats->update(static_cast<uint64_t>(offsets[i]));
                     if (enableBloomFilter) {
                         bloomFilter->addLong(offsets[i]);
                     }
                 }
             }
-            colIndexStatistics->increase(count);
+            collectionStats->increase(count);
             if (count < numValues) {
-                colIndexStatistics->setHasNull(true);
+                collectionStats->setHasNull(true);
             }
         }
     }

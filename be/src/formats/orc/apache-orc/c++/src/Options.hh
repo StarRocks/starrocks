@@ -126,6 +126,7 @@ struct RowReaderOptionsPrivate {
     std::list<uint64_t> includedColumnIndexes;
     std::list<std::string> includedColumnNames;
     std::list<std::string> lazyLoadColumnNames;
+
     uint64_t dataStart;
     uint64_t dataLength;
     bool throwOnHive11DecimalOverflow;
@@ -133,6 +134,7 @@ struct RowReaderOptionsPrivate {
     bool enableLazyDecoding;
     std::shared_ptr<SearchArgument> sargs;
     std::shared_ptr<RowReaderFilter> filter;
+
     std::string readerTimezone;
     bool useWriterTimezone;
 
@@ -291,6 +293,7 @@ RowReaderOptions& RowReaderOptions::setTimezoneName(const std::string& zoneName)
 const std::string& RowReaderOptions::getTimezoneName() const {
     return privateBits->readerTimezone;
 }
+
 RowReaderOptions& RowReaderOptions::useWriterTimezone() {
     privateBits->useWriterTimezone = true;
     return *this;
@@ -299,4 +302,5 @@ RowReaderOptions& RowReaderOptions::useWriterTimezone() {
 bool RowReaderOptions::getUseWriterTimezone() const {
     return privateBits->useWriterTimezone;
 }
+
 } // namespace orc

@@ -1,6 +1,6 @@
 # This file is made available under Elastic License 2.0.
 # This file is based on code available under the Apache license here:
-# https://github.com/apache/orc/tree/main/tools/src/CMakeLists.txt
+#   https://github.com/apache/orc/tree/main/tools/src/CMakeLists.txt
 
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +33,7 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g ${CXX11_FLAGS} ${WARN_FLAGS}")
 
 add_executable (orc-contents
   FileContents.cc
+  ToolsHelper.cc
   )
 
 target_link_libraries (orc-contents
@@ -42,6 +43,7 @@ target_link_libraries (orc-contents
 
 add_executable (orc-scan
   FileScan.cc
+  ToolsHelper.cc
   )
 
 target_link_libraries (orc-scan
@@ -51,6 +53,7 @@ target_link_libraries (orc-scan
 
 add_executable (orc-metadata
   FileMetadata.cc
+  ToolsHelper.cc
   )
 
 target_link_libraries (orc-metadata
@@ -70,6 +73,7 @@ target_link_libraries (orc-statistics
 
 add_executable (orc-memory
   FileMemory.cc
+  ToolsHelper.cc
   )
 
 target_link_libraries (orc-memory

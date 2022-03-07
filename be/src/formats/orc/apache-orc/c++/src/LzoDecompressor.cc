@@ -62,7 +62,6 @@ MalformedInputException::~MalformedInputException() noexcept {
 // it's very tempting to use reinterpret_cast to copy value, but it's also quite risky to compiler optimization.
 // check out https://en.cppreference.com/w/cpp/language/reinterpret_cast [[Type aliasing]] section.
 // using reinterpret_cast is ok to run in gcc9 and gcc10(debug/asan), but failed to run in gcc10(release).
-#define COPY_VALUE(dst, src, type) memcpy(dst, src, sizeof(type))
 
 uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit) {
     // nothing compresses to nothing
@@ -304,11 +303,12 @@ uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* o
                         output[3] = *(matchAddress + 3);
                         output += SIZE_OF_INT;
                         matchAddress += increment32;
-                        COPY_VALUE(output, matchAddress, int32_t);
+
+                        memcpy(output, matchAddress, SIZE_OF_INT);
                         output += SIZE_OF_INT;
                         matchAddress -= decrement64;
                     } else {
-                        COPY_VALUE(output, matchAddress, int64_t);
+                        memcpy(output, matchAddress, SIZE_OF_LONG);
                         matchAddress += SIZE_OF_LONG;
                         output += SIZE_OF_LONG;
                     }
@@ -319,7 +319,7 @@ uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* o
                         }
 
                         while (output < fastOutputLimit) {
-                            COPY_VALUE(output, matchAddress, int64_t);
+                            memcpy(output, matchAddress, SIZE_OF_LONG);
                             matchAddress += SIZE_OF_LONG;
                             output += SIZE_OF_LONG;
                         }
@@ -329,7 +329,7 @@ uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* o
                         }
                     } else {
                         while (output < matchOutputLimit) {
-                            COPY_VALUE(output, matchAddress, int64_t);
+                            memcpy(output, matchAddress, SIZE_OF_LONG);
                             matchAddress += SIZE_OF_LONG;
                             output += SIZE_OF_LONG;
                         }
@@ -353,7 +353,7 @@ uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* o
                 // fast copy. We may over-copy but there's enough room in input
                 // and output to not overrun them
                 do {
-                    COPY_VALUE(output, input, int64_t);
+                    memcpy(output, input, SIZE_OF_LONG);
                     input += SIZE_OF_LONG;
                     output += SIZE_OF_LONG;
                 } while (output < literalOutputLimit);

@@ -96,6 +96,7 @@ public:
     // For each child of type, select it if one of its children
     // is selected.
     bool selectParents(std::vector<bool>& selectedColumns, const Type& type);
+
     /**
     * Constructor that selects columns.
     * @param contents of the file
@@ -124,6 +125,7 @@ private:
     proto::Footer* footer;
     DataBuffer<uint64_t> firstRowOfStripe;
     mutable std::unique_ptr<Type> selectedSchema;
+    bool skipBloomFilters;
 
     // reading state
     uint64_t previousRow;
@@ -176,12 +178,18 @@ private:
     friend class TestRowReader_advanceToNextRowGroup_Test;
     friend class TestRowReader_computeBatchSize_Test;
 
-    /**
-     * Seek to the start of a row group in the current stripe
+    /* Seek to the start of a row group in the current stripe
      * @param rowGroupEntryId the row group id to seek to
      */
     void seekToRowGroup(uint32_t rowGroupEntryId);
     void getRowGroupPosition(uint32_t rowGroupEntryId, PositionProviderMap* map);
+
+    /**
+     * Check if the file has bad bloom filters. We will skip using them in the
+     * following reads.
+     * @return true if it has.
+     */
+    bool hasBadBloomFilters();
 
 public:
     /**
@@ -264,6 +272,8 @@ public:
     WriterId getWriterId() const override;
 
     uint32_t getWriterIdValue() const override;
+
+    std::string getSoftwareVersion() const override;
 
     WriterVersion getWriterVersion() const override;
 

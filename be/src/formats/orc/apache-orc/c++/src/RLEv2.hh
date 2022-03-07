@@ -125,6 +125,7 @@ private:
     int64_t* adjDeltas;
 
     uint32_t getOpCode(EncodingType encoding);
+    int64_t* prepareForDirectOrPatchedBase(EncodingOption& option);
     void determineEncoding(EncodingOption& option);
     void computeZigZagLiterals(EncodingOption& option);
     void preparePatchedBlob(EncodingOption& option);
@@ -209,7 +210,6 @@ private:
     int64_t readLongBE(uint64_t bsz);
     int64_t readVslong();
     uint64_t readVulong();
-
     uint64_t readLongsFully(int64_t* data, uint64_t len, uint64_t fb) {
         if (bitsLeft != 0) {
             throw ParseError("bitsLeft not zero when bit packing");
@@ -335,8 +335,8 @@ private:
     int64_t firstValue;                // Used by SHORT_REPEAT and DELTA
     int64_t prevValue;                 // Used by DELTA
     uint32_t bitSize;                  // Used by DIRECT, PATCHED_BASE and DELTA
-    uint32_t bitsLeft;                 // Used by anything that uses readLongs
-    uint8_t curByte;                   // Used by anything that uses readLongs
+    uint32_t bitsLeft;                 // Used by readLongs when bitSize < 8
+    uint32_t curByte;                  // Used by anything that uses readLongs
     uint32_t patchBitSize;             // Used by PATCHED_BASE
     uint64_t unpackedIdx;              // Used by PATCHED_BASE
     uint64_t patchIdx;                 // Used by PATCHED_BASE

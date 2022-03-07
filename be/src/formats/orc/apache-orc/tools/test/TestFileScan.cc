@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-// https://github.com/apache/orc/tree/main/tools/test/TestFileScan.cc
+//   https://github.com/apache/orc/tree/main/tools/test/TestFileScan.cc
 
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -36,7 +36,16 @@ TEST(TestFileScan, testNominal) {
     EXPECT_EQ("Rows: 32768\nBatches: 33\n", output);
     EXPECT_EQ("", error);
 
+    EXPECT_EQ(0, runProgram({pgm, std::string("-c"), std::string("1,2,3,9"), file}, output, error));
+    EXPECT_EQ("Rows: 32768\nBatches: 33\n", output);
+    EXPECT_EQ("", error);
+
     EXPECT_EQ(0, runProgram({pgm, std::string("-b"), std::string("256"), file}, output, error));
+    EXPECT_EQ("Rows: 32768\nBatches: 131\n", output);
+    EXPECT_EQ("", error);
+
+    EXPECT_EQ(0, runProgram({pgm, std::string("-b"), std::string("256"), std::string("-c"), std::string("1,2,3"), file},
+                            output, error));
     EXPECT_EQ("Rows: 32768\nBatches: 131\n", output);
     EXPECT_EQ("", error);
 
@@ -49,6 +58,10 @@ TEST(TestFileScan, testNominal) {
     EXPECT_EQ("", error);
 
     EXPECT_EQ(0, runProgram({pgm, std::string("--batch=256"), file}, output, error));
+    EXPECT_EQ("Rows: 32768\nBatches: 131\n", output);
+    EXPECT_EQ("", error);
+
+    EXPECT_EQ(0, runProgram({pgm, std::string("--batch=256"), std::string("--columns=1,2,3"), file}, output, error));
     EXPECT_EQ("Rows: 32768\nBatches: 131\n", output);
     EXPECT_EQ("", error);
 }
@@ -102,33 +115,85 @@ TEST(TestFileScan, testBadCommand) {
     EXPECT_EQ("", output);
     EXPECT_EQ(
             "orc-scan: option requires an argument -- b\n"
-            "Usage: orc-scan [-h] [--help]\n"
-            "                [-b<size>] [--batch=<size>] <filename>\n",
+            "Usage: orc-scan [options] <filename>...\n"
+            "Options:\n"
+            "\t-h --help\n"
+            "\t-c --columns\t\tComma separated list of top-level column fields\n"
+            "\t-t --columnTypeIds\tComma separated list of column type ids\n"
+            "\t-n --columnNames\tComma separated list of column names\n"
+            "\t-b --batch\t\tBatch size for reading\n"
+            "Scans and displays the row count of the ORC files.\n",
             removeChars(stripPrefix(error, "orc-scan: "), "'`"));
 
     EXPECT_EQ(1, runProgram({pgm, file, std::string("-b"), std::string("20x")}, output, error));
     EXPECT_EQ("", output);
-    EXPECT_EQ("The --batch parameter requires an integer option.\n", error);
+    EXPECT_EQ(
+            "The --batch parameter requires an integer option.\n"
+            "Usage: orc-scan [options] <filename>...\n"
+            "Options:\n"
+            "\t-h --help\n"
+            "\t-c --columns\t\tComma separated list of top-level column fields\n"
+            "\t-t --columnTypeIds\tComma separated list of column type ids\n"
+            "\t-n --columnNames\tComma separated list of column names\n"
+            "\t-b --batch\t\tBatch size for reading\n"
+            "Scans and displays the row count of the ORC files.\n",
+            error);
 
     EXPECT_EQ(1, runProgram({pgm, file, std::string("-b"), std::string("x30")}, output, error));
     EXPECT_EQ("", output);
-    EXPECT_EQ("The --batch parameter requires an integer option.\n", error);
+    EXPECT_EQ(
+            "The --batch parameter requires an integer option.\n"
+            "Usage: orc-scan [options] <filename>...\n"
+            "Options:\n"
+            "\t-h --help\n"
+            "\t-c --columns\t\tComma separated list of top-level column fields\n"
+            "\t-t --columnTypeIds\tComma separated list of column type ids\n"
+            "\t-n --columnNames\tComma separated list of column names\n"
+            "\t-b --batch\t\tBatch size for reading\n"
+            "Scans and displays the row count of the ORC files.\n",
+            error);
 
     EXPECT_EQ(1, runProgram({pgm, file, std::string("--batch")}, output, error));
     EXPECT_EQ("", output);
     EXPECT_EQ(
             "orc-scan: option --batch requires an argument\n"
-            "Usage: orc-scan [-h] [--help]\n"
-            "                [-b<size>] [--batch=<size>] <filename>\n",
+            "Usage: orc-scan [options] <filename>...\n"
+            "Options:\n"
+            "\t-h --help\n"
+            "\t-c --columns\t\tComma separated list of top-level column fields\n"
+            "\t-t --columnTypeIds\tComma separated list of column type ids\n"
+            "\t-n --columnNames\tComma separated list of column names\n"
+            "\t-b --batch\t\tBatch size for reading\n"
+            "Scans and displays the row count of the ORC files.\n",
             removeChars(stripPrefix(error, "orc-scan: "), "'`"));
 
     EXPECT_EQ(1, runProgram({pgm, file, std::string("--batch"), std::string("20x")}, output, error));
     EXPECT_EQ("", output);
-    EXPECT_EQ("The --batch parameter requires an integer option.\n", error);
+    EXPECT_EQ(
+            "The --batch parameter requires an integer option.\n"
+            "Usage: orc-scan [options] <filename>...\n"
+            "Options:\n"
+            "\t-h --help\n"
+            "\t-c --columns\t\tComma separated list of top-level column fields\n"
+            "\t-t --columnTypeIds\tComma separated list of column type ids\n"
+            "\t-n --columnNames\tComma separated list of column names\n"
+            "\t-b --batch\t\tBatch size for reading\n"
+            "Scans and displays the row count of the ORC files.\n",
+            error);
 
     EXPECT_EQ(1, runProgram({pgm, file, std::string("--batch"), std::string("x30")}, output, error));
     EXPECT_EQ("", output);
-    EXPECT_EQ("The --batch parameter requires an integer option.\n", error);
+    EXPECT_EQ(
+            "The --batch parameter requires an integer option.\n"
+            "Usage: orc-scan [options] <filename>...\n"
+            "Options:\n"
+            "\t-h --help\n"
+            "\t-c --columns\t\tComma separated list of top-level column fields\n"
+            "\t-t --columnTypeIds\tComma separated list of column type ids\n"
+            "\t-n --columnNames\tComma separated list of column names\n"
+            "\t-b --batch\t\tBatch size for reading\n"
+            "Scans and displays the row count of the ORC files.\n",
+            error);
 }
 
 void checkForError(const std::string& filename, const std::string& error_msg) {

@@ -23,7 +23,6 @@
 #pragma once
 
 #include <sstream>
-#include <utility>
 
 #include "Timezone.hh"
 #include "TypeImpl.hh"
@@ -44,7 +43,6 @@ struct StatContext {
     StatContext() {}
     StatContext(bool cStat, const Timezone* const timezone = nullptr) : correctStats(cStat), writerTimezone(timezone) {}
 };
-
 /**
  * Internal Statistics Implementation
  */
@@ -176,6 +174,7 @@ typedef InternalStatisticsImpl<int32_t> InternalDateStatistics;
 typedef InternalStatisticsImpl<double> InternalDoubleStatistics;
 typedef InternalStatisticsImpl<Decimal> InternalDecimalStatistics;
 typedef InternalStatisticsImpl<std::string> InternalStringStatistics;
+typedef InternalStatisticsImpl<uint64_t> InternalCollectionStatistics;
 
 /**
    * Mutable column statistics for use by the writer.
@@ -846,7 +845,23 @@ public:
         _stats.setSum(sum);
     }
 
-    void update(int64_t value, int repetitions);
+    void update(int64_t value, int repetitions) {
+        _stats.updateMinMax(value);
+
+        if (_stats.hasSum()) {
+            if (repetitions > 1) {
+                _stats.setHasSum(multiplyExact(value, repetitions, &value));
+            }
+
+            if (_stats.hasSum()) {
+                _stats.setHasSum(addExact(_stats.getSum(), value, &value));
+
+                if (_stats.hasSum()) {
+                    _stats.setSum(value);
+                }
+            }
+        }
+    }
 
     void merge(const MutableColumnStatistics& other) override {
         const IntegerColumnStatisticsImpl& intStats = dynamic_cast<const IntegerColumnStatisticsImpl&>(other);
@@ -856,10 +871,10 @@ public:
         // update sum and check overflow
         _stats.setHasSum(_stats.hasSum() && intStats.hasSum());
         if (_stats.hasSum()) {
-            bool wasPositive = _stats.getSum() >= 0;
-            _stats.setSum(_stats.getSum() + intStats.getSum());
-            if ((intStats.getSum() >= 0) == wasPositive) {
-                _stats.setHasSum((_stats.getSum() >= 0) == wasPositive);
+            int64_t value;
+            _stats.setHasSum(addExact(_stats.getSum(), intStats.getSum(), &value));
+            if (_stats.hasSum()) {
+                _stats.setSum(value);
             }
         }
     }
@@ -957,12 +972,12 @@ public:
 
     void setMinimum(std::string minimum) {
         _stats.setHasMinimum(true);
-        _stats.setMinimum(std::move(minimum));
+        _stats.setMinimum(minimum);
     }
 
     void setMaximum(std::string maximum) {
         _stats.setHasMaximum(true);
-        _stats.setMaximum(std::move(maximum));
+        _stats.setMaximum(maximum);
     }
 
     uint64_t getTotalLength() const override {
@@ -1004,7 +1019,7 @@ public:
         _stats.setTotalLength(_stats.getTotalLength() + length);
     }
 
-    void update(const std::string& value) { update(value.c_str(), value.length()); }
+    void update(std::string value) { update(value.c_str(), value.length()); }
 
     void merge(const MutableColumnStatistics& other) override {
         const StringColumnStatisticsImpl& strStats = dynamic_cast<const StringColumnStatisticsImpl&>(other);
@@ -1285,6 +1300,150 @@ public:
         } else {
             throw ParseError("Maximum is not defined.");
         }
+    }
+};
+
+class CollectionColumnStatisticsImpl : public CollectionColumnStatistics, public MutableColumnStatistics {
+private:
+    InternalCollectionStatistics _stats;
+
+public:
+    CollectionColumnStatisticsImpl() { reset(); }
+    CollectionColumnStatisticsImpl(const proto::ColumnStatistics& stats);
+    virtual ~CollectionColumnStatisticsImpl() override;
+
+    bool hasMinimumChildren() const override { return _stats.hasMinimum(); }
+
+    bool hasMaximumChildren() const override { return _stats.hasMaximum(); }
+
+    bool hasTotalChildren() const override { return _stats.hasSum(); }
+
+    void increase(uint64_t count) override { _stats.setNumberOfValues(_stats.getNumberOfValues() + count); }
+
+    uint64_t getNumberOfValues() const override { return _stats.getNumberOfValues(); }
+
+    void setNumberOfValues(uint64_t value) override { _stats.setNumberOfValues(value); }
+
+    bool hasNull() const override { return _stats.hasNull(); }
+
+    void setHasNull(bool hasNull) override { _stats.setHasNull(hasNull); }
+
+    uint64_t getMinimumChildren() const override {
+        if (hasMinimumChildren()) {
+            return _stats.getMinimum();
+        } else {
+            throw ParseError("MinimumChildren is not defined.");
+        }
+    }
+
+    uint64_t getMaximumChildren() const override {
+        if (hasMaximumChildren()) {
+            return _stats.getMaximum();
+        } else {
+            throw ParseError("MaximumChildren is not defined.");
+        }
+    }
+
+    uint64_t getTotalChildren() const override {
+        if (hasTotalChildren()) {
+            return _stats.getSum();
+        } else {
+            throw ParseError("TotalChildren is not defined.");
+        }
+    }
+
+    void setMinimumChildren(uint64_t minimum) override {
+        _stats.setHasMinimum(true);
+        _stats.setMinimum(minimum);
+    }
+
+    void setMaximumChildren(uint64_t maximum) override {
+        _stats.setHasMaximum(true);
+        _stats.setMaximum(maximum);
+    }
+
+    void setTotalChildren(uint64_t sum) override {
+        _stats.setHasSum(true);
+        _stats.setSum(sum);
+    }
+
+    void setHasTotalChildren(bool hasSum) override { _stats.setHasSum(hasSum); }
+
+    void merge(const MutableColumnStatistics& other) override {
+        const CollectionColumnStatisticsImpl& collectionStats =
+                dynamic_cast<const CollectionColumnStatisticsImpl&>(other);
+
+        _stats.merge(collectionStats._stats);
+
+        // hasSumValue here means no overflow
+        _stats.setHasSum(_stats.hasSum() && collectionStats.hasTotalChildren());
+        if (_stats.hasSum()) {
+            uint64_t oldSum = _stats.getSum();
+            _stats.setSum(_stats.getSum() + collectionStats.getTotalChildren());
+            if (oldSum > _stats.getSum()) {
+                _stats.setHasSum(false);
+            }
+        }
+    }
+
+    void reset() override {
+        _stats.reset();
+        setTotalChildren(0);
+    }
+
+    void update(uint64_t value) {
+        _stats.updateMinMax(value);
+        if (_stats.hasSum()) {
+            uint64_t oldSum = _stats.getSum();
+            _stats.setSum(_stats.getSum() + value);
+            if (oldSum > _stats.getSum()) {
+                _stats.setHasSum(false);
+            }
+        }
+    }
+
+    void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
+        pbStats.set_hasnull(_stats.hasNull());
+        pbStats.set_numberofvalues(_stats.getNumberOfValues());
+
+        proto::CollectionStatistics* collectionStats = pbStats.mutable_collectionstatistics();
+        if (_stats.hasMinimum()) {
+            collectionStats->set_minchildren(_stats.getMinimum());
+            collectionStats->set_maxchildren(_stats.getMaximum());
+        } else {
+            collectionStats->clear_minchildren();
+            collectionStats->clear_maxchildren();
+        }
+        if (_stats.hasSum()) {
+            collectionStats->set_totalchildren(_stats.getSum());
+        } else {
+            collectionStats->clear_totalchildren();
+        }
+    }
+
+    std::string toString() const override {
+        std::ostringstream buffer;
+        buffer << "Data type: Collection(LIST|MAP)" << std::endl
+               << "Values: " << getNumberOfValues() << std::endl
+               << "Has null: " << (hasNull() ? "yes" : "no") << std::endl;
+        if (hasMinimumChildren()) {
+            buffer << "MinChildren: " << getMinimumChildren() << std::endl;
+        } else {
+            buffer << "MinChildren is not defined" << std::endl;
+        }
+
+        if (hasMaximumChildren()) {
+            buffer << "MaxChildren: " << getMaximumChildren() << std::endl;
+        } else {
+            buffer << "MaxChildren is not defined" << std::endl;
+        }
+
+        if (hasTotalChildren()) {
+            buffer << "TotalChildren: " << getTotalChildren() << std::endl;
+        } else {
+            buffer << "TotalChildren is not defined" << std::endl;
+        }
+        return buffer.str();
     }
 };
 

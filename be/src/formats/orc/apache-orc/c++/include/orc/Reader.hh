@@ -201,7 +201,6 @@ public:
      * Set search argument for predicate push down
      */
     RowReaderOptions& searchArgument(std::unique_ptr<SearchArgument> sargs);
-    RowReaderOptions& rowReaderFilter(std::shared_ptr<RowReaderFilter> filter);
 
     /**
      * Should enable encoding block mode
@@ -262,7 +261,6 @@ public:
      * Get search argument for predicate push down
      */
     std::shared_ptr<SearchArgument> getSearchArgument() const;
-    std::shared_ptr<RowReaderFilter> getRowReaderFilter() const;
 
     /**
      * Set desired timezone to return data of timestamp type
@@ -274,6 +272,8 @@ public:
      */
     const std::string& getTimezoneName() const;
 
+    RowReaderOptions& rowReaderFilter(std::shared_ptr<RowReaderFilter> filter);
+    std::shared_ptr<RowReaderFilter> getRowReaderFilter() const;
     RowReaderOptions& useWriterTimezone();
     bool getUseWriterTimezone() const;
     RowReaderOptions& includeLazyLoadColumnNames(const std::list<std::string>& include);
@@ -302,6 +302,12 @@ public:
      * @return the number of rows
      */
     virtual uint64_t getNumberOfRows() const = 0;
+
+    /**
+     * Get the software instance and version that wrote this file.
+     * @return a user-facing string that specifies the software version
+     */
+    virtual std::string getSoftwareVersion() const = 0;
 
     /**
      * Get the user metadata keys.
@@ -505,7 +511,7 @@ public:
     virtual uint64_t getMemoryUseByTypeId(const std::list<uint64_t>& include, int stripeIx = -1) = 0;
 
     /**
-     * Get BloomFilters of all selected columns in the specified stripe
+     * Get BloomFiters of all selected columns in the specified stripe
      * @param stripeIndex index of the stripe to be read for bloom filters.
      * @param included index of selected columns to return (if not specified,
      *        all columns that have bloom filters are considered).
@@ -527,7 +533,6 @@ public:
         uint64_t num_values = 0;
         uint64_t row_in_stripe = 0;
     };
-
     virtual ~RowReader();
     /**
      * Get the selected type of the rows in the file. The file's row type

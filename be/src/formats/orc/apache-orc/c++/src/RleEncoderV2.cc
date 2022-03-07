@@ -68,7 +68,7 @@ RleEncoderV2::RleEncoderV2(std::unique_ptr<BufferedOutputStream> outStream, bool
         : RleEncoder(std::move(outStream), hasSigned), alignedBitPacking(alignBitPacking), prevDelta(0) {
     literals = new int64_t[MAX_LITERAL_SIZE];
     gapVsPatchList = new int64_t[MAX_LITERAL_SIZE];
-    zigzagLiterals = new int64_t[MAX_LITERAL_SIZE];
+    zigzagLiterals = hasSigned ? new int64_t[MAX_LITERAL_SIZE] : nullptr;
     baseRedLiterals = new int64_t[MAX_LITERAL_SIZE];
     adjDeltas = new int64_t[MAX_LITERAL_SIZE];
 }
@@ -125,7 +125,8 @@ void RleEncoderV2::write(int64_t val) {
         }
 
         if (fixedRunLength == MAX_LITERAL_SIZE) {
-            determineEncoding(option);
+            option.encoding = DELTA;
+            option.isFixedDelta = true;
             writeValues(option);
         }
         return;
@@ -169,14 +170,9 @@ void RleEncoderV2::write(int64_t val) {
 }
 
 void RleEncoderV2::computeZigZagLiterals(EncodingOption& option) {
-    int64_t zzEncVal = 0;
+    assert(isSigned);
     for (size_t i = 0; i < numLiterals; i++) {
-        if (isSigned) {
-            zzEncVal = zigZag(literals[i]);
-        } else {
-            zzEncVal = literals[i];
-        }
-        zigzagLiterals[option.zigzagLiteralsCount++] = zzEncVal;
+        zigzagLiterals[option.zigzagLiteralsCount++] = zigZag(literals[i]);
     }
 }
 
@@ -282,6 +278,20 @@ void RleEncoderV2::preparePatchedBlob(EncodingOption& option) {
     }
 }
 
+/**
+ * Prepare for Direct or PatchedBase encoding
+ * compute zigZagLiterals and zzBits100p (Max number of encoding bits required)
+ * @return zigzagLiterals
+ */
+int64_t* RleEncoderV2::prepareForDirectOrPatchedBase(EncodingOption& option) {
+    if (isSigned) {
+        computeZigZagLiterals(option);
+    }
+    int64_t* currentZigzagLiterals = isSigned ? zigzagLiterals : literals;
+    option.zzBits100p = percentileBits(currentZigzagLiterals, 0, numLiterals, 1.0);
+    return currentZigzagLiterals;
+}
+
 void RleEncoderV2::determineEncoding(EncodingOption& option) {
     // We need to compute zigzag values for DIRECT and PATCHED_BASE encodings,
     // but not for SHORT_REPEAT or DELTA. So we only perform the zigzag
@@ -291,8 +301,7 @@ void RleEncoderV2::determineEncoding(EncodingOption& option) {
     if (numLiterals <= MIN_REPEAT) {
         // we need to compute zigzag values for DIRECT encoding if we decide to
         // break early for delta overflows or for shorter runs
-        computeZigZagLiterals(option);
-        option.zzBits100p = percentileBits(zigzagLiterals, 0, numLiterals, 1.0);
+        prepareForDirectOrPatchedBase(option);
         option.encoding = DIRECT;
         return;
     }
@@ -332,8 +341,7 @@ void RleEncoderV2::determineEncoding(EncodingOption& option) {
     // PATCHED_BASE condition as encoding using DIRECT is faster and has less
     // overhead than PATCHED_BASE
     if (!isSafeSubtract(max, option.min)) {
-        computeZigZagLiterals(option);
-        option.zzBits100p = percentileBits(zigzagLiterals, 0, numLiterals, 1.0);
+        prepareForDirectOrPatchedBase(option);
         option.encoding = DIRECT;
         return;
     }
@@ -387,9 +395,8 @@ void RleEncoderV2::determineEncoding(EncodingOption& option) {
     // beyond a threshold then we need to patch the values. if the variation
     // is not significant then we can use direct encoding
 
-    computeZigZagLiterals(option);
-    option.zzBits100p = percentileBits(zigzagLiterals, 0, numLiterals, 1.0);
-    option.zzBits90p = percentileBits(zigzagLiterals, 0, numLiterals, 0.9, true);
+    int64_t* currentZigzagLiterals = prepareForDirectOrPatchedBase(option);
+    option.zzBits90p = percentileBits(currentZigzagLiterals, 0, numLiterals, 0.9, true);
     uint32_t diffBitsLH = option.zzBits100p - option.zzBits90p;
 
     // if the difference between 90th percentile and 100th percentile fixed
@@ -537,7 +544,8 @@ void RleEncoderV2::writeDirectValues(EncodingOption& option) {
     writeByte(headerSecondByte);
 
     // bit packing the zigzag encoded literals
-    writeInts(zigzagLiterals, 0, numLiterals, fb);
+    int64_t* currentZigzagLiterals = isSigned ? zigzagLiterals : literals;
+    writeInts(currentZigzagLiterals, 0, numLiterals, fb);
 
     // reset run length
     variableRunLength = 0;
@@ -575,9 +583,7 @@ void RleEncoderV2::writePatchedBasedValues(EncodingOption& option) {
     // find the number of bytes required for base and shift it by 5 bits
     // to accommodate patch width. The additional bit is used to store the sign
     // of the base value.
-    uint32_t baseBitsNum = findClosestNumBits(option.min);
-    // if Negative, sign bit is already accounted for
-    uint32_t baseWidth = isNegative ? baseBitsNum : baseBitsNum + 1;
+    const uint32_t baseWidth = findClosestNumBits(option.min) + 1;
     const uint32_t baseBytes = baseWidth % 8 == 0 ? baseWidth / 8 : (baseWidth / 8) + 1;
     const uint32_t bb = (baseBytes - 1) << 5;
 

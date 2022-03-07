@@ -140,5 +140,4 @@ std::unique_ptr<RleEncoder> createRleEncoder(std::unique_ptr<BufferedOutputStrea
 std::unique_ptr<RleDecoder> createRleDecoder(std::unique_ptr<SeekableInputStream> input, bool isSigned,
                                              RleVersion version, MemoryPool& pool,
                                              DataBuffer<char>* sharedBufferPtr = nullptr);
-
 } // namespace orc

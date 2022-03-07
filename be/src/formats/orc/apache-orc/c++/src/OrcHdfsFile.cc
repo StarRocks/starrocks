@@ -41,13 +41,13 @@ private:
     std::unique_ptr<hdfs::FileHandle> file;
     std::unique_ptr<hdfs::FileSystem> file_system;
     uint64_t totalLength;
-    const uint64_t READ_SIZE = 1024 * 1024; // 1 MB
+    const uint64_t READ_SIZE = 1024 * 1024; //1 MB
 
 public:
     HdfsFileInputStream(std::string _filename) {
         filename = _filename;
 
-        // Building a URI object from the given uri_path
+        //Building a URI object from the given uri_path
         hdfs::URI uri;
         try {
             uri = hdfs::URI::parse_from_string(filename);
@@ -55,18 +55,18 @@ public:
             throw ParseError("Malformed URI: " + filename);
         }
 
-        // This sets conf path to default "$HADOOP_CONF_DIR" or "/etc/hadoop/conf"
-        // and loads configs core-site.xml and hdfs-site.xml from the conf path
+        //This sets conf path to default "$HADOOP_CONF_DIR" or "/etc/hadoop/conf"
+        //and loads configs core-site.xml and hdfs-site.xml from the conf path
         hdfs::ConfigParser parser;
         if (!parser.LoadDefaultResources()) {
             throw ParseError("Could not load default resources. ");
         }
         auto stats = parser.ValidateResources();
-        // validating core-site.xml
+        //validating core-site.xml
         if (!stats[0].second.ok()) {
             throw ParseError(stats[0].first + " is invalid: " + stats[0].second.ToString());
         }
-        // validating hdfs-site.xml
+        //validating hdfs-site.xml
         if (!stats[1].second.ok()) {
             throw ParseError(stats[1].first + " is invalid: " + stats[1].second.ToString());
         }
@@ -75,15 +75,15 @@ public:
             throw ParseError("Could not load Options object. ");
         }
         hdfs::IoService* io_service = hdfs::IoService::New();
-        // Wrapping file_system into a unique pointer to guarantee deletion
+        //Wrapping file_system into a unique pointer to guarantee deletion
         file_system = std::unique_ptr<hdfs::FileSystem>(hdfs::FileSystem::New(io_service, "", options));
         if (file_system.get() == nullptr) {
             throw ParseError("Can't create FileSystem object. ");
         }
         hdfs::Status status;
-        // Checking if the user supplied the host
+        //Checking if the user supplied the host
         if (!uri.get_host().empty()) {
-            // Using port if supplied, otherwise using "" to look up port in configs
+            //Using port if supplied, otherwise using "" to look up port in configs
             std::string port = uri.has_port() ? std::to_string(uri.get_port()) : "";
             status = file_system->Connect(uri.get_host(), port);
             if (!status.ok()) {
@@ -109,7 +109,7 @@ public:
         if (!status.ok()) {
             throw ParseError("Can't open " + uri.get_path() + ". " + status.ToString());
         }
-        // Wrapping file_raw into a unique pointer to guarantee deletion
+        //Wrapping file_raw into a unique pointer to guarantee deletion
         file.reset(file_raw);
 
         hdfs::StatInfo stat_info;

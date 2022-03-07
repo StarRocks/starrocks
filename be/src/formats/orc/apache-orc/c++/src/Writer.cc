@@ -59,9 +59,9 @@ struct WriterOptionsPrivate {
         enableIndex = true;
         bloomFilterFalsePositiveProb = 0.05;
         bloomFilterVersion = UTF8;
-        // Writer timezone uses "GMT" by default to get rid of potential issues
-        // introduced by moving timestamps between different timezones.
-        // Explictly set the writer timezone if the use case depends on it.
+        //Writer timezone uses "GMT" by default to get rid of potential issues
+        //introduced by moving timestamps between different timezones.
+        //Explictly set the writer timezone if the use case depends on it.
         timezone = "GMT";
     }
 };
@@ -371,6 +371,7 @@ void WriterImpl::init() {
     fileFooter.set_numberofrows(0);
     fileFooter.set_rowindexstride(static_cast<uint32_t>(options.getRowIndexStride()));
     fileFooter.set_writer(writerId);
+    fileFooter.set_softwareversion(ORC_VERSION);
 
     uint32_t index = 0;
     buildFooterType(type, fileFooter, index);
