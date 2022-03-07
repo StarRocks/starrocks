@@ -314,9 +314,9 @@ void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) cons
     }
 }
 
-int64_t NullableColumn::xor_checksum() const {
+int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     if (!_has_null) {
-        return _data_column->xor_checksum();
+        return _data_column->xor_checksum(from, to);
     }
 
     int64_t xor_checksum = 0;
@@ -325,26 +325,13 @@ int64_t NullableColumn::xor_checksum() const {
 
     // The XOR of NullableColumn
     // XOR all the 8-bit integers one by one
-#ifdef __AVX2__
-    __m256i avx2_checksum = _mm256_setzero_si256();
-    size_t step = sizeof(__m256i) / sizeof(uint8_t);
-    while (num >= step) {
-        const __m256i left = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
-        avx2_checksum = _mm256_xor_si256(left, avx2_checksum);
-        src += step;
-        num -= step;
-    }
-    uint8_t* checksum_vec = reinterpret_cast<uint8_t*>(&avx2_checksum);
-    for (size_t i = 0; i < step; ++i) {
-        xor_checksum ^= checksum_vec[i];
-    }
-#endif
-
     for (size_t i = 0; i < num; ++i) {
         xor_checksum ^= src[i];
+        if (!src[i]) {
+            xor_checksum ^= _data_column->xor_checksum(i, i + 1);
+        }
     }
-
-    return (xor_checksum ^ _data_column->xor_checksum());
+    return xor_checksum;
 }
 
 void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
