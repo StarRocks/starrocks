@@ -652,14 +652,8 @@ void UDAFFunction::reset(jobject state) {
     env->CallVoidMethod(_udaf_handle, reset, state);
 }
 
-jobject UDAFFunction::get_values(jobject state, int start, int end) {
-    JNIEnv* env = getJNIEnv();
-    jmethodID get_values = _ctx->get_values->get_method_id();
-    return env->CallObjectMethod(_udaf_handle, get_values, state, start, end);
-}
-
-jobject UDAFFunction::window_update_batch(jobject state, int64_t peer_group_start, int64_t peer_group_end,
-                                          int64_t frame_start, int64_t frame_end, int col_sz, jobject* cols) {
+jobject UDAFFunction::window_update_batch(jobject state, int peer_group_start, int peer_group_end, int frame_start,
+                                          int frame_end, int col_sz, jobject* cols) {
     JNIEnv* env = getJNIEnv();
     jmethodID window_update = _ctx->window_update->get_method_id();
     jvalue jvalues[5 + col_sz];

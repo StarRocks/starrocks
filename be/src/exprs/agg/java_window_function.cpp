@@ -54,8 +54,8 @@ Status window_init_jvm_context(int fid, const std::string& url, const std::strin
     RETURN_IF_ERROR(add_method("reset", udaf_ctx->udaf_class.clazz(), &udaf_ctx->reset));
     RETURN_IF_ERROR(add_method("create", udaf_ctx->udaf_class.clazz(), &udaf_ctx->create));
     RETURN_IF_ERROR(add_method("destroy", udaf_ctx->udaf_class.clazz(), &udaf_ctx->destory));
-    RETURN_IF_ERROR(add_method("getValues", udaf_ctx->udaf_class.clazz(), &udaf_ctx->get_values));
-    RETURN_IF_ERROR(add_method("batchUpdate", udaf_ctx->udaf_class.clazz(), &udaf_ctx->window_update));
+    RETURN_IF_ERROR(add_method("finalize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->finalize));
+    RETURN_IF_ERROR(add_method("windowUpdate", udaf_ctx->udaf_class.clazz(), &udaf_ctx->window_update));
 
     udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle, udaf_ctx);
 
