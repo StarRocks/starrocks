@@ -25,7 +25,9 @@ class UnionPassthroughOperator final : public Operator {
 public:
     struct SlotItem {
         SlotId slot_id;
-        size_t ref_count;
+        // Only one of the dest slots mapping to the same src slot can move
+        // the src column directly, the others must clone the src column.
+        bool moveable;
     };
 
     using SlotMap = std::unordered_map<SlotId, SlotItem>;

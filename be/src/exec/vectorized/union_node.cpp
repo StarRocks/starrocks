@@ -51,18 +51,19 @@ Status UnionNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 void UnionNode::_convert_pass_through_slot_map(const std::map<SlotId, SlotId>& slot_map) {
-    std::map<SlotId, size_t> tmp_map;
-    for (const auto& [key, value] : slot_map) {
-        if (tmp_map.find(value) == tmp_map.end()) {
-            tmp_map[value] = 1;
-        } else {
-            tmp_map[value]++;
+    std::unordered_set<SlotId> visited_src_slots;
+    std::unordered_set<SlotId> moveable_dst_slots;
+    for (const auto& [dst_slot, src_slot] : slot_map) {
+        if (visited_src_slots.find(src_slot) == visited_src_slots.end()) {
+            visited_src_slots.emplace(src_slot);
+            moveable_dst_slots.emplace(dst_slot);
         }
     }
 
     pipeline::UnionPassthroughOperator::SlotMap tuple_slot_map;
-    for (const auto& [key, value] : slot_map) {
-        tuple_slot_map[key] = {value, tmp_map[value]};
+    for (const auto& [dst_slot, src_slot] : slot_map) {
+        bool moveable = moveable_dst_slots.find(dst_slot) != moveable_dst_slots.end();
+        tuple_slot_map[dst_slot] = {src_slot, moveable};
     }
     _pass_through_slot_maps.emplace_back(tuple_slot_map);
 }
@@ -238,9 +239,10 @@ void UnionNode::_move_passthrough_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chun
         for (auto* dest_slot : _tuple_desc->slots()) {
             auto slot_item = _pass_through_slot_maps[_child_idx][dest_slot->id()];
             ColumnPtr& column = src_chunk->get_column_by_slot_id(slot_item.slot_id);
-            // There may be multiple DestSlotId mapped to the same SrcSlotId,
-            // so here we have to decide whether you can MoveColumn according to this situation
-            if (slot_item.ref_count <= 1) {
+            // There may be multiple DestSlotIds mapped to the same SrcSlotId,
+            // so only one of the dest slots mapping to the same src slot can move
+            // the src column directly, the others must clone the src column.
+            if (slot_item.moveable) {
                 _move_column(dest_chunk, column, dest_slot, src_chunk->num_rows());
             } else {
                 _clone_column(dest_chunk, column, dest_slot, src_chunk->num_rows());

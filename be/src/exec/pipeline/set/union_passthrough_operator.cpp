@@ -16,9 +16,10 @@ Status UnionPassthroughOperator::push_chunk(RuntimeState* state, const ChunkPtr&
         for (auto* dst_slot : _dst_slots) {
             auto& src_slot_item = (*_dst2src_slot_map)[dst_slot->id()];
             ColumnPtr& src_column = src_chunk->get_column_by_slot_id(src_slot_item.slot_id);
-            // If there are multiple dest slots mapping to the same src slot id,
-            // we should clone the src column instead of directly moving the src column.
-            if (src_slot_item.ref_count > 1) {
+            // There may be multiple DestSlotIds mapped to the same SrcSlotId,
+            // so only one of the dest slots mapping to the same src slot can move
+            // the src column directly, the others must clone the src column.
+            if (!src_slot_item.moveable) {
                 auto dst_column = vectorized::ColumnHelper::clone_column(dst_slot->type(), dst_slot->is_nullable(),
                                                                          src_column, src_chunk->num_rows());
                 _dst_chunk->append_column(std::move(dst_column), dst_slot->id());
