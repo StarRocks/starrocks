@@ -353,11 +353,11 @@ TEST_F(HdfsScanNodeTest, TestBasic) {
         Status status = hdfs_scan_node->init(*tnode, _runtime_state.get());
         ASSERT_TRUE(status.ok());
 
-        auto scan_ranges = _create_scan_ranges();
-        status = hdfs_scan_node->set_scan_ranges(scan_ranges);
+        status = hdfs_scan_node->prepare(_runtime_state.get());
         ASSERT_TRUE(status.ok());
 
-        status = hdfs_scan_node->prepare(_runtime_state.get());
+        auto scan_ranges = _create_scan_ranges();
+        status = hdfs_scan_node->set_scan_ranges(scan_ranges);
         ASSERT_TRUE(status.ok());
 
         status = hdfs_scan_node->open(_runtime_state.get());
@@ -385,11 +385,11 @@ TEST_F(HdfsScanNodeTest, TestBasic) {
         Status status = hdfs_scan_node->init(*tnode, _runtime_state.get());
         ASSERT_TRUE(status.ok());
 
-        auto scan_ranges = _create_scan_ranges_for_filter_partition();
-        status = hdfs_scan_node->set_scan_ranges(scan_ranges);
+        status = hdfs_scan_node->prepare(_runtime_state.get());
         ASSERT_TRUE(status.ok());
 
-        status = hdfs_scan_node->prepare(_runtime_state.get());
+        auto scan_ranges = _create_scan_ranges_for_filter_partition();
+        status = hdfs_scan_node->set_scan_ranges(scan_ranges);
         ASSERT_TRUE(status.ok());
 
         status = hdfs_scan_node->open(_runtime_state.get());
