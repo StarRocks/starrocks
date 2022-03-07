@@ -71,16 +71,11 @@ set(EXPR_FILES
   vectorized/string_functions.cpp
   vectorized/time_functions.cpp
   vectorized/utility_functions.cpp
+  agg/java_udaf_function.cpp
+  agg/java_window_function.cpp
+  table_function/java_udtf_function.cpp
+  vectorized/java_function_call_expr.cpp
 )
-
-IF (WITH_HDFS)
-    set(EXPR_FILES ${EXPR_FILES}
-      agg/java_udaf_function.cpp
-      agg/java_window_function.cpp
-      table_function/java_udtf_function.cpp
-      vectorized/java_function_call_expr.cpp
-    )
-endif()
 
 add_library(Exprs ${EXPR_FILES})
 

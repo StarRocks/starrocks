@@ -465,12 +465,8 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new vectorized::TableFunctionNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::HDFS_SCAN_NODE:
-#ifdef STARROCKS_WITH_HDFS
         *node = pool->add(new vectorized::HdfsScanNode(pool, tnode, descs));
         return Status::OK();
-#else
-        return Status::InternalError("Don't support HDFS table, you should rebuild StarRocks with WITH_HDFS option ON");
-#endif
     case TPlanNodeType::MYSQL_SCAN_NODE:
         *node = pool->add(new vectorized::MysqlScanNode(pool, tnode, descs));
         return Status::OK();

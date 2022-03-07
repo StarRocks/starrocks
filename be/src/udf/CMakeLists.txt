@@ -30,12 +30,10 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/udf")
 # Build this library twice. Once to be linked into the main StarRocks. This version
 # can have dependencies on our other libs. The second version is shipped as part
 # of the UDF sdk, which can't use other libs.
-IF (WITH_HDFS)
-    set(UDF_FILES
-      java/java_udf.cpp
-      java/java_data_converter.cpp
-    )
-endif()
+set(UDF_FILES
+  java/java_udf.cpp
+  java/java_data_converter.cpp
+)
 
 add_library(Udf udf.cpp udf_ir.cpp java/utils.cpp ${UDF_FILES})
 add_library(StarRocksUdf udf.cpp udf_ir.cpp)
