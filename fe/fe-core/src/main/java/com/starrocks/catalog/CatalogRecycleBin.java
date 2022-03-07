@@ -64,6 +64,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     private Map<Long, RecycleDatabaseInfo> idToDatabase;
     // The first Long type is DdId, the second Long is TableId
     private com.google.common.collect.Table<Long, Long, RecycleTableInfo> idToTableInfo;
+    // The first Long type is DdId, the second String is TableName
     private com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
     private Map<Long, RecyclePartitionInfo> idToPartition;
 
