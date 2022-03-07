@@ -21,7 +21,7 @@ public:
     // Part of that change is looking through the ec2 metadata, which can take a long time.
     // For more details, please refer https://github.com/aws/aws-sdk-cpp/issues/1440
     static Aws::Client::ClientConfiguration s_config;
-    
+
     EnvS3() {}
     ~EnvS3() override = default;
 

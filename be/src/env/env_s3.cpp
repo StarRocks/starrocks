@@ -14,7 +14,6 @@
 #include <aws/s3/model/ListObjectsRequest.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <fmt/core.h>
-#include <stdlib.h>
 #include <time.h>
 
 #include <limits>
