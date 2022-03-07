@@ -25,7 +25,6 @@ public:
 
         _exec_env = ExecEnv::GetInstance();
         auto* engine = StorageEngine::instance();
-        ExecEnv::init(_exec_env, engine->engine_options()->store_paths);
         _exec_env->set_storage_engine(engine);
 
         _create_runtime_state();
@@ -82,6 +81,7 @@ std::vector<TScanRangeParams> HdfsScanNodeTest::_create_scan_ranges() {
     hdfs_scan_range.__set_length(_file_size);
     hdfs_scan_range.__set_partition_id(0);
     hdfs_scan_range.__set_relative_path(_file);
+    hdfs_scan_range.__set_file_format(THdfsFileFormat::PARQUET);
 
     TScanRange scan_range;
     scan_range.__set_hdfs_scan_range(hdfs_scan_range);
@@ -100,6 +100,7 @@ std::vector<TScanRangeParams> HdfsScanNodeTest::_create_scan_ranges_for_filter_p
     hdfs_scan_range.__set_length(_file_size);
     hdfs_scan_range.__set_partition_id(0);
     hdfs_scan_range.__set_relative_path(_file);
+    hdfs_scan_range.__set_file_format(THdfsFileFormat::PARQUET);
 
     TScanRange scan_range;
     scan_range.__set_hdfs_scan_range(hdfs_scan_range);
@@ -114,6 +115,7 @@ std::vector<TScanRangeParams> HdfsScanNodeTest::_create_scan_ranges_for_filter_p
     hdfs_scan_range2.__set_length(_file_2_size);
     hdfs_scan_range2.__set_partition_id(1);
     hdfs_scan_range2.__set_relative_path(_file_2);
+    hdfs_scan_range2.__set_file_format(THdfsFileFormat::PARQUET);
 
     TScanRange scan_range2;
     scan_range2.__set_hdfs_scan_range(hdfs_scan_range2);
@@ -131,7 +133,6 @@ void HdfsScanNodeTest::_create_runtime_state() {
     _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
     TUniqueId id;
     _mem_tracker = std::make_shared<MemTracker>(-1, "olap scanner test");
-    _runtime_state->set_fragment_mem_tracker(_mem_tracker.get());
     _runtime_state->init_mem_trackers(id);
 }
 
@@ -336,7 +337,7 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     TTableDescriptor tdesc;
     tdesc.__set_hdfsTable(t_hdfs_table);
     _table_desc = _pool->add(new HdfsTableDescriptor(tdesc, _pool));
-    _table_desc->create_key_exprs(_pool);
+    _table_desc->create_key_exprs(_pool, _runtime_state->chunk_size());
     tbl->get_tuple_descriptor(0)->set_table_desc(_table_desc);
 
     return tbl;

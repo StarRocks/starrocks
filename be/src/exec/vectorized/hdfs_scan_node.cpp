@@ -34,7 +34,11 @@ namespace starrocks::vectorized {
 class OpenLimitAllocator {
 public:
     OpenLimitAllocator() = default;
-    ~OpenLimitAllocator() = default;
+    ~OpenLimitAllocator() {
+        for (auto& it : _data) {
+            delete it.second;
+        }
+    }
 
     OpenLimitAllocator(const OpenLimitAllocator&) = delete;
     void operator=(const OpenLimitAllocator&) = delete;

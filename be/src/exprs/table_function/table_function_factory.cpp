@@ -89,9 +89,7 @@ const TableFunction* get_table_function(const std::string& name, const std::vect
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         return TableFunctionResolver::instance()->get_table_function(name, arg_type, return_type);
     } else if (binary_type == TFunctionBinaryType::SRJAR) {
-#ifdef STARROCKS_WITH_HDFS
         return getJavaUDTFFunction();
-#endif
     }
     return nullptr;
 }
