@@ -3,8 +3,10 @@
 #pragma once
 
 #include <cstring>
+#include <limits>
 #include <vector>
 
+#include "common/compiler_util.h"
 #include "exprs/agg/java_udaf_function.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
@@ -27,41 +29,37 @@ public:
                                    int64_t frame_end) const override {
         int num_rows = columns[0]->size();
         int num_args = ctx->get_num_args();
+        if (UNLIKELY(frame_start > std::numeric_limits<int32_t>::max() ||
+                     frame_end > std::numeric_limits<int32_t>::max())) {
+            ctx->set_error(fmt::format("too big window: start:{}, end:{}", frame_start, frame_end).c_str());
+        }
 
-        jobject input_cols[num_args];
-        PrimitiveType types[num_rows];
+        std::vector<jobject> args;
         std::vector<DirectByteBuffer> buffers;
         ConvertDirectBufferVistor vistor(buffers);
         auto& helper = JVMFunctionHelper::getInstance();
-
-        for (int i = 0; i < num_args; ++i) {
-            types[i] = ctx->get_arg_type(i)->type;
-            int buffers_idx = buffers.size();
-            columns[i]->accept(&vistor);
-            int buffers_sz = buffers.size() - buffers_idx;
-            input_cols[i] = helper.create_boxed_array(types[i], num_rows, columns[i]->is_nullable(),
-                                                      &buffers[buffers_idx], buffers_sz);
-        }
+        JNIEnv* env = helper.getEnv();
+        JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_args, num_rows, &args);
         ctx->impl()->udaf_ctxs()->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end,
-                                                             frame_start, frame_end, num_args, input_cols);
+                                                             frame_start, frame_end, num_args, args.data());
         // release input cols
+        for (int i = 0; i < num_args; ++i) {
+            env->DeleteLocalRef(args[i]);
+        }
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
-        jobject val = ctx->impl()->udaf_ctxs()->_func->get_values(this->data(state).handle, start, end);
-        // insert values to column
         auto& helper = JVMFunctionHelper::getInstance();
+        jvalue val = ctx->impl()->udaf_ctxs()->_func->finalize(this->data(state).handle);
+        // insert values to column
         JNIEnv* env = helper.getEnv();
-        helper.getEnv()->PushLocalFrame(end - start);
         MethodTypeDescriptor desc = {(PrimitiveType)ctx->get_return_type().type, true};
         int sz = end - start;
         for (int i = 0; i < sz; ++i) {
-            jobject vi = env->GetObjectArrayElement((jobjectArray)val, i);
-            assign_jvalue(desc, dst, start + i, {.l = vi});
+            assign_jvalue(desc, dst, start + i, val);
         }
-        helper.getEnv()->PopLocalFrame(nullptr);
-        env->DeleteLocalRef(val);
+        env->DeleteLocalRef(val.l);
     }
 };
 } // namespace starrocks::vectorized
