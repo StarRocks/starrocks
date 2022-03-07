@@ -148,6 +148,39 @@ echo "******************************"
 echo "    Running StarRocks BE Unittest    "
 echo "******************************"
 
+. ${STARROCKS_HOME}/bin/common.sh
+
+# ====================== configure JAVA/JVM ====================
+# NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table
+# this is only for starting be
+jvm_arch="amd64"
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    jvm_arch="aarch64"
+fi
+
+if [ "$JAVA_HOME" = "" ]; then
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jvm/$jvm_arch/server:$STARROCKS_HOME/lib/jvm/$jvm_arch:$LD_LIBRARY_PATH
+else
+    java_version=$(jdk_version)
+    if [[ $java_version -gt 8 ]]; then
+        export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
+    # JAVA_HOME is jdk
+    elif [[ -d "$JAVA_HOME/jre"  ]]; then
+        export LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/$jvm_arch/server:$JAVA_HOME/jre/lib/$jvm_arch:$LD_LIBRARY_PATH
+    # JAVA_HOME is jre
+    else
+        export LD_LIBRARY_PATH=$JAVA_HOME/lib/$jvm_arch/server:$JAVA_HOME/lib/$jvm_arch:$LD_LIBRARY_PATH
+    fi
+fi
+
+export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+
+# HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
+# put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
+export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
+
+# ===========================================================
+
 export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test/
 
 # prepare util test_data
