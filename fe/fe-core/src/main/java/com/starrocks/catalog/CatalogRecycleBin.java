@@ -299,7 +299,11 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     private synchronized void eraseTableWithSameName(long dbId, String tableName) {
         Map<String, RecycleTableInfo> nameToTableInfoDBLevel = nameToTableInfo.row(dbId);
-        Table table = nameToTableInfoDBLevel.get(tableName).getTable();
+        RecycleTableInfo tableInfo = nameToTableInfoDBLevel.get(tableName);
+        if (tableInfo == null) {
+            return;
+        }
+        Table table = tableInfo.getTable();
 
         if (table.getName().equals(tableName)) {
             if (table.getType() == TableType.OLAP) {
