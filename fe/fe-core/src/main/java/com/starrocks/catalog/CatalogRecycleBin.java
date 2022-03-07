@@ -298,14 +298,15 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     }
 
     private synchronized void eraseTableWithSameName(long dbId, String tableName) {
-        Table table = nameToTableInfo.row(dbId).get(tableName).getTable();
+        Map<String, RecycleTableInfo> nameToTableInfoDBLevel = nameToTableInfo.row(dbId);
+        Table table = nameToTableInfoDBLevel.get(tableName).getTable();
 
         if (table.getName().equals(tableName)) {
             if (table.getType() == TableType.OLAP) {
                 Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
             }
 
-            nameToTableInfo.row(dbId).remove(tableName);
+            nameToTableInfoDBLevel.remove(tableName);
             idToTableInfo.row(dbId).remove(table.getId());
             idToRecycleTime.remove(table.getId());
             LOG.info("erase table[{}-{}], because table with the same name is recycled", table.getId(), tableName);
@@ -325,6 +326,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             }
         }
         idToRecycleTime.remove(tableId);
+        LOG.info("replay erase table[{}] finished", tableId);
     }
 
     private synchronized void erasePartition(long currentTimeMs) {
@@ -456,14 +458,15 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     public synchronized boolean recoverTable(Database db, String tableName) {
         // make sure to get db lock
         long dbId = db.getId();
-        RecycleTableInfo recycleTableInfo = nameToTableInfo.row(dbId).get(tableName);
+        Map<String, RecycleTableInfo> nameToTableInfoDbLevel = nameToTableInfo.row(dbId);
+        RecycleTableInfo recycleTableInfo = nameToTableInfoDbLevel.get(tableName);
         if (recycleTableInfo == null) {
             return false;
         }
 
         Table table = recycleTableInfo.getTable();
         db.createTable(table);
-        nameToTableInfo.row(dbId).remove(tableName);
+        nameToTableInfoDbLevel.remove(tableName);
         idToTableInfo.row(dbId).remove(table.getId());
         idToRecycleTime.remove(table.getId());
 
@@ -477,12 +480,13 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     public synchronized void replayRecoverTable(Database db, long tableId) {
         // make sure to get db write lock
         long dbId = db.getId();
-        RecycleTableInfo tableInfo = idToTableInfo.row(dbId).get(tableId);
+        Map<Long, RecycleTableInfo> idToTableInfoDbLevel = idToTableInfo.row(dbId);
+        RecycleTableInfo tableInfo = idToTableInfoDbLevel.get(tableId);
         Preconditions.checkState(tableInfo.getDbId() == db.getId());
         Table table = tableInfo.getTable();
         db.createTable(table);
         nameToTableInfo.row(dbId).remove(table.getName());
-        idToTableInfo.row(dbId).remove(tableId);
+        idToTableInfoDbLevel.remove(tableId);
         idToRecycleTime.remove(tableInfo.getTable().getId());
         LOG.info("replay recover table[{}-{}] finished", tableId, tableInfo.getTable().getName());
     }
