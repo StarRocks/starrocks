@@ -6,9 +6,9 @@ import java.sql.Date;
 import java.text.SimpleDateFormat;
 
 public class JDBCUtil {
+    private static final SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
     // format Date to 'YYYY-MM-dd'
     static String formatDate(Date date) {
-        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
         return format.format(date);
     }
 }
