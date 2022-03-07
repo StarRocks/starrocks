@@ -1038,7 +1038,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
         auto* data_column = ColumnHelper::as_raw_column<Int64Column>(table_items.build_key_column);
         auto data = data_column->get_data();
         while (probe_index != 0) {
-            if (JoinKeyEqual<int64_t>()((100 + i) * (1ul << 32ul) + i, data[probe_index])) {
+            if ((100 + i) * (1ul << 32ul) + i == data[probe_index]) {
                 found_count++;
             }
             probe_index = table_items.next[probe_index];
@@ -1098,8 +1098,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
         size_t probe_index = probe_state.next[i];
         auto data = table_items.build_slice;
         while (probe_index != 0) {
-            if (JoinKeyEqual<Slice>()(JoinHashMapHelper::get_hash_key(*probe_state.key_columns, i, buffer.data()),
-                                      data[probe_index])) {
+            if (JoinHashMapHelper::get_hash_key(*probe_state.key_columns, i, buffer.data()) == data[probe_index]) {
                 found_count++;
             }
             probe_index = table_items.next[probe_index];
@@ -1164,7 +1163,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
         auto data = table_items.build_slice;
         while (probe_index != 0) {
             auto probe_slice = JoinHashMapHelper::get_hash_key(probe_data_columns, i, buffer.data());
-            if (JoinKeyEqual<Slice>()(probe_slice, data[probe_index])) {
+            if (probe_slice == data[probe_index]) {
                 found_count++;
             }
             probe_index = table_items.next[probe_index];
