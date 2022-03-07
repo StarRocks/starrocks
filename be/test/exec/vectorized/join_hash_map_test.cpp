@@ -550,7 +550,7 @@ void JoinHashMapTest::check_binary_column(const ColumnPtr& column, uint32_t row_
         Slice check_slice;
         check_slice.data = str.data();
         check_slice.size = str.size();
-        ASSERT_TRUE(JoinKeyEqual<Slice>()(check_slice, data[i]));
+        ASSERT_TRUE(check_slice == data[i]);
     }
 }
 
@@ -719,15 +719,6 @@ TEST_F(JoinHashMapTest, JoinKeyHash) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, JoinKeyEqual) {
-    ASSERT_TRUE(JoinKeyEqual<int32_t>()(1, 1));
-    ASSERT_FALSE(JoinKeyEqual<int32_t>()(1, 2));
-    ASSERT_TRUE(JoinKeyEqual<Slice>()(Slice{"abcd", 4}, Slice{"abcd", 4}));
-    ASSERT_FALSE(JoinKeyEqual<Slice>()(Slice{"abcd", 4}, Slice{"efgh", 4}));
-    ASSERT_FALSE(JoinKeyEqual<Slice>()(Slice{"abcd", 4}, Slice{"abc", 3}));
-}
-
-// NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, CalcBucketNum) {
     uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num(1, 4);
     ASSERT_EQ(2, bucket_num);
@@ -883,7 +874,7 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
         size_t probe_index = probe_state.next[i];
         auto data = ColumnHelper::as_raw_column<Int32Column>(table_items.key_columns[0])->get_data();
         while (probe_index != 0) {
-            if (JoinKeyEqual<int32_t>()(i, data[probe_index])) {
+            if (i == data[probe_index]) {
                 found_count++;
             }
             probe_index = table_items.next[probe_index];
@@ -926,7 +917,7 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
         auto data_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0])->data_column();
         auto data = ColumnHelper::as_raw_column<Int32Column>(data_column)->get_data();
         while (probe_index != 0) {
-            if (JoinKeyEqual<int32_t>()(i, data[probe_index])) {
+            if (i == data[probe_index]) {
                 found_count++;
             }
             probe_index = table_items.next[probe_index];
@@ -984,7 +975,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
         auto* data_column = ColumnHelper::as_raw_column<Int64Column>(table_items.build_key_column);
         auto data = data_column->get_data();
         while (probe_index != 0) {
-            if (JoinKeyEqual<int64_t>()((100 + i) * (1ul << 32u) + i, data[probe_index])) {
+            if ((100 + i) * (1ul << 32u) + i == data[probe_index]) {
                 found_count++;
             }
             probe_index = table_items.next[probe_index];
@@ -1038,7 +1029,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
         auto* data_column = ColumnHelper::as_raw_column<Int64Column>(table_items.build_key_column);
         auto data = data_column->get_data();
         while (probe_index != 0) {
-            if (JoinKeyEqual<int64_t>()((100 + i) * (1ul << 32ul) + i, data[probe_index])) {
+            if ((100 + i) * (1ul << 32ul) + i == data[probe_index]) {
                 found_count++;
             }
             probe_index = table_items.next[probe_index];
@@ -1098,8 +1089,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
         size_t probe_index = probe_state.next[i];
         auto data = table_items.build_slice;
         while (probe_index != 0) {
-            if (JoinKeyEqual<Slice>()(JoinHashMapHelper::get_hash_key(*probe_state.key_columns, i, buffer.data()),
-                                      data[probe_index])) {
+            if (JoinHashMapHelper::get_hash_key(*probe_state.key_columns, i, buffer.data()) == data[probe_index]) {
                 found_count++;
             }
             probe_index = table_items.next[probe_index];
@@ -1164,7 +1154,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
         auto data = table_items.build_slice;
         while (probe_index != 0) {
             auto probe_slice = JoinHashMapHelper::get_hash_key(probe_data_columns, i, buffer.data());
-            if (JoinKeyEqual<Slice>()(probe_slice, data[probe_index])) {
+            if (probe_slice == data[probe_index]) {
                 found_count++;
             }
             probe_index = table_items.next[probe_index];
