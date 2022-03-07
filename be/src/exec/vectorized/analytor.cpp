@@ -262,7 +262,6 @@ Status Analytor::open(RuntimeState* state) {
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
 
     auto create_fn_states = [this]() {
-#ifdef STARROCKS_WITH_HDFS
         for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
             if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                 const auto& fn = _fns[i];
@@ -271,7 +270,6 @@ Status Analytor::open(RuntimeState* state) {
                 RETURN_IF_ERROR(st);
             }
         }
-#endif
         vectorized::AggDataPtr agg_states =
                 _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
         _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
