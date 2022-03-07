@@ -45,7 +45,7 @@ void ConstColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     DCHECK(false) << "Const column shouldn't call crc32 hash";
 }
 
-int64_t ConstColumn::xor_checksum() const {
+int64_t ConstColumn::xor_checksum(uint32_t from, uint32_t to) const {
     DCHECK(false) << "Const column shouldn't call xor_checksum";
     return 0;
 }

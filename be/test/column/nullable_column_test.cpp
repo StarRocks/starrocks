@@ -256,7 +256,7 @@ PARALLEL_TEST(NullableColumnTest, test_xor_checksum) {
         c0->append_datum((int32_t)i);
     }
 
-    int64_t checksum = c0->xor_checksum();
+    int64_t checksum = c0->xor_checksum(0, 1001);
     int64_t expected_checksum = 1001;
 
     ASSERT_EQ(checksum, expected_checksum);

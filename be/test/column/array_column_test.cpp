@@ -833,7 +833,7 @@ PARALLEL_TEST(ArrayColumnTest, test_xor_checksum) {
     elements->append(8);
     offsets->append(8);
 
-    int64_t checksum = c0->xor_checksum();
+    int64_t checksum = c0->xor_checksum(0, 2);
     int64_t expected_checksum = 14;
 
     ASSERT_EQ(checksum, expected_checksum);
