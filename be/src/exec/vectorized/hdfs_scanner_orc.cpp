@@ -49,13 +49,13 @@ public:
 
         Status status = _file->read_at_fully(offset, buf, length);
         if (!status.ok()) {
-            auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
+            auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
             throw orc::ParseError(msg);
         }
         _stats->bytes_read += length;
     }
 
-    const std::string& getName() const override { return _file->file_name(); }
+    const std::string& getName() const override { return _file->filename(); }
 
 private:
     RandomAccessFile* _file;

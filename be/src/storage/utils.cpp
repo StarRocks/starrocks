@@ -212,7 +212,7 @@ Status read_write_test_file(const string& test_file_path) {
                 fmt::format("Error to read file: {}, error:{} ", test_file_path, std::strerror(Errno::no())));
     }
     if (memcmp(write_buff.get(), read_buff.get(), TEST_FILE_BUF_SIZE) != 0) {
-        LOG(WARNING) << "the test file write_buf and read_buf not equal, [file_name = " << test_file_path << "]";
+        LOG(WARNING) << "the test file write_buf and read_buf not equal, [filename = " << test_file_path << "]";
         return Status::InternalError("test file write_buf and read_buf not equal");
     }
     st = file->close();
