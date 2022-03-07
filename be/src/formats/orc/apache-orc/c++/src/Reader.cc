@@ -39,6 +39,10 @@
 #include "wrap/coded-stream-wrapper.h"
 
 namespace orc {
+// ORC files writen by these versions of cpp writers have inconsistent bloom filter
+// hashing. Bloom filters of them should not be used.
+static const char* BAD_CPP_BLOOM_FILTER_VERSIONS[] = {"1.6.0", "1.6.1", "1.6.2", "1.6.3",  "1.6.4",  "1.6.5", "1.6.6",
+                                                      "1.6.7", "1.6.8", "1.6.9", "1.6.10", "1.6.11", "1.7.0"};
 
 const WriterVersionImpl& WriterVersionImpl::VERSION_HIVE_8732() {
     static const WriterVersionImpl version(WriterVersion_HIVE_8732);
@@ -89,16 +93,30 @@ void ColumnSelector::selectChildren(std::vector<bool>& selectedColumns, const Ty
 }
 
 /**
-   * Recurse over a type tree and selects the parents of every selected type.
+   * Recurses over a type tree and selects the parents of every selected type.
    * @return true if any child was selected.
    */
 bool ColumnSelector::selectParents(std::vector<bool>& selectedColumns, const Type& type) {
     size_t id = static_cast<size_t>(type.getColumnId());
     bool result = selectedColumns[id];
+    uint64_t numSubtypeSelected = 0;
     for (uint64_t c = 0; c < type.getSubtypeCount(); ++c) {
-        result |= selectParents(selectedColumns, *type.getSubtype(c));
+        if (selectParents(selectedColumns, *type.getSubtype(c))) {
+            result = true;
+            numSubtypeSelected++;
+        }
     }
     selectedColumns[id] = result;
+
+    if (type.getKind() == TypeKind::UNION && selectedColumns[id]) {
+        if (0 < numSubtypeSelected && numSubtypeSelected < type.getSubtypeCount()) {
+            // Subtypes of UNION should be fully selected or not selected at all.
+            // Override partial subtype selections with full selections.
+            for (uint64_t c = 0; c < type.getSubtypeCount(); ++c) {
+                selectChildren(selectedColumns, *type.getSubtype(c));
+            }
+        }
+    }
     return result;
 }
 
@@ -243,6 +261,34 @@ RowReaderImpl::RowReaderImpl(const std::shared_ptr<FileContents>& _contents, con
         sargsApplier.reset(new SargsApplier(*contents->schema, sargs.get(), opts.getRowReaderFilter().get(),
                                             footer->rowindexstride(), getWriterVersionImpl(_contents.get())));
     }
+
+    skipBloomFilters = hasBadBloomFilters();
+}
+
+// Check if the file has inconsistent bloom filters.
+bool RowReaderImpl::hasBadBloomFilters() {
+    // Only C++ writer in old releases could have bad bloom filters.
+    if (footer->writer() != ORC_CPP_WRITER) return false;
+    // 'softwareVersion' is added in 1.5.13, 1.6.11, and 1.7.0.
+    // 1.6.x releases before 1.6.11 won't have it. On the other side, the C++ writer
+    // supports writing bloom filters since 1.6.0. So files written by the C++ writer
+    // and with 'softwareVersion' unset would have bad bloom filters.
+    if (!footer->has_softwareversion()) return true;
+
+    const std::string& fullVersion = footer->softwareversion();
+    std::string version;
+    // Deal with snapshot versions, e.g. 1.6.12-SNAPSHOT.
+    if (fullVersion.find('-') != std::string::npos) {
+        version = fullVersion.substr(0, fullVersion.find('-'));
+    } else {
+        version = fullVersion;
+    }
+    for (const char* v : BAD_CPP_BLOOM_FILTER_VERSIONS) {
+        if (version == v) {
+            return true;
+        }
+    }
+    return false;
 }
 
 CompressionKind RowReaderImpl::getCompression() const {
@@ -379,7 +425,7 @@ void RowReaderImpl::loadStripeIndex() {
                     throw ParseError("Failed to parse the row index");
                 }
                 rowIndexes[colId] = rowIndex;
-            } else { // Stream_Kind_BLOOM_FILTER_UTF8
+            } else if (!skipBloomFilters) { // Stream_Kind_BLOOM_FILTER_UTF8
                 proto::BloomFilterIndex pbBFIndex;
                 if (!pbBFIndex.ParseFromZeroCopyStream(inStream.get())) {
                     throw ParseError("Failed to parse bloom filter index");
@@ -436,7 +482,6 @@ bool RowReaderImpl::getUseWriterTimezone() const {
 DataBuffer<char>* RowReaderImpl::getSharedBuffer() const {
     return &sharedBuffer;
 }
-
 proto::StripeFooter getStripeFooter(const proto::StripeInformation& info, const FileContents& contents) {
     uint64_t stripeFooterStart = info.offset() + info.indexlength() + info.datalength();
     uint64_t stripeFooterLength = info.footerlength();
@@ -553,6 +598,15 @@ uint32_t ReaderImpl::getWriterIdValue() const {
     } else {
         return WriterId::ORC_JAVA_WRITER;
     }
+}
+
+std::string ReaderImpl::getSoftwareVersion() const {
+    std::ostringstream buffer;
+    buffer << writerIdToString(getWriterIdValue());
+    if (footer->has_softwareversion()) {
+        buffer << " " << footer->softwareversion();
+    }
+    return buffer.str();
 }
 
 WriterVersion ReaderImpl::getWriterVersion() const {

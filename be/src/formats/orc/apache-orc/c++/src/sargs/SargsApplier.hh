@@ -82,6 +82,8 @@ public:
 
 private:
     friend class TestSargsApplier_findColumnTest_Test;
+    friend class TestSargsApplier_findArrayColumnTest_Test;
+    friend class TestSargsApplier_findMapColumnTest_Test;
     static uint64_t findColumn(const Type& type, const std::string& colName);
 
 private:

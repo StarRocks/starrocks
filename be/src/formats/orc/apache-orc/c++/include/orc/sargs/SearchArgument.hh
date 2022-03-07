@@ -123,6 +123,15 @@ public:
     virtual SearchArgumentBuilder& lessThan(const std::string& column, PredicateDataType type, Literal literal) = 0;
 
     /**
+     * Add a less than leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literal the literal
+     * @return this
+     */
+    virtual SearchArgumentBuilder& lessThan(uint64_t columnId, PredicateDataType type, Literal literal) = 0;
+
+    /**
      * Add a less than equals leaf to the current item on the stack.
      * @param column the name of the column
      * @param type the type of the expression
@@ -133,6 +142,15 @@ public:
                                                   Literal literal) = 0;
 
     /**
+     * Add a less than equals leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literal the literal
+     * @return this
+     */
+    virtual SearchArgumentBuilder& lessThanEquals(uint64_t columnId, PredicateDataType type, Literal literal) = 0;
+
+    /**
      * Add an equals leaf to the current item on the stack.
      * @param column the name of the column
      * @param type the type of the expression
@@ -140,6 +158,15 @@ public:
      * @return this
      */
     virtual SearchArgumentBuilder& equals(const std::string& column, PredicateDataType type, Literal literal) = 0;
+
+    /**
+     * Add an equals leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literal the literal
+     * @return this
+     */
+    virtual SearchArgumentBuilder& equals(uint64_t columnId, PredicateDataType type, Literal literal) = 0;
 
     /**
      * Add a null safe equals leaf to the current item on the stack.
@@ -152,6 +179,15 @@ public:
                                                   Literal literal) = 0;
 
     /**
+     * Add a null safe equals leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literal the literal
+     * @return this
+     */
+    virtual SearchArgumentBuilder& nullSafeEquals(uint64_t columnId, PredicateDataType type, Literal literal) = 0;
+
+    /**
      * Add an in leaf to the current item on the stack.
      * @param column the name of the column
      * @param type the type of the expression
@@ -160,7 +196,35 @@ public:
      */
     virtual SearchArgumentBuilder& in(const std::string& column, PredicateDataType type,
                                       const std::initializer_list<Literal>& literals) = 0;
+
+    /**
+     * Add an in leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literals the literals
+     * @return this
+     */
+    virtual SearchArgumentBuilder& in(uint64_t columnId, PredicateDataType type,
+                                      const std::initializer_list<Literal>& literals) = 0;
+
+    /**
+     * Add an in leaf to the current item on the stack.
+     * @param column the name of the column
+     * @param type the type of the expression
+     * @param literals the literals
+     * @return this
+     */
     virtual SearchArgumentBuilder& in(const std::string& column, PredicateDataType type,
+                                      const std::vector<Literal>& literals) = 0;
+
+    /**
+     * Add an in leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literals the literals
+     * @return this
+     */
+    virtual SearchArgumentBuilder& in(uint64_t columnId, PredicateDataType type,
                                       const std::vector<Literal>& literals) = 0;
 
     /**
@@ -172,6 +236,14 @@ public:
     virtual SearchArgumentBuilder& isNull(const std::string& column, PredicateDataType type) = 0;
 
     /**
+     * Add an is null leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @return this
+     */
+    virtual SearchArgumentBuilder& isNull(uint64_t columnId, PredicateDataType type) = 0;
+
+    /**
      * Add a between leaf to the current item on the stack.
      * @param column the name of the column
      * @param type the type of the expression
@@ -181,6 +253,16 @@ public:
      */
     virtual SearchArgumentBuilder& between(const std::string& column, PredicateDataType type, Literal lower,
                                            Literal upper) = 0;
+
+    /**
+     * Add a between leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param lower the literal
+     * @param upper the literal
+     * @return this
+     */
+    virtual SearchArgumentBuilder& between(uint64_t columnId, PredicateDataType type, Literal lower, Literal upper) = 0;
 
     /**
      * Add a truth value to the expression.

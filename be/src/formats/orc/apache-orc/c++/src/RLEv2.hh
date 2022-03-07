@@ -125,6 +125,7 @@ private:
     int64_t* adjDeltas;
 
     uint32_t getOpCode(EncodingType encoding);
+    int64_t* prepareForDirectOrPatchedBase(EncodingOption& option);
     void determineEncoding(EncodingOption& option);
     void computeZigZagLiterals(EncodingOption& option);
     void preparePatchedBlob(EncodingOption& option);
@@ -336,7 +337,7 @@ private:
     int64_t prevValue;                 // Used by DELTA
     uint32_t bitSize;                  // Used by DIRECT, PATCHED_BASE and DELTA
     uint32_t bitsLeft;                 // Used by anything that uses readLongs
-    uint8_t curByte;                   // Used by anything that uses readLongs
+    uint32_t curByte;                  // Used by anything that uses readLongs
     uint32_t patchBitSize;             // Used by PATCHED_BASE
     uint64_t unpackedIdx;              // Used by PATCHED_BASE
     uint64_t patchIdx;                 // Used by PATCHED_BASE

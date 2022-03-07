@@ -371,6 +371,7 @@ void WriterImpl::init() {
     fileFooter.set_numberofrows(0);
     fileFooter.set_rowindexstride(static_cast<uint32_t>(options.getRowIndexStride()));
     fileFooter.set_writer(writerId);
+    fileFooter.set_softwareversion(ORC_VERSION);
 
     uint32_t index = 0;
     buildFooterType(type, fileFooter, index);

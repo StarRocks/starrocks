@@ -116,13 +116,31 @@ public:
     SearchArgumentBuilder& lessThan(const std::string& column, PredicateDataType type, Literal literal) override;
 
     /**
+     * Add a less than leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literal the literal
+     * @return this
+     */
+    SearchArgumentBuilder& lessThan(uint64_t columnId, PredicateDataType type, Literal literal) override;
+
+    /**
      * Add a less than equals leaf to the current item on the stack.
-     * @param column the name of the column
+     * @param column the field name of the column
      * @param type the type of the expression
      * @param literal the literal
      * @return this
      */
     SearchArgumentBuilder& lessThanEquals(const std::string& column, PredicateDataType type, Literal literal) override;
+
+    /**
+     * Add a less than equals leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literal the literal
+     * @return this
+     */
+    SearchArgumentBuilder& lessThanEquals(uint64_t columnId, PredicateDataType type, Literal literal) override;
 
     /**
      * Add an equals leaf to the current item on the stack.
@@ -134,6 +152,15 @@ public:
     SearchArgumentBuilder& equals(const std::string& column, PredicateDataType type, Literal literal) override;
 
     /**
+     * Add an equals leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literal the literal
+     * @return this
+     */
+    SearchArgumentBuilder& equals(uint64_t columnId, PredicateDataType type, Literal literal) override;
+
+    /**
      * Add a null safe equals leaf to the current item on the stack.
      * @param column the name of the column
      * @param type the type of the expression
@@ -141,6 +168,15 @@ public:
      * @return this
      */
     SearchArgumentBuilder& nullSafeEquals(const std::string& column, PredicateDataType type, Literal literal) override;
+
+    /**
+     * Add a null safe equals leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literal the literal
+     * @return this
+     */
+    SearchArgumentBuilder& nullSafeEquals(uint64_t columnId, PredicateDataType type, Literal literal) override;
 
     /**
      * Add an in leaf to the current item on the stack.
@@ -151,8 +187,36 @@ public:
      */
     SearchArgumentBuilder& in(const std::string& column, PredicateDataType type,
                               const std::initializer_list<Literal>& literals) override;
+
+    /**
+     * Add an in leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literals the literals
+     * @return this
+     */
+    SearchArgumentBuilder& in(uint64_t columnId, PredicateDataType type,
+                              const std::initializer_list<Literal>& literals) override;
+
+    /**
+     * Add an in leaf to the current item on the stack.
+     * @param column the name of the column
+     * @param type the type of the expression
+     * @param literals the literals
+     * @return this
+     */
     SearchArgumentBuilder& in(const std::string& column, PredicateDataType type,
                               const std::vector<Literal>& literals) override;
+
+    /**
+     * Add an in leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literals the literals
+     * @return this
+     */
+    SearchArgumentBuilder& in(uint64_t columnId, PredicateDataType type, const std::vector<Literal>& literals) override;
+
     /**
      * Add an is null leaf to the current item on the stack.
      * @param column the name of the column
@@ -162,8 +226,16 @@ public:
     SearchArgumentBuilder& isNull(const std::string& column, PredicateDataType type) override;
 
     /**
+     * Add an is null leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @return this
+     */
+    SearchArgumentBuilder& isNull(uint64_t columnId, PredicateDataType type) override;
+
+    /**
      * Add a between leaf to the current item on the stack.
-     * @param column the name of the column
+     * @param column the field name of the column
      * @param type the type of the expression
      * @param lower the literal
      * @param upper the literal
@@ -171,6 +243,16 @@ public:
      */
     SearchArgumentBuilder& between(const std::string& column, PredicateDataType type, Literal lower,
                                    Literal upper) override;
+
+    /**
+     * Add a between leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param lower the literal
+     * @param upper the literal
+     * @return this
+     */
+    SearchArgumentBuilder& between(uint64_t columnId, PredicateDataType type, Literal lower, Literal upper) override;
 
     /**
      * Add a truth value to the expression.
@@ -189,8 +271,22 @@ public:
 private:
     SearchArgumentBuilder& start(ExpressionTree::Operator op);
     size_t addLeaf(const PredicateLeaf& leaf);
-    SearchArgumentBuilder& compareOperator(PredicateLeaf::Operator op, const std::string& column,
-                                           PredicateDataType type, const Literal& literal);
+
+    static bool isInvalidColumn(const std::string& column);
+    static bool isInvalidColumn(uint64_t columnId);
+
+    template <typename T>
+    SearchArgumentBuilder& compareOperator(PredicateLeaf::Operator op, T column, PredicateDataType type,
+                                           const Literal& literal);
+
+    template <typename T, typename CONTAINER>
+    SearchArgumentBuilder& addChildForIn(T column, PredicateDataType type, const CONTAINER& literals);
+
+    template <typename T>
+    SearchArgumentBuilder& addChildForIsNull(T column, PredicateDataType type);
+
+    template <typename T>
+    SearchArgumentBuilder& addChildForBetween(T column, PredicateDataType type, Literal lower, Literal upper);
 
 public:
     static TreeNode pushDownNot(TreeNode root);
