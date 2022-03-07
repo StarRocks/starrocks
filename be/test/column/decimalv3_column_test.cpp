@@ -82,7 +82,7 @@ TEST(DecimalV3ColumnTest, test_crc32_hash_decimal64p15s6) {
 TEST(DecimalV3ColumnTest, test_xor_checksum_decimal128p27s10) {
     constexpr auto num_rows = 101;
     auto col0 = create_decimal_column<int128_t>(27, 10, num_rows, "18446744073709551616.1");
-    int64_t checksum = col0->xor_checksum();
+    int64_t checksum = col0->xor_checksum(0, 101);
     int64_t expected_checksum = 9995422848;
     ASSERT_EQ(checksum, expected_checksum);
 }

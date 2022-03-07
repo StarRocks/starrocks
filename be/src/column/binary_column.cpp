@@ -441,15 +441,14 @@ void BinaryColumn::crc32_hash(uint32_t* hashes, uint32_t from, uint32_t to) cons
     }
 }
 
-int64_t BinaryColumn::xor_checksum() const {
+int64_t BinaryColumn::xor_checksum(uint32_t from, uint32_t to) const {
     // The XOR of BinaryColumn
     // For one string, treat it as a number of 64-bit integers and 8-bit integers.
     // XOR all of the integers to get a checksum for one string.
     // XOR all of the checksums to get xor_checksum.
     int64_t xor_checksum = 0;
-    size_t size = _offsets.size() - 1;
 
-    for (size_t i = 0; i < size; ++i) {
+    for (size_t i = from; i < to; ++i) {
         size_t num = _offsets[i + 1] - _offsets[i];
         const uint8_t* src = reinterpret_cast<const uint8_t*>(_bytes.data() + _offsets[i]);
 
