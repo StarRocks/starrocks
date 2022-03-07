@@ -145,6 +145,32 @@ bool FunctionContextImpl::check_local_allocations_empty() {
     return false;
 }
 
+void FunctionContextImpl::set_error(const char* error_msg) {
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    if (_error_msg.empty()) {
+        _error_msg = error_msg;
+        std::stringstream ss;
+        ss << "UDF ERROR: " << error_msg;
+        if (_state != nullptr) {
+            _state->set_process_status(ss.str());
+        }
+    }
+}
+
+bool FunctionContextImpl::has_error() {
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    return !_error_msg.empty();
+}
+
+const char* FunctionContextImpl::error_msg() {
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    if (!_error_msg.empty()) {
+        return _error_msg.c_str();
+    } else {
+        return nullptr;
+    }
+}
+
 starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
         RuntimeState* state, MemPool* pool, const starrocks_udf::FunctionContext::TypeDesc& return_type,
         const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size, bool debug) {
@@ -246,7 +272,7 @@ FunctionContext::UniqueId FunctionContext::query_id() const {
 }
 
 bool FunctionContext::has_error() const {
-    return !_impl->_error_msg.empty();
+    return _impl->has_error();
 }
 
 const char* FunctionContext::error_msg() const {
@@ -322,19 +348,7 @@ void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
 }
 
 void FunctionContext::set_error(const char* error_msg) {
-    if (_impl->_error_msg.empty()) {
-        _impl->_error_msg = error_msg;
-        std::stringstream ss;
-        ss << "UDF ERROR: " << error_msg;
-
-        if (_impl->_state != nullptr) {
-            _impl->_state->set_process_status(ss.str());
-        }
-    }
-}
-
-void FunctionContext::clear_error_msg() {
-    _impl->_error_msg.clear();
+    _impl->set_error(error_msg);
 }
 
 bool FunctionContext::add_warning(const char* warning_msg) {
