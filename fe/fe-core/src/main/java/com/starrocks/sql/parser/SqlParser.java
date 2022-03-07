@@ -29,10 +29,11 @@ public class SqlParser {
                 StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
                 CommonTokenStream tokenStream = new CommonTokenStream(lexer);
                 StarRocksParser parser = new StarRocksParser(tokenStream);
+                StarRocksParser.sqlMode = sqlMode;
                 parser.removeErrorListeners();
                 parser.addErrorListener(new ErrorHandler());
                 StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-                statements.add((StatementBase) new AstBuilder(sqlMode)
+                statements.add((StatementBase) new AstBuilder()
                         .visitSingleStatement(sqlStatements.singleStatement(0)));
             } catch (ParsingException parsingException) {
                 StatementBase statement = parseWithOldParser(sql, sqlMode);
