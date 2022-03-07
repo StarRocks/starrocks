@@ -12,12 +12,12 @@
 
 namespace starrocks::vectorized {
 
-Status SerializedJoinBuildFunc::prepare(RuntimeState* state, JoinHashTableItems* table_items,
-                                        HashTableProbeState* probe_state) {
+void SerializedJoinBuildFunc::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
+    table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
+    table_items->first.resize(table_items->bucket_size, 0);
+    table_items->next.resize(table_items->row_count + 1, 0);
     table_items->build_slice.resize(table_items->row_count + 1);
-    probe_state->buckets.resize(state->chunk_size());
-    probe_state->is_nulls.resize(state->chunk_size());
-    return Status::OK();
+    table_items->build_pool = std::make_unique<MemPool>();
 }
 
 Status SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
@@ -118,6 +118,8 @@ void SerializedJoinBuildFunc::_build_nullable_columns(JoinHashTableItems* table_
 }
 
 Status SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state) {
+    probe_state->probe_pool->clear();
+
     // prepare columns
     Columns data_columns;
     NullColumns null_columns;
@@ -246,11 +248,8 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items = std::make_shared<JoinHashTableItems>();
     _probe_state = std::make_unique<HashTableProbeState>();
 
-    _table_items->row_count = 0;
-    _table_items->bucket_size = 0;
     _table_items->need_create_tuple_columns = _need_create_tuple_columns;
     _table_items->build_chunk = std::make_shared<Chunk>();
-    _table_items->build_pool = std::make_unique<MemPool>();
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
     _table_items->row_desc = param.row_desc;
@@ -269,7 +268,6 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->output_build_column_timer = param.output_build_column_timer;
     _table_items->join_keys = param.join_keys;
 
-    _probe_state->probe_pool = std::make_unique<MemPool>();
     _probe_state->search_ht_timer = param.search_ht_timer;
     _probe_state->output_probe_column_timer = param.output_probe_column_timer;
     _probe_state->output_tuple_column_timer = param.output_tuple_column_timer;
@@ -331,16 +329,6 @@ void JoinHashTable::create(const HashTableParam& param) {
 
 Status JoinHashTable::build(RuntimeState* state) {
     _hash_map_type = _choose_join_hash_map();
-    _table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(_table_items->row_count + 1);
-    _table_items->first.resize(_table_items->bucket_size, 0);
-    _table_items->next.resize(_table_items->row_count + 1, 0);
-    if (_table_items->join_type == TJoinOp::RIGHT_OUTER_JOIN || _table_items->join_type == TJoinOp::FULL_OUTER_JOIN ||
-        _table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN) {
-        _probe_state->build_match_index.resize(_table_items->row_count + 1, 0);
-        _probe_state->build_match_index[0] = 1;
-    }
-
-    JoinHashMapHelper::prepare_map_index(_probe_state.get(), state->chunk_size());
 
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
@@ -348,6 +336,8 @@ Status JoinHashTable::build(RuntimeState* state) {
 #define M(NAME)                                                                                                       \
     case JoinHashMapType::NAME:                                                                                       \
         _##NAME = std::make_unique<typename decltype(_##NAME)::element_type>(_table_items.get(), _probe_state.get()); \
+        _##NAME->build_prepare(state);                                                                                \
+        _##NAME->probe_prepare(state);                                                                                \
         RETURN_IF_ERROR(_##NAME->build(state));                                                                       \
         break;
         APPLY_FOR_JOIN_VARIANTS(M)
