@@ -6,6 +6,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -67,7 +68,7 @@ public class AnalyzeSingleTest {
 
         analyzeSuccess("select v1 from t0 temporary partition(t1,t2)");
         analyzeFail("SELECT v1,v2,v3 FROM t0 INTO OUTFILE \"hdfs://path/to/result_\""
-                        + "FORMAT AS PARQUET PROPERTIES" +
+                + "FORMAT AS PARQUET PROPERTIES" +
                 "(\"broker.name\" = \"my_broker\"," +
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");", "Only support CSV format");
@@ -418,12 +419,29 @@ public class AnalyzeSingleTest {
         Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
         analyzer.analyze(statementBase);
         Assert.assertEquals("SELECT (TRUE) OR (FALSE) FROM `default_cluster:test`.`t0`"
-                ,AST2SQL.toString(statementBase));
+                , AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
         statementBase = com.starrocks.sql.parser.SqlParser.parse("select 'a' || 'b' from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         analyzer.analyze(statementBase);
-        Assert.assertEquals("SELECT concat('a', 'b') FROM `default_cluster:test`.`t0`"
-                ,AST2SQL.toString(statementBase));    }
+        Assert.assertEquals("SELECT concat('a', 'b') FROM `default_cluster:test`.`t0`",
+                AST2SQL.toString(statementBase));
+
+        statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        analyzer.analyze(statementBase);
+        Assert.assertEquals("SELECT * FROM `default_cluster:test`.`tall` WHERE ta LIKE concat(concat('h', 'a', 'i'), '%')",
+                AST2SQL.toString(statementBase));
+
+        connectContext.getSessionVariable().setSqlMode(0);
+        statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")|| true",
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        analyzer.analyze(statementBase);
+        Assert.assertEquals("SELECT * FROM `default_cluster:test`.`tall` WHERE (ta LIKE concat('h', 'a', 'i')) OR (TRUE)",
+                AST2SQL.toString(statementBase));
+
+        analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
+                "LIKE concat('h', 'a', 'i')) OR ('%')' part of predicate ''%'' should return type 'BOOLEAN'");
+    }
 }
