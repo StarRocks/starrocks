@@ -20,9 +20,9 @@ Status CSVReader::next_record(Record* record) {
     }
     size_t l = d - _buff.position();
     *record = Record(_buff.position(), l);
-    _buff.skip(l + 1);
+    _buff.skip(l + _record_delimiter_length);
     //               ^^ skip record delimiter.
-    _parsed_bytes += l + 1;
+    _parsed_bytes += l + _record_delimiter_length;
     return Status::OK();
 }
 
@@ -46,7 +46,7 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
     const char* ptr = record.data;
     const size_t size = record.size;
 
-    if (_field_delimiter.size() == 1) {
+    if (_field_delimiter_length == 1) {
         for (size_t i = 0; i < size; ++i, ++ptr) {
             if (*ptr == _field_delimiter[0]) {
                 fields->emplace_back(value, ptr - value);
@@ -54,14 +54,14 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
             }
         }
     } else {
-        const auto fd_size = _field_delimiter.size();
         const auto* const base = ptr;
 
         do {
-            ptr = static_cast<char*>(memmem(value, size - (value - base), _field_delimiter.data(), fd_size));
+            ptr = static_cast<char*>(
+                    memmem(value, size - (value - base), _field_delimiter.data(), _field_delimiter_length));
             if (ptr != nullptr) {
                 fields->emplace_back(value, ptr - value);
-                value = ptr + fd_size;
+                value = ptr + _field_delimiter_length;
             }
         } while (ptr != nullptr);
 

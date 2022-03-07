@@ -176,6 +176,8 @@ struct TBrokerScanRangeParams {
     10: optional bool strict_mode
     // If multi_column_separator is set, column_separator becomes ignore.
     11: optional string multi_column_separator;
+    // If multi_row_delimiter is set, row_delimiter will ignore.
+    12: optional string multi_row_delimiter;
 }
 
 // Broker scan range

@@ -34,6 +34,10 @@ public:
     // character is found.
     char* find(char c, size_t pos = 0) { return (char*)memchr(position() + pos, c, available() - pos); }
 
+    char* find(const string& str, size_t pos = 0) {
+        return (char*)memmem(position() + pos, available() - pos, str.c_str(), str.size());
+    }
+
     void skip(size_t n) { _position += n; }
 
     // Compacts this buffer.
@@ -67,9 +71,12 @@ public:
     using Field = Slice;
     using Fields = std::vector<Field>;
 
-    CSVReader(char record_delimiter, string field_delimiter)
-            : _record_delimiter(record_delimiter),
+    CSVReader(string record_delimiter, string field_delimiter, size_t _record_delimiter_length,
+              size_t _field_delimiter_length)
+            : _record_delimiter(std::move(record_delimiter)),
               _field_delimiter(std::move(field_delimiter)),
+              _record_delimiter_length(_record_delimiter_length),
+              _field_delimiter_length(_field_delimiter_length),
               _storage(kMinBufferSize),
               _buff(_storage.data(), _storage.size()) {}
 
@@ -82,9 +89,10 @@ public:
     void split_record(const Record& record, Fields* fields) const;
 
 protected:
-    // TODO: support string
-    char _record_delimiter;
+    string _record_delimiter;
     string _field_delimiter;
+    size_t _record_delimiter_length;
+    size_t _field_delimiter_length;
     raw::RawVector<char> _storage;
     CSVBuffer _buff;
 

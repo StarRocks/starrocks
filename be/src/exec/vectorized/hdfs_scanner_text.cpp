@@ -12,9 +12,10 @@ namespace starrocks::vectorized {
 class HdfsScannerCSVReader : public CSVReader {
 public:
     // |file| must outlive HdfsScannerCSVReader
-    HdfsScannerCSVReader(RandomAccessFile* file, char record_delimiter, string field_delimiter, size_t offset,
+    HdfsScannerCSVReader(RandomAccessFile* file, string record_delimiter, string field_delimiter, size_t offset,
                          size_t remain_length, size_t file_length)
-            : CSVReader(record_delimiter, field_delimiter) {
+            : CSVReader(std::move(record_delimiter), std::move(field_delimiter), record_delimiter.size(),
+                        field_delimiter.size()) {
         _file = file;
         _offset = offset;
         _remain_length = remain_length;
@@ -68,15 +69,19 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     _remain_length -= s.size;
     _buff.add_limit(s.size);
     auto n = _buff.available();
-    if (s.size == 0 && n == 0) {
-        // Has reached the end of file and the buffer is empty.
-        _should_stop_scan = true;
-        LOG(INFO) << "Reach end of file!";
-        return Status::EndOfFile(_file->file_name());
-    } else if (s.size == 0 && _buff.position()[n - 1] != _record_delimiter) {
-        // Has reached the end of file but still no record delimiter found, which
-        // is valid, according the RFC, add the record delimiter ourself.
-        _buff.append(_record_delimiter);
+    if (s.size == 0) {
+        if (n == 0) {
+            // Has reached the end of file and the buffer is empty.
+            _should_stop_scan = true;
+            LOG(INFO) << "Reach end of file!";
+        } else if (n < _record_delimiter_length ||
+                   _buff.find(_record_delimiter, n - _record_delimiter_length) == nullptr) {
+            // Has reached the end of file but still no record delimiter found, which
+            // is valid, according the RFC, add the record delimiter ourself.
+            for (char ch : _record_delimiter) {
+                _buff.append(ch);
+            }
+        }
     }
 
     // For each scan range we always read the first record of next scan range,so _remain_length
