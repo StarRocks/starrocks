@@ -6,8 +6,6 @@
 
 #include "env/env.h"
 
-#include <aws/core/Aws.h>
-
 namespace starrocks {
 
 // NOTE: Many methods in this class are unimplemented
@@ -15,13 +13,6 @@ namespace starrocks {
 // definition to cpp file.
 class EnvS3 : public Env {
 public:
-    // We cached config here and make a deep copy each time.Since aws sdk has changed the
-    // Aws::Client::ClientConfiguration default constructor to search for the region
-    // (where as before 1.8 it has been hard coded default of "us-east-1").
-    // Part of that change is looking through the ec2 metadata, which can take a long time.
-    // For more details, please refer https://github.com/aws/aws-sdk-cpp/issues/1440
-    static Aws::Client::ClientConfiguration s_config;
-
     EnvS3() {}
     ~EnvS3() override = default;
 
