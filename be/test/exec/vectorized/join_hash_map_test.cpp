@@ -325,7 +325,7 @@ void JoinHashMapTest::check_build_column(const Buffer<uint8_t>& nulls, const Col
         if (nulls[i] == 0) {
             int32_t index = i;
             int64_t check_value = 0;
-            uint8_t* ptr = reinterpret_cast<uint8_t*>(&check_value);
+            auto* ptr = reinterpret_cast<uint8_t*>(&check_value);
             memcpy(ptr, &index, 4);
             memcpy(ptr + 4, &index, 4);
             ASSERT_EQ(check_value, data[i + 1]);
@@ -343,7 +343,7 @@ void JoinHashMapTest::check_build_column(const ColumnPtr& build_column, uint32_t
     for (size_t i = 0; i < row_count; i++) {
         int32_t index = i;
         int64_t check_value = 0;
-        uint8_t* ptr = reinterpret_cast<uint8_t*>(&check_value);
+        auto* ptr = reinterpret_cast<uint8_t*>(&check_value);
         memcpy(ptr, &index, 4);
         memcpy(ptr + 4, &index, 4);
         ASSERT_EQ(check_value, data[i + 1]);
@@ -502,7 +502,14 @@ void JoinHashMapTest::prepare_probe_state(HashTableProbeState* probe_state, uint
     probe_state->search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTimer");
     probe_state->output_probe_column_timer = ADD_TIMER(_runtime_profile, "OutputProbeColumnTimer");
     probe_state->output_tuple_column_timer = ADD_TIMER(_runtime_profile, "OutputTupleColumnTimer");
-    JoinHashMapHelper::prepare_map_index(probe_state, config::vector_chunk_size);
+    probe_state->build_index.resize(config::vector_chunk_size + 8);
+    probe_state->probe_index.resize(config::vector_chunk_size + 8);
+    probe_state->next.resize(config::vector_chunk_size);
+    probe_state->probe_match_index.resize(config::vector_chunk_size);
+    probe_state->build_match_index.resize(config::vector_chunk_size);
+    probe_state->probe_match_filter.resize(config::vector_chunk_size);
+    probe_state->buckets.resize(config::vector_chunk_size);
+    probe_state->is_nulls.resize(config::vector_chunk_size);
 
     for (size_t i = 0; i < probe_row_count; i++) {
         probe_state->next[i] = 1 + 2 * config::vector_chunk_size + i;
@@ -739,19 +746,6 @@ TEST_F(JoinHashMapTest, CalcBucketNums) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, PrepareMapIndex) {
-    HashTableProbeState probe_state;
-    JoinHashMapHelper::prepare_map_index(&probe_state, config::vector_chunk_size);
-
-    ASSERT_EQ(probe_state.build_index.size(), config::vector_chunk_size + 8);
-    ASSERT_EQ(probe_state.probe_index.size(), config::vector_chunk_size + 8);
-    ASSERT_EQ(probe_state.next.size(), config::vector_chunk_size);
-    ASSERT_EQ(probe_state.probe_match_index.size(), config::vector_chunk_size);
-    ASSERT_EQ(probe_state.probe_match_filter.size(), config::vector_chunk_size);
-    ASSERT_EQ(probe_state.buckets.size(), config::vector_chunk_size);
-}
-
-// NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, GetHashKey) {
     auto c1 = JoinHashMapTest::create_int32_column(2, 0);
     auto c2 = JoinHashMapTest::create_int32_column(2, 2);
@@ -796,9 +790,9 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     auto row_desc = create_row_desc(object_pool, &row_desc_builder, false);
     vector<HashTableSlotDescriptor> hash_table_slot_vec;
-    for (size_t i = 0; i < row_desc->tuple_descriptors()[0]->slots().size(); ++i) {
-        HashTableSlotDescriptor hash_table_slot;
-        hash_table_slot.slot = row_desc->tuple_descriptors()[0]->slots()[i];
+    for (auto& slot : row_desc->tuple_descriptors()[0]->slots()) {
+        HashTableSlotDescriptor hash_table_slot{};
+        hash_table_slot.slot = slot;
         hash_table_slot.need_output = true;
         hash_table_slot_vec.emplace_back(hash_table_slot);
     }
@@ -833,9 +827,9 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
     auto row_desc = create_row_desc(object_pool, &row_desc_builder, false);
 
     vector<HashTableSlotDescriptor> hash_table_slot_vec;
-    for (size_t i = 0; i < row_desc->tuple_descriptors()[0]->slots().size(); ++i) {
-        HashTableSlotDescriptor hash_table_slot;
-        hash_table_slot.slot = row_desc->tuple_descriptors()[0]->slots()[i];
+    for (auto& slot : row_desc->tuple_descriptors()[0]->slots()) {
+        HashTableSlotDescriptor hash_table_slot{};
+        hash_table_slot.slot = slot;
         hash_table_slot.need_output = true;
         hash_table_slot_vec.emplace_back(hash_table_slot);
     }
@@ -879,10 +873,9 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
     Columns probe_columns{probe_column};
     probe_state.key_columns = &probe_columns;
 
-    auto status = JoinBuildFunc<PrimitiveType::TYPE_INT>::prepare(nullptr, &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
+    JoinBuildFunc<PrimitiveType::TYPE_INT>::prepare(nullptr, &table_items);
+    JoinProbeFunc<PrimitiveType::TYPE_INT>::prepare(runtime_state.get(), &probe_state);
     JoinBuildFunc<PrimitiveType::TYPE_INT>::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
-    JoinProbeFunc<PrimitiveType::TYPE_INT>::prepare(runtime_state.get(), &table_items, &probe_state);
     JoinProbeFunc<PrimitiveType::TYPE_INT>::lookup_init(table_items, &probe_state);
 
     for (size_t i = 0; i < 10; i++) {
@@ -922,10 +915,9 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
     Columns probe_columns{probe_column};
     probe_state.key_columns = &probe_columns;
 
-    auto status = JoinBuildFunc<TYPE_INT>::prepare(nullptr, &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
+    JoinBuildFunc<TYPE_INT>::prepare(nullptr, &table_items);
+    JoinProbeFunc<TYPE_INT>::prepare(runtime_state.get(), &probe_state);
     JoinBuildFunc<TYPE_INT>::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
-    JoinProbeFunc<TYPE_INT>::prepare(runtime_state.get(), &table_items, &probe_state);
     JoinProbeFunc<TYPE_INT>::lookup_init(table_items, &probe_state);
 
     for (size_t i = 0; i < 10; i++) {
@@ -981,12 +973,9 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
     Columns probe_columns{probe_column1, probe_column2};
     probe_state.key_columns = &probe_columns;
 
-    auto status = FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
+    FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &table_items);
+    FixedSizeJoinProbeFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &probe_state);
     FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
-
-    status = FixedSizeJoinProbeFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
     FixedSizeJoinProbeFunc<TYPE_BIGINT>::lookup_init(table_items, &probe_state);
 
     for (size_t i = 0; i < 10; i++) {
@@ -1038,12 +1027,9 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
     Columns probe_columns{probe_column1, probe_column2};
     probe_state.key_columns = &probe_columns;
 
-    auto status = FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
+    FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &table_items);
+    FixedSizeJoinProbeFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &probe_state);
     FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
-
-    status = FixedSizeJoinProbeFunc<TYPE_BIGINT>::prepare(runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
     FixedSizeJoinProbeFunc<TYPE_BIGINT>::lookup_init(table_items, &probe_state);
 
     for (size_t i = 0; i < 10; i++) {
@@ -1102,11 +1088,9 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
     probe_state.key_columns = &probe_columns;
     Buffer<uint8_t> buffer(1024);
 
-    auto status = SerializedJoinBuildFunc::prepare(runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
-
+    SerializedJoinBuildFunc::prepare(runtime_state.get(), &table_items);
+    SerializedJoinProbeFunc::prepare(runtime_state.get(), &probe_state);
     SerializedJoinBuildFunc::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
-    SerializedJoinProbeFunc::prepare(runtime_state.get(), &table_items, &probe_state);
     SerializedJoinProbeFunc::lookup_init(table_items, &probe_state);
 
     for (size_t i = 0; i < 10; i++) {
@@ -1163,11 +1147,9 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     probe_state.key_columns = &probe_columns;
     Buffer<uint8_t> buffer(1024);
 
-    auto status = SerializedJoinBuildFunc::prepare(runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
-
+    SerializedJoinBuildFunc::prepare(runtime_state.get(), &table_items);
+    SerializedJoinProbeFunc::prepare(runtime_state.get(), &probe_state);
     SerializedJoinBuildFunc::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
-    SerializedJoinProbeFunc::prepare(runtime_state.get(), &table_items, &probe_state);
     SerializedJoinProbeFunc::lookup_init(table_items, &probe_state);
 
     Columns probe_data_columns;
@@ -1201,12 +1183,13 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
 TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneAllMatch) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
-    probe_state.probe_row_count = 4096;
-    probe_state.cur_probe_index = 0;
-    probe_state.next.resize(config::vector_chunk_size);
+
     table_items.next.resize(8193);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    JoinHashMapHelper::prepare_map_index(&probe_state, config::vector_chunk_size);
+
+    prepare_probe_state(&probe_state, 4096);
+    probe_state.next.resize(config::vector_chunk_size);
+
     auto runtime_state = create_runtime_state();
     runtime_state->init_instance_mem_tracker();
 
@@ -1244,12 +1227,11 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneAllMatch) {
 TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneMostMatch) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
-    probe_state.probe_row_count = 4096;
-    probe_state.cur_probe_index = 0;
-    probe_state.next.resize(config::vector_chunk_size);
+
     table_items.next.resize(8193);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    JoinHashMapHelper::prepare_map_index(&probe_state, config::vector_chunk_size);
+
+    prepare_probe_state(&probe_state, 4096);
     auto runtime_state = create_runtime_state();
     runtime_state->init_instance_mem_tracker();
 
@@ -1296,12 +1278,12 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToOneMostMatch) {
 TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
-    probe_state.probe_row_count = 3000;
-    probe_state.cur_probe_index = 0;
-    probe_state.next.resize(config::vector_chunk_size);
+
     table_items.next.resize(8193);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    JoinHashMapHelper::prepare_map_index(&probe_state, config::vector_chunk_size);
+
+    prepare_probe_state(&probe_state, 3000);
+
     auto runtime_state = create_runtime_state();
     runtime_state->init_instance_mem_tracker();
 
@@ -1356,12 +1338,12 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
 TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinFoundEmpty) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
-    probe_state.probe_row_count = 3000;
-    probe_state.cur_probe_index = 0;
-    probe_state.next.resize(config::vector_chunk_size);
+
     table_items.next.resize(8193);
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
-    JoinHashMapHelper::prepare_map_index(&probe_state, config::vector_chunk_size);
+
+    prepare_probe_state(&probe_state, 3000);
+
     auto runtime_state = create_runtime_state();
     runtime_state->init_instance_mem_tracker();
 
@@ -1817,8 +1799,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNotNullableColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
 
     // Construct Hash Table
-    Status status = FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
+    FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items);
     FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
@@ -1853,8 +1834,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNullableColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
 
     // Construct Hash Table
-    Status status = FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
+    FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items);
     FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
@@ -1889,8 +1869,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForPartialNullableColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
 
     // Construct Hash Table
-    Status status = FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
+    FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items);
     FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
@@ -1924,8 +1903,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNotNullableColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_VARCHAR, false});
 
     // Construct Hash Table
-    Status status = SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
+    SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items);
     SerializedJoinBuildFunc::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
@@ -1960,8 +1938,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNullableColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_VARCHAR, false});
 
     // Construct Hash Table
-    Status status = SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
+    SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items);
     SerializedJoinBuildFunc::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
@@ -1996,8 +1973,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForPartialNullColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_VARCHAR, false});
 
     // Construct Hash Table
-    Status status = SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items, &probe_state);
-    ASSERT_TRUE(status.ok());
+    SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items);
     SerializedJoinBuildFunc::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
 
     // Check
