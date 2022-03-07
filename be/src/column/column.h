@@ -298,6 +298,8 @@ public:
 
     virtual void fnv_hash_at(uint32_t* seed, int32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
 
+    virtual int64_t xor_checksum() const = 0;
+
     // Push one row to MysqlRowBuffer
     virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const = 0;
 

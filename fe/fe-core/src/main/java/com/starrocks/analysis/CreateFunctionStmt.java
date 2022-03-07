@@ -78,9 +78,8 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String STATE_CLASS_NAME = "State";
     public static final String SERIALIZE_LENGTH_METHOD_NAME = "serializeLength";
     public static final String RETURN_FIELD_NAME = "Return";
-    public static final String BATCH_UPDATE_METHOD_NAME = "batchUpdate";
-    public static final String GET_VALUES_METHOD_NAME = "getValues";
-    public static final String IS_ANALYTIC_NAME = "isAnalytic";
+    public static final String WINDOW_UPDATE_METHOD_NAME = "windowUpdate";
+    public static final String IS_ANALYTIC_NAME = "Analytic";
     public static final String PROCESS_METHOD_NAME = "process";
 
     private final FunctionName functionName;
@@ -451,11 +450,7 @@ public class CreateFunctionStmt extends DdlStmt {
         }
         if (isAnalyticFn) {
             {
-                Method method = mainClass.getMethod(BATCH_UPDATE_METHOD_NAME, true);
-                mainClass.checkMethodNonStaticAndPublic(method);
-            }
-            {
-                Method method = mainClass.getMethod(GET_VALUES_METHOD_NAME, true);
+                Method method = mainClass.getMethod(WINDOW_UPDATE_METHOD_NAME, true);
                 mainClass.checkMethodNonStaticAndPublic(method);
             }
         }

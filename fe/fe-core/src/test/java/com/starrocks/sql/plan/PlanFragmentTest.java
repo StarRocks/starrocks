@@ -1800,6 +1800,66 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: `ods_order`\n" +
                 "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07') AND (order_no = 'p')\n" +
                 "     limit: 10"));
+
+        sql = "select * from ods_order where order_dt = '2025-08-07' and length(order_no) > 10 limit 10;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:SELECT\n" +
+                "  |  predicates: length(order_no) > 10\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
+
+        sql = "select * from ods_order where order_dt = '2025-08-08' or length(order_no) > 10 limit 10;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:SELECT\n" +
+                "  |  predicates: (order_dt = '2025-08-08') OR (length(order_no) > 10)\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
+
+        sql = "select * from ods_order where order_dt = '2025-08-07' and (length(order_no) > 10 or order_no = 'p');";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:SELECT\n" +
+                "  |  predicates: (length(order_no) > 10) OR (order_no = 'p')\n" +
+                "  |  \n" +
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
+
+        sql = "select * from ods_order where not (order_dt = '2025-08-07' and length(order_no) > 10)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:SELECT\n" +
+                "  |  predicates: (order_dt != '2025-08-07') OR (length(order_no) <= 10)\n" +
+                "  |  \n" +
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "    " +
+                        " Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
+
+        sql = "select * from ods_order where order_dt in ('2025-08-08','2025-08-08') or order_dt between '2025-08-01' and '2025-09-05';";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE ((order_dt IN ('2025-08-08', '2025-08-08')) OR ((order_dt >= '2025-08-01') AND (order_dt <= '2025-09-05')))"));
+
+        sql = "select * from ods_order where (order_dt = '2025-08-07' and length(order_no) > 10) and org_order_no = 'p';";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:SELECT\n" +
+                "  |  predicates: length(order_no) > 10\n" +
+                "  |  \n" +
+                "  0:SCAN MYSQL\n" +
+                "     TABLE: `ods_order`\n" +
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07') AND (org_order_no = 'p')"));
+
     }
 
     @Test
@@ -1845,6 +1905,41 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (pay_st = 214748364)"));
+    }
+
+    @Test
+    public void testJDBCTableFilter() throws Exception {
+        String sql = "select * from test.jdbc_test where a > 10 and b < 'abc' limit 10";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:SCAN JDBC\n" +
+                "     TABLE: `test_table`\n" +
+                "     QUERY: SELECT a, b, c FROM `test_table` WHERE (a > 10) AND (b < 'abc')\n" +
+                "     limit: 10"));
+        sql = "select * from test.jdbc_test where a > 10 and length(b) < 20 limit 10";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:SELECT\n" +
+                "  |  predicates: length(b) < 20\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  0:SCAN JDBC\n" +
+                "     TABLE: `test_table`\n" +
+                "     QUERY: SELECT a, b, c FROM `test_table` WHERE (a > 10)"));
+
+    }
+
+    @Test
+    public void testJDBCTableAggregation() throws Exception {
+        String sql = "select b, sum(a) from test.jdbc_test group by b";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(a)\n" +
+                "  |  group by: b\n" +
+                "  |  \n" +
+                "  0:SCAN JDBC\n" +
+                "     TABLE: `test_table`\n" +
+                "     QUERY: SELECT a, b FROM `test_table`"));
     }
 
     @Test
@@ -5787,10 +5882,8 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testInPredicateNormalize() throws Exception {
-        //        connectContext.setDatabase("default_cluster:test");
-
         starRocksAssert.withTable("create table test_in_pred_norm" +
-                "(c0 INT, c1 INT, c2 INT, c3 INT) " +
+                "(c0 INT, c1 INT, c2 INT, c3 INT, c4 DATE, c5 DATE) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
 
@@ -5814,6 +5907,29 @@ public class PlanFragmentTest extends PlanTestBase {
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (0, c1) ", "1: c0 != 0, 1: c0 != 2: c1");
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c0 NOT IN (0, c1, c2) ",
                 "1: c0 != 0, 1: c0 != 2: c1, 1: c0 != 3: c2");
+
+        // contains cast expression
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('1970-01-01', '1970-01-01', '1970-02-01') ",
+                "c4 IN ('1970-01-01', '1970-01-01', '1970-02-01')");
+        testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('292278994-08-17', '1970-01-01', '1970-02-01') ",
+                "c4 IN (CAST('292278994-08-17' AS DATE), '1970-01-01', '1970-02-01')");
+
+        // common expression
+        testPlanContains("SELECT " +
+                        "c4 IN ('292278994-08-17', '1970-02-01') AND " +
+                        "c5 IN ('292278994-08-17', '1970-02-01') AND " +
+                        "c5 IN ('292278994-08-17', '1970-02-01')  " +
+                        " FROM test_in_pred_norm",
+                "<slot 7> : ((5: c4 = 8: cast) OR (5: c4 = '1970-02-01')) AND ((6: c5 = 8: cast) OR (6: c5 = '1970-02-01'))");
+
+        String plan = getFragmentPlan("SELECT " +
+                "c4 IN ('292278994-08-17', '1970-02-01') AND c4 IN ('292278994-08-18', '1970-02-01') AND " +
+                "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-18', '1970-02-01') AND " +
+                "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-17', '1970-02-01')  " +
+                " FROM test_in_pred_norm");
+        Assert.assertTrue("plan is " + plan, plan.contains("common expressions:"));
+        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 8> "));
+        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 9> "));
     }
 
     @Test

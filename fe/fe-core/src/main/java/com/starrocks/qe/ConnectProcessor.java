@@ -259,7 +259,7 @@ public class ConnectProcessor {
             ctx.setQueryId(UUIDUtil.genUUID());
             List<StatementBase> stmts;
             try {
-                stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx);
+                stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode());
             } catch (ParsingException parsingException) {
                 throw new AnalysisException(parsingException.getMessage());
             } catch (Exception e) {

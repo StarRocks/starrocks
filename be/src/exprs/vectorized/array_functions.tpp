@@ -139,8 +139,9 @@ private:
             const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
             const auto* src_data_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column().get());
 
-            dest_column = NullableColumn::create(ArrayColumn::create(dest_column_data, UInt32Column::create(src_data_column->offsets())),
-                                                            NullColumn::create());
+            dest_column = NullableColumn::create(
+                    ArrayColumn::create(dest_column_data, UInt32Column::create(src_data_column->offsets())),
+                    NullColumn::create());
 
             auto& dest_nullable_column = down_cast<NullableColumn&>(*dest_column);
             auto& dest_null_data = down_cast<NullableColumn&>(*dest_column).null_column_data();
@@ -521,6 +522,169 @@ private:
 
             data[index] = 0;
         }
+    }
+};
+
+template <PrimitiveType PT>
+class ArrayIntersect {
+public:
+    using CppType = RunTimeCppType<PT>;
+
+    class CppTypeWithOverlapTimes {
+    public:
+        CppTypeWithOverlapTimes(const CppType& item, size_t n = 0) : value(item), overlap_times(n) {}
+
+        CppType value;
+        mutable size_t overlap_times;
+    };
+
+    template <PrimitiveType type>
+    struct CppTypeWithOverlapTimesHash {
+        std::size_t operator()(const CppTypeWithOverlapTimes& cpp_type_value) const {
+            if constexpr (pt_is_largeint<PT>) {
+                return phmap_mix_with_seed<sizeof(size_t), PhmapSeed1>()(hash_128(PhmapSeed1, cpp_type_value.value));
+            } else if constexpr (pt_is_fixedlength<PT>) {
+                return phmap_mix<sizeof(size_t)>()(std::hash<CppType>()(cpp_type_value.value));
+            } else if constexpr (pt_is_binary<PT>) {
+                return crc_hash_64(cpp_type_value.value.data, static_cast<int32_t>(cpp_type_value.value.size),
+                                   CRC_HASH_SEED1);
+            } else {
+                assert(false);
+            }
+        }
+    };
+
+    struct CppTypeWithOverlapTimesEqual {
+        bool operator()(const CppTypeWithOverlapTimes& x, const CppTypeWithOverlapTimes& y) const {
+            return x.value == y.value;
+        }
+    };
+
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        if constexpr (pt_is_largeint<PT>) {
+            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
+                                                         CppTypeWithOverlapTimesEqual>>(columns);
+        } else if constexpr (pt_is_fixedlength<PT>) {
+            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
+                                                         CppTypeWithOverlapTimesEqual>>(columns);
+        } else if constexpr (pt_is_binary<PT>) {
+            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
+                                                         CppTypeWithOverlapTimesEqual>>(columns);
+        } else {
+            assert(false);
+        }
+    }
+
+private:
+    template <typename HashSet>
+    static ColumnPtr _array_intersect(const Columns& columns) {
+        if (columns.size() == 1) {
+            return columns[0];
+        }
+
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+        size_t chunk_size = columns[0]->size();
+        bool is_nullable = false;
+        bool has_null = false;
+        int null_index = 0;
+        std::vector<ArrayColumn*> src_columns;
+        src_columns.reserve(columns.size());
+        NullColumnPtr null_result = NullColumn::create();
+        null_result->resize(chunk_size);
+
+        for (int i = 0; i < columns.size(); ++i) {
+            if (columns[i]->is_nullable()) {
+                is_nullable = true;
+                has_null = (columns[i]->has_null() || has_null);
+                null_index = i;
+
+                const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[i].get());
+                src_columns.emplace_back(down_cast<ArrayColumn*>(src_nullable_column->data_column().get()));
+                null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
+            } else {
+                src_columns.emplace_back(down_cast<ArrayColumn*>(columns[i].get()));
+            }
+        }
+
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[null_index]);
+        ColumnPtr dest_column = src_column->clone_empty();
+
+        ArrayColumn* dest_data_column = nullptr;
+        if (is_nullable) {
+            auto& dest_nullable_column = down_cast<NullableColumn&>(*dest_column);
+            dest_data_column = down_cast<ArrayColumn*>(dest_nullable_column.data_column().get());
+            auto& dest_null_data = dest_nullable_column.null_column_data();
+
+            dest_null_data = null_result->get_data();
+            dest_nullable_column.set_has_null(has_null);
+        } else {
+            dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
+        }
+
+        HashSet hash_set;
+        for (size_t i = 0; i < chunk_size; i++) {
+            _array_intersect_item<HashSet>(src_columns, i, &hash_set, dest_data_column);
+            hash_set.clear();
+        }
+
+        return dest_column;
+    }
+
+    template <typename HashSet>
+    static void _array_intersect_item(const std::vector<ArrayColumn*>& columns, size_t index, HashSet* hash_set,
+                                      ArrayColumn* dest_column) {
+        bool has_null = false;
+
+        {
+            Datum v = columns[0]->get(index);
+            const auto& items = v.get<DatumArray>();
+            for (const auto& item : items) {
+                if (item.is_null()) {
+                    has_null = true;
+                } else {
+                    hash_set->emplace(CppTypeWithOverlapTimes(item.get<CppType>(), 0));
+                }
+            }
+        }
+
+        for (int i = 1; i < columns.size(); ++i) {
+            Datum v = columns[i]->get(index);
+            const auto& items = v.get<DatumArray>();
+            bool local_has_null = false;
+            for (const auto& item : items) {
+                if (item.is_null()) {
+                    local_has_null = true;
+                } else {
+                    auto iter = hash_set->find(item.get<CppType>());
+                    if (iter != hash_set->end()) {
+                        if (iter->overlap_times < i) {
+                            ++iter->overlap_times;
+                        }
+                    }
+                }
+            }
+
+            has_null = (has_null && local_has_null);
+        }
+
+        auto& dest_data_column = dest_column->elements_column();
+        auto& dest_offsets = dest_column->offsets_column()->get_data();
+
+        auto max_overlap_times = columns.size() - 1;
+        size_t result_size = 0;
+        for (auto iterator = hash_set->begin(); iterator != hash_set->end(); ++iterator) {
+            if (iterator->overlap_times == max_overlap_times) {
+                dest_data_column->append_datum(iterator->value);
+                ++result_size;
+            }
+        }
+
+        if (has_null) {
+            dest_data_column->append_nulls(1);
+        }
+
+        dest_offsets.emplace_back(dest_offsets.back() + result_size + has_null);
     }
 };
 

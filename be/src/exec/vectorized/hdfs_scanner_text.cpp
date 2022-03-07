@@ -63,18 +63,9 @@ Status HdfsScannerCSVReader::_fill_buffer() {
         size_t slice_len = _remain_length;
         s = Slice(_buff.limit(), std::min(_buff.free_space(), slice_len));
     }
-    Status st = _file->read(_offset, &s);
+    ASSIGN_OR_RETURN(s.size, _file->read_at(_offset, s.data, s.size));
     _offset += s.size;
     _remain_length -= s.size;
-    // According to the specification of `Env::read`, when reached the end of
-    // a file, the returned status will be OK instead of EOF, but here we check
-    // EOF also for safety.
-    if (st.is_end_of_file()) {
-        s.size = 0;
-    } else if (!st.ok()) {
-        LOG(WARNING) << "Status is not ok " << st.get_error_msg();
-        return st;
-    }
     _buff.add_limit(s.size);
     auto n = _buff.available();
     if (s.size == 0 && n == 0) {
@@ -108,9 +99,7 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_create_or_reinit_reader());
-#ifndef BE_TEST
-    SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
-#endif
+    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto slot = _scanner_params.materialize_slots[i];
         ConverterPtr conv = csv::get_converter(slot->type(), true);
@@ -124,7 +113,6 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
 }
 
 void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
-    update_counter();
     _reader.reset();
 }
 

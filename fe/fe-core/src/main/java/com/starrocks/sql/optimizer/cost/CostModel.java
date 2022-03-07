@@ -188,6 +188,10 @@ public class CostModel {
         public CostEstimate computeAggFunExtraCost(PhysicalHashAggregateOperator node, Statistics statistics,
                                                    Statistics inputStatistics) {
             CostEstimate costEstimate = CostEstimate.zero();
+            // If the statistics with inaccurate row count，It don't need to compute the extra cost.
+            if (statistics.isTableRowCountMayInaccurate()) {
+                return costEstimate;
+            }
             int distinctCount =
                     (int) node.getAggregations().values().stream()
                             .filter(aggregation -> isDistinctAggFun(aggregation, node)).count();
@@ -226,12 +230,6 @@ public class CostModel {
                     // In second phase of aggregation, do not compute extra row size costs
                     if (distinctColumn.getType().isStringType() && !(node.getType().isGlobal() && node.isSplit())) {
                         rowSize = rowSize + 16;
-                    }
-
-                    // only when distinct count == 1, consider to avoid OOM
-                    // because of distinct count more than 1, we must use multi_distinct function
-                    if (distinctCount == 1 && (buckets >= 15000000 && rowSize >= 20)) {
-                        return CostEstimate.infinite();
                     }
 
                     double hashSetSize;

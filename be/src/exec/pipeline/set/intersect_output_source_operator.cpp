@@ -8,9 +8,9 @@ StatusOr<vectorized::ChunkPtr> IntersectOutputSourceOperator::pull_chunk(Runtime
     return _intersect_ctx->pull_chunk(state);
 }
 
-Status IntersectOutputSourceOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_intersect_ctx->unref(state));
-    return Operator::close(state);
+void IntersectOutputSourceOperator::close(RuntimeState* state) {
+    _intersect_ctx->unref(state);
+    Operator::close(state);
 }
 
 void IntersectOutputSourceOperatorFactory::close(RuntimeState* state) {

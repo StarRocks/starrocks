@@ -1646,4 +1646,9 @@ public class OlapTable extends Table {
         // which make things easier.
         dropAllTempPartitions();
     }
+
+    @Override
+    public boolean isSupported() {
+        return true;
+    }
 }

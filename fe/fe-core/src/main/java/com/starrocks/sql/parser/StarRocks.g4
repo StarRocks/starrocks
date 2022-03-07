@@ -85,9 +85,16 @@ columnNameWithComment
     : identifier string?
     ;
 
+outfile
+    : INTO OUTFILE file=string fileFormat? properties?
+    ;
+
+fileFormat
+    : FORMAT AS (identifier | string)
+    ;
 
 queryStatement
-    : query;
+    : query outfile?;
 
 query
     : withClause? queryNoWith
@@ -221,7 +228,7 @@ relationPrimary
     ;
 
 partitionNames
-    : (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
     ;
 
 expressionsWithDefault
@@ -236,7 +243,7 @@ expression
     : booleanExpression                                                                   #expressionDefault
     | (NOT | LOGICAL_NOT) expression                                                      #logicalNot
     | left=expression operator=AND right=expression                                       #logicalBinary
-    | left=expression operator=OR right=expression                                        #logicalBinary
+    | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
     ;
 
 booleanExpression
@@ -265,7 +272,6 @@ valueExpression
       right = valueExpression                                                             #arithmeticBinary
     | left = valueExpression operator =
         (PLUS_SYMBOL | MINUS_SYMBOL) right=valueExpression                                #arithmeticBinary
-    | left = valueExpression CONCAT_SYMBOL right = valueExpression                        #concatenation
     ;
 
 primaryExpression
@@ -292,6 +298,8 @@ primaryExpression
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
     | IF '(' (expression (',' expression)*)? ')'                                          #functionCall
+    | LEFT '(' expression ',' expression ')'                                              #functionCall
+    | RIGHT '(' expression ',' expression ')'                                             #functionCall
     | qualifiedName '(' ASTERISK_SYMBOL ')' over?                                         #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
     | windowFunction over                                                                 #windowFunctionCall
@@ -421,7 +429,7 @@ nonReserved
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COSTS
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING
+    | FILTER | FIRST | FOLLOWING | FORMAT
     | GLOBAL
     | HASH | HOUR
     | INTERVAL
@@ -432,7 +440,7 @@ nonReserved
     | PRECEDING | PROPERTIES
     | ROLLUP
     | SECOND | SESSION | SETS | START
-    | TABLES | THAN | TIME | TYPE
+    | TABLES | TEMPORARY | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
     | YEAR

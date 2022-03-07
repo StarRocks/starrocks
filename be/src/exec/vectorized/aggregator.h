@@ -68,7 +68,7 @@ public:
     Status open(RuntimeState* state);
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile, MemTracker* mem_tracker);
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     std::unique_ptr<MemPool>& mem_pool() { return _mem_pool; };
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
@@ -238,6 +238,8 @@ private:
     AggrPhase _aggr_phase = AggrPhase1;
 
     std::vector<uint8_t> _streaming_selection;
+
+    bool _has_udaf = false;
 
     RuntimeProfile::Counter* _get_results_timer{};
     RuntimeProfile::Counter* _agg_compute_timer{};

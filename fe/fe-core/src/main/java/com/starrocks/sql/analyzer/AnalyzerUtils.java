@@ -11,15 +11,9 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.MysqlTable;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;
@@ -31,7 +25,9 @@ import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.ViewRelation;
 
 import java.util.List;
 import java.util.Map;
@@ -64,12 +60,6 @@ public class AnalyzerUtils {
 
     public static boolean isAggregate(List<FunctionCallExpr> aggregates, List<Expr> groupByExpressions) {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
-    }
-
-    public static boolean isSupportedTable(Table table) {
-        return table instanceof OlapTable || table instanceof HiveTable || table instanceof SchemaTable ||
-                table instanceof MysqlTable || table instanceof EsTable || table instanceof IcebergTable ||
-                table instanceof HudiTable;
     }
 
     //Get all the db used, the query needs to add locks to them
@@ -113,6 +103,16 @@ public class AnalyzerUtils {
         }
 
         @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            return visit(node.getQuery());
+        }
+
+        public Void visitView(ViewRelation node, Void context) {
+            getDB(node.getName());
+            return visit(node.getQuery(), context);
+        }
+
+        @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
             if (node.hasWithClause()) {
                 node.getRelations().forEach(this::visit);
@@ -135,7 +135,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            String dbName = node.getName().getDb();
+            getDB(node.getName());
+            return null;
+        }
+
+        private void getDB(TableName tableName) {
+            String dbName = tableName.getDb();
             if (Strings.isNullOrEmpty(dbName)) {
                 dbName = session.getDatabase();
             } else {
@@ -145,7 +150,6 @@ public class AnalyzerUtils {
             Database db = session.getCatalog().getDb(dbName);
 
             dbs.put(dbName, db);
-            return null;
         }
     }
 
@@ -173,6 +177,16 @@ public class AnalyzerUtils {
         @Override
         public Void visitQueryStatement(QueryStatement node, Void context) {
             return visit(node.getQueryRelation());
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            return visit(node.getQuery());
+        }
+
+
+        public Void visitView(ViewRelation node, Void context) {
+            return visit(node.getQuery(), context);
         }
 
         @Override

@@ -125,9 +125,6 @@ public:
 
     std::string get_error_msg() const;
 
-    // when you reused this expr context, you maybe need clear the error status and message.
-    void clear_error_msg();
-
     // vector query engine
     ColumnPtr evaluate(vectorized::Chunk* chunk);
 

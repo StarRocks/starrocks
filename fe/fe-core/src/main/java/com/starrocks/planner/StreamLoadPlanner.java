@@ -64,6 +64,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 // Used to generate a plan fragment for a streaming load.
 // we only support OlapTable now.
@@ -134,8 +135,10 @@ public class StreamLoadPlanner {
 
             if (col.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
                     col.getName())) {
-                ColumnDict dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
-                globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict));
+                Optional<ColumnDict>  dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
+                if (dict != null && dict.isPresent()) {
+                    globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict.get()));
+                }
             }
         }
         if (isPrimaryKey) {

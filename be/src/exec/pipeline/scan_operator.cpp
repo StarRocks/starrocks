@@ -42,7 +42,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ScanOperator::close(RuntimeState* state) {
+void ScanOperator::close(RuntimeState* state) {
     DCHECK(_num_running_io_tasks == 0);
 
     if (_workgroup == nullptr) {
@@ -56,7 +56,7 @@ Status ScanOperator::close(RuntimeState* state) {
     }
 
     do_close(state);
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 bool ScanOperator::has_output() const {

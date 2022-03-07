@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <future>
 #include <memory>
 #include <sstream>
 #include <tuple>
@@ -32,6 +33,7 @@
 #include "runtime/user_function_cache.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
+#include "udf/java/utils.h"
 #include "udf/udf.h"
 #include "util/slice.h"
 #include "util/unaligned_access.h"
@@ -163,10 +165,18 @@ ColumnPtr JavaFunctionCallExpr::evaluate(ExprContext* context, vectorized::Chunk
     return _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
 }
 
-JavaFunctionCallExpr::~JavaFunctionCallExpr() = default;
+JavaFunctionCallExpr::~JavaFunctionCallExpr() {
+    auto promise = call_function_in_pthread(_runtime_state, [this]() {
+        this->_func_desc.reset();
+        this->_call_helper.reset();
+        return Status::OK();
+    });
+    promise->get_future().get();
+}
 
-// TODO support prepare
+// TODO support prepare UDF
 Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) {
+    _runtime_state = state;
     // init Expr::prepare
     RETURN_IF_ERROR(Expr::prepare(state, context));
 
@@ -213,57 +223,60 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
             const_columns.emplace_back(child->evaluate_const(context));
         }
     }
+    auto open_state = [this, scope]() {
+        // init class loader and analyzer
+        std::string libpath;
+        auto function_cache = UserFunctionCache::instance();
+        RETURN_IF_ERROR(function_cache->get_libpath(_fn.id, _fn.hdfs_location, _fn.checksum, &libpath));
+        _func_desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
+        RETURN_IF_ERROR(_func_desc->udf_classloader->init());
+        _func_desc->analyzer = std::make_unique<ClassAnalyzer>();
+        _func_desc->udf_class = _func_desc->udf_classloader->getClass(_fn.scalar_fn.symbol);
+        if (_func_desc->udf_class.clazz() == nullptr) {
+            return Status::InternalError(fmt::format("Not found symbol:{}", _fn.scalar_fn.symbol));
+        }
 
-    // init class loader and analyzer
-    std::string libpath;
-    RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(_fn.id, _fn.hdfs_location, _fn.checksum, &libpath));
-    _func_desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
-    RETURN_IF_ERROR(_func_desc->udf_classloader->init());
-    _func_desc->analyzer = std::make_unique<ClassAnalyzer>();
-    _func_desc->udf_class = _func_desc->udf_classloader->getClass(_fn.scalar_fn.symbol);
-    if (_func_desc->udf_class.clazz() == nullptr) {
-        return Status::InternalError(fmt::format("Not found symbol:{}", _fn.scalar_fn.symbol));
-    }
+        auto add_method = [&](const std::string& name, std::unique_ptr<JavaMethodDescriptor>* res) {
+            bool has_method = false;
+            std::string method_name = name;
+            std::string signature;
+            std::vector<MethodTypeDescriptor> mtdesc;
+            RETURN_IF_ERROR(_func_desc->analyzer->has_method(_func_desc->udf_class.clazz(), method_name, &has_method));
+            if (has_method) {
+                RETURN_IF_ERROR(
+                        _func_desc->analyzer->get_signature(_func_desc->udf_class.clazz(), method_name, &signature));
+                RETURN_IF_ERROR(_func_desc->analyzer->get_method_desc(signature, &mtdesc));
+                *res = std::make_unique<JavaMethodDescriptor>();
+                (*res)->name = std::move(method_name);
+                (*res)->signature = std::move(signature);
+                (*res)->method_desc = std::move(mtdesc);
+                ASSIGN_OR_RETURN((*res)->method,
+                                 _func_desc->analyzer->get_method_object(_func_desc->udf_class.clazz(), name));
+            }
+            return Status::OK();
+        };
 
-    auto add_method = [&](const std::string& name, std::unique_ptr<JavaMethodDescriptor>* res) {
-        bool has_method = false;
-        std::string method_name = name;
-        std::string signature;
-        std::vector<MethodTypeDescriptor> mtdesc;
-        RETURN_IF_ERROR(_func_desc->analyzer->has_method(_func_desc->udf_class.clazz(), method_name, &has_method));
-        if (has_method) {
-            RETURN_IF_ERROR(
-                    _func_desc->analyzer->get_signature(_func_desc->udf_class.clazz(), method_name, &signature));
-            RETURN_IF_ERROR(_func_desc->analyzer->get_method_desc(signature, &mtdesc));
-            *res = std::make_unique<JavaMethodDescriptor>();
-            (*res)->name = std::move(method_name);
-            (*res)->signature = std::move(signature);
-            (*res)->method_desc = std::move(mtdesc);
-            ASSIGN_OR_RETURN((*res)->method,
-                             _func_desc->analyzer->get_method_object(_func_desc->udf_class.clazz(), name));
+        // Now we don't support prepare/close for UDF
+        // RETURN_IF_ERROR(add_method("prepare", &_func_desc->prepare));
+        // RETURN_IF_ERROR(add_method("method_close", &_func_desc->close));
+        RETURN_IF_ERROR(add_method("evaluate", &_func_desc->evaluate));
+
+        // create UDF function instance
+        RETURN_IF_ERROR(_func_desc->udf_class.newInstance(&_func_desc->udf_handle));
+
+        _call_helper = std::make_shared<UDFFunctionCallHelper>();
+        _call_helper->fn_desc = _func_desc.get();
+        _call_helper->call_desc = _func_desc->evaluate.get();
+
+        if (_func_desc->prepare != nullptr) {
+            // we only support fragment local scope to call prepare
+            if (scope == FunctionContext::FRAGMENT_LOCAL) {
+                // TODO: handle prepare function
+            }
         }
         return Status::OK();
     };
-
-    // Now we don't support prepare/close for UDF
-    // RETURN_IF_ERROR(add_method("prepare", &_func_desc->prepare));
-    // RETURN_IF_ERROR(add_method("method_close", &_func_desc->close));
-    RETURN_IF_ERROR(add_method("evaluate", &_func_desc->evaluate));
-
-    // create UDF function instance
-    RETURN_IF_ERROR(_func_desc->udf_class.newInstance(&_func_desc->udf_handle));
-
-    _call_helper = std::make_shared<UDFFunctionCallHelper>();
-    _call_helper->fn_desc = _func_desc.get();
-    _call_helper->call_desc = _func_desc->evaluate.get();
-
-    if (_func_desc->prepare != nullptr) {
-        // we only support fragment local scope to call prepare
-        if (scope == FunctionContext::FRAGMENT_LOCAL) {
-            // TODO: handle prepare function
-        }
-    }
-
+    RETURN_IF_ERROR(call_function_in_pthread(state, open_state)->get_future().get());
     return Status::OK();
 }
 

@@ -16,7 +16,7 @@ public:
     bool parse(const char* uri);
     bool parse(const std::string& uri) { return parse(uri.c_str()); }
 
-    const std::string& schema() const { return _schema; }
+    const std::string& scheme() const { return _scheme; }
 
     const std::string& bucket() const { return _bucket; }
 
@@ -26,7 +26,7 @@ public:
 
     const std::string& endpoint() const { return _endpoint; }
 
-    void set_schema(std::string value) { _schema = std::move(value); }
+    void set_scheme(std::string value) { _scheme = std::move(value); }
 
     void set_bucket(std::string value) { _bucket = std::move(value); }
 
@@ -37,7 +37,7 @@ public:
     void set_endpoint(std::string value) { _endpoint = std::move(value); }
 
 private:
-    std::string _schema;
+    std::string _scheme;
     std::string _bucket;
     std::string _key;
     std::string _region;

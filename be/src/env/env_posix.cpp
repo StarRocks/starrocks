@@ -95,7 +95,7 @@ static Status do_open(const string& filename, Env::OpenMode mode, int* fd) {
 }
 
 static Status do_readv_at(int fd, const std::string& filename, uint64_t offset, const Slice* res, size_t res_cnt,
-                          size_t* read_bytes) {
+                          uint64_t* read_bytes) {
     // Convert the results into the iovec vector to request
     // and calculate the total bytes requested
     size_t bytes_req = 0;
@@ -219,20 +219,18 @@ public:
         }
     }
 
-    Status read(Slice* result) override {
+    StatusOr<int64_t> read(void* data, int64_t size) override {
         size_t r;
-        STREAM_RETRY_ON_EINTR(r, _file, fread_unlocked(result->data, 1, result->size, _file));
-        if (r < result->size) {
+        STREAM_RETRY_ON_EINTR(r, _file, fread_unlocked(data, 1, size, _file));
+        if (r < size) {
             if (feof(_file)) {
-                // We leave status as ok if we hit the end of the file.
-                // We need to adjust the slice size.
-                result->truncate(r);
+                return r;
             } else {
                 // A partial read with an error: return a non-ok status.
                 return io_error(_filename, ferror(_file));
             }
         }
-        return Status::OK();
+        return r;
     }
 
     Status skip(uint64_t n) override {
@@ -260,23 +258,27 @@ public:
         }
     }
 
-    Status read(uint64_t offset, Slice* res) const override {
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override {
+        Slice buff(static_cast<uint8_t*>(data), size);
         uint64_t read_bytes = 0;
-        auto st = do_readv_at(_fd, _filename, offset, res, 1, &read_bytes);
-        if (!st.ok() && st.is_end_of_file()) {
-            res->size = read_bytes;
-            return Status::OK();
+        auto st = do_readv_at(_fd, _filename, static_cast<uint64_t>(offset), &buff, 1, &read_bytes);
+        if (st.ok()) {
+            return size;
+        } else if (st.is_end_of_file()) {
+            return read_bytes;
         }
         return st;
     }
 
-    Status read_at(uint64_t offset, const Slice& result) const override {
-        return do_readv_at(_fd, _filename, offset, &result, 1, nullptr);
+    Status read_at_fully(int64_t offset, void* data, int64_t size) const override {
+        Slice buff(static_cast<uint8_t*>(data), size);
+        return do_readv_at(_fd, _filename, offset, &buff, 1, nullptr);
     }
 
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
         return do_readv_at(_fd, _filename, offset, res, res_cnt, nullptr);
     }
+
     Status size(uint64_t* size) const override {
         struct stat st;
         auto res = fstat(_fd, &st);

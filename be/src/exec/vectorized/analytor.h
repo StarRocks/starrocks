@@ -47,7 +47,7 @@ public:
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     enum FrameType {
         Unbounded,               // BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
@@ -101,7 +101,7 @@ public:
     void reset_window_state();
     void get_window_function_result(int32_t start, int32_t end);
 
-    bool is_partition_finished();
+    bool is_partition_finished(int64_t found_partition_end);
     Status output_result_chunk(vectorized::ChunkPtr* chunk);
     size_t compute_memory_usage();
     void create_agg_result_columns(int64_t chunk_size);
@@ -195,6 +195,8 @@ private:
     // assumed to come from a single SortNode). NULL if both partition_exprs and
     // order_by_exprs are empty.
     TTupleId _buffered_tuple_id = 0;
+
+    bool _has_udaf = false;
 
     void _update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                      int64_t frame_end);

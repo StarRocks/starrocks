@@ -496,6 +496,21 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return "(" + Joiner.on(" ").join(strings) + ")";
     }
 
+    public static boolean containsSlotRef(Expr root) {
+        if (root == null) {
+            return false;
+        }
+        if (root instanceof SlotRef) {
+            return true;
+        }
+        for (Expr child : root.getChildren()) {
+            if (containsSlotRef(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Return true if l1[i].equals(l2[i]) for all i.
      */
@@ -858,6 +873,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     public String toMySql() {
+        return toSql();
+    }
+
+    public String toJDBCSQL() {
         return toSql();
     }
 

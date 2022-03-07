@@ -459,4 +459,9 @@ public class EsTable extends Table {
     public void onCreate() {
         Catalog.getCurrentCatalog().getEsRepository().registerTable(this);
     }
+
+    @Override
+    public boolean isSupported() {
+        return true;
+    }
 }

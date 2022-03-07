@@ -1,6 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -13,6 +17,7 @@ import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeSingleTest {
     // use a unique dir so that it won't be conflict with other unit test which
@@ -59,6 +64,19 @@ public class AnalyzeSingleTest {
          */
         analyzeFail("select error from t0");
         analyzeFail("select v1 from t_error");
+
+        analyzeSuccess("select v1 from t0 temporary partition(t1,t2)");
+        analyzeFail("SELECT v1,v2,v3 FROM t0 INTO OUTFILE \"hdfs://path/to/result_\""
+                        + "FORMAT AS PARQUET PROPERTIES" +
+                "(\"broker.name\" = \"my_broker\"," +
+                "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
+                "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");", "Only support CSV format");
+
+        analyzeSuccess("SELECT v1,v2,v3 FROM t0  INTO OUTFILE \"hdfs://path/to/result_\""
+                + "FORMAT AS CSV PROPERTIES" +
+                "(\"broker.name\" = \"my_broker\"," +
+                "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
+                "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
     }
 
     @Test
@@ -310,6 +328,9 @@ public class AnalyzeSingleTest {
         analyzeFail("select max(TIMEDIFF(NULL, NULL)) from t0");
         analyzeSuccess("select abs(TIMEDIFF(NULL, NULL)) from t0");
         analyzeFail(" SELECT t0.v1 FROM t0 GROUP BY t0.v1 HAVING ((MAX(TIMEDIFF(NULL, NULL))) IS NULL)");
+
+        analyzeSuccess("select right('foo', 1)");
+        analyzeSuccess("select left('foo', 1)");
     }
 
     @Test
@@ -385,4 +406,24 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select 1,2,3 from dual");
         analyzeFail("select * from dual", "No tables used");
     }
+
+    @Test
+    public void testSqlMode() {
+        ConnectContext connectContext = getConnectContext();
+        analyzeFail("select 'a' || 'b' from t0",
+                "Operand '('a') OR ('b')' part of predicate ''a'' should return type 'BOOLEAN'");
+
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select true || false from t0",
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
+        analyzer.analyze(statementBase);
+        Assert.assertEquals("SELECT (TRUE) OR (FALSE) FROM `default_cluster:test`.`t0`"
+                ,AST2SQL.toString(statementBase));
+
+        connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select 'a' || 'b' from t0",
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        analyzer.analyze(statementBase);
+        Assert.assertEquals("SELECT concat('a', 'b') FROM `default_cluster:test`.`t0`"
+                ,AST2SQL.toString(statementBase));    }
 }

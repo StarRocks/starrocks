@@ -30,6 +30,10 @@ message ImmutableIndexMetaPB {
     EditVersionPB version = 1;
     uint64 size = 2;
     repeated ImmutableIndexShardMetaPB shards = 3;
+    // only support fixed length KVs currently
+    // will add varlen KV in future
+    uint64 fixed_key_size = 4;
+    uint64 fixed_value_size = 5;
 }
 
 message PersistentIndexMetaPB {

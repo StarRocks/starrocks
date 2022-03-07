@@ -154,6 +154,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool("elt", config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
+    _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
 
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
@@ -370,6 +371,10 @@ void ExecEnv::_destroy() {
     if (_etl_thread_pool) {
         delete _etl_thread_pool;
         _etl_thread_pool = nullptr;
+    }
+    if (_udf_call_pool) {
+        delete _udf_call_pool;
+        _udf_call_pool = nullptr;
     }
     if (_pipeline_scan_io_thread_pool) {
         delete _pipeline_scan_io_thread_pool;

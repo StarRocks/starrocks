@@ -47,7 +47,7 @@ public:
             throw orc::ParseError("Buffer is null");
         }
 
-        Status status = _file->read_at(offset, Slice((char*)buf, length));
+        Status status = _file->read_at_fully(offset, buf, length);
         if (!status.ok()) {
             auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
             throw orc::ParseError(msg);
@@ -324,26 +324,10 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
     return false;
 }
 
-void HdfsOrcScanner::update_counter() {
-    HdfsScanner::update_counter();
-
-#ifndef BE_TEST
-    COUNTER_UPDATE(_scanner_params.parent->_rows_read_counter, _stats.raw_rows_read);
-    COUNTER_UPDATE(_scanner_params.parent->_expr_filter_timer, _stats.expr_filter_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_io_timer, _stats.io_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_io_counter, _stats.io_count);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_counter, _stats.bytes_read);
-    COUNTER_UPDATE(_scanner_params.parent->_column_read_timer, _stats.column_read_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_column_convert_timer, _stats.column_convert_ns);
-#endif
-}
-
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     auto input_stream =
             std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length, &_stats);
-#ifndef BE_TEST
-    SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
-#endif
+    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {
         orc::ReaderOptions options;
@@ -415,7 +399,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
 
 void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
     _orc_adapter.reset(nullptr);
-    update_counter();
 }
 
 Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {

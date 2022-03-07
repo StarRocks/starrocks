@@ -385,26 +385,29 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     using namespace pipeline;
     auto rhs_operators = child(1)->decompose_to_pipeline(context);
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
-    size_t num_partitions;
+    size_t num_right_partitions;
+    size_t num_left_partitions;
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
-        num_partitions = context->degree_of_parallelism();
+        num_right_partitions = 1;
+        // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
+        // use the same hash table with their own different probe states.
+        rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
 
-        rhs_operators =
-                context->maybe_interpolate_local_broadcast_exchange(runtime_state(), rhs_operators, num_partitions);
-        lhs_operators =
-                context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators, num_partitions);
+        num_left_partitions = context->degree_of_parallelism();
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators,
+                                                                              num_left_partitions);
     } else {
         // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
         // return empty result in this case. Hash join cannot be divided into multiple
         // partitions in this case. Otherwise, NULL value in right table will only occur
         // in some partition hash table, and other partition hash table can output chunk.
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
-            num_partitions = 1;
+            num_left_partitions = num_right_partitions = 1;
 
             rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
             lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators);
         } else {
-            num_partitions = context->degree_of_parallelism();
+            num_left_partitions = num_right_partitions = context->degree_of_parallelism();
 
             // Both HashJoin{Build, Probe}Operator are parallelized
             // There are two ways of shuffle
@@ -462,11 +465,11 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     }
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
-    HashJoinerParam param(pool, _hash_join_node, _id, _type, limit(), _is_null_safes, _build_expr_ctxs,
-                          _probe_expr_ctxs, _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(),
-                          child(0)->row_desc(), _row_descriptor, child(1)->type(), child(0)->type(),
-                          child(1)->conjunct_ctxs().empty(), _build_runtime_filters, _output_slots);
-    auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param, num_partitions);
+    HashJoinerParam param(pool, _hash_join_node, _id, _type, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
+                          _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
+                          _row_descriptor, child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(),
+                          _build_runtime_filters, _output_slots, _distribution_mode);
+    auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param, num_left_partitions);
 
     // add placeholder into RuntimeFilterHub, HashJoinBuildOperator will generate runtime filters and fill it,
     // Operators consuming the runtime filters will inspect this placeholder.
@@ -475,14 +478,10 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // In default query engine, we only build one hash table for join right child.
-    // But for pipeline query engine, we will build `num_partitions` hash tables, so we need to enlarge the limit
-    std::unique_ptr<PartialRuntimeFilterMerger> partial_rf_merger;
-    if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
-        partial_rf_merger = std::make_unique<PartialRuntimeFilterMerger>(pool, _runtime_join_filter_pushdown_limit, 1);
-    } else {
-        partial_rf_merger = std::make_unique<PartialRuntimeFilterMerger>(
-                pool, _runtime_join_filter_pushdown_limit * num_partitions, num_partitions);
-    }
+    // But for pipeline query engine, we will build `num_right_partitions` hash tables, so we need to enlarge the limit
+    std::unique_ptr<PartialRuntimeFilterMerger> partial_rf_merger = std::make_unique<PartialRuntimeFilterMerger>(
+            pool, _runtime_join_filter_pushdown_limit * num_right_partitions, num_right_partitions);
+
     auto build_op = std::make_shared<HashJoinBuildOperatorFactory>(
             context->next_operator_id(), id(), hash_joiner_factory, std::move(partial_rf_merger), _distribution_mode);
 

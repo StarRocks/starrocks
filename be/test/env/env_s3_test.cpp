@@ -41,14 +41,12 @@ TEST_F(EnvS3Test, write_and_read) {
     ASSERT_EQ(sizeof("hello world!"), wf->size() + 1);
 
     char buf[1024];
-    Slice s(buf, 1024);
     ASSIGN_OR_ABORT(auto rf, env.new_random_access_file(uri));
-    ASSERT_OK(rf->read(0, &s));
-    ASSERT_EQ("hello world!", s);
+    ASSIGN_OR_ABORT(auto nr, rf->read_at(0, buf, sizeof(buf)));
+    ASSERT_EQ("hello world!", std::string_view(buf, nr));
 
-    s.size = 5;
-    ASSERT_OK(rf->read_at(3, s));
-    ASSERT_EQ("lo wo", s);
+    ASSIGN_OR_ABORT(nr, rf->read_at(3, buf, sizeof(buf)));
+    ASSERT_EQ("lo wo", std::string_view(buf, nr));
 }
 
 } // namespace starrocks

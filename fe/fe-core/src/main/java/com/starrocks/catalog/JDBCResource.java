@@ -27,6 +27,8 @@ import java.util.Map;
 * DROP RESOURCE "jdbc_pg";
 * */
 public class JDBCResource extends Resource {
+    public static final String TYPE = "type";
+    public static final String NAME = "name";
     public static final String DRIVER = "driver";
     public static final String URI = "jdbc_uri";
     public static final String USER = "user";
@@ -58,7 +60,8 @@ public class JDBCResource extends Resource {
     protected void setProperties(Map<String, String> properties) throws DdlException {
         Preconditions.checkState(properties != null);
         for (String key : properties.keySet()) {
-            if (!DRIVER.equals(key) && !URI.equals(key) && !USER.equals(key) && !PASSWORD.equals(key)) {
+            if (!DRIVER.equals(key) && !URI.equals(key) && !USER.equals(key) && !PASSWORD.equals(key)
+                    && !TYPE.equals(key) && !NAME.equals(key)) {
                 throw new DdlException("Property " + key + " is unknown");
             }
         }

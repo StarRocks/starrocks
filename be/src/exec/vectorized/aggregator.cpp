@@ -2,11 +2,14 @@
 
 #include "aggregator.h"
 
+#include <algorithm>
+
 #include "common/status.h"
 #include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "udf/java/utils.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -25,14 +28,24 @@ Status Aggregator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
 #ifdef STARROCKS_WITH_HDFS
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
-            const auto& fn = _fns[i];
-            auto st = vectorized::init_udaf_context(fn.id, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                    _agg_fn_ctxs[i]);
-            RETURN_IF_ERROR(st);
-        }
+    // init function context
+    _has_udaf = std::any_of(_fns.begin(), _fns.end(),
+                            [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
+    if (_has_udaf) {
+        auto promise_st = call_function_in_pthread(state, [this]() {
+            for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+                if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                    const auto& fn = _fns[i];
+                    auto st = vectorized::init_udaf_context(fn.id, fn.hdfs_location, fn.checksum,
+                                                            fn.aggregate_fn.symbol, _agg_fn_ctxs[i]);
+                    RETURN_IF_ERROR(st);
+                }
+            }
+            return Status::OK();
+        });
+        RETURN_IF_ERROR(promise_st->get_future().get());
     }
+
 #endif
 
     // AggregateFunction::create needs to call create in JNI,
@@ -41,9 +54,19 @@ Status Aggregator::open(RuntimeState* state) {
     if (_group_by_expr_ctxs.empty()) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
         RETURN_IF_UNLIKELY_NULL(_single_agg_state, Status::MemoryAllocFailed("alloc single agg state failed"));
-        for (int i = 0; i < _agg_functions.size(); i++) {
-            _agg_functions[i]->create(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+        auto call_agg_create = [this]() {
+            for (int i = 0; i < _agg_functions.size(); i++) {
+                _agg_functions[i]->create(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+            }
+            return Status::OK();
+        };
+        if (_has_udaf) {
+            auto promise_st = call_function_in_pthread(state, call_agg_create);
+            promise_st->get_future().get();
+        } else {
+            call_agg_create();
         }
+
         if (_agg_expr_ctxs.empty()) {
             return Status::InternalError("Invalid agg query plan");
         }
@@ -56,6 +79,8 @@ Status Aggregator::open(RuntimeState* state) {
     } else {
         TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
     }
+
+    RETURN_IF_ERROR(check_has_error());
 
     return Status::OK();
 }
@@ -244,48 +269,55 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     return Status::OK();
 }
 
-Status Aggregator::close(RuntimeState* state) {
+void Aggregator::close(RuntimeState* state) {
     if (_is_closed) {
-        return Status::OK();
+        return;
     }
 
     _is_closed = true;
 
-    // _mem_pool is nullptr means prepare phase failed
-    if (_mem_pool != nullptr) {
-        // Note: we must free agg_states object before _mem_pool free_all;
-        if (_single_agg_state != nullptr) {
-            for (int i = 0; i < _agg_functions.size(); i++) {
-                _agg_functions[i]->destroy(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
-            }
-        } else if (!_is_only_group_by_columns) {
-            if (false) {
-            }
+    auto agg_close = [this, state]() {
+        // _mem_pool is nullptr means prepare phase failed
+        if (_mem_pool != nullptr) {
+            // Note: we must free agg_states object before _mem_pool free_all;
+            if (_single_agg_state != nullptr) {
+                for (int i = 0; i < _agg_functions.size(); i++) {
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+                }
+            } else if (!_is_only_group_by_columns) {
+                if (false) {
+                }
 #define HASH_MAP_METHOD(NAME)                                                  \
     else if (_hash_map_variant.type == vectorized::HashMapVariant::Type::NAME) \
             _release_agg_memory<decltype(_hash_map_variant.NAME)::element_type>(_hash_map_variant.NAME.get());
-            APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+                APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
+            }
+
+            _mem_pool->free_all();
         }
 
-        _mem_pool->free_all();
-    }
-
-    // AggregateFunction::destroy depends FunctionContext.
-    // so we close function context after destroy stage
-    for (auto ctx : _agg_fn_ctxs) {
-        if (ctx != nullptr && ctx->impl()) {
-            ctx->impl()->close();
+        // AggregateFunction::destroy depends FunctionContext.
+        // so we close function context after destroy stage
+        for (auto ctx : _agg_fn_ctxs) {
+            if (ctx != nullptr && ctx->impl()) {
+                ctx->impl()->close();
+            }
         }
-    }
 
-    Expr::close(_group_by_expr_ctxs, state);
-    for (const auto& i : _agg_expr_ctxs) {
-        Expr::close(i, state);
+        Expr::close(_group_by_expr_ctxs, state);
+        for (const auto& i : _agg_expr_ctxs) {
+            Expr::close(i, state);
+        }
+        Expr::close(_conjunct_ctxs, state);
+        return Status::OK();
+    };
+    if (_has_udaf) {
+        auto promise_st = call_function_in_pthread(state, agg_close);
+        promise_st->get_future().get();
+    } else {
+        agg_close();
     }
-    Expr::close(_conjunct_ctxs, state);
-
-    return Status::OK();
 }
 
 bool Aggregator::is_chunk_buffer_empty() {
