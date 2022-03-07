@@ -54,7 +54,7 @@ public:
 
         Status status = _file->read_at_fully(offset, buf, length);
         if (!status.ok()) {
-            auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
+            auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
             throw orc::ParseError(msg);
         }
     }
@@ -62,7 +62,7 @@ public:
     /**
      * Get the name of the stream for error messages.
      */
-    const std::string& getName() const override { return _file->file_name(); }
+    const std::string& getName() const override { return _file->filename(); }
 
 private:
     std::shared_ptr<RandomAccessFile> _file;
@@ -217,14 +217,14 @@ Status ORCScanner::_open_next_orc_reader() {
             LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
             return st;
         }
-        const std::string& file_name = file->file_name();
+        const std::string& file_name = file->filename();
         auto inStream = std::make_unique<ORCFileStream>(file, _counter);
         _next_range++;
         _orc_adapter->set_read_chunk_size(_max_chunk_size);
         _orc_adapter->set_current_file_name(file_name);
         st = _orc_adapter->init(std::move(inStream));
         if (st.is_end_of_file()) {
-            LOG(WARNING) << "Failed to init orc adapter. file_name: " << file_name << ", status: " << st.to_string();
+            LOG(WARNING) << "Failed to init orc adapter. filename: " << file_name << ", status: " << st.to_string();
             continue;
         }
         return st;
