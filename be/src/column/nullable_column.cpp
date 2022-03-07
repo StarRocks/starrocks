@@ -327,7 +327,9 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     // XOR all the 8-bit integers one by one
     for (size_t i = 0; i < num; ++i) {
         xor_checksum ^= src[i];
-        xor_checksum ^= _data_column->xor_checksum(i, i + 1);
+        if (!src[i]) {
+            xor_checksum ^= _data_column->xor_checksum(i, i + 1);
+        }
     }
     return xor_checksum;
 }
