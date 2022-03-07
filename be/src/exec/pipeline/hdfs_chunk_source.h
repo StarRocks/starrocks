@@ -63,7 +63,7 @@ private:
     Status _init_scanner(RuntimeState* state);
 
     // =====================================
-    Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::Chunk* chunk);
+    Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::ChunkPtr* chunk);
     void _update_realtime_counter(vectorized::Chunk* chunk);
 
     // =====================================

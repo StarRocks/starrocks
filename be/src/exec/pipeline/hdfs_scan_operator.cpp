@@ -3,7 +3,7 @@
 #include "exec/pipeline/hdfs_scan_operator.h"
 
 #include "column/chunk.h"
-// #include "exec/pipeline/hdfs_chunk_source.h"
+#include "exec/pipeline/hdfs_chunk_source.h"
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -36,9 +36,8 @@ Status HdfsScanOperator::do_prepare(RuntimeState*) {
 void HdfsScanOperator::do_close(RuntimeState*) {}
 
 ChunkSourcePtr HdfsScanOperator::create_chunk_source(MorselPtr morsel) {
-    // vectorized::HdfsScanNode* hdfs_scan_node = down_cast<vectorized::HdfsScanNode*>(_scan_node);
-    // return std::make_shared<HdfsChunkSource>(std::move(morsel), this, hdfs_scan_node);
-    return nullptr;
+    vectorized::HdfsScanNode* hdfs_scan_node = down_cast<vectorized::HdfsScanNode*>(_scan_node);
+    return std::make_shared<HdfsChunkSource>(std::move(morsel), this, hdfs_scan_node);
 }
 
 } // namespace starrocks::pipeline

@@ -125,7 +125,7 @@ void HdfsChunkSource::_init_partition_values() {
         assert(partition_value_col->is_constant());
         auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
         ColumnPtr data_column = const_column->data_column();
-        ColumnPtr chunk_part_column = _partition_chunk->get_column_by_slot_id(slot_id);
+        ColumnPtr chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
         if (data_column->is_nullable()) {
             chunk_part_column->append_nulls(1);
         } else {
@@ -266,7 +266,7 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
     std::string name_node;
     RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &name_node));
 
-    auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
+    auto* hdfs_file_desc = _pool->add(new vectorized::HdfsFileDesc());
     hdfs_file_desc->env = env;
     hdfs_file_desc->path = native_file_path;
     hdfs_file_desc->partition_id = scan_range.partition_id;
@@ -278,9 +278,9 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
 
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_bloom_filters;
-    scanner_params.scan_ranges = hdfs_file_desc.splits;
-    scanner_params.env = hdfs_file_desc.env;
-    scanner_params.path = hdfs_file_desc.path;
+    scanner_params.scan_ranges = hdfs_file_desc->splits;
+    scanner_params.env = hdfs_file_desc->env;
+    scanner_params.path = hdfs_file_desc->path;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -316,14 +316,13 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
 }
 
 void HdfsChunkSource::close(RuntimeState* state) {
-    if (_closed) return Status::OK();
+    if (_closed) return;
     if (_scanner != nullptr) {
         _scanner->close(state);
     }
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
     _closed = true;
-    return Status::OK();
 }
 
 // ===================================================================
@@ -356,7 +355,7 @@ Status HdfsChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
 
     for (size_t i = 0; i < batch_size && !can_finish; ++i) {
         ChunkPtr chunk;
-        _status = _read_chunk_from_storage(_runtime_state, chunk.get());
+        _status = _read_chunk_from_storage(_runtime_state, &chunk);
         if (!_status.ok()) {
             // end of file is normal case, need process chunk
             if (_status.is_end_of_file()) {
@@ -383,7 +382,7 @@ Status HdfsChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
             SCOPED_RAW_TIMER(&time_spent);
 
             ChunkPtr chunk;
-            _status = _read_chunk_from_storage(_runtime_state, chunk.get());
+            _status = _read_chunk_from_storage(_runtime_state, &chunk);
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
@@ -410,17 +409,15 @@ Status HdfsChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
     return _status;
 }
 
-Status HdfsChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized::Chunk* chunk) {
+Status HdfsChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized::ChunkPtr* chunk) {
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");
     }
     SCOPED_TIMER(_profile.scan_timer);
     do {
-        ChunkPtr ck;
-        RETURN_IF_ERROR(_scanner->get_next(state, &ck));
-        *chunk = std::move(*ck);
-    } while (chunk->num_rows() == 0);
-    _update_realtime_counter(chunk);
+        RETURN_IF_ERROR(_scanner->get_next(state, chunk));
+    } while ((*chunk)->num_rows() == 0);
+    _update_realtime_counter((*chunk).get());
     // Improve for select * from table limit x, x is small
     if (_limit != -1 && _num_rows_read >= _limit) {
         return Status::EndOfFile("limit reach");
