@@ -37,7 +37,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
-
 import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
 
 public class CreateTableAnalyzer {
@@ -108,7 +107,7 @@ public class CreateTableAnalyzer {
                             }
                             break;
                         }
-                        if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()) {
+                        if (!columnDef.getType().isKeyType()) {
                             break;
                         }
                         if (columnDef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {

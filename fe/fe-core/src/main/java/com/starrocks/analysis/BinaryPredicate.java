@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -309,6 +310,9 @@ public class BinaryPredicate extends Predicate implements Writable {
         if ((t1 == PrimitiveType.BIGINT || t1 == PrimitiveType.LARGEINT)
                 && (t2 == PrimitiveType.BIGINT || t2 == PrimitiveType.LARGEINT)) {
             return Type.LARGEINT;
+        }
+        if (type1.isJsonType() || type2.isJsonType()) {
+            return ScalarType.createJsonType();
         }
 
         return Type.DOUBLE;
