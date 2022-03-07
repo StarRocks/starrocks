@@ -157,7 +157,7 @@ public class Group {
                                               double cost) {
         Pair<Double, GroupExpression> lowestExpression = lowestCostExpressions.get(oldProperty);
         lowestExpression.second
-                .setPropertyWithCost(newProperty, lowestExpression.second.getInputProperties(oldProperty), cost);
+                .updatePropertyWithCost(newProperty, lowestExpression.second.getInputProperties(oldProperty), cost);
         lowestCostExpressions.remove(oldProperty);
 
         lowestCostExpressions.put(newProperty, lowestExpression);

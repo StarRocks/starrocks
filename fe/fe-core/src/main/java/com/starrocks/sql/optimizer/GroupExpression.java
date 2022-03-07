@@ -193,9 +193,9 @@ public class GroupExpression {
      * @param inputProperties  List of children input properties required
      * @param cost             Cost
      */
-    public boolean setPropertyWithCost(PhysicalPropertySet outputProperties,
-                                    List<PhysicalPropertySet> inputProperties,
-                                    double cost) {
+    public boolean updatePropertyWithCost(PhysicalPropertySet outputProperties,
+                                          List<PhysicalPropertySet> inputProperties,
+                                          double cost) {
         if (lowestCostTable.containsKey(outputProperties)) {
             if (lowestCostTable.get(outputProperties).first > cost) {
                 lowestCostTable.put(outputProperties, new Pair<>(cost, inputProperties));
