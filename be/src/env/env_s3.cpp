@@ -131,12 +131,6 @@ public:
     using ClientConfiguration = Aws::Client::ClientConfiguration;
     using S3Client = Aws::S3::S3Client;
     using S3ClientPtr = std::shared_ptr<S3Client>;
-    // We cached config here and make a deep copy each time.Since aws sdk has changed the
-    // Aws::Client::ClientConfiguration default constructor to search for the region
-    // (where as before 1.8 it has been hard coded default of "us-east-1").
-    // Part of that change is looking through the ec2 metadata, which can take a long time.
-    // For more details, please refer https://github.com/aws/aws-sdk-cpp/issues/1440
-    static Aws::Client::ClientConfiguration s_config;
 
     static S3ClientFactory& instance() {
         static S3ClientFactory obj;
@@ -197,8 +191,15 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     return client;
 }
 
+// We cached config here and make a deep copy each time.Since aws sdk has changed the
+// Aws::Client::ClientConfiguration default constructor to search for the region
+// (where as before 1.8 it has been hard coded default of "us-east-1").
+// Part of that change is looking through the ec2 metadata, which can take a long time.
+// For more details, please refer https://github.com/aws/aws-sdk-cpp/issues/1440
+static Aws::Client::ClientConfiguration s_config;
+
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
-    Aws::Client::ClientConfiguration config = S3ClientFactory::s_config;
+    Aws::Client::ClientConfiguration config = s_config;
     config.scheme = Aws::Http::Scheme::HTTP; // TODO: use the scheme in uri
     if (!uri.endpoint().empty()) {
         config.endpointOverride = uri.endpoint();
