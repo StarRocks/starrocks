@@ -379,7 +379,7 @@ void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const s
     if (global_dict.empty()) return;
 
     for (size_t i = 0; i < slot_descs->size(); ++i) {
-        if (global_dict.count((*slot_descs)[i]->id()) && (*slot_descs)[i]->type().type == TYPE_INT) {
+        if (global_dict.count((*slot_descs)[i]->id()) && (*slot_descs)[i]->type().type == LowCardDictType) {
             SlotDescriptor* newSlot = runtime_state->global_obj_pool()->add(new SlotDescriptor(*(*slot_descs)[i]));
             newSlot->type().type = TYPE_VARCHAR;
             (*slot_descs)[i] = newSlot;
