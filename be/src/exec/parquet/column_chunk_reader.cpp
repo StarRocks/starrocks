@@ -56,7 +56,7 @@ public:
     Status size(uint64_t* size) const override { return _file->size(size); }
 
     // Return name of this file
-    const std::string& file_name() const override { return _file->file_name(); }
+    const std::string& filename() const override { return _file->filename(); }
 
 private:
     RandomAccessFile* _file;

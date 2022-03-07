@@ -244,7 +244,7 @@ public:
     virtual Status size(uint64_t* size) const = 0;
 
     // Return name of this file
-    virtual const std::string& file_name() const = 0;
+    virtual const std::string& filename() const = 0;
 
     // Get statistics about the reads which this RandomAccessFile has done.
     // If the RandomAccessFile implementation doesn't support statistics, a null pointer or

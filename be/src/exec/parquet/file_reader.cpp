@@ -85,12 +85,11 @@ Status FileReader::_parse_footer() {
     // if local buf is not large enough, we have to allocate on heap and re-read.
     // 4 bytes magic number, 4 bytes for footer_size, so total size is footer_size + 8.
     if ((footer_size + 8) > to_read) {
-        VLOG_FILE << "parquet file has large footer. name = " << _file->file_name()
-                  << ", footer_size = " << footer_size;
+        VLOG_FILE << "parquet file has large footer. name = " << _file->filename() << ", footer_size = " << footer_size;
         to_read = footer_size + 8;
         if (_file_size < to_read) {
             return Status::Corruption(strings::Substitute("Invalid parquet file: name=$0, file_size=$1, footer_size=$2",
-                                                          _file->file_name(), _file_size, to_read));
+                                                          _file->filename(), _file_size, to_read));
         }
         footer_buf = new uint8[to_read];
         {
