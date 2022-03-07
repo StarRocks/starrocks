@@ -2,13 +2,13 @@
 
 package com.starrocks.sql.plan;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ViewPlanTest extends PlanTestBase {
     private final static AtomicInteger INDEX = new AtomicInteger(0);

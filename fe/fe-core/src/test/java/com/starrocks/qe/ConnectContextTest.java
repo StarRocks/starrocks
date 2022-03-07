@@ -21,9 +21,6 @@
 
 package com.starrocks.qe;
 
-import java.nio.channels.SocketChannel;
-import java.util.List;
-
 import com.starrocks.catalog.Catalog;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -34,6 +31,9 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.nio.channels.SocketChannel;
+import java.util.List;
 
 public class ConnectContextTest {
     @Mocked

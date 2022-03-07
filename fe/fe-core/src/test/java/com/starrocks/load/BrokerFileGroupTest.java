@@ -2,8 +2,6 @@
 
 package com.starrocks.load;
 
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BinaryPredicate;
@@ -25,6 +23,8 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.List;
 
 public class BrokerFileGroupTest {
     @Mocked

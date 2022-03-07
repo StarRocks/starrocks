@@ -21,13 +21,6 @@
 
 package com.starrocks.backup;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.zip.Adler32;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
@@ -69,6 +62,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.Adler32;
 
 public class RestoreJobTest {
 

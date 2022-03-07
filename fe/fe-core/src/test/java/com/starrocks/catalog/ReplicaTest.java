@@ -21,16 +21,6 @@
 
 package com.starrocks.catalog;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.junit.Assert.assertEquals;
-
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeMetaVersion;
 import mockit.Expectations;
@@ -38,6 +28,15 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.List;
+import static org.junit.Assert.assertEquals;
 
 public class ReplicaTest {
 

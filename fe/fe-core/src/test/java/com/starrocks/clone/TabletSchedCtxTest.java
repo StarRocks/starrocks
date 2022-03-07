@@ -21,12 +21,12 @@
 
 package com.starrocks.clone;
 
-import java.util.PriorityQueue;
-
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletSchedCtx.Type;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.PriorityQueue;
 
 public class TabletSchedCtxTest {
 

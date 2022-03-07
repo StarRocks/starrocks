@@ -1,10 +1,5 @@
 package com.starrocks.catalog;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.common.FeConstants;
 import io.netty.buffer.ByteBuf;
@@ -15,6 +10,11 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class CreateFunctionTest {
     @Mocked

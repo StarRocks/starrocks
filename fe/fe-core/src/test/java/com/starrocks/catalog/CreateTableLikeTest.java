@@ -21,10 +21,6 @@
 
 package com.starrocks.catalog;
 
-import java.io.File;
-import java.util.List;
-import java.util.UUID;
-
 import avro.shaded.com.google.common.collect.Lists;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
@@ -37,6 +33,10 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.File;
+import java.util.List;
+import java.util.UUID;
 
 public class CreateTableLikeTest {
     private static final String runningDir = "fe/mocked/CreateTableLikeTest/" + UUID.randomUUID() + "/";

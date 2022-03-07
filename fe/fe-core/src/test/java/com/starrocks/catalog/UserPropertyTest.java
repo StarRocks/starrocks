@@ -21,13 +21,6 @@
 
 package com.starrocks.catalog;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -35,6 +28,13 @@ import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.UserProperty;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.List;
 
 public class UserPropertyTest {
     private FakeCatalog fakeCatalog;

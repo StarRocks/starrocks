@@ -21,9 +21,6 @@
 
 package com.starrocks.analysis;
 
-import java.util.LinkedList;
-import java.util.List;
-
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -46,6 +43,9 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.LinkedList;
+import java.util.List;
 
 public class DropMaterializedViewStmtTest {
 

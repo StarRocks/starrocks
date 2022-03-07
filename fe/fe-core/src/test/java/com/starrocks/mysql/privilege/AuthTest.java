@@ -21,12 +21,6 @@
 
 package com.starrocks.mysql.privilege;
 
-import java.io.UnsupportedEncodingException;
-import java.lang.reflect.InvocationTargetException;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Set;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.Analyzer;
@@ -58,6 +52,12 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.UnsupportedEncodingException;
+import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Set;
 
 public class AuthTest {
 

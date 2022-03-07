@@ -2,13 +2,12 @@
 
 package com.starrocks.sql.analyzer;
 
-import java.util.UUID;
-
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
-
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.UUID;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeShowTest {
     // may also start a Mocked Frontend

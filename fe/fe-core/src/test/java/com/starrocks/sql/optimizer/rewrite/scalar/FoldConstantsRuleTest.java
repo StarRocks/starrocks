@@ -1,11 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-
-import static org.junit.Assert.assertEquals;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
@@ -24,6 +19,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import mockit.Expectations;
 import org.junit.Test;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import static org.junit.Assert.assertEquals;
 
 public class FoldConstantsRuleTest {
     private final FoldConstantsRule rule = new FoldConstantsRule();

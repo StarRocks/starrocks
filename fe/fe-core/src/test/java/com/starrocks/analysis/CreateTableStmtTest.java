@@ -21,8 +21,6 @@
 
 package com.starrocks.analysis;
 
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ColumnDef.DefaultValueDef;
 import com.starrocks.catalog.AggregateType;
@@ -44,6 +42,8 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 public class CreateTableStmtTest {
     private static final Logger LOG = LoggerFactory.getLogger(CreateTableStmtTest.class);

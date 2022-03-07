@@ -2,9 +2,6 @@
 
 package com.starrocks.catalog;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.common.DdlException;
@@ -12,6 +9,9 @@ import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class JDBCResourceTest {
     private Analyzer analyzer;

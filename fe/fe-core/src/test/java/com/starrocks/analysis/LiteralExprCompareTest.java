@@ -21,14 +21,14 @@
 
 package com.starrocks.analysis;
 
-import java.util.TimeZone;
-
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.TimeZone;
 
 public class LiteralExprCompareTest {
 

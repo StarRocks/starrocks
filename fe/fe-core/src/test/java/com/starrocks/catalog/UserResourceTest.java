@@ -21,18 +21,18 @@
 
 package com.starrocks.catalog;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.UserResource;
 import com.starrocks.thrift.TResourceType;
 import com.starrocks.thrift.TUserResource;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 
 public class UserResourceTest {
     @Test

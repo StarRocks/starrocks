@@ -2,12 +2,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.assertEquals;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -37,6 +31,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Test;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import static org.junit.Assert.assertEquals;
 
 public class DistributionPrunerRuleTest {
 

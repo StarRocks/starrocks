@@ -21,12 +21,12 @@
 
 package com.starrocks.analysis;
 
-import java.io.StringReader;
-
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.SqlModeHelper;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.io.StringReader;
 
 public class SqlModeTest {
 

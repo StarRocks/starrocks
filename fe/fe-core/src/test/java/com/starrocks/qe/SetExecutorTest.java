@@ -21,8 +21,6 @@
 
 package com.starrocks.qe;
 
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
@@ -40,6 +38,8 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.List;
 
 public class SetExecutorTest {
     private Analyzer analyzer;

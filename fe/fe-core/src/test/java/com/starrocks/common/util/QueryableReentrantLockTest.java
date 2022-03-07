@@ -21,10 +21,10 @@
 
 package com.starrocks.common.util;
 
-import java.util.concurrent.TimeUnit;
-
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.concurrent.TimeUnit;
 
 public class QueryableReentrantLockTest {
 

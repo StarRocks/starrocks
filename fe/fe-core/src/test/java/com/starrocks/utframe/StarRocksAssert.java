@@ -21,12 +21,6 @@
 
 package com.starrocks.utframe;
 
-import java.io.IOException;
-import java.io.StringReader;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Stream;
-
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.AlterTableStmt;
@@ -58,6 +52,12 @@ import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.StringUtils;
 import org.junit.Assert;
+
+import java.io.IOException;
+import java.io.StringReader;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 public class StarRocksAssert {
 

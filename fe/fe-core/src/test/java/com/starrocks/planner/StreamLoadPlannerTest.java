@@ -21,10 +21,6 @@
 
 package com.starrocks.planner;
 
-import java.io.StringReader;
-import java.util.Arrays;
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
@@ -50,6 +46,10 @@ import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.io.StringReader;
+import java.util.Arrays;
+import java.util.List;
 
 public class StreamLoadPlannerTest {
     @Injectable

@@ -2,15 +2,15 @@
 
 package com.starrocks.mysql.privilege;
 
-import java.io.UnsupportedEncodingException;
-import java.nio.charset.StandardCharsets;
-
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.security.LdapSecurity;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 
 public class PasswordTest {
 

@@ -21,10 +21,6 @@
 
 package com.starrocks.load.loadv2;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
@@ -60,6 +56,10 @@ import org.apache.spark.launcher.SparkLauncher;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 
 public class SparkEtlJobHandlerTest {
     private long loadJobId;

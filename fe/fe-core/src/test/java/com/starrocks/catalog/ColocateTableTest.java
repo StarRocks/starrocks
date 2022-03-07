@@ -21,12 +21,6 @@
 
 package com.starrocks.catalog;
 
-import java.io.File;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
@@ -43,6 +37,12 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+
+import java.io.File;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public class ColocateTableTest {
     private static final String runningDir = "fe/mocked/ColocateTableTest" + UUID.randomUUID() + "/";

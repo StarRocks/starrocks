@@ -21,9 +21,6 @@
 
 package com.starrocks.qe;
 
-import java.nio.channels.SocketChannel;
-import java.util.concurrent.atomic.AtomicLong;
-
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlProto;
@@ -35,6 +32,9 @@ import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.nio.channels.SocketChannel;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class ConnectSchedulerTest {
     private static final Logger LOG = LoggerFactory.getLogger(ConnectScheduler.class);

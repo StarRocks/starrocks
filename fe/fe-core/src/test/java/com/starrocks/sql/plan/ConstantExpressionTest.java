@@ -17,14 +17,14 @@
 
 package com.starrocks.sql.plan;
 
-import java.util.UUID;
-
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.UUID;
 
 public class ConstantExpressionTest {
     // use a unique dir so that it won't be conflict with other unit test which

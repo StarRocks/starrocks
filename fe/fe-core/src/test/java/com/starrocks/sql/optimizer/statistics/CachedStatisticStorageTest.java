@@ -2,10 +2,6 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
-
 import avro.shaded.com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.catalog.Catalog;
@@ -27,6 +23,10 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
 
 public class CachedStatisticStorageTest {
     // use a unique dir so that it won't be conflict with other unit test which

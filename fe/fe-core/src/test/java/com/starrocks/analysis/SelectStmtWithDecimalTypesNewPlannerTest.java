@@ -2,8 +2,6 @@
 
 package com.starrocks.analysis;
 
-import java.util.UUID;
-
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
@@ -14,6 +12,8 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+
+import java.util.UUID;
 
 public class SelectStmtWithDecimalTypesNewPlannerTest {
     private static final String runningDir =

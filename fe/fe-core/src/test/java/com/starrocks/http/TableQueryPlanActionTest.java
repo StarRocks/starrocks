@@ -21,10 +21,6 @@
 
 package com.starrocks.http;
 
-import java.io.IOException;
-import java.util.Base64;
-import java.util.Objects;
-
 import com.starrocks.thrift.TQueryPlanInfo;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -35,6 +31,10 @@ import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Base64;
+import java.util.Objects;
 
 public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
 

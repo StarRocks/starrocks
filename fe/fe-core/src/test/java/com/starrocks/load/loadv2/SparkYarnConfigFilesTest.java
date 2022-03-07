@@ -1,8 +1,5 @@
 package com.starrocks.load.loadv2;
 
-import java.io.File;
-import java.util.Map;
-
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.LoadException;
@@ -11,6 +8,9 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.File;
+import java.util.Map;
 
 public class SparkYarnConfigFilesTest {
     private static final String RESOURCE_NAME = "spark0";

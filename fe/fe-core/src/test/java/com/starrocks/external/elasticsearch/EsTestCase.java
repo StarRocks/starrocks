@@ -21,6 +21,17 @@
 
 package com.starrocks.external.elasticsearch;
 
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.CatalogTestUtil;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.EsTable;
+import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.FeMetaVersion;
+import com.starrocks.meta.MetaContext;
+import org.junit.BeforeClass;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -32,17 +43,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-
-import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.CatalogTestUtil;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.FakeCatalog;
-import com.starrocks.catalog.FakeEditLog;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
-import com.starrocks.meta.MetaContext;
-import org.junit.BeforeClass;
 
 public class EsTestCase {
 

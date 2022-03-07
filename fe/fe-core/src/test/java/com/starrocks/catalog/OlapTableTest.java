@@ -21,11 +21,6 @@
 
 package com.starrocks.catalog;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.Table.TableType;
@@ -35,6 +30,11 @@ import com.starrocks.common.util.UnitTestUtil;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Test;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.List;
 
 public class OlapTableTest {
 

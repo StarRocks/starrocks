@@ -1,9 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import java.io.File;
-import java.util.UUID;
-
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TablePattern;
@@ -17,6 +14,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.File;
+import java.util.UUID;
 
 public class PrivilegeCheckerTest {
 

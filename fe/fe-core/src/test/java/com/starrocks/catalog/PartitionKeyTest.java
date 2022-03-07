@@ -21,6 +21,13 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.PartitionValue;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -30,13 +37,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.TimeZone;
-
-import com.starrocks.analysis.PartitionValue;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
 
 public class PartitionKeyTest {
 

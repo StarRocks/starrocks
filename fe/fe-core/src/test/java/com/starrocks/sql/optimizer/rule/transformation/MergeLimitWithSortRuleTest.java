@@ -2,10 +2,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import java.util.List;
-
-import static org.junit.Assert.assertEquals;
-
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Memo;
@@ -18,6 +14,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import org.junit.Test;
+
+import java.util.List;
+import static org.junit.Assert.assertEquals;
 
 public class MergeLimitWithSortRuleTest {
 

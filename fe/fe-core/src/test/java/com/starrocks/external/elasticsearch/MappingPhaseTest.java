@@ -21,12 +21,6 @@
 
 package com.starrocks.external.elasticsearch;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Type;
@@ -35,6 +29,11 @@ import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 public class MappingPhaseTest extends EsTestCase {
 

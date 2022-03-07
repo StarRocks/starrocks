@@ -21,12 +21,12 @@
 
 package com.starrocks.qe;
 
-import java.util.concurrent.CountDownLatch;
-
 import com.google.common.collect.Multiset;
 import com.google.common.collect.TreeMultiset;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.concurrent.CountDownLatch;
 
 public class JournalObservableTest {
     @Test

@@ -21,15 +21,6 @@
 
 package com.starrocks.task;
 
-import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import com.google.common.collect.Range;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.catalog.AggregateType;
@@ -52,6 +43,15 @@ import com.starrocks.thrift.TTaskType;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class AgentTaskTest {
 

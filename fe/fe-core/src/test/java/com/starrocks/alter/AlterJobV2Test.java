@@ -21,9 +21,6 @@
 
 package com.starrocks.alter;
 
-import java.util.Map;
-import java.util.UUID;
-
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.catalog.Catalog;
@@ -39,6 +36,9 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Map;
+import java.util.UUID;
 
 public class AlterJobV2Test {
     // use a unique dir so that it won't be conflict with other unit test which

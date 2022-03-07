@@ -21,10 +21,6 @@
 
 package com.starrocks.analysis;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.nio.ByteBuffer;
-
 import com.google.common.base.Strings;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -33,6 +29,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
 
 public class DecimalLiteralTest {
 

@@ -21,10 +21,6 @@
 
 package com.starrocks.load.routineload;
 
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -53,6 +49,10 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public class RoutineLoadJobTest {
     @Test

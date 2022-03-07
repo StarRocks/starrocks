@@ -21,11 +21,6 @@
 
 package com.starrocks.common.util;
 
-import java.time.ZoneId;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.TimeZone;
-
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -37,6 +32,11 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.time.ZoneId;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.TimeZone;
 
 public class TimeUtilsTest {
 

@@ -21,9 +21,6 @@
 
 package com.starrocks.backup;
 
-import java.util.List;
-import java.util.Map;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -66,6 +63,9 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
+
+import java.util.List;
+import java.util.Map;
 
 public class CatalogMocker {
     // user

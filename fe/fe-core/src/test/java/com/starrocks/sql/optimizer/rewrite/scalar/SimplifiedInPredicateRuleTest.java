@@ -2,8 +2,6 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import static org.junit.Assert.assertEquals;
-
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -12,6 +10,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 public class SimplifiedInPredicateRuleTest {
 

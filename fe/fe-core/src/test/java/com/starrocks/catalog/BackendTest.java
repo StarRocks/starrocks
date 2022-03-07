@@ -21,6 +21,14 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.common.FeConstants;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TDisk;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -30,14 +38,6 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-
-import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.common.FeConstants;
-import com.starrocks.system.Backend;
-import com.starrocks.thrift.TDisk;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
 
 public class BackendTest {
     private Backend backend;

@@ -21,17 +21,17 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.DynamicPartitionProperty;
+import org.junit.Assert;
+import org.junit.Test;
+
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.TimeZone;
-
-import com.google.common.collect.Maps;
-import com.starrocks.catalog.DynamicPartitionProperty;
-import org.junit.Assert;
-import org.junit.Test;
 
 public class DynamicPartitionUtilTest {
 

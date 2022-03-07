@@ -21,13 +21,13 @@
 
 package com.starrocks.analysis;
 
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 public class ReorderColumnsClauseTest {
     private static Analyzer analyzer;

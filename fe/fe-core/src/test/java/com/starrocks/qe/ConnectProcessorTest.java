@@ -21,10 +21,6 @@
 
 package com.starrocks.qe;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
-
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -45,6 +41,10 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
 
 public class ConnectProcessorTest {
     private static ByteBuffer initDbPacket;

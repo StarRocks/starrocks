@@ -1,11 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import java.io.StringReader;
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
-
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SqlParser;
@@ -35,6 +30,11 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+
+import java.io.StringReader;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
 
 public class AnalyzeDecimalV3Test {
     private static final String runningDir = "fe/mocked/AnalyzeDecimalV3Test/" + UUID.randomUUID() + "/";

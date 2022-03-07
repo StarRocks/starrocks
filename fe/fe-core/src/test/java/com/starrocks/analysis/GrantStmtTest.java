@@ -21,8 +21,6 @@
 
 package com.starrocks.analysis;
 
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.Catalog;
@@ -35,6 +33,8 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.List;
 
 public class GrantStmtTest {
     private Analyzer analyzer;

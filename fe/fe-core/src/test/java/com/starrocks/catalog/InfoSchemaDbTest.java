@@ -21,10 +21,10 @@
 
 package com.starrocks.catalog;
 
-import java.io.IOException;
-
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.io.IOException;
 
 public class InfoSchemaDbTest {
     @Test

@@ -21,15 +21,15 @@
 
 package com.starrocks.load.loadv2;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.URL;
-
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URL;
 
 public class SparkLauncherMonitorTest {
     private String appId;

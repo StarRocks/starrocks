@@ -2,9 +2,6 @@
 
 package com.starrocks.catalog;
 
-import java.util.List;
-import java.util.Map;
-
 import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
@@ -13,6 +10,9 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.Map;
 
 public class JDBCTableTest {
     private String table;

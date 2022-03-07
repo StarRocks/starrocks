@@ -21,8 +21,6 @@
 
 package com.starrocks.analysis;
 
-import java.util.Arrays;
-
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FakeCatalog;
 import com.starrocks.common.AnalysisException;
@@ -34,6 +32,8 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+
+import java.util.Arrays;
 
 public class ShowPartitionsStmtTest {
     @Mocked

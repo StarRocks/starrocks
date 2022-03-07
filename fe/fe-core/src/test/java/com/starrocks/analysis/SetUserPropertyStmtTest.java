@@ -21,8 +21,6 @@
 
 package com.starrocks.analysis;
 
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
@@ -33,6 +31,8 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.List;
 
 public class SetUserPropertyStmtTest {
     private Analyzer analyzer;

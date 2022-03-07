@@ -2,8 +2,6 @@
 
 package com.starrocks.catalog;
 
-import java.util.List;
-
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
@@ -12,6 +10,8 @@ import com.starrocks.analysis.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.List;
 
 public class CatalogRecycleBinTest {
 

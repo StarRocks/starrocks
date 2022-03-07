@@ -21,12 +21,12 @@
 
 package com.starrocks.mysql;
 
-import java.io.UnsupportedEncodingException;
-import java.nio.charset.StandardCharsets;
-
 import com.starrocks.common.AnalysisException;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 
 public class MysqlPasswordTest {
     @Test

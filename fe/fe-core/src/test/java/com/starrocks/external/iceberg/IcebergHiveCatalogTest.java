@@ -2,8 +2,6 @@
 
 package com.starrocks.external.iceberg;
 
-import java.util.Map;
-
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -17,6 +15,8 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.Map;
 
 
 public class IcebergHiveCatalogTest {

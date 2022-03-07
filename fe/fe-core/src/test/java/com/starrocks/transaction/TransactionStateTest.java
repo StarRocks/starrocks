@@ -21,14 +21,6 @@
 
 package com.starrocks.transaction;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.UUID;
-
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
@@ -39,6 +31,14 @@ import com.starrocks.transaction.TransactionState.TxnSourceType;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.UUID;
 
 public class TransactionStateTest {
 

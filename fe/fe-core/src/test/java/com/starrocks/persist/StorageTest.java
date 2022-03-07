@@ -21,12 +21,12 @@
 
 package com.starrocks.persist;
 
+import org.junit.Assert;
+import org.junit.Test;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-
-import org.junit.Assert;
-import org.junit.Test;
 
 public class StorageTest {
     private final String meta = "storageTestDir/";

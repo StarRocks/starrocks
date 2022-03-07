@@ -21,10 +21,6 @@
 
 package com.starrocks.persist;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-
 import com.starrocks.catalog.Catalog;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
@@ -33,6 +29,10 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Test;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 
 public class EditLogTest {
     private final String meta = "editLogTestDir/";

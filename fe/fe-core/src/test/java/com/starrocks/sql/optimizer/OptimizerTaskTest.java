@@ -2,15 +2,6 @@
 
 package com.starrocks.sql.optimizer;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
@@ -60,6 +51,14 @@ import mockit.Mocked;
 import org.junit.Before;
 import org.junit.Test;
 import org.spark_project.guava.collect.Maps;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class OptimizerTaskTest {
     private ColumnRefFactory columnRefFactory;

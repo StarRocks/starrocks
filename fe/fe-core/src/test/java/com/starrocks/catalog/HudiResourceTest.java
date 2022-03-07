@@ -2,8 +2,6 @@
 
 package com.starrocks.catalog;
 
-import java.util.Map;
-
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
@@ -19,6 +17,8 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.Map;
 
 public class HudiResourceTest {
     private Analyzer analyzer;

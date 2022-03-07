@@ -2,10 +2,6 @@
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
-import java.util.List;
-
-import static org.junit.Assert.assertEquals;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
@@ -18,6 +14,9 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import mockit.Mocked;
 import org.junit.Test;
+
+import java.util.List;
+import static org.junit.Assert.assertEquals;
 
 public class OlapScanImplementationRuleTest {
 

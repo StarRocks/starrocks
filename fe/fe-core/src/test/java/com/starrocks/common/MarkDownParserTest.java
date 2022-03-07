@@ -21,12 +21,12 @@
 
 package com.starrocks.common;
 
-import java.util.List;
-import java.util.Map;
-
 import com.google.common.collect.Lists;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.Map;
 
 public class MarkDownParserTest {
 

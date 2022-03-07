@@ -21,8 +21,6 @@
 
 package com.starrocks.analysis;
 
-import java.util.UUID;
-
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -32,6 +30,8 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.UUID;
 
 public class AggregateTest {
 

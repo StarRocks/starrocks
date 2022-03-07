@@ -21,14 +21,6 @@
 
 package com.starrocks.cluster;
 
-import java.io.BufferedInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.Analyzer;
@@ -48,6 +40,14 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 
 public class SystemInfoServiceTest {
 

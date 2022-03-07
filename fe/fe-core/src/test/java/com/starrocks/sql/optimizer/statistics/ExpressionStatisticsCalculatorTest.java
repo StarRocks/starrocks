@@ -2,10 +2,6 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import java.time.LocalDateTime;
-
-import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
@@ -17,6 +13,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.time.LocalDateTime;
+import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
 public class ExpressionStatisticsCalculatorTest {
     @Test

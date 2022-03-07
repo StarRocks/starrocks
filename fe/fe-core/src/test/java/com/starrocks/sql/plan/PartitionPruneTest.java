@@ -2,11 +2,11 @@
 
 package com.starrocks.sql.plan;
 
-import static org.junit.Assert.assertTrue;
-
 import com.starrocks.common.FeConstants;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
 
 public class PartitionPruneTest extends PlanTestBase {
     @BeforeClass

@@ -21,10 +21,6 @@
 
 package com.starrocks.qe;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.UUID;
-
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.AuditEvent;
@@ -35,6 +31,10 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.UUID;
 
 public class AuditEventProcessorTest {
 

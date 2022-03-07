@@ -21,11 +21,6 @@
 
 package com.starrocks.common;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TAgentPublishRequest;
@@ -66,6 +61,11 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 public class GenericPoolTest {
     static GenericPool<BackendService.Client> backendService;

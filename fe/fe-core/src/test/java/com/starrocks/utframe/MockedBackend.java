@@ -21,13 +21,6 @@
 
 package com.starrocks.utframe;
 
-import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import com.google.common.collect.Queues;
 import com.starrocks.common.ClientPool;
 import com.starrocks.master.MasterImpl;
@@ -86,6 +79,13 @@ import com.starrocks.thrift.TTransmitDataResult;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
+
+import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /*
  * Mocked Backend

@@ -2,16 +2,15 @@
 
 package com.starrocks.sql.optimizer.transformer;
 
-import java.time.LocalDateTime;
-import java.util.Collections;
-
-import static org.junit.Assert.assertEquals;
-
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.junit.Test;
+
+import java.time.LocalDateTime;
+import java.util.Collections;
+import static org.junit.Assert.assertEquals;
 
 public class SqlToScalarOperatorTranslatorTest {
 

@@ -2,14 +2,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import java.io.File;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
-
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.sql.ast.QueryRelation;
@@ -24,6 +16,13 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.File;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeExprTest {
     // use a unique dir so that it won't be conflict with other unit test which

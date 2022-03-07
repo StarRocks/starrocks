@@ -21,11 +21,6 @@
 
 package com.starrocks.load.loadv2;
 
-import java.io.StringReader;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -79,6 +74,11 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.StringReader;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 public class LoadingTaskPlannerTest {
     private long jobId;

@@ -21,16 +21,16 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.common.FeConstants;
+import com.starrocks.meta.MetaContext;
+import org.junit.Assert;
+import org.junit.Test;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-
-import com.starrocks.common.FeConstants;
-import com.starrocks.meta.MetaContext;
-import org.junit.Assert;
-import org.junit.Test;
 
 public class ReplicaPersistInfoTest {
     @Test

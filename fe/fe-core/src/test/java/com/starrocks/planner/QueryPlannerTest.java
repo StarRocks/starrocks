@@ -21,11 +21,6 @@
 
 package com.starrocks.planner;
 
-import java.io.File;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
@@ -41,6 +36,11 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.File;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public class QueryPlannerTest {
     // use a unique dir so that it won't be conflict with other unit test which

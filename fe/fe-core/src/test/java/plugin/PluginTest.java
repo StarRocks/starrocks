@@ -17,13 +17,13 @@
 
 package plugin;
 
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-
 import com.starrocks.plugin.Plugin;
 import com.starrocks.plugin.PluginContext;
 import com.starrocks.plugin.PluginInfo;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class PluginTest extends Plugin {
 

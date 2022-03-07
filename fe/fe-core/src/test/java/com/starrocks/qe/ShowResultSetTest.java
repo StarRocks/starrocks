@@ -21,12 +21,12 @@
 
 package com.starrocks.qe;
 
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.List;
 
 public class ShowResultSetTest {
     @Mocked

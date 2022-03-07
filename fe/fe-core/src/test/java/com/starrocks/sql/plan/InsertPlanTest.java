@@ -1,8 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.plan;
 
-import java.util.stream.Stream;
-
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -11,6 +9,8 @@ import com.starrocks.thrift.TExplainLevel;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.stream.Stream;
 
 public class InsertPlanTest extends PlanTestBase {
     @BeforeClass

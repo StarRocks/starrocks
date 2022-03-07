@@ -21,8 +21,6 @@
 
 package com.starrocks.sql.optimizer;
 
-import java.util.UUID;
-
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
@@ -33,6 +31,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.UUID;
 
 public class MVRewriteTest {
     private static final String baseDir = "fe";

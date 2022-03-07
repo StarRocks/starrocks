@@ -21,11 +21,11 @@
 
 package com.starrocks.qe;
 
-import java.util.List;
-
 import com.google.gson.Gson;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.List;
 
 public class QueryDetailQueueTest {
     @Test

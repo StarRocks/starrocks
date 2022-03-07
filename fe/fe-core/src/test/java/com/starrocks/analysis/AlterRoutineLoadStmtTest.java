@@ -21,8 +21,6 @@
 
 package com.starrocks.analysis;
 
-import java.util.Map;
-
 import com.google.common.collect.Maps;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
@@ -34,6 +32,8 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.Map;
 
 /*
  * Author: Chenmingyu

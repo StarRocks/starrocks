@@ -2,9 +2,6 @@
 
 package com.starrocks.external.iceberg;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
@@ -29,6 +26,9 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class ExpressionConverterTest {
 

@@ -21,12 +21,12 @@
 
 package com.starrocks.analysis;
 
-import java.io.StringReader;
-import java.lang.reflect.Method;
-
 import com.starrocks.common.util.SqlParserUtils;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.io.StringReader;
+import java.lang.reflect.Method;
 
 public class AdminShowReplicaTest {
 

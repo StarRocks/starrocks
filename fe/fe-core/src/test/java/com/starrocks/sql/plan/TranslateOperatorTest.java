@@ -2,9 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-import java.util.Arrays;
-import java.util.List;
-
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
@@ -12,6 +9,9 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Arrays;
+import java.util.List;
 
 public class TranslateOperatorTest extends PlanTestBase {
 

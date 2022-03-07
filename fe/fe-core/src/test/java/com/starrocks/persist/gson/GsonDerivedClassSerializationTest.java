@@ -21,16 +21,6 @@
 
 package com.starrocks.persist.gson;
 
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.Map;
-
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -42,6 +32,16 @@ import com.starrocks.persist.gson.GsonUtils.PostProcessTypeAdapterFactory;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.io.DataInput;
+import java.io.DataInputStream;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Map;
 
 /*
  * This unit test shows how to serialize and deserialize inherited class.

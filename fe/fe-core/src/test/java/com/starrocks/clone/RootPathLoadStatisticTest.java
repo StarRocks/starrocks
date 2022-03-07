@@ -21,14 +21,14 @@
 
 package com.starrocks.clone;
 
-import java.util.Collections;
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.thrift.TStorageMedium;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.Collections;
+import java.util.List;
 
 public class RootPathLoadStatisticTest {
 

@@ -2,9 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-import java.util.HashMap;
-import java.util.List;
-
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
@@ -40,6 +37,9 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+
+import java.util.HashMap;
+import java.util.List;
 
 public class PlanFragmentTest extends PlanTestBase {
     @BeforeClass

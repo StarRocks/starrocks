@@ -2,12 +2,6 @@
 
 package com.starrocks.external.hive;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Executors;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -22,6 +16,12 @@ import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executors;
 
 public class HiveMetaCacheTest {
     private final List<Column> partColumns = Lists.newArrayList(new Column("k1", Type.INT),

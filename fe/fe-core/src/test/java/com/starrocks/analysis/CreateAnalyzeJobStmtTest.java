@@ -2,9 +2,6 @@
 
 package com.starrocks.analysis;
 
-import java.io.StringReader;
-import java.util.UUID;
-
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.AnalyzeJob;
@@ -14,6 +11,9 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.StringReader;
+import java.util.UUID;
 
 public class CreateAnalyzeJobStmtTest {
     private static final String runningDir = "fe/mocked/CreateAnalyzeJobStmtTest/" + UUID.randomUUID() + "/";

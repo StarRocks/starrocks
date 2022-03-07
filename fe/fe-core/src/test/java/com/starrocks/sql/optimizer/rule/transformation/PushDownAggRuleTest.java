@@ -2,11 +2,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.assertEquals;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -27,6 +22,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.Map;
+import static org.junit.Assert.assertEquals;
 
 public class PushDownAggRuleTest {
 

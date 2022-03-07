@@ -22,8 +22,6 @@
 
 package com.starrocks.load.loadv2;
 
-import java.util.Map;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LoadStmt;
@@ -50,6 +48,8 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Map;
 
 public class LoadJobTest {
 

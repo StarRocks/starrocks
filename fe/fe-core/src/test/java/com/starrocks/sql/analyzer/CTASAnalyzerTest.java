@@ -1,10 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import java.util.UUID;
-
-import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
-
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
@@ -22,6 +18,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.UUID;
+import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
 
 public class CTASAnalyzerTest {

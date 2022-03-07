@@ -2,10 +2,6 @@
 
 package com.starrocks.analysis;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
-
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -21,6 +17,10 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
 
 public class SelectStmtWithDecimalTypesTest {
     private static final String runningDir = "fe/mocked/DecimalDemoTest/" + UUID.randomUUID() + "/";

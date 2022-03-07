@@ -21,10 +21,10 @@
 
 package com.starrocks.mysql;
 
-import java.util.List;
-
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.Auth;
+
+import java.util.List;
 
 public class WrappedAuth extends Auth {
     @Override

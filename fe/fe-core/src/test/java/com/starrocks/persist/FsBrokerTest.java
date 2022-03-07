@@ -21,12 +21,6 @@
 
 package com.starrocks.persist;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
@@ -35,6 +29,12 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 
 public class FsBrokerTest {
 

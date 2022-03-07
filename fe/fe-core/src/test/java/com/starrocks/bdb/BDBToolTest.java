@@ -21,9 +21,6 @@
 
 package com.starrocks.bdb;
 
-import java.io.File;
-import java.io.IOException;
-
 import com.sleepycat.bind.tuple.TupleBinding;
 import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseConfig;
@@ -42,6 +39,9 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.File;
+import java.io.IOException;
 
 public class BDBToolTest {
 
