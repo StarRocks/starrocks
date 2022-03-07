@@ -350,7 +350,7 @@ Status ParquetScanner::open_next_reader() {
             LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
             return st;
         }
-        _conv_ctx.current_file = file->file_name();
+        _conv_ctx.current_file = file->filename();
         auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0);
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file);
         _next_file++;
