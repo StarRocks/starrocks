@@ -35,7 +35,6 @@ Usage: $0 <options>
      --clean                        clean and build ut
      --run                          build and run ut
      --gtest_filter                 specify test cases
-     --with-hdfs                    enable to test hdfs
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
 
@@ -56,7 +55,6 @@ OPTS=$(getopt \
   -l 'run' \
   -l 'clean' \
   -l "gtest_filter:" \
-  -l "with-hdfs" \
   -l 'with-aws' \
   -l 'with-bench' \
   -l 'help' \
@@ -112,7 +110,7 @@ fi
 cd ${CMAKE_BUILD_DIR}
 
 ${CMAKE_CMD} ../ -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} -DSTARROCKS_HOME=${STARROCKS_HOME} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-    -DWITH_AWS=${WITH_AWS} -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DUSE_AVX2=$USE_AVX2 \
+    -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DUSE_AVX2=$USE_AVX2 \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH}
 
 time make -j${PARALLEL}
@@ -182,6 +180,10 @@ export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
 # ===========================================================
 
 export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test/
+
+if [ $WITH_AWS = "OFF" ]; then
+    TEST_FILTER="$TEST_FILTER:-*S3*"
+fi
 
 # prepare util test_data
 if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then

@@ -193,15 +193,14 @@ set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/li
 add_library(crypto STATIC IMPORTED)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 
-if (WITH_AWS)
-    set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
-    set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n")
-    foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
-        list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
-    endforeach()
-    find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer)
-    include_directories(${AWSSDK_INCLUDE_DIRS})
-endif()
+set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
+set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n")
+foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
+    list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/${lib}/cmake)
+    list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
+endforeach()
+find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer)
+include_directories(${AWSSDK_INCLUDE_DIRS})
 
 add_library(libevent STATIC IMPORTED)
 set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
@@ -335,10 +334,6 @@ elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
 endif()
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}  -Wno-attributes -DS2_USE_GFLAGS -DS2_USE_GLOG")
-
-if (WITH_AWS)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_AWS")
-endif()
 
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -faligned-new")
@@ -479,12 +474,12 @@ include_directories(${JAVA_HOME}/include)
 include_directories(${JAVA_HOME}/include/linux)
 
 
-if (WITH_AWS)
-    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        ${AWSSDK_LINK_LIBRARIES}
-        ${AWSSDK_PLATFORM_DEPS}
-        )
-endif()
+
+set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+    ${AWSSDK_LINK_LIBRARIES}
+    ${AWSSDK_PLATFORM_DEPS}
+    )
+
 
 # Set thirdparty libraries
 set(STARROCKS_DEPENDENCIES
