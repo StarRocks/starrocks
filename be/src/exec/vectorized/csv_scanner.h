@@ -34,7 +34,7 @@ private:
     public:
         ScannerCSVReader(std::shared_ptr<SequentialFile> file, const string& record_delimiter,
                          const string& field_delimiter)
-                : CSVReader(record_delimiter, field_delimiter) {
+                : CSVReader(record_delimiter, field_delimiter, record_delimiter.size(), field_delimiter.size()) {
             _file = std::move(file);
         }
 

@@ -71,9 +71,12 @@ public:
     using Field = Slice;
     using Fields = std::vector<Field>;
 
-    CSVReader(string record_delimiter, string field_delimiter)
+    CSVReader(string record_delimiter, string field_delimiter, size_t _record_delimiter_length,
+              size_t _field_delimiter_length)
             : _record_delimiter(std::move(record_delimiter)),
               _field_delimiter(std::move(field_delimiter)),
+              _record_delimiter_length(_record_delimiter_length),
+              _field_delimiter_length(_field_delimiter_length),
               _storage(kMinBufferSize),
               _buff(_storage.data(), _storage.size()) {}
 
@@ -88,6 +91,8 @@ public:
 protected:
     string _record_delimiter;
     string _field_delimiter;
+    size_t _record_delimiter_length;
+    size_t _field_delimiter_length;
     raw::RawVector<char> _storage;
     CSVBuffer _buff;
 
