@@ -256,6 +256,7 @@ set(EXEC_FILES
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
         ./gutil/sysinfo-test.cc
+        ./exec/vectorized/hdfs_scan_node_test.cpp
         )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
@@ -274,10 +275,6 @@ endif()
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif()
-
-if (WITH_HDFS)
-    set(EXEC_FILES ${EXEC_FILES} ./exec/vectorized/hdfs_scan_node_test.cpp)
-endif ()
 
 add_executable(starrocks_test ${EXEC_FILES})
 

@@ -69,7 +69,7 @@ public:
         return Status::OK();
     }
 
-    const std::string& file_name() const override { return _path; }
+    const std::string& filename() const override { return _path; }
 
 private:
     std::string _path;
@@ -88,7 +88,7 @@ public:
         return nread;
     }
 
-    const std::string& filename() const override { return _random_file.file_name(); }
+    const std::string& filename() const override { return _random_file.filename(); }
 
     Status skip(uint64_t n) override {
         uint64_t size = 0;

@@ -74,6 +74,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
             // Has reached the end of file and the buffer is empty.
             _should_stop_scan = true;
             LOG(INFO) << "Reach end of file!";
+            return Status::EndOfFile(_file->filename());
         } else if (n < _record_delimiter_length ||
                    _buff.find(_record_delimiter, n - _record_delimiter_length) == nullptr) {
             // Has reached the end of file but still no record delimiter found, which
