@@ -1,7 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#ifdef STARROCKS_WITH_AWS
-
 #include "io/s3_input_stream.h"
 
 #include <aws/core/Aws.h>
@@ -213,5 +211,3 @@ TEST_F(S3InputStreamTest, test_read_at) {
 }
 
 } // namespace starrocks::io
-
-#endif

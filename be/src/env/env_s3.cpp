@@ -1,7 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#ifdef STARROCKS_WITH_AWS
-
 #include "env/env_s3.h"
 
 #include <aws/core/Aws.h>
@@ -237,5 +235,3 @@ StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const WritableF
 }
 
 } // namespace starrocks
-
-#endif
