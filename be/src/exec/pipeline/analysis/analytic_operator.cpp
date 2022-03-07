@@ -112,7 +112,7 @@ Status AnalyticOperator::_process_by_partition_if_necessary() {
             _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows()) {
             vectorized::ChunkPtr chunk;
             RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
-            _analytor->offer_chunk_to_buffer(chunk);
+            _analytor->offer_chunk_to_buffer(std::move(chunk));
             if (_analytor->reached_limit()) {
                 return Status::OK();
             }

@@ -57,7 +57,7 @@ public:
 
     bool is_chunk_buffer_empty();
     vectorized::ChunkPtr poll_chunk_buffer();
-    void offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk);
+    void offer_chunk_to_buffer(vectorized::ChunkPtr chunk);
 
     bool reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
     std::vector<vectorized::ChunkPtr>& input_chunks() { return _input_chunks; }
@@ -132,7 +132,6 @@ private:
 
     // only used in pipeline engine
     std::queue<vectorized::ChunkPtr> _buffer;
-    std::mutex _buffer_mutex;
 
     RuntimeProfile* _runtime_profile;
     RuntimeProfile::Counter* _rows_returned_counter;

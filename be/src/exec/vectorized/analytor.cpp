@@ -327,23 +327,20 @@ void Analytor::close(RuntimeState* state) {
 }
 
 bool Analytor::is_chunk_buffer_empty() {
-    std::lock_guard<std::mutex> l(_buffer_mutex);
     return _buffer.empty();
 }
 
 vectorized::ChunkPtr Analytor::poll_chunk_buffer() {
-    std::lock_guard<std::mutex> l(_buffer_mutex);
     if (_buffer.empty()) {
         return nullptr;
     }
-    vectorized::ChunkPtr chunk = _buffer.front();
+    vectorized::ChunkPtr chunk = std::move(_buffer.front());
     _buffer.pop();
     return chunk;
 }
 
-void Analytor::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
-    std::lock_guard<std::mutex> l(_buffer_mutex);
-    _buffer.push(chunk);
+void Analytor::offer_chunk_to_buffer(vectorized::ChunkPtr chunk) {
+    _buffer.emplace(std::move(chunk));
 }
 
 FrameRange Analytor::get_sliding_frame_range() {
