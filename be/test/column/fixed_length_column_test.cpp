@@ -547,7 +547,7 @@ TEST(FixedLengthColumnTest, test_xor_checksum) {
         column->append(i);
     }
 
-    int64_t checksum = column->xor_checksum();
+    int64_t checksum = column->xor_checksum(0, 101);
     int64_t expected_checksum = 100;
 
     ASSERT_EQ(checksum, expected_checksum);
