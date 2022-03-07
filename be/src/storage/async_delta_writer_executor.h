@@ -3,11 +3,11 @@
 #include "common/compiler_util.h"
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/bthread.h>
 #include <bthread/execution_queue.h>
 DIAGNOSTIC_POP
 
 #include "common/config.h"
-#include "util/monotime.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -35,7 +35,7 @@ public:
             st = _thread_pool->submit_func([=]() { fn(args); });
             if (!st.is_service_unavailable()) break;
             LOG(INFO) << "async_delta_writer is busy, retry after " << kRetryIntervalMs << "ms";
-            SleepFor(MonoDelta::FromMilliseconds(kRetryIntervalMs));
+            bthread_usleep(kRetryIntervalMs * 1000);
         }
         LOG_IF(WARNING, !st.ok()) << st;
         return st.ok() ? 0 : -1;
