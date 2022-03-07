@@ -162,16 +162,12 @@ public:
     // Like append_strings. To achieve higher performance, this function will read 16 bytes out of
     // bounds. So the caller must make sure that no invalid address access exception occurs for
     // out-of-bounds reads
-    [[nodiscard]] virtual bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
-        return false;
-    }
+    [[nodiscard]] virtual bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) { return false; }
 
     // Like `append_strings` but the corresponding storage of each slice is adjacent to the
     // next one's, the implementation can take advantage of this feature, e.g, copy the whole
     // memory at once.
-    [[nodiscard]] virtual bool append_continuous_strings(const Buffer<Slice>& strs) {
-        return append_strings(strs);
-    }
+    [[nodiscard]] virtual bool append_continuous_strings(const Buffer<Slice>& strs) { return append_strings(strs); }
 
     // Copy |length| bytes from |buff| into this column and cast them as integers.
     // The count of copied integers depends on |length| and the size of column value:
