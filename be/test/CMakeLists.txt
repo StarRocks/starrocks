@@ -24,6 +24,7 @@ set(EXEC_FILES
         ./env/env_broker_test.cpp
         ./env/env_posix_test.cpp
         ./env/env_memory_test.cpp
+        ./env/env_s3_test.cpp
         ./env/output_stream_wrapper_test.cpp
         ./exec/buffered_reader_test.cpp
         ./exec/es_query_builder_test.cpp
@@ -113,9 +114,11 @@ set(EXEC_FILES
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
-        io/array_input_stream_test.cpp
+        ./io/array_input_stream_test.cpp
         ./io/fd_output_stream_test.cpp
-        io/fd_input_stream_test.cpp
+        ./io/s3_output_stream_test.cpp
+        ./io/s3_input_stream_test.cpp
+        ./io/fd_input_stream_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
@@ -266,11 +269,6 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
         set_source_files_properties(./formats/json/binary_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
         set_source_files_properties(./formats/json/numeric_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
         set_source_files_properties(./formats/json/nullable_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-endif()
-
-if (WITH_AWS)
-    set(EXEC_FILES ${EXEC_FILES} ./io/s3_output_stream_test.cpp ./io/s3_input_stream_test.cpp
-        ./env/env_s3_test.cpp)
 endif()
 
 if (USE_AVX2)

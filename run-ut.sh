@@ -181,6 +181,10 @@ export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
 
 export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test/
 
+if [ $WITH_AWS = "OFF" ]; then
+    TEST_FILTER="$TEST_FILTER:-*S3*"
+fi
+
 # prepare util test_data
 if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then
     rm -rf ${STARROCKS_TEST_BINARY_DIR}/util/test_data
