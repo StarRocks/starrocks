@@ -93,8 +93,15 @@ public class TypeManager {
     public static Type getCompatibleTypeForBetweenAndIn(List<Type> types) {
         Preconditions.checkState(types.size() > 0);
         Type compatibleType = types.get(0);
+        // TODO(mofei) support it
+        if (compatibleType.isJsonType()) {
+            throw new SemanticException("InPredicate of JSON is not supported");
+        }
 
         for (int i = 1; i < types.size(); i++) {
+            if (types.get(i).isJsonType()) {
+                throw new SemanticException("InPredicate of JSON is not supported");
+            }
             compatibleType = Type.getCmpType(compatibleType, types.get(i));
         }
 

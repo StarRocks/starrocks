@@ -1199,6 +1199,7 @@ public abstract class Type implements Cloneable {
             case HLL:
             case BITMAP:
             case PERCENTILE:
+            case JSON:
                 return VARCHAR;
             case DECIMALV2:
                 return DECIMALV2;
@@ -1226,6 +1227,10 @@ public abstract class Type implements Cloneable {
 
         if (t1.getPrimitiveType().equals(t2.getPrimitiveType())) {
             return t1;
+        }
+
+        if (t1.isJsonType() || t2.isJsonType()) {
+            return ScalarType.createJsonType();
         }
 
         PrimitiveType t1ResultType = t1.getResultType().getPrimitiveType();
