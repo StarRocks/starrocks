@@ -7,9 +7,6 @@
 #include "exec/pipeline/chunk_source.h"
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "exec/vectorized/hdfs_scanner.h"
-#include "exec/vectorized/hdfs_scanner_orc.h"
-#include "exec/vectorized/hdfs_scanner_parquet.h"
-#include "exec/vectorized/hdfs_scanner_text.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -21,7 +18,8 @@ class SlotDescriptor;
 
 namespace vectorized {
 class RuntimeFilterProbeCollector;
-}
+class HdfsScanner;
+} // namespace vectorized
 
 namespace pipeline {
 
@@ -30,11 +28,11 @@ class HdfsChunkSource final : public ChunkSource {
 public:
     HdfsChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorized::HdfsScanNode* scan_node);
 
-    ~HdfsChunkSource() override = default;
+    ~HdfsChunkSource() override;
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool has_next_chunk() const override;
 
@@ -49,11 +47,6 @@ public:
                                                            int worker_id, workgroup::WorkGroupPtr running_wg) override;
 
 private:
-    friend HdfsScanner;
-    friend HdfsParquetScanner;
-    friend HdfsOrcScanner;
-    friend HdfsTextScanner;
-
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round,
@@ -67,11 +60,10 @@ private:
     void _init_counter(RuntimeState* state);
 
     void _init_partition_values();
-    Status _init_scanner();
+    Status _init_scanner(RuntimeState* state);
 
     // =====================================
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::Chunk* chunk);
-    void _update_counter();
     void _update_realtime_counter(vectorized::Chunk* chunk);
 
     // =====================================
@@ -82,11 +74,13 @@ private:
     THdfsScanRange* _scan_range;
 
     Status _status = Status::OK();
+    bool _closed = false;
     UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
 
     ObjectPool _obj_pool;
     ObjectPool* _pool = &_obj_pool;
     RuntimeState* _runtime_state = nullptr;
+    vectorized::HdfsScanner* _scanner = nullptr;
 
     // =============== conjuncts =====================
     // copied from scan node and merge predicates from runtime filter.
@@ -131,27 +125,9 @@ private:
 
     // ======================================
     // The following are profile metrics
-    int64_t _num_rows_read = 0;
-    int64_t _raw_rows_read = 0;
-
     RuntimeProfile* _runtime_profile;
-    RuntimeProfile::Counter* _bytes_read_counter = nullptr;
-    RuntimeProfile::Counter* _rows_read_counter = nullptr;
-
-    RuntimeProfile::Counter* _scan_timer = nullptr;
-    RuntimeProfile::Counter* _scanner_queue_timer = nullptr;
-    RuntimeProfile::Counter* _scan_ranges_counter = nullptr;
-    RuntimeProfile::Counter* _scan_files_counter = nullptr;
-    RuntimeProfile::Counter* _reader_init_timer = nullptr;
-    RuntimeProfile::Counter* _open_file_timer = nullptr;
-    RuntimeProfile::Counter* _expr_filter_timer = nullptr;
-
-    RuntimeProfile::Counter* _io_timer = nullptr;
-    RuntimeProfile::Counter* _io_counter = nullptr;
-    RuntimeProfile::Counter* _column_read_timer = nullptr;
-    RuntimeProfile::Counter* _column_convert_timer = nullptr;
-
-    HdfsParquetProfile _parquet_profile;
+    int64_t _num_rows_read = 0;
+    vectorized::HdfsScanProfile _profile;
 };
 } // namespace pipeline
 } // namespace starrocks

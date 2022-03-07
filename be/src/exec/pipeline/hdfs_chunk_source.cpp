@@ -6,6 +6,9 @@
 #include "env/env_s3.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/vectorized/hdfs_scan_node.h"
+#include "exec/vectorized/hdfs_scanner_orc.h"
+#include "exec/vectorized/hdfs_scanner_parquet.h"
+#include "exec/vectorized/hdfs_scanner_text.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/vectorized/runtime_filter.h"
 #include "gutil/map_util.h"
@@ -56,6 +59,12 @@ HdfsChunkSource::HdfsChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorize
     _scan_range = scan_morsel->get_hdfs_scan_range();
 }
 
+HdfsChunkSource::~HdfsChunkSource() {
+    if (_runtime_state != nullptr) {
+        close(_runtime_state);
+    }
+}
+
 Status HdfsChunkSource::prepare(RuntimeState* state) {
     // right now we don't force user to set JAVA_HOME.
     // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
@@ -76,10 +85,9 @@ Status HdfsChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
     _init_counter(state);
-
     _init_partition_values();
     if (_filter_by_eval_partition_conjuncts) return Status::OK();
-
+    RETURN_IF_ERROR(_init_scanner(state));
     return Status::OK();
 }
 
@@ -190,16 +198,24 @@ void HdfsChunkSource::_decompose_conjunct_ctxs() {
 void HdfsChunkSource::_init_counter(RuntimeState* state) {
     const auto& hdfs_scan_node = _scan_node->thrift_hdfs_scan_node();
 
-    _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
-    _scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
-    _reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
-    _open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
-    _expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
+    _profile.runtime_profile = _runtime_profile;
+    _profile.pool = _pool;
+    _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
+    _profile.bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
 
-    _io_timer = ADD_TIMER(_runtime_profile, "IoTime");
-    _io_counter = ADD_COUNTER(_runtime_profile, "IoCounter", TUnit::UNIT);
-    _column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
-    _column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
+    _profile.scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+    _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
+    _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
+    _profile.scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
+
+    _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
+    _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
+    _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
+
+    _profile.io_timer = ADD_TIMER(_runtime_profile, "IoTime");
+    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IoCounter", TUnit::UNIT);
+    _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
+    _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
     if (hdfs_scan_node.__isset.table_name) {
         _runtime_profile->add_info_string("Table", hdfs_scan_node.table_name);
@@ -213,8 +229,6 @@ void HdfsChunkSource::_init_counter(RuntimeState* state) {
     if (hdfs_scan_node.__isset.partition_sql_predicates) {
         _runtime_profile->add_info_string("PredicatesPartition", hdfs_scan_node.partition_sql_predicates);
     }
-    _scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
-    _scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
 }
 
 Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
@@ -224,12 +238,12 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
         scan_range_path = scan_range.relative_path;
     }
 
-    COUNTER_UPDATE(_scan_files_counter, 1);
+    COUNTER_UPDATE(_profile.scan_files_counter, 1);
     std::string native_file_path = scan_range.full_path;
     if (_lake_table != nullptr) {
         auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
 
-        SCOPED_TIMER(_open_file_timer);
+        SCOPED_TIMER(_profile.open_file_timer);
 
         std::filesystem::path file_path(partition_desc->location());
         file_path /= scan_range.relative_path;
@@ -273,30 +287,42 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
     scanner_params.partition_slots = _partition_slots;
     scanner_params.partition_index_in_chunk = _partition_index_in_chunk;
     scanner_params._partition_index_in_hdfs_partition_columns = _partition_index_in_hdfs_partition_columns;
-    scanner_params.partition_values = _partition_values_map[hdfs_file_desc.partition_id];
+    scanner_params.partition_values = _partition_values;
     scanner_params.conjunct_ctxs = _scanner_conjunct_ctxs;
     scanner_params.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
-    scanner_params.parent = this;
-    scanner_params.open_limit = hdfs_file_desc.open_limit;
+    scanner_params.profile = &_profile;
+    scanner_params.open_limit = hdfs_file_desc->open_limit;
 
     HdfsScanner* scanner = nullptr;
-    if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::PARQUET) {
-        _parquet_profile.init(_runtime_profile);
+    auto format = hdfs_file_desc->hdfs_file_format;
+    if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool->add(new HdfsParquetScanner());
-    } else if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::ORC) {
+    } else if (format == THdfsFileFormat::ORC) {
         scanner = _pool->add(new HdfsOrcScanner());
-    } else if (hdfs_file_desc.hdfs_file_format == THdfsFileFormat::TEXT) {
+    } else if (format == THdfsFileFormat::TEXT) {
         scanner = _pool->add(new HdfsTextScanner());
     } else {
-        std::string msg = fmt::format("unsupported hdfs file format: {}", hdfs_file_desc.hdfs_file_format);
+        std::string msg = fmt::format("unsupported hdfs file format: {}", format);
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
+    RETURN_IF_ERROR(scanner->open(state));
+    _scanner = scanner;
+    return Status::OK();
+}
 
+void HdfsChunkSource::close(RuntimeState* state) {
+    if (_closed) return Status::OK();
+    if (_scanner != nullptr) {
+        _scanner->close(state);
+    }
+    Expr::close(_min_max_conjunct_ctxs, state);
+    Expr::close(_partition_conjunct_ctxs, state);
+    _closed = true;
     return Status::OK();
 }
 
@@ -329,8 +355,7 @@ Status HdfsChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
     using namespace vectorized;
 
     for (size_t i = 0; i < batch_size && !can_finish; ++i) {
-        ChunkUniquePtr chunk(
-                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
+        ChunkPtr chunk;
         _status = _read_chunk_from_storage(_runtime_state, chunk.get());
         if (!_status.ok()) {
             // end of file is normal case, need process chunk
@@ -357,8 +382,7 @@ Status HdfsChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
         {
             SCOPED_RAW_TIMER(&time_spent);
 
-            ChunkUniquePtr chunk(
-                    ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
+            ChunkPtr chunk;
             _status = _read_chunk_from_storage(_runtime_state, chunk.get());
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
@@ -390,9 +414,11 @@ Status HdfsChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");
     }
-    SCOPED_TIMER(_scan_timer);
+    SCOPED_TIMER(_profile.scan_timer);
     do {
-        // TODO(yan):
+        ChunkPtr ck;
+        RETURN_IF_ERROR(_scanner->get_next(state, &ck));
+        *chunk = std::move(*ck);
     } while (chunk->num_rows() == 0);
     _update_realtime_counter(chunk);
     // Improve for select * from table limit x, x is small
@@ -402,83 +428,8 @@ Status HdfsChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
     return Status::OK();
 }
 
-Status HdfsChunkSource::close(RuntimeState* state) {
-    _update_counter();
-    return Status::OK();
-}
-
 void HdfsChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
-    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
-    _compressed_bytes_read += _reader->stats().compressed_bytes_read;
-    _reader->mutable_stats()->compressed_bytes_read = 0;
-
-    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
-    _raw_rows_read += _reader->stats().raw_rows_read;
-    _reader->mutable_stats()->raw_rows_read = 0;
     _num_rows_read += chunk->num_rows();
-}
-
-void HdfsChunkSource::_update_counter() {
-    COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
-    COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
-
-    COUNTER_UPDATE(_io_timer, _reader->stats().io_ns);
-    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
-    _compressed_bytes_read += _reader->stats().compressed_bytes_read;
-    COUNTER_UPDATE(_decompress_timer, _reader->stats().decompress_ns);
-    COUNTER_UPDATE(_read_uncompressed_counter, _reader->stats().uncompressed_bytes_read);
-    COUNTER_UPDATE(_bytes_read_counter, _reader->stats().bytes_read);
-
-    COUNTER_UPDATE(_block_load_timer, _reader->stats().block_load_ns);
-    COUNTER_UPDATE(_block_load_counter, _reader->stats().blocks_load);
-    COUNTER_UPDATE(_block_fetch_timer, _reader->stats().block_fetch_ns);
-    COUNTER_UPDATE(_block_seek_timer, _reader->stats().block_seek_ns);
-
-    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
-    _raw_rows_read += _reader->mutable_stats()->raw_rows_read;
-    COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
-
-    COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
-
-    COUNTER_UPDATE(_pred_filter_timer, _reader->stats().vec_cond_evaluate_ns);
-    COUNTER_UPDATE(_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
-    COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
-
-    COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
-    COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
-    COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
-    COUNTER_UPDATE(_index_load_timer, _reader->stats().index_load_ns);
-
-    COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);
-    COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);
-
-    COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
-    COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
-    COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
-
-    COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
-    COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
-    COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
-
-    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
-
-    StarRocksMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
-    StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
-
-    if (_reader->stats().decode_dict_ns > 0) {
-        RuntimeProfile::Counter* c = ADD_TIMER(_scan_profile, "DictDecode");
-        COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);
-    }
-    if (_reader->stats().late_materialize_ns > 0) {
-        RuntimeProfile::Counter* c = ADD_TIMER(_scan_profile, "LateMaterialize");
-        COUNTER_UPDATE(c, _reader->stats().late_materialize_ns);
-    }
-    if (_reader->stats().del_filter_ns > 0) {
-        RuntimeProfile::Counter* c1 = ADD_TIMER(_scan_profile, "DeleteFilter");
-        RuntimeProfile::Counter* c2 = ADD_COUNTER(_scan_profile, "DeleteFilterRows", TUnit::UNIT);
-        COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
-        COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
-    }
 }
 
 } // namespace starrocks::pipeline

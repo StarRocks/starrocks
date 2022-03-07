@@ -1898,7 +1898,7 @@ void OrcScannerAdapter::set_conjuncts(const std::vector<Expr*>& conjuncts) {
 }
 
 void OrcScannerAdapter::set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
-                                                          RuntimeFilterProbeCollector* rf_collector) {
+                                                          const RuntimeFilterProbeCollector* rf_collector) {
     std::unique_ptr<orc::SearchArgumentBuilder> builder = orc::SearchArgumentFactory::newBuilder();
     int ok = 0;
     builder->startAnd();
