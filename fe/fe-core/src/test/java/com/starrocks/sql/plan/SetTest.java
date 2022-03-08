@@ -264,7 +264,6 @@ public class SetTest extends PlanTestBase {
         sql =
                 "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("0:UNION\n" +
                 "  |  child exprs:\n" +
                 "  |      [1, DECIMAL64(12,2), true]\n" +

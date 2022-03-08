@@ -209,7 +209,6 @@ public class ScanTest extends PlanTestBase {
         sql =
                 "select t1.k2, sum(t1.k9) from baseall t1 join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("6:OlapScanNode\n" +
                 "  |       TABLE: baseall\n" +
                 "  |       PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
@@ -263,7 +262,6 @@ public class ScanTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select join1.id from join1, join2 group by join1.id";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
 
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +

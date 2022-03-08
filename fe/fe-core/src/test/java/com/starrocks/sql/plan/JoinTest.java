@@ -366,7 +366,6 @@ public class JoinTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select * from t0 as x0 join t0 as x1 using(v1);";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  2:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (COLOCATE)\n"
                 + "  |  hash predicates:\n"
@@ -427,7 +426,6 @@ public class JoinTest extends PlanTestBase {
     public void testSemiReorder() throws Exception {
         String sql = "select 0 from t0,t1 left semi join t2 on v4 = v7";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:10: expr\n" +
                 "  PARTITION: RANDOM\n" +
@@ -1032,7 +1030,6 @@ public class JoinTest extends PlanTestBase {
                 "FROM lineitem JOIN [shuffle] orders o1 ON l_orderkey = o1.o_orderkey\n" +
                 "JOIN [shuffle] orders o2 ON l_orderkey = o2.o_orderkey";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("join op: INNER JOIN (BUCKET_SHUFFLE(S))"));
     }
 
@@ -2048,7 +2045,6 @@ public class JoinTest extends PlanTestBase {
     public void testEquivalenceLoopDependency() throws Exception {
         String sql = "select * from t0 join t1 on t0.v1 = t1.v4 and cast(t0.v1 as STRING) = t0.v1";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("|  equal join conjunct: 1: v1 = 4: v4"));
         Assert.assertTrue(plan.contains("     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +

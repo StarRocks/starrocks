@@ -97,7 +97,6 @@ public class SubqueryTest extends PlanTestBase {
                 "select * from join1 where join1.dt > 1 and NOT EXISTS (select * from join1 as a where join1.dt = 1 and a.id = join1.id)" +
                         "and NOT EXISTS (select * from join1 as a where join1.dt = 2 and a.id = join1.id);";
         String explainString = getFragmentPlan(sql);
-        System.out.println(explainString);
 
         Assert.assertTrue(explainString.contains("  5:HASH JOIN\n" +
                 "  |  join op: RIGHT ANTI JOIN (COLOCATE)\n" +

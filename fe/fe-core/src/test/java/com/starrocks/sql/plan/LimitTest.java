@@ -267,7 +267,6 @@ public class LimitTest extends PlanTestBase {
         String sql = "select v1, v2 from t0 union all " +
                 "select v1, v2 from t0 limit 1 ";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("    EXCHANGE ID: 02\n" +
                 "    UNPARTITIONED"));
         Assert.assertTrue(plan.contains("    EXCHANGE ID: 05\n" +
@@ -328,7 +327,6 @@ public class LimitTest extends PlanTestBase {
     public void testJoinLimitLeft() throws Exception {
         String sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 limit 10";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
@@ -453,7 +451,6 @@ public class LimitTest extends PlanTestBase {
 
         sql = "select v1 from (select * from t0 limit 10) x0 left outer join t1 on x0.v1 = t1.v4 limit 1";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +

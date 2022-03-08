@@ -385,8 +385,8 @@ public class ExpressionTest extends PlanTestBase {
                 "select * from test_all_type_distributed_by_datetime where cast(cast(id_datetime as date) as datetime) >= '1970-01-01 12:00:00' " +
                         "and cast(cast(id_datetime as date) as datetime) <= '1970-01-01 18:00:00'";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "CAST(8: id_datetime AS DATE) >= '1970-01-02', CAST(8: id_datetime AS DATE) <= '1970-01-01'"));
+        Assert.assertTrue(
+                plan.contains("8: id_datetime >= '1970-01-02 00:00:00', 8: id_datetime < '1970-01-02 00:00:00'"));
     }
 
     @Test
@@ -547,9 +547,6 @@ public class ExpressionTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:AGGREGATE (merge serialize)\n" +
                 "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE"));
-        System.out.println(" 1:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  group by: 1: L_ORDERKEY, 15: L_SHIPMODE");
 
         sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem group by L_PARTKEY";
         plan = getFragmentPlan(sql);
