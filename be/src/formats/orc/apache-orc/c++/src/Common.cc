@@ -62,10 +62,36 @@ std::string writerVersionToString(WriterVersion version) {
         return "ORC-101";
     case WriterVersion_ORC_135:
         return "ORC-135";
+    case WriterVersion_ORC_517:
+        return "ORC-517";
+    case WriterVersion_ORC_203:
+        return "ORC-203";
+    case WriterVersion_ORC_14:
+        return "ORC-14";
     }
     std::stringstream buffer;
     buffer << "future - " << version;
     return buffer.str();
+}
+
+std::string writerIdToString(uint32_t id) {
+    switch (id) {
+    case ORC_JAVA_WRITER:
+        return "ORC Java";
+    case ORC_CPP_WRITER:
+        return "ORC C++";
+    case PRESTO_WRITER:
+        return "Presto";
+    case SCRITCHLEY_GO:
+        return "Scritchley Go";
+    case TRINO_WRITER:
+        return "Trino";
+    default: {
+        std::ostringstream buffer;
+        buffer << "Unknown(" << id << ")";
+        return buffer.str();
+    }
+    }
 }
 
 std::string streamKindToString(StreamKind kind) {
