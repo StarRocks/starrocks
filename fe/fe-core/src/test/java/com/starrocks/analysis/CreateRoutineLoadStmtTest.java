@@ -32,8 +32,12 @@ import com.starrocks.common.UserException;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import javafx.scene.shape.VLineTo;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
@@ -188,9 +192,9 @@ public class CreateRoutineLoadStmtTest {
         Assert.assertEquals(createRoutineLoadStmt.getJsonPaths(), "[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]");
 
         String selectSQL = "SELECT \"Pat O\"\"Hanrahan & <Matthew Eldridge]\"\"\";";
-        SelectStmt selectStmt = (SelectStmt)UtFrameUtils.parseStmtWithNewAnalyzer(selectSQL, ctx);
+        QueryStatement selectStmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(selectSQL, ctx);
 
-        Expr expr = selectStmt.getSelectList().getItems().get(0).getExpr();
+        Expr expr = ((ValuesRelation) (selectStmt.getQueryRelation())).getRow(0).get(0);
         Assert.assertTrue(expr instanceof StringLiteral);
         StringLiteral stringLiteral = (StringLiteral)expr;
         Assert.assertEquals(stringLiteral.getValue(), "Pat O\"Hanrahan & <Matthew Eldridge]\"");

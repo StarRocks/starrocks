@@ -24,7 +24,6 @@ import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -314,11 +313,11 @@ public class StatisticExecutor {
                 lock(dbs);
             }
             
-            Analyzer analyzer = new Analyzer(context.getCatalog(), context);
-            QueryRelation query = (QueryRelation) analyzer.analyze(parsedStmt);
+            Analyzer.analyze(parsedStmt, context);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, context).transform(query);
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, context).transform(
+                    ((QueryStatement) parsedStmt).getQueryRelation());
 
             Optimizer optimizer = new Optimizer();
             OptExpression optimizedPlan = optimizer.optimize(

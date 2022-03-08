@@ -22,20 +22,14 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.InlineViewRef;
-import com.starrocks.analysis.SelectStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksHttpException;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -44,6 +38,11 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
@@ -65,7 +64,6 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
@@ -189,16 +187,13 @@ public class TableQueryPlanAction extends RestBaseAction {
                              Map<String, Object> result) {
         StatementBase statementBase;
         ExecPlan execPlan;
-        SqlScanner input =
-                new SqlScanner(new StringReader(sql), context.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
         try {
             /*
              * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
              * currently only used in Spark/Flink Connector
              */
             context.getSessionVariable().setSingleNodeExecPlan(true);
-            statementBase = SqlParserUtils.getFirstStmt(parser);
+            statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, context.getSessionVariable().getSqlMode()).get(0);
             execPlan = new StatementPlanner().plan(statementBase, context);
             context.getSessionVariable().setSingleNodeExecPlan(false);
         } catch (Exception e) {
@@ -207,31 +202,35 @@ public class TableQueryPlanAction extends RestBaseAction {
         }
 
         // only process select semantic
-        if (!(statementBase instanceof SelectStmt)) {
+        if (!(statementBase instanceof QueryStatement)) {
             throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
                     "Select statement needed, but found [" + sql + " ]");
         }
-        SelectStmt stmt = (SelectStmt) statementBase;
+
+        SelectRelation stmt = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         // only process sql like `select * from table where <predicate>`, only support executing scan semantic
-        if (stmt.hasAggInfo() || stmt.hasAnalyticInfo()
-                || stmt.hasOrderByClause() || stmt.hasOffset() || stmt.hasLimit() || stmt.isExplain()) {
+        if (stmt.hasAggregation() || stmt.hasAnalyticInfo()
+                || stmt.hasOrderByClause() || stmt.hasOffset() || stmt.hasLimit() || statementBase.isExplain()) {
             throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
                     "only support single table filter-prune-scan, but found [ " + sql + "]");
         }
+
         // only process one table by one http query
-        List<TableRef> fromTables = stmt.getTableRefs();
-        if (fromTables.size() != 1) {
-            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
-                    "Select statement must have only one table");
+        if (AnalyzerUtils.collectAllTable(statementBase).size() != 1) {
+            if (stmt.getRelation() instanceof TableRelation) {
+                throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
+                        "Select statement must have only one table");
+            }
         }
-        TableRef fromTable = fromTables.get(0);
-        if (fromTable instanceof InlineViewRef) {
+
+        if (stmt.getRelation() instanceof SubqueryRelation) {
             throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
                     "Select statement must not embed another statement");
         }
+
         // check consistent http requested resource with sql referenced
         // if consistent in this way, can avoid check privilege
-        TableName tableAndDb = fromTables.get(0).getName();
+        TableName tableAndDb = stmt.getRelation().getAlias();
         if (!(tableAndDb.getDb().equals(requestDb) && tableAndDb.getTbl().equals(requestTable))) {
             throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
                     "requested database and table must consistent with sql: request [ "
