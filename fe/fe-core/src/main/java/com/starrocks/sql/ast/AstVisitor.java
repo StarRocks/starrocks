@@ -1,17 +1,24 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateAnalyzeJobStmt;
+import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DefaultValueExpr;
+import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -28,6 +35,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
@@ -53,8 +61,36 @@ public abstract class AstVisitor<R, C> {
 
     // ----------------- Statement ---------------
 
-    public R visitStatement(StatementBase node, C context) {
-        return visitNode(node, context);
+    public R visitStatement(StatementBase statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitBaseViewStatement(BaseViewStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropWorkGroupStatement(DropWorkGroupStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitQueryStatement(QueryStatement node, C context) {
@@ -65,28 +101,32 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(node, context);
     }
 
+    public R visitShowStatement(ShowStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitShowTableStmt(ShowTableStmt node, C context) {
-        return visitStatement(node, context);
+        return visitShowStatement(node, context);
     }
 
     public R visitShowDatabasesStmt(ShowDbStmt node, C context) {
-        return visitStatement(node, context);
+        return visitShowStatement(node, context);
     }
 
     public R visitShowWorkGroupStmt(ShowWorkGroupStmt node, C context) {
-        return visitStatement(node, context);
+        return visitShowStatement(node, context);
     }
 
     public R visitShowVariablesStmt(ShowVariablesStmt node, C context) {
-        return visitStatement(node, context);
+        return visitShowStatement(node, context);
     }
 
     public R visitShowColumnStmt(ShowColumnStmt node, C context) {
-        return visitStatement(node, context);
+        return visitShowStatement(node, context);
     }
 
     public R visitShowTableStatusStmt(ShowTableStatusStmt node, C context) {
-        return visitStatement(node, context);
+        return visitShowStatement(node, context);
     }
 
     // ----------------- Relation ---------------
@@ -136,10 +176,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitTableFunction(TableFunctionRelation node, C context) {
-        return visitRelation(node, context);
-    }
-
-    public R visitInsert(InsertRelation node, C context) {
         return visitRelation(node, context);
     }
 

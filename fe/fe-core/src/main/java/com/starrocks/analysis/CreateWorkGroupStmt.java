@@ -4,6 +4,7 @@ import com.starrocks.catalog.WorkGroup;
 import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.thrift.TWorkGroupType;
 
@@ -50,7 +51,7 @@ public class CreateWorkGroupStmt extends DdlStmt {
         this.replaceIfExists = replaceIfExists;
     }
 
-    public Relation analyze() throws SemanticException {
+    public void analyze() throws SemanticException {
         workgroup = new WorkGroup();
         workgroup.setName(name);
         List<WorkGroupClassifier> classifierList = new ArrayList<>();
@@ -73,10 +74,14 @@ public class CreateWorkGroupStmt extends DdlStmt {
         if (workgroup.getConcurrencyLimit() == null) {
             throw new SemanticException("property 'concurrent_limit' is absent");
         }
-        return null;
     }
 
     public WorkGroup getWorkgroup() {
         return workgroup;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateWorkGroupStatement(this, context);
     }
 }

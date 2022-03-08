@@ -176,11 +176,9 @@ public class StarRocksAssert {
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
         SqlParser parser = new SqlParser(input);
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
         List<StatementBase> statements = SqlParserUtils.getMultiStmts(parser);
         for (StatementBase stmt : statements) {
-            analyzer.analyze(stmt);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
             Assert.assertTrue(stmt.getClass().getSimpleName().contains("WorkGroupStmt"));
             DdlExecutor.execute(Catalog.getCurrentCatalog(), (DdlStmt) stmt);
         }
@@ -191,10 +189,8 @@ public class StarRocksAssert {
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
         SqlParser parser = new SqlParser(input);
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
         StatementBase statement = SqlParserUtils.getFirstStmt(parser);
-        analyzer.analyze(statement);
+        com.starrocks.sql.analyzer.Analyzer.analyze(statement, ctx);
         Assert.assertTrue(statement instanceof ShowWorkGroupStmt);
         return Catalog.getCurrentCatalog().getWorkGroupMgr().showWorkGroup((ShowWorkGroupStmt) statement);
     }

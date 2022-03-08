@@ -8,7 +8,6 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionNames;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MysqlTable;
@@ -17,9 +16,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.InsertRelation;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 
@@ -31,17 +28,9 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class InsertAnalyzer {
-    private final Catalog catalog;
-    private final ConnectContext session;
-
-    public InsertAnalyzer(Catalog catalog, ConnectContext session) {
-        this.catalog = catalog;
-        this.session = session;
-    }
-
-    public Relation transformInsertStmt(InsertStmt insertStmt) {
+    public static void analyze(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
-        new QueryAnalyzerV2(catalog, session).analyze(insertStmt.getQueryStatement());
+        new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 
         /*
          *  Target table
@@ -148,7 +137,12 @@ public class InsertAnalyzer {
             }
         }
 
-        return new InsertRelation(query, database, table, targetPartitionIds, targetColumns,
-                insertStmt.getTargetColumnNames());
+
+
+
+
+        insertStmt.setTargetTable(table);
+        insertStmt.setTargetPartitionIds(targetPartitionIds);
+        insertStmt.setTargetColumns(targetColumns);
     }
 }

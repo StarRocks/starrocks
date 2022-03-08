@@ -482,7 +482,7 @@ public class AST2SQL {
         }
 
         public String visitSubquery(Subquery node, Void context) {
-            return "(" + visit(new QueryStatement(node.getQueryBlock())) + ")";
+            return "(" + visit(new QueryStatement(node.getQueryRelation())) + ")";
         }
 
         public String visitSysVariableDesc(SysVariableDesc node, Void context) {
