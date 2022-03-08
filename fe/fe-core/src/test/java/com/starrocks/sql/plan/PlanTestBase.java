@@ -800,6 +800,18 @@ public class PlanTestBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+
+        starRocksAssert.withTable("create table test.colocate1\n" +
+                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                "properties(\"replication_num\" = \"1\"," +
+                "\"colocate_with\" = \"group1\");")
+                .withTable("create table test.colocate2\n" +
+                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                        "properties(\"replication_num\" = \"1\"," +
+                        "\"colocate_with\" = \"group1\");")
+                .withTable("create table test.nocolocate3\n" +
+                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 10\n" +
+                        "properties(\"replication_num\" = \"1\");");
     }
 
     protected static void setTableStatistics(OlapTable table, long rowCount) {
