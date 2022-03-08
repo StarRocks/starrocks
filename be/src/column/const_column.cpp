@@ -60,6 +60,11 @@ size_t ConstColumn::filter_range(const Column::Filter& filter, size_t from, size
     return from + count;
 }
 
+void ConstColumn::sort_and_tie(bool is_asc_order, bool is_null_first, Permutation& permutation,
+                               std::vector<uint8_t>& tie) {
+    // noop
+}
+
 int ConstColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
     DCHECK(rhs.is_constant());
     const auto& rhs_data = static_cast<const ConstColumn&>(rhs)._data;

@@ -94,4 +94,14 @@ inline size_t count_nonzero(const std::vector<int8_t>& list) {
     return count_nonzero(list.data(), list.size());
 }
 
+// TODO(mofei) optimize it with SIMD
+inline static size_t find_zero(const std::vector<uint8_t>& list, size_t start) {
+    for (; start < list.size(); start++) {
+        if (list[start] == 0) {
+            return start;
+        }
+    }
+    return list.size();
+}
+
 } // namespace SIMD

@@ -11,6 +11,7 @@
 #include "column/column_visitor_mutable.h"
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "gutil/casts.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 #include "util/slice.h"
@@ -274,6 +275,10 @@ public:
 
     // FIXME: Many derived implementation assume |to| equals to size().
     virtual size_t filter_range(const Filter& filter, size_t from, size_t to) = 0;
+
+    // Sort this column incrementally, and build tie for the next column
+    virtual void sort_and_tie(bool is_asc_order, bool is_null_first, Permutation& permutation,
+                              std::vector<uint8_t>& tie) = 0;
 
     // Compares (*this)[left] and rhs[right]. Column rhs should have the same type.
     // Returns negative number, 0, or positive number (*this)[left] is less, equal, greater than

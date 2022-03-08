@@ -2,6 +2,7 @@
 
 #include "column/json_column.h"
 
+#include "exec/vectorized/sorting/sort_helper.h"
 #include "glog/logging.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
@@ -16,6 +17,13 @@ void JsonColumn::append_datum(const Datum& datum) {
     } else {
         CHECK(false) << "invalid datum type";
     }
+}
+void JsonColumn::sort_and_tie(bool is_asc_order, bool is_null_first, Permutation& permutation,
+                              std::vector<uint8_t>& tie) {
+    auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
+        return get_object(lhs.index_in_chunk)->compare(*get_object(rhs.index_in_chunk));
+    };
+    sort_and_tie_helper(this, is_asc_order, permutation, tie, cmp);
 }
 
 int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::vectorized::Column& rhs,

@@ -28,14 +28,22 @@ public:
         _runtime_state = _create_runtime_state();
     }
 
-    static std::tuple<ColumnPtr, std::unique_ptr<SlotRef>> build_column(TypeDescriptor type_desc, int slot_index) {
+    static std::tuple<ColumnPtr, std::unique_ptr<SlotRef>> build_column(TypeDescriptor type_desc, int slot_index,
+                                                                        bool low_card) {
+        using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
+        using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
         ColumnPtr column = ColumnHelper::create_column(type_desc, false);
         auto expr = std::make_unique<SlotRef>(type_desc, 0, slot_index);
 
         std::random_device dev;
         std::mt19937 rng(dev());
-        std::uniform_int_distribution<std::mt19937::result_type> uniform_int(1, 1'000'000 * std::pow(2, slot_index));
-        std::poisson_distribution<std::mt19937::result_type> poisson_int(1000000);
+        UniformInt uniform_int;
+        if (low_card) {
+            uniform_int.param(UniformInt::param_type(1, 100 * std::pow(2, slot_index)));
+        } else {
+            uniform_int.param(UniformInt::param_type(1, 100'000 * std::pow(2, slot_index)));
+        }
+        PoissonInt poisson_int(100'000);
         static std::string alphanum =
                 "0123456789"
                 "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -81,7 +89,7 @@ enum SortAlgorithm : int {
 };
 
 static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, CompareStrategy strategy, int num_chunks,
-                     int num_columns, int limit = -1) {
+                     int num_columns, int limit = -1, bool low_card = false) {
     ChunkSorterBase suite;
     suite.SetUp();
 
@@ -96,7 +104,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
     Chunk::SlotHashMap map;
 
     for (int i = 0; i < num_columns; i++) {
-        auto [column, expr] = suite.build_column(int_type_desc, i);
+        auto [column, expr] = suite.build_column(int_type_desc, i, low_card);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
         sort_exprs.push_back(new ExprContext(exprs.back().get()));
@@ -188,6 +196,17 @@ static void BM_fullsort_row_wise(benchmark::State& state) {
 static void BM_fullsort_column_wise(benchmark::State& state) {
     do_bench(state, FullSort, ColumnWise, state.range(0), state.range(1));
 }
+static void BM_fullsort_column_incr(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnInc, state.range(0), state.range(1));
+}
+// Low cardinality
+static void BM_fullsort_low_card_column_wise(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnWise, state.range(0), state.range(1), -1, true);
+}
+static void BM_fullsort_low_card_column_incr(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnInc, state.range(0), state.range(1), -1, true);
+}
+
 static void BM_heapsort_row_wise(benchmark::State& state) {
     do_bench(state, HeapSort, RowWise, state.range(0), state.range(1));
 }
@@ -227,6 +246,9 @@ static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
 
 BENCHMARK(BM_fullsort_row_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_column_wise)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_column_incr)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_low_card_column_wise)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_low_card_column_incr)->Apply(CustomArgsFull);
 BENCHMARK(BM_heapsort_row_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_mergesort_row_wise)->Apply(CustomArgsFull);
 

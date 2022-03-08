@@ -196,6 +196,12 @@ size_t ObjectColumn<T>::filter_range(const Column::Filter& filter, size_t from, 
 }
 
 template <typename T>
+void ObjectColumn<T>::sort_and_tie(bool is_asc_order, bool is_null_first, Permutation& permutation,
+                                   std::vector<uint8_t>& tie) {
+    DCHECK(false) << "Don't support object column sort_and_tie";
+}
+
+template <typename T>
 int ObjectColumn<T>::compare_at(size_t left, size_t right, const starrocks::vectorized::Column& rhs,
                                 int nan_direction_hint) const {
     DCHECK(false) << "Don't support object column compare_at";
