@@ -39,8 +39,14 @@ public class GroupExpression {
     private final BitSet ruleMasks = new BitSet(RuleType.NUM_RULES.ordinal() + 1);
     private boolean statsDerived = false;
     private final Map<PhysicalPropertySet, Pair<Double, List<PhysicalPropertySet>>> lowestCostTable;
+    // required property by parent -> output property
+    private final Map<PhysicalPropertySet, PhysicalPropertySet> outputPropertyMap;
+
+    // valid output/input properties, only used in enum plan
     private final Set<OutputInputProperty> validOutputInputProperties;
-    private Map<OutputInputProperty, Integer> propertiesPlanCountMap;
+    // property -> plan count, only used in enum plan
+    private final Map<OutputInputProperty, Integer> propertiesPlanCountMap;
+
     private boolean isUnused = false;
 
     public GroupExpression(Operator op, List<Group> inputs) {
@@ -49,6 +55,7 @@ public class GroupExpression {
         this.lowestCostTable = Maps.newHashMap();
         this.validOutputInputProperties = Sets.newLinkedHashSet();
         this.propertiesPlanCountMap = Maps.newLinkedHashMap();
+        this.outputPropertyMap = Maps.newHashMap();
     }
 
     public Group getGroup() {
@@ -105,6 +112,17 @@ public class GroupExpression {
 
     public boolean hasRuleExplored(Rule rule) {
         return ruleMasks.get(rule.type().ordinal());
+    }
+
+    public PhysicalPropertySet getOutputProperty(PhysicalPropertySet requiredPropertySet) {
+        PhysicalPropertySet outputProperty = outputPropertyMap.get(requiredPropertySet);
+        Preconditions.checkState(outputProperty != null);
+        return outputProperty;
+    }
+
+    public void setOutputPropertySatisfyRequiredProperty(PhysicalPropertySet outputPropertySet,
+                                                         PhysicalPropertySet requiredPropertySet) {
+        this.outputPropertyMap.put(requiredPropertySet, outputPropertySet);
     }
 
     public void addValidOutputInputProperties(PhysicalPropertySet outputProperty,
@@ -175,16 +193,19 @@ public class GroupExpression {
      * @param inputProperties  List of children input properties required
      * @param cost             Cost
      */
-    public void setPropertyWithCost(PhysicalPropertySet outputProperties,
-                                    List<PhysicalPropertySet> inputProperties,
-                                    double cost) {
+    public boolean updatePropertyWithCost(PhysicalPropertySet outputProperties,
+                                          List<PhysicalPropertySet> inputProperties,
+                                          double cost) {
         if (lowestCostTable.containsKey(outputProperties)) {
             if (lowestCostTable.get(outputProperties).first > cost) {
                 lowestCostTable.put(outputProperties, new Pair<>(cost, inputProperties));
+                return true;
             }
         } else {
             lowestCostTable.put(outputProperties, new Pair<>(cost, inputProperties));
+            return true;
         }
+        return false;
     }
 
     // This function will drive input group logical property first,

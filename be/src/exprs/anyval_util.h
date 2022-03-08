@@ -26,7 +26,6 @@
 #include "runtime/primitive_type.h"
 #include "udf/udf.h"
 #include "util/hash_util.hpp"
-#include "util/types.h"
 
 namespace starrocks {
 

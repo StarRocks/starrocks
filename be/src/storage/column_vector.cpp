@@ -23,7 +23,10 @@
 
 #include <memory>
 
+#include "common/statusor.h"
 #include "storage/field.h"
+#include "storage/olap_common.h"
+#include "storage/olap_type_infra.h"
 
 namespace starrocks {
 
@@ -37,103 +40,41 @@ Status ColumnVectorBatch::resize(size_t new_cap) {
     return Status::OK();
 }
 
-namespace {
-template <FieldType field_type>
-using batch_t = ScalarColumnVectorBatch<typename CppTypeTraits<field_type>::CppType>;
-} // namespace
+template <FieldType ftype>
+struct BatchT {
+    using value = ScalarColumnVectorBatch<typename CppTypeTraits<ftype>::CppType>;
+};
+template <>
+struct BatchT<OLAP_FIELD_TYPE_BOOL> {
+    using value = ScalarColumnVectorBatch<typename CppTypeTraits<OLAP_FIELD_TYPE_TINYINT>::CppType>;
+};
+
+struct BatchBuilder {
+    template <FieldType ftype>
+    StatusOr<std::unique_ptr<ColumnVectorBatch>> operator()(const TypeInfoPtr& type_info, bool nullable, Field* field,
+                                                            size_t capacity) {
+        switch (ftype) {
+        case OLAP_FIELD_TYPE_ARRAY: {
+            if (field == nullptr) {
+                return Status::InvalidArgument("`Field` cannot be NULL when create ArrayColumnVectorBatch");
+            }
+            return std::make_unique<ArrayColumnVectorBatch>(type_info, nullable, capacity, field);
+        }
+        default: {
+            using batch_t = typename BatchT<ftype>::value;
+            return std::make_unique<batch_t>(type_info, nullable);
+        }
+        }
+    }
+};
 
 Status ColumnVectorBatch::create(size_t capacity, bool nullable, const TypeInfoPtr& type_info, Field* field,
                                  std::unique_ptr<ColumnVectorBatch>* batch) {
-    switch (type_info->type()) {
-    case OLAP_FIELD_TYPE_BOOL:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_TINYINT>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_TINYINT:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_TINYINT>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_SMALLINT:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_SMALLINT>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_INT:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_INT>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_UNSIGNED_INT>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_BIGINT:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_BIGINT>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_UNSIGNED_BIGINT>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_LARGEINT:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_LARGEINT>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_FLOAT:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_FLOAT>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_DOUBLE:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_DOUBLE>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_DECIMAL>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_DECIMAL_V2>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL32:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_DECIMAL32>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL64:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_DECIMAL64>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL128:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_DECIMAL128>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_DATE:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_DATE>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_DATE_V2:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_DATE_V2>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_DATETIME:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_DATETIME>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_TIMESTAMP>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_CHAR:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_CHAR>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_VARCHAR:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_VARCHAR>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_HLL:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_HLL>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_OBJECT:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_OBJECT>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_PERCENTILE:
-        *batch = std::make_unique<batch_t<OLAP_FIELD_TYPE_PERCENTILE>>(type_info, nullable);
-        break;
-    case OLAP_FIELD_TYPE_ARRAY: {
-        if (field == nullptr) {
-            return Status::InvalidArgument("`Field` cannot be NULL when create ArrayColumnVectorBatch");
-        }
-        *batch = std::make_unique<ArrayColumnVectorBatch>(type_info, nullable, capacity, field);
-        break;
+    auto res = field_type_dispatch_column(type_info->type(), BatchBuilder(), type_info, nullable, field, capacity);
+    if (!res.ok()) {
+        return res.status();
     }
-    case OLAP_FIELD_TYPE_UNKNOWN:
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-    case OLAP_FIELD_TYPE_STRUCT:
-    case OLAP_FIELD_TYPE_MAP:
-    case OLAP_FIELD_TYPE_NONE:
-    case OLAP_FIELD_TYPE_MAX_VALUE:
-        return Status::NotSupported("Unsupported type " + std::to_string(type_info->type()));
-    }
+    *batch = std::move(res.value());
     (*batch)->resize(capacity);
     return Status::OK();
 }

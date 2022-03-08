@@ -687,7 +687,7 @@ public class SelectStmtWithDecimalTypesTest {
 
     @Test
     public void testDecimalV3WindowFunction() throws Exception {
-        String sql = "explain select sum(col_decimal_p9s4) over() from db1.decimal_table;";
+        String sql = "select sum(col_decimal_p9s4) over() from db1.decimal_table;";
         String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
         Assert.assertFalse(plan.contains("not supported with OVER clause."));
     }

@@ -11,11 +11,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
-import org.joda.time.DateTime;
-import org.joda.time.format.DateTimeFormatter;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoField;
 import java.time.temporal.WeekFields;
 import java.util.List;
 import java.util.Map;
@@ -23,11 +24,11 @@ import java.util.Map;
 public class MultiRangePartitionDesc extends PartitionDesc {
 
     private final String DEFAULT_PREFIX = "p";
-    private String partitionBegin;
-    private String partitionEnd;
+    private final String partitionBegin;
+    private final String partitionEnd;
     private Long step;
     private String timeUnit;
-    private ImmutableSet<TimestampArithmeticExpr.TimeUnit> supportedTimeUnitType = ImmutableSet.of(
+    private final ImmutableSet<TimestampArithmeticExpr.TimeUnit> supportedTimeUnitType = ImmutableSet.of(
             TimestampArithmeticExpr.TimeUnit.DAY,
             TimestampArithmeticExpr.TimeUnit.WEEK,
             TimestampArithmeticExpr.TimeUnit.MONTH,
@@ -48,22 +49,6 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         this.step = offset;
     }
 
-    public String getPartitionBegin() {
-        return partitionBegin;
-    }
-
-    public void setPartitionBegin(String partitionBegin) {
-        this.partitionBegin = partitionBegin;
-    }
-
-    public String getPartitionEnd() {
-        return partitionEnd;
-    }
-
-    public void setPartitionEnd(String partitionEnd) {
-        this.partitionEnd = partitionEnd;
-    }
-
     public Long getStep() {
         return step;
     }
@@ -74,10 +59,6 @@ public class MultiRangePartitionDesc extends PartitionDesc {
 
     public String getTimeUnit() {
         return timeUnit;
-    }
-
-    public void setTimeUnit(String timeUnit) {
-        this.timeUnit = timeUnit;
     }
 
     public List<SingleRangePartitionDesc> convertToSingle(Type firstPartitionColumnType,
@@ -100,13 +81,15 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             throws AnalysisException {
         // int type does not support datekey int type
 
-        DateTime beginTime, endTime;
-        DateTimeFormatter beginDateTimeFormat, endDateTimeFormat;
+        LocalDateTime beginTime;
+        LocalDateTime endTime;
+        DateTimeFormatter beginDateTimeFormat;
+        DateTimeFormatter endDateTimeFormat;
         try {
             beginDateTimeFormat = DateUtils.probeFormat(partitionBegin);
             endDateTimeFormat = DateUtils.probeFormat(partitionEnd);
-            beginTime = DateTime.parse(partitionBegin, beginDateTimeFormat);
-            endTime = DateTime.parse(partitionEnd, endDateTimeFormat);
+            beginTime = DateUtils.parseStringWithDefaultHSM(partitionBegin, beginDateTimeFormat);
+            endTime = DateUtils.parseStringWithDefaultHSM(partitionEnd, endDateTimeFormat);
         } catch (Exception ex) {
             throw new AnalysisException("Batch build partition EVERY is date type " +
                     "but START or END does not type match.");
@@ -165,29 +148,29 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         }
         WeekFields weekFields = WeekFields.of(DayOfWeek.of(dayOfWeek), 1);
         while (beginTime.isBefore(endTime)) {
-            PartitionValue lowerPartitionValue = new PartitionValue(beginTime.toString(beginDateTimeFormat));
+            PartitionValue lowerPartitionValue = new PartitionValue(beginTime.format(beginDateTimeFormat));
 
             switch (timeUnitType) {
                 case DAY:
-                    partitionName = DEFAULT_PREFIX + beginTime.toString(DateUtils.DATEKEY_FORMAT);
+                    partitionName = DEFAULT_PREFIX + beginTime.format(DateUtils.DATEKEY_FORMATTER);
                     beginTime = beginTime.plusDays(timeInterval);
                     break;
                 case WEEK:
-                    LocalDate localDate = LocalDate.of(beginTime.getYear(), beginTime.getMonthOfYear(),
+                    LocalDate localDate = LocalDate.of(beginTime.getYear(), beginTime.getMonthValue(),
                             beginTime.getDayOfMonth());
                     int weekOfYear = localDate.get(weekFields.weekOfYear());
                     partitionName = String.format("%s%s_%02d", DEFAULT_PREFIX,
-                            beginTime.toString(DateUtils.YEAR_FORMAT), weekOfYear);
-                    beginTime = beginTime.withDayOfWeek(dayOfWeek);
+                            beginTime.format(DateUtils.YEAR_FORMATTER), weekOfYear);
+                    beginTime = beginTime.with(ChronoField.DAY_OF_WEEK, dayOfMonth);
                     beginTime = beginTime.plusWeeks(timeInterval);
                     break;
                 case MONTH:
-                    partitionName = DEFAULT_PREFIX + beginTime.toString(DateUtils.MONTH_FORMAT);
+                    partitionName = DEFAULT_PREFIX + beginTime.format(DateUtils.MONTH_FORMATTER);
                     beginTime = beginTime.withDayOfMonth(dayOfMonth);
                     beginTime = beginTime.plusMonths(timeInterval);
                     break;
                 case YEAR:
-                    partitionName = DEFAULT_PREFIX + beginTime.toString(DateUtils.YEAR_FORMAT);
+                    partitionName = DEFAULT_PREFIX + beginTime.format(DateUtils.YEAR_FORMATTER);
                     beginTime = beginTime.withDayOfYear(1);
                     beginTime = beginTime.plusYears(timeInterval);
                     break;
@@ -199,7 +182,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                 beginTime = endTime;
             }
 
-            PartitionValue upperPartitionValue = new PartitionValue(beginTime.toString(beginDateTimeFormat));
+            PartitionValue upperPartitionValue = new PartitionValue(beginTime.format(beginDateTimeFormat));
             PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(Lists.newArrayList(lowerPartitionValue),
                     Lists.newArrayList(upperPartitionValue));
             SingleRangePartitionDesc singleRangePartitionDesc = new SingleRangePartitionDesc(false,

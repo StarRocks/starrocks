@@ -70,7 +70,7 @@ public:
 
     bool append_nulls(size_t count) override;
 
-    bool append_strings(const std::vector<Slice>& strs) override { return false; }
+    bool append_strings(const Buffer<Slice>& strs) override { return false; }
 
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
@@ -79,6 +79,8 @@ public:
     void append_default() override;
 
     void append_default(size_t count) override;
+
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     void remove_first_n_values(size_t count) override {}
 
@@ -93,7 +95,7 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
+    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override;
 
@@ -108,6 +110,8 @@ public:
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+
+    int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
@@ -148,6 +152,8 @@ public:
     bool reach_capacity_limit() const override {
         return _elements->reach_capacity_limit() || _offsets->reach_capacity_limit();
     }
+
+    void check_or_die() const override;
 
 private:
     ColumnPtr _elements;

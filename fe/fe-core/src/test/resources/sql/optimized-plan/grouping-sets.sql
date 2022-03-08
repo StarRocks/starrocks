@@ -1,9 +1,9 @@
 [sql]
 select grouping(v1), grouping(v2), grouping_id(v1,v2), v1,v2 from t0 group by grouping sets((v1,v2),(v1),(v2));
 [result]
-AGGREGATE ([GLOBAL] aggregate [{}] group by [[2: v2, 1: v1, 4: GROUPING_ID, 5: GROUPING, 6: GROUPING, 7: GROUPING]] having [null]
-    EXCHANGE SHUFFLE[2, 1, 4, 5, 6, 7]
-        AGGREGATE ([LOCAL] aggregate [{}] group by [[2: v2, 1: v1, 4: GROUPING_ID, 5: GROUPING, 6: GROUPING, 7: GROUPING]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1, 2: v2, 4: GROUPING_ID, 5: GROUPING, 6: GROUPING, 7: GROUPING]] having [null]
+    EXCHANGE SHUFFLE[1, 2, 4, 5, 6, 7]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1, 2: v2, 4: GROUPING_ID, 5: GROUPING, 6: GROUPING, 7: GROUPING]] having [null]
             REPEAT [[1: v1, 2: v2], [1: v1], [2: v2]]
                 SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
@@ -57,7 +57,7 @@ select v1 from t0 group by not (false), v1 having not (false) != v1
 [result]
 AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1]] having [null]
     AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1]] having [null]
-        SCAN (columns[1: v1] predicate[1: v1 != 1])
+        SCAN (columns[1: v1] predicate[1: v1 = 0])
 [end]
 
 [sql]

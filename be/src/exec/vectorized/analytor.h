@@ -7,6 +7,7 @@
 #include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 #include "util/runtime_profile.h"
@@ -46,7 +47,7 @@ public:
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     enum FrameType {
         Unbounded,               // BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
@@ -100,7 +101,7 @@ public:
     void reset_window_state();
     void get_window_function_result(int32_t start, int32_t end);
 
-    bool is_partition_finished();
+    bool is_partition_finished(int64_t found_partition_end);
     Status output_result_chunk(vectorized::ChunkPtr* chunk);
     size_t compute_memory_usage();
     void create_agg_result_columns(int64_t chunk_size);
@@ -123,12 +124,14 @@ public:
 private:
     RuntimeState* _state = nullptr;
     bool _is_closed = false;
-
+    // TPlanNode is only valid in the PREPARE and INIT phase
     const TPlanNode& _tnode;
     const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
+    // The open phase still relies on the TFunction object for some initialization operations
+    std::vector<TFunction> _fns;
 
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
@@ -193,6 +196,8 @@ private:
     // order_by_exprs are empty.
     TTupleId _buffered_tuple_id = 0;
 
+    bool _has_udaf = false;
+
     void _update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                      int64_t frame_end);
     // lead and lag function is special, the frame_start and frame_end
@@ -206,16 +211,17 @@ private:
 // Helper class that properly invokes destructor when state goes out of scope.
 class ManagedFunctionStates {
 public:
-    ManagedFunctionStates(vectorized::AggDataPtr __restrict agg_states, Analytor* agg_node)
-            : _agg_states(agg_states), _agg_node(agg_node) {
+    ManagedFunctionStates(std::vector<starrocks_udf::FunctionContext*>* ctxs,
+                          vectorized::AggDataPtr __restrict agg_states, Analytor* agg_node)
+            : _ctxs(ctxs), _agg_states(agg_states), _agg_node(agg_node) {
         for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->create(_agg_states + _agg_node->_agg_states_offsets[i]);
+            _agg_node->_agg_functions[i]->create((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
         }
     }
 
     ~ManagedFunctionStates() {
         for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->destroy(_agg_states + _agg_node->_agg_states_offsets[i]);
+            _agg_node->_agg_functions[i]->destroy((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
         }
     }
 
@@ -223,6 +229,7 @@ public:
     const uint8_t* data() const { return _agg_states; }
 
 private:
+    std::vector<starrocks_udf::FunctionContext*>* _ctxs;
     vectorized::AggDataPtr _agg_states;
     Analytor* _agg_node;
 };

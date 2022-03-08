@@ -73,17 +73,16 @@ public:
 
     void openReader(TBrokerOpenReaderResponse& response, const TBrokerOpenReaderRequest& request) {
         std::string path = url_path(request.path);
-        std::unique_ptr<RandomAccessFile> f;
-        Status st = _env->new_random_access_file(path, &f);
-        if (st.ok()) {
+        auto res = _env->new_random_access_file(path);
+        if (res.ok()) {
             TBrokerFD fd;
             fd.__set_high(0);
             fd.__set_low(++_next_fd);
             response.__set_fd(fd);
             response.__set_size(0);
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::OK);
-            _readers[fd.low] = std::move(f);
-        } else if (st.is_not_found()) {
+            _readers[fd.low] = std::move(res).value();
+        } else if (res.status().is_not_found()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::FILE_NOT_FOUND);
         } else {
             // I don't know how real broker handle this case, just return an non-OK status here.
@@ -98,15 +97,15 @@ public:
             return;
         }
         response.data.resize(request.length);
-        Slice buff(response.data);
         auto& f = iter->second;
-        Status st = f->read(request.offset, &buff);
-        response.data.resize(buff.size);
-        if (!st.ok()) {
+        auto res = f->read_at(request.offset, response.data.data(), response.data.size());
+        if (!res.ok()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::INVALID_INPUT_OFFSET);
-        } else if (buff.size == 0) {
+        } else if (*res == 0) {
+            response.data.resize(*res);
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::END_OF_FILE);
         } else {
+            response.data.resize(*res);
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::OK);
         }
     }
@@ -124,15 +123,14 @@ public:
     void openWriter(TBrokerOpenWriterResponse& response, const TBrokerOpenWriterRequest& request) {
         std::string path = url_path(request.path);
         RandomRWFileOptions opts{.mode = Env::MUST_CREATE};
-        std::unique_ptr<RandomRWFile> f;
-        Status st = _env->new_random_rw_file(opts, path, &f);
-        if (!st.ok()) {
+        auto res = _env->new_random_rw_file(opts, path);
+        if (!res.ok()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::INVALID_INPUT_FILE_PATH);
         } else {
             TBrokerFD fd;
             fd.__set_high(0);
             fd.__set_low(++_next_fd);
-            _writers[fd.low] = std::move(f);
+            _writers[fd.low] = std::move(res).value();
             response.__set_fd(fd);
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::OK);
         }
@@ -290,19 +288,15 @@ protected:
 
 std::string read(std::unique_ptr<SequentialFile>& f, int len) {
     std::string s(len, '\0');
-    Slice buff(s.data(), s.size());
-    Status st = f->read(&buff);
-    CHECK(st.ok()) << st.to_string();
-    s.resize(buff.size);
+    ASSIGN_OR_ABORT(auto nread, f->read(s.data(), s.size()));
+    s.resize(nread);
     return s;
 }
 
 std::string read(std::unique_ptr<RandomAccessFile>& f, size_t off, size_t len) {
     std::string s(len, '\0');
-    Slice buff(s.data(), s.size());
-    Status st = f->read(off, &buff);
-    CHECK(st.ok()) << st.to_string();
-    s.resize(buff.size);
+    ASSIGN_OR_ABORT(auto nread, f->read_at(off, s.data(), s.size()));
+    s.resize(nread);
     return s;
 }
 
@@ -322,20 +316,17 @@ uint64_t filesize(std::unique_ptr<RandomAccessFile>& f) {
 TEST_F(EnvBrokerTest, test_open_non_exist_file) {
     const std::string url = "/xyz/xxx.txt";
 
-    std::unique_ptr<SequentialFile> f0;
-    std::unique_ptr<RandomAccessFile> f1;
     // Check the specific (mocked) error code is meaningless, because
     // I don't know what it is.
-    ASSERT_FALSE(_env.new_sequential_file(url, &f0).ok());
-    ASSERT_FALSE(_env.new_random_access_file(url, &f1).ok());
+    ASSERT_FALSE(_env.new_sequential_file(url).ok());
+    ASSERT_FALSE(_env.new_random_access_file(url).ok());
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_write_file) {
     const std::string path = "/tmp/1.txt";
 
-    std::unique_ptr<WritableFile> f;
-    ASSERT_OK(_env.new_writable_file(path, &f));
+    auto f = *_env.new_writable_file(path);
     ASSERT_OK(f->append("first line\n"));
     ASSERT_OK(f->append("second line\n"));
     f->close();
@@ -351,8 +342,7 @@ TEST_F(EnvBrokerTest, test_sequential_read) {
     ASSERT_OK(_env_mem->create_file(path));
     ASSERT_OK(_env_mem->append_file(path, content));
 
-    std::unique_ptr<SequentialFile> f;
-    ASSERT_OK(_env.new_sequential_file(path, &f));
+    auto f = *_env.new_sequential_file(path);
     ASSERT_EQ("", read(f, 0));
     ASSERT_EQ("a", read(f, 1));
     ASSERT_EQ("bcdefghij", read(f, 9));
@@ -367,8 +357,7 @@ TEST_F(EnvBrokerTest, test_random_read) {
     ASSERT_OK(_env_mem->create_file(path));
     ASSERT_OK(_env_mem->append_file(path, content));
 
-    std::unique_ptr<RandomAccessFile> f;
-    ASSERT_OK(_env.new_random_access_file(path, &f));
+    auto f = *_env.new_random_access_file(path);
     ASSERT_EQ(content.size(), filesize(f));
     ASSERT_EQ("", read(f, 0, 0));
     ASSERT_EQ("", read(f, 10, 0));
@@ -377,8 +366,7 @@ TEST_F(EnvBrokerTest, test_random_read) {
     ASSERT_EQ(content.substr(1), read(f, 1, 100));
     ASSERT_EQ("a", read(f, 0, 1));
 
-    Slice s(_buff.data(), 1);
-    ASSERT_FALSE(f->read_at(content.size(), s).ok());
+    ASSERT_FALSE(f->read_at_fully(content.size(), _buff.data(), 1).ok());
 
     f.reset();
 }
@@ -390,19 +378,19 @@ TEST_F(EnvBrokerTest, test_write_exist_file) {
     ASSERT_OK(_env_mem->append_file(path, "old content"));
 
     std::unique_ptr<WritableFile> f;
-    ASSERT_TRUE(_env.new_writable_file(path, &f).is_not_supported());
+    ASSERT_TRUE(_env.new_writable_file(path).status().is_not_supported());
 
     auto opts = WritableFileOptions{.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSERT_TRUE(_env.new_writable_file(opts, path, &f).is_not_supported());
+    ASSERT_TRUE(_env.new_writable_file(opts, path).status().is_not_supported());
 
     opts = WritableFileOptions{.mode = Env::MUST_CREATE};
-    ASSERT_TRUE(_env.new_writable_file(opts, path, &f).is_already_exist());
+    ASSERT_TRUE(_env.new_writable_file(opts, path).status().is_already_exist());
 
     opts = WritableFileOptions{.mode = Env::MUST_EXIST};
-    ASSERT_TRUE(_env.new_writable_file(opts, path, &f).is_not_supported());
+    ASSERT_TRUE(_env.new_writable_file(opts, path).status().is_not_supported());
 
     opts = WritableFileOptions{.mode = Env::CREATE_OR_OPEN};
-    ASSERT_TRUE(_env.new_writable_file(opts, path, &f).is_not_supported());
+    ASSERT_TRUE(_env.new_writable_file(opts, path).status().is_not_supported());
 
     // Assume the file still exists.
     std::string content;

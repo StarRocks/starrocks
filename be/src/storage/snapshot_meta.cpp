@@ -11,7 +11,7 @@ namespace starrocks {
 
 Status SnapshotMeta::serialize_to_file(const std::string& file_path) {
     std::unique_ptr<WritableFile> f;
-    RETURN_IF_ERROR(Env::Default()->new_writable_file(file_path, &f));
+    ASSIGN_OR_RETURN(f, Env::Default()->new_writable_file(file_path));
     RETURN_IF_ERROR(serialize_to_file(f.get()));
     RETURN_IF_ERROR(f->sync());
     RETURN_IF_ERROR(f->close());
@@ -94,7 +94,7 @@ Status SnapshotMeta::parse_from_file(RandomAccessFile* file) {
     std::string buff;
     raw::stl_string_resize_uninitialized(&buff, 16);
 
-    RETURN_IF_ERROR(file->read_at(file_length - 16, buff));
+    RETURN_IF_ERROR(file->read_at_fully(file_length - 16, buff.data(), buff.size()));
     // Parse SnapshotMetaFooterPB
     auto footer_limit = static_cast<int64_t>(file_length) - 16;
     auto footer_offset = static_cast<int64_t>(BigEndian::ToHost64(UNALIGNED_LOAD64(buff.data())));
@@ -106,7 +106,7 @@ Status SnapshotMeta::parse_from_file(RandomAccessFile* file) {
         return Status::Corruption("invalid footer offset");
     }
     raw::stl_string_resize_uninitialized(&buff, footer_limit - footer_offset);
-    RETURN_IF_ERROR(file->read_at(footer_offset, buff));
+    RETURN_IF_ERROR(file->read_at_fully(footer_offset, buff.data(), buff.size()));
     SnapshotMetaFooterPB footer;
     if (!footer.ParseFromString(buff)) {
         return Status::Corruption("parse snapshot meta footer failed");
@@ -147,7 +147,7 @@ Status SnapshotMeta::parse_from_file(RandomAccessFile* file) {
         auto start = footer.rowset_meta_offsets(i);
         auto end = footer.rowset_meta_offsets(i + 1);
         raw::stl_string_resize_uninitialized(&buff, end - start);
-        RETURN_IF_ERROR(file->read_at(start, buff));
+        RETURN_IF_ERROR(file->read_at_fully(start, buff.data(), buff.size()));
         if (!_rowset_metas[i].ParseFromString(buff)) {
             return Status::InternalError("parse rowset meta failed");
         }
@@ -161,7 +161,7 @@ Status SnapshotMeta::parse_from_file(RandomAccessFile* file) {
         auto start = footer.delvec_offsets(i);
         auto end = footer.delvec_offsets(i + 1);
         raw::stl_string_resize_uninitialized(&buff, end - start);
-        RETURN_IF_ERROR(file->read_at(start, buff));
+        RETURN_IF_ERROR(file->read_at_fully(start, buff.data(), buff.size()));
         DelVector delvec;
         RETURN_IF_ERROR(delvec.load(version, buff.data(), buff.size()));
         (void)_delete_vectors.emplace(static_cast<uint32_t>(segment_id), std::move(delvec));
@@ -175,7 +175,7 @@ Status SnapshotMeta::parse_from_file(RandomAccessFile* file) {
     // Tablet meta
     auto tablet_meta_offset = footer.tablet_meta_offset();
     raw::stl_string_resize_uninitialized(&buff, footer_offset - tablet_meta_offset);
-    RETURN_IF_ERROR(file->read_at(tablet_meta_offset, buff));
+    RETURN_IF_ERROR(file->read_at_fully(tablet_meta_offset, buff.data(), buff.size()));
     if (!_tablet_meta.ParseFromString(buff)) {
         return Status::InternalError("parse tablet meta failed");
     }

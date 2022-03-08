@@ -2,15 +2,6 @@
 
 #include "exec/vectorized/hdfs_scanner.h"
 
-#include <hdfs/hdfs.h>
-#include <unistd.h>
-
-#include <algorithm>
-#include <memory>
-#include <mutex>
-#include <thread>
-
-#include "env/env_hdfs.h"
 #include "exec/vectorized/hdfs_scan_node.h"
 
 namespace starrocks::vectorized {
@@ -94,9 +85,7 @@ void HdfsScanner::_build_file_read_param() {
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_CANCELLED(_runtime_state);
-#ifndef BE_TEST
-    SCOPED_TIMER(_scanner_params.parent->_scan_timer);
-#endif
+    SCOPED_RAW_TIMER(&_stats.scan_ns);
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
         if (!_conjunct_ctxs.empty()) {
@@ -106,7 +95,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     } else if (status.is_end_of_file()) {
         // do nothing.
     } else {
-        LOG(ERROR) << "failed to read file: " << _scanner_params.fs->file_name();
+        LOG(ERROR) << "failed to read file: " << _scanner_params.path;
     }
     return status;
 }
@@ -115,17 +104,16 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_is_open) {
         return Status::OK();
     }
-#ifndef BE_TEST
-    RETURN_IF_ERROR(down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->open());
-#endif
+    CHECK(_file == nullptr) << "File has already been opened";
+    ASSIGN_OR_RETURN(_file, _scanner_params.env->new_random_access_file(_scanner_params.path));
     _build_file_read_param();
     auto status = do_open(runtime_state);
     if (status.ok()) {
         _is_open = true;
-#ifndef BE_TEST
-        (*_scanner_params.open_limit)++;
-#endif
-        LOG(INFO) << "open file success: " << _scanner_params.fs->file_name();
+        if (_scanner_params.open_limit != nullptr) {
+            _scanner_params.open_limit->fetch_add(1, std::memory_order_relaxed);
+        }
+        LOG(INFO) << "open file success: " << _scanner_params.path;
     }
     return status;
 }
@@ -135,20 +123,24 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     if (_is_closed) {
         return;
     }
+    update_counter();
     Expr::close(_conjunct_ctxs, runtime_state);
     Expr::close(_min_max_conjunct_ctxs, runtime_state);
     for (auto& it : _conjunct_ctxs_by_slot) {
         Expr::close(it.second, runtime_state);
     }
     do_close(runtime_state);
-#ifndef BE_TEST
-    down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->close();
-    if (_is_open) {
-        (*_scanner_params.open_limit)--;
-    }
-#endif
-    _scanner_params.fs.reset();
+    _file.reset(nullptr);
     _is_closed = true;
+    if (_is_open && _scanner_params.open_limit != nullptr) {
+        _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
+    }
+}
+
+void HdfsScanner::cleanup() {
+    if (_runtime_state != nullptr) {
+        close(_runtime_state);
+    }
 }
 
 void HdfsScanner::enter_pending_queue() {
@@ -159,52 +151,46 @@ uint64_t HdfsScanner::exit_pending_queue() {
     return _pending_queue_sw.reset();
 }
 
-#ifndef BE_TEST
-struct HdfsReadStats {
-    int64_t bytes_total_read = 0;
-    int64_t bytes_read_local = 0;
-    int64_t bytes_read_short_circuit = 0;
-    int64_t bytes_read_dn_cache = 0;
-    int64_t bytes_read_remote = 0;
-};
+void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
+    static const char* const kHdfsIOProfileSectionPrefix = "HdfsIO";
+    if (_file == nullptr) return;
 
-static void get_hdfs_statistics(hdfsFile file, HdfsReadStats* stats) {
-    struct hdfsReadStatistics* hdfs_stats = nullptr;
-    auto res = hdfsFileGetReadStatistics(file, &hdfs_stats);
-    if (res == 0) {
-        stats->bytes_total_read += hdfs_stats->totalBytesRead;
-        stats->bytes_read_local += hdfs_stats->totalLocalBytesRead;
-        stats->bytes_read_short_circuit += hdfs_stats->totalShortCircuitBytesRead;
-        stats->bytes_read_dn_cache += hdfs_stats->totalZeroCopyBytesRead;
-        stats->bytes_read_remote += hdfs_stats->totalBytesRead - hdfs_stats->totalLocalBytesRead;
+    auto res = _file->get_numeric_statistics();
+    if (!res.ok()) return;
 
-        hdfsFileFreeReadStatistics(hdfs_stats);
+    std::unique_ptr<NumericStatistics> statistics = std::move(res).value();
+    if (statistics == nullptr || statistics->size() == 0) return;
+
+    RuntimeProfile* runtime_profile = profile->runtime_profile;
+    ADD_TIMER(runtime_profile, kHdfsIOProfileSectionPrefix);
+    for (int64_t i = 0, sz = statistics->size(); i < sz; i++) {
+        auto&& name = statistics->name(i);
+        auto&& counter = ADD_CHILD_COUNTER(runtime_profile, name, TUnit::UNIT, kHdfsIOProfileSectionPrefix);
+        COUNTER_UPDATE(counter, statistics->value(i));
     }
-    hdfsFileClearReadStatistics(file);
 }
-#endif
+
+void HdfsScanner::do_update_counter(HdfsScanProfile* profile) {}
 
 void HdfsScanner::update_counter() {
-#ifndef BE_TEST
-    // _scanner_params.fs is null means scanner open failed
-    if (_scanner_params.fs == nullptr) return;
+    HdfsScanProfile* profile = _scanner_params.profile;
+    if (profile == nullptr) return;
 
-    HdfsReadStats hdfs_stats;
-    auto hdfs_file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->hdfs_file();
-    if (hdfs_file == nullptr) return;
-    // Hdfslib only supports obtaining statistics of hdfs file system.
-    // For other systems such as s3, calling this function will cause be crash.
-    if (_scanner_params.parent->_is_hdfs_fs) {
-        get_hdfs_statistics(hdfs_file, &hdfs_stats);
-    }
+    update_hdfs_counter(profile);
 
-    auto& root = _scanner_params.parent->_hdfs_io_profile;
-    COUNTER_UPDATE(root.bytes_total_read, hdfs_stats.bytes_total_read);
-    COUNTER_UPDATE(root.bytes_read_local, hdfs_stats.bytes_read_local);
-    COUNTER_UPDATE(root.bytes_read_short_circuit, hdfs_stats.bytes_read_short_circuit);
-    COUNTER_UPDATE(root.bytes_read_dn_cache, hdfs_stats.bytes_read_dn_cache);
-    COUNTER_UPDATE(root.bytes_read_remote, hdfs_stats.bytes_read_remote);
-#endif
+    COUNTER_UPDATE(profile->scan_timer, _stats.scan_ns);
+    COUNTER_UPDATE(profile->reader_init_timer, _stats.reader_init_ns);
+
+    COUNTER_UPDATE(profile->rows_read_counter, _stats.raw_rows_read);
+    COUNTER_UPDATE(profile->bytes_read_counter, _stats.bytes_read);
+    COUNTER_UPDATE(profile->expr_filter_timer, _stats.expr_filter_ns);
+    COUNTER_UPDATE(profile->io_timer, _stats.io_ns);
+    COUNTER_UPDATE(profile->io_counter, _stats.io_count);
+    COUNTER_UPDATE(profile->column_read_timer, _stats.column_read_ns);
+    COUNTER_UPDATE(profile->column_convert_timer, _stats.column_convert_ns);
+
+    // update scanner private profile.
+    do_update_counter(profile);
 }
 
 void HdfsFileReaderParam::set_columns_from_file(const std::unordered_set<std::string>& names) {
@@ -293,19 +279,6 @@ bool HdfsFileReaderParam::can_use_dict_filter_on_slot(SlotDescriptor* slot) cons
         }
     }
     return true;
-}
-
-static const std::string kHdfsIOProfileSectionPrefix = "HdfsIO";
-
-void HdfsIOProfile::init(RuntimeProfile* root) {
-    if (_toplev != nullptr) return;
-    _toplev = ADD_TIMER(root, kHdfsIOProfileSectionPrefix);
-    bytes_total_read = ADD_CHILD_COUNTER(root, "BytesTotalRead", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
-    bytes_read_local = ADD_CHILD_COUNTER(root, "BytesReadLocal", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
-    bytes_read_short_circuit =
-            ADD_CHILD_COUNTER(root, "BytesReadShortCircuit", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
-    bytes_read_dn_cache = ADD_CHILD_COUNTER(root, "BytesReadDataNodeCache", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
-    bytes_read_remote = ADD_CHILD_COUNTER(root, "BytesReadRemote", TUnit::BYTES, kHdfsIOProfileSectionPrefix);
 }
 
 } // namespace starrocks::vectorized

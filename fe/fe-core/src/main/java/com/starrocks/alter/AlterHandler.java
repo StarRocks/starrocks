@@ -28,6 +28,7 @@ import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.CancelStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -439,7 +440,7 @@ public abstract class AlterHandler extends MasterDaemon {
             }
             Tablet tablet = index.getTablet(task.getTabletId());
             Preconditions.checkNotNull(tablet, task.getTabletId());
-            Replica replica = tablet.getReplicaById(task.getNewReplicaId());
+            Replica replica = ((LocalTablet) tablet).getReplicaById(task.getNewReplicaId());
             if (replica == null) {
                 throw new MetaNotFoundException("replica " + task.getNewReplicaId() + " does not exist");
             }

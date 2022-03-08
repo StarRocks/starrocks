@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +35,7 @@ import java.util.Objects;
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
 // TODO: Remove old query optimizer related codes before 2021-09-30
-public class OrderByElement {
+public class OrderByElement implements ParseNode {
     private Expr expr;
     private final boolean isAsc;
 
@@ -201,5 +202,10 @@ public class OrderByElement {
      */
     public static boolean nullsFirst(Boolean nullsFirstParam, boolean isAsc) {
         return nullsFirstParam == null ? isAsc : nullsFirstParam;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitOrderByElement(this, context);
     }
 }

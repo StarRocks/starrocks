@@ -52,6 +52,8 @@ import com.starrocks.mysql.MysqlServerStatusFlag;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.SqlDigestBuilder;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
@@ -159,7 +161,7 @@ public class ConnectProcessor {
                 MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
                 if (elapseMs > Config.qe_slow_log_ms) {
                     MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
-                    ctx.getAuditEventBuilder().setDigest(computeStatementDigest((QueryStmt) parsedStmt));
+                    ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
                 }
             }
             ctx.getAuditEventBuilder().setIsQuery(true);
@@ -182,8 +184,13 @@ public class ConnectProcessor {
         Catalog.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
     }
 
-    public String computeStatementDigest(QueryStmt queryStmt) {
-        String digest = queryStmt.toDigest();
+    public String computeStatementDigest(StatementBase queryStmt) {
+        String digest;
+        if (queryStmt instanceof QueryStmt) {
+            digest = ((QueryStmt) queryStmt).toDigest();
+        } else {
+            digest = SqlDigestBuilder.build(queryStmt);
+        }
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
@@ -250,7 +257,15 @@ public class ConnectProcessor {
         StatementBase parsedStmt = null;
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
-            List<StatementBase> stmts = analyze(originStmt);
+            List<StatementBase> stmts;
+            try {
+                stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode());
+            } catch (ParsingException parsingException) {
+                throw new AnalysisException(parsingException.getMessage());
+            } catch (Exception e) {
+                stmts = analyze(originStmt);
+            }
+
             for (int i = 0; i < stmts.size(); ++i) {
                 ctx.getState().reset();
                 if (i > 0) {

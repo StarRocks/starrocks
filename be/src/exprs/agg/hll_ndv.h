@@ -90,7 +90,7 @@ public:
         }
     }
 
-    void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
+    void serialize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                              Column* to) const override {
         DCHECK(to->is_binary());
 
@@ -102,7 +102,8 @@ public:
         column->append(Slice(result, size));
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         const ColumnType* column = down_cast<const ColumnType*>(src[0].get());
         auto* result = down_cast<BinaryColumn*>((*dst).get());
 

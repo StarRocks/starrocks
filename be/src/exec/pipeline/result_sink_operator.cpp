@@ -30,7 +30,7 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ResultSinkOperator::close(RuntimeState* state) {
+void ResultSinkOperator::close(RuntimeState* state) {
     Status st;
     // Close the writer
     if (_writer != nullptr) {
@@ -57,7 +57,6 @@ Status ResultSinkOperator::close(RuntimeState* state) {
     }
 
     Operator::close(state);
-    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> ResultSinkOperator::pull_chunk(RuntimeState* state) {
@@ -102,7 +101,7 @@ Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
 
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs));
 
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
 
     return Status::OK();

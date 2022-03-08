@@ -16,14 +16,16 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
 
     DCHECK(_buff.free_space() > 0);
     Slice s(_buff.limit(), _buff.free_space());
-    Status st = _file->read(&s);
+    auto res = _file->read(s.data, s.size);
     // According to the specification of `Env::read`, when reached the end of
     // a file, the returned status will be OK instead of EOF, but here we check
     // EOF also for safety.
-    if (st.is_end_of_file()) {
+    if (res.status().is_end_of_file()) {
         s.size = 0;
-    } else if (!st.ok()) {
-        return st;
+    } else if (!res.ok()) {
+        return res.status();
+    } else {
+        s.size = *res;
     }
     _buff.add_limit(s.size);
     auto n = _buff.available();
@@ -190,7 +192,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
             if (_counter->num_rows_filtered++ < 50) {
                 std::stringstream error_msg;
                 error_msg << "Value count does not match column count. "
-                          << "Expect " << fields.size() << ", but got " << _num_fields_in_csv;
+                          << "Expect " << _num_fields_in_csv << ", but got " << fields.size();
                 _report_error(record.to_string(), error_msg.str());
             }
             continue;

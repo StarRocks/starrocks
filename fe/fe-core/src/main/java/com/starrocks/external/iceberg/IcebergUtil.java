@@ -2,16 +2,23 @@
 
 package com.starrocks.external.iceberg;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.external.hive.HdfsFileFormat;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.expressions.UnboundPredicate;
+import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Expressions;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class IcebergUtil {
@@ -76,7 +83,7 @@ public class IcebergUtil {
      */
     public static Optional<Snapshot> getCurrentTableSnapshot(Table table, boolean refresh) {
         if (refresh) {
-            table.refresh();
+            refreshTable(table);
         }
         return Optional.ofNullable(table.currentSnapshot());
     }
@@ -92,16 +99,59 @@ public class IcebergUtil {
      */
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
-                                         List<UnboundPredicate> icebergPredicates,
+                                         List<Expression> icebergPredicates,
                                          boolean refresh) {
         if (refresh) {
-            table.refresh();
+            refreshTable(table);
         }
 
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
-        for (UnboundPredicate predicate : icebergPredicates) {
-            tableScan = tableScan.filter(predicate);
+        Expression filterExpressions = Expressions.alwaysTrue();
+        if (!icebergPredicates.isEmpty()) {
+            filterExpressions = icebergPredicates.stream().reduce(Expressions.alwaysTrue(), Expressions::and);
         }
-        return tableScan;
+
+        return tableScan.filter(filterExpressions);
+    }
+
+    private static void refreshTable(Table table) {
+        try {
+            if (table instanceof BaseTable) {
+                BaseTable baseTable = (BaseTable) table;
+                if (baseTable.operations().refresh() == null) {
+                    // If table is loaded successfully, current table metadata will never be null.
+                    // So when we get a null metadata after refresh, it indicates the table has been dropped.
+                    // See: https://github.com/StarRocks/starrocks/issues/3076
+                    throw new NoSuchTableException("No such table: %s", table.name());
+                }
+            } else {
+                // table loaded by Catalog should be a base table
+                throw new StarRocksIcebergException(String.format("Invalid table type of %s, it should be a BaseTable!",
+                        table.name()));
+            }
+        } catch (NoSuchTableException e) {
+            throw new StarRocksIcebergException(String.format("No such table  %s", table.name()));
+        } catch (IllegalStateException ei) {
+            throw new StarRocksIcebergException(String.format("Refresh table %s with failure, the table under hood" +
+                            " may have been dropped. You should re-create the external table. cause %s",
+                    table.name(), ei.getMessage()));
+        }
+    }
+
+    /**
+     *
+     * @param partitionSpec
+     * @return
+     */
+    public static Map<PartitionField, Integer> getIdentityPartitions(PartitionSpec partitionSpec) {
+        // TODO: expose transform information in Iceberg library
+        ImmutableMap.Builder<PartitionField, Integer> columns = ImmutableMap.builder();
+        for (int i = 0; i < partitionSpec.fields().size(); i++) {
+            PartitionField field = partitionSpec.fields().get(i);
+            if (field.transform().toString().equals("identity")) {
+                columns.put(field, i);
+            }
+        }
+        return columns.build();
     }
 }

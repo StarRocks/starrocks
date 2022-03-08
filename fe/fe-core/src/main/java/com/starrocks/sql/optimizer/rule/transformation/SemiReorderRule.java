@@ -128,7 +128,9 @@ public class SemiReorderRule extends TransformationRule {
             projectMap.put(smallestColumnRef, smallestColumnRef);
             newSemiOutputColumns.union(smallestColumnRef);
         } else {
-            projectMap = newSemiOutputColumns.getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+            projectMap = newSemiOutputColumns.getStream()
+                    .filter(c -> newTopJoin.getRequiredChildInputColumns().contains(c))
+                    .mapToObj(context.getColumnRefFactory()::getColumnRef)
                     .collect(Collectors.toMap(Function.identity(), Function.identity()));
         }
 

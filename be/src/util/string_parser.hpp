@@ -212,6 +212,7 @@ private:
         return true;
     }
 
+public:
     // Returns the position of the first non-whitespace character in s.
     static inline int skip_leading_whitespace(const char* s, int len) {
         int i = 0;

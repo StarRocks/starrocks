@@ -36,8 +36,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.io.Writable;
-import com.starrocks.sql.analyzer.ExprVisitor;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprOpcode;
@@ -117,7 +117,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // an empty set (e.g. count).
     public static final Predicate<Expr>
             NON_NULL_EMPTY_AGG = (com.google.common.base.Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
-                    ((FunctionCallExpr) arg).returnsNonNullOnEmpty();
+            ((FunctionCallExpr) arg).returnsNonNullOnEmpty();
 
     // Returns true if an Expr is a builtin aggregate function.
     public static final Predicate<Expr> CORRELATED_SUBQUERY_SUPPORT_AGG_FN =
@@ -496,6 +496,21 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return "(" + Joiner.on(" ").join(strings) + ")";
     }
 
+    public static boolean containsSlotRef(Expr root) {
+        if (root == null) {
+            return false;
+        }
+        if (root instanceof SlotRef) {
+            return true;
+        }
+        for (Expr child : root.getChildren()) {
+            if (containsSlotRef(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Return true if l1[i].equals(l2[i]) for all i.
      */
@@ -858,6 +873,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     public String toMySql() {
+        return toSql();
+    }
+
+    public String toJDBCSQL() {
         return toSql();
     }
 
@@ -1234,18 +1253,13 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             return this;
         }
 
-        if ((targetType.isStringType() || targetType.isHllType())
-                && (this.type.isStringType() || this.type.isHllType())) {
+        if (targetType.isHllType() && this.type.isStringType()) {
             return this;
         }
-        if (!canCastTo(targetType)) {
+        if (!Type.canCastTo(this.type, targetType)) {
             throw new AnalysisException("Cannot cast '" + this.toSql() + "' from " + this.type + " to " + targetType);
         }
         return uncheckedCastTo(targetType);
-    }
-
-    protected boolean canCastTo(Type targetType) {
-        return Type.canCastTo(this.type, targetType);
     }
 
     /**
@@ -1520,7 +1534,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         List<Subquery> subqueries = Lists.newArrayList();
         collect(Subquery.class, subqueries);
         Preconditions.checkState(subqueries.size() == 1,
-                "only support one subquery in " + this.toSql());
+                "only support one subquery in " + AST2SQL.toString(this));
         return subqueries.get(0);
     }
 
@@ -1704,7 +1718,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     /**
      * Below function is added by new analyzer
      */
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitExpression(this, context);
     }
 

@@ -18,15 +18,15 @@ Status IntersectBuildSinkOperator::prepare(RuntimeState* state) {
     return _intersect_ctx->prepare(state, _dst_exprs);
 }
 
-Status IntersectBuildSinkOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_intersect_ctx->unref(state));
-    return Operator::close(state);
+void IntersectBuildSinkOperator::close(RuntimeState* state) {
+    _intersect_ctx->unref(state);
+    Operator::close(state);
 }
 
 Status IntersectBuildSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    Expr::prepare(_dst_exprs, state, _row_desc);
+    Expr::prepare(_dst_exprs, state);
     Expr::open(_dst_exprs, state);
 
     return Status::OK();

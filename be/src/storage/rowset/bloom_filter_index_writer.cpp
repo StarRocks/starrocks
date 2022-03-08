@@ -28,6 +28,7 @@
 #include "env/env.h"
 #include "runtime/mem_pool.h"
 #include "storage/fs/block_manager.h"
+#include "storage/olap_type_infra.h"
 #include "storage/rowset/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 #include "storage/rowset/common.h"
 #include "storage/rowset/encoding_info.h"
@@ -171,79 +172,19 @@ private:
 
 } // namespace
 
+struct BloomFilterBuilderFunctor {
+    template <FieldType ftype>
+    Status operator()(std::unique_ptr<BloomFilterIndexWriter>* res, const BloomFilterOptions& bf_options,
+                      const TypeInfoPtr& typeinfo) {
+        *res = std::make_unique<BloomFilterIndexWriterImpl<ftype>>(bf_options, typeinfo);
+        return Status::OK();
+    }
+};
+
 // TODO currently we don't support bloom filter index for tinyint/hll/float/double
 Status BloomFilterIndexWriter::create(const BloomFilterOptions& bf_options, const TypeInfoPtr& typeinfo,
                                       std::unique_ptr<BloomFilterIndexWriter>* res) {
-    FieldType type = typeinfo->type();
-    switch (type) {
-    case OLAP_FIELD_TYPE_SMALLINT:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_SMALLINT>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_INT:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_INT>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_UNSIGNED_INT>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_BIGINT:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_BIGINT>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_LARGEINT:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_LARGEINT>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_CHAR:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_CHAR>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_VARCHAR:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_VARCHAR>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DATE:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_DATE>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DATE_V2:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_DATE_V2>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DATETIME:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_DATETIME>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_TIMESTAMP>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL_V2>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL32:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL32>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL64:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL64>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_DECIMAL128:
-        *res = std::make_unique<BloomFilterIndexWriterImpl<OLAP_FIELD_TYPE_DECIMAL128>>(bf_options, typeinfo);
-        break;
-    case OLAP_FIELD_TYPE_TINYINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-    case OLAP_FIELD_TYPE_FLOAT:
-    case OLAP_FIELD_TYPE_DOUBLE:
-    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-    case OLAP_FIELD_TYPE_STRUCT:
-    case OLAP_FIELD_TYPE_ARRAY:
-    case OLAP_FIELD_TYPE_MAP:
-    case OLAP_FIELD_TYPE_UNKNOWN:
-    case OLAP_FIELD_TYPE_NONE:
-    case OLAP_FIELD_TYPE_HLL:
-    case OLAP_FIELD_TYPE_BOOL:
-    case OLAP_FIELD_TYPE_OBJECT:
-    case OLAP_FIELD_TYPE_PERCENTILE:
-    case OLAP_FIELD_TYPE_MAX_VALUE:
-        return Status::NotSupported("unsupported type for bloom filter: " + std::to_string(type));
-    }
-    return Status::OK();
+    return field_type_dispatch_bloomfilter(typeinfo->type(), BloomFilterBuilderFunctor(), res, bf_options, typeinfo);
 }
 
 } // namespace starrocks

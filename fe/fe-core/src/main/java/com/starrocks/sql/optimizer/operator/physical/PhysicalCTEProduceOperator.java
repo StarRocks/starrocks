@@ -10,14 +10,14 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import java.util.Objects;
 
 public class PhysicalCTEProduceOperator extends PhysicalOperator {
-    private final String cteId;
+    private final int cteId;
 
-    public PhysicalCTEProduceOperator(String cteId) {
+    public PhysicalCTEProduceOperator(int cteId) {
         super(OperatorType.PHYSICAL_CTE_PRODUCE);
         this.cteId = cteId;
     }
 
-    public String getCteId() {
+    public int getCteId() {
         return cteId;
     }
 

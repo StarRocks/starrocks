@@ -22,17 +22,15 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -47,9 +45,6 @@ import java.util.Objects;
 /**
  * Most predicates with two operands..
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class BinaryPredicate extends Predicate implements Writable {
     private static final Logger LOG = LogManager.getLogger(BinaryPredicate.class);
 
@@ -193,32 +188,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         isInferred_ = other.isInferred_;
     }
 
-    public boolean isInferred() {
-        return isInferred_;
-    }
-
-    public static void initBuiltins(FunctionSet functionSet) {
-        for (Type t : Type.getSupportedTypes()) {
-            if (t.isNull() || t.isPseudoType()) {
-                continue; // NULL is handled through type promotion.
-            }
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.EQ.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.NE.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.LE.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.GE.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.LT.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.GT.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                    Operator.EQ_FOR_NULL.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
-        }
-    }
-
     @Override
     public Expr clone() {
         return new BinaryPredicate(this);
@@ -322,6 +291,9 @@ public class BinaryPredicate extends Predicate implements Writable {
 
         // Following logical is compatible with MySQL:
         //    Cast to DOUBLE by default, because DOUBLE has the largest range of values.
+        if (type1.isJsonType() || type2.isJsonType()) {
+            return ScalarType.createJsonType();
+        }
         if (t1 == PrimitiveType.VARCHAR && t2 == PrimitiveType.VARCHAR) {
             return Type.VARCHAR;
         }
@@ -415,8 +387,6 @@ public class BinaryPredicate extends Predicate implements Writable {
 
         this.opcode = op.getOpcode();
         String opName = op.getName();
-        fn = getBuiltinFunction(analyzer, opName, collectChildReturnTypes(), Function.CompareMode.IS_SUPERTYPE_OF);
-        Preconditions.checkArgument(fn != null, String.format("Unsupported binary predicate %s", toSql()));
 
         selectivity = Expr.DEFAULT_SELECTIVITY;
     }
@@ -626,7 +596,7 @@ public class BinaryPredicate extends Predicate implements Writable {
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitBinaryPredicate(this, context);
     }
 

@@ -18,6 +18,7 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
@@ -47,6 +48,9 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.thrift.TExprOpcode;
+import com.starrocks.thrift.TFunctionBinaryType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -55,6 +59,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class ScalarOperatorToExpr {
+    private static final Logger LOG = LogManager.getLogger(ScalarOperatorToExpr.class);
+
     public static Expr buildExecExpression(ScalarOperator expression, FormatterContext descTbl) {
         return expression.accept(new Formatter(), descTbl);
     }
@@ -250,9 +256,7 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitInPredicate(InPredicateOperator predicate, FormatterContext context) {
             List<Expr> args = Lists.newArrayList();
-            boolean allConstant = true;
             for (int i = 1; i < predicate.getChildren().size(); ++i) {
-                allConstant &= predicate.getChild(i).isConstant();
                 args.add(buildExecExpression(predicate.getChild(i), context));
             }
 
@@ -260,14 +264,20 @@ public class ScalarOperatorToExpr {
             InPredicate expr =
                     new InPredicate(buildExecExpression(predicate.getChild(0), context), args, predicate.isNotIn());
 
-            if (allConstant) {
-                expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN);
-            } else {
-                expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NEW_NOT_IN : TExprOpcode.FILTER_NEW_IN);
-            }
+            expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN);
 
             expr.setType(Type.BOOLEAN);
             return expr;
+        }
+
+        static Function isNullFN = new Function(new FunctionName("is_null_pred"),
+                new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+        static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
+                new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+
+        {
+            isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
+            isNotNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
         }
 
         @Override
@@ -276,11 +286,9 @@ public class ScalarOperatorToExpr {
 
             // for set function name
             if (predicate.isNotNull()) {
-                expr.setFn(Expr.getBuiltinFunction("is_not_null_pred", new Type[] {expr.getChild(0).getType()},
-                        Function.CompareMode.IS_INDISTINGUISHABLE));
+                expr.setFn(isNotNullFN);
             } else {
-                expr.setFn(Expr.getBuiltinFunction("is_null_pred", new Type[] {expr.getChild(0).getType()},
-                        Function.CompareMode.IS_INDISTINGUISHABLE));
+                expr.setFn(isNullFN);
             }
 
             expr.setType(Type.BOOLEAN);

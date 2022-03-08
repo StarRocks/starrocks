@@ -26,7 +26,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.ListPartitionPruner;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

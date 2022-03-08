@@ -29,8 +29,12 @@ public class MultiCastPlanFragment extends PlanFragment {
     }
 
     public MultiCastPlanFragment(PlanFragment planFragment) {
-        super(planFragment.fragmentId, planFragment.planRoot, DataPartition.RANDOM);
+        super(planFragment.fragmentId, planFragment.planRoot, planFragment.getDataPartition());
+        // Use random, only send to self
+        this.outputPartition = DataPartition.RANDOM;
         this.children.addAll(planFragment.getChildren());
+        this.setLoadGlobalDicts(planFragment.loadGlobalDicts);
+        this.setQueryGlobalDicts(planFragment.queryGlobalDicts);
     }
 
     public List<PlanFragment> getDestFragmentList() {
@@ -50,7 +54,7 @@ public class MultiCastPlanFragment extends PlanFragment {
 
         for (ExchangeNode f : destNodeList) {
             DataStreamSink streamSink = new DataStreamSink(f.getId());
-            streamSink.setPartition(f.getFragment().getOutputPartition());
+            streamSink.setPartition(DataPartition.RANDOM);
             streamSink.setFragment(this);
             multiCastDataSink.getDataStreamSinks().add(streamSink);
             multiCastDataSink.getDestinations().add(Lists.newArrayList());
@@ -99,8 +103,4 @@ public class MultiCastPlanFragment extends PlanFragment {
         Preconditions.checkState(false);
     }
 
-    @Override
-    public void setLoadGlobalDicts(List<Pair<Integer, ColumnDict>> loadGlobalDicts) {
-        Preconditions.checkState(false);
-    }
 }

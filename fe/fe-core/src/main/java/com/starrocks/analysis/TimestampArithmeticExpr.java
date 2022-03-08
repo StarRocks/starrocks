@@ -30,7 +30,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -302,6 +302,18 @@ public class TimestampArithmeticExpr extends Expr {
         return null;
     }
 
+    public String getFuncName() {
+        return funcName;
+    }
+
+    public String getTimeUnitIdent() {
+        return timeUnitIdent;
+    }
+
+    public boolean isIntervalFirst() {
+        return intervalFirst;
+    }
+
     @Override
     public String toSqlImpl() {
         StringBuilder strBuilder = new StringBuilder();
@@ -378,7 +390,6 @@ public class TimestampArithmeticExpr extends Expr {
         return strBuilder.toString();
     }
 
-
     // Time units supported in timestamp arithmetic.
     public enum TimeUnit {
         YEAR("YEAR"),                               // YEARS
@@ -433,7 +444,7 @@ public class TimestampArithmeticExpr extends Expr {
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitTimestampArithmeticExpr(this, context);
     }
 }

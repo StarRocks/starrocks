@@ -13,9 +13,11 @@
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
 #include "storage/column_vector.h"
+#include "storage/olap_type_infra.h"
 #include "storage/schema.h"
 #include "storage/tablet_schema.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "util/json.h"
 #include "util/pred_guard.h"
 #include "util/stack_util.h"
 #include "util/unaligned_access.h"
@@ -91,16 +93,19 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
-        auto timestamp = src.get_timestamp();
-        int year, mon, day, hour, minute, second, usec;
-        timestamp.to_timestamp(&year, &mon, &day, &hour, &minute, &second, &usec);
-        dst.set_uint24((year << 9) + (mon << 5) + day);
+
+        auto src_value = src.get_int64();
+        int64_t part1 = (src_value / 1000000L);
+        uint24_t year = static_cast<uint24_t>((part1 / 10000L) % 10000);
+        uint24_t mon = static_cast<uint24_t>((part1 / 100) % 100);
+        uint24_t day = static_cast<uint24_t>(part1 % 100);
+        dst->set_uint24((year << 9) + (mon << 5) + day);
         return Status::OK();
     }
 };
@@ -114,16 +119,16 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
         int year, mon, day, hour, minute, second, usec;
         auto src_value = src.get_timestamp();
         src_value.to_timestamp(&year, &mon, &day, &hour, &minute, &second, &usec);
-        dst.set_uint24((year << 9) + (mon << 5) + day);
+        dst->set_uint24((year << 9) + (mon << 5) + day);
         return Status::OK();
     }
 };
@@ -137,10 +142,10 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
         auto src_value = src.get_int32();
@@ -151,7 +156,7 @@ public:
         uint24_t year = static_cast<uint24_t>(src_value / 10000);
         uint24_t mon = static_cast<uint24_t>((src_value % 10000) / 100);
         uint24_t day = static_cast<uint24_t>(src_value % 100);
-        dst.set_uint24((year << 9) + (mon << 5) + day);
+        dst->set_uint24((year << 9) + (mon << 5) + day);
         return Status::OK();
     }
 };
@@ -165,14 +170,14 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
         auto src_value = src.get_date();
-        dst.set_uint24(src_value.to_mysql_date());
+        dst->set_uint24(src_value.to_mysql_date());
         return Status::OK();
     }
 };
@@ -187,14 +192,18 @@ public:
         return Status::OK();
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
         auto src_value = src.get_timestamp();
-        dst.set_date(src_value);
+        int year, mon, day, hour, minute, second, usec;
+        src_value.to_timestamp(&year, &mon, &day, &hour, &minute, &second, &usec);
+        DateValue dst_value;
+        dst_value.from_date(year, mon, day);
+        dst->set_date(dst_value);
         return Status::OK();
     }
 };
@@ -211,13 +220,20 @@ public:
         return Status::OK();
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
-        dst.set_date(src.get_timestamp());
+        auto src_value = src.get_int64();
+        int64_t part1 = (src_value / 1000000L);
+        int32_t year = static_cast<int32_t>((part1 / 10000L) % 10000);
+        int32_t mon = static_cast<int32_t>((part1 / 100) % 100);
+        int32_t day = static_cast<int32_t>(part1 % 100);
+        DateValue date_v2;
+        date_v2.from_date(year, mon, day);
+        dst->set_date(date_v2);
         return Status::OK();
     }
 };
@@ -231,13 +247,15 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
-        dst.set_date(src.get_date());
+        DateValue date_v2;
+        date_v2.from_mysql_date(src.get_uint24());
+        dst->set_date(date_v2);
         return Status::OK();
     }
 };
@@ -251,16 +269,17 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
-        DateValue date_v2 = src.get_date();
-        int year, month, day;
-        date_v2.to_date(&year, &month, &day);
-        dst.set_int64(static_cast<int64>(year * 10000L + month * 100L + day) * 1000000);
+        uint32_t src_value = src.get_uint24();
+        int day = implicit_cast<int>(src_value & 31u);
+        int month = implicit_cast<int>((src_value >> 5u) & 15u);
+        int year = implicit_cast<int>(src_value >> 9u);
+        dst->set_int64(static_cast<int64>(year * 10000L + month * 100L + day) * 1000000);
         return Status::OK();
     }
 };
@@ -274,16 +293,16 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
         auto src_value = src.get_date();
         int year, mon, day;
         src_value.to_date(&year, &mon, &day);
-        dst.set_int64(static_cast<int64>(year * 10000L + mon * 100L + day) * 1000000);
+        dst->set_int64(static_cast<int64>(year * 10000L + mon * 100L + day) * 1000000);
         return Status::OK();
     }
 };
@@ -297,13 +316,13 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
-        dst.set_int64(src.get_timestamp().to_timestamp_literal());
+        dst->set_int64(src.get_timestamp().to_timestamp_literal());
         return Status::OK();
     }
 };
@@ -322,16 +341,17 @@ public:
         return Status::OK();
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
-        DateValue date_v2 = src.get_date();
-        int year, month, day;
-        date_v2.to_date(&year, &month, &day);
-        dst.set_timestamp(TimestampValue::create(year, month, day, 0, 0, 0));
+        uint32_t src_value = src.get_uint24();
+        int day = implicit_cast<int>(src_value & 31u);
+        int month = implicit_cast<int>((src_value >> 5u) & 15u);
+        int year = implicit_cast<int>(src_value >> 9u);
+        dst->set_timestamp(TimestampValue::create(year, month, day, 0, 0, 0));
         return Status::OK();
     }
 };
@@ -351,10 +371,10 @@ public:
         return Status::OK();
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
         auto src_value = src.get_date();
@@ -362,7 +382,7 @@ public:
         int mon = 0;
         int day = 0;
         src_value.to_date(&year, &mon, &day);
-        dst.set_timestamp(TimestampValue::create(year, mon, day, 0, 0, 0));
+        dst->set_timestamp(TimestampValue::create(year, mon, day, 0, 0, 0));
         return Status::OK();
     }
 };
@@ -376,13 +396,15 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
-        dst.set_timestamp(src.get_timestamp());
+        TimestampValue timestamp{0};
+        timestamp.from_timestamp_literal(src.get_int64());
+        dst->set_timestamp(timestamp);
         return Status::OK();
     }
 };
@@ -396,16 +418,16 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
         char buf[64] = {0};
         snprintf(buf, 64, "%f", src.get_float());
         char* tg;
-        dst.set_double(strtod(buf, &tg));
+        dst->set_double(strtod(buf, &tg));
         return Status::OK();
     }
 };
@@ -419,14 +441,14 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
         decimal12_t dst_value(src.get_decimal().int_value(), src.get_decimal().frac_value());
-        dst.set_decimal12(dst_value);
+        dst->set_decimal12(dst_value);
         return Status::OK();
     }
 };
@@ -440,14 +462,15 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
-        DecimalV2Value dst_value = src.get_decimal();
-        dst.set_decimal(dst_value);
+        DecimalV2Value dst_value;
+        dst_value.from_olap_decimal(src.get_decimal12().integer, src.get_decimal12().fraction);
+        dst->set_decimal(dst_value);
         return Status::OK();
     }
 };
@@ -470,16 +493,16 @@ public:
         return Status::InvalidArgument(Substitute("Can not convert $0 to Date", src_value));
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
         auto src_value = src.get<CppType>();
         DateValue dst_val;
         if (dst_val.from_date_literal_with_check(src_value)) {
-            dst.set_date(dst_val);
+            dst->set_date(dst_val);
             return Status::OK();
         } else {
             return Status::InvalidArgument(Substitute("Can not convert $0 to Date", src_value));
@@ -500,16 +523,16 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
         const auto& src_val = src.get<SrcCppType>();
         DstCppType dst_val;
         ConvFunction<SrcCppType, DstCppType>::apply(&src_val, &dst_val);
-        dst.set<DstCppType>(dst_val);
+        dst->set<DstCppType>(dst_val);
         return Status::OK();
     }
 };
@@ -527,10 +550,10 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         if (src.is_null()) {
-            dst.set_null();
+            dst->set_null();
             return Status::OK();
         }
         DstCppType dst_val = 0;
@@ -538,29 +561,8 @@ public:
         auto overflow =
                 to_decimal<SrcCppType, DstCppType>(&src_val, &dst_val, src_typeinfo->precision(), src_typeinfo->scale(),
                                                    dst_typeinfo->precision(), dst_typeinfo->scale());
-        dst.set<DstCppType>(dst_val);
+        dst->set<DstCppType>(dst_val);
         return overflow;
-    }
-};
-
-class StringToDateV2TypeConverter : public TypeConverter {
-public:
-    StringToDateV2TypeConverter() = default;
-    ~StringToDateV2TypeConverter() = default;
-
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
-        auto str = unaligned_load<Slice>(src);
-        DateValue tmp;
-        if (tmp.from_string((const char*)str.data, str.size)) {
-            unaligned_store<DateValue>(dst, tmp);
-            return Status::OK();
-        }
-        return Status::InvalidArgument(Substitute("Can not convert $0 to Date", str.to_string()));
-    }
-
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
-                         MemPool* mem_pool) const override {
-        return Status::InternalError("missing implementation");
     }
 };
 
@@ -576,7 +578,7 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         std::string source;
         if (src.is_null()) {
@@ -586,7 +588,37 @@ public:
         }
         CppType value;
         RETURN_IF_ERROR(dst_typeinfo->from_string(&value, source));
-        dst.set(value);
+        dst->set(value);
+        return Status::OK();
+    }
+};
+
+// Convert string to json
+// JSON needs dynamic memory allocation, which could not fit in TypeInfo::from_string
+template <>
+class StringToOtherTypeConverter<OLAP_FIELD_TYPE_JSON> : public TypeConverter {
+public:
+    using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_JSON>::CppType;
+
+    StringToOtherTypeConverter() = default;
+    ~StringToOtherTypeConverter() = default;
+
+    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+        return Status::InternalError("not supported");
+    }
+
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
+                         MemPool* mem_pool) const override {
+        Slice source;
+        if (src.is_null()) {
+            source = "null";
+        } else {
+            source = src.get_slice();
+        }
+        JsonValue json;
+        RETURN_IF_ERROR(JsonValue::parse(source, &json));
+        dst->move_in(std::move(json));
+
         return Status::OK();
     }
 };
@@ -603,7 +635,7 @@ public:
         return Status::InternalError("missing implementation");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum& dst,
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
         std::string source;
         if (src.is_null()) {
@@ -624,7 +656,36 @@ public:
             }
             memcpy(slice.data, source.data(), slice.size);
         }
-        dst.set_slice(slice);
+        dst->set_slice(slice);
+        return Status::OK();
+    }
+};
+
+template <>
+class OtherToStringTypeConverter<OLAP_FIELD_TYPE_JSON> : public TypeConverter {
+public:
+    using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_JSON>::CppType;
+
+    OtherToStringTypeConverter() = default;
+    ~OtherToStringTypeConverter() = default;
+
+    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+        return Status::InternalError("not supported");
+    }
+
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
+                         MemPool* mem_pool) const override {
+        if (src.is_null()) {
+            dst->set_null();
+            return Status::OK();
+        }
+        const JsonValue* json = src.get_json();
+        std::string json_str = json->to_string_uncheck();
+        Slice dst_slice = json_str;
+        dst_slice.data = reinterpret_cast<char*>(mem_pool->allocate(dst_slice.size));
+        RETURN_IF_UNLIKELY_NULL(dst_slice.data, Status::MemoryAllocFailed("mempool exceeded"));
+        memcpy(dst_slice.data, json_str.data(), dst_slice.size);
+        dst->set_slice(dst_slice);
         return Status::OK();
     }
 };
@@ -669,10 +730,6 @@ const TypeConverter* get_datev2_converter(FieldType from_type, FieldType to_type
     }
     case OLAP_FIELD_TYPE_DATE: {
         static DateToDateV2TypeConverter s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_VARCHAR: {
-        static StringToDateV2TypeConverter s_converter;
         return &s_converter;
     }
     default:
@@ -748,6 +805,12 @@ const TypeConverter* get_decimalv2_converter(FieldType from_type, FieldType to_t
     }
 }
 
+#define DECIMALV3_TYPE_CONVERTER(FromType, ToType)                   \
+    case FromType: {                                                 \
+        static DecimalV3TypeConverter<FromType, ToType> s_converter; \
+        return &s_converter;                                         \
+    }
+
 const TypeConverter* get_decimal128_converter(FieldType from_type, FieldType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_DECIMAL: {
@@ -758,18 +821,9 @@ const TypeConverter* get_decimal128_converter(FieldType from_type, FieldType to_
         static DecimalTypeConverter<OLAP_FIELD_TYPE_DECIMAL_V2, OLAP_FIELD_TYPE_DECIMAL128> s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DECIMAL32: {
-        static DecimalV3TypeConverter<OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL128> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
-        static DecimalV3TypeConverter<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL128> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static DecimalV3TypeConverter<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL128> s_converter;
-        return &s_converter;
-    }
+        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL128);
+        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL128);
+        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL128);
     default:
         return nullptr;
     }
@@ -777,18 +831,9 @@ const TypeConverter* get_decimal128_converter(FieldType from_type, FieldType to_
 
 const TypeConverter* get_decimal64_converter(FieldType from_type, FieldType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DECIMAL32: {
-        static DecimalV3TypeConverter<OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL64> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
-        static DecimalV3TypeConverter<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL64> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static DecimalV3TypeConverter<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL64> s_converter;
-        return &s_converter;
-    }
+        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL64);
+        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL64);
+        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL64);
     default:
         return nullptr;
     }
@@ -797,22 +842,14 @@ const TypeConverter* get_decimal64_converter(FieldType from_type, FieldType to_t
 
 const TypeConverter* get_decimal32_converter(FieldType from_type, FieldType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DECIMAL32: {
-        static DecimalV3TypeConverter<OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL32> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
-        static DecimalV3TypeConverter<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL32> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static DecimalV3TypeConverter<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL32> s_converter;
-        return &s_converter;
-    }
+        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL32);
+        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL32);
+        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL32);
     default:
         return nullptr;
     }
 }
+#undef DECIMALV3_TYPE_CONVERTER
 
 const TypeConverter* get_double_converter(FieldType from_type, FieldType to_type) {
     switch (from_type) {
@@ -827,70 +864,13 @@ const TypeConverter* get_double_converter(FieldType from_type, FieldType to_type
 
 const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType to_type) {
     switch (to_type) {
-    case OLAP_FIELD_TYPE_TINYINT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_TINYINT> s_converter;
-        return &s_converter;
+#define M(ftype)                                              \
+    case ftype: {                                             \
+        static StringToOtherTypeConverter<ftype> s_converter; \
+        return &s_converter;                                  \
     }
-    case OLAP_FIELD_TYPE_SMALLINT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_SMALLINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_INT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_INT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_BIGINT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_BIGINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_LARGEINT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_LARGEINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_FLOAT: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_FLOAT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DOUBLE: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DOUBLE> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATE: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DATE> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATE_V2: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DATE_V2> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATETIME: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DATETIME> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DATETIME> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DECIMAL> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DECIMAL_V2> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL32: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DECIMAL32> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DECIMAL64> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static StringToOtherTypeConverter<OLAP_FIELD_TYPE_DECIMAL128> s_converter;
-        return &s_converter;
-    }
+        APPLY_FOR_TYPE_CONVERT_FROM_VARCHAR(M)
+#undef M
     default:
         return nullptr;
     }
@@ -898,69 +878,8 @@ const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType t
 
 const TypeConverter* get_to_varchar_converter(FieldType from_type, FieldType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_BOOL:
-    case OLAP_FIELD_TYPE_TINYINT: {
+    case OLAP_FIELD_TYPE_BOOL: {
         static OtherToStringTypeConverter<OLAP_FIELD_TYPE_TINYINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_SMALLINT: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_SMALLINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_INT: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_INT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_BIGINT: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_BIGINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_LARGEINT: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_LARGEINT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_FLOAT: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_FLOAT> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DOUBLE: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DOUBLE> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATE: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DATE> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATE_V2: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DATE_V2> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATETIME: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DATETIME> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_TIMESTAMP> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DECIMAL> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DECIMAL_V2> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL32: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DECIMAL32> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DECIMAL64> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_DECIMAL128> s_converter;
         return &s_converter;
     }
     case OLAP_FIELD_TYPE_CHAR:
@@ -968,6 +887,14 @@ const TypeConverter* get_to_varchar_converter(FieldType from_type, FieldType to_
         static OtherToStringTypeConverter<OLAP_FIELD_TYPE_VARCHAR> s_converter;
         return &s_converter;
     }
+#define M(ftype)                                              \
+    case ftype: {                                             \
+        static OtherToStringTypeConverter<ftype> s_converter; \
+        return &s_converter;                                  \
+    }
+        APPLY_FOR_TYPE_CONVERT_TO_VARCHAR(M)
+#undef M
+
     default:
         return nullptr;
     }
@@ -1107,10 +1034,12 @@ public:
     }
 };
 
-class Decimal32ToPercentileTypeConverter : public MaterializeTypeConverter {
+template <FieldType SrcType>
+class DecimalToPercentileTypeConverter : public MaterializeTypeConverter {
 public:
-    Decimal32ToPercentileTypeConverter() = default;
-    ~Decimal32ToPercentileTypeConverter() = default;
+    using CppType = typename CppTypeTraits<SrcType>::CppType;
+    DecimalToPercentileTypeConverter() = default;
+    ~DecimalToPercentileTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
                                 const TabletColumn& ref_column) const override {
@@ -1123,65 +1052,9 @@ public:
                 continue;
             }
             double origin_value;
-            auto v = src_datum.get_int32();
-            auto scale_factor = get_scale_factor<int32_t>(ref_column.scale());
-            DecimalV3Cast::to_float<int32_t, double>(v, scale_factor, &origin_value);
-            PercentileValue percentile;
-            percentile.add(origin_value);
-            dst_datum.set_percentile(&percentile);
-            dst_col->append_datum(dst_datum);
-        }
-        return Status::OK();
-    }
-};
-
-class Decimal64ToPercentileTypeConverter : public MaterializeTypeConverter {
-public:
-    Decimal64ToPercentileTypeConverter() = default;
-    ~Decimal64ToPercentileTypeConverter() = default;
-
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
-                                const TabletColumn& ref_column) const override {
-        for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
-            Datum src_datum = src_col->get(row_index);
-            Datum dst_datum;
-            if (src_datum.is_null()) {
-                dst_datum.set_null();
-                dst_col->append_datum(dst_datum);
-                continue;
-            }
-            double origin_value;
-            auto v = src_datum.get_int64();
-            auto scale_factor = get_scale_factor<int64_t>(ref_column.scale());
-            DecimalV3Cast::to_float<int64_t, double>(v, scale_factor, &origin_value);
-            PercentileValue percentile;
-            percentile.add(origin_value);
-            dst_datum.set_percentile(&percentile);
-            dst_col->append_datum(dst_datum);
-        }
-        return Status::OK();
-    }
-};
-
-class Decimal128ToPercentileTypeConverter : public MaterializeTypeConverter {
-public:
-    Decimal128ToPercentileTypeConverter() = default;
-    ~Decimal128ToPercentileTypeConverter() = default;
-
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
-                                const TabletColumn& ref_column) const override {
-        for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
-            Datum src_datum = src_col->get(row_index);
-            Datum dst_datum;
-            if (src_datum.is_null()) {
-                dst_datum.set_null();
-                dst_col->append_datum(dst_datum);
-                continue;
-            }
-            double origin_value;
-            auto v = src_datum.get_int128();
-            auto scale_factor = get_scale_factor<int128_t>(ref_column.scale());
-            DecimalV3Cast::to_float<int128_t, double>(v, scale_factor, &origin_value);
+            auto v = src_datum.get<CppType>();
+            auto scale_factor = get_scale_factor<CppType>(ref_column.scale());
+            DecimalV3Cast::to_float<CppType, double>(v, scale_factor, &origin_value);
             PercentileValue percentile;
             percentile.add(origin_value);
             dst_datum.set_percentile(&percentile);
@@ -1209,68 +1082,62 @@ public:
     }
 };
 
+#define GET_PERENTILE_CONVERTER(from_type)                     \
+    {                                                          \
+        static PercentileTypeConverter<from_type> s_converter; \
+        return &s_converter;                                   \
+    }
+
+#define GET_DECIMAL_PERENTILE_CONVERTER(from_type)                      \
+    {                                                                   \
+        static DecimalToPercentileTypeConverter<from_type> s_converter; \
+        return &s_converter;                                            \
+    }
+
+#define GET_HLL_CONVERTER(from_type)                    \
+    {                                                   \
+        static HLLTypeConverter<from_type> s_converter; \
+        return &s_converter;                            \
+    }
+
+#define GET_BTIMAP_CONVERTER(from_type)                    \
+    {                                                      \
+        static BitMapTypeConverter<from_type> s_converter; \
+        return &s_converter;                               \
+    }
+
 const MaterializeTypeConverter* get_perentile_converter(FieldType from_type, MaterializeType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_TINYINT: {
-        static PercentileTypeConverter<int8_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT: {
-        static PercentileTypeConverter<uint8_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_SMALLINT: {
-        static PercentileTypeConverter<int16_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT: {
-        static PercentileTypeConverter<uint16_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_INT: {
-        static PercentileTypeConverter<int32_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_INT: {
-        static PercentileTypeConverter<uint32_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_BIGINT: {
-        static PercentileTypeConverter<int64_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT: {
-        static PercentileTypeConverter<uint64_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_LARGEINT: {
-        static PercentileTypeConverter<int128_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_FLOAT: {
-        static PercentileTypeConverter<float> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DOUBLE: {
-        static PercentileTypeConverter<double> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
-        static PercentileTypeConverter<DecimalV2Value> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL32: {
-        static Decimal32ToPercentileTypeConverter s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
-        static Decimal64ToPercentileTypeConverter s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static Decimal128ToPercentileTypeConverter s_converter;
-        return &s_converter;
-    }
+    case OLAP_FIELD_TYPE_TINYINT:
+        GET_PERENTILE_CONVERTER(int8_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+        GET_PERENTILE_CONVERTER(uint8_t);
+    case OLAP_FIELD_TYPE_SMALLINT:
+        GET_PERENTILE_CONVERTER(int16_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+        GET_PERENTILE_CONVERTER(uint16_t);
+    case OLAP_FIELD_TYPE_INT:
+        GET_PERENTILE_CONVERTER(int32_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+        GET_PERENTILE_CONVERTER(uint32_t);
+    case OLAP_FIELD_TYPE_BIGINT:
+        GET_PERENTILE_CONVERTER(int64_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+        GET_PERENTILE_CONVERTER(uint64_t);
+    case OLAP_FIELD_TYPE_LARGEINT:
+        GET_PERENTILE_CONVERTER(int128_t);
+    case OLAP_FIELD_TYPE_FLOAT:
+        GET_PERENTILE_CONVERTER(float);
+    case OLAP_FIELD_TYPE_DOUBLE:
+        GET_PERENTILE_CONVERTER(double);
+    case OLAP_FIELD_TYPE_DECIMAL_V2:
+        GET_PERENTILE_CONVERTER(DecimalV2Value);
+    case OLAP_FIELD_TYPE_DECIMAL32:
+        GET_DECIMAL_PERENTILE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32);
+    case OLAP_FIELD_TYPE_DECIMAL64:
+        GET_DECIMAL_PERENTILE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64);
+    case OLAP_FIELD_TYPE_DECIMAL128:
+        GET_DECIMAL_PERENTILE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128);
     default:
         LOG(WARNING) << "the column type which was altered from was unsupported."
                      << " from_type=" << from_type;
@@ -1281,62 +1148,36 @@ const MaterializeTypeConverter* get_perentile_converter(FieldType from_type, Mat
 const MaterializeTypeConverter* get_hll_converter(FieldType from_type, MaterializeType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_CHAR:
-    case OLAP_FIELD_TYPE_VARCHAR: {
-        static HLLTypeConverter<Slice> s_converter;
-        return &s_converter;
-    }
+    case OLAP_FIELD_TYPE_VARCHAR:
+        GET_HLL_CONVERTER(Slice);
     case OLAP_FIELD_TYPE_BOOL:
-    case OLAP_FIELD_TYPE_TINYINT: {
-        static HLLTypeConverter<int8_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT: {
-        static HLLTypeConverter<uint8_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_SMALLINT: {
-        static HLLTypeConverter<int16_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT: {
-        static HLLTypeConverter<uint16_t> s_converter;
-        return &s_converter;
-    }
+    case OLAP_FIELD_TYPE_TINYINT:
+        GET_HLL_CONVERTER(int8_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+        GET_HLL_CONVERTER(uint8_t);
+    case OLAP_FIELD_TYPE_SMALLINT:
+        GET_HLL_CONVERTER(int16_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+        GET_HLL_CONVERTER(uint16_t);
     case OLAP_FIELD_TYPE_DATE_V2:
-    case OLAP_FIELD_TYPE_INT: {
-        static HLLTypeConverter<int32_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_INT: {
-        static HLLTypeConverter<uint32_t> s_converter;
-        return &s_converter;
-    }
+    case OLAP_FIELD_TYPE_INT:
+        GET_HLL_CONVERTER(int32_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+        GET_HLL_CONVERTER(uint32_t);
     case OLAP_FIELD_TYPE_TIMESTAMP:
     case OLAP_FIELD_TYPE_DATETIME:
-    case OLAP_FIELD_TYPE_BIGINT: {
-        static HLLTypeConverter<int64_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT: {
-        static HLLTypeConverter<uint64_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_LARGEINT: {
-        static HLLTypeConverter<int128_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_FLOAT: {
-        static HLLTypeConverter<float> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DOUBLE: {
-        static HLLTypeConverter<double> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_DATE: {
-        static HLLTypeConverter<uint24_t> s_converter;
-        return &s_converter;
-    }
+    case OLAP_FIELD_TYPE_BIGINT:
+        GET_HLL_CONVERTER(int64_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+        GET_HLL_CONVERTER(uint64_t);
+    case OLAP_FIELD_TYPE_LARGEINT:
+        GET_HLL_CONVERTER(int128_t);
+    case OLAP_FIELD_TYPE_FLOAT:
+        GET_HLL_CONVERTER(float);
+    case OLAP_FIELD_TYPE_DOUBLE:
+        GET_HLL_CONVERTER(double);
+    case OLAP_FIELD_TYPE_DATE:
+        GET_HLL_CONVERTER(uint24_t);
     default:
         LOG(WARNING) << "fail to hll hash type : " << from_type;
         return nullptr;
@@ -1345,44 +1186,33 @@ const MaterializeTypeConverter* get_hll_converter(FieldType from_type, Materiali
 
 const MaterializeTypeConverter* get_bitmap_converter(FieldType from_type, MaterializeType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_TINYINT: {
-        static BitMapTypeConverter<int8_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT: {
-        static BitMapTypeConverter<uint8_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_SMALLINT: {
-        static BitMapTypeConverter<int16_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT: {
-        static BitMapTypeConverter<uint16_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_INT: {
-        static BitMapTypeConverter<int32_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_INT: {
-        static BitMapTypeConverter<uint32_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_BIGINT: {
-        static BitMapTypeConverter<int64_t> s_converter;
-        return &s_converter;
-    }
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT: {
-        static BitMapTypeConverter<uint64_t> s_converter;
-        return &s_converter;
-    }
+    case OLAP_FIELD_TYPE_TINYINT:
+        GET_BTIMAP_CONVERTER(int8_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+        GET_BTIMAP_CONVERTER(uint8_t);
+    case OLAP_FIELD_TYPE_SMALLINT:
+        GET_BTIMAP_CONVERTER(int16_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+        GET_BTIMAP_CONVERTER(uint16_t);
+    case OLAP_FIELD_TYPE_INT:
+        GET_BTIMAP_CONVERTER(int32_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+        GET_BTIMAP_CONVERTER(uint32_t);
+    case OLAP_FIELD_TYPE_BIGINT:
+        GET_BTIMAP_CONVERTER(int64_t);
+    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+        GET_BTIMAP_CONVERTER(uint64_t);
     default:
         LOG(WARNING) << "the column type which was altered from was unsupported."
                      << " from_type=" << from_type;
         return nullptr;
     }
 }
+
+#undef GET_PERENTILE_CONVERTER
+#undef GET_DECIMAL_PERENTILE_CONVERTER
+#undef GET_HLL_CONVERTER
+#undef GET_BITMAP_CONVERTER
 
 const MaterializeTypeConverter* get_materialized_converter(FieldType from_type, MaterializeType to_type) {
     switch (to_type) {
@@ -1958,6 +1788,7 @@ const FieldConverter* get_field_converter(FieldType from_type, FieldType to_type
             TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_HLL)
             TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_OBJECT)
             TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_PERCENTILE)
+            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_JSON)
         case OLAP_FIELD_TYPE_DECIMAL32:
         case OLAP_FIELD_TYPE_DECIMAL64:
         case OLAP_FIELD_TYPE_DECIMAL128:

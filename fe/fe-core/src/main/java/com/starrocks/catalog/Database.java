@@ -35,6 +35,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.QueryableReentrantReadWriteLock;
+import com.starrocks.common.util.Util;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -53,7 +55,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.zip.Adler32;
 
 /**
@@ -79,7 +80,7 @@ public class Database extends MetaObject implements Writable {
     private long id;
     private String fullQualifiedName;
     private String clusterName;
-    private ReentrantReadWriteLock rwLock;
+    private QueryableReentrantReadWriteLock rwLock;
 
     // table family group map
     private Map<Long, Table> idToTable;
@@ -109,7 +110,7 @@ public class Database extends MetaObject implements Writable {
         if (this.fullQualifiedName == null) {
             this.fullQualifiedName = "";
         }
-        this.rwLock = new ReentrantReadWriteLock(true);
+        this.rwLock = new QueryableReentrantReadWriteLock(true);
         this.idToTable = new ConcurrentHashMap<>();
         this.nameToTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.default_db_data_quota_bytes;
@@ -125,7 +126,14 @@ public class Database extends MetaObject implements Writable {
 
     public boolean tryReadLock(long timeout, TimeUnit unit) {
         try {
-            return this.rwLock.readLock().tryLock(timeout, unit);
+            if (!this.rwLock.readLock().tryLock(timeout, unit)) {
+                Thread owner = rwLock.getOwner();
+                if (owner != null) {
+                    LOG.warn("database lock is held by: {}", Util.dumpThread(owner, 50));
+                }
+                return false;
+            }
+            return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try read lock at db[" + id + "]", e);
             return false;
@@ -142,7 +150,14 @@ public class Database extends MetaObject implements Writable {
 
     public boolean tryWriteLock(long timeout, TimeUnit unit) {
         try {
-            return this.rwLock.writeLock().tryLock(timeout, unit);
+            if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
+                Thread owner = rwLock.getOwner();
+                if (owner != null) {
+                    LOG.warn("database lock is held by: {}", Util.dumpThread(owner, 50));
+                }
+                return false;
+            }
+            return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try write lock at db[" + id + "]", e);
             return false;

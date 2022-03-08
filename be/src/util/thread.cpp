@@ -222,8 +222,8 @@ void Thread::set_thread_name(pthread_t t, const std::string name) {
     }
 }
 
-void Thread::set_thread_name(std::thread& t, const std::string name) {
-    Thread::set_thread_name(t.native_handle(), name);
+void Thread::set_thread_name(std::thread& t, std::string name) {
+    Thread::set_thread_name(t.native_handle(), std::move(name));
 }
 
 int64_t Thread::wait_for_tid() const {

@@ -25,10 +25,8 @@ public:
 
     std::string read_len(size_t len) {
         std::string buff(len, '\0');
-        Slice s(buff);
-        Status st = _file->read(&s);
-        CHECK(st.ok()) << st.to_string();
-        buff.resize(s.size);
+        ASSIGN_OR_ABORT(auto n, _file->read(buff.data(), buff.size()));
+        buff.resize(n);
         return buff;
     }
 
@@ -171,8 +169,8 @@ TEST_F(EnvMemoryTest, test_delete_dir) {
 // NOLINTNEXTLINE
 TEST_F(EnvMemoryTest, test_new_writable_file) {
     std::unique_ptr<WritableFile> file;
-    EXPECT_STATUS(Status::IOError(""), _env->new_writable_file("/", &file));
-    EXPECT_STATUS(Status::OK(), _env->new_writable_file("/1.csv", &file));
+    EXPECT_STATUS(Status::IOError(""), _env->new_writable_file("/").status());
+    file = *_env->new_writable_file("/1.csv");
     file->append("abc");
     file->close();
     std::vector<std::string> children;
@@ -186,8 +184,7 @@ TEST_F(EnvMemoryTest, test_new_writable_file) {
 
 // NOLINTNEXTLINE
 TEST_F(EnvMemoryTest, test_delete_file) {
-    std::unique_ptr<WritableFile> file;
-    EXPECT_STATUS(Status::OK(), _env->new_writable_file("/1.csv", &file));
+    auto file = *_env->new_writable_file("/1.csv");
     file->append("abc");
     file->close();
 
@@ -204,11 +201,11 @@ TEST_F(EnvMemoryTest, test_delete_file) {
 TEST_F(EnvMemoryTest, test_sequential_read) {
     std::unique_ptr<WritableFile> writable_file;
     std::unique_ptr<SequentialFile> readable_file;
-    EXPECT_STATUS(Status::OK(), _env->new_writable_file("/a.txt", &writable_file));
+    writable_file = *_env->new_writable_file("/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
 
-    EXPECT_STATUS(Status::OK(), _env->new_sequential_file("/a.txt", &readable_file));
+    readable_file = *_env->new_sequential_file("/a.txt");
     SequentialFileWrapper wrapper(readable_file.get());
     EXPECT_EQ("first line\nsecond line\n", wrapper.read_len(100));
     EXPECT_EQ("", wrapper.read_len(100));
@@ -216,33 +213,29 @@ TEST_F(EnvMemoryTest, test_sequential_read) {
 
 // NOLINTNEXTLINE
 TEST_F(EnvMemoryTest, test_CREATE_OR_OPEN_WITH_TRUNCATE) {
-    std::unique_ptr<WritableFile> writable_file;
-    EXPECT_STATUS(Status::OK(), _env->new_writable_file("/a.txt", &writable_file));
+    auto writable_file = *_env->new_writable_file("/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
     writable_file->close();
 
-    EXPECT_STATUS(Status::OK(), _env->new_writable_file("/a.txt", &writable_file));
+    writable_file = *_env->new_writable_file("/a.txt");
 
-    std::unique_ptr<SequentialFile> readable_file;
-    EXPECT_STATUS(Status::OK(), _env->new_sequential_file("/a.txt", &readable_file));
+    auto readable_file = *_env->new_sequential_file("/a.txt");
     SequentialFileWrapper wrapper(readable_file.get());
     EXPECT_EQ("", wrapper.read_len(100));
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvMemoryTest, test_CREATE_OR_OPEN) {
-    std::unique_ptr<WritableFile> writable_file;
-    EXPECT_STATUS(Status::OK(), _env->new_writable_file("/a.txt", &writable_file));
+    auto writable_file = *_env->new_writable_file("/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
     writable_file->close();
 
     WritableFileOptions opts{.mode = Env::CREATE_OR_OPEN};
-    EXPECT_STATUS(Status::OK(), _env->new_writable_file(opts, "/a.txt", &writable_file));
+    writable_file = *_env->new_writable_file(opts, "/a.txt");
 
-    std::unique_ptr<SequentialFile> readable_file;
-    EXPECT_STATUS(Status::OK(), _env->new_sequential_file("/a.txt", &readable_file));
+    auto readable_file = *_env->new_sequential_file("/a.txt");
     SequentialFileWrapper wrapper(readable_file.get());
     EXPECT_EQ("first line\nsecond line\n", wrapper.read_len(100));
     EXPECT_EQ("", wrapper.read_len(100));
@@ -250,17 +243,15 @@ TEST_F(EnvMemoryTest, test_CREATE_OR_OPEN) {
 
 // NOLINTNEXTLINE
 TEST_F(EnvMemoryTest, test_MUST_EXIST) {
-    std::unique_ptr<WritableFile> writable_file;
-    EXPECT_STATUS(Status::OK(), _env->new_writable_file("/a.txt", &writable_file));
+    auto writable_file = *_env->new_writable_file("/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
     writable_file->close();
 
     WritableFileOptions opts{.mode = Env::MUST_EXIST};
-    EXPECT_STATUS(Status::OK(), _env->new_writable_file(opts, "/a.txt", &writable_file));
+    writable_file = *_env->new_writable_file(opts, "/a.txt");
 
-    std::unique_ptr<SequentialFile> readable_file;
-    EXPECT_STATUS(Status::OK(), _env->new_sequential_file("/a.txt", &readable_file));
+    auto readable_file = *_env->new_sequential_file("/a.txt");
     SequentialFileWrapper wrapper(readable_file.get());
     EXPECT_EQ("first line\nsecond line\n", wrapper.read_len(100));
     EXPECT_EQ("", wrapper.read_len(100));
@@ -268,14 +259,13 @@ TEST_F(EnvMemoryTest, test_MUST_EXIST) {
 
 // NOLINTNEXTLINE
 TEST_F(EnvMemoryTest, test_MUST_CREATE) {
-    std::unique_ptr<WritableFile> writable_file;
-    EXPECT_STATUS(Status::OK(), _env->new_writable_file("/a.txt", &writable_file));
+    std::unique_ptr<WritableFile> writable_file = *_env->new_writable_file("/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
     writable_file->close();
 
     WritableFileOptions opts{.mode = Env::MUST_CREATE};
-    EXPECT_STATUS(Status::AlreadyExist(""), _env->new_writable_file(opts, "/a.txt", &writable_file));
+    EXPECT_STATUS(Status::AlreadyExist(""), _env->new_writable_file(opts, "/a.txt").status());
 }
 
 // NOLINTNEXTLINE
@@ -289,10 +279,9 @@ TEST_F(EnvMemoryTest, test_link_file) {
     EXPECT_STATUS(Status::AlreadyExist(""), _env->link_file("/tmp/a.txt", "/home/b.txt"));
     EXPECT_STATUS(Status::OK(), _env->link_file("/tmp/a.txt", "/home/a.txt"));
 
-    std::unique_ptr<WritableFile> w;
+    std::unique_ptr<WritableFile> w = *_env->new_writable_file("/tmp/a.txt");
     std::string content;
 
-    EXPECT_STATUS(Status::OK(), _env->new_writable_file("/tmp/a.txt", &w));
     EXPECT_STATUS(Status::OK(), w->append("content in a.txt"));
     EXPECT_STATUS(Status::OK(), _env->delete_file("/tmp/a.txt"));
     EXPECT_STATUS(Status::NotFound(""), _env->read_file("/tmp/a.txt", &content));
@@ -395,8 +384,7 @@ TEST_F(EnvMemoryTest, test_rename02) {
 
 // NOLINTNEXTLINE
 TEST_F(EnvMemoryTest, test_random_rw_file) {
-    std::unique_ptr<RandomRWFile> file;
-    EXPECT_STATUS(Status::OK(), _env->new_random_rw_file("/a.txt", &file));
+    auto file = *_env->new_random_rw_file("/a.txt");
     EXPECT_STATUS(Status::OK(), file->write_at(10, "aaaa"));
     EXPECT_STATUS(Status::OK(), file->write_at(0, "0123456789"));
     EXPECT_STATUS(Status::OK(), file->write_at(5, "54321"));
@@ -425,28 +413,27 @@ TEST_F(EnvMemoryTest, test_random_access_file) {
     const std::string content = "stay hungry stay foolish";
     EXPECT_STATUS(Status::OK(), _env->append_file("/a.txt", content));
 
-    std::unique_ptr<RandomAccessFile> f;
-    EXPECT_STATUS(Status::OK(), _env->new_random_access_file("/a.txt", &f));
+    auto f = *_env->new_random_access_file("/a.txt");
 
     uint64_t size = 0;
-    EXPECT_STATUS(Status::OK(), f->size(&size));
+    ASSERT_OK(f->size(&size));
     EXPECT_EQ(content.size(), size);
 
     std::string buff(4, '\0');
     Slice slice(buff);
-    EXPECT_STATUS(Status::OK(), f->read_at(0, slice));
+    ASSERT_OK(f->read_at_fully(0, slice.data, slice.size));
     EXPECT_EQ("stay", slice);
 
-    EXPECT_STATUS(Status::OK(), f->read_at(5, slice));
+    ASSERT_OK(f->read_at_fully(5, slice.data, slice.size));
     EXPECT_EQ("hung", slice);
 
-    EXPECT_STATUS(Status::OK(), f->read(17, &slice));
+    ASSIGN_OR_ABORT(slice.size, f->read_at(17, slice.data, slice.size));
     EXPECT_EQ("fool", slice);
 
-    EXPECT_STATUS(Status::OK(), f->read(21, &slice));
+    ASSIGN_OR_ABORT(slice.size, f->read_at(21, slice.data, slice.size));
     EXPECT_EQ("ish", slice);
 
-    EXPECT_STATUS(Status::IOError(""), f->read_at(22, slice));
+    EXPECT_STATUS(Status::EndOfFile(""), f->read_at_fully(22, slice.data, slice.size));
 }
 
 } // namespace starrocks

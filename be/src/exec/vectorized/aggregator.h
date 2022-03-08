@@ -68,7 +68,7 @@ public:
     Status open(RuntimeState* state);
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile, MemTracker* mem_tracker);
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     std::unique_ptr<MemPool>& mem_pool() { return _mem_pool; };
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
@@ -139,6 +139,8 @@ public:
     void try_convert_to_two_level_map();
     void try_convert_to_two_level_set();
 
+    Status check_has_error();
+
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
     static constexpr size_t streaming_hash_table_size_threshold = 10000000;
@@ -151,12 +153,16 @@ private:
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
 
+    // TPlanNode is only valid in the PREPARE and INIT phase
     const TPlanNode& _tnode;
 
     MemTracker* _mem_tracker = nullptr;
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
+    // The open phase still relies on the TFunction object for some initialization operations
+    std::vector<TFunction> _fns;
+
     RuntimeProfile* _runtime_profile;
 
     int64_t _limit = -1;
@@ -233,6 +239,8 @@ private:
 
     std::vector<uint8_t> _streaming_selection;
 
+    bool _has_udaf = false;
+
     RuntimeProfile::Counter* _get_results_timer{};
     RuntimeProfile::Counter* _agg_compute_timer{};
     RuntimeProfile::Counter* _streaming_timer{};
@@ -262,9 +270,8 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
-                        _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
+                        _agg_functions[i]->create(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i]);
                     }
                     return agg_state;
                 },
@@ -278,9 +285,8 @@ public:
                 [this]() {
                     vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-                    RETURN_IF_UNLIKELY_NULL(agg_state, (uint8_t*)(nullptr));
                     for (int i = 0; i < _agg_functions.size(); i++) {
-                        _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
+                        _agg_functions[i]->create(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i]);
                     }
                     return agg_state;
                 },
@@ -475,11 +481,18 @@ private:
     template <typename HashMapWithKey>
     void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
         if (hash_map_with_key != nullptr) {
+            auto null_data_ptr = hash_map_with_key->get_null_key_data();
+            if (null_data_ptr != nullptr) {
+                for (int i = 0; i < _agg_functions.size(); i++) {
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], null_data_ptr + _agg_states_offsets[i]);
+                }
+            }
+
             auto it = hash_map_with_key->hash_map.begin();
             auto end = hash_map_with_key->hash_map.end();
             while (it != end) {
                 for (int i = 0; i < _agg_functions.size(); i++) {
-                    _agg_functions[i]->destroy(it->second + _agg_states_offsets[i]);
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], it->second + _agg_states_offsets[i]);
                 }
                 ++it;
             }

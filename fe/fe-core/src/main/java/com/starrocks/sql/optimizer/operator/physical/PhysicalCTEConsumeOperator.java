@@ -14,11 +14,11 @@ import java.util.Map;
 import java.util.Objects;
 
 public class PhysicalCTEConsumeOperator extends PhysicalOperator {
-    private final String cteId;
+    private final int cteId;
 
     private final Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap;
 
-    public PhysicalCTEConsumeOperator(String cteId, Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap,
+    public PhysicalCTEConsumeOperator(int cteId, Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap,
                                       long limit, ScalarOperator predicate, Projection projection) {
         super(OperatorType.PHYSICAL_CTE_CONSUME);
         this.cteId = cteId;
@@ -28,7 +28,7 @@ public class PhysicalCTEConsumeOperator extends PhysicalOperator {
         this.projection = projection;
     }
 
-    public String getCteId() {
+    public int getCteId() {
         return cteId;
     }
 

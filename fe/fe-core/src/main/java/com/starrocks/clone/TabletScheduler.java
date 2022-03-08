@@ -34,6 +34,8 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -41,8 +43,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.Tablet.TabletStatus;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletSchedCtx.Priority;
@@ -534,7 +534,7 @@ public class TabletScheduler extends MasterDaemon {
                 throw new SchedException(Status.UNRECOVERABLE, "index does not exist");
             }
 
-            Tablet tablet = idx.getTablet(tabletCtx.getTabletId());
+            LocalTablet tablet = (LocalTablet) idx.getTablet(tabletCtx.getTabletId());
             Preconditions.checkNotNull(tablet);
 
             if (isColocateTable) {
@@ -725,8 +725,8 @@ public class TabletScheduler extends MasterDaemon {
                     tabletCtx.getTabletId());
         } catch (SchedException e) {
             if (e.getStatus() == Status.SCHEDULE_FAILED) {
-                LOG.info("failed to find version incomplete replica from tablet relocating. tablet id: {}, "
-                        + "try to find a new backend", tabletCtx.getTabletId());
+                LOG.info("failed to find version incomplete replica from tablet relocating. " +
+                        "reason : [{}], tablet id: [{}], try to find a new backend", e.getMessage(), tabletCtx.getTabletId());
                 // the dest or src slot may be taken after calling handleReplicaVersionIncomplete(),
                 // so we need to release these slots first.
                 // and reserve the tablet in TabletSchedCtx so that it can continue to be scheduled.

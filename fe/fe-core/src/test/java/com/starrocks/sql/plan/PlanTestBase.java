@@ -56,7 +56,6 @@ public class PlanTestBase {
     public static void beforeClass() throws Exception {
         FeConstants.default_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster(runningDir);
-
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -352,40 +351,40 @@ public class PlanTestBase {
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `lineitem_partition` (\n" +
-                        "  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
-                        "  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n" +
-                        "  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n" +
-                        "  `L_LINENUMBER` int(11) NOT NULL COMMENT \"\",\n" +
-                        "  `L_QUANTITY` double NOT NULL COMMENT \"\",\n" +
-                        "  `L_EXTENDEDPRICE` double NOT NULL COMMENT \"\",\n" +
-                        "  `L_DISCOUNT` double NOT NULL COMMENT \"\",\n" +
-                        "  `L_TAX` double NOT NULL COMMENT \"\",\n" +
-                        "  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n" +
-                        "  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n" +
-                        "  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n" +
-                        "  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n" +
-                        "  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n" +
-                        "  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n" +
-                        "  `L_SHIPMODE` char(10) NOT NULL COMMENT \"\",\n" +
-                        "  `L_COMMENT` varchar(44) NOT NULL COMMENT \"\",\n" +
-                        "  `PAD` char(1) NOT NULL COMMENT \"\"\n" +
-                        ") ENGINE=OLAP\n" +
-                        "DUPLICATE KEY(`L_ORDERKEY`, `L_PARTKEY`, `L_SUPPKEY`)\n" +
-                        "COMMENT \"OLAP\"\n" +
-                        "PARTITION BY RANGE(`L_SHIPDATE`)\n" +
-                        "(PARTITION p1992 VALUES [('1992-01-01'), ('1993-01-01')),\n" +
-                        "PARTITION p1993 VALUES [('1993-01-01'), ('1994-01-01')),\n" +
-                        "PARTITION p1994 VALUES [('1994-01-01'), ('1995-01-01')),\n" +
-                        "PARTITION p1995 VALUES [('1995-01-01'), ('1996-01-01')),\n" +
-                        "PARTITION p1996 VALUES [('1996-01-01'), ('1997-01-01')),\n" +
-                        "PARTITION p1997 VALUES [('1997-01-01'), ('1998-01-01')),\n" +
-                        "PARTITION p1998 VALUES [('1998-01-01'), ('1999-01-01')))\n" +
-                        "DISTRIBUTED BY HASH(`L_ORDERKEY`) BUCKETS 48\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
-                        ");");
+                "  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `L_LINENUMBER` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `L_QUANTITY` double NOT NULL COMMENT \"\",\n" +
+                "  `L_EXTENDEDPRICE` double NOT NULL COMMENT \"\",\n" +
+                "  `L_DISCOUNT` double NOT NULL COMMENT \"\",\n" +
+                "  `L_TAX` double NOT NULL COMMENT \"\",\n" +
+                "  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n" +
+                "  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n" +
+                "  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n" +
+                "  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n" +
+                "  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n" +
+                "  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n" +
+                "  `L_SHIPMODE` char(10) NOT NULL COMMENT \"\",\n" +
+                "  `L_COMMENT` varchar(44) NOT NULL COMMENT \"\",\n" +
+                "  `PAD` char(1) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`L_ORDERKEY`, `L_PARTKEY`, `L_SUPPKEY`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`L_SHIPDATE`)\n" +
+                "(PARTITION p1992 VALUES [('1992-01-01'), ('1993-01-01')),\n" +
+                "PARTITION p1993 VALUES [('1993-01-01'), ('1994-01-01')),\n" +
+                "PARTITION p1994 VALUES [('1994-01-01'), ('1995-01-01')),\n" +
+                "PARTITION p1995 VALUES [('1995-01-01'), ('1996-01-01')),\n" +
+                "PARTITION p1996 VALUES [('1996-01-01'), ('1997-01-01')),\n" +
+                "PARTITION p1997 VALUES [('1997-01-01'), ('1998-01-01')),\n" +
+                "PARTITION p1998 VALUES [('1998-01-01'), ('1999-01-01')))\n" +
+                "DISTRIBUTED BY HASH(`L_ORDERKEY`) BUCKETS 48\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
 
         starRocksAssert.withTable("CREATE TABLE `emp` (\n" +
                 "  `id` bigint NULL COMMENT \"\",\n" +
@@ -638,6 +637,21 @@ public class PlanTestBase {
                         "\"password\" = \"123\",\n" +
                         "\"database\" = \"db1\",\n" +
                         "\"table\" = \"tbl1\"\n" +
+                        ");")
+                .withResource("create external resource \"jdbc_test\"\n" +
+                        "PROPERTIES (\n" +
+                        "\"type\"=\"jdbc\",\n" +
+                        "\"user\"=\"test_user\",\n" +
+                        "\"password\"=\"test_passwd\",\n" +
+                        "\"driver\"=\"test_driver\",\n" +
+                        "\"jdbc_uri\"=\"test_uri\"\n" +
+                        ");")
+                .withTable("create external table test.jdbc_test\n" +
+                        "(a int, b varchar(20), c float)\n" +
+                        "ENGINE=jdbc\n" +
+                        "PROPERTIES (\n" +
+                        "\"resource\"=\"jdbc_test\",\n" +
+                        "\"table\"=\"test_table\"\n" +
                         ");");
 
         starRocksAssert.withTable("CREATE TABLE `t0_not_null` (\n" +
@@ -734,7 +748,7 @@ public class PlanTestBase {
                 "PARTITION BY RANGE(`id_datetime`)\n" +
                 "(PARTITION p19910101AM VALUES [('1991-01-01 00:00:00'), ('1991-01-01 12:00:00')),\n" +
                 "PARTITION p1990101PM VALUES [('1991-01-01 12:00:00'), ('1992-01-02 00:00:00')),\n" +
-                "PARTITION pother VALUES [('1992-01-02 00:00:00'), ('1994-01-01 00:00:00')))"+
+                "PARTITION pother VALUES [('1992-01-02 00:00:00'), ('1994-01-01 00:00:00')))" +
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -759,13 +773,45 @@ public class PlanTestBase {
                 "PARTITION BY RANGE(`id_date`)\n" +
                 "(PARTITION p1992 VALUES [('1991-01-01'), ('1992-01-01')),\n" +
                 "PARTITION p1993 VALUES [('1992-01-01'), ('1993-01-01')),\n" +
-                "PARTITION p1998 VALUES [('1993-01-01'), ('1994-01-01')))"+
+                "PARTITION p1998 VALUES [('1993-01-01'), ('1994-01-01')))" +
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE `test_partition_prune_optimize_by_date` (\n" +
+                "  `session_id` varchar(20) NULL COMMENT \"\",\n" +
+                "  `store_id` varchar(20) NULL COMMENT \"店铺id\",\n" +
+                "  `dt` date NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`session_id`, `store_id`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(PARTITION p_20211227 VALUES [('2021-12-27'), ('2021-12-28')),\n" +
+                "PARTITION p_20211228 VALUES [('2021-12-28'), ('2021-12-29')),\n" +
+                "PARTITION p_20211229 VALUES [('2021-12-29'), ('2021-12-30')),\n" +
+                "PARTITION p_20211230 VALUES [('2021-12-30'), ('2021-12-31'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`session_id`) BUCKETS 5 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable("create table test.colocate1\n" +
+                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                "properties(\"replication_num\" = \"1\"," +
+                "\"colocate_with\" = \"group1\");")
+                .withTable("create table test.colocate2\n" +
+                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                        "properties(\"replication_num\" = \"1\"," +
+                        "\"colocate_with\" = \"group1\");")
+                .withTable("create table test.nocolocate3\n" +
+                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 10\n" +
+                        "properties(\"replication_num\" = \"1\");");
     }
 
     protected static void setTableStatistics(OlapTable table, long rowCount) {
@@ -789,8 +835,9 @@ public class PlanTestBase {
     }
 
     public String getFragmentPlan(String sql) throws Exception {
-        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
+        String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
+        return s;
     }
 
     public String getVerboseExplain(String sql) throws Exception {
@@ -948,7 +995,8 @@ public class PlanTestBase {
                                 }
                             }
                             if (isDebug) {
-                                debugSQL(writer, hasResult, hasFragment, isDump, hasFragmentStatistics, sql.toString(),
+                                debugSQL(writer, hasResult, hasFragment, isDump, hasFragmentStatistics,
+                                        sql.toString(),
                                         pair.first, fra, dumpStr, statistic, comment.toString());
                             }
                             if (isEnumerate) {

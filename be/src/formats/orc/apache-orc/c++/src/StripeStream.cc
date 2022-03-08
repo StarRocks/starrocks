@@ -63,8 +63,12 @@ StreamInformationImpl::~StreamInformationImpl() {
     // PASS
 }
 
-const std::vector<bool> StripeStreamsImpl::getSelectedColumns() const {
+const std::vector<bool>& StripeStreamsImpl::getSelectedColumns() const {
     return reader.getSelectedColumns();
+}
+
+const std::vector<bool>& StripeStreamsImpl::getLazyLoadColumns() const {
+    return reader.getLazyLoadColumns();
 }
 
 proto::ColumnEncoding StripeStreamsImpl::getEncoding(uint64_t columnId) const {
@@ -97,7 +101,7 @@ std::unique_ptr<SeekableInputStream> StripeStreamsImpl::getStream(uint64_t colum
         if (stream.has_kind() && stream.kind() == kind && stream.column() == static_cast<uint64_t>(columnId)) {
             uint64_t streamLength = stream.length();
             uint64_t myBlock = shouldStream ? input.getNaturalReadSize() : streamLength;
-            // if we don't need that much data, why we read it.
+            // if we don't need that much data, why we read it?
             if (streamLength < myBlock) {
                 myBlock = streamLength;
             }

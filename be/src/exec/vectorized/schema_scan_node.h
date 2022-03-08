@@ -59,6 +59,8 @@ private:
     // TODO(xueli): remove this when fe and be version both >= 1.19
     // Map from index in desc slots to column of src schema table.
     std::vector<int> _index_map;
+
+    RuntimeProfile::Counter* _filter_timer = nullptr;
 };
 
 } // namespace starrocks::vectorized

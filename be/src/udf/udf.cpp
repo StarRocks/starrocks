@@ -26,13 +26,11 @@
 #include <sstream>
 
 #include "common/logging.h"
+#include "exprs/agg/java_udaf_function.h"
 #include "runtime/decimal_value.h"
 #include "runtime/decimalv2_value.h"
+#include "runtime/types.h"
 #include "storage/hll.h"
-
-// Be careful what this includes since this needs to be linked into the UDF's
-// binary. For example, it would be unfortunate if they had a random dependency
-// on libhdfs.
 #include "udf/udf_internal.h"
 #include "util/debug_util.h"
 
@@ -93,6 +91,8 @@ FunctionContextImpl::FunctionContextImpl(starrocks_udf::FunctionContext* parent)
           _external_bytes_tracked(0),
           _closed(false) {}
 
+FunctionContextImpl::~FunctionContextImpl() = default;
+
 void FunctionContextImpl::close() {
     if (_closed) {
         return;
@@ -141,11 +141,37 @@ bool FunctionContextImpl::check_local_allocations_empty() {
     return false;
 }
 
+void FunctionContextImpl::set_error(const char* error_msg) {
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    if (_error_msg.empty()) {
+        _error_msg = error_msg;
+        std::stringstream ss;
+        ss << "UDF ERROR: " << error_msg;
+        if (_state != nullptr) {
+            _state->set_process_status(ss.str());
+        }
+    }
+}
+
+bool FunctionContextImpl::has_error() {
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    return !_error_msg.empty();
+}
+
+const char* FunctionContextImpl::error_msg() {
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    if (!_error_msg.empty()) {
+        return _error_msg.c_str();
+    } else {
+        return nullptr;
+    }
+}
+
 starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
         RuntimeState* state, MemPool* pool, const starrocks_udf::FunctionContext::TypeDesc& return_type,
         const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size, bool debug) {
     starrocks_udf::FunctionContext::TypeDesc invalid_type;
-    invalid_type.type = starrocks_udf::FunctionContext::INVALID_TYPE;
+    invalid_type.type = INVALID_TYPE;
     invalid_type.precision = 0;
     invalid_type.scale = 0;
     return FunctionContextImpl::create_context(state, pool, invalid_type, return_type, arg_types, varargs_buffer_size,
@@ -170,6 +196,7 @@ starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
     ctx->_impl->_varargs_buffer = reinterpret_cast<uint8_t*>(malloc(varargs_buffer_size));
     ctx->_impl->_varargs_buffer_size = varargs_buffer_size;
     ctx->_impl->_debug = debug;
+    ctx->_impl->_jvm_udaf_ctxs = std::make_unique<vectorized::JavaUDAFContext>();
     VLOG_ROW << "Created FunctionContext: " << ctx << " with pool " << ctx->_impl->_pool;
     return ctx;
 }
@@ -197,9 +224,10 @@ FunctionContext* FunctionContext::create_test_context() {
     return context;
 }
 
-FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& arg_types) {
+FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& arg_types, const TypeDesc& return_type) {
     FunctionContext* context = FunctionContext::create_test_context();
     context->impl()->_arg_types = std::move(arg_types);
+    context->impl()->_return_type = return_type;
     return context;
 }
 
@@ -238,7 +266,7 @@ FunctionContext::UniqueId FunctionContext::query_id() const {
 }
 
 bool FunctionContext::has_error() const {
-    return !_impl->_error_msg.empty();
+    return _impl->has_error();
 }
 
 const char* FunctionContext::error_msg() const {
@@ -314,19 +342,7 @@ void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
 }
 
 void FunctionContext::set_error(const char* error_msg) {
-    if (_impl->_error_msg.empty()) {
-        _impl->_error_msg = error_msg;
-        std::stringstream ss;
-        ss << "UDF ERROR: " << error_msg;
-
-        if (_impl->_state != nullptr) {
-            _impl->_state->set_process_status(ss.str());
-        }
-    }
-}
-
-void FunctionContext::clear_error_msg() {
-    _impl->_error_msg.clear();
+    _impl->set_error(error_msg);
 }
 
 bool FunctionContext::add_warning(const char* warning_msg) {
@@ -345,156 +361,11 @@ bool FunctionContext::add_warning(const char* warning_msg) {
     }
 }
 
-StringVal::StringVal(FunctionContext* context, int64_t len) : len(len), ptr(context->impl()->allocate_local(len)) {}
-
-bool StringVal::resize(FunctionContext* ctx, int64_t new_len) {
-    if (new_len <= len) {
-        len = new_len;
-        return true;
-    }
-    if (UNLIKELY(new_len > StringVal::MAX_LENGTH)) {
-        len = 0;
-        is_null = true;
-        return false;
-    }
-    auto* new_ptr = ctx->impl()->allocate_local(new_len);
-    if (new_ptr != nullptr) {
-        memcpy(new_ptr, ptr, len);
-        ptr = new_ptr;
-        len = new_len;
-        return true;
-    }
-    return false;
-}
-
-StringVal StringVal::copy_from(FunctionContext* ctx, const uint8_t* buf, size_t len) {
-    StringVal result(ctx, len);
-    if (!result.is_null) {
-        memcpy(result.ptr, buf, len);
-    }
-    return result;
-}
-
-StringVal StringVal::create_temp_string_val(FunctionContext* ctx, int64_t len) {
-    ctx->impl()->string_result().resize(len);
-    return StringVal((uint8_t*)ctx->impl()->string_result().c_str(), len);
-}
-
-void StringVal::append(FunctionContext* ctx, const uint8_t* buf, size_t buf_len) {
-    if (UNLIKELY(len + buf_len > StringVal::MAX_LENGTH)) {
-        ctx->set_error(
-                "Concatenated string length larger than allowed limit of "
-                "1 GB character data.");
-        ctx->free(ptr);
-        ptr = nullptr;
-        len = 0;
-        is_null = true;
-    } else {
-        ptr = ctx->reallocate(ptr, len + buf_len);
-        memcpy(ptr + len, buf, buf_len);
-        len += buf_len;
-    }
-}
-
-void StringVal::append(FunctionContext* ctx, const uint8_t* buf, size_t buf_len, const uint8_t* buf2, size_t buf2_len) {
-    if (UNLIKELY(len + buf_len + buf2_len > StringVal::MAX_LENGTH)) {
-        ctx->set_error(
-                "Concatenated string length larger than allowed limit of "
-                "1 GB character data.");
-        ctx->free(ptr);
-        ptr = nullptr;
-        len = 0;
-        is_null = true;
-    } else {
-        ptr = ctx->reallocate(ptr, len + buf_len + buf2_len);
-        memcpy(ptr + len, buf, buf_len);
-        memcpy(ptr + len + buf_len, buf2, buf2_len);
-        len += buf_len + buf2_len;
-    }
-}
-
-bool DecimalVal::operator==(const DecimalVal& other) const {
-    if (is_null && other.is_null) {
-        return true;
-    }
-
-    if (is_null || other.is_null) {
-        return false;
-    }
-
-    // TODO(lingbin): implement DecimalVal's own cmp method
-    starrocks::DecimalValue value1 = starrocks::DecimalValue::from_decimal_val(*this);
-    starrocks::DecimalValue value2 = starrocks::DecimalValue::from_decimal_val(other);
-    return value1 == value2;
-}
-
 const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) const {
     if (arg_idx < 0 || arg_idx >= _impl->_arg_types.size()) {
         return nullptr;
     }
     return &_impl->_arg_types[arg_idx];
-}
-
-void HllVal::init(FunctionContext* ctx) {
-    len = starrocks::HLL_COLUMN_DEFAULT_LEN;
-    ptr = ctx->allocate(len);
-    memset(ptr, 0, len);
-    // the HLL type is HLL_DATA_FULL in UDF or UDAF
-    ptr[0] = starrocks::HllDataType::HLL_DATA_FULL;
-
-    is_null = false;
-}
-
-void HllVal::agg_parse_and_cal(FunctionContext* ctx, const HllVal& other) {
-    starrocks::HllSetResolver resolver;
-
-    // zero size means the src input is a HyperLogLog object
-    if (other.len == 0) {
-        auto* hll = reinterpret_cast<starrocks::HyperLogLog*>(other.ptr);
-        uint8_t* other_ptr = ctx->allocate(starrocks::HLL_COLUMN_DEFAULT_LEN);
-        int other_len = hll->serialize(ptr);
-        resolver.init((char*)other_ptr, other_len);
-    } else {
-        resolver.init((char*)other.ptr, other.len);
-    }
-
-    resolver.parse();
-
-    if (resolver.get_hll_data_type() == starrocks::HLL_DATA_EMPTY) {
-        return;
-    }
-
-    uint8_t* pdata = ptr + 1;
-    int data_len = starrocks::HLL_REGISTERS_COUNT;
-
-    if (resolver.get_hll_data_type() == starrocks::HLL_DATA_EXPLICIT) {
-        for (int i = 0; i < resolver.get_explicit_count(); i++) {
-            uint64_t hash_value = resolver.get_explicit_value(i);
-            int idx = hash_value % data_len;
-            uint8_t first_one_bit = __builtin_ctzl(hash_value >> starrocks::HLL_COLUMN_PRECISION) + 1;
-            pdata[idx] = std::max(pdata[idx], first_one_bit);
-        }
-    } else if (resolver.get_hll_data_type() == starrocks::HLL_DATA_SPARSE) {
-        std::map<starrocks::HllSetResolver::SparseIndexType, starrocks::HllSetResolver::SparseValueType>& sparse_map =
-                resolver.get_sparse_map();
-        for (auto& iter : sparse_map) {
-            pdata[iter.first] = std::max(pdata[iter.first], (uint8_t)iter.second);
-        }
-    } else if (resolver.get_hll_data_type() == starrocks::HLL_DATA_FULL) {
-        char* full_value = resolver.get_full_value();
-        for (int i = 0; i < starrocks::HLL_REGISTERS_COUNT; i++) {
-            pdata[i] = std::max(pdata[i], (uint8_t)full_value[i]);
-        }
-    }
-}
-
-void HllVal::agg_merge(const HllVal& other) {
-    uint8_t* pdata = ptr + 1;
-    uint8_t* pdata_other = other.ptr + 1;
-
-    for (int i = 0; i < starrocks::HLL_REGISTERS_COUNT; ++i) {
-        pdata[i] = std::max(pdata[i], pdata_other[i]);
-    }
 }
 
 } // namespace starrocks_udf

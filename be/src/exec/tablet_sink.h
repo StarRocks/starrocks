@@ -165,7 +165,7 @@ public:
     Status mark_close();
     Status close_wait(RuntimeState* state);
 
-    void cancel();
+    void cancel(const Status& err_st);
 
     int try_send_chunk_and_fetch_status();
 
@@ -239,6 +239,7 @@ private:
     int64_t _mem_exceeded_block_ns = 0;
     int64_t _queue_push_lock_ns = 0;
     int64_t _actual_consume_ns = 0;
+    Status _err_st = Status::OK();
 
     RuntimeState* _runtime_state = nullptr;
 };

@@ -130,6 +130,8 @@ static FieldType TPrimitiveType2FieldType(TPrimitiveType::type primitive_type, F
         return OLAP_FIELD_TYPE_OBJECT;
     case TPrimitiveType::PERCENTILE:
         return OLAP_FIELD_TYPE_PERCENTILE;
+    case TPrimitiveType::JSON:
+        return OLAP_FIELD_TYPE_JSON;
     }
     return OLAP_FIELD_TYPE_UNKNOWN;
 }

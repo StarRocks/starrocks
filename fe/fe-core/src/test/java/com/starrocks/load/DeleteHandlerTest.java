@@ -27,6 +27,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -147,6 +148,7 @@ public class DeleteHandlerTest {
         };
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
 
+        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 Catalog.getCurrentCatalog();
@@ -167,6 +169,14 @@ public class DeleteHandlerTest {
                 AgentTaskQueue.addTask((AgentTask) any);
                 minTimes = 0;
                 result = true;
+
+                Catalog.getCurrentSystemInfo();
+                minTimes = 0;
+                result = systemInfoService;
+
+                systemInfoService.getBackendIds(true);
+                minTimes = 0;
+                result = Lists.newArrayList();
             }
         };
     }

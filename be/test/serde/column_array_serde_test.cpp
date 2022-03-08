@@ -10,12 +10,50 @@
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "testutil/parallel_test.h"
+#include "util/json.h"
 
 namespace starrocks::serde {
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, json_column) {
+    auto c1 = vectorized::JsonColumn::create();
+
+    ASSERT_EQ(8, ColumnArraySerde::max_serialized_size(*c1));
+
+    for (int i = 0; i < 10; i++) {
+        JsonValue json;
+        std::string json_str = strings::Substitute("{\"a\": $0}", i);
+        ASSERT_TRUE(JsonValue::parse(json_str, &json).ok());
+        c1->append(&json);
+    }
+
+    ASSERT_EQ(148, ColumnArraySerde::max_serialized_size(*c1));
+
+    auto c2 = vectorized::JsonColumn::create();
+
+    std::vector<uint8_t> buffer;
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+    auto p1 = ColumnArraySerde::serialize(*c1, buffer.data());
+    auto p2 = ColumnArraySerde::deserialize(buffer.data(), c2.get());
+    ASSERT_EQ(buffer.data() + buffer.size(), p1);
+    ASSERT_EQ(buffer.data() + buffer.size(), p2);
+
+    ASSERT_EQ(10, c2->size());
+    for (size_t i = 0; i < c1->size(); i++) {
+        const JsonValue* datum1 = c1->get(i).get_json();
+        const JsonValue* datum2 = c2->get(i).get_json();
+        std::string str1 = datum1->to_string().value();
+        std::string str2 = datum2->to_string().value();
+        ASSERT_EQ(str1, str2);
+        ASSERT_EQ(0, datum1->compare(*datum2));
+    }
+}
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, decimal_column) {

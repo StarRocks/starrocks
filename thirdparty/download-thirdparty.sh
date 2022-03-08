@@ -341,6 +341,15 @@ fi
 cd -
 echo "Finished patching $GPERFTOOLS_SOURCE"
 
+# patch librdkafka
+cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-1.7.0" ]; then
+    patch -p0 < $TP_PATCH_DIR/librdkafka.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $LIBRDKAFKA_SOURCE"
+
 # patch mariadb-connector-c-3.2.5
 cd $TP_SOURCE_DIR/$MARIADB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; then
@@ -350,5 +359,19 @@ if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; 
 else
     echo "$MARIADB_SOURCE not patched"
 fi
+
+cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.9.179" ]; then
+    if [ ! -f prefetch_crt_dep_ok ]; then
+        bash ./prefetch_crt_dependency.sh
+        touch prefetch_crt_dep_ok
+    fi
+    patch -p0 < $TP_PATCH_DIR/aws-sdk-cpp-1.9.179.patch    
+    touch $PATCHED_MARK
+    echo "Finished patching $AWS_SDK_CPP_SOURCE"
+else
+    echo "$AWS_SDK_CPP_SOURCE not patched"
+fi
+
 cd -
 

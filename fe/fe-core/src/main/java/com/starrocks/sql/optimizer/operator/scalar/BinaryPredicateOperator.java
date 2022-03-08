@@ -149,4 +149,9 @@ public class BinaryPredicateOperator extends PredicateOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), type);
     }
+
+    @Override
+    public boolean isNullable() {
+        return !this.type.equals(BinaryType.EQ_FOR_NULL) && super.isNullable();
+    }
 }

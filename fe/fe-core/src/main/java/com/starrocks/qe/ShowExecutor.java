@@ -76,6 +76,7 @@ import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -86,6 +87,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -95,7 +97,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
@@ -257,6 +258,8 @@ public class ShowExecutor {
             handleShowSqlBlackListStmt();
         } else if (stmt instanceof ShowAnalyzeStmt) {
             handleShowAnalyze();
+        } else if (stmt instanceof ShowWorkGroupStmt) {
+            handleShowWorkGroup();
         } else {
             handleEmtpy();
         }
@@ -686,7 +689,8 @@ public class ShowExecutor {
                         final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                         final String isKey = col.isKey() ? "YES" : "NO";
                         final String defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
-                        final String aggType = col.getAggregationType() == null ? "" : col.getAggregationType().toSql();
+                        final String aggType = col.getAggregationType() == null
+                                || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().toSql();
                         if (showStmt.isVerbose()) {
                             // Field Type Collation Null Key Default Extra
                             // Privileges Comment
@@ -1090,7 +1094,7 @@ public class ShowExecutor {
                     }
                     indexName = olapTable.getIndexNameById(indexId);
 
-                    Tablet tablet = index.getTablet(tabletId);
+                    LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                     if (tablet == null) {
                         isSync = false;
                         break;
@@ -1512,5 +1516,11 @@ public class ShowExecutor {
             }
         }
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowWorkGroup() {
+        ShowWorkGroupStmt showWorkGroupStmt = (ShowWorkGroupStmt) stmt;
+        List<List<String>> rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
+        resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);
     }
 }

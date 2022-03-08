@@ -39,6 +39,10 @@
 #include "wrap/coded-stream-wrapper.h"
 
 namespace orc {
+// ORC files writen by these versions of cpp writers have inconsistent bloom filter
+// hashing. Bloom filters of them should not be used.
+static const char* BAD_CPP_BLOOM_FILTER_VERSIONS[] = {"1.6.0", "1.6.1", "1.6.2", "1.6.3",  "1.6.4",  "1.6.5", "1.6.6",
+                                                      "1.6.7", "1.6.8", "1.6.9", "1.6.10", "1.6.11", "1.7.0"};
 
 const WriterVersionImpl& WriterVersionImpl::VERSION_HIVE_8732() {
     static const WriterVersionImpl version(WriterVersion_HIVE_8732);
@@ -89,16 +93,30 @@ void ColumnSelector::selectChildren(std::vector<bool>& selectedColumns, const Ty
 }
 
 /**
-   * Recurse over a type tree and selects the parents of every selected type.
+   * Recurses over a type tree and selects the parents of every selected type.
    * @return true if any child was selected.
    */
 bool ColumnSelector::selectParents(std::vector<bool>& selectedColumns, const Type& type) {
     size_t id = static_cast<size_t>(type.getColumnId());
     bool result = selectedColumns[id];
+    uint64_t numSubtypeSelected = 0;
     for (uint64_t c = 0; c < type.getSubtypeCount(); ++c) {
-        result |= selectParents(selectedColumns, *type.getSubtype(c));
+        if (selectParents(selectedColumns, *type.getSubtype(c))) {
+            result = true;
+            numSubtypeSelected++;
+        }
     }
     selectedColumns[id] = result;
+
+    if (type.getKind() == TypeKind::UNION && selectedColumns[id]) {
+        if (0 < numSubtypeSelected && numSubtypeSelected < type.getSubtypeCount()) {
+            // Subtypes of UNION should be fully selected or not selected at all.
+            // Override partial subtype selections with full selections.
+            for (uint64_t c = 0; c < type.getSubtypeCount(); ++c) {
+                selectChildren(selectedColumns, *type.getSubtype(c));
+            }
+        }
+    }
     return result;
 }
 
@@ -126,8 +144,11 @@ void ColumnSelector::buildTypeNameIdMap(const Type* type) {
     }
 }
 
-void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, const RowReaderOptions& options) {
+void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, std::vector<bool>& lazyLoadColumns,
+                                    const RowReaderOptions& options) {
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
+    lazyLoadColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
+
     if (contents->schema->getKind() == STRUCT && options.getIndexesSet()) {
         for (unsigned long field : options.getInclude()) {
             updateSelectedByFieldId(selectedColumns, field);
@@ -135,6 +156,9 @@ void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, const Ro
     } else if (contents->schema->getKind() == STRUCT && options.getNamesSet()) {
         for (const auto& field : options.getIncludeNames()) {
             updateSelectedByName(selectedColumns, field);
+        }
+        for (const auto& field : options.getLazyLoadColumnNames()) {
+            updateSelectedByName(lazyLoadColumns, field);
         }
     } else if (options.getTypeIdsSet()) {
         for (unsigned long typeId : options.getInclude()) {
@@ -198,6 +222,7 @@ RowReaderImpl::RowReaderImpl(const std::shared_ptr<FileContents>& _contents, con
     currentStripe = numberOfStripes;
     lastStripe = 0;
     currentRowInStripe = 0;
+    lazyLoadLastUsedRowInStripe = 0;
     rowsInCurrentStripe = 0;
     uint64_t rowTotal = 0;
 
@@ -228,7 +253,7 @@ RowReaderImpl::RowReaderImpl(const std::shared_ptr<FileContents>& _contents, con
     }
 
     ColumnSelector column_selector(contents.get());
-    column_selector.updateSelected(selectedColumns, opts);
+    column_selector.updateSelected(selectedColumns, lazyLoadColumns, opts);
 
     // prepare SargsApplier if SearchArgument is available
     if (opts.getSearchArgument() && footer->rowindexstride() > 0) {
@@ -236,6 +261,34 @@ RowReaderImpl::RowReaderImpl(const std::shared_ptr<FileContents>& _contents, con
         sargsApplier.reset(new SargsApplier(*contents->schema, sargs.get(), opts.getRowReaderFilter().get(),
                                             footer->rowindexstride(), getWriterVersionImpl(_contents.get())));
     }
+
+    skipBloomFilters = hasBadBloomFilters();
+}
+
+// Check if the file has inconsistent bloom filters.
+bool RowReaderImpl::hasBadBloomFilters() {
+    // Only C++ writer in old releases could have bad bloom filters.
+    if (footer->writer() != ORC_CPP_WRITER) return false;
+    // 'softwareVersion' is added in 1.5.13, 1.6.11, and 1.7.0.
+    // 1.6.x releases before 1.6.11 won't have it. On the other side, the C++ writer
+    // supports writing bloom filters since 1.6.0. So files written by the C++ writer
+    // and with 'softwareVersion' unset would have bad bloom filters.
+    if (!footer->has_softwareversion()) return true;
+
+    const std::string& fullVersion = footer->softwareversion();
+    std::string version;
+    // Deal with snapshot versions, e.g. 1.6.12-SNAPSHOT.
+    if (fullVersion.find('-') != std::string::npos) {
+        version = fullVersion.substr(0, fullVersion.find('-'));
+    } else {
+        version = fullVersion;
+    }
+    for (const char* v : BAD_CPP_BLOOM_FILTER_VERSIONS) {
+        if (version == v) {
+            return true;
+        }
+    }
+    return false;
 }
 
 CompressionKind RowReaderImpl::getCompression() const {
@@ -246,8 +299,12 @@ uint64_t RowReaderImpl::getCompressionSize() const {
     return contents->blockSize;
 }
 
-const std::vector<bool> RowReaderImpl::getSelectedColumns() const {
+const std::vector<bool>& RowReaderImpl::getSelectedColumns() const {
     return selectedColumns;
+}
+
+const std::vector<bool>& RowReaderImpl::getLazyLoadColumns() const {
+    return lazyLoadColumns;
 }
 
 const Type& RowReaderImpl::getSelectedType() const {
@@ -327,17 +384,40 @@ void RowReaderImpl::loadStripeIndex() {
 
     // obtain row indexes for selected columns
     uint64_t offset = currentStripeInfo.offset();
+
+    static const uint64_t MAX_ONE_READ_ROW_INDEX_SIZE = 1024 * 1024;
+    uint64_t rowIndexSize = currentStripeInfo.indexlength();
+    uint64_t startOffset = offset;
+    // rowIndexBufferData is allocated in rowIndexInputStream
+    std::unique_ptr<SeekableFileInputStream> rowIndexInputStream = nullptr;
+    const char* rowIndexBufferData = nullptr;
+    if (rowIndexSize < MAX_ONE_READ_ROW_INDEX_SIZE) {
+        rowIndexInputStream = std::unique_ptr<SeekableFileInputStream>(new SeekableFileInputStream(
+                contents->stream.get(), startOffset, rowIndexSize, *contents->pool, rowIndexSize));
+        int size = 0;
+        const void* data = nullptr;
+        if (!rowIndexInputStream->Next(&data, &size) || static_cast<uint64_t>(size) != rowIndexSize) {
+            throw ParseError("Failed to read the row index data");
+        }
+        rowIndexBufferData = static_cast<const char*>(data);
+    }
+
     for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {
         const proto::Stream& pbStream = currentStripeFooter.streams(i);
         uint64_t colId = pbStream.column();
         if (selectedColumns[colId] && pbStream.has_kind() &&
             (pbStream.kind() == proto::Stream_Kind_ROW_INDEX ||
              pbStream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
+            std::unique_ptr<SeekableInputStream> inputStream = nullptr;
+            if (rowIndexBufferData) {
+                inputStream = std::unique_ptr<SeekableInputStream>(
+                        new SeekableArrayInputStream(rowIndexBufferData + offset - startOffset, pbStream.length()));
+            } else {
+                inputStream = std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
+                        contents->stream.get(), offset, pbStream.length(), *contents->pool));
+            }
             std::unique_ptr<SeekableInputStream> inStream =
-                    createDecompressor(getCompression(),
-                                       std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
-                                               contents->stream.get(), offset, pbStream.length(), *contents->pool)),
-                                       getCompressionSize(), *contents->pool);
+                    createDecompressor(getCompression(), std::move(inputStream), getCompressionSize(), *contents->pool);
 
             if (pbStream.kind() == proto::Stream_Kind_ROW_INDEX) {
                 proto::RowIndex rowIndex;
@@ -345,7 +425,7 @@ void RowReaderImpl::loadStripeIndex() {
                     throw ParseError("Failed to parse the row index");
                 }
                 rowIndexes[colId] = rowIndex;
-            } else { // Stream_Kind_BLOOM_FILTER_UTF8
+            } else if (!skipBloomFilters) { // Stream_Kind_BLOOM_FILTER_UTF8
                 proto::BloomFilterIndex pbBFIndex;
                 if (!pbBFIndex.ParseFromZeroCopyStream(inStream.get())) {
                     throw ParseError("Failed to parse bloom filter index");
@@ -364,26 +444,23 @@ void RowReaderImpl::loadStripeIndex() {
     }
 }
 
-void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
-    // store positions for selected columns
-    std::vector<std::list<uint64_t>> positions;
-    // store position providers for selected colimns
-    std::unordered_map<uint64_t, PositionProvider> positionProviders;
-
+void RowReaderImpl::getRowGroupPosition(uint32_t rowGroupEntryId, PositionProviderMap* map) {
     for (const auto& rowIndexe : rowIndexes) {
         uint64_t colId = rowIndexe.first;
         const proto::RowIndexEntry& entry = rowIndexe.second.entry(static_cast<int32_t>(rowGroupEntryId));
-
-        // copy index positions for a specific column
-        positions.emplace_back();
-        auto& position = positions.back();
+        map->positions.emplace_back();
+        auto& position = map->positions.back();
         for (int pos = 0; pos != entry.positions_size(); ++pos) {
             position.push_back(entry.positions(pos));
         }
-        positionProviders.insert(std::make_pair(colId, PositionProvider(position)));
+        map->providers.insert(std::make_pair(colId, PositionProvider(position)));
     }
+}
 
-    reader->seekToRowGroup(positionProviders);
+void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
+    PositionProviderMap map;
+    getRowGroupPosition(rowGroupEntryId, &map);
+    reader->seekToRowGroup(&map);
 }
 
 const FileContents& RowReaderImpl::getFileContents() const {
@@ -405,7 +482,6 @@ bool RowReaderImpl::getUseWriterTimezone() const {
 DataBuffer<char>* RowReaderImpl::getSharedBuffer() const {
     return &sharedBuffer;
 }
-
 proto::StripeFooter getStripeFooter(const proto::StripeInformation& info, const FileContents& contents) {
     uint64_t stripeFooterStart = info.offset() + info.indexlength() + info.datalength();
     uint64_t stripeFooterLength = info.footerlength();
@@ -522,6 +598,15 @@ uint32_t ReaderImpl::getWriterIdValue() const {
     } else {
         return WriterId::ORC_JAVA_WRITER;
     }
+}
+
+std::string ReaderImpl::getSoftwareVersion() const {
+    std::ostringstream buffer;
+    buffer << writerIdToString(getWriterIdValue());
+    if (footer->has_softwareversion()) {
+        buffer << " " << footer->softwareversion();
+    }
+    return buffer.str();
 }
 
 WriterVersion ReaderImpl::getWriterVersion() const {
@@ -955,7 +1040,7 @@ void RowReaderImpl::startNextStripe() {
     }
 }
 
-bool RowReaderImpl::next(ColumnVectorBatch& data) {
+bool RowReaderImpl::next(ColumnVectorBatch& data, ReadPosition* pos) {
     if (currentStripe >= lastStripe) {
         data.numElements = 0;
         if (lastStripe > 0) {
@@ -968,6 +1053,10 @@ bool RowReaderImpl::next(ColumnVectorBatch& data) {
     }
     if (currentRowInStripe == 0) {
         startNextStripe();
+        lazyLoadLastUsedRowInStripe = 0;
+        if (pos != nullptr) {
+            pos->start_new_stripe = true;
+        }
     }
     uint64_t rowsToRead = std::min(static_cast<uint64_t>(data.capacity), rowsInCurrentStripe - currentRowInStripe);
     if (currentStripe >= lastStripe) {
@@ -988,6 +1077,13 @@ bool RowReaderImpl::next(ColumnVectorBatch& data) {
     } else {
         reader->next(data, rowsToRead, nullptr);
     }
+
+    if (pos != nullptr) {
+        pos->stripe_index = currentStripe;
+        pos->num_values = rowsToRead;
+        pos->row_in_stripe = currentRowInStripe;
+    }
+
     // update row number
     previousRow = firstRowOfStripe[currentStripe] + currentRowInStripe;
     currentRowInStripe += rowsToRead;
@@ -1010,6 +1106,43 @@ bool RowReaderImpl::next(ColumnVectorBatch& data) {
         currentRowInStripe = 0;
     }
     return rowsToRead != 0;
+}
+
+void RowReaderImpl::lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) {
+    if (enableEncodedBlock) {
+        reader->lazyLoadNextEncoded(data, numValues, nullptr);
+    } else {
+        reader->lazyLoadNext(data, numValues, nullptr);
+    }
+    lazyLoadLastUsedRowInStripe += numValues;
+}
+
+void RowReaderImpl::lazyLoadSeekTo(uint64_t toRow) {
+    uint64_t costDirectSkip = (toRow - lazyLoadLastUsedRowInStripe);
+    if (costDirectSkip == 0) {
+        return;
+    }
+    // we have two options to locate `toRow`:
+    // 1. use seek to row group, and skip rest rows(# = toRow % rowindexstripe)
+    // 2. or skip rest rows directly(# = toRow - lazyLoadLastUsedRowInStripe)
+    // we can assume `seek to row group` costs skipping X rows
+    // then #1 cost is X + toRow % rowindexstripe
+    // #2 cost is (row - lazyLoadLastUsedRowInStripe)
+    const uint64_t ROW_INDEX_STRIDE = footer->rowindexstride();
+    static const uint64_t SEEK_TO_ROW_GROUP_COST = 4096;
+    uint64_t costIndirectSkip = toRow % ROW_INDEX_STRIDE;
+    uint64_t toRowGroupNumber = toRow / ROW_INDEX_STRIDE;
+    uint64_t fromRowGroupNumber = lazyLoadLastUsedRowInStripe / ROW_INDEX_STRIDE;
+
+    if ((fromRowGroupNumber != toRowGroupNumber) && (SEEK_TO_ROW_GROUP_COST + costIndirectSkip) < costDirectSkip) {
+        PositionProviderMap map;
+        getRowGroupPosition(static_cast<uint32_t>(toRowGroupNumber), &map);
+        reader->lazyLoadSeekToRowGroup(&map);
+        reader->lazyLoadSkip(costIndirectSkip);
+    } else {
+        reader->lazyLoadSkip(costDirectSkip);
+    }
+    lazyLoadLastUsedRowInStripe = toRow;
 }
 
 uint64_t RowReaderImpl::computeBatchSize(uint64_t requestedSize, uint64_t currentRowInStripe,
@@ -1275,6 +1408,10 @@ RowReader::~RowReader() {
     // PASS
 }
 
+bool RowReader::next(ColumnVectorBatch& cvb) {
+    return this->next(cvb, nullptr);
+}
+
 Reader::~Reader() {
     // PASS
 }
@@ -1282,5 +1419,9 @@ Reader::~Reader() {
 InputStream::~InputStream(){
         // PASS
 };
+
+uint64_t InputStream::getNaturalReadSizeAfterSeek() const {
+    return 128 * 1024;
+}
 
 } // namespace orc

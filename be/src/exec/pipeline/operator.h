@@ -72,7 +72,7 @@ public:
     // close is used to do the cleanup work
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
-    virtual Status close(RuntimeState* state);
+    virtual void close(RuntimeState* state);
 
     // Whether we could pull chunk from this operator
     virtual bool has_output() const = 0;
@@ -108,7 +108,7 @@ public:
     RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
 
     virtual std::string get_name() const {
-        return strings::Substitute("$0_$1($2)", _name, this, is_finished() ? "X" : "O");
+        return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
     }
 
     const LocalRFWaitingSet& rf_waiting_set() const;
@@ -134,14 +134,25 @@ public:
     static const int32_t s_pseudo_plan_node_id_for_result_sink;
     static const int32_t s_pseudo_plan_node_id_upper_bound;
 
+    RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+    RuntimeProfile* common_metrics() { return _common_metrics.get(); }
+    RuntimeProfile* unique_metrics() { return _unique_metrics.get(); }
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
     const std::string _name;
     // Which plan node this operator belongs to
     const int32_t _plan_node_id;
+    // _common_metrics and _unique_metrics are the only children of _runtime_profile
+    // _common_metrics contains the common metrics of Operator, including counters and sub profiles,
+    // e.g. OperatorTotalTime/PushChunkNum/PullChunkNum etc.
+    // _unique_metrics contains the unique metrics, incluing counters and sub profiles,
+    // e.g. ExchangeSinkOperator have some counters to describe the transmission' speed and throughput.
     std::shared_ptr<RuntimeProfile> _runtime_profile;
-    std::unique_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<RuntimeProfile> _common_metrics;
+    std::shared_ptr<RuntimeProfile> _unique_metrics;
+    MemTracker* _mem_tracker = nullptr;
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
@@ -182,7 +193,7 @@ public:
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
     virtual void close(RuntimeState* state);
-    std::string get_name() const { return _name + "_" + std::to_string(_id); }
+    std::string get_name() const { return _name + "_" + std::to_string(_plan_node_id); }
 
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
     // util the corresponding local rf generated.
@@ -240,7 +251,7 @@ protected:
 
             auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
             for (auto* filter : in_filters) {
-                filter->prepare(state, _row_desc);
+                filter->prepare(state);
                 filter->open(state);
                 _runtime_in_filters.push_back(filter);
             }
@@ -251,14 +262,14 @@ protected:
     const std::string _name;
     const int32_t _plan_node_id;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
-    RuntimeFilterHub* _runtime_filter_hub;
+    RuntimeFilterHub* _runtime_filter_hub = nullptr;
     std::vector<TupleId> _tuple_ids;
     // a set of TPlanNodeIds of HashJoinNode who generates Local RF that take effects on this operator.
     LocalRFWaitingSet _rf_waiting_set;
     std::once_flag _prepare_runtime_in_filters_once;
     RowDescriptor _row_desc;
     std::vector<ExprContext*> _runtime_in_filters;
-    std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector;
+    std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector = nullptr;
     std::vector<SlotId> _filter_null_value_columns;
     // Mappings from input slot to output slot of ancestor exec nodes (include itself).
     // It is used to rewrite runtime in filters.

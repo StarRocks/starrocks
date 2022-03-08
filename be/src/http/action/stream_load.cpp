@@ -141,7 +141,7 @@ void StreamLoadAction::handle(HttpRequest* req) {
             ctx->need_rollback = false;
         }
         if (ctx->body_sink != nullptr) {
-            ctx->body_sink->cancel();
+            ctx->body_sink->cancel(ctx->status);
         }
     }
 
@@ -209,7 +209,7 @@ int StreamLoadAction::on_header(HttpRequest* req) {
             ctx->need_rollback = false;
         }
         if (ctx->body_sink != nullptr) {
-            ctx->body_sink->cancel();
+            ctx->body_sink->cancel(st);
         }
         auto str = ctx->to_json();
         HttpChannel::send_reply(req, str);
@@ -328,7 +328,7 @@ void StreamLoadAction::free_handler_ctx(void* param) {
     }
     // sender is going, make receiver know it
     if (ctx->body_sink != nullptr) {
-        ctx->body_sink->cancel();
+        ctx->body_sink->cancel(Status::Cancelled("Cancelled"));
     }
     if (ctx->unref()) {
         delete ctx;

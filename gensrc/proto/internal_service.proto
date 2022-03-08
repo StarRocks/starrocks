@@ -31,7 +31,7 @@ import "types.proto";
 
 option cc_generic_services = true;
 
-// Transmit data when process SQL query
+// Transmit data when process SQL query.
 message PTransmitDataParams {
     // non-change member
     required PUniqueId finst_id = 1;
@@ -40,17 +40,17 @@ message PTransmitDataParams {
     required int32 sender_id = 3;
     required int32 be_number = 4;
 
-    // if set to true, indicates that no more row batches will be sent
-    // for this dest_node_id
+    // If set to true, indicates that no more row batches will be sent
+    // for this dest_node_id.
     required bool eos = 5;
     optional PRowBatch row_batch = 6;
-    // different per packet
+    // Different per packet.
     required int64 packet_seq = 7;
     optional PQueryStatistics query_statistics = 8;
 };
 
 // Transmit vectorized data chunks between Backends.
-// Try to batch enough chunk in one request to reduce each RPC call overhead
+// Try to batch enough chunk in one request to reduce each RPC call overhead.
 message PTransmitChunkParams {
     // non-change member
     optional PUniqueId finst_id = 1;
@@ -58,19 +58,24 @@ message PTransmitChunkParams {
     // Id of this fragment in its role as a sender.
     optional int32 sender_id = 3;
     optional int32 be_number = 4;
-    // if set to true, indicates that no more row batches will be sent
-    // for this dest_node_id
+    // If set to true, indicates that no more row batches will be sent
+    // for this dest_node_id.
     optional bool eos = 5;
     // RPC sequence number for the send channel.
     // Sever will check this number to see if some packet has lost.
     optional int64 sequence = 6;
 
-    // The protobuf data structure for column chunk
+    // The protobuf data structure for column chunk.
     repeated ChunkPB chunks = 7;
 
-    // Some statistics for the runing query
+    // Some statistics for the runing query.
     optional PQueryStatistics query_statistics = 8;
-    optional bool use_pass_through = 9 [default = false] ;
+    optional bool use_pass_through = 9 [default = false];
+
+    // Whether enable pipeline level shuffle.
+    optional bool is_pipeline_level_shuffle = 10 [default = false];
+    // Driver sequences of pipeline level shuffle.
+    repeated int32 driver_sequences = 11;
 };
 
 message PTransmitDataResult {
@@ -98,11 +103,11 @@ message PTransmitRuntimeFilterParams {
     optional PUniqueId finst_id = 5;
     optional bytes data = 6;
 
-    // multiple probe fragment instances maybe on a single host.
+    // Multiple probe fragment instances maybe on a single host.
     repeated PUniqueId probe_finst_ids = 7;
     optional int32 build_be_number = 8;
     repeated PTransmitRuntimeFilterForwardTarget forward_targets = 9;
-    // when merge node starts to broadcast this rf(millseconds since unix epoch)
+    // When merge node starts to broadcast this rf(millseconds since unix epoch).
     optional int64 broadcast_timestamp = 10;
     optional bool is_pipeline = 11;
 };
@@ -123,7 +128,7 @@ message PTabletInfo {
     repeated string valid_dict_cache_columns = 4;
 }
 
-// open a tablet writer
+// Open a tablet writer.
 message PTabletWriterOpenRequest {
     required PUniqueId id = 1;
     required int64 index_id = 2;
@@ -134,14 +139,14 @@ message PTabletWriterOpenRequest {
     required bool need_gen_rollup = 7; // Deprecated
     optional int64 load_mem_limit = 8;
     optional int64 load_channel_timeout_s = 9;
-    optional bool is_vectorized = 20 [deprecated = true];
+    optional bool is_vectorized = 20; // Deprecate if we confirm all customer have upgrade to 2.1
 };
 
 message PTabletWriterOpenResult {
     required PStatus status = 1;
 };
 
-// add batch to tablet writer
+// Add batch to tablet writer.
 message PTabletWriterAddBatchRequest {
     required PUniqueId id = 1;
     required int64 index_id = 2;
@@ -152,9 +157,9 @@ message PTabletWriterAddBatchRequest {
 
     required int64 packet_seq = 5;
     repeated int64 tablet_ids = 6;
-    // unset if and only if when eos is true
+    // Unset if and only if when eos is true.
     optional PRowBatch row_batch = 7;
-    // only valid when eos is true
+    // Only valid when eos is true.
     // valid partition ids that would write in this writer
     repeated int64 partition_ids = 8;
 };
@@ -164,12 +169,12 @@ message PTabletWriterAddChunkRequest {
     optional int64 index_id = 2;
     optional int32 sender_id = 3;
 
-    // Whether this is the last batch from this sender
+    // Whether this is the last batch from this sender.
     optional bool eos = 4;
 
     optional int64 packet_seq = 5;
     repeated int64 tablet_ids = 6;
-    // unset if and only if eos is true
+    // Unset if and only if eos is true.
     optional ChunkPB chunk  = 7;
     // only valid when eos is true
     // valid partition ids that would write in this writer
@@ -183,7 +188,7 @@ message PTabletWriterAddBatchResult {
     optional int64 wait_lock_time_us = 4;
 };
 
-// tablet writer cancel
+// Tablet writer cancel.
 message PTabletWriterCancelRequest {
     required PUniqueId id = 1;
     required int64 index_id = 2;
@@ -225,7 +230,7 @@ message PFetchDataRequest {
 
 message PFetchDataResult {
     required PStatus status = 1;
-    // valid when status is ok
+    // Valid when status is ok.
     optional int64 packet_seq = 2;
     optional bool eos = 3;
     optional PQueryStatistics query_statistics = 4;
@@ -292,7 +297,7 @@ message PProxyResult {
 };
 
 // NOTE(zc): If you want to add new method here,
-// you MUST add same method to doris_internal_service.proto
+// you must add same method to 'doris_internal_service.proto'.
 service PInternalService {
     rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
     rpc exec_plan_fragment(PExecPlanFragmentRequest) returns (PExecPlanFragmentResult);
@@ -304,7 +309,7 @@ service PInternalService {
     rpc trigger_profile_report(PTriggerProfileReportRequest) returns (PTriggerProfileReportResult);
     rpc get_info(PProxyRequest) returns (PProxyResult); 
 
-    // Transmit vectorized data between backends
+    // Transmit vectorized data between backends.
     rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);

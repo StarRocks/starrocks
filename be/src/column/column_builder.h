@@ -2,9 +2,11 @@
 
 #pragma once
 
+#include <type_traits>
 #include <utility>
 
 #include "column/column_helper.h"
+#include "column/type_traits.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -16,6 +18,7 @@ public:
     using DataColumnPtr = typename RunTimeColumnType<Type>::Ptr;
     using NullColumnPtr = NullColumn::Ptr;
     using DatumType = RunTimeCppType<Type>;
+    using MovableType = RunTimeCppMovableType<Type>;
 
     ColumnBuilder(int32_t chunk_size) {
         static_assert(!pt_is_decimal<Type>, "Not support Decimal32/64/128 types");
@@ -50,10 +53,21 @@ public:
         _column->append(value);
     }
 
+    void append(MovableType value) {
+        _null_column->append(DATUM_NOT_NULL);
+        _column->append(std::move(value));
+    }
+
     void append(const DatumType& value, bool is_null) {
         _has_null = _has_null | is_null;
         _null_column->append(is_null);
         _column->append(value);
+    }
+
+    void append(MovableType value, bool is_null) {
+        _has_null = _has_null | is_null;
+        _null_column->append(is_null);
+        _column->append(std::move(value));
     }
 
     void append_null() {
@@ -75,6 +89,8 @@ public:
             return _column;
         }
     }
+
+    ColumnPtr build_nullable_column() { return NullableColumn::create(_column, _null_column); }
 
     void reserve(int size) {
         _column->reserve(size);
@@ -142,9 +158,16 @@ public:
     // as the number of evolving columns; however, the offset is updated
     // only once, so we split the append into append_partial and append_complete
     // as follows
-    void append_partial(uint8_t* begin, uint8_t* end) {
+    void append_partial(const uint8_t* begin, const uint8_t* end) {
         Bytes& bytes = _column->get_bytes();
         bytes.insert(bytes.end(), begin, end);
+    }
+
+    void append_partial(const Slice& slice) {
+        const auto* begin = reinterpret_cast<const uint8_t*>(slice.data);
+        const auto* end = begin + slice.size;
+
+        append_partial(begin, end);
     }
 
     void append_complete(size_t i) {

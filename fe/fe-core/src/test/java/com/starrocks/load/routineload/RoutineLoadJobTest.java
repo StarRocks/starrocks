@@ -21,12 +21,14 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CreateRoutineLoadStmt;
+import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.SqlParser;
+import com.starrocks.analysis.SqlScanner;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -36,10 +38,12 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
-import java_cup.runtime.Symbol;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -49,19 +53,10 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class RoutineLoadJobTest {
-
-    @Mocked
-    EditLog editLog;
-    @Mocked
-    SqlParser sqlParser;
-    @Mocked
-    CreateRoutineLoadStmt createRoutineLoadStmt;
-    @Mocked
-    Symbol symbol;
-
     @Test
     public void testAfterAbortedReasonOffsetOutOfRange(@Mocked Catalog catalog,
                                                        @Injectable TransactionState transactionState,
@@ -297,5 +292,95 @@ public class RoutineLoadJobTest {
         Assert.assertEquals(new Long(0), Deencapsulation.getField(routineLoadJob, "currentErrorRows"));
         Assert.assertEquals(new Long(0), Deencapsulation.getField(routineLoadJob, "currentTotalRows"));
 
+    }
+
+    @Test
+    public void testModifyJobProperties() throws Exception {
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        // alter job properties
+        String desiredConcurrentNumber = "3";
+        String maxBatchInterval = "60";
+        String maxErrorNumber = "10000";
+        String maxBatchRows = "200000";
+        String strictMode = "true";
+        String timeZone = "UTC";
+        String jsonPaths = "[\\\"$.category\\\",\\\"$.author\\\",\\\"$.price\\\",\\\"$.timestamp\\\"]";
+        String stripOuterArray = "true";
+        String jsonRoot = "$.RECORDS";
+        String originStmt = "alter routine load for db.job1 " +
+                "properties (" +
+                "   \"desired_concurrent_number\" = \"" + desiredConcurrentNumber + "\"," +
+                "   \"max_batch_interval\" = \"" + maxBatchInterval + "\"," +
+                "   \"max_error_number\" = \"" + maxErrorNumber + "\"," +
+                "   \"max_batch_rows\" = \"" + maxBatchRows + "\"," +
+                "   \"strict_mode\" = \"" + strictMode + "\"," +
+                "   \"timezone\" = \"" + timeZone + "\"," +
+                "   \"jsonpaths\" = \"" + jsonPaths + "\"," +
+                "   \"strip_outer_array\" = \"" + stripOuterArray + "\"," +
+                "   \"json_root\" = \"" + jsonRoot + "\"" +
+                ")";
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseAndAnalyzeStmt(originStmt, connectContext);
+        routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
+        Assert.assertEquals(Integer.parseInt(desiredConcurrentNumber),
+                (int) Deencapsulation.getField(routineLoadJob, "desireTaskConcurrentNum"));
+        Assert.assertEquals(Long.parseLong(maxBatchInterval),
+                (long) Deencapsulation.getField(routineLoadJob, "taskSchedIntervalS"));
+        Assert.assertEquals(Long.parseLong(maxErrorNumber),
+                (long) Deencapsulation.getField(routineLoadJob, "maxErrorNum"));
+        Assert.assertEquals(Long.parseLong(maxBatchRows),
+                (long) Deencapsulation.getField(routineLoadJob, "maxBatchRows"));
+        Assert.assertEquals(Boolean.parseBoolean(strictMode), routineLoadJob.isStrictMode());
+        Assert.assertEquals(timeZone, routineLoadJob.getTimezone());
+        Assert.assertEquals(jsonPaths.replace("\\", ""), routineLoadJob.getJsonPaths());
+        Assert.assertEquals(Boolean.parseBoolean(stripOuterArray), routineLoadJob.isStripOuterArray());
+        Assert.assertEquals(jsonRoot, routineLoadJob.getJsonRoot());
+    }
+
+    @Test
+    public void testModifyDataSourceProperties() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        //alter data source custom properties
+        String groupId = "group1";
+        String clientId = "client1";
+        String defaultOffsets = "OFFSET_BEGINNING";
+        String originStmt = "alter routine load for db.job1 " +
+                "FROM KAFKA (" +
+                "   \"property.group.id\" = \"" + groupId + "\"," +
+                "   \"property.client.id\" = \"" + clientId + "\"," +
+                "   \"property.kafka_default_offsets\" = \"" + defaultOffsets + "\"" +
+                ")";
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseAndAnalyzeStmt(originStmt, connectContext);
+        routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
+        routineLoadJob.convertCustomProperties(true);
+        Map<String, String> properties = routineLoadJob.getConvertedCustomProperties();
+        Assert.assertEquals(groupId, properties.get("group.id"));
+        Assert.assertEquals(clientId, properties.get("client.id"));
+        Assert.assertEquals(-2L,
+                (long) Deencapsulation.getField(routineLoadJob, "kafkaDefaultOffSet"));
+    }
+
+    @Test
+    public void testModifyLoadDesc() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        //alter load desc
+        String originStmt = "alter routine load for db.job1 " +
+                "COLUMNS (a, b, c, d=a), " +
+                "WHERE a = 1," +
+                "COLUMNS TERMINATED BY \",\"," +
+                "PARTITION(p1, p2, p3)," +
+                "ROWS TERMINATED BY \"A\"";
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseAndAnalyzeStmt(originStmt, connectContext);
+        routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
+        Assert.assertEquals("a,b,c,d=`a`", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
+        Assert.assertEquals("`a` = 1", routineLoadJob.getWhereExpr().toSql());
+        Assert.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
+        Assert.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
+        Assert.assertEquals("p1,p2,p3", Joiner.on(",").join(routineLoadJob.getPartitions().getPartitionNames()));
     }
 }

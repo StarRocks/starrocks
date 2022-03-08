@@ -59,8 +59,8 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
 
     Status st = _reader->prepare();
     if (!st.ok()) {
-        std::string msg = strings::Substitute("[$0] fail to prepare tablet reader $1: $2",
-                                              BackendOptions::get_localhost(), _tablet->full_name(), st.to_string());
+        std::string msg = strings::Substitute("Fail to scan tablet. error: $0, backend: $1", st.get_error_msg(),
+                                              BackendOptions::get_localhost());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     } else {
@@ -75,12 +75,12 @@ Status TabletScanner::open([[maybe_unused]] RuntimeState* runtime_state) {
         _is_open = true;
         Status st = _reader->open(_params);
         if (!st.ok()) {
-            auto msg = strings::Substitute("[$0] fail to open tablet reader $1: $2", BackendOptions::get_localhost(),
-                                           _tablet->full_name(), st.to_string());
+            auto msg = strings::Substitute("Fail to scan tablet. error: $0, backend: $1", st.get_error_msg(),
+                                           BackendOptions::get_localhost());
             st = Status::InternalError(msg);
             LOG(WARNING) << st;
         } else {
-            RETURN_IF_ERROR(runtime_state->check_mem_limit("olap scanner open"));
+            RETURN_IF_ERROR(runtime_state->check_mem_limit("tablet_scanner"));
         }
         return st;
     }
@@ -90,7 +90,9 @@ Status TabletScanner::close(RuntimeState* state) {
     if (_is_closed) {
         return Status::OK();
     }
-    _prj_iter->close();
+    if (_prj_iter) {
+        _prj_iter->close();
+    }
     update_counter();
     _reader.reset();
     _predicate_free_pool.clear();
@@ -103,17 +105,14 @@ Status TabletScanner::close(RuntimeState* state) {
 
 Status TabletScanner::_get_tablet(const TInternalScanRange* scan_range) {
     TTabletId tablet_id = scan_range->tablet_id;
-    SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
     std::string err;
     _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
     if (!_tablet) {
-        std::stringstream ss;
-        ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-           << ", reason=" << err;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
+        auto msg = strings::Substitute("Not found tablet. tablet_id: $0, error: $1", tablet_id, err);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
     }
     return Status::OK();
 }
@@ -137,7 +136,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<PredicatePtr> preds;
-    _parent->_conjuncts_manager.get_column_predicates(&parser, &preds);
+    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(&parser, &preds));
     for (auto& p : preds) {
         if (parser.can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
@@ -190,10 +189,9 @@ Status TabletScanner::_init_return_columns() {
         }
         int32_t index = _tablet->field_index(slot->col_name());
         if (index < 0) {
-            std::stringstream ss;
-            ss << "invalid field name: " << slot->col_name();
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
+            auto msg = strings::Substitute("Invalid column name: $0", slot->col_name());
+            LOG(WARNING) << msg;
+            return Status::InvalidArgument(msg);
         }
         _scanner_columns.push_back(index);
         if (!_unused_output_column_ids.count(index)) {
@@ -213,10 +211,9 @@ Status TabletScanner::_init_unused_output_columns(const std::vector<std::string>
     for (const auto& col_name : unused_output_columns) {
         int32_t index = _tablet->field_index(col_name);
         if (index < 0) {
-            std::stringstream ss;
-            ss << "invalid field name: " << col_name;
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
+            auto msg = strings::Substitute("Invalid column name: $0", col_name);
+            LOG(WARNING) << msg;
+            return Status::InvalidArgument(msg);
         }
         _unused_output_column_ids.insert(index);
     }
@@ -293,6 +290,9 @@ void TabletScanner::_update_realtime_counter(Chunk* chunk) {
 
 void TabletScanner::update_counter() {
     if (_has_update_counter) {
+        return;
+    }
+    if (!_reader) {
         return;
     }
     COUNTER_UPDATE(_parent->_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);

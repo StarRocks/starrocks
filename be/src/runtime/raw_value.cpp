@@ -26,7 +26,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/string_value.hpp"
 #include "storage/utils.h"
-#include "util/types.h"
 #include "util/unaligned_access.h"
 
 namespace starrocks {

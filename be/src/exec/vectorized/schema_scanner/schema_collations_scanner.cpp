@@ -30,40 +30,66 @@ SchemaCollationsScanner::SchemaCollationsScanner()
 SchemaCollationsScanner::~SchemaCollationsScanner() = default;
 
 Status SchemaCollationsScanner::fill_chunk(ChunkPtr* chunk) {
-    // COLLATION_NAME
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[0]->id());
-        Slice value(_s_collations[_index].name, strlen(_s_collations[_index].name));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        switch (slot_id) {
+        case 1: {
+            // COLLATION_NAME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                Slice value(_s_collations[_index].name, strlen(_s_collations[_index].name));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 2: {
+            // charset
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                Slice value(_s_collations[_index].charset, strlen(_s_collations[_index].charset));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 3: {
+            // id
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_s_collations[_index].id);
+            }
+            break;
+        }
+        case 4: {
+            // is_default
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                Slice value(_s_collations[_index].is_default, strlen(_s_collations[_index].is_default));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 5: {
+            // IS_COMPILED
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                Slice value(_s_collations[_index].is_compile, strlen(_s_collations[_index].is_compile));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 6: {
+            // sortlen
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_s_collations[_index].sortlen);
+            }
+            break;
+        }
+        default:
+            break;
+        }
     }
-    // charset
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[1]->id());
-        Slice value(_s_collations[_index].charset, strlen(_s_collations[_index].charset));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // id
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[2]->id());
-        fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_s_collations[_index].id);
-    }
-    // is_default
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[3]->id());
-        Slice value(_s_collations[_index].is_default, strlen(_s_collations[_index].is_default));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // IS_COMPILED
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[4]->id());
-        Slice value(_s_collations[_index].is_compile, strlen(_s_collations[_index].is_compile));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // sortlen
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[5]->id());
-        fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_s_collations[_index].sortlen);
-    }
+
     _index++;
     return Status::OK();
 }

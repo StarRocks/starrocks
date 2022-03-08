@@ -5,7 +5,7 @@
 namespace starrocks::pipeline {
 
 bool AnalyticSourceOperator::has_output() const {
-    return _analytor->is_sink_complete() && !_analytor->is_chunk_buffer_empty();
+    return !_analytor->is_chunk_buffer_empty();
 }
 
 bool AnalyticSourceOperator::is_finished() const {
@@ -16,9 +16,9 @@ void AnalyticSourceOperator::set_finished(RuntimeState* state) {
     _analytor->set_finished();
 }
 
-Status AnalyticSourceOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_analytor->unref(state));
-    return SourceOperator::close(state);
+void AnalyticSourceOperator::close(RuntimeState* state) {
+    _analytor->unref(state);
+    SourceOperator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> AnalyticSourceOperator::pull_chunk(RuntimeState* state) {

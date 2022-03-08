@@ -36,7 +36,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
-public class DistributionDesc implements Writable {
+public class DistributionDesc implements ParseNode, Writable {
     protected DistributionInfoType type;
 
     public DistributionDesc() {
@@ -44,6 +44,10 @@ public class DistributionDesc implements Writable {
     }
 
     public void analyze(Set<String> colSet) throws AnalysisException {
+        throw new NotImplementedException();
+    }
+
+    public int getBuckets() {
         throw new NotImplementedException();
     }
 

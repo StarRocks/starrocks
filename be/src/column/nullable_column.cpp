@@ -32,6 +32,13 @@ NullableColumn::NullableColumn(ColumnPtr data_column, NullColumnPtr null_column)
             << "nullable column's data must be single column";
 }
 
+size_t NullableColumn::null_count() const {
+    if (!_has_null) {
+        return 0;
+    }
+    return SIMD::count_nonzero(_null_column->get_data());
+}
+
 void NullableColumn::append_datum(const Datum& datum) {
     if (datum.is_null()) {
         append_nulls(1);
@@ -110,7 +117,7 @@ bool NullableColumn::append_nulls(size_t count) {
     return true;
 }
 
-bool NullableColumn::append_strings(const std::vector<Slice>& strs) {
+bool NullableColumn::append_strings(const Buffer<Slice>& strs) {
     if (_data_column->append_strings(strs)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
         return true;
@@ -119,7 +126,7 @@ bool NullableColumn::append_strings(const std::vector<Slice>& strs) {
     return false;
 }
 
-bool NullableColumn::append_strings_overflow(const std::vector<Slice>& strs, size_t max_length) {
+bool NullableColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
     if (_data_column->append_strings_overflow(strs, max_length)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
         return true;
@@ -128,7 +135,7 @@ bool NullableColumn::append_strings_overflow(const std::vector<Slice>& strs, siz
     return false;
 }
 
-bool NullableColumn::append_continuous_strings(const std::vector<Slice>& strs) {
+bool NullableColumn::append_continuous_strings(const Buffer<Slice>& strs) {
     if (_data_column->append_continuous_strings(strs)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
         return true;
@@ -149,6 +156,23 @@ size_t NullableColumn::append_numbers(const void* buff, size_t length) {
 void NullableColumn::append_value_multiple_times(const void* value, size_t count) {
     _data_column->append_value_multiple_times(value, count);
     null_column_data().insert(null_column_data().end(), count, 0);
+}
+
+Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+    size_t replace_num = src.size();
+    if (src.is_nullable()) {
+        const auto& c = down_cast<const NullableColumn&>(src);
+        RETURN_IF_ERROR(_null_column->update_rows(*c._null_column, indexes));
+        RETURN_IF_ERROR(_data_column->update_rows(*c._data_column, indexes));
+    } else {
+        auto new_null_column = NullColumn::create();
+        new_null_column->get_data().insert(new_null_column->get_data().end(), replace_num, 0);
+        RETURN_IF_ERROR(_null_column->update_rows(*new_null_column.get(), indexes));
+        RETURN_IF_ERROR(_data_column->update_rows(src, indexes));
+    }
+
+    return Status::OK();
 }
 
 size_t NullableColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
@@ -232,7 +256,7 @@ const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
     return pos;
 }
 
-void NullableColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+void NullableColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
     }
@@ -290,12 +314,42 @@ void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) cons
     }
 }
 
+int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
+    if (!_has_null) {
+        return _data_column->xor_checksum(from, to);
+    }
+
+    int64_t xor_checksum = 0;
+    size_t num = _null_column->size();
+    uint8_t* src = _null_column->get_data().data();
+
+    // The XOR of NullableColumn
+    // XOR all the 8-bit integers one by one
+    for (size_t i = 0; i < num; ++i) {
+        xor_checksum ^= src[i];
+        if (!src[i]) {
+            xor_checksum ^= _data_column->xor_checksum(i, i + 1);
+        }
+    }
+    return xor_checksum;
+}
+
 void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     if (_has_null && _null_column->get_data()[idx]) {
         buf->push_null();
     } else {
         _data_column->put_mysql_row_buffer(buf, idx);
     }
+}
+
+void NullableColumn::check_or_die() const {
+    CHECK_EQ(_null_column->size(), _data_column->size());
+    // when _has_null=true, the column may have no null value, so don't check.
+    if (!_has_null) {
+        CHECK_EQ(SIMD::count_nonzero(_null_column->get_data()), 0);
+    }
+    _data_column->check_or_die();
+    _null_column->check_or_die();
 }
 
 } // namespace starrocks::vectorized

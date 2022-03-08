@@ -9,11 +9,17 @@ public class HivePartitionKey {
     private final String databaseName;
     private final String tableName;
     private final List<String> partitionValues;
+    private final boolean isHudiTable;
 
     public HivePartitionKey(String databaseName, String tableName, List<String> partitionValues) {
+        this(databaseName, tableName, partitionValues, false);
+    }
+
+    public HivePartitionKey(String databaseName, String tableName, List<String> partitionValues, boolean isHudiTable) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.partitionValues = partitionValues;
+        this.isHudiTable = isHudiTable;
     }
 
     public static HivePartitionKey gen(String databaseName, String tableName, List<String> partitionValues) {
@@ -32,6 +38,10 @@ public class HivePartitionKey {
         return partitionValues;
     }
 
+    public boolean isHudiTable() {
+        return isHudiTable;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -44,11 +54,12 @@ public class HivePartitionKey {
         HivePartitionKey other = (HivePartitionKey) o;
         return Objects.equals(databaseName, other.databaseName) &&
                 Objects.equals(tableName, other.tableName) &&
-                Objects.equals(partitionValues, other.partitionValues);
+                Objects.equals(partitionValues, other.partitionValues) &&
+                Objects.equals(isHudiTable, other.isHudiTable);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName, partitionValues);
+        return Objects.hash(databaseName, tableName, partitionValues, isHudiTable);
     }
 }

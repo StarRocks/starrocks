@@ -332,4 +332,38 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
     }
 }
 
+ColumnPtr BitmapFunctions::bitmap_max(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_BIGINT> builder(size);
+    for (int row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+        } else {
+            int64_t value = viewer.value(row)->max();
+            builder.append(value);
+        }
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr BitmapFunctions::bitmap_min(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_BIGINT> builder(size);
+    for (int row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+        } else {
+            int64_t value = viewer.value(row)->min();
+            builder.append(value);
+        }
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 } // namespace starrocks::vectorized

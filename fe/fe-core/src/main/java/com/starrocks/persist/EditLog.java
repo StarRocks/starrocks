@@ -21,7 +21,7 @@
 
 package com.starrocks.persist;
 
-import com.sleepycat.je.rep.ReplicaWriteException;
+import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.alter.DecommissionBackendJob;
@@ -49,7 +49,7 @@ import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
-import com.starrocks.journal.bdbje.BDBJEJournal;
+import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteInfo;
@@ -82,25 +82,21 @@ import java.util.List;
 public class EditLog {
     public static final Logger LOG = LogManager.getLogger(EditLog.class);
 
-    private EditLogOutputStream editStream = null;
+    private final EditLogOutputStream editStream = null;
 
     private long txId = 0;
 
     private long numTransactions;
     private long totalTimeTransactions;
 
-    private Journal journal;
+    private final Journal journal;
 
     public EditLog(String nodeName) {
-        journal = new BDBJEJournal(nodeName);
+        journal = JournalFactory.create(nodeName);
     }
 
     public long getMaxJournalId() {
         return journal.getMaxJournalId();
-    }
-
-    public long getMinJournalId() {
-        return journal.getMinJournalId();
     }
 
     public JournalCursor read(long fromId, long toId) {
@@ -135,13 +131,13 @@ public class EditLog {
         try {
             switch (opCode) {
                 case OperationType.OP_SAVE_NEXTID: {
-                    String idString = ((Text) journal.getData()).toString();
+                    String idString = journal.getData().toString();
                     long id = Long.parseLong(idString);
                     catalog.setNextId(id + 1);
                     break;
                 }
                 case OperationType.OP_SAVE_TRANSACTION_ID: {
-                    String idString = ((Text) journal.getData()).toString();
+                    String idString = journal.getData().toString();
                     long id = Long.parseLong(idString);
                     Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().initTransactionId(id + 1);
                     break;
@@ -546,16 +542,10 @@ public class EditLog {
                     catalog.replayExpandCluster(info);
                     break;
                 }
-                case OperationType.OP_LINK_CLUSTER: {
-                    final BaseParam param = (BaseParam) journal.getData();
-                    catalog.replayLinkDb(param);
+                // for compatibility
+                case OperationType.OP_LINK_CLUSTER:
+                case OperationType.OP_MIGRATE_CLUSTER:
                     break;
-                }
-                case OperationType.OP_MIGRATE_CLUSTER: {
-                    final BaseParam param = (BaseParam) journal.getData();
-                    catalog.replayMigrateDb(param);
-                    break;
-                }
                 case OperationType.OP_UPDATE_DB: {
                     final DatabaseInfo param = (DatabaseInfo) journal.getData();
                     catalog.replayUpdateDb(param);
@@ -709,6 +699,11 @@ public class EditLog {
                     catalog.getResourceMgr().replayDropResource(operationLog);
                     break;
                 }
+                case OperationType.OP_WORKGROUP: {
+                    final WorkGroupOpEntry entry = (WorkGroupOpEntry) journal.getData();
+                    catalog.getWorkGroupMgr().replayWorkGroupOp(entry);
+                    break;
+                }
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     catalog.getSmallFileMgr().replayCreateFile(smallFile);
@@ -747,6 +742,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
+                case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
@@ -856,10 +852,11 @@ public class EditLog {
 
         long start = System.currentTimeMillis();
 
+        Preconditions.checkState(Catalog.getCurrentCatalog().isMaster(),
+                "non-master fe can not write bdb log");
+
         try {
             journal.write(op, writable);
-        } catch (ReplicaWriteException e) {
-            throw e;
         } catch (Exception e) {
             LOG.error("Fatal Error : write stream Exception", e);
             System.exit(-1);
@@ -934,6 +931,10 @@ public class EditLog {
 
     public void logCreateTable(CreateTableInfo info) {
         logEdit(OperationType.OP_CREATE_TABLE, info);
+    }
+
+    public void logWorkGroupOp(WorkGroupOpEntry op) {
+        logEdit(OperationType.OP_WORKGROUP, op);
     }
 
     public void logAddPartition(PartitionPersistInfo info) {
@@ -1264,6 +1265,10 @@ public class EditLog {
 
     public void logDropFunction(FunctionSearchDesc function) {
         logEdit(OperationType.OP_DROP_FUNCTION, function);
+    }
+
+    public void logSetHasForbitGlobalDict(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
     }
 
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {

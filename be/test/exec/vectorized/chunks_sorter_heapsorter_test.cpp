@@ -18,23 +18,12 @@
 #include "exprs/expr_context.h"
 #include "exprs/slot_ref.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 #include "runtime/types.h"
 #include "util/defer_op.h"
 #include "util/value_generator.h"
 
 namespace starrocks::vectorized {
-
-#define APPLY_FOR_ALL_NUMBER_TYPE(M) \
-    M(TYPE_TINYINT)                  \
-    M(TYPE_SMALLINT)                 \
-    M(TYPE_INT)                      \
-    M(TYPE_BIGINT)                   \
-    M(TYPE_LARGEINT)                 \
-    M(TYPE_FLOAT)                    \
-    M(TYPE_DOUBLE)                   \
-    M(TYPE_DECIMAL32)                \
-    M(TYPE_DECIMAL64)                \
-    M(TYPE_DECIMAL128)
 
 struct HeapChunkSorterTest : public testing::Test {
     void SetUp() override {

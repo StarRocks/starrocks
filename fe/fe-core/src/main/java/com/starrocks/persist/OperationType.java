@@ -176,6 +176,9 @@ public class OperationType {
     // set table in memory
     public static final short OP_MODIFY_IN_MEMORY = 267;
 
+    // global dict
+    public static final short OP_SET_FORBIT_GLOBAL_DICT = 268;
+
     // plugin 270~275
     public static final short OP_INSTALL_PLUGIN = 270;
 
@@ -196,4 +199,7 @@ public class OperationType {
     // statistic 10010 ~ 10020
     public static final short OP_ADD_ANALYZER_JOB = 10010;
     public static final short OP_REMOVE_ANALYZER_JOB = 10011;
+
+    // workgroup 10021 ~ 10030
+    public static final short OP_WORKGROUP = 10021;
 }

@@ -8,20 +8,17 @@
 #include "env/env.h"
 #include "exec/scan_node.h"
 #include "exec/vectorized/hdfs_scanner.h"
-#include "exec/vectorized/hdfs_scanner_orc.h"
-#include "exec/vectorized/hdfs_scanner_parquet.h"
-#include "exec/vectorized/hdfs_scanner_text.h"
 #include "hdfs/hdfs.h"
 
 namespace starrocks::vectorized {
 
 struct HdfsFileDesc {
-    hdfsFS hdfs_fs;
     THdfsFileFormat::type hdfs_file_format;
-    std::shared_ptr<RandomAccessFile> fs;
+    Env* env; // The Env used to open |path|
+    std::string path;
 
     int partition_id = 0;
-    std::string path;
+    std::string scan_range_path;
     int64_t file_length = 0;
     std::vector<const THdfsScanRange*> splits;
 
@@ -31,11 +28,7 @@ struct HdfsFileDesc {
 class HdfsScanNode final : public starrocks::ScanNode {
 public:
     HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~HdfsScanNode() override {
-        if (runtime_state() != nullptr) {
-            close(runtime_state());
-        }
-    }
+    ~HdfsScanNode() override;
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
@@ -46,10 +39,6 @@ public:
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
 
 private:
-    friend HdfsScanner;
-    friend HdfsParquetScanner;
-    friend HdfsOrcScanner;
-    friend HdfsTextScanner;
     int kMaxConcurrency = config::max_hdfs_scanner_num;
 
     template <typename T>
@@ -79,10 +68,10 @@ private:
     // create
     // 1. _scanner_conjunct_ctxs evaled in scanner.
     // 2. _conjunct_ctxs_by_slot evaled in parquet file reader or group reader.
-    void _pre_process_conjunct_ctxs();
+    void _decompose_conjunct_ctxs();
 
     Status _start_scan_thread(RuntimeState* state);
-    void _init_partition_expr_map();
+    void _init_partition_values_map();
     bool _filter_partition(const std::vector<ExprContext*>& partition_exprs);
     Status _find_and_insert_hdfs_file(const THdfsScanRange& scan_range);
     Status _create_and_init_scanner(RuntimeState* state, const HdfsFileDesc& hdfs_file_desc);
@@ -97,16 +86,14 @@ private:
     HdfsScanner* _pop_pending_scanner();
     static int _compute_priority(int32_t num_submitted_tasks);
 
-    void _init_counter(RuntimeState* state);
+    void _init_counter();
 
     Status _init_table();
 
-    int _tuple_id = 0;
     const TupleDescriptor* _tuple_desc = nullptr;
 
     int _min_max_tuple_id = 0;
     TupleDescriptor* _min_max_tuple_desc = nullptr;
-    RowDescriptor* _min_max_row_desc = nullptr;
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
 
     // complex conjuncts, such as contains multi slot, are evaled in scanner.
@@ -137,13 +124,8 @@ private:
 
     std::vector<THdfsScanRange> _scan_ranges;
     std::vector<HdfsFileDesc*> _hdfs_files;
-    const HdfsTableDescriptor* _hdfs_table = nullptr;
-    const IcebergTableDescriptor* _iceberg_table = nullptr;
+    const LakeTableDescriptor* _lake_table = nullptr;
     std::vector<std::string> _hive_column_names;
-
-    std::unique_ptr<MemPool> _mem_pool;
-
-    bool _eos = false;
 
     std::mutex _mtx;
     Stack<ChunkPtr> _chunk_pool;
@@ -154,8 +136,6 @@ private:
     mutable SpinLock _status_mutex;
     Status _status;
     RuntimeState* _runtime_state = nullptr;
-    bool _is_hdfs_fs = true;
-
     std::atomic_bool _pending_token = true;
 
     std::atomic<int32_t> _scanner_submit_count = 0;
@@ -164,20 +144,6 @@ private:
 
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
 
-    RuntimeProfile::Counter* _scan_timer = nullptr;
-    RuntimeProfile::Counter* _scanner_queue_timer = nullptr;
-    RuntimeProfile::Counter* _scan_ranges_counter = nullptr;
-    RuntimeProfile::Counter* _scan_files_counter = nullptr;
-    RuntimeProfile::Counter* _reader_init_timer = nullptr;
-    RuntimeProfile::Counter* _open_file_timer = nullptr;
-    RuntimeProfile::Counter* _expr_filter_timer = nullptr;
-
-    RuntimeProfile::Counter* _io_timer = nullptr;
-    RuntimeProfile::Counter* _io_counter = nullptr;
-    RuntimeProfile::Counter* _column_read_timer = nullptr;
-    RuntimeProfile::Counter* _column_convert_timer = nullptr;
-
-    HdfsIOProfile _hdfs_io_profile;
-    HdfsParquetProfile _parquet_profile;
+    HdfsScanProfile _profile;
 };
 } // namespace starrocks::vectorized

@@ -1,10 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -13,7 +10,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.StringReader;
 import java.util.stream.Stream;
 
 public class InsertPlanTest extends PlanTestBase {
@@ -57,7 +53,6 @@ public class InsertPlanTest extends PlanTestBase {
                 "         2"));
 
         explainString = getInsertExecPlan("insert into t0(v1) select v5 from t1");
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: v5 | 4: expr | 5: expr\n" +
                 "  PARTITION: RANDOM\n" +
@@ -156,7 +151,6 @@ public class InsertPlanTest extends PlanTestBase {
                         "  |  <slot 3> : NULL\n" +
                         "  |  <slot 4> : if(NULL IS NULL, 0, 1)"));
 
-        System.out.println(explainString);
         explainString = getInsertExecPlan("insert into test_insert_mv_count(v3,v1) values(3,1)");
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:2: expr | 3: expr | 1: expr | 4: if"));
         Assert.assertTrue(explainString.contains(
@@ -336,15 +330,11 @@ public class InsertPlanTest extends PlanTestBase {
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
-        SqlScanner input =
-                new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
         connectContext.getDumpInfo().setOriginStmt(originStmt);
         ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
 
         String ret = execPlan.getExplainString(TExplainLevel.NORMAL);
-        //        System.out.println(ret);
         return ret;
     }
 
@@ -368,16 +358,13 @@ public class InsertPlanTest extends PlanTestBase {
         plan = getInsertExecPlan(sql);
         containsKeywords(plan, "OUTPUT EXPRS:1: id | 2: id2", "OLAP TABLE SINK", "0:OlapScanNode");
 
-        sql = "insert into test.bitmap_table select id, to_bitmap(id2) from test.bitmap_table_2;";
-        plan = getInsertExecPlan(sql);
-        containsKeywords(plan, "OUTPUT EXPRS:1: id | 3: to_bitmap", "OLAP TABLE SINK",
-                "1:Project", "<slot 1> : 1: id", "<slot 3> : to_bitmap(CAST(2: id2 AS VARCHAR))", "0:OlapScanNode",
-                "TABLE: bitmap_table_2");
+        Assert.assertThrows("No matching function with signature: to_bitmap(bitmap).", SemanticException.class,
+                () -> getInsertExecPlan(
+                        "insert into test.bitmap_table select id, to_bitmap(id2) from test.bitmap_table_2;"));
 
-        sql = "insert into test.bitmap_table select id, bitmap_hash(id2) from test.bitmap_table_2;";
-        plan = getInsertExecPlan(sql);
-        containsKeywords(plan, "OUTPUT EXPRS:1: id | 3: bitmap_hash", "OLAP TABLE SINK",
-                "1:Project", "<slot 1> : 1: id", "<slot 3> : bitmap_hash(CAST(2: id2 AS VARCHAR))");
+        Assert.assertThrows("No matching function with signature: bitmap_hash(bitmap).", SemanticException.class,
+                () -> getInsertExecPlan(
+                        "insert into test.bitmap_table select id, bitmap_hash(id2) from test.bitmap_table_2;"));
 
         sql = "insert into test.bitmap_table select id, id from test.bitmap_table_2;";
         plan = getInsertExecPlan(sql);

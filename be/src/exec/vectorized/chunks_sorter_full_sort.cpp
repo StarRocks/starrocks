@@ -3,8 +3,10 @@
 #include "chunks_sorter_full_sort.h"
 
 #include "column/type_traits.h"
+#include "exec/vectorized/chunks_sorter.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
+#include "runtime/primitive_type_infra.h"
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
@@ -340,7 +342,17 @@ Status ChunksSorterFullSort::_sort_chunks(RuntimeState* state) {
     // Step2: sort by columns or row
     // For no more than three order-by columns, sorting by columns can benefit from reducing
     // the cost of calling virtual functions of Column::compare_at.
-    if (_get_number_of_order_by_columns() <= 3) {
+    CompareStrategy strategy = Default;
+    if (_compare_strategy != Default) {
+        strategy = _compare_strategy;
+    } else {
+        if (_get_number_of_order_by_columns() <= 3) {
+            strategy = ColumnWise;
+        } else {
+            strategy = RowWise;
+        }
+    }
+    if (strategy == ColumnWise) {
         RETURN_IF_ERROR(_sort_by_columns(state));
     } else {
         RETURN_IF_ERROR(_sort_by_row_cmp(state));
@@ -452,23 +464,7 @@ Status ChunksSorterFullSort::_sort_by_columns(RuntimeState* state) {
         ExprContext* expr_ctx = (*_sort_exprs)[col_index];
         if (column->is_nullable()) {
             switch (expr_ctx->root()->type().type) {
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_BOOLEAN)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_TINYINT)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_SMALLINT)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_INT)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_BIGINT)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_LARGEINT)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_FLOAT)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DOUBLE)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DECIMALV2)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DECIMAL32)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DECIMAL64)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DECIMAL128)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_CHAR)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_VARCHAR)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DATE)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DATETIME)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_TIME)
+                APPLY_FOR_ALL_SCALAR_TYPE(CASE_FOR_NULLABLE_COLUMN_SORT)
             default: {
                 RETURN_IF_ERROR(SortHelper::sort_on_other_column(state, column, _sort_order_flag[col_index],
                                                                  _null_first_flag[col_index], _sorted_permutation));
@@ -477,23 +473,7 @@ Status ChunksSorterFullSort::_sort_by_columns(RuntimeState* state) {
             }
         } else {
             switch (expr_ctx->root()->type().type) {
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_BOOLEAN)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_TINYINT)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_SMALLINT)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_INT)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_BIGINT)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_LARGEINT)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_FLOAT)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DOUBLE)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DECIMALV2)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DECIMAL32)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DECIMAL64)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DECIMAL128)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_CHAR)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_VARCHAR)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DATE)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DATETIME)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_TIME)
+                APPLY_FOR_ALL_SCALAR_TYPE(CASE_FOR_NOT_NULL_COLUMN_SORT)
             default: {
                 RETURN_IF_ERROR(SortHelper::sort_on_other_column(state, column, _sort_order_flag[col_index],
                                                                  _null_first_flag[col_index], _sorted_permutation));

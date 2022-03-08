@@ -51,9 +51,9 @@ Status SortExecExprs::prepare(RuntimeState* state, const RowDescriptor& child_ro
                               const RowDescriptor& output_row_desc) {
     _runtime_state = state;
     if (_materialize_tuple) {
-        RETURN_IF_ERROR(Expr::prepare(_sort_tuple_slot_expr_ctxs, state, child_row_desc));
+        RETURN_IF_ERROR(Expr::prepare(_sort_tuple_slot_expr_ctxs, state));
     }
-    RETURN_IF_ERROR(Expr::prepare(_lhs_ordering_expr_ctxs, state, output_row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_lhs_ordering_expr_ctxs, state));
     return Status::OK();
 }
 

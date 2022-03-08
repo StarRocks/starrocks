@@ -82,7 +82,8 @@ enum TPrimitiveType {
   PERCENTILE,
   DECIMAL32,
   DECIMAL64,
-  DECIMAL128
+  DECIMAL128,
+  JSON
 }
 
 enum TTypeNodeType {
@@ -149,7 +150,8 @@ enum TPushType {
     DELETE,
     LOAD_DELETE,
     // for spark load push request
-    LOAD_V2
+    LOAD_V2,
+    CANCEL_DELETE
 }
 
 enum TTaskType {
@@ -178,7 +180,9 @@ enum TTaskType {
     // this type of task will replace both ROLLUP and SCHEMA_CHANGE
     ALTER,
     INSTALL_PLUGIN,
-    UNINSTALL_PLUGIN
+    UNINSTALL_PLUGIN,
+    // this use for calculate enum count
+    NUM_TASK_TYPE
 }
 
 enum TStmtType {
@@ -283,6 +287,7 @@ struct TAggregateFunction {
 
 struct TTableFunction {
   1: required list<TTypeDesc> ret_types
+  2: optional string symbol
 }
 
 // Represents a function in the Catalog.
@@ -350,6 +355,8 @@ enum TTableType {
     ES_TABLE,
     HDFS_TABLE,
     ICEBERG_TABLE,
+    HUDI_TABLE,
+    JDBC_TABLE,
     VIEW = 20
 }
 

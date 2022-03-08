@@ -32,7 +32,6 @@
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "gutil/strings/numbers.h"
-#include "udf/udf.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_global.h"
 
@@ -317,30 +316,6 @@ public:
             i = DIG_BASE - 1;
         }
         return value;
-    }
-
-    static DecimalValue from_decimal_val(const starrocks_udf::DecimalVal& val) {
-        DecimalValue result;
-        result._int_length = val.int_len;
-        result._frac_length = val.frac_len;
-        result._sign = val.sign;
-
-        result._buffer_length = DECIMAL_BUFF_LENGTH;
-
-        DIAGNOSTIC_PUSH
-        DIAGNOSTIC_IGNORE("-Warray-bounds")
-        DIAGNOSTIC_IGNORE("-Wstringop-overflow=")
-        memcpy(result._buffer, val.buffer, sizeof(int32_t) * DECIMAL_BUFF_LENGTH);
-        DIAGNOSTIC_POP
-
-        return result;
-    }
-
-    void to_decimal_val(starrocks_udf::DecimalVal* value) const {
-        value->int_len = _int_length;
-        value->frac_len = _frac_length;
-        value->sign = _sign;
-        memcpy(value->buffer, _buffer, sizeof(int32_t) * DECIMAL_BUFF_LENGTH);
     }
 
     // set DecimalValue to zero

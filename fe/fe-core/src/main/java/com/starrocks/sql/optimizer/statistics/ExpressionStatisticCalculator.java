@@ -116,7 +116,7 @@ public class ExpressionStatisticCalculator {
                     min = min.castTo(cast.getType());
                 }
             } catch (Exception e) {
-                LOG.warn("expression statistic compute cast failed: " + max.toString() + ", " + min.toString() +
+                LOG.debug("expression statistic compute cast failed: " + max.toString() + ", " + min.toString() +
                         ", to type: " + cast.getType());
                 return childStatistic;
             }
@@ -179,7 +179,7 @@ public class ExpressionStatisticCalculator {
                         minValue = getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
                         maxValue = getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
                     } catch (DateTimeException e) {
-                        LOG.warn("get date type column statistics min/max failed. " + e);
+                        LOG.debug("get date type column statistics min/max failed. " + e);
                     }
                     return new ColumnStatistic(minValue, maxValue, 0,
                             callOperator.getType().getTypeSize(),
@@ -205,8 +205,9 @@ public class ExpressionStatisticCalculator {
                     return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
                             callOperator.getType().getTypeSize(), rowCount);
                 case FunctionSet.MULTI_DISTINCT_COUNT:
+                    // use child column averageRowSize instead call operator type size
                     return new ColumnStatistic(0, columnStatistic.getDistinctValuesCount(), 0,
-                            callOperator.getType().getTypeSize(), rowCount);
+                            columnStatistic.getAverageRowSize(), rowCount);
                 // use child column statistics for now
                 case FunctionSet.SUM:
                 case FunctionSet.AVG:

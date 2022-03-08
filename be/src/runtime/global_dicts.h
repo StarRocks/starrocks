@@ -22,6 +22,7 @@ class RuntimeState;
 namespace vectorized {
 class ColumnRef;
 
+constexpr auto LowCardDictType = TYPE_INT;
 // TODO: we need to change the dict type to int16 later
 using DictId = int32_t;
 
@@ -36,6 +37,15 @@ using GlobalDictMapEntity = std::pair<GlobalDictMap, RGlobalDictMap>;
 using GlobalDictMaps = phmap::flat_hash_map<uint32_t, GlobalDictMapEntity>;
 
 inline std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map) {
+    stream << "[";
+    for (const auto& [k, v] : map) {
+        stream << "(" << k << "," << v << "),";
+    }
+    stream << "]";
+    return stream;
+}
+
+inline std::ostream& operator<<(std::ostream& stream, const GlobalDictMap& map) {
     stream << "[";
     for (const auto& [k, v] : map) {
         stream << "(" << k << "," << v << "),";
@@ -72,6 +82,7 @@ public:
 
     void rewrite_exprs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
                        const std::vector<SlotId>& target_slotids);
+    template <bool close_original_expr>
     void rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs, RuntimeState* state);
 
     void close(RuntimeState* state) noexcept;
@@ -93,7 +104,7 @@ private:
     void _check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
 
     // use code mapping rewrite expr
-    template <bool is_predicate, typename ExprType>
+    template <bool close_original_expr, bool is_predicate, typename ExprType>
     void _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
                             const std::vector<SlotId>& slot_ids);
 
@@ -168,7 +179,7 @@ struct DictDecoder {
     }
 };
 
-using DefaultDecoder = DictDecoder<TYPE_INT, RGlobalDictMap, TYPE_VARCHAR>;
+using DefaultDecoder = DictDecoder<LowCardDictType, RGlobalDictMap, TYPE_VARCHAR>;
 using DefaultDecoderPtr = std::unique_ptr<DefaultDecoder>;
 
 } // namespace vectorized

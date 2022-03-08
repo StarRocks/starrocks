@@ -67,6 +67,8 @@ Status BetaRowset::init() {
     return Status::OK();
 }
 
+// use partial_rowset_footer to indicate the segment footer position and size
+// if partial_rowset_footer is nullptr, the segment_footer is at the end of the segment_file
 Status BetaRowset::do_load() {
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
 
@@ -75,7 +77,7 @@ Status BetaRowset::do_load() {
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
         auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path, seg_id,
-                                 _schema, &footer_size_hint);
+                                 _schema, &footer_size_hint, rowset_meta()->partial_rowset_footer(seg_id));
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();
@@ -346,9 +348,10 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
     return seg_iterators;
 }
 
+// this function is only used for partial update so far
+// make sure segment_footer is in the end of segment_file before call this function
 Status BetaRowset::reload() {
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {

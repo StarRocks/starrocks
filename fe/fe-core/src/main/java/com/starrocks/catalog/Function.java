@@ -533,92 +533,6 @@ public class Function implements Writable {
         return "";
     }
 
-    public static String getUdfTypeName(PrimitiveType t) {
-        switch (t) {
-            case BOOLEAN:
-                return "boolean_val";
-            case TINYINT:
-                return "tiny_int_val";
-            case SMALLINT:
-                return "small_int_val";
-            case INT:
-                return "int_val";
-            case BIGINT:
-                return "big_int_val";
-            case LARGEINT:
-                return "large_int_val";
-            case FLOAT:
-                return "float_val";
-            case DOUBLE:
-            case TIME:
-                return "double_val";
-            case VARCHAR:
-            case CHAR:
-            case HLL:
-            case BITMAP:
-            case PERCENTILE:
-                return "string_val";
-            case DATE:
-            case DATETIME:
-                return "datetime_val";
-            case DECIMALV2:
-                return "decimalv2_val";
-            case DECIMAL32:
-                return "decimal32_val";
-            case DECIMAL64:
-                return "decimal64_val";
-            case DECIMAL128:
-                return "decimal128_val";
-            default:
-                Preconditions.checkState(false, t.toString());
-                return "";
-        }
-    }
-
-    public static String getUdfType(PrimitiveType t) {
-        switch (t) {
-            case NULL_TYPE:
-                return "AnyVal";
-            case BOOLEAN:
-                return "BooleanVal";
-            case TINYINT:
-                return "TinyIntVal";
-            case SMALLINT:
-                return "SmallIntVal";
-            case INT:
-                return "IntVal";
-            case BIGINT:
-                return "BigIntVal";
-            case LARGEINT:
-                return "LargeIntVal";
-            case FLOAT:
-                return "FloatVal";
-            case DOUBLE:
-            case TIME:
-                return "DoubleVal";
-            case VARCHAR:
-            case CHAR:
-            case HLL:
-            case BITMAP:
-            case PERCENTILE:
-                return "StringVal";
-            case DATE:
-            case DATETIME:
-                return "DateTimeVal";
-            case DECIMALV2:
-                return "DecimalV2Val";
-            case DECIMAL32:
-                return "Decimal32";
-            case DECIMAL64:
-                return "Decimal64";
-            case DECIMAL128:
-                return "Decimal128";
-            default:
-                Preconditions.checkState(false, t.toString());
-                return "";
-        }
-    }
-
     public static Function getFunction(List<Function> fns, Function desc, CompareMode mode) {
         if (fns == null) {
             return null;
@@ -664,7 +578,8 @@ public class Function implements Writable {
     enum FunctionType {
         ORIGIN(0),
         SCALAR(1),
-        AGGREGATE(2);
+        AGGREGATE(2),
+        TABLE(3);
 
         private int code;
 
@@ -684,6 +599,8 @@ public class Function implements Writable {
                     return SCALAR;
                 case 2:
                     return AGGREGATE;
+                case 3:
+                    return TABLE;
             }
             return null;
         }
@@ -755,6 +672,9 @@ public class Function implements Writable {
             case AGGREGATE:
                 function = new AggregateFunction();
                 break;
+            case TABLE:
+                function = new TableFunction();
+                break;
             default:
                 throw new Error("Unsupported function type, type=" + functionType);
         }
@@ -794,7 +714,7 @@ public class Function implements Writable {
             if (this instanceof ScalarFunction) {
                 row.add("Scalar");
                 row.add("NULL");
-            } else {
+            } else if (this instanceof AggregateFunction) {
                 row.add("Aggregate");
                 AggregateFunction aggFunc = (AggregateFunction) this;
                 Type intermediateType = aggFunc.getIntermediateType();
@@ -803,6 +723,10 @@ public class Function implements Writable {
                 } else {
                     row.add("NULL");
                 }
+            } else {
+                TableFunction tableFunc = (TableFunction) this;
+                row.add("Table");
+                row.add("NULL");
             }
             // property
             row.add(getProperties());

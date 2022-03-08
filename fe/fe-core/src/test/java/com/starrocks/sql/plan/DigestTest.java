@@ -22,7 +22,6 @@ public class DigestTest extends PlanTestBase {
         digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
         Assert.assertEquals(digest1, digest2);
 
-
         sql1 = "select s_address from supplier where a < 2 and b > -1 ";
         sql2 = "select s_address from supplier where a < 1000      and b > 100000 ";
         digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);

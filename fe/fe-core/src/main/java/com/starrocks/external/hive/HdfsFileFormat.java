@@ -8,18 +8,21 @@ import com.starrocks.thrift.THdfsFileFormat;
 public enum HdfsFileFormat {
     UNKNOWN("unknown"),
     PARQUET("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
+    HUDI_PARQUET("org.apache.hudi.hadoop.HoodieParquetInputFormat"),
     ORC("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
     TEXT("org.apache.hadoop.mapred.TextInputFormat");
 
     private static final ImmutableMap<String, HdfsFileFormat> validInputFormats =
             new ImmutableMap.Builder<String, HdfsFileFormat>()
                     .put("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat", PARQUET)
+                    .put("org.apache.hudi.hadoop.HoodieParquetInputFormat", HUDI_PARQUET)
                     .put("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat", ORC)
                     .put("org.apache.hadoop.mapred.TextInputFormat", TEXT)
                     .build();
     private static final ImmutableMap<String, Boolean> fileFormatSplittableInfos =
             new ImmutableMap.Builder<String, Boolean>()
                     .put("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat", true)
+                    .put("org.apache.hudi.hadoop.HoodieParquetInputFormat", true)
                     .put("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat", true)
                     .put("org.apache.hadoop.mapred.TextInputFormat", true)
                     .build();
@@ -41,6 +44,7 @@ public enum HdfsFileFormat {
     public THdfsFileFormat toThrift() {
         switch (this) {
             case PARQUET:
+            case HUDI_PARQUET:
                 return THdfsFileFormat.PARQUET;
             case ORC:
                 return THdfsFileFormat.ORC;

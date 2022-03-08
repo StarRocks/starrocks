@@ -35,20 +35,18 @@ public class ConstantExpressionTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.startFEServer(runningDir);
+        UtFrameUtils.createMinStarRocksCluster(runningDir);
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setQueryId(UUIDUtil.genUUID());
     }
 
     private static void testFragmentPlanContainsConstExpr(String sql, String result) throws Exception {
         String explainString = UtFrameUtils.getFragmentPlan(connectContext, sql);
-        System.out.println("explainString=" + explainString);
         Assert.assertTrue(explainString.contains("constant exprs: \n         " + result));
     }
 
     private static void testFragmentPlanContains(String sql, String result) throws Exception {
         String explainString = UtFrameUtils.getFragmentPlan(connectContext, sql);
-        System.out.println("explainString=" + explainString);
         Assert.assertTrue(explainString.contains(result));
     }
 
@@ -128,6 +126,17 @@ public class ConstantExpressionTest {
         testFragmentPlanContainsConstExpr(
                 "select cast ('2020-01-20' as date);",
                 "'2020-01-20'");
+    }
+
+    @Test
+    public void testCastToDecimalLiteral() throws Exception {
+        testFragmentPlanContainsConstExpr(
+                "select cast(151971657 as decimal32);",
+                "NULL");
+
+        testFragmentPlanContainsConstExpr(
+                "select cast('0.5' as decimal32);",
+                "0.5");
     }
 
     @Test

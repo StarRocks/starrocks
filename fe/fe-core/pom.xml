@@ -37,6 +37,7 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
+        <jacoco.version>0.8.5</jacoco.version> 
         <starrocks.thridparty>${basedir}/../../thirdparty</starrocks.thridparty>
         <iceberg.version>0.12.1</iceberg.version>
     </properties>
@@ -180,12 +181,6 @@ under the License.
             <groupId>org.jmockit</groupId>
             <artifactId>jmockit</artifactId>
             <scope>test</scope>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/joda-time/joda-time -->
-        <dependency>
-            <groupId>joda-time</groupId>
-            <artifactId>joda-time</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
@@ -510,12 +505,81 @@ under the License.
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aws</artifactId>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.antlr/antlr4 -->
+        <dependency>
+            <groupId>org.antlr</groupId>
+            <artifactId>antlr4</artifactId>
+            <version>4.9.2</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>commons-lang</groupId>
+                    <artifactId>commons-lang</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-common -->
+        <dependency>
+            <groupId>org.apache.hudi</groupId>
+            <artifactId>hudi-common</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-hadoop-mr -->
+        <dependency>
+            <groupId>org.apache.hudi</groupId>
+            <artifactId>hudi-hadoop-mr</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
         <finalName>starrocks-fe</finalName>
 
         <plugins>
+            <!-- fe ut coverage-->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.5</version>
+                <executions>
+                    <execution>
+                        <id>default-prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                        <configuration>
+                            <propertyName>jacocoArgLine</propertyName>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>default-report</id>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>default-check</id>
+                        <goals>
+                             <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                 <rule>
+                                     <element>BUNDLE</element>
+                                     <limits>
+                                         <limit>
+                                             <counter>COMPLEXITY</counter>
+                                             <value>COVEREDRATIO</value>
+                                             <minimum>0.60</minimum>
+                                         </limit>
+                                     </limits>
+                                 </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!--thrift-->
             <plugin>
                 <groupId>org.apache.thrift.tools</groupId>
@@ -582,6 +646,32 @@ under the License.
                 </executions>
             </plugin>
 
+            <!--antlr-->
+            <plugin>
+                <groupId>org.antlr</groupId>
+                <artifactId>antlr4-maven-plugin</artifactId>
+                <version>4.9.2</version>
+                <executions>
+                    <execution>
+                        <id>antlr</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>antlr4</goal>
+                        </goals>
+                        <configuration>
+                            <sourceDirectory>src/main/java/com/starrocks/sql/parser</sourceDirectory>
+                            <outputDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</outputDirectory>
+                            <libDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</libDirectory>
+                            <visitor>true</visitor>
+                            <arguments>
+                                <argument>-package</argument>
+                                <argument>com.starrocks.sql.parser</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- jmockit -->
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -592,7 +682,7 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
                     <argLine>
-                        -javaagent:${settings.localRepository}/org/jmockit/jmockit/1.48/jmockit-1.48.jar -Xmx2048m -Duser.timezone=Asia/Shanghai
+                        -javaagent:${settings.localRepository}/org/jmockit/jmockit/1.48/jmockit-1.48.jar -Xmx2048m -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
@@ -732,6 +822,7 @@ under the License.
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
                     <linkXRef>false</linkXRef>
+                    <excludes>**/sql/parser/gen/**</excludes>
                 </configuration>
                 <executions>
                     <execution>
@@ -758,7 +849,6 @@ under the License.
                     </execution>
                 </executions>
             </plugin>
-
         </plugins>
 
         <pluginManagement>

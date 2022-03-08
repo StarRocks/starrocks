@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "exprs/vectorized/function_helper.h"
+#include "exprs/vectorized/array_functions.tpp"
 
 namespace starrocks::vectorized {
 
@@ -18,6 +18,96 @@ public:
 
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
+
+#define APPLY_COMMONE_TYPES_FOR_ARRAY(M)        \
+    M(boolean, PrimitiveType::TYPE_BOOLEAN)     \
+    M(tinyint, PrimitiveType::TYPE_TINYINT)     \
+    M(smallint, PrimitiveType::TYPE_SMALLINT)   \
+    M(int, PrimitiveType::TYPE_INT)             \
+    M(bigint, PrimitiveType::TYPE_BIGINT)       \
+    M(largeint, PrimitiveType::TYPE_LARGEINT)   \
+    M(float, PrimitiveType::TYPE_FLOAT)         \
+    M(double, PrimitiveType::TYPE_DOUBLE)       \
+    M(varchar, PrimitiveType::TYPE_VARCHAR)     \
+    M(char, PrimitiveType::TYPE_CHAR)           \
+    M(decimalv2, PrimitiveType::TYPE_DECIMALV2) \
+    M(datetime, PrimitiveType::TYPE_DATETIME)   \
+    M(date, PrimitiveType::TYPE_DATE)
+
+#define DEFINE_ARRAY_DISTINCT_FN(NAME, PT)                                                     \
+    static ColumnPtr array_distinct_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayDistinct<PT>::process(context, columns);                                   \
+    }
+    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_DISTINCT_FN)
+#undef DEFINE_ARRAY_DISTINCT_FN
+
+#define DEFINE_ARRAY_DIFFERENCE_FN(NAME, PT)                                                     \
+    static ColumnPtr array_difference_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayDifference<PT>::process(context, columns);                                   \
+    }
+
+    DEFINE_ARRAY_DIFFERENCE_FN(boolean, PrimitiveType::TYPE_BOOLEAN)
+    DEFINE_ARRAY_DIFFERENCE_FN(tinyint, PrimitiveType::TYPE_TINYINT)
+    DEFINE_ARRAY_DIFFERENCE_FN(smallint, PrimitiveType::TYPE_SMALLINT)
+    DEFINE_ARRAY_DIFFERENCE_FN(int, PrimitiveType::TYPE_INT)
+    DEFINE_ARRAY_DIFFERENCE_FN(bigint, PrimitiveType::TYPE_BIGINT)
+    DEFINE_ARRAY_DIFFERENCE_FN(largeint, PrimitiveType::TYPE_LARGEINT)
+    DEFINE_ARRAY_DIFFERENCE_FN(float, PrimitiveType::TYPE_FLOAT)
+    DEFINE_ARRAY_DIFFERENCE_FN(double, PrimitiveType::TYPE_DOUBLE)
+    DEFINE_ARRAY_DIFFERENCE_FN(decimalv2, PrimitiveType::TYPE_DECIMALV2)
+
+#undef DEFINE_ARRAY_DIFFERENCE_FN
+
+#define DEFINE_ARRAY_SLICE_FN(NAME, PT)                                                     \
+    static ColumnPtr array_slice_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArraySlice<PT>::process(context, columns);                                   \
+    }
+    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SLICE_FN)
+#undef DEFINE_ARRAY_SLICE_FN
+
+#define DEFINE_ARRAY_CONCAT_FN(NAME, PT)                                                     \
+    static ColumnPtr array_concat_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayConcat<PT>::process(context, columns);                                   \
+    }
+    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_CONCAT_FN)
+#undef DEFINE_ARRAY_CONCAT_FN
+
+#define DEFINE_ARRAY_OVERLAP_FN(NAME, PT)                                                     \
+    static ColumnPtr array_overlap_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayOverlap<PT>::process(context, columns);                                   \
+    }
+    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_OVERLAP_FN)
+#undef DEFINE_ARRAY_OVERLAP_FN
+
+#define DEFINE_ARRAY_INTERSECT_FN(NAME, PT)                                                     \
+    static ColumnPtr array_intersect_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayIntersect<PT>::process(context, columns);                                   \
+    }
+    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_INTERSECT_FN)
+#undef DEFINE_ARRAY_INTERSECT_FN
+
+#define DEFINE_ARRAY_SORT_FN(NAME, PT)                                                     \
+    static ColumnPtr array_sort_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArraySort<PT>::process(context, columns);                                   \
+    }
+    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SORT_FN)
+#undef DEFINE_ARRAY_SORT_FN
+
+#define DEFINE_ARRAY_REVERSE_FN(NAME, PT)                                                     \
+    static ColumnPtr array_reverse_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayReverse<PT>::process(context, columns);                                   \
+    }
+    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_REVERSE_FN)
+#undef DEFINE_ARRAY_REVERSE_FN
+
+#define DEFINE_ARRAY_JOIN_FN(NAME)                                                         \
+    static ColumnPtr array_join_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayJoin::process(context, columns);                                       \
+    }
+
+    DEFINE_ARRAY_JOIN_FN(varchar);
+
+#undef DEFINE_ARRAY_JOIN_FN
 
     DEFINE_VECTORIZED_FN(array_sum_boolean);
     DEFINE_VECTORIZED_FN(array_sum_tinyint);

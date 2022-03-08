@@ -6,20 +6,19 @@
 
 namespace starrocks {
 
-Status CompressedSequentialFile::read(Slice* result) {
-    size_t output_len = result->size;
+StatusOr<int64_t> CompressedSequentialFile::read(void* data, int64_t size) {
+    size_t output_len = size;
     size_t output_bytes = 0;
-    result->size = 0;
 
     while (output_bytes == 0) {
         Status st = _compressed_buff.read(_input_file.get());
         if (!st.ok() && !st.is_end_of_file()) {
             return st;
         } else if (st.is_end_of_file() && _stream_end) {
-            return Status::OK();
+            break;
         }
 
-        uint8_t* output = reinterpret_cast<uint8_t*>(result->data);
+        uint8_t* output = reinterpret_cast<uint8_t*>(data);
         Slice compressed_data = _compressed_buff.read_buffer();
         size_t input_bytes_read = 0;
         size_t output_bytes_written = 0;
@@ -36,9 +35,7 @@ Status CompressedSequentialFile::read(Slice* result) {
         _compressed_buff.skip(input_bytes_read);
         output_bytes += output_bytes_written;
     }
-    result->size = output_bytes;
-
-    return Status::OK();
+    return output_bytes;
 }
 
 Status CompressedSequentialFile::skip(uint64_t n) {
@@ -46,13 +43,13 @@ Status CompressedSequentialFile::skip(uint64_t n) {
     buff.resize(n);
     while (n > 0) {
         Slice s(buff.data(), n);
-        Status st = read(&s);
-        if (st.ok()) {
-            n -= s.size;
-        } else if (st.is_end_of_file()) {
+        auto res = read(buff.data(), n);
+        if (res.ok()) {
+            n -= *res;
+        } else if (res.status().is_end_of_file()) {
             return Status::OK();
         } else {
-            return st;
+            return res.status();
         }
     }
     return Status::OK();

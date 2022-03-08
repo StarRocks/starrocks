@@ -115,7 +115,7 @@ class SchemaChangeTest : public testing::Test {
         Datum dst_datum;
         auto converter = vectorized::get_type_converter(type, OLAP_FIELD_TYPE_VARCHAR);
         std::unique_ptr<MemPool> mem_pool(new MemPool());
-        Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), dst_datum, mem_pool.get());
+        Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
         ASSERT_TRUE(st.ok());
 
         EXPECT_EQ(expect_val, dst_datum.get_slice().to_string());
@@ -141,10 +141,14 @@ class SchemaChangeTest : public testing::Test {
         Datum dst_datum;
         auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_VARCHAR, type);
         std::unique_ptr<MemPool> mem_pool(new MemPool());
-        Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), dst_datum, mem_pool.get());
+        Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
         ASSERT_TRUE(st.ok());
 
-        EXPECT_EQ(expect_val, dst_datum.get<T>());
+        if constexpr (std::is_same_v<T, JsonValue*>) {
+            EXPECT_EQ(*expect_val, dst_datum.get<JsonValue>());
+        } else {
+            EXPECT_EQ(expect_val, dst_datum.get<T>());
+        }
     }
 
     SchemaChange* _sc_procedure;
@@ -221,7 +225,7 @@ TEST_F(SchemaChangeTest, convert_float_to_double) {
     Datum dst_datum;
     auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_FLOAT, OLAP_FIELD_TYPE_DOUBLE);
     std::unique_ptr<MemPool> mem_pool(new MemPool());
-    Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), dst_datum, mem_pool.get());
+    Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
 
     EXPECT_EQ(1.2345, dst_datum.get_double());
@@ -243,16 +247,16 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
 
     tm time_tm;
     strptime(origin_val.c_str(), "%Y-%m-%d %H:%M:%S", &time_tm);
-    TimestampValue timestamp = TimestampValue::create(2021, 9, 28, 0, 0, 0);
-    int64_t value = timestamp.timestamp();
+    int64_t value = ((time_tm.tm_year + 1900) * 10000L + (time_tm.tm_mon + 1) * 100L + time_tm.tm_mday) * 1000000L +
+                    time_tm.tm_hour * 10000L + time_tm.tm_min * 100L + time_tm.tm_sec;
     src_datum.set_int64(value);
     Datum dst_datum;
     auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_DATETIME, OLAP_FIELD_TYPE_DATE);
 
-    Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), dst_datum, mem_pool.get());
+    Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
 
-    int dst_value = (2021 << 9) + (9 << 5) + 28;
+    int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
     EXPECT_EQ(dst_value, dst_datum.get_uint24());
 }
 
@@ -271,16 +275,15 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
     tm time_tm;
     strptime(origin_val.c_str(), "%Y-%m-%d", &time_tm);
 
-    DateValue date_v2;
-    date_v2.from_date(2021, 9, 28);
-    src_datum.set_date(date_v2);
+    int value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
+    src_datum.set_uint24(value);
     Datum dst_datum;
     auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_DATE, OLAP_FIELD_TYPE_DATETIME);
 
-    Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), dst_datum, mem_pool.get());
+    Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
 
-    int64_t dst_value = (2021 * 10000L + 9 * 100L + 28) * 1000000L;
+    int64_t dst_value = ((time_tm.tm_year + 1900) * 10000L + (time_tm.tm_mon + 1) * 100L + time_tm.tm_mday) * 1000000L;
     EXPECT_EQ(dst_value, dst_datum.get_int64());
 }
 
@@ -303,7 +306,7 @@ TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
     Datum dst_datum;
     auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_DATE_V2);
 
-    Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), dst_datum, mem_pool.get());
+    Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
 
     EXPECT_EQ("2021-09-28", dst_datum.get_date().to_string());
@@ -328,7 +331,7 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     Datum dst_datum;
     auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_DATE);
 
-    Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), dst_datum, mem_pool.get());
+    Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
 
     int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
@@ -526,6 +529,20 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1003);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1004);
+}
+
+TEST_F(SchemaChangeTest, convert_varchar_to_json) {
+    std::vector<std::string> test_cases = {"{\"a\": 1}", "null", "[1,2,3]"};
+    for (auto json_str : test_cases) {
+        JsonValue json = JsonValue::parse(json_str).value();
+        test_convert_from_varchar(OLAP_FIELD_TYPE_JSON, 16, json_str, &json);
+    }
+}
+
+TEST_F(SchemaChangeTest, convert_json_to_varchar) {
+    std::string json_str = "{\"a\": 1}";
+    JsonValue json = JsonValue::parse(json_str).value();
+    test_convert_to_varchar(OLAP_FIELD_TYPE_JSON, 16, &json, json_str);
 }
 
 } // namespace starrocks::vectorized

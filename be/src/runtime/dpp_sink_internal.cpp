@@ -154,7 +154,7 @@ Status PartitionInfo::from_thrift(ObjectPool* pool, const TRangePartition& t_par
 
 Status PartitionInfo::prepare(RuntimeState* state, const RowDescriptor& row_desc) {
     if (_distributed_expr_ctxs.size() > 0) {
-        RETURN_IF_ERROR(Expr::prepare(_distributed_expr_ctxs, state, row_desc));
+        RETURN_IF_ERROR(Expr::prepare(_distributed_expr_ctxs, state));
     }
     return Status::OK();
 }

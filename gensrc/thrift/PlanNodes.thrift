@@ -60,6 +60,7 @@ enum TPlanNodeType {
   PROJECT_NODE,
   TABLE_FUNCTION_NODE,
   DECODE_NODE,
+  JDBC_SCAN_NODE,
 }
 
 // phases of an execution node
@@ -341,6 +342,16 @@ struct TOlapScanNode {
   // which columns only be used to filter data in the stage of scan data
   24: optional list<string> unused_output_column_name
 }
+
+struct TJDBCScanNode {
+  1: optional Types.TTupleId tuple_id
+  2: optional string table_name
+  3: optional list<string> columns
+  4: optional list<string> filters
+  5: optional i64 limit
+}
+
+
 struct TEqJoinCondition {
   // left-hand side of "<a> = <b>"
   1: required Exprs.TExpr left;
@@ -413,6 +424,8 @@ struct THashJoinNode {
   51: optional bool build_runtime_filters_from_planner;
 
   52: optional TJoinDistributionMode distribution_mode;
+  53: optional list<Exprs.TExpr> partition_exprs
+  54: optional list<Types.TSlotId> output_columns
 }
 
 struct TMergeJoinNode {
@@ -694,6 +707,8 @@ struct TExchangeNode {
   2: optional TSortInfo sort_info
   // This is tHe number of rows to skip before returning results
   3: optional i64 offset
+  // Sender's partition type
+  4: optional Partitions.TPartitionType partition_type;
 }
 
 // This contains all of the information computed by the plan as part of the resource
@@ -891,6 +906,8 @@ struct TPlanNode {
   58: optional list<Types.TSlotId> filter_null_value_columns;
   // for outer join and cross join
   59: optional bool need_create_tuple_columns;
+  // Scan node for jdbc
+  60: optional TJDBCScanNode jdbc_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

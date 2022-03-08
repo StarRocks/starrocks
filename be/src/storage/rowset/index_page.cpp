@@ -87,54 +87,30 @@ Status IndexPageReader::parse(const Slice& body, const IndexPageFooterPB& footer
 }
 ///////////////////////////////////////////////////////////////////////////////
 
+// This function has the meaning of interval, in fact, it is to find first possible Page which <=search key
 Status IndexPageIterator::seek_at_or_before(const Slice& search_key) {
-    int32_t left = 0;
-    int32_t right = _reader->count() - 1;
-    while (left <= right) {
-        int32_t mid = left + (right - left) / 2;
-        int cmp = search_key.compare(_reader->get_key(mid));
-        if (cmp < 0) {
-            right = mid - 1;
-        } else if (cmp > 0) {
-            left = mid + 1;
-        } else {
-            _pos = mid;
-            return Status::OK();
-        }
-    }
-    // no exact match, the insertion point is `left`
-    if (left == 0) {
-        // search key is smaller than all keys
+    const auto& keys = _reader->get_keys();
+    auto iter = std::upper_bound(keys.begin(), keys.end(), search_key);
+    if (iter == keys.begin()) {
         return Status::NotFound("no page contains the given key");
+    } else {
+        // upper_bound is search the first key > search key, so should return last entry
+        _pos = iter - keys.begin() - 1;
+        return Status::OK();
     }
-    // index entry records the first key of the indexed page,
-    // therefore the first page with keys >= searched key is the one before the insertion point
-    _pos = left - 1;
-    return Status::OK();
 }
 
+// This function has the meaning of interval, in fact, it is to find first possible Page which >=search key
 Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
-    size_t num_entries = _reader->count();
-    int32_t left = 0;
-    int32_t right = num_entries - 1;
-    int32_t mid = 0;
-    while (left <= right) {
-        mid = (right + left) / 2;
-        int cmp = search_key.compare(_reader->get_key(mid));
-        if (cmp > 0) {
-            left = mid + 1;
-        } else if (cmp < 0) {
-            right = mid - 1;
-        } else {
-            _pos = mid;
-            return Status::OK();
-        }
+    const auto& keys = _reader->get_keys();
+    auto iter = std::upper_bound(keys.begin(), keys.end(), search_key);
+    if (iter == keys.begin()) {
+        // all the key is larger then search key, so shoud the first entry
+        _pos = 0;
+    } else {
+        // upper_bound is search the first key > search key, so should return last entry
+        _pos = iter - keys.begin() - 1;
     }
-
-    // index entry records the first key of the indexed page,
-    // so can't use left as the final result
-    // TODO: add page index entry for the end key of last page
-    _pos = mid;
     return Status::OK();
 }
 

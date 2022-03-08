@@ -56,6 +56,12 @@ enum SegmentsOverlapPB {
     NONOVERLAPPING = 2;
 }
 
+// indicate segment footer position and size of partial rowset
+message FooterPointerPB {
+    optional uint64 position = 1;
+    optional uint64 size = 2;
+}
+
 // some txn semantic information bind to a written rowset
 // i.e.
 //   1. partial update txn only provide and update a subset of columns,
@@ -67,10 +73,6 @@ message RowsetTxnMetaPB {
     repeated uint32 partial_update_column_ids = 1;
     repeated uint32 partial_update_column_unique_ids = 2;
 
-    message FooterPointerPB {
-        optional uint64 position = 1;
-        optional uint64 size = 2;
-    }
     // one for each segment
     repeated FooterPointerPB partial_rowset_footers = 3;
 }
@@ -218,11 +220,6 @@ enum TabletStatePB {
 enum TabletTypePB {
     TABLET_TYPE_DISK = 0;
     TABLET_TYPE_MEMORY = 1;
-}
-
-message EditVersionPB {
-    optional int64 major = 1;
-    optional int64 minor = 2;
 }
 
 message CompactionInfoPB {

@@ -305,6 +305,31 @@ struct TIcebergTable {
     2: optional list<TColumn> columns
 }
 
+struct THudiTable {
+    // table location
+    1: optional string location
+
+    // Schema columns, except partition columns
+    2: optional list<TColumn> columns
+
+    // Partition columns
+    3: optional list<TColumn> partition_columns
+
+    // Map from partition id to partition metadata.
+    4: optional map<i64, THdfsPartition> partitions
+
+    // The prefixes of locations of partitions in this table
+    5: optional list<string> partition_prefixes
+}
+
+struct TJDBCTable {
+    1: optional string jdbc_driver
+    2: optional string jdbc_url
+    3: optional string jdbc_table
+    4: optional string jdbc_user
+    5: optional string jdbc_passwd
+}
+
 // "Union" of all table types.
 struct TTableDescriptor {
   1: required Types.TTableId id
@@ -322,12 +347,16 @@ struct TTableDescriptor {
   12: optional TSchemaTable schemaTable
   14: optional TBrokerTable BrokerTable
   15: optional TEsTable esTable
+  16: optional TJDBCTable jdbcTable
 
   // Hdfs Table schema
   30: optional THdfsTable hdfsTable
 
   // Iceberg Table schema
   31: optional TIcebergTable icebergTable
+
+  // Hudi Table schema
+  32: optional THudiTable hudiTable
 }
 
 struct TDescriptorTable {
@@ -336,4 +365,5 @@ struct TDescriptorTable {
 
   // all table descriptors referenced by tupleDescriptors
   3: optional list<TTableDescriptor> tableDescriptors;
+  4: optional bool is_cached;
 }

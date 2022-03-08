@@ -39,6 +39,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
@@ -364,12 +365,12 @@ public class MaterializedViewHandler extends AlterHandler {
                 long baseTabletId = baseTablet.getId();
                 long mvTabletId = catalog.getNextId();
 
-                Tablet newTablet = new Tablet(mvTabletId);
+                LocalTablet newTablet = new LocalTablet(mvTabletId);
                 mvIndex.addTablet(newTablet, mvTabletMeta);
                 addedTablets.add(newTablet);
 
                 mvJob.addTabletIdMap(partitionId, mvTabletId, baseTabletId);
-                List<Replica> baseReplicas = baseTablet.getReplicas();
+                List<Replica> baseReplicas = ((LocalTablet) baseTablet).getReplicas();
 
                 int healthyReplicaNum = 0;
                 for (Replica baseReplica : baseReplicas) {
@@ -805,8 +806,7 @@ public class MaterializedViewHandler extends AlterHandler {
             partition.deleteRollupIndex(mvIndexId);
             // remove tablets from inverted index
             for (Tablet tablet : rollupIndex.getTablets()) {
-                long tabletId = tablet.getId();
-                invertedIndex.deleteTablet(tabletId);
+                invertedIndex.deleteTablet(tablet.getId());
             }
         }
         olapTable.deleteIndexInfo(mvName);

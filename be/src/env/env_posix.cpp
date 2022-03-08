@@ -95,7 +95,7 @@ static Status do_open(const string& filename, Env::OpenMode mode, int* fd) {
 }
 
 static Status do_readv_at(int fd, const std::string& filename, uint64_t offset, const Slice* res, size_t res_cnt,
-                          size_t* read_bytes) {
+                          uint64_t* read_bytes) {
     // Convert the results into the iovec vector to request
     // and calculate the total bytes requested
     size_t bytes_req = 0;
@@ -219,20 +219,18 @@ public:
         }
     }
 
-    Status read(Slice* result) override {
+    StatusOr<int64_t> read(void* data, int64_t size) override {
         size_t r;
-        STREAM_RETRY_ON_EINTR(r, _file, fread_unlocked(result->data, 1, result->size, _file));
-        if (r < result->size) {
+        STREAM_RETRY_ON_EINTR(r, _file, fread_unlocked(data, 1, size, _file));
+        if (r < size) {
             if (feof(_file)) {
-                // We leave status as ok if we hit the end of the file.
-                // We need to adjust the slice size.
-                result->truncate(r);
+                return r;
             } else {
                 // A partial read with an error: return a non-ok status.
                 return io_error(_filename, ferror(_file));
             }
         }
-        return Status::OK();
+        return r;
     }
 
     Status skip(uint64_t n) override {
@@ -254,29 +252,33 @@ public:
     PosixRandomAccessFile(std::string filename, int fd) : _filename(std::move(filename)), _fd(fd) {}
     ~PosixRandomAccessFile() override {
         int res;
-        RETRY_ON_EINTR(res, close(_fd));
+        RETRY_ON_EINTR(res, ::close(_fd));
         if (res != 0) {
             LOG(WARNING) << "close file failed, name=" << _filename << ", msg=" << errno_to_string(errno);
         }
     }
 
-    Status read(uint64_t offset, Slice* res) const override {
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override {
+        Slice buff(static_cast<uint8_t*>(data), size);
         uint64_t read_bytes = 0;
-        auto st = do_readv_at(_fd, _filename, offset, res, 1, &read_bytes);
-        if (!st.ok() && st.is_end_of_file()) {
-            res->size = read_bytes;
-            return Status::OK();
+        auto st = do_readv_at(_fd, _filename, static_cast<uint64_t>(offset), &buff, 1, &read_bytes);
+        if (st.ok()) {
+            return size;
+        } else if (st.is_end_of_file()) {
+            return read_bytes;
         }
         return st;
     }
 
-    Status read_at(uint64_t offset, const Slice& result) const override {
-        return do_readv_at(_fd, _filename, offset, &result, 1, nullptr);
+    Status read_at_fully(int64_t offset, void* data, int64_t size) const override {
+        Slice buff(static_cast<uint8_t*>(data), size);
+        return do_readv_at(_fd, _filename, offset, &buff, 1, nullptr);
     }
 
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
         return do_readv_at(_fd, _filename, offset, res, res_cnt, nullptr);
     }
+
     Status size(uint64_t* size) const override {
         struct stat st;
         auto res = fstat(_fd, &st);
@@ -287,7 +289,7 @@ public:
         return Status::OK();
     }
 
-    const std::string& file_name() const override { return _filename; }
+    const std::string& filename() const override { return _filename; }
 
 private:
     std::string _filename;
@@ -492,38 +494,36 @@ class PosixEnv : public Env {
 public:
     ~PosixEnv() override = default;
 
-    Status new_sequential_file(const string& fname, std::unique_ptr<SequentialFile>* result) override {
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const string& fname) override {
         FILE* f;
         POINTER_RETRY_ON_EINTR(f, fopen(fname.c_str(), "r"));
         if (f == nullptr) {
             return io_error(fname, errno);
         }
-        *result = std::make_unique<PosixSequentialFile>(fname, f);
-        return Status::OK();
+        return std::make_unique<PosixSequentialFile>(fname, f);
     }
 
     // get a RandomAccessFile pointer without file cache
-    Status new_random_access_file(const std::string& fname, std::unique_ptr<RandomAccessFile>* result) override {
-        return new_random_access_file(RandomAccessFileOptions(), fname, result);
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& fname) override {
+        return new_random_access_file(RandomAccessFileOptions(), fname);
     }
 
-    Status new_random_access_file(const RandomAccessFileOptions& opts, const std::string& fname,
-                                  std::unique_ptr<RandomAccessFile>* result) override {
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& fname) override {
         int fd;
         RETRY_ON_EINTR(fd, open(fname.c_str(), O_RDONLY));
         if (fd < 0) {
             return io_error(fname, errno);
         }
-        *result = std::make_unique<PosixRandomAccessFile>(fname, fd);
-        return Status::OK();
+        return std::make_unique<PosixRandomAccessFile>(fname, fd);
     }
 
-    Status new_writable_file(const string& fname, std::unique_ptr<WritableFile>* result) override {
-        return new_writable_file(WritableFileOptions(), fname, result);
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const string& fname) override {
+        return new_writable_file(WritableFileOptions(), fname);
     }
 
-    Status new_writable_file(const WritableFileOptions& opts, const string& fname,
-                             std::unique_ptr<WritableFile>* result) override {
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
+                                                              const string& fname) override {
         int fd;
         RETURN_IF_ERROR(do_open(fname, opts.mode, &fd));
 
@@ -531,20 +531,18 @@ public:
         if (opts.mode == MUST_EXIST) {
             RETURN_IF_ERROR(get_file_size(fname, &file_size));
         }
-        *result = std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
-        return Status::OK();
+        return std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
     }
 
-    Status new_random_rw_file(const string& fname, std::unique_ptr<RandomRWFile>* result) override {
-        return new_random_rw_file(RandomRWFileOptions(), fname, result);
+    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const string& fname) override {
+        return new_random_rw_file(RandomRWFileOptions(), fname);
     }
 
-    Status new_random_rw_file(const RandomRWFileOptions& opts, const string& fname,
-                              std::unique_ptr<RandomRWFile>* result) override {
+    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
+                                                               const string& fname) override {
         int fd;
         RETURN_IF_ERROR(do_open(fname, opts.mode, &fd));
-        *result = std::make_unique<PosixRandomRWFile>(fname, fd, opts.sync_on_close);
-        return Status::OK();
+        return std::make_unique<PosixRandomRWFile>(fname, fd, opts.sync_on_close);
     }
 
     Status path_exists(const std::string& fname) override {

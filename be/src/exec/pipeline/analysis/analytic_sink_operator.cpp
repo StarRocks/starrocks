@@ -10,7 +10,7 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     // _analytor is shared by sink operator and source operator
     // we must only prepare it at sink operator
-    RETURN_IF_ERROR(_analytor->prepare(state, state->obj_pool(), get_runtime_profile()));
+    RETURN_IF_ERROR(_analytor->prepare(state, state->obj_pool(), _unique_metrics.get()));
     RETURN_IF_ERROR(_analytor->open(state));
 
     TAnalyticWindow window = _tnode.analytic_node.window;
@@ -38,9 +38,9 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status AnalyticSinkOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_analytor->unref(state));
-    return Operator::close(state);
+void AnalyticSinkOperator::close(RuntimeState* state) {
+    _analytor->unref(state);
+    Operator::close(state);
 }
 
 void AnalyticSinkOperator::set_finishing(RuntimeState* state) {
@@ -58,6 +58,8 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     _analytor->input_chunk_first_row_positions().emplace_back(_analytor->input_rows());
     size_t chunk_size = chunk->num_rows();
     _analytor->update_input_rows(chunk_size);
+
+    _analytor->remove_unused_buffer_values(state);
 
     for (size_t i = 0; i < _analytor->agg_fn_ctxs().size(); i++) {
         for (size_t j = 0; j < _analytor->agg_expr_ctxs()[i].size(); j++) {
@@ -90,15 +92,15 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
 Status AnalyticSinkOperator::_process_by_partition_if_necessary() {
     while (_analytor->has_output()) {
+        int64_t found_partition_end = _analytor->find_partition_end();
         // Only process after all the data in a partition is reached
-        if (!_analytor->is_partition_finished()) {
+        if (!_analytor->is_partition_finished(found_partition_end)) {
             return Status::OK();
         }
 
         size_t chunk_size = _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows();
         _analytor->create_agg_result_columns(chunk_size);
 
-        int64_t found_partition_end = _analytor->find_partition_end();
         bool is_new_partition = _analytor->is_new_partition(found_partition_end);
         if (is_new_partition) {
             _analytor->reset_state_for_new_partition(found_partition_end);

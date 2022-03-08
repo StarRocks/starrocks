@@ -15,14 +15,15 @@ Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
     SourceOperator::prepare(state);
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
-            config::exchg_node_buffer_size_bytes, _runtime_profile, true, nullptr, true, true);
+            config::exchg_node_buffer_size_bytes, _unique_metrics, true, nullptr, true,
+            // ExchangeMergeSort will never perform pipeline level shuffle
+            DataStreamRecvr::INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE, true);
     _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first);
     return Status::OK();
 }
 
-Status ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
+void ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
     Operator::close(state);
-    return Status::OK();
 }
 
 bool ExchangeMergeSortSourceOperator::has_output() const {

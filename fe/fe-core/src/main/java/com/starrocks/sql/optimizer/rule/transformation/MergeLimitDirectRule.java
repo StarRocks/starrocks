@@ -18,9 +18,11 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule OLAP_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_OLAP_SCAN);
     public static final MergeLimitDirectRule HIVE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_HIVE_SCAN);
     public static final MergeLimitDirectRule ICEBERG_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final MergeLimitDirectRule HUDI_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_HUDI_SCAN);
     public static final MergeLimitDirectRule SCHEMA_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final MergeLimitDirectRule MYSQL_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_MYSQL_SCAN);
     public static final MergeLimitDirectRule ES_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ES_SCAN);
+    public static final MergeLimitDirectRule JDBC_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_JDBC_SCAN);
     public static final MergeLimitDirectRule WINDOW = new MergeLimitDirectRule(OperatorType.LOGICAL_WINDOW);
     public static final MergeLimitDirectRule JOIN = new MergeLimitDirectRule(OperatorType.LOGICAL_JOIN);
     public static final MergeLimitDirectRule INTERSECT = new MergeLimitDirectRule(OperatorType.LOGICAL_INTERSECT);

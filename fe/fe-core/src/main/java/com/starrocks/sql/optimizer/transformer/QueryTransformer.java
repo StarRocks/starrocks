@@ -17,8 +17,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.analyzer.relation.Relation;
-import com.starrocks.sql.analyzer.relation.SelectRelation;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -47,10 +47,10 @@ class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
-    private final Map<String, ExpressionMapping> cteContext;
+    private final Map<Integer, ExpressionMapping> cteContext;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            Map<String, ExpressionMapping> cteContext) {
+                            Map<Integer, ExpressionMapping> cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
@@ -66,7 +66,7 @@ class QueryTransformer {
         builder = filter(builder, queryBlock.getHaving());
         builder = window(builder, queryBlock.getOutputAnalytic());
 
-        if (queryBlock.hasOrderBy()) {
+        if (queryBlock.hasOrderByClause()) {
             if (!queryBlock.hasAggregation()) {
                 //requires both output and source fields to be visible if there are no aggregations
                 builder = projectForOrderWithoutAggregation(
@@ -107,10 +107,10 @@ class QueryTransformer {
         return outputs;
     }
 
-    private OptExprBuilder planFrom(Relation node, Map<String, ExpressionMapping> cteContext) {
+    private OptExprBuilder planFrom(Relation node, Map<Integer, ExpressionMapping> cteContext) {
         // This must be a copy of the context, because the new Relation may contain cte with the same name,
         // and the internal cte with the same name will overwrite the original mapping
-        Map<String, ExpressionMapping> newCTEContext = Maps.newHashMap(cteContext);
+        Map<Integer, ExpressionMapping> newCTEContext = Maps.newHashMap(cteContext);
         return new RelationTransformer(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCTEContext).visit(
                 node).getRootBuilder();
@@ -228,6 +228,15 @@ class QueryTransformer {
                 projections.put(variable, expression);
                 fieldMappings.add(variable);
             }
+
+            // child output expressions
+            for (Expr expression : subOpt.getExpressionMapping().getAllExpressions()) {
+                ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
+                        subOpt.getExpressionMapping(), projections, columnRefFactory);
+                fieldMappings.add(columnRef);
+                outputTranslations.put(expression, columnRef);
+            }
+
             for (Expr expression : projectExpressions) {
                 ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
                         subOpt.getExpressionMapping(), projections, columnRefFactory);
@@ -249,8 +258,7 @@ class QueryTransformer {
         for (AnalyticExpr analyticExpr : window) {
             WindowTransformer.WindowOperator rewriteOperator = WindowTransformer.standardize(analyticExpr);
             if (windowOperators.contains(rewriteOperator)) {
-                windowOperators.get(windowOperators.indexOf(rewriteOperator))
-                        .addFunction(analyticExpr.getFnCall(), analyticExpr);
+                windowOperators.get(windowOperators.indexOf(rewriteOperator)).addFunction(analyticExpr);
             } else {
                 windowOperators.add(rewriteOperator);
             }
@@ -426,7 +434,7 @@ class QueryTransformer {
                 groupingTranslations.put(groupingFunction, grouping);
 
                 groupingIds.add(tempGroupingIdsBitSets.stream().map(bitset ->
-                                Utils.convertBitSetToLong(bitset, groupingFunction.getChildren().size()))
+                        Utils.convertBitSetToLong(bitset, groupingFunction.getChildren().size()))
                         .collect(Collectors.toList()));
                 groupByColumnRefs.add(grouping);
                 repeatOutput.add(grouping);

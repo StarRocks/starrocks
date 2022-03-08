@@ -33,6 +33,7 @@ set(EXPR_FILES
   expr.cpp
   slot_ref.cpp
   table_function/table_function_factory.cpp
+  table_function/json_each.cpp
   vectorized/arithmetic_expr.cpp
   vectorized/array_element_expr.cpp
   vectorized/array_expr.cpp
@@ -57,6 +58,7 @@ set(EXPR_FILES
   vectorized/in_predicate.cpp
   vectorized/is_null_predicate.cpp
   vectorized/json_functions.cpp
+  vectorized/jsonpath.cpp
   vectorized/like_predicate.cpp
   vectorized/literal.cpp
   vectorized/locate.cpp
@@ -69,13 +71,11 @@ set(EXPR_FILES
   vectorized/string_functions.cpp
   vectorized/time_functions.cpp
   vectorized/utility_functions.cpp
+  agg/java_udaf_function.cpp
+  agg/java_window_function.cpp
+  table_function/java_udtf_function.cpp
+  vectorized/java_function_call_expr.cpp
 )
-
-IF (WITH_HDFS)
-    set(EXPR_FILES ${EXPR_FILES}
-      vectorized/java_function_call_expr.cpp
-    )
-endif()
 
 add_library(Exprs ${EXPR_FILES})
 

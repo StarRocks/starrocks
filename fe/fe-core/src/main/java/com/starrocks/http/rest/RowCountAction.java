@@ -25,6 +25,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -97,7 +98,7 @@ public class RowCountAction extends RestBaseAction {
                     long indexRowCount = 0L;
                     for (Tablet tablet : index.getTablets()) {
                         long tabletRowCount = 0L;
-                        for (Replica replica : tablet.getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                             if (replica.checkVersionCatchUp(version, false)
                                     && replica.getRowCount() > tabletRowCount) {
                                 tabletRowCount = replica.getRowCount();
@@ -106,7 +107,8 @@ public class RowCountAction extends RestBaseAction {
                         indexRowCount += tabletRowCount;
                     } // end for tablets
                     index.setRowCount(indexRowCount);
-                    indexRowCountMap.put(olapTable.getIndexNameById(index.getId()), indexRowCount);
+                    String indexName = olapTable.getIndexNameById(index.getId());
+                    indexRowCountMap.put(indexName, indexRowCountMap.getOrDefault(indexName, 0L) + indexRowCount);
                 } // end for indices
             } // end for partitions            
         } finally {

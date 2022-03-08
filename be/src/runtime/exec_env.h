@@ -25,6 +25,7 @@
 #include <memory>
 
 #include "common/status.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "storage/options.h"
 
 namespace starrocks {
@@ -64,7 +65,7 @@ class ClientCache;
 class HeartbeatFlags;
 
 namespace pipeline {
-class DriverDispatcher;
+class DriverExecutor;
 }
 
 // Execution environment for queries/plan fragments.
@@ -127,8 +128,10 @@ public:
     size_t increment_num_scan_operators(size_t n) { return _num_scan_operators.fetch_add(n); }
     size_t decrement_num_scan_operators(size_t n) { return _num_scan_operators.fetch_sub(n); }
     PriorityThreadPool* etl_thread_pool() { return _etl_thread_pool; }
+    PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
-    starrocks::pipeline::DriverDispatcher* driver_dispatcher() { return _driver_dispatcher; }
+    starrocks::pipeline::DriverExecutor* driver_executor() { return _driver_executor; }
+    starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
     TMasterInfo* master_info() { return _master_info; }
     LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
@@ -137,6 +140,8 @@ public:
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
     LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
+
+    starrocks::workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
     void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
@@ -204,10 +209,14 @@ private:
     PriorityThreadPool* _pipeline_scan_io_thread_pool = nullptr;
     std::atomic<size_t> _num_scan_operators;
     PriorityThreadPool* _etl_thread_pool = nullptr;
+    PriorityThreadPool* _udf_call_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
-    starrocks::pipeline::DriverDispatcher* _driver_dispatcher = nullptr;
+    starrocks::pipeline::DriverExecutor* _driver_executor = nullptr;
+    pipeline::DriverExecutor* _wg_driver_executor = nullptr;
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
+
+    starrocks::workgroup::ScanExecutor* _scan_executor = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;

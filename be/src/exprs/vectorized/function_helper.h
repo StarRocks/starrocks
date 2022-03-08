@@ -5,7 +5,6 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/type_traits.h"
-#include "util/types.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -17,9 +16,21 @@ public:
      * else return ptr
      * @param ptr 
      */
-    static inline const ColumnPtr& get_real_data_column(const ColumnPtr& ptr) {
+    static inline const ColumnPtr& get_data_column_of_nullable(const ColumnPtr& ptr) {
         if (ptr->is_nullable()) {
             return down_cast<NullableColumn*>(ptr.get())->data_column();
+        }
+        return ptr;
+    }
+
+    /**
+     * if ptr is ConstColumn, return data column
+     * else return ptr
+     * @param ptr 
+     */
+    static inline const ColumnPtr& get_data_column_of_const(const ColumnPtr& ptr) {
+        if (ptr->is_constant()) {
+            return down_cast<ConstColumn*>(ptr.get())->data_column();
         }
         return ptr;
     }

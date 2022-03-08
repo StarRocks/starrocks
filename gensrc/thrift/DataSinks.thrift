@@ -89,6 +89,10 @@ struct TDataStreamSink {
   // side need to maintain a send window in order to avoiding the receiver
   // buffer too many out-of-order packets
   4: optional bool is_merge
+
+  // degree of paralleliasm of destination
+  // only used in pipeline engine
+  5: optional i32 dest_dop
 }
 
 struct TMultiCastDataStreamSink {

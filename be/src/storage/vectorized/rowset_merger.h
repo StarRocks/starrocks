@@ -12,7 +12,7 @@ namespace vectorized {
 
 struct MergeConfig {
     size_t chunk_size;
-    CompactionAlgorithm algorithm = kHorizontal;
+    CompactionAlgorithm algorithm = HORIZONTAL_COMPACTION;
 };
 
 // heap based rowset merger used for updatable tablet's compaction

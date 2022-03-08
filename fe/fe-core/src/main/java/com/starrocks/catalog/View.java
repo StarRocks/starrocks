@@ -27,9 +27,12 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.SqlParserUtils;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;
@@ -79,10 +82,10 @@ public class View extends Table {
     // 'queryStmt' is a strong reference, which is used when this view is created directly from a QueryStmt
     // 'queryStmtRef' is a soft reference, it is created from parsing query stmt, and it will be cleared if
     // JVM memory is not enough.
-    private QueryStmt queryStmt;
+    private QueryStatement queryStmt;
     @Deprecated
     // Can't keep a cache in meta data
-    private SoftReference<QueryStmt> queryStmtRef = new SoftReference<QueryStmt>(null);
+    private SoftReference<QueryStatement> queryStmtRef = new SoftReference<QueryStatement>(null);
 
     // Set if this View is from a WITH clause and not persisted in the catalog.
     private boolean isLocalView;
@@ -108,6 +111,13 @@ public class View extends Table {
     public View(String alias, QueryStmt queryStmt, List<String> colLabels) {
         super(-1, alias, TableType.VIEW, null);
         this.isLocalView = true;
+        this.queryStmt = null;
+        this.colLabels = colLabels;
+    }
+
+    public View(String alias, QueryStatement queryStmt, List<String> colLabels) {
+        super(-1, alias, TableType.VIEW, null);
+        this.isLocalView = true;
         this.queryStmt = queryStmt;
         this.colLabels = colLabels;
     }
@@ -121,39 +131,29 @@ public class View extends Table {
     // 1. Write member variable in a readonly interface
     // 2. Hold a temporary cache in the globally shared metadata
     public QueryStmt getQueryStmt() {
-        if (queryStmt != null) {
-            return queryStmt;
+        try {
+            SqlScanner input = new SqlScanner(new StringReader(inlineViewDef), sqlMode);
+            SqlParser parser = new SqlParser(input);
+            StatementBase node = SqlParserUtils.getFirstStmt(parser);
+            return (QueryStmt) node;
+        } catch (Exception e) {
+            throw new SemanticException(e.getMessage());
         }
-        QueryStmt retStmt = queryStmtRef.get();
-        if (retStmt == null) {
-            synchronized (this) {
-                retStmt = queryStmtRef.get();
-                if (retStmt == null) {
-                    try {
-                        retStmt = init();
-                    } catch (UserException e) {
-                        // should not happen
-                        LOG.error("unexpected exception", e);
-                    }
-                }
-            }
-        }
-        return retStmt;
     }
 
     public QueryStmt getQueryStmtWithParse() throws StarRocksPlannerException {
+        return null;
+    }
+
+    public QueryStatement getQueryStatement() throws StarRocksPlannerException {
         if (queryStmt != null) {
             return queryStmt;
         }
 
         Preconditions.checkNotNull(inlineViewDef);
-        // Parse the expanded view definition SQL-string into a QueryStmt and
-        // populate a view definition.
-        SqlScanner input = new SqlScanner(new StringReader(inlineViewDef), sqlMode);
-        SqlParser parser = new SqlParser(input);
         ParseNode node;
         try {
-            node = SqlParserUtils.getFirstStmt(parser);
+            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
         } catch (Exception e) {
             LOG.warn("stmt is {}", inlineViewDef);
             LOG.warn("exception because: ", e);
@@ -162,12 +162,12 @@ public class View extends Table {
                     ErrorType.INTERNAL_ERROR);
         }
         // Make sure the view definition parses to a query statement.
-        if (!(node instanceof QueryStmt)) {
+        if (!(node instanceof QueryStatement)) {
             throw new StarRocksPlannerException(String.format("View definition of %s " +
                     "is not a query statement", name), ErrorType.INTERNAL_ERROR);
         }
 
-        return (QueryStmt) node;
+        return (QueryStatement) node;
     }
 
     public void setInlineViewDefWithSqlMode(String inlineViewDef, long sqlMode) {
@@ -185,15 +185,13 @@ public class View extends Table {
      * Throws a TableLoadingException if there was any error parsing the
      * the SQL or if the view definition did not parse into a QueryStmt.
      */
-    public synchronized QueryStmt init() throws UserException {
+    public synchronized QueryStatement init() throws UserException {
         Preconditions.checkNotNull(inlineViewDef);
         // Parse the expanded view definition SQL-string into a QueryStmt and
         // populate a view definition.
-        SqlScanner input = new SqlScanner(new StringReader(inlineViewDef), sqlMode);
-        SqlParser parser = new SqlParser(input);
         ParseNode node;
         try {
-            node = (ParseNode) SqlParserUtils.getFirstStmt(parser);
+            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
         } catch (Exception e) {
             LOG.info("stmt is {}", inlineViewDef);
             LOG.info("exception because: ", e);
@@ -201,15 +199,15 @@ public class View extends Table {
             // Do not pass e as the exception cause because it might reveal the existence
             // of tables that the user triggering this load may not have privileges on.
             throw new UserException(
-                    String.format("Failed to parse view-definition statement of view: %s", name));
+                    String.format("Failed to parse view-definition statement of view: %s", name), e);
         }
         // Make sure the view definition parses to a query statement.
-        if (!(node instanceof QueryStmt)) {
+        if (!(node instanceof QueryStatement)) {
             throw new UserException(String.format("View definition of %s " +
                     "is not a query statement", name));
         }
-        queryStmtRef = new SoftReference<QueryStmt>((QueryStmt) node);
-        return (QueryStmt) node;
+        queryStmtRef = new SoftReference<>((QueryStatement) node);
+        return (QueryStatement) node;
     }
 
     /**

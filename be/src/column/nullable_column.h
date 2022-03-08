@@ -123,11 +123,11 @@ public:
 
     bool append_nulls(size_t count) override;
 
-    bool append_strings(const std::vector<Slice>& strs) override;
+    bool append_strings(const Buffer<Slice>& strs) override;
 
-    bool append_strings_overflow(const std::vector<Slice>& strs, size_t max_length) override;
+    bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;
 
-    bool append_continuous_strings(const std::vector<Slice>& strs) override;
+    bool append_continuous_strings(const Buffer<Slice>& strs) override;
 
     size_t append_numbers(const void* buff, size_t length) override;
 
@@ -142,6 +142,8 @@ public:
 
     void append_default(size_t count) override { append_nulls(count); }
 
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
+
     uint32_t max_one_element_serialize_size() const override {
         return sizeof(bool) + _data_column->max_one_element_serialize_size();
     }
@@ -155,7 +157,7 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
+    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override {
         if (_null_column->get_data()[idx]) {
@@ -179,6 +181,8 @@ public:
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
+    int64_t xor_checksum(uint32_t from, uint32_t to) const override;
+
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
     std::string get_name() const override { return "nullable-" + _data_column->get_name(); }
@@ -196,7 +200,10 @@ public:
 
     ColumnPtr& data_column() { return _data_column; }
 
+    const NullColumn& null_column_ref() const { return *_null_column; }
     const NullColumnPtr& null_column() const { return _null_column; }
+
+    size_t null_count() const;
 
     Datum get(size_t n) const override {
         if (_has_null && _null_column->get_data()[n]) {
@@ -273,6 +280,8 @@ public:
     bool reach_capacity_limit() const override {
         return _data_column->reach_capacity_limit() || _null_column->reach_capacity_limit();
     }
+
+    void check_or_die() const override;
 
 private:
     ColumnPtr _data_column;

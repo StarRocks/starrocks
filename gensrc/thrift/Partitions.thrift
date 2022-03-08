@@ -45,14 +45,10 @@ enum TPartitionType {
 }
 
 enum TDistributionType {
-  UNPARTITIONED,
-
-  // round-robin partition
-  RANDOM,
-
-  // unordered partition on a set of exprs
-  // (partition bounds overlap)
-  HASH_PARTITIONED
+  ANY,
+  BROADCAST,
+  SHUFFLE,
+  GATHER
 }
 
 // TODO(zc): Refine

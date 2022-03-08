@@ -5,6 +5,7 @@
 #include "gutil/casts.h"
 #include "storage/hll.h"
 #include "util/bitmap_value.h"
+#include "util/json.h"
 #include "util/mysql_row_buffer.h"
 #include "util/percentile_value.h"
 
@@ -28,7 +29,9 @@ size_t ObjectColumn<T>::byte_size(size_t idx) const {
 
 template <typename T>
 void ObjectColumn<T>::assign(size_t n, size_t idx) {
-    _pool[0] = std::move(_pool[idx]);
+    if (idx != 0) {
+        _pool[0] = std::move(_pool[idx]);
+    }
     _pool.resize(1);
     _pool.reserve(n);
 
@@ -89,7 +92,7 @@ void ObjectColumn<T>::append_value_multiple_times(const starrocks::vectorized::C
 };
 
 template <typename T>
-bool ObjectColumn<T>::append_strings(const vector<starrocks::Slice>& strs) {
+bool ObjectColumn<T>::append_strings(const Buffer<starrocks::Slice>& strs) {
     _pool.reserve(_pool.size() + strs.size());
     for (const Slice& s : strs) {
         _pool.emplace_back(s);
@@ -125,6 +128,18 @@ void ObjectColumn<T>::append_default(size_t count) {
 }
 
 template <typename T>
+Status ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
+    const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
+    size_t replace_num = src.size();
+    for (size_t i = 0; i < replace_num; i++) {
+        DCHECK_LT(indexes[i], _pool.size());
+        _pool[indexes[i]] = *obj_col.get_object(i);
+    }
+    _cache_ok = false;
+    return Status::OK();
+}
+
+template <typename T>
 uint32_t ObjectColumn<T>::serialize(size_t idx, uint8_t* pos) {
     DCHECK(false) << "Don't support object column serialize";
     return 0;
@@ -149,7 +164,7 @@ const uint8_t* ObjectColumn<T>::deserialize_and_append(const uint8_t* pos) {
 }
 
 template <typename T>
-void ObjectColumn<T>::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+void ObjectColumn<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     DCHECK(false) << "Don't support object column deserialize and append";
 }
 
@@ -200,6 +215,12 @@ void ObjectColumn<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const
 template <typename T>
 void ObjectColumn<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     DCHECK(false) << "object column shouldn't call crc32_hash ";
+}
+
+template <typename T>
+int64_t ObjectColumn<T>::xor_checksum(uint32_t from, uint32_t to) const {
+    DCHECK(false) << "object column shouldn't call xor_checksum";
+    return 0;
 }
 
 template <typename T>
@@ -259,5 +280,6 @@ std::string ObjectColumn<BitmapValue>::debug_item(uint32_t idx) const {
 template class ObjectColumn<HyperLogLog>;
 template class ObjectColumn<BitmapValue>;
 template class ObjectColumn<PercentileValue>;
+template class ObjectColumn<JsonValue>;
 
 } // namespace starrocks::vectorized

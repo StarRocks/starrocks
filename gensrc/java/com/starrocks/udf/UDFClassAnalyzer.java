@@ -32,6 +32,8 @@ public class UDFClassAnalyzer {
         String signStr = anlyMap.get(typeName);
         if (signStr != null) {
             return prefix + signStr;
+        } else if (typeName.contains("[L")){
+            return typeName.replace(".", "/");
         } else {
             return prefix + "L" + typeName.replace('.', '/') + ";";
         }
@@ -66,6 +68,15 @@ public class UDFClassAnalyzer {
             }
         }
         throw new NoSuchMethodException("Not Found Method:" + methodName);
+    }
+    
+    public static Method getMethodObject(String methodName, Class clazz) {
+        for (Method declaredMethod : clazz.getDeclaredMethods()) {
+            if (declaredMethod.getName().equals(methodName)) {
+                return declaredMethod;
+            }
+        }
+        return null;
     }
 }
 

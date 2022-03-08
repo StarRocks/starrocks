@@ -67,8 +67,7 @@ TEST_F(VectorizedInPredicateTest, sliceInTrue) {
     expr->_children.push_back(&col6);
 
     {
-        starrocks::RowDescriptor rd;
-        ASSERT_TRUE(expr->prepare(nullptr, rd, nullptr).ok());
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ASSERT_TRUE(ptr->is_numeric());
@@ -103,8 +102,7 @@ TEST_F(VectorizedInPredicateTest, dateInFalse) {
     expr->_children.push_back(&col6);
 
     {
-        starrocks::RowDescriptor rd;
-        ASSERT_TRUE(expr->prepare(nullptr, rd, nullptr).ok());
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ASSERT_TRUE(ptr->is_numeric());
@@ -139,8 +137,7 @@ TEST_F(VectorizedInPredicateTest, intNotInTrue) {
     expr->_children.push_back(&col6);
 
     {
-        starrocks::RowDescriptor rd;
-        ASSERT_TRUE(expr->prepare(nullptr, rd, nullptr).ok());
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ASSERT_TRUE(ptr->is_numeric());
@@ -175,8 +172,7 @@ TEST_F(VectorizedInPredicateTest, nullSliceIn) {
     expr->_children.push_back(&col3);
 
     {
-        starrocks::RowDescriptor rd;
-        ASSERT_TRUE(expr->prepare(nullptr, rd, nullptr).ok());
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ASSERT_TRUE(ptr->is_nullable());
@@ -221,8 +217,7 @@ TEST_F(VectorizedInPredicateTest, sliceNotInNull) {
     expr->_children.push_back(&col3);
 
     {
-        starrocks::RowDescriptor rd;
-        ASSERT_TRUE(expr->prepare(nullptr, rd, nullptr).ok());
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ASSERT_TRUE(ptr->is_nullable());
@@ -230,6 +225,35 @@ TEST_F(VectorizedInPredicateTest, sliceNotInNull) {
         for (int j = 0; j < ptr->size(); ++j) {
             ASSERT_TRUE(ptr->is_null(j));
         }
+    }
+}
+
+TEST_F(VectorizedInPredicateTest, inConstPred) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.opcode = TExprOpcode::FILTER_NOT_IN;
+    expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    expr_node.in_predicate.is_not_in = true;
+
+    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
+
+    std::string v2("test2");
+    Slice s2(v2);
+
+    auto mock_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(s2, 5);
+    MockExpr col1(expr_node, mock_col);
+
+    MockNullVectorizedExpr<TYPE_VARCHAR> col2(expr_node, 1, s2);
+    col2.all_null = true;
+    col2.only_null = true;
+
+    expr->_children.push_back(&col1);
+    expr->_children.push_back(&col2);
+
+    {
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ASSERT_TRUE(ptr->size() == 5);
     }
 }
 

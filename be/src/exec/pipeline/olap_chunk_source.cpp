@@ -3,7 +3,10 @@
 #include "exec/pipeline/olap_chunk_source.h"
 
 #include "column/column_helper.h"
+#include "exec/pipeline/scan_operator.h"
+#include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/olap_scan_prepare.h"
+#include "exec/workgroup/work_group.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter.h"
 #include "gutil/map_util.h"
@@ -19,9 +22,24 @@
 
 namespace starrocks::pipeline {
 using namespace vectorized;
+
+OlapChunkSource::OlapChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorized::OlapScanNode* scan_node)
+        : ChunkSource(std::move(morsel)),
+          _scan_node(scan_node),
+          _limit(scan_node->limit()),
+          _runtime_in_filters(op->runtime_in_filters()),
+          _runtime_bloom_filters(op->runtime_bloom_filters()),
+          _runtime_profile(op->unique_metrics()) {
+    _conjunct_ctxs = scan_node->conjunct_ctxs();
+    _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
+    ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
+    _scan_range = scan_morsel->get_olap_scan_range();
+}
+
 Status OlapChunkSource::prepare(RuntimeState* state) {
     _runtime_state = state;
-    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
+    const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
+    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
     _slots = &tuple_desc->slots();
 
     _init_counter(state);
@@ -33,8 +51,8 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
     cm.tuple_desc = tuple_desc;
     cm.obj_pool = &_obj_pool;
-    cm.key_column_names = &_key_column_names;
-    cm.runtime_filters = &_runtime_bloom_filters;
+    cm.key_column_names = &thrift_olap_scan_node.key_column_name;
+    cm.runtime_filters = _runtime_bloom_filters;
     cm.runtime_state = state;
 
     const TQueryOptions& query_options = state->query_options();
@@ -44,7 +62,11 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     } else {
         max_scan_key_num = config::doris_max_scan_key_num;
     }
-    RETURN_IF_ERROR(cm.parse_conjuncts(true, max_scan_key_num, _enable_column_expr_predicate));
+    bool enable_column_expr_predicate = false;
+    if (thrift_olap_scan_node.__isset.enable_column_expr_predicate) {
+        enable_column_expr_predicate = thrift_olap_scan_node.enable_column_expr_predicate;
+    }
+    RETURN_IF_ERROR(cm.parse_conjuncts(true, max_scan_key_num, enable_column_expr_predicate));
     RETURN_IF_ERROR(_build_scan_range(_runtime_state));
     RETURN_IF_ERROR(_init_olap_reader(_runtime_state));
     return Status::OK();
@@ -99,7 +121,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 Status OlapChunkSource::_build_scan_range(RuntimeState* state) {
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-    _dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state);
+    _dict_optimize_parser.rewrite_conjuncts<false>(&_not_push_down_conjuncts, state);
 
     // FixMe(kks): Ensure this logic is right.
     int scanners_per_tablet = 64;
@@ -137,8 +159,10 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
 Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                             const std::vector<uint32_t>& scanner_columns,
                                             std::vector<uint32_t>& reader_columns) {
+    const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
+    bool skip_aggregation = thrift_olap_scan_node.is_preaggregation;
     _params.reader_type = READER_QUERY;
-    _params.skip_aggregation = _skip_aggregation;
+    _params.skip_aggregation = skip_aggregation;
     _params.profile = _scan_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
@@ -151,7 +175,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<PredicatePtr> preds;
-    _conjuncts_manager.get_column_predicates(&parser, &preds);
+    RETURN_IF_ERROR(_conjuncts_manager.get_column_predicates(&parser, &preds));
     for (auto& p : preds) {
         if (parser.can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
@@ -181,7 +205,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
     }
 
     // Return columns
-    if (_skip_aggregation) {
+    if (skip_aggregation) {
         reader_columns = scanner_columns;
     } else {
         for (size_t i = 0; i < _tablet->num_key_columns(); i++) {
@@ -239,6 +263,8 @@ Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::strin
 }
 
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
+    const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
+
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
     std::vector<uint32_t> scanner_columns;
     // columns fetched from |_reader|.
@@ -246,7 +272,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
     RETURN_IF_ERROR(_init_global_dicts(&_params));
-    RETURN_IF_ERROR(_init_unused_output_columns(*_unused_output_columns));
+    RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
@@ -316,12 +342,55 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
     return _status;
 }
 
+Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, bool& can_finish,
+                                                                        size_t* num_read_chunks, int worker_id,
+                                                                        workgroup::WorkGroupPtr running_wg) {
+    if (!_status.ok()) {
+        return _status;
+    }
+
+    using namespace vectorized;
+    int64_t time_spent = 0;
+    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+        {
+            SCOPED_RAW_TIMER(&time_spent);
+
+            ChunkUniquePtr chunk(
+                    ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
+            _status = _read_chunk_from_storage(_runtime_state, chunk.get());
+            if (!_status.ok()) {
+                // end of file is normal case, need process chunk
+                if (_status.is_end_of_file()) {
+                    ++(*num_read_chunks);
+                    _chunk_buffer.put(std::move(chunk));
+                }
+                break;
+            }
+
+            ++(*num_read_chunks);
+            _chunk_buffer.put(std::move(chunk));
+        }
+
+        if (time_spent >= YIELD_MAX_TIME_SPENT) {
+            break;
+        }
+
+        if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id, running_wg)) {
+            break;
+        }
+    }
+
+    return _status;
+}
+
 // mapping a slot-column-id to schema-columnid
 Status OlapChunkSource::_init_global_dicts(vectorized::TabletReaderParams* params) {
+    const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
     auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
-    const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(_tuple_id);
+    const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
     for (auto slot : tuple_desc->slots()) {
         if (!slot->is_materialized()) {
             continue;
@@ -376,13 +445,12 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
     return Status::OK();
 }
 
-Status OlapChunkSource::close(RuntimeState* state) {
+void OlapChunkSource::close(RuntimeState* state) {
     _update_counter();
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
     _dict_optimize_parser.close(state);
-    return Status::OK();
 }
 
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {

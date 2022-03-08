@@ -4,6 +4,7 @@
 
 #include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_source_operator.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "runtime/current_thread.h"
@@ -139,7 +140,6 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                                       _aggregator->mem_pool()->total_reserved_bytes());
                     TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
-
                     continue;
                 } else {
                     // TODO: direct call the function may affect the performance of some aggregated cases
@@ -209,10 +209,12 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
 
         COUNTER_SET(_aggregator->rows_returned_counter(), _aggregator->num_rows_returned());
         *eos = true;
+        RETURN_IF_ERROR(_aggregator->check_has_error());
         return Status::OK();
     }
 
     _aggregator->process_limit(chunk);
+    RETURN_IF_ERROR(_aggregator->check_has_error());
 
     DCHECK_CHUNK(*chunk);
     return Status::OK();
@@ -277,6 +279,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
+    if (limit() != -1) {
+        operators_with_source.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
     return operators_with_source;
 }
 

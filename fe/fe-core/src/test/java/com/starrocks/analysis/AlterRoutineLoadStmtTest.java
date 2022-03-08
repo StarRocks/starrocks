@@ -83,7 +83,7 @@ public class AlterRoutineLoadStmtTest {
             RoutineLoadDataSourceProperties routineLoadDataSourceProperties = new RoutineLoadDataSourceProperties(
                     typeName, dataSourceProperties);
             AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"),
-                    jobProperties, routineLoadDataSourceProperties);
+                    null, jobProperties, routineLoadDataSourceProperties);
             try {
                 stmt.analyze(analyzer);
             } catch (UserException e) {
@@ -105,7 +105,7 @@ public class AlterRoutineLoadStmtTest {
 
     @Test(expected = AnalysisException.class)
     public void testNoPproperties() throws AnalysisException, UserException {
-        AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"),
+        AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
                 Maps.newHashMap(), new RoutineLoadDataSourceProperties());
         stmt.analyze(analyzer);
     }
@@ -115,7 +115,7 @@ public class AlterRoutineLoadStmtTest {
         {
             Map<String, String> jobProperties = Maps.newHashMap();
             jobProperties.put(CreateRoutineLoadStmt.FORMAT, "csv");
-            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"),
+            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
                     jobProperties, new RoutineLoadDataSourceProperties());
             try {
                 stmt.analyze(analyzer);
@@ -135,7 +135,7 @@ public class AlterRoutineLoadStmtTest {
             dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY, "new_topic");
             RoutineLoadDataSourceProperties routineLoadDataSourceProperties = new RoutineLoadDataSourceProperties(
                     typeName, dataSourceProperties);
-            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"),
+            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
                     jobProperties, routineLoadDataSourceProperties);
 
             try {
@@ -156,7 +156,7 @@ public class AlterRoutineLoadStmtTest {
             dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,2,3");
             RoutineLoadDataSourceProperties routineLoadDataSourceProperties = new RoutineLoadDataSourceProperties(
                     typeName, dataSourceProperties);
-            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"),
+            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
                     jobProperties, routineLoadDataSourceProperties);
             try {
                 stmt.analyze(analyzer);
@@ -177,7 +177,7 @@ public class AlterRoutineLoadStmtTest {
             dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, "1000, 2000");
             RoutineLoadDataSourceProperties routineLoadDataSourceProperties = new RoutineLoadDataSourceProperties(
                     typeName, dataSourceProperties);
-            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"),
+            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
                     jobProperties, routineLoadDataSourceProperties);
             try {
                 stmt.analyze(analyzer);
@@ -197,7 +197,7 @@ public class AlterRoutineLoadStmtTest {
             dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, "1000, 2000, 3000");
             RoutineLoadDataSourceProperties routineLoadDataSourceProperties = new RoutineLoadDataSourceProperties(
                     typeName, dataSourceProperties);
-            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"),
+            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
                     jobProperties, routineLoadDataSourceProperties);
             try {
                 stmt.analyze(analyzer);

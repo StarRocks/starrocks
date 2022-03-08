@@ -197,6 +197,16 @@ void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t
     }
 }
 
+void Chunk::rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    size_t num_columns = _columns.size();
+    DCHECK_EQ(num_columns, src.columns().size());
+
+    for (size_t i = 0; i < num_columns; ++i) {
+        _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
+        src.columns()[i].reset();
+    }
+}
+
 size_t Chunk::filter(const Buffer<uint8_t>& selection) {
     for (auto& column : _columns) {
         column->filter(selection);
@@ -276,6 +286,7 @@ void Chunk::check_or_die() {
     } else {
         for (const ColumnPtr& c : _columns) {
             CHECK_EQ(num_rows(), c->size());
+            c->check_or_die();
         }
     }
 
@@ -300,6 +311,16 @@ std::string Chunk::debug_row(uint32_t index) const {
     }
     os << _columns[_columns.size() - 1]->debug_item(index) << "]";
     return os.str();
+}
+
+void Chunk::merge(Chunk&& src) {
+    DCHECK_EQ(src.num_rows(), num_rows());
+    for (auto& it : src._slot_id_to_index) {
+        SlotId slot_id = it.first;
+        size_t index = it.second;
+        ColumnPtr& c = src._columns[index];
+        append_column(c, slot_id);
+    }
 }
 
 void Chunk::append(const Chunk& src, size_t offset, size_t count) {

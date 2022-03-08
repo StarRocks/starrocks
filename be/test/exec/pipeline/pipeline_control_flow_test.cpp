@@ -110,12 +110,12 @@ public:
         _is_finished = true;
     }
 
-    Status close(RuntimeState* state) override {
+    void close(RuntimeState* state) override {
         if (_is_closed) {
             ++lifecycle_error_num;
         }
         _is_closed = true;
-        return Operator::close(state);
+        Operator::close(state);
     }
 
 private:
@@ -174,7 +174,7 @@ public:
         _is_finished = true;
     }
 
-    Status close(RuntimeState* state) override {
+    void close(RuntimeState* state) override {
         if (_pending_finish_cnt >= 0) {
             ++lifecycle_error_num;
         }
@@ -182,7 +182,7 @@ public:
             ++lifecycle_error_num;
         }
         _is_closed = true;
-        return SourceOperator::close(state);
+        SourceOperator::close(state);
     }
 
     bool has_output() const override { return _index < _chunks.size(); }

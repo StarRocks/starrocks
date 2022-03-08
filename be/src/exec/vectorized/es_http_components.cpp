@@ -17,6 +17,7 @@ static const char* FIELD_SCROLL_ID = "_scroll_id";
 static const char* FIELD_HITS = "hits";
 static const char* FIELD_INNER_HITS = "hits";
 static const char* FIELD_SOURCE = "_source";
+static const char* FIELD_FIELDS = "fields";
 static const char* FIELD_ID = "_id";
 
 const char* json_type_to_raw_str(rapidjson::Type type) {
@@ -158,31 +159,36 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
     *chunk = std::make_shared<Chunk>();
     std::vector<SlotDescriptor*> slot_descs = _tuple_desc->slots();
 
-    // init column information
-    for (auto& slot_desc : slot_descs) {
-        ColumnPtr column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-        (*chunk)->append_column(std::move(column), slot_desc->id());
-    }
-
     size_t left_sz = _size - _cur_line;
     size_t fill_sz = std::min(left_sz, (size_t)state->chunk_size());
 
-    auto slots = _tuple_desc->slots();
+    // init column information
+    for (auto& slot_desc : slot_descs) {
+        ColumnPtr column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        column->reserve(fill_sz);
+        (*chunk)->append_column(std::move(column), slot_desc->id());
+    }
 
+    auto slots = _tuple_desc->slots();
     // TODO: we could fill chunk by column rather than row
     for (size_t i = 0; i < fill_sz; ++i) {
         const rapidjson::Value& obj = _inner_hits_node[_cur_line + i];
         bool pure_doc_value = _pure_doc_value(obj);
-        const rapidjson::Value& line = obj.HasMember(FIELD_SOURCE) ? obj[FIELD_SOURCE] : obj["fields"];
+        bool has_source = obj.HasMember(FIELD_SOURCE);
+        bool has_fields = obj.HasMember(FIELD_FIELDS);
+
+        if (!has_source && !has_fields) {
+            for (auto column : (*chunk)->columns()) {
+                column->append_default();
+            }
+            continue;
+        }
+        DCHECK(has_source ^ has_fields);
+        const rapidjson::Value& line = has_source ? obj[FIELD_SOURCE] : obj[FIELD_FIELDS];
 
         for (size_t col_idx = 0; col_idx < slots.size(); ++col_idx) {
             SlotDescriptor* slot_desc = slot_descs[col_idx];
             ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
-
-            // because the fe planner filter the non_materialize column
-            if (!slot_desc->is_materialized()) {
-                continue;
-            }
 
             // _id field must exists in every document, this is guaranteed by ES
             // if _id was found in tuple, we would get `_id` value from inner-hit node
@@ -253,7 +259,7 @@ void ScrollParser::set_params(const TupleDescriptor* descs,
 }
 
 bool ScrollParser::_pure_doc_value(const rapidjson::Value& obj) {
-    if (obj.HasMember("fields")) {
+    if (obj.HasMember(FIELD_FIELDS)) {
         return true;
     }
     return false;
@@ -495,7 +501,7 @@ template <PrimitiveType type, typename T>
 Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value) {
     auto append_timestamp = [](auto& col, Column* column) {
         TimestampValue value;
-        value.from_unixtime(col.GetInt64() / 1000, "+08:00");
+        value.from_unixtime(col.GetInt64() / 1000, TimezoneUtils::default_time_zone);
         if constexpr (type == TYPE_DATE) {
             DateValue date_val = DateValue(value);
             _append_data<TYPE_DATE>(column, date_val);
@@ -518,6 +524,11 @@ Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* colum
             TimestampValue value;
             if (!value.from_string(raw_str, val_size)) {
                 RETURN_ERROR_IF_CAST_FORMAT_ERROR(col, type);
+            }
+            // https://en.wikipedia.org/wiki/ISO_8601
+            // 2020-06-06T16:00:00.000Z was UTC time.
+            if (raw_str[val_size - 1] == 'Z') {
+                value.from_unixtime(value.to_unix_second(), TimezoneUtils::default_time_zone);
             }
             _append_data<TYPE_DATETIME>(column, value);
         }

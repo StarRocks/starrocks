@@ -23,7 +23,7 @@ public class PruneExceptColumnsRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
+        ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
 
         LogicalSetOperator lso = (LogicalSetOperator) input.getOp();
         List<ColumnRefOperator> outputs = lso.getOutputColumnRefOp();

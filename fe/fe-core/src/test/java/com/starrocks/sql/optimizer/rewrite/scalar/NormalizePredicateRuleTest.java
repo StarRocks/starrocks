@@ -7,6 +7,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import org.junit.Test;
@@ -59,5 +60,24 @@ public class NormalizePredicateRuleTest {
         ScalarOperator result = rule.apply(bpo, context);
 
         assertEquals(bpo, result);
+    }
+
+    @Test
+    public void testInPredicate() {
+        NormalizePredicateRule rule = new NormalizePredicateRule();
+        ScalarOperatorRewriteContext context = new ScalarOperatorRewriteContext();
+
+        InPredicateOperator inOp = new InPredicateOperator(
+                ConstantOperator.createInt(1),
+                new ColumnRefOperator(0, Type.INT, "col1", true)
+        );
+
+        ScalarOperator result = rule.apply(inOp, context);
+        BinaryPredicateOperator eqOp = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                ConstantOperator.createInt(1),
+                new ColumnRefOperator(0, Type.INT, "col1", true)
+        );
+
+        assertEquals(eqOp, result);
     }
 }

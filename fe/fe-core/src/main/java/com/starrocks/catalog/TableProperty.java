@@ -71,6 +71,8 @@ public class TableProperty implements Writable {
     //    After checkpoint, we relay TableProperty::write to persist.
     private boolean hasDelete = false;
 
+    private boolean hasForbitGlobalDict = false;
+
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
     }
@@ -161,8 +163,17 @@ public class TableProperty implements Writable {
         return hasDelete;
     }
 
+
     public void setHasDelete(boolean hasDelete) {
         this.hasDelete = hasDelete;
+    }
+
+    public boolean hasForbitGlobalDict() {
+        return hasForbitGlobalDict;
+    }
+
+    public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
+        this.hasForbitGlobalDict = hasForbitGlobalDict;
     }
 
     @Override

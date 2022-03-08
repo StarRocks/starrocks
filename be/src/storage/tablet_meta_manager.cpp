@@ -51,6 +51,7 @@ static const std::string TABLET_META_LOG_PREFIX = "tlg_";
 static const std::string TABLET_META_ROWSET_PREFIX = "trs_";
 static const std::string TABLET_META_PENDING_ROWSET_PREFIX = "tpr_";
 static const std::string TABLET_DELVEC_PREFIX = "dlv_";
+static const std::string TABLET_PERSISTENT_INDEX_META_PREFIX = "tpi_";
 
 static string encode_meta_log_key(TTabletId id, uint64_t logid);
 static bool decode_meta_log_key(const std::string_view& key, TTabletId* id, uint64_t* logid);
@@ -62,6 +63,8 @@ static string encode_meta_pending_rowset_key(TTabletId id, int64_t version);
 std::string encode_del_vector_key(TTabletId tablet_id, uint32_t segment_id, int64_t version);
 void decode_del_vector_key(const std::string_view& enc_key, TTabletId* tablet_id, uint32_t* segment_id,
                            int64_t* version);
+std::string encode_persistent_index_key(TTabletId tablet_id);
+void decode_persistent_index_key(const std::string_view& enc_key, TTabletId* tablet_id);
 
 static std::string encode_tablet_meta_key(TTabletId tablet_id, TSchemaHash schema_hash) {
     return strings::Substitute("$0$1_$2", HEADER_PREFIX, tablet_id, schema_hash);
@@ -303,6 +306,15 @@ Status TabletMetaManager::get_tablet_meta(DataDir* store, TTabletId tablet_id, T
     std::string value;
     RETURN_IF_ERROR(store->get_meta()->get(META_COLUMN_FAMILY_INDEX, key, &value));
     return tablet_meta->deserialize(value);
+}
+
+Status TabletMetaManager::get_persistent_index_meta(DataDir* store, TTabletId tablet_id,
+                                                    PersistentIndexMetaPB* index_meta) {
+    std::string key = encode_persistent_index_key(tablet_id);
+    std::string value;
+    RETURN_IF_ERROR(store->get_meta()->get(META_COLUMN_FAMILY_INDEX, key, &value));
+    index_meta->ParseFromString(value);
+    return Status::OK();
 }
 
 Status TabletMetaManager::get_json_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
@@ -664,6 +676,19 @@ void decode_del_vector_key(const std::string_view& enc_key, TTabletId* tablet_id
     *version = INT64_MAX - BigEndian::ToHost64(UNALIGNED_LOAD64(enc_key.data() + 16));
 }
 
+std::string encode_persistent_index_key(TTabletId tablet_id) {
+    std::string key;
+    key.reserve(TABLET_PERSISTENT_INDEX_META_PREFIX.length() + sizeof(uint64_t));
+    key.append(TABLET_PERSISTENT_INDEX_META_PREFIX);
+    put_fixed64_le(&key, BigEndian::FromHost64(tablet_id));
+    return key;
+}
+
+void decode_persistent_index_key(const std::string_view& enc_key, TTabletId* tablet_id) {
+    DCHECK_EQ(4 + sizeof(uint64_t), enc_key.size());
+    *tablet_id = BigEndian::ToHost64(UNALIGNED_LOAD64(enc_key.data() + 4));
+}
+
 int64_t decode_del_vector_key_version(const std::string_view& key) {
     DCHECK_GT(key.size(), sizeof(int64_t));
     auto v = UNALIGNED_LOAD64(key.data() + key.size() - sizeof(int64_t));
@@ -703,6 +728,42 @@ Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int
     }
     // pending rowset may exists or not, but delete it anyway
     RETURN_IF_ERROR(delete_pending_rowset(store, &batch, tablet_id, edit->version().major()));
+    return store->get_meta()->write_batch(&batch);
+}
+
+Status TabletMetaManager::write_rowset_meta(DataDir* store, TTabletId tablet_id, const RowsetMetaPB& rowset,
+                                            const string& rowset_meta_key) {
+    WriteBatch batch;
+    auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    string rowsetkey = encode_meta_rowset_key(tablet_id, rowset.rowset_seg_id());
+    auto rowsetvalue = rowset.SerializeAsString();
+    rocksdb::Status st = batch.Put(handle, rowsetkey, rowsetvalue);
+    if (!st.ok()) {
+        LOG(WARNING) << "put rowset meta failed, rocksdb.batch.put failed";
+        return to_status(st);
+    }
+    if (!rowset_meta_key.empty()) {
+        // delete rowset meta in txn
+        st = batch.Delete(handle, rowset_meta_key);
+        if (!st.ok()) {
+            LOG(WARNING) << "put rowset meta failed, rocksdb.batch.delete failed";
+            return to_status(st);
+        }
+    }
+    return store->get_meta()->write_batch(&batch);
+}
+
+Status TabletMetaManager::write_persistent_index_meta(DataDir* store, TTabletId tablet_id,
+                                                      const PersistentIndexMetaPB& meta) {
+    WriteBatch batch;
+    auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    string meta_key = encode_persistent_index_key(tablet_id);
+    auto value = meta.SerializeAsString();
+    rocksdb::Status st = batch.Put(handle, meta_key, value);
+    if (!st.ok()) {
+        LOG(WARNING) << "put persistent index meta failed, rocksdb.batch.put failed";
+        return to_status(st);
+    }
     return store->get_meta()->write_batch(&batch);
 }
 
@@ -771,6 +832,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
             return to_status(st);
         }
     }
+
     return store->get_meta()->write_batch(&batch);
 }
 

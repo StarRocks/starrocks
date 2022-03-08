@@ -616,7 +616,7 @@ public class OptimizerTaskTest {
 
         assertEquals(OperatorType.PHYSICAL_OLAP_SCAN, physicalTree.getOp().getOpType());
         PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getOp();
-        assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column1));
+        assertEquals(physicalOlapScan.getProjection().getOutputColumns(), Lists.newArrayList(column4));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
                 getLogicalProperty().getOutputColumns(), new ColumnRefSet(outputColumns1));
@@ -655,7 +655,7 @@ public class OptimizerTaskTest {
         assertNotNull(physicalTree.getOp().getProjection());
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
         PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getOp();
-        assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column1));
+        assertEquals(physicalOlapScan.getProjection().getOutputColumns(), Lists.newArrayList(column4));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
                 getLogicalProperty().getOutputColumns(), new ColumnRefSet(outputColumns1));
@@ -1603,7 +1603,7 @@ public class OptimizerTaskTest {
 
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
         PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getOp();
-        assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column1));
+        assertEquals(physicalOlapScan.getProjection().getOutputColumns(), Lists.newArrayList(column4, column5));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
                 getLogicalProperty().getOutputColumns(), new ColumnRefSet(outputColumns));

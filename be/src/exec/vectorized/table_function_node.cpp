@@ -3,9 +3,11 @@
 #include "exec/vectorized/table_function_node.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/table_function_operator.h"
+#include "exprs/table_function/java_udtf_function.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
@@ -58,13 +60,11 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
         TypeDescriptor return_type = TypeDescriptor::from_thrift(ttype_desc);
         return_types.emplace_back(return_type.type);
     }
-
-    _table_function = get_table_function(table_function_name, arg_types, return_types);
+    _table_function = get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
-    RETURN_IF_ERROR(_table_function->init(&_table_function_state));
-
+    RETURN_IF_ERROR(_table_function->init(table_fn, &_table_function_state));
     _input_chunk_seek_rows = 0;
     _table_function_result_eos = true;
     _outer_column_remain_repeat_times = 0;
@@ -84,6 +84,7 @@ Status TableFunctionNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(child(0)->open(state));
+    RETURN_IF_ERROR(_table_function->open(state, _table_function_state));
     return Status::OK();
 }
 
@@ -209,7 +210,7 @@ Status TableFunctionNode::close(RuntimeState* state) {
         return Status::OK();
     }
     if (_table_function != nullptr) {
-        RETURN_IF_ERROR(_table_function->close(_table_function_state));
+        RETURN_IF_ERROR(_table_function->close(state, _table_function_state));
     }
     return ExecNode::close(state);
 }
@@ -277,6 +278,9 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TableFunctionNode::decom
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
+    if (limit() != -1) {
+        operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
 
     return operators;
 }

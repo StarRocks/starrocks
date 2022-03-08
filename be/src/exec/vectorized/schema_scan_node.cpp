@@ -91,6 +91,10 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
         return Status::InternalError("Failed to get schema table descriptor.");
     }
 
+    _scanner_param._rpc_timer = ADD_TIMER(_runtime_profile, "FERPC");
+    _scanner_param._fill_chunk_timer = ADD_TIMER(_runtime_profile, "FillChunk");
+    _filter_timer = ADD_TIMER(_runtime_profile, "FilterTime");
+
     // new one scanner
     _schema_scanner = SchemaScanner::create(schema_table->schema_table_type());
 
@@ -166,95 +170,87 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     RETURN_IF_CANCELLED(state);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
-    if (reached_limit() || _is_finished) {
+    const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
+    // For dummy schema scanner, the src_slot_descs is empty and the result also should be empty
+    if (src_slot_descs.empty() || reached_limit() || _is_finished) {
         *eos = true;
         return Status::OK();
     }
 
-    const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
     const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
 
-    *chunk = std::make_shared<vectorized::Chunk>();
-    if (nullptr == chunk->get()) {
-        return Status::InternalError("Failed to allocate new chunk.");
-    }
-    for (auto& slot_desc : dest_slot_descs) {
-        if (!slot_desc->is_materialized()) {
-            continue;
-        }
-        ColumnPtr column = vectorized::ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-        (*chunk)->append_column(std::move(column), slot_desc->id());
-    }
     bool scanner_eos = false;
     int row_num = 0;
 
-    while (true) {
-        RETURN_IF_CANCELLED(state);
-
-        if (reached_limit()) {
-            _is_finished = true;
-            // if row_num is greater than 0, in this call, eos = false, and eos will be set to true
-            // in the next call
-            if (row_num == 0) {
-                *eos = true;
-            }
-            break;
-        }
-
-        if (row_num >= runtime_state()->chunk_size()) {
-            break;
-        }
-
-        ChunkPtr chunk_src = std::make_shared<vectorized::Chunk>();
-        if (nullptr == chunk_src.get()) {
-            return Status::InternalError("Failed to allocate new chunk.");
-        }
-        // init column information
-        for (auto& slot_desc : src_slot_descs) {
-            ColumnPtr column = vectorized::ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-            chunk_src->append_column(std::move(column), slot_desc->id());
-        }
-        RETURN_IF_ERROR(_schema_scanner->get_next(&chunk_src, &scanner_eos));
-
-        if (scanner_eos) {
-            _is_finished = true;
-            // if row_num is greater than 0, in this call, eos = false, and eos will be set to true
-            // in the next call
-            if (row_num == 0) {
-                *eos = true;
-            }
-            break;
-        }
-        ++row_num;
-
-        // convert src chunk format to dest chunk format to process where clause
-        ChunkPtr chunk_dst = std::make_shared<vectorized::Chunk>();
-        if (nullptr == chunk_dst.get()) {
-            return Status::InternalError("Failed to allocate new chunk.");
-        }
-        if (!src_slot_descs.empty()) {
-            for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
-                if (!dest_slot_descs[i]->is_materialized()) {
-                    continue;
-                }
-                int j = _index_map[i];
-                ColumnPtr column = chunk_src->get_column_by_slot_id(src_slot_descs[j]->id());
-                chunk_dst->append_column(std::move(column), dest_slot_descs[i]->id());
-            }
-        }
-
-        // process where clause
-        if (!_conjunct_ctxs.empty()) {
-            ExecNode::eval_conjuncts(_conjunct_ctxs, chunk_dst.get());
-        }
-
-        // collect result chunk
-        if (chunk_dst->num_rows()) {
-            (*chunk)->append(*(chunk_dst.get()));
-            ++_num_rows_returned;
-            COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-        }
+    ChunkPtr chunk_src = std::make_shared<vectorized::Chunk>();
+    if (nullptr == chunk_src.get()) {
+        return Status::InternalError("Failed to allocate new chunk.");
     }
+
+    for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
+        DCHECK(dest_slot_descs[i]->is_materialized());
+        int j = _index_map[i];
+        SlotDescriptor* src_slot = src_slot_descs[j];
+        ColumnPtr column = vectorized::ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
+        column->reserve(state->chunk_size());
+        chunk_src->append_column(std::move(column), src_slot->id());
+    }
+
+    // convert src chunk format to dest chunk format to process where clause
+    ChunkPtr chunk_dst = std::make_shared<vectorized::Chunk>();
+    if (nullptr == chunk_dst.get()) {
+        return Status::InternalError("Failed to allocate new chunk.");
+    }
+
+    for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
+        ColumnPtr column =
+                vectorized::ColumnHelper::create_column(dest_slot_descs[i]->type(), dest_slot_descs[i]->is_nullable());
+        chunk_dst->append_column(std::move(column), dest_slot_descs[i]->id());
+    }
+
+    while (!scanner_eos && chunk_dst->is_empty()) {
+        while (row_num < state->chunk_size()) {
+            RETURN_IF_ERROR(_schema_scanner->get_next(&chunk_src, &scanner_eos));
+
+            if (scanner_eos) {
+                _is_finished = true;
+                // if row_num is greater than 0, in this call, eos = false, and eos will be set to true
+                // in the next call
+                if (row_num == 0) {
+                    *eos = true;
+                }
+                break;
+            }
+
+            row_num++;
+        }
+
+        for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
+            int j = _index_map[i];
+            ColumnPtr& src_column = chunk_src->get_column_by_slot_id(src_slot_descs[j]->id());
+            ColumnPtr& dst_column = chunk_dst->get_column_by_slot_id(dest_slot_descs[i]->id());
+            dst_column->append(*src_column);
+        }
+
+        {
+            SCOPED_TIMER(_filter_timer);
+            if (!_conjunct_ctxs.empty()) {
+                ExecNode::eval_conjuncts(_conjunct_ctxs, chunk_dst.get());
+            }
+        }
+        row_num = chunk_dst->num_rows();
+        chunk_src->reset();
+    }
+
+    _num_rows_returned += chunk_dst->num_rows();
+    if (reached_limit()) {
+        int64_t num_rows_over = _num_rows_returned - _limit;
+        chunk_dst->set_num_rows(chunk_dst->num_rows() - num_rows_over);
+        COUNTER_SET(_rows_returned_counter, _limit);
+    } else {
+        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+    }
+    *chunk = std::move(chunk_dst);
 
     return Status::OK();
 }

@@ -159,6 +159,7 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
 
     field->name = level1_schema.name;
     field->type.type = TYPE_ARRAY;
+    field->type.children.push_back(field->children[0].type);
     field->is_nullable = is_optional;
     field->level_info = cur_level_info;
     field->level_info.immediate_repeated_ancestor_def_level = last_immediate_repeated_ancestor_def_level;
@@ -354,7 +355,7 @@ std::string SchemaDescriptor::debug_string() const {
 
 int SchemaDescriptor::get_column_index(const std::string& column) const {
     for (size_t i = 0; i < _fields.size(); i++) {
-        if (_physical_fields[i]->name == column) {
+        if (_fields[i].name == column) {
             return i;
         }
     }

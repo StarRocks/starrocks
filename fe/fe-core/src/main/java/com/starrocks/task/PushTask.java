@@ -61,7 +61,7 @@ public class PushTask extends AgentTask {
     private boolean isSyncDelete;
     private long asyncDeleteJobId;
 
-    private long transactionId;
+    private final long transactionId;
     private boolean isSchemaChanging;
 
     // for load v2 (spark load)
@@ -90,6 +90,16 @@ public class PushTask extends AgentTask {
         this.tBrokerScanRange = null;
         this.tDescriptorTable = null;
         this.useVectorized = true;
+    }
+
+    // for cancel delete
+    public PushTask(long backendId, TPushType pushType, TPriority priority, TTaskType taskType,
+                    long transactionId, long signature) {
+        super(null, backendId, taskType, -1, -1, -1, -1, -1);
+        this.pushType = pushType;
+        this.priority = priority;
+        this.transactionId = transactionId;
+        this.signature = signature;
     }
 
     // for load v2 (SparkLoadJob)
@@ -163,6 +173,9 @@ public class PushTask extends AgentTask {
                 request.setBroker_scan_range(tBrokerScanRange);
                 request.setDesc_tbl(tDescriptorTable);
                 request.setUse_vectorized(useVectorized);
+                break;
+            case CANCEL_DELETE:
+                request.setTransaction_id(transactionId);
                 break;
             default:
                 LOG.warn("unknown push type. type: " + pushType.name());

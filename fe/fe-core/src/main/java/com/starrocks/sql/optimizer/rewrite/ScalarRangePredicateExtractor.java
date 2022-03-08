@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -88,7 +89,7 @@ public class ScalarRangePredicateExtractor {
             }
         }
 
-        if (extractExpr != null && !conjuncts.contains(extractExpr)) {
+        if (!conjuncts.contains(extractExpr)) {
             result.forEach(f -> f.setFromPredicateRangeDerive(true));
             result.stream().filter(predicateOperator -> !checkStatisticsEstimateValid(predicateOperator))
                     .forEach(f -> f.setNotEvalEstimate(true));
@@ -122,7 +123,7 @@ public class ScalarRangePredicateExtractor {
         return re.apply(scalarOperator, null);
     }
 
-    private class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
+    private static class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
         private final Map<ScalarOperator, ValueDescriptor> descMap = Maps.newHashMap();
 
         public Map<ScalarOperator, ValueDescriptor> apply(ScalarOperator scalarOperator, Void context) {
@@ -295,7 +296,7 @@ public class ScalarRangePredicateExtractor {
     }
 
     private static class MultiValuesDescriptor extends ValueDescriptor {
-        protected List<ConstantOperator> values = Lists.newArrayList();
+        protected Set<ConstantOperator> values = new LinkedHashSet<>();
 
         public MultiValuesDescriptor(ScalarOperator ref) {
             super(ref);

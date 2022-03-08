@@ -12,16 +12,24 @@
 #include <utility>
 
 #include "common/status.h"
-#include "gutil/macros.h"
+#include "env/env_hdfs.h"
 
 namespace starrocks {
+
+class ObjectStore;
+
+struct HdfsFsHandle {
+    enum class Type { LOCAL, HDFS, S3 };
+    Type type;
+    std::string namenode;
+    hdfsFS hdfs_fs;
+    ObjectStore* object_store;
+};
 
 // Cache for HDFS file system
 class HdfsFsCache {
 public:
-    using FileOpenLimit = std::atomic<int32_t>;
-    using FileOpenLimitPtr = FileOpenLimit*;
-    using HdfsFsMap = std::unordered_map<std::string, std::pair<hdfsFS, std::unique_ptr<FileOpenLimit>>>;
+    using HdfsFsMap = std::unordered_map<std::string, HdfsFsHandle>;
 
     static HdfsFsCache* instance() {
         static HdfsFsCache s_instance;
@@ -29,8 +37,7 @@ public:
     }
 
     // This function is thread-safe
-    Status get_connection(const std::string& path, hdfsFS* fs, FileOpenLimitPtr* semaphore = nullptr,
-                          HdfsFsMap* map = nullptr);
+    Status get_connection(const std::string& namenode, HdfsFsHandle* handle);
 
 private:
     std::mutex _lock;

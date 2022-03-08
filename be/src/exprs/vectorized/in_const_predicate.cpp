@@ -3,27 +3,10 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 
 #include "gutil/strings/substitute.h"
+#include "runtime/primitive_type_infra.h"
 
 namespace starrocks {
 namespace vectorized {
-
-#define APPLY_FOR_ALL_PRIMITIVE_TYPE(M) \
-    M(TYPE_TINYINT)                     \
-    M(TYPE_SMALLINT)                    \
-    M(TYPE_INT)                         \
-    M(TYPE_BIGINT)                      \
-    M(TYPE_LARGEINT)                    \
-    M(TYPE_FLOAT)                       \
-    M(TYPE_DOUBLE)                      \
-    M(TYPE_VARCHAR)                     \
-    M(TYPE_CHAR)                        \
-    M(TYPE_DATE)                        \
-    M(TYPE_DATETIME)                    \
-    M(TYPE_DECIMALV2)                   \
-    M(TYPE_DECIMAL32)                   \
-    M(TYPE_DECIMAL64)                   \
-    M(TYPE_DECIMAL128)                  \
-    M(TYPE_BOOLEAN)
 
 ExprContext* VectorizedInConstPredicateBuilder::_create() {
     Expr* probe_expr = _expr;
@@ -68,7 +51,7 @@ ExprContext* VectorizedInConstPredicateBuilder::_create() {
         auto* ctx = _pool->add(new ExprContext(in_pred));                                                            \
         return ctx;                                                                                                  \
     }
-        APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
+        APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
     default:
         _st = Status::NotSupported(strings::Substitute("Can not create in-const-predicate on type $0", probe_type));
@@ -104,7 +87,7 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
         }                                                                             \
         break;                                                                        \
     }
-            APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
+            APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
         default:;
         }
@@ -139,7 +122,7 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
         }                                                                                                       \
         break;                                                                                                  \
     }
-            APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
+            APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
         default:;
         }

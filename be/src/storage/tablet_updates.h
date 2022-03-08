@@ -10,6 +10,7 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/edit_version.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_writer.h"
 #include "util/blocking_queue.hpp"
@@ -36,21 +37,6 @@ class ChunkChanger;
 class SegmentIterator;
 } // namespace vectorized
 
-struct EditVersion {
-    uint128_t value = 0;
-    EditVersion() = default;
-    EditVersion(int64_t major, int64_t minor) { value = (((uint128_t)major) << 64) | minor; }
-    int64_t major() const { return value >> 64; }
-    int64_t minor() const { return (int64_t)(value & 0xffffffffUL); }
-    std::string to_string() const;
-    bool operator<(const EditVersion& rhs) const { return value < rhs.value; }
-    bool operator==(const EditVersion& rhs) const { return value == rhs.value; }
-};
-
-inline std::ostream& operator<<(std::ostream& os, const EditVersion& v) {
-    return os << v.to_string();
-}
-
 struct CompactionInfo {
     EditVersion start_version;
     std::vector<uint32_t> inputs;
@@ -68,6 +54,8 @@ public:
     Status init();
 
     bool is_error() const { return _error; }
+
+    std::string get_error_msg() const { return _error_msg; }
 
     using IteratorList = std::vector<std::shared_ptr<vectorized::ChunkIterator>>;
 
@@ -132,6 +120,8 @@ public:
 
     // perform compaction, should only be called by compaction thread
     Status compaction(MemTracker* mem_tracker);
+
+    void get_compaction_status(std::string* json_result);
 
     // Remove version whose creation time is less than |expire_time|.
     // [thread-safe]
@@ -271,6 +261,8 @@ private:
 
     void _ignore_rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
 
+    void _get_latest_applied_version(EditVersion* latest_applied_version);
+
     void _apply_rowset_commit(const EditVersionInfo& version_info);
 
     void _apply_compaction_commit(const EditVersionInfo& version_info);
@@ -309,7 +301,7 @@ private:
 
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 
-    void _set_error();
+    void _set_error(const string& msg);
 
     Status _load_from_pb(const TabletUpdatesPB& updates);
 
@@ -361,6 +353,8 @@ private:
 
     std::atomic<bool> _compaction_running{false};
     int64_t _last_compaction_time_ms = 0;
+    std::atomic<int64_t> _last_compaction_success_millis{0};
+    std::atomic<int64_t> _last_compaction_failure_millis{0};
     int64_t _compaction_cost_seek = 32 * 1024 * 1024; // 32MB
 
     mutable std::mutex _rowset_stats_lock;
@@ -381,6 +375,7 @@ private:
     // keep the scene(internal state) unchanged for further investigation, and don't crash
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
+    std::string _error_msg;
 
     TabletUpdates(const TabletUpdates&) = delete;
     const TabletUpdates& operator=(const TabletUpdates&) = delete;

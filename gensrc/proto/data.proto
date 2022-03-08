@@ -47,19 +47,19 @@ message PRowBatch {
     required bool is_compressed = 5;
 };
 
-// We only serialize slot_id_map, is_nulls, is_consts in first chunk when RPC
+// We only serialize slot_id_map, is_nulls, is_consts in first chunk when RPC.
 message ChunkPB {
-    // Content for this chunk
+    // Content for this chunk.
     optional bytes data = 1;
     optional CompressionTypePB compress_type = 2;
-    // helper to allocate memory to decompress compressed data
+    // Helper to allocate memory to decompress compressed data.
     optional int64 uncompressed_size = 3;
     repeated int32 slot_id_map = 4 ; // slot id to column id map
     repeated bool is_nulls = 5; // column is nullable
     repeated bool is_consts = 6; // column is const
     repeated int32 tuple_id_map = 7; // tuple id to column id map
     optional int64 data_size = 8; // used to record size using brpc attachment
-    // for some object column types like bitmap/hll/percentile
+    // For some object column types like bitmap/hll/percentile.
     // we may estimate larger serialized_size but actually don't use that much space.
     optional int64 serialized_size  = 9; // how many bytes are really written into data.
 };

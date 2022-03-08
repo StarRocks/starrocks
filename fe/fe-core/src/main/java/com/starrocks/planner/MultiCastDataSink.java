@@ -22,6 +22,7 @@ public class MultiCastDataSink extends DataSink {
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
         StringBuilder sb = new StringBuilder();
 
+        sb.append(prefix).append("MultiCastDataSinks\n");
         for (DataStreamSink dataStreamSink : dataStreamSinks) {
             sb.append(dataStreamSink.getExplainString(prefix, explainLevel));
         }
@@ -33,6 +34,7 @@ public class MultiCastDataSink extends DataSink {
     public String getVerboseExplain(String prefix) {
         StringBuilder sb = new StringBuilder();
 
+        sb.append(prefix).append("MultiCastDataSinks:\n");
         for (DataStreamSink dataStreamSink : dataStreamSinks) {
             sb.append(dataStreamSink.getVerboseExplain(prefix));
         }

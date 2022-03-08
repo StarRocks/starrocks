@@ -52,36 +52,58 @@ Status SchemaSchemataScanner::start(RuntimeState* state) {
 }
 
 Status SchemaSchemataScanner::fill_chunk(ChunkPtr* chunk) {
-    // catalog
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[0]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // schema
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[1]->id());
-        std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index]);
-        Slice value(db_name.c_str(), db_name.length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // DEFAULT_CHARACTER_SET_NAME
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[2]->id());
-        const char* str = "utf8";
-        Slice value(str, strlen(str));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // DEFAULT_COLLATION_NAME
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[3]->id());
-        const char* str = "utf8_general_ci";
-        Slice value(str, strlen(str));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // SQL_PATH
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[4]->id());
-        fill_data_column_with_null(column.get());
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        switch (slot_id) {
+        case 1: {
+            // catalog
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 2: {
+            // schema
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index]);
+                Slice value(db_name.c_str(), db_name.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 3: {
+            // DEFAULT_CHARACTER_SET_NAME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                const char* str = "utf8";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 4: {
+            // DEFAULT_COLLATION_NAME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                const char* str = "utf8_general_ci";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 5: {
+            // SQL_PATH
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        default:
+            break;
+        }
     }
     _db_index++;
     return Status::OK();

@@ -44,7 +44,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -178,6 +178,9 @@ public class FunctionCallExpr extends Expr {
                     .add(FunctionSet.MONTH)
                     .add(FunctionSet.DAY)
                     .add(FunctionSet.HOUR)
+                    .add(FunctionSet.ADD)
+                    .add(FunctionSet.SUBTRACT)
+                    .add(FunctionSet.MULTIPLY)
                     .build();
 
     public boolean isMergeAggFn() {
@@ -393,7 +396,7 @@ public class FunctionCallExpr extends Expr {
             return;
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("group_concat")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
             if (children.size() > 2 || children.isEmpty()) {
                 throw new AnalysisException(
                         "group_concat requires one or two parameters: " + this.toSql());
@@ -452,16 +455,25 @@ public class FunctionCallExpr extends Expr {
             return;
         }
 
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+            if (fnParams.isDistinct()) {
+                throw new AnalysisException("array_agg does not support DISTINCT");
+            }
+            if (arg.type.isDecimalV3()) {
+                throw new AnalysisException("array_agg does not support DecimalV3");
+            }
+        }
+
         // SUM and AVG cannot be applied to non-numeric types
         if ((fnName.getFunction().equalsIgnoreCase("sum")
                 || fnName.getFunction().equalsIgnoreCase("avg"))
                 && ((!arg.type.isNumericType() && !arg.type.isNull() && !(arg instanceof NullLiteral)) ||
-                arg.type.isOnlyMetricType())) {
+                !arg.type.canApplyToNumeric())) {
             throw new AnalysisException(fnName.getFunction() + " requires a numeric parameter: " + this.toSql());
         }
         if (fnName.getFunction().equalsIgnoreCase("sum_distinct")
                 && ((!arg.type.isNumericType() && !arg.type.isNull() && !(arg instanceof NullLiteral)) ||
-                arg.type.isOnlyMetricType())) {
+                !arg.type.canApplyToNumeric())) {
             throw new AnalysisException(
                     "SUM_DISTINCT requires a numeric parameter: " + this.toSql());
         }
@@ -470,7 +482,7 @@ public class FunctionCallExpr extends Expr {
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.MAX)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.NDV)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.APPROX_COUNT_DISTINCT))
-                && arg.type.isOnlyMetricType()) {
+                && !arg.type.canApplyToNumeric()) {
             throw new AnalysisException(Type.OnlyMetricTypeErrorMsg);
         }
 
@@ -652,7 +664,7 @@ public class FunctionCallExpr extends Expr {
             argTypes[i] = this.children.get(i).getType();
         }
 
-        Type decimalReturnType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argTypes, fnName);
+        Type decimalReturnType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argTypes, fnName.getFunction());
         analyzeBuiltinAggFunction();
 
         if (fnName.getFunction().equalsIgnoreCase("sum")) {
@@ -934,7 +946,7 @@ public class FunctionCallExpr extends Expr {
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitFunctionCall(this, context);
     }
 

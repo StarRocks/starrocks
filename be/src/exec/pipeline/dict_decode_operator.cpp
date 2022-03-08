@@ -12,9 +12,8 @@ Status DictDecodeOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status DictDecodeOperator::close(RuntimeState* state) {
+void DictDecodeOperator::close(RuntimeState* state) {
     Operator::close(state);
-    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> DictDecodeOperator::pull_chunk(RuntimeState* state) {
@@ -63,11 +62,32 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::Chu
 Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, _row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
 
     const auto& global_dict = state->get_query_global_dict_map();
     _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
+
+    for (auto& [slot_id, v] : _string_functions) {
+        auto dict_iter = global_dict.find(slot_id);
+        auto dict_not_contains_cid = dict_iter == global_dict.end();
+        if (dict_not_contains_cid) {
+            auto& [expr_ctx, dict_ctx] = v;
+            DCHECK(expr_ctx->root()->fn().could_apply_dict_optimize);
+            _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
+            if (!dict_ctx.could_apply_dict_optimize) {
+                return Status::InternalError(fmt::format(
+                        "Not found dict for function-called cid:{} it may cause by unsupported function", slot_id));
+            }
+
+            _dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, slot_id);
+            auto dict_iter = global_dict.find(slot_id);
+            DCHECK(dict_iter != global_dict.end());
+            if (dict_iter == global_dict.end()) {
+                return Status::InternalError(fmt::format("Eval Expr Error for cid:{}", slot_id));
+            }
+        }
+    }
 
     DCHECK_EQ(_encode_column_cids.size(), _decode_column_cids.size());
     int need_decode_size = _decode_column_cids.size();
@@ -75,27 +95,10 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
         int need_encode_cid = _encode_column_cids[i];
         auto dict_iter = global_dict.find(need_encode_cid);
         auto dict_not_contains_cid = dict_iter == global_dict.end();
-        auto input_has_string_function = _string_functions.find(need_encode_cid) != _string_functions.end();
 
-        if (dict_not_contains_cid && !input_has_string_function) {
+        if (dict_not_contains_cid) {
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
-        } else if (dict_not_contains_cid && input_has_string_function) {
-            auto& [expr_ctx, dict_ctx] = _string_functions[need_encode_cid];
-            DCHECK(expr_ctx->root()->fn().could_apply_dict_optimize);
-            _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
-            if (!dict_ctx.could_apply_dict_optimize) {
-                return Status::InternalError(
-                        fmt::format("Not found dict for function-called cid:{} it may cause by unsupported function",
-                                    need_encode_cid));
-            }
-            _dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, need_encode_cid);
-            dict_iter = global_dict.find(need_encode_cid);
-            DCHECK(dict_iter != global_dict.end());
-            if (dict_iter == global_dict.end()) {
-                return Status::InternalError(fmt::format("Eval Expr Error for cid:{}", need_encode_cid));
-            }
         }
-
         vectorized::DefaultDecoderPtr decoder = std::make_unique<vectorized::DefaultDecoder>();
         // TODO : avoid copy dict
         decoder->dict = dict_iter->second.second;

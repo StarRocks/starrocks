@@ -37,13 +37,11 @@ public class OptimizeGroupTask extends OptimizerTask {
         }
 
         for (GroupExpression expression : group.getLogicalExpressions()) {
-            pushTask(new OptimizeExpressionTask(context, expression, false));
+            pushTask(new OptimizeExpressionTask(context, expression));
         }
 
         for (GroupExpression expression : group.getPhysicalExpressions()) {
             pushTask((new EnforceAndCostTask(context, expression)));
         }
-
-        group.setHasExplored();
     }
 }

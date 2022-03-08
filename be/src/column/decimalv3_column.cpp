@@ -81,6 +81,26 @@ void DecimalV3Column<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) 
     }
 }
 
+template <typename T>
+int64_t DecimalV3Column<T>::xor_checksum(uint32_t from, uint32_t to) const {
+    // The XOR of DecimalV3Column
+    // XOR all the decimals one by one
+    auto& data = this->get_data();
+    int64_t xor_checksum = 0;
+    const T* src = reinterpret_cast<const T*>(data.data());
+
+    for (size_t i = from; i < to; ++i) {
+        if constexpr (std::is_same_v<T, int128_t>) {
+            xor_checksum ^= (src[i] >> 64);
+            xor_checksum ^= (src[i] & ULLONG_MAX);
+        } else {
+            xor_checksum ^= src[i];
+        }
+    }
+
+    return xor_checksum;
+}
+
 template class DecimalV3Column<int32_t>;
 template class DecimalV3Column<int64_t>;
 template class DecimalV3Column<int128_t>;

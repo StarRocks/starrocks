@@ -7,45 +7,28 @@
 #include "column/column.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
+#include "exprs/vectorized/runtime_filter.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 #include "simd/simd.h"
 #include "util/time.h"
+
 namespace starrocks::vectorized {
 
 // 0x1. initial global runtime filter impl
 // 0x2. change simd-block-filter hash function.
 static const uint8_t RF_VERSION = 0x2;
 
-#define APPLY_FOR_ALL_PRIMITIVE_TYPE(M) \
-    M(TYPE_TINYINT)                     \
-    M(TYPE_SMALLINT)                    \
-    M(TYPE_INT)                         \
-    M(TYPE_BIGINT)                      \
-    M(TYPE_LARGEINT)                    \
-    M(TYPE_FLOAT)                       \
-    M(TYPE_DOUBLE)                      \
-    M(TYPE_VARCHAR)                     \
-    M(TYPE_CHAR)                        \
-    M(TYPE_DATE)                        \
-    M(TYPE_DATETIME)                    \
-    M(TYPE_DECIMALV2)                   \
-    M(TYPE_DECIMAL32)                   \
-    M(TYPE_DECIMAL64)                   \
-    M(TYPE_DECIMAL128)                  \
-    M(TYPE_BOOLEAN)
+struct FilterBuilder {
+    template <PrimitiveType ptype>
+    JoinRuntimeFilter* operator()() {
+        return new RuntimeBloomFilter<ptype>();
+    }
+};
 
 JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, PrimitiveType type) {
-    JoinRuntimeFilter* filter = nullptr;
-    switch (type) {
-#define M(NAME)                                                 \
-    case PrimitiveType::NAME: {                                 \
-        filter = new RuntimeBloomFilter<PrimitiveType::NAME>(); \
-        break;                                                  \
-    }
-        APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
-#undef M
-    default:;
-    }
+    JoinRuntimeFilter* filter = type_dispatch_filter(type, (JoinRuntimeFilter*)nullptr, FilterBuilder());
     if (pool != nullptr && filter != nullptr) {
         return pool->add(filter);
     } else {
@@ -99,50 +82,38 @@ JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* 
     return filter;
 }
 
+struct FilterIniter {
+    template <PrimitiveType ptype>
+    auto operator()(const ColumnPtr& column, size_t column_offset, JoinRuntimeFilter* expr, bool eq_null) {
+        using ColumnType = typename RunTimeTypeTraits<ptype>::ColumnType;
+        auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
+
+        if (column->is_nullable()) {
+            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
+            auto& data_array = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data();
+            for (size_t j = column_offset; j < data_array.size(); j++) {
+                if (!nullable_column->is_null(j)) {
+                    filter->insert(&data_array[j]);
+                } else {
+                    if (eq_null) {
+                        filter->insert(nullptr);
+                    }
+                }
+            }
+
+        } else {
+            auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
+            for (size_t j = column_offset; j < data_ptr.size(); j++) {
+                filter->insert(&data_ptr[j]);
+            }
+        }
+        return nullptr;
+    }
+};
+
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type,
                                                       JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
-    JoinRuntimeFilter* expr = filter;
-    if (!column->is_nullable()) {
-        switch (type) {
-#define M(FIELD_TYPE)                                                                 \
-    case PrimitiveType::FIELD_TYPE: {                                                 \
-        using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;        \
-        auto* filter = (RuntimeBloomFilter<PrimitiveType::FIELD_TYPE>*)(expr);        \
-        auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); \
-        for (size_t j = column_offset; j < data_ptr.size(); j++) {                    \
-            filter->insert(&data_ptr[j]);                                             \
-        }                                                                             \
-        break;                                                                        \
-    }
-            APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
-#undef M
-        default:;
-        }
-    } else {
-        switch (type) {
-#define M(FIELD_TYPE)                                                                                           \
-    case PrimitiveType::FIELD_TYPE: {                                                                           \
-        using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;                                  \
-        auto* filter = (RuntimeBloomFilter<PrimitiveType::FIELD_TYPE>*)(expr);                                  \
-        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);                            \
-        auto& data_array = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data(); \
-        for (size_t j = column_offset; j < data_array.size(); j++) {                                            \
-            if (!nullable_column->is_null(j)) {                                                                 \
-                filter->insert(&data_array[j]);                                                                 \
-            } else {                                                                                            \
-                if (eq_null) {                                                                                  \
-                    filter->insert(nullptr);                                                                    \
-                }                                                                                               \
-            }                                                                                                   \
-        }                                                                                                       \
-        break;                                                                                                  \
-    }
-            APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
-#undef M
-        default:;
-        }
-    }
-
+    type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null);
     return Status::OK();
 }
 
@@ -194,7 +165,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
 
 Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
     if (_probe_expr_ctx != nullptr) {
-        RETURN_IF_ERROR(_probe_expr_ctx->prepare(state, row_desc));
+        RETURN_IF_ERROR(_probe_expr_ctx->prepare(state));
     }
     _open_timestamp = UnixMillis();
     _latency_timer = ADD_COUNTER(p, strings::Substitute("JoinRuntimeFilter/$0/latency", _filter_id), TUnit::TIME_NS);
@@ -222,7 +193,7 @@ void RuntimeFilterProbeDescriptor::replace_probe_expr_ctx(RuntimeState* state, c
     _probe_expr_ctx->close(state);
     // create new probe expr and open it.
     _probe_expr_ctx = state->obj_pool()->add(new ExprContext(new_probe_expr_ctx->root()));
-    _probe_expr_ctx->prepare(state, row_desc);
+    _probe_expr_ctx->prepare(state);
     _probe_expr_ctx->open(state);
 }
 

@@ -72,6 +72,9 @@ Status OlapMetaScanNode::open(RuntimeState* state) {
         return Status::InternalError("Invalid ScanRange.");
     }
 
+    DCHECK_GT(_scanners.size(), 0);
+    RETURN_IF_ERROR(_scanners[_cursor_idx]->open(state));
+
     _cursor_idx = 0;
 
     RETURN_IF_CANCELLED(state);
@@ -82,7 +85,9 @@ Status OlapMetaScanNode::open(RuntimeState* state) {
 Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
     RETURN_IF_CANCELLED(state);
+
     if (!_scanners[_cursor_idx]->has_more()) {
+        _scanners[_cursor_idx]->close(state);
         _cursor_idx++;
     }
     if (_cursor_idx >= _scanners.size()) {
@@ -90,6 +95,7 @@ Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
         return Status::OK();
     }
 
+    RETURN_IF_ERROR(_scanners[_cursor_idx]->open(state));
     RETURN_IF_ERROR(_scanners[_cursor_idx]->get_chunk(state, chunk));
     return Status::OK();
 }

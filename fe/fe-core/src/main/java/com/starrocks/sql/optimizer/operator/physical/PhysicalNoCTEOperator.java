@@ -10,14 +10,14 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import java.util.Objects;
 
 public class PhysicalNoCTEOperator extends PhysicalOperator {
-    private final String cteId;
+    private final int cteId;
 
-    public PhysicalNoCTEOperator(String cteId) {
+    public PhysicalNoCTEOperator(int cteId) {
         super(OperatorType.PHYSICAL_NO_CTE);
         this.cteId = cteId;
     }
 
-    public String getCteId() {
+    public int getCteId() {
         return cteId;
     }
 

@@ -13,7 +13,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.relation.ValuesRelation;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -32,15 +32,16 @@ import java.util.Map;
 public class ValuesTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
-    Map<String, ExpressionMapping> cteContex;
+    Map<Integer, ExpressionMapping> cteContext;
 
     private final BitSet subqueriesIndex = new BitSet();
     private final List<ColumnRefOperator> outputColumns = Lists.newArrayList();
 
-    ValuesTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, Map<String, ExpressionMapping> cteContex) {
+    ValuesTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
+                      Map<Integer, ExpressionMapping> cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
-        this.cteContex = cteContex;
+        this.cteContext = cteContext;
     }
 
     public LogicalPlan plan(ValuesRelation node) {
@@ -53,8 +54,8 @@ public class ValuesTransformer {
         List<ColumnRefOperator> valuesOutputColumns = Lists.newArrayList();
 
         // flag subquery
-        for (int i = 0; i < node.getOutputExpr().size(); i++) {
-            Expr expr = node.getOutputExpr().get(i);
+        for (int i = 0; i < node.getRows().get(0).size(); i++) {
+            Expr expr = node.getRows().get(0).get(i);
 
             List<Subquery> tmp = Lists.newArrayList();
             expr.collect(Subquery.class, tmp);
@@ -114,6 +115,10 @@ public class ValuesTransformer {
             values.add(valuesRow);
         }
 
+        if (node.hasLimit()) {
+            values = values.subList((int) node.getLimit().getOffset(),
+                    (int) (node.getLimit().getOffset() + node.getLimit().getLimit()));
+        }
         return new OptExprBuilder(new LogicalValuesOperator(valuesOutputColumns, values), Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), valuesOutputColumns));
     }
@@ -127,16 +132,16 @@ public class ValuesTransformer {
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
-        for (int i = 0; i < node.getOutputExpr().size(); i++) {
+        for (int i = 0; i < node.getRows().get(0).size(); i++) {
             if (!subqueriesIndex.get(i)) {
                 projections.put(outputColumns.get(i), outputColumns.get(i));
                 continue;
             }
 
-            Expr output = node.getOutputExpr().get(i);
-            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, output, cteContex);
+            Expr output = node.getRows().get(0).get(i);
+            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, output, cteContext);
             ColumnRefOperator columnRef = SqlToScalarOperatorTranslator
-                    .findOrCreateColumnRefForExpr(node.getOutputExpr().get(i), subOpt.getExpressionMapping(),
+                    .findOrCreateColumnRefForExpr(node.getRows().get(0).get(i), subOpt.getExpressionMapping(),
                             projections, columnRefFactory);
             outputTranslations.put(output, columnRef);
             outputColumns.set(i, columnRef);

@@ -103,10 +103,8 @@ public:
     ColumnSelector(const FileContents* contents);
 
     // Select the columns from the RowReaderoptions object
-    void updateSelected(std::vector<bool>& selectedColumns, const RowReaderOptions& options);
-
-    // Select the columns from the Readeroptions object
-    void updateSelected(std::vector<bool>& selectedColumns, const ReaderOptions& options);
+    void updateSelected(std::vector<bool>& selectedColumns, std::vector<bool>& lazyLoadColumns,
+                        const RowReaderOptions& options);
 };
 
 class RowReaderImpl : public RowReader {
@@ -120,11 +118,13 @@ private:
 
     // inputs
     std::vector<bool> selectedColumns;
+    std::vector<bool> lazyLoadColumns;
 
     // footer
     proto::Footer* footer;
     DataBuffer<uint64_t> firstRowOfStripe;
     mutable std::unique_ptr<Type> selectedSchema;
+    bool skipBloomFilters;
 
     // reading state
     uint64_t previousRow;
@@ -132,6 +132,8 @@ private:
     uint64_t currentStripe;
     uint64_t lastStripe; // the stripe AFTER the last one
     uint64_t currentRowInStripe;
+    uint64_t lazyLoadLastUsedRowInStripe; // which row in stripe loazy load files are used in last time.
+
     uint64_t rowsInCurrentStripe;
     proto::StripeInformation currentStripeInfo;
     proto::StripeFooter currentStripeFooter;
@@ -180,6 +182,14 @@ private:
      * @param rowGroupEntryId the row group id to seek to
      */
     void seekToRowGroup(uint32_t rowGroupEntryId);
+    void getRowGroupPosition(uint32_t rowGroupEntryId, PositionProviderMap* map);
+
+    /**
+     * Check if the file has bad bloom filters. We will skip using them in the
+     * following reads.
+     * @return true if it has.
+     */
+    bool hasBadBloomFilters();
 
 public:
     /**
@@ -190,13 +200,16 @@ public:
     RowReaderImpl(const std::shared_ptr<FileContents>& contents, const RowReaderOptions& options);
 
     // Select the columns from the options object
-    const std::vector<bool> getSelectedColumns() const override;
+    const std::vector<bool>& getSelectedColumns() const override;
+    const std::vector<bool>& getLazyLoadColumns() const override;
 
     const Type& getSelectedType() const override;
 
     std::unique_ptr<ColumnVectorBatch> createRowBatch(uint64_t size) const override;
 
-    bool next(ColumnVectorBatch& data) override;
+    bool next(ColumnVectorBatch& data, ReadPosition* pos) override;
+    void lazyLoadSeekTo(uint64_t rowInStripe) override;
+    void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) override;
 
     CompressionKind getCompression() const;
 
@@ -259,6 +272,8 @@ public:
     WriterId getWriterId() const override;
 
     uint32_t getWriterIdValue() const override;
+
+    std::string getSoftwareVersion() const override;
 
     WriterVersion getWriterVersion() const override;
 

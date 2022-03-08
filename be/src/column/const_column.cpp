@@ -34,6 +34,10 @@ void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index,
     append(src, index, size);
 }
 
+Status ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    return Status::NotSupported("ConstColumn does not support update");
+}
+
 void ConstColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     DCHECK(_size > 0);
     for (uint32_t i = from; i < to; ++i) {
@@ -43,6 +47,11 @@ void ConstColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
 
 void ConstColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     DCHECK(false) << "Const column shouldn't call crc32 hash";
+}
+
+int64_t ConstColumn::xor_checksum(uint32_t from, uint32_t to) const {
+    DCHECK(false) << "Const column shouldn't call xor_checksum";
+    return 0;
 }
 
 size_t ConstColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
@@ -55,6 +64,13 @@ int ConstColumn::compare_at(size_t left, size_t right, const Column& rhs, int na
     DCHECK(rhs.is_constant());
     const auto& rhs_data = static_cast<const ConstColumn&>(rhs)._data;
     return _data->compare_at(0, 0, *rhs_data, nan_direction_hint);
+}
+
+void ConstColumn::check_or_die() const {
+    if (_size > 0) {
+        CHECK_GE(_data->size(), 1);
+    }
+    _data->check_or_die();
 }
 
 } // namespace starrocks::vectorized

@@ -20,7 +20,7 @@ under the License.
 -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.starrocks</groupId>
@@ -49,6 +49,7 @@ under the License.
         <parquet.version>1.10.1</parquet.version>
         <hadoop.version>3.3.0</hadoop.version>
         <skip.plugin>false</skip.plugin>
+        <hudi.version>0.10.0</hudi.version>
     </properties>
 
     <profiles>
@@ -308,13 +309,6 @@ under the License.
                 <artifactId>jmockit</artifactId>
                 <version>1.48</version>
                 <scope>test</scope>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/joda-time/joda-time -->
-            <dependency>
-                <groupId>joda-time</groupId>
-                <artifactId>joda-time</artifactId>
-                <version>2.10.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
@@ -580,7 +574,7 @@ under the License.
             <dependency>
                 <groupId>com.facebook.presto.hive</groupId>
                 <artifactId>hive-apache</artifactId>
-                <version>3.0.0-5</version>
+                <version>3.0.0-7</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-common -->
@@ -696,6 +690,20 @@ under the License.
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-aws</artifactId>
                 <version>${hadoop.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-common -->
+            <dependency>
+                <groupId>org.apache.hudi</groupId>
+                <artifactId>hudi-common</artifactId>
+                <version>${hudi.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-hadoop-mr -->
+            <dependency>
+                <groupId>org.apache.hudi</groupId>
+                <artifactId>hudi-hadoop-mr</artifactId>
+                <version>${hudi.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

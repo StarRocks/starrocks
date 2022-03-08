@@ -27,10 +27,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <string_view>
 
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
-#include "udf/udf.h"
 #include "util/hash_util.hpp"
 #include "util/timezone_utils.h"
 
@@ -315,11 +315,13 @@ public:
 
     //unix_timestamp is called with a timezone argument,
     //it returns seconds of the value of date literal since '1970-01-01 00:00:00' UTC
-    bool unix_timestamp(int64_t* timestamp, const std::string& timezone) const;
+    bool unix_timestamp(int64_t* timestamp, const std::string_view& timezone) const;
     bool unix_timestamp(int64_t* timestamp, const cctz::time_zone& ctz) const;
 
     //construct datetime_value from timestamp and timezone
     //timestamp is an internal timestamp value representing seconds since '1970-01-01 00:00:00' UTC
+    bool from_cctz_timezone(const TimezoneHsScan& timezone_hsscan, const std::string_view& timezone,
+                            cctz::time_zone& ctz);
     bool from_unixtime(int64_t, const std::string& timezone);
     bool from_unixtime(int64_t, const cctz::time_zone& ctz);
 
@@ -374,20 +376,6 @@ public:
         }
         }
         return *this;
-    }
-
-    void to_datetime_val(starrocks_udf::DateTimeVal* tv) const {
-        tv->packed_time = to_int64_datetime_packed();
-        tv->type = _type;
-    }
-
-    static DateTimeValue from_datetime_val(const starrocks_udf::DateTimeVal& tv) {
-        DateTimeValue value;
-        value.from_packed_time(tv.packed_time);
-        if (tv.type == TIME_DATE) {
-            value.cast_to_date();
-        }
-        return value;
     }
 
     inline uint32_t hash(int seed) const { return HashUtil::hash(this, sizeof(*this), seed); }

@@ -12,11 +12,12 @@
 #include <memory>
 #include <string>
 
-#include "common/status.h"
+#include "common/statusor.h"
 #include "util/slice.h"
 
 namespace starrocks {
 
+class NumericStatistics;
 class RandomAccessFile;
 class RandomRWFile;
 class WritableFile;
@@ -46,49 +47,42 @@ public:
     static Env* Default();
 
     // Create a brand new sequentially-readable file with the specified name.
-    // On success, stores a pointer to the new file in *result and returns OK.
-    // On failure stores NULL in *result and returns non-OK.  If the file does
-    // not exist, returns a non-OK status.
+    //  If the file does not exist, returns a non-OK status.
     //
     // The returned file will only be accessed by one thread at a time.
-    virtual Status new_sequential_file(const std::string& fname, std::unique_ptr<SequentialFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& fname) = 0;
 
     // Create a brand new random access read-only file with the
-    // specified name.  On success, stores a pointer to the new file in
-    // *result and returns OK.  On failure stores nullptr in *result and
-    // returns non-OK.  If the file does not exist, returns a non-OK
-    // status.
+    // specified name.
     //
-    // The returned file may be concurrently accessed by multiple threads.
-    virtual Status new_random_access_file(const std::string& fname, std::unique_ptr<RandomAccessFile>* result) = 0;
+    // The returned file will only be accessed by one thread at a time.
+    virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& fname) = 0;
 
-    virtual Status new_random_access_file(const RandomAccessFileOptions& opts, const std::string& fname,
-                                          std::unique_ptr<RandomAccessFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                               const std::string& fname) = 0;
 
     // Create an object that writes to a new file with the specified
     // name.  Deletes any existing file with the same name and creates a
-    // new file.  On success, stores a pointer to the new file in
-    // *result and returns OK.  On failure stores NULL in *result and
-    // returns non-OK.
+    // new file.
     //
     // The returned file will only be accessed by one thread at a time.
-    virtual Status new_writable_file(const std::string& fname, std::unique_ptr<WritableFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& fname) = 0;
 
     // Like the previous new_writable_file, but allows options to be
     // specified.
-    virtual Status new_writable_file(const WritableFileOptions& opts, const std::string& fname,
-                                     std::unique_ptr<WritableFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
+                                                                      const std::string& fname) = 0;
 
     // Creates a new readable and writable file. If a file with the same name
     // already exists on disk, it is deleted.
     //
     // Some of the methods of the new file may be accessed concurrently,
     // while others are only safe for access by one thread at a time.
-    virtual Status new_random_rw_file(const std::string& fname, std::unique_ptr<RandomRWFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const std::string& fname) = 0;
 
     // Like the previous new_random_rw_file, but allows options to be specified.
-    virtual Status new_random_rw_file(const RandomRWFileOptions& opts, const std::string& fname,
-                                      std::unique_ptr<RandomRWFile>* result) = 0;
+    virtual StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
+                                                                       const std::string& fname) = 0;
 
     // Returns OK if the path exists.
     //         NotFound if the named file does not exist,
@@ -188,16 +182,14 @@ public:
     SequentialFile() = default;
     virtual ~SequentialFile() = default;
 
-    // Read up to "result.size" bytes from the file.
-    // Copies the resulting data into "result.data".
+    // Read up to "size" bytes from the file.
+    // Copies the resulting data into "data".
     //
-    // If an error was encountered, returns a non-OK status
-    // and the contents of "result" are invalid.
-    //
-    // Return OK if reached the end of file.
+    // On success, return the number of bytes read, otherwise return
+    // an error and the contents of "result" are invalid.
     //
     // REQUIRES: External synchronization
-    virtual Status read(Slice* result) = 0;
+    virtual StatusOr<int64_t> read(void* data, int64_t size) = 0;
 
     // Skip "n" bytes from the file. This is guaranteed to be no
     // slower that reading the same data, but may be faster.
@@ -210,6 +202,11 @@ public:
 
     // Returns the filename provided when the SequentialFile was constructed.
     virtual const std::string& filename() const = 0;
+
+    // Get statistics about the reads which this SequentialFile has done.
+    // If the SequentialFile implementation doesn't support statistics, a null pointer or
+    // an empty statistics is returned.
+    virtual StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() { return nullptr; }
 };
 
 class RandomAccessFile {
@@ -217,23 +214,18 @@ public:
     RandomAccessFile() = default;
     virtual ~RandomAccessFile() = default;
 
-    // Read up to "result.size" bytes from the file.
-    // Copies the resulting data into "result.data".
+    // Read up to "size" bytes from the file.
+    // Copies the resulting data into "data".
     //
-    // Return OK if reached the end of file.
-    virtual Status read(uint64_t offset, Slice* res) const = 0;
+    // Return the number of bytes read or error.
+    virtual StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const = 0;
 
-    // Read "result.size" bytes from the file starting at "offset".
-    // Copies the resulting data into "result.data".
-    //
-    // If an error was encountered, returns a non-OK status.
-    //
-    // This method will internally retry on EINTR and "short reads" in order to
-    // fully read the requested number of bytes. In the event that it is not
-    // possible to read exactly 'length' bytes, an IOError is returned.
-    //
-    // Safe for concurrent use by multiple threads.
-    virtual Status read_at(uint64_t offset, const Slice& result) const = 0;
+    // Read exactly the number of "size" bytes data from given position "offset".
+    // This method does not return the number of bytes read because either
+    // (1) the entire "size" bytes is read
+    // (2) the end of the stream is reached
+    // If the eof is reached, an IO error is returned.
+    virtual Status read_at_fully(int64_t offset, void* data, int64_t size) const = 0;
 
     // Reads up to the "results" aggregate size, based on each Slice's "size",
     // from the file starting at 'offset'. The Slices must point to already-allocated
@@ -252,7 +244,12 @@ public:
     virtual Status size(uint64_t* size) const = 0;
 
     // Return name of this file
-    virtual const std::string& file_name() const = 0;
+    virtual const std::string& filename() const = 0;
+
+    // Get statistics about the reads which this RandomAccessFile has done.
+    // If the RandomAccessFile implementation doesn't support statistics, a null pointer or
+    // an empty statistics is returned.
+    virtual StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() { return nullptr; }
 };
 
 // A file abstraction for sequential writing.  The implementation
@@ -334,5 +331,54 @@ public:
     virtual Status size(uint64_t* size) const = 0;
     virtual const std::string& filename() const = 0;
 };
+
+class NumericStatistics {
+public:
+    NumericStatistics() = default;
+    ~NumericStatistics() = default;
+
+    NumericStatistics(const NumericStatistics&) = default;
+    NumericStatistics& operator=(const NumericStatistics&) = default;
+    NumericStatistics(NumericStatistics&&) = default;
+    NumericStatistics& operator=(NumericStatistics&&) = default;
+
+    void append(std::string_view name, int64_t value);
+
+    int64_t size() const;
+
+    const std::string& name(int64_t idx) const;
+
+    int64_t value(int64_t idx) const;
+
+    void reserve(int64_t size);
+
+private:
+    std::vector<std::string> _names;
+    std::vector<int64_t> _values;
+};
+
+inline void NumericStatistics::append(std::string_view name, int64_t value) {
+    _names.emplace_back(name);
+    _values.emplace_back(value);
+}
+
+inline int64_t NumericStatistics::size() const {
+    return static_cast<int64_t>(_names.size());
+}
+
+inline const std::string& NumericStatistics::name(int64_t idx) const {
+    assert(idx >= 0 && idx < size());
+    return _names[idx];
+}
+
+inline int64_t NumericStatistics::value(int64_t idx) const {
+    assert(idx >= 0 && idx < size());
+    return _values[idx];
+}
+
+inline void NumericStatistics::reserve(int64_t size) {
+    _names.reserve(size);
+    _values.reserve(size);
+}
 
 } // namespace starrocks

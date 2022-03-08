@@ -21,6 +21,9 @@
 
 #include "util/metrics.h"
 
+#include <mutex>
+#include <shared_mutex>
+
 namespace starrocks {
 
 MetricLabels MetricLabels::EmptyLabels;
@@ -124,7 +127,7 @@ void MetricCollector::get_metrics(std::vector<Metric*>* metrics) {
 
 MetricRegistry::~MetricRegistry() {
     {
-        std::lock_guard<SpinLock> l(_lock);
+        std::unique_lock lock(_mutex);
 
         std::vector<Metric*> metrics;
         for (const auto& it : _collectors) {
@@ -141,7 +144,7 @@ MetricRegistry::~MetricRegistry() {
 bool MetricRegistry::register_metric(const std::string& name, const MetricLabels& labels, Metric* metric) {
     DCHECK(metric != nullptr);
     metric->hide();
-    std::lock_guard<SpinLock> l(_lock);
+    std::unique_lock lock(_mutex);
     MetricCollector* collector = nullptr;
     auto it = _collectors.find(name);
     if (it == _collectors.end()) {
@@ -173,7 +176,7 @@ void MetricRegistry::_deregister_locked(Metric* metric) {
 }
 
 Metric* MetricRegistry::get_metric(const std::string& name, const MetricLabels& labels) const {
-    std::lock_guard<SpinLock> l(_lock);
+    std::shared_lock lock(_mutex);
     auto it = _collectors.find(name);
     if (it != _collectors.end()) {
         return it->second->get_metric(labels);
@@ -182,13 +185,13 @@ Metric* MetricRegistry::get_metric(const std::string& name, const MetricLabels& 
 }
 
 bool MetricRegistry::register_hook(const std::string& name, const std::function<void()>& hook) {
-    std::lock_guard<SpinLock> l(_lock);
+    std::unique_lock lock(_mutex);
     auto it = _hooks.emplace(name, hook);
     return it.second;
 }
 
 void MetricRegistry::deregister_hook(const std::string& name) {
-    std::lock_guard<SpinLock> l(_lock);
+    std::unique_lock lock(_mutex);
     _hooks.erase(name);
 }
 

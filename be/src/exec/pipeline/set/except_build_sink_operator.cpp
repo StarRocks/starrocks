@@ -18,15 +18,15 @@ Status ExceptBuildSinkOperator::prepare(RuntimeState* state) {
     return _except_ctx->prepare(state, _dst_exprs);
 }
 
-Status ExceptBuildSinkOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_except_ctx->unref(state));
-    return Operator::close(state);
+void ExceptBuildSinkOperator::close(RuntimeState* state) {
+    _except_ctx->unref(state);
+    Operator::close(state);
 }
 
 Status ExceptBuildSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    Expr::prepare(_dst_exprs, state, _row_desc);
+    Expr::prepare(_dst_exprs, state);
     Expr::open(_dst_exprs, state);
 
     return Status::OK();

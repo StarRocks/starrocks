@@ -10,6 +10,7 @@
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
 #include "util/int96.h"
+#include "util/json.h"
 #include "util/percentile_value.h"
 #include "util/slice.h"
 
@@ -19,6 +20,7 @@ class Status;
 class BitmapValue;
 class HyperLogLog;
 class PercentileValue;
+class JsonValue;
 } // namespace starrocks
 
 namespace starrocks::vectorized {
@@ -60,6 +62,7 @@ public:
     const HyperLogLog* get_hyperloglog() const { return get<HyperLogLog*>(); }
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }
     const PercentileValue* get_percentile() const { return get<PercentileValue*>(); }
+    const JsonValue* get_json() const { return get<JsonValue*>(); }
 
     void set_int8(int8_t v) { set<decltype(v)>(v); }
     void set_uint8(uint8_t v) { set<decltype(v)>(v); }
@@ -83,6 +86,7 @@ public:
     void set_hyperloglog(HyperLogLog* v) { set<decltype(v)>(v); }
     void set_bitmap(BitmapValue* v) { set<decltype(v)>(v); }
     void set_percentile(PercentileValue* v) { set<decltype(v)>(v); }
+    void set_json(JsonValue* v) { set<decltype(v)>(v); }
 
     template <typename T>
     const T& get() const {
@@ -102,6 +106,11 @@ public:
     }
 
     template <typename T>
+    std::add_pointer_t<std::add_const_t<T>> get_if() const {
+        return std::get_if<std::remove_const_t<T>>(&_value);
+    }
+
+    template <typename T>
     void set(T value) {
         if constexpr (std::is_same_v<DateValue, T>) {
             _value = value.julian();
@@ -116,6 +125,21 @@ public:
         }
     }
 
+    template <typename T>
+    void move_in(T&& value) {
+        if constexpr (std::is_same_v<DateValue, T>) {
+            _value = value.julian();
+        } else if constexpr (std::is_same_v<TimestampValue, T>) {
+            _value = value.timestamp();
+        } else if constexpr (std::is_same_v<bool, T>) {
+            _value = (int8_t)value;
+        } else if constexpr (std::is_unsigned_v<T>) {
+            _value = (std::make_signed_t<T>)value;
+        } else {
+            _value = std::move(value);
+        }
+    }
+
     bool is_null() const { return _value.index() == 0; }
 
     void set_null() { _value = std::monostate(); }
@@ -126,9 +150,15 @@ public:
     }
 
 private:
-    using Variant = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t,
-                                 int64_t, uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float,
-                                 double, DatumArray, HyperLogLog*, BitmapValue*, PercentileValue*>;
+    // NOTE
+    // Either JsonValue and JsonValue* could stored in datum.
+    // - Pointer type JsonValue* is used as view-type, to navigate datum in a column without copy data
+    // - Value type JsonValue is used to store real data and own the value itself, which is mostly used to hold a
+    //   JsonValue as return value. Right now only schema-change procedure use it.
+    using Variant =
+            std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
+                         uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double, DatumArray,
+                         HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*, JsonValue>;
     Variant _value;
 };
 

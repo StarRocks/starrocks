@@ -8,6 +8,7 @@
 #include "exec/olap_utils.h"
 #include "exec/pipeline/chunk_source.h"
 #include "exec/vectorized/olap_scan_prepare.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
@@ -17,40 +18,25 @@
 #include "storage/vectorized/tablet_reader.h"
 
 namespace starrocks {
+
 class SlotDescriptor;
+
 namespace vectorized {
 class RuntimeFilterProbeCollector;
 }
+
 namespace pipeline {
 
+class ScanOperator;
 class OlapChunkSource final : public ChunkSource {
 public:
-    OlapChunkSource(MorselPtr&& morsel, int32_t tuple_id, int64_t limit, bool enable_column_expr_predicate,
-                    std::vector<ExprContext*> conjunct_ctxs, std::vector<ExprContext*>& runtime_in_filters,
-                    vectorized::RuntimeFilterProbeCollector* runtime_bloom_filters,
-                    std::vector<std::string> key_column_names, bool skip_aggregation,
-                    std::vector<std::string>* unused_output_columns, RuntimeProfile* runtime_profile)
-            : ChunkSource(std::move(morsel)),
-              _tuple_id(tuple_id),
-              _limit(limit),
-              _enable_column_expr_predicate(enable_column_expr_predicate),
-              _conjunct_ctxs(std::move(conjunct_ctxs)),
-              _runtime_in_filters(runtime_in_filters),
-              _runtime_bloom_filters(*runtime_bloom_filters),
-              _key_column_names(std::move(key_column_names)),
-              _skip_aggregation(skip_aggregation),
-              _unused_output_columns(unused_output_columns),
-              _runtime_profile(runtime_profile) {
-        _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
-        OlapMorsel* olap_morsel = (OlapMorsel*)_morsel.get();
-        _scan_range = olap_morsel->get_scan_range();
-    }
+    OlapChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorized::OlapScanNode* scan_node);
 
     ~OlapChunkSource() override = default;
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool has_next_chunk() const override;
 
@@ -61,8 +47,16 @@ public:
     StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() override;
 
     Status buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) override;
+    Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, bool& can_finish, size_t* num_read_chunks,
+                                                           int worker_id, workgroup::WorkGroupPtr running_wg) override;
 
 private:
+    // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
+    static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
+    // Yield scan io task when maximum time in nano-seconds has spent in current execution round,
+    // if it runs in the worker thread owned by other workgroup, which has running drivers.
+    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
+
     Status _get_tablet(const TInternalScanRange* scan_range);
     Status _init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
@@ -78,14 +72,11 @@ private:
 
     vectorized::TabletReaderParams _params = {};
 
-    const int32_t _tuple_id;
+    vectorized::OlapScanNode* _scan_node;
     const int64_t _limit; // -1: no limit
-    const bool _enable_column_expr_predicate;
     std::vector<ExprContext*> _conjunct_ctxs;
     const std::vector<ExprContext*>& _runtime_in_filters;
-    const vectorized::RuntimeFilterProbeCollector& _runtime_bloom_filters;
-    std::vector<std::string> _key_column_names;
-    bool _skip_aggregation;
+    const vectorized::RuntimeFilterProbeCollector* _runtime_bloom_filters;
     TInternalScanRange* _scan_range;
 
     Status _status = Status::OK();

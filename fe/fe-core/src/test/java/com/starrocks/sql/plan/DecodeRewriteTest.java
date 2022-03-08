@@ -52,8 +52,69 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE lineorder_flat (\n" +
+                "LO_ORDERDATE date NOT NULL COMMENT \"\",\n" +
+                "LO_ORDERKEY int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_LINENUMBER tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "LO_CUSTKEY int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_PARTKEY int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_SUPPKEY int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_ORDERPRIORITY varchar(100) NOT NULL COMMENT \"\",\n" +
+                "LO_SHIPPRIORITY tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "LO_QUANTITY tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "LO_EXTENDEDPRICE int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_ORDTOTALPRICE int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_DISCOUNT tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "LO_REVENUE int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_SUPPLYCOST int(11) NOT NULL COMMENT \"\",\n" +
+                "LO_TAX tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "LO_COMMITDATE date NOT NULL COMMENT \"\",\n" +
+                "LO_SHIPMODE varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_NAME varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_ADDRESS varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_CITY varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_NATION varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_REGION varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_PHONE varchar(100) NOT NULL COMMENT \"\",\n" +
+                "C_MKTSEGMENT varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_NAME varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_ADDRESS varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_CITY varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_NATION varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_REGION varchar(100) NOT NULL COMMENT \"\",\n" +
+                "S_PHONE varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_NAME varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_MFGR varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_CATEGORY varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_BRAND varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_COLOR varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_TYPE varchar(100) NOT NULL COMMENT \"\",\n" +
+                "P_SIZE tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "P_CONTAINER varchar(100) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(LO_ORDERDATE, LO_ORDERKEY)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(LO_ORDERKEY) BUCKETS 48\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
+    }
+
+    @Test
+    public void testOlapScanNodeOutputColumns() throws Exception {
+        connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
+        String sql = "SELECT C_CITY, S_CITY, year(LO_ORDERDATE) as year, sum(LO_REVENUE) AS revenue FROM lineorder_flat " +
+                "WHERE C_CITY in ('UNITED KI1', 'UNITED KI5') AND S_CITY in ( 'UNITED KI1', 'UNITED\n" +
+                "KI5') AND LO_ORDERDATE >= '1997-12-01' AND LO_ORDERDATE <= '1997-12-31' GROUP BY C_CITY, S_CITY, year " +
+                "ORDER BY year ASC, revenue DESC;";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+        connectContext.getSessionVariable().disableTrimOnlyFilteredColumnsInScanStage();
     }
 
     @Test
@@ -215,7 +276,7 @@ public class DecodeRewriteTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
         Assert.assertTrue(plan.contains("7:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(12: count), multi_distinct_count(13: count)"));
+                "  |  output: multi_distinct_count(13: count), multi_distinct_count(12: count)"));
 
         sql = "select count(distinct S_ADDRESS), count(distinct S_COMMENT) from supplier;";
         plan = getFragmentPlan(sql);
@@ -225,10 +286,50 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
+    public void testDecodeNodeRewriteDistinct() throws Exception {
+        String sql;
+        String plan;
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        sql = "select count(distinct S_ADDRESS) from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([10: S_ADDRESS, INT, false]); args: INT; result: BIGINT; args nullable: false; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  3:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(3);
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  4:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: count[([10: S_ADDRESS, INT, false]); args: INT; result: BIGINT; args nullable: false; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(4);
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  6:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: count[([9: count, BIGINT, false]); args: VARCHAR; result: BIGINT; args nullable: true; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testDecodeNodeRewriteTwoPaseDistinct() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select count(distinct S_ADDRESS), count(distinct S_NATIONKEY) from supplier";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false], " +
+                "multi_distinct_count[([10: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
     public void testDecodeNodeRewriteTwoPhaseAgg() throws Exception {
         String sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by a,b";
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
-        String plan = getThriftPlan(sql);
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 13> : lower(upper(12: S_ADDRESS))\n" +
+                "  |  <slot 14> : upper(12: S_ADDRESS)"));
+        Assert.assertFalse(plan.contains("common expressions"));
+        plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
         Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
 
@@ -351,6 +452,7 @@ public class DecodeRewriteTest extends PlanTestBase {
 
     @Test
     public void testDecodeNodeRewrite13() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql;
         String plan;
         // case join:
@@ -402,6 +504,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <slot 19> : coalesce(3: S_ADDRESS, CAST(4: S_NATIONKEY AS VARCHAR))\n" +
                 "  |  <slot 21> : 21: P_MFGR\n" +
                 "  |  <slot 22> : upper(21: P_MFGR)"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -418,6 +521,29 @@ public class DecodeRewriteTest extends PlanTestBase {
         sql = "select max(S_ADDRESS), approx_count_distinct(S_ADDRESS) from supplier";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
+    }
+
+    @Test
+    public void testDecodeNodeRewrite15() throws Exception {
+        // Test Predicate dict columns both has support predicate and no-support predicate
+        String sql;
+        String plan;
+        {
+            sql = "select count(*) from " +
+                    "supplier where S_ADDRESS like '%A%' and S_ADDRESS not like '%B%'";
+            plan = getCostExplain(sql);
+            Assert.assertFalse(plan.contains(" dict_col=S_ADDRESS "));
+        }
+        {
+            sql = "select * from supplier l join supplier r on " +
+                    "l.S_NAME = r.S_NAME where upper(l.S_ADDRESS) like '%A%' and upper(l.S_ADDRESS) not like '%B%'";
+            plan = getCostExplain(sql);
+            Assert.assertTrue(plan.contains("  1:OlapScanNode\n" +
+                    "     table: supplier, rollup: supplier\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: upper(3: S_ADDRESS) LIKE '%A%', NOT (upper(3: S_ADDRESS) LIKE '%B%')\n" +
+                    "     dict_col=S_COMMENT"));
+        }
     }
 
     @Test
@@ -477,6 +603,11 @@ public class DecodeRewriteTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  group by: 10: S_ADDRESS\n" +
                 "  |  having: 9: count > 3"));
+        // test couldn't push down predicate
+        sql = "select sum(S_NATIONKEY) a, sum(S_ACCTBAL) as b, S_ADDRESS as c from supplier group by S_ADDRESS " +
+                "having a < b*1.2 or c not like '%open%'";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
     @Test
@@ -520,12 +651,14 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "dict_string_id_to_int_ids:{20=28}"));
         Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
-        Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]), is_merge:false)), " +
-                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
+        Assert.assertTrue(
+                plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]), is_merge:false, dest_dop:0)), " +
+                        "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
     }
 
     @Test
     public void testCountDistinctMultiColumns() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "select count(distinct S_SUPPKEY, S_COMMENT) from supplier";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("2:Decode\n" +
@@ -540,6 +673,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <dict id 11> : <string id 7>"));
         Assert.assertTrue(plan.contains(" 5:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(3 IS NULL, NULL, 7))"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -591,6 +725,23 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
+    public void testNestedExpressions() throws Exception {
+        String sql;
+        String plan;
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select upper(lower(S_ADDRESS)) from supplier group by lower(S_ADDRESS);";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 13> : <string id 10>"));
+        Assert.assertTrue(plan.contains("  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  13 <-> upper[([12: lower, INT, true]); args: VARCHAR; result: INT; args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains("  4:AGGREGATE (merge finalize)\n" +
+                "  |  group by: [12: lower, INT, true]"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
     public void testMultiMaxMin() throws Exception {
         String sql;
         String plan;
@@ -614,7 +765,6 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <dict id 14> : <string id 9>\n" +
                 "  |  <dict id 15> : <string id 10>"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
-
 
     }
 
@@ -653,7 +803,8 @@ public class DecodeRewriteTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: count[(NULL); args: BOOLEAN; result: BIGINT; args nullable: true; result nullable: false]\n" +
                 "  |  group by: [10: S_ADDRESS, INT, false]\n" +
-                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH + ")) = ''"));
+                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH +
+                ")) = ''"));
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
                 "  |  cardinality: 1"));
@@ -725,6 +876,19 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <dict id 16> : <string id 15>"));
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 16> : 16: t1a"));
+    }
+
+    @Test
+    public void testCTEWithDecode() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        connectContext.getSessionVariable().setEnablePipelineEngine(true);
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        String sql =
+                "with v1 as( select S_ADDRESS a, count(*) b from supplier group by S_ADDRESS) select x1.a, x1.b from v1 x1 join v1 x2 on x1.a=x2.a";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[mock], ids:[1])"));
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        connectContext.getSessionVariable().setEnablePipelineEngine(false);
     }
 
 }

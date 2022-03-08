@@ -62,20 +62,19 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
-    RETURN_IF_ERROR(_table_function->init(&_table_function_state));
+    RETURN_IF_ERROR(_table_function->init(table_fn, &_table_function_state));
 
     _input_chunk_index = 0;
     _table_function_result_eos = false;
     _remain_repeat_times = 0;
 
-    _table_function_exec_timer = ADD_TIMER(_runtime_profile, "TableFunctionTime");
+    _table_function_exec_timer = ADD_TIMER(_unique_metrics, "TableFunctionTime");
     return _table_function->prepare(_table_function_state);
 }
 
 StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     DCHECK(_input_chunk != nullptr);
 
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
     size_t chunk_size = state->chunk_size();
     size_t remain_chunk_size = chunk_size;
     std::vector<vectorized::ColumnPtr> output_columns;

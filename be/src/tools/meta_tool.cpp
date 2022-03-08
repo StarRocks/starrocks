@@ -362,7 +362,7 @@ void batch_delete_meta(const std::string& tablet_file) {
 
 Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
-    const std::string& file_name = input_file->file_name();
+    const std::string& file_name = input_file->filename();
     uint64_t file_size;
     RETURN_IF_ERROR(input_file->size(&file_size));
 
@@ -371,7 +371,7 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
     }
 
     uint8_t fixed_buf[12];
-    RETURN_IF_ERROR(input_file->read_at(file_size - 12, Slice(fixed_buf, 12)));
+    RETURN_IF_ERROR(input_file->read_at_fully(file_size - 12, fixed_buf, 12));
 
     // validate magic number
     const char* k_segment_magic = "D0R1";
@@ -388,7 +388,7 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
     }
     std::string footer_buf;
     footer_buf.resize(footer_length);
-    RETURN_IF_ERROR(input_file->read_at(file_size - 12 - footer_length, footer_buf));
+    RETURN_IF_ERROR(input_file->read_at_fully(file_size - 12 - footer_length, footer_buf.data(), footer_buf.size()));
 
     // validate footer PB's checksum
     uint32_t expect_checksum = starrocks::decode_fixed32_le(fixed_buf + 4);
@@ -408,14 +408,14 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
 }
 
 void show_segment_footer(const std::string& file_name) {
-    std::unique_ptr<RandomAccessFile> input_file;
-    Status status = starrocks::Env::Default()->new_random_access_file(file_name, &input_file);
-    if (!status.ok()) {
-        std::cout << "open file failed: " << status.to_string() << std::endl;
+    auto res = starrocks::Env::Default()->new_random_access_file(file_name);
+    if (!res.ok()) {
+        std::cout << "open file failed: " << res.status() << std::endl;
         return;
     }
+    auto input_file = std::move(res).value();
     SegmentFooterPB footer;
-    status = get_segment_footer(input_file.get(), &footer);
+    auto status = get_segment_footer(input_file.get(), &footer);
     if (!status.ok()) {
         std::cout << "get footer failed: " << status.to_string() << std::endl;
         return;

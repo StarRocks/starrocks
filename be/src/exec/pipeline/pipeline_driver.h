@@ -15,11 +15,11 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "util/phmap/phmap.h"
+
 namespace starrocks {
-namespace workgroup {
-class WorkGroup;
-}
+
 namespace pipeline {
 
 class PipelineDriver;
@@ -74,9 +74,7 @@ static inline std::string ds_to_string(DriverState ds) {
 // for schedule.
 class DriverAcct {
 public:
-    DriverAcct()
-
-    {}
+    DriverAcct() {}
     //TODO:
     // get_level return a non-negative value that is a hint used by DriverQueue to choose
     // the target internal queue for put_back.
@@ -91,7 +89,7 @@ public:
     }
     void update_last_chunks_moved(int64_t chunks_moved) {
         this->last_chunks_moved = chunks_moved;
-        this->accumulated_chunk_moved += chunks_moved;
+        this->accumulated_chunks_moved += chunks_moved;
         this->schedule_effective_times += (chunks_moved > 0) ? 1 : 0;
     }
     void update_accumulated_rows_moved(int64_t rows_moved) { this->accumulated_rows_moved += rows_moved; }
@@ -102,14 +100,16 @@ public:
     int64_t get_schedule_effective_times() { return schedule_effective_times; }
 
     int64_t get_rows_per_chunk() {
-        if (accumulated_chunk_moved > 0) {
-            return accumulated_rows_moved / accumulated_chunk_moved;
+        if (accumulated_chunks_moved > 0) {
+            return accumulated_rows_moved / accumulated_chunks_moved;
         } else {
             return 0;
         }
     }
 
-    int64_t get_accumulated_chunk_moved() { return accumulated_chunk_moved; }
+    int64_t get_accumulated_chunks_moved() { return accumulated_chunks_moved; }
+
+    int64_t get_accumulated_time_spent() const { return accumulated_time_spent; }
 
 private:
     int64_t schedule_times{0};
@@ -117,7 +117,7 @@ private:
     int64_t last_time_spent{0};
     int64_t last_chunks_moved{0};
     int64_t accumulated_time_spent{0};
-    int64_t accumulated_chunk_moved{0};
+    int64_t accumulated_chunks_moved{0};
     int64_t accumulated_rows_moved{0};
 };
 
@@ -147,9 +147,7 @@ public:
               _source_node_id(operators[0]->get_plan_node_id()),
               _driver_id(driver_id),
               _is_root(is_root),
-              _state(DriverState::NOT_READY),
-              _yield_max_chunks_moved(config::pipeline_yield_max_chunks_moved),
-              _yield_max_time_spent(config::pipeline_yield_max_time_spent) {
+              _state(DriverState::NOT_READY) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
         for (auto& op : _operators) {
             _operator_stages[op->get_id()] = OperatorStage::INIT;
@@ -160,14 +158,16 @@ public:
             : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id,
                              driver._is_root) {}
 
+    ~PipelineDriver();
+
     QueryContext* query_ctx() { return _query_ctx; }
     FragmentContext* fragment_ctx() { return _fragment_ctx; }
     int32_t source_node_id() { return _source_node_id; }
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
-    void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
+    void set_morsel_queue(MorselQueuePtr morsel_queue) { _morsel_queue = std::move(morsel_queue); }
     Status prepare(RuntimeState* runtime_state);
-    StatusOr<DriverState> process(RuntimeState* runtime_state);
+    StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
@@ -226,7 +226,7 @@ public:
     // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
     // are finished.
     void mark_precondition_ready(RuntimeState* runtime_state);
-    void dispatch_operators();
+    void submit_operators();
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
     void finish_operators(RuntimeState* runtime_state);
@@ -338,11 +338,21 @@ public:
 
     std::string to_readable_string() const;
 
-    starrocks::workgroup::WorkGroup* workgroup();
+    workgroup::WorkGroup* workgroup();
+    void set_workgroup(workgroup::WorkGroupPtr wg);
 
-    void set_workgroup(starrocks::workgroup::WorkGroup* wg);
+    size_t get_driver_queue_level() const { return _driver_queue_level; }
+    void set_driver_queue_level(size_t driver_queue_level) { _driver_queue_level = driver_queue_level; }
 
 private:
+    // Yield PipelineDriver when maximum number of chunks has been moved in current execution round.
+    static constexpr size_t YIELD_MAX_CHUNKS_MOVED = 100;
+    // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
+    static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
+    // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
+    // if it runs in the worker thread owned by other workgroup, which has running drivers.
+    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
+
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
     void _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
@@ -350,6 +360,14 @@ private:
     void _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
     void _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
+
+    // Update metrics when the driver yields.
+    void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+        driver_acct().increment_schedule_times();
+        driver_acct().update_last_chunks_moved(total_chunks_moved);
+        driver_acct().update_accumulated_rows_moved(total_rows_moved);
+        driver_acct().update_last_time_spent(time_spent);
+    }
 
     RuntimeState* _runtime_state = nullptr;
     void _update_overhead_timer();
@@ -376,16 +394,16 @@ private:
     const bool _is_root;
     DriverAcct _driver_acct;
     // The first one is source operator
-    MorselQueue* _morsel_queue = nullptr;
+    MorselQueuePtr _morsel_queue = nullptr;
     // _state must be set by set_driver_state() to record state timer.
     DriverState _state;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
-    const size_t _yield_max_chunks_moved;
-    const int64_t _yield_max_time_spent;
 
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
-    starrocks::workgroup::WorkGroup* _workgroup = nullptr;
+    workgroup::WorkGroupPtr _workgroup = nullptr;
+    // The index of QuerySharedDriverQueue{WithoutLock}._queues which this driver belongs to.
+    size_t _driver_queue_level = 0;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
@@ -403,7 +421,7 @@ private:
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _schedule_effective_counter = nullptr;
     RuntimeProfile::Counter* _schedule_rows_per_chunk = nullptr;
-    RuntimeProfile::Counter* _schedule_accumulated_chunk_moved = nullptr;
+    RuntimeProfile::Counter* _schedule_accumulated_chunks_moved = nullptr;
 
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;

@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -65,7 +65,7 @@ public class AnalyzeJoinTest {
 
         QueryRelation query = analyzeSuccess(
                 "select * from (select sum(v1) as v, sum(v2) from t0) a left semi join (select v1,v2 from t0 order by v3) b on a.v = b.v2");
-        Assert.assertEquals("v,sum(`v2`)", String.join(",", query.getColumnOutputNames()));
+        Assert.assertEquals("v,sum(v2)", String.join(",", query.getColumnOutputNames()));
     }
 
     @Test
@@ -74,9 +74,9 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select * from t0 a join t0 b using(v1, v2, v3)");
         analyzeFail("select * from t0 join t0 using(v1)");
         analyzeFail("select * from t0 join t1 using(v1)");
-        analyzeFail("select * from t0 x,t0 y inner join t0 z using(v1)", "Column 'v1' is ambiguous");
-        analyzeSuccess("select * from t0,t1 inner join tnotnull using(v1)");
-        analyzeSuccess("select * from t0,t1 inner join tnotnull using(v1,v2)");
+        analyzeSuccess("select * from t0 x,t0 y inner join t0 z using(v1)");
+        analyzeFail("select * from t0,t1 inner join tnotnull using(v1)", "Column '`v1`' cannot be resolved");
+        analyzeFail("select * from t0,t1 inner join tnotnull using(v1,v2)");
         analyzeSuccess("select * from tnotnull inner join (select * from t0,t1) t using (v1)");
         analyzeFail("select * from (select * from t0,tnotnull) t inner join t0 using (v1)",
                 "Column 'v1' is ambiguous");

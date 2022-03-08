@@ -3,6 +3,7 @@
 #include "exec/vectorized/assert_num_rows_node.h"
 
 #include "exec/pipeline/assert_num_rows_operator.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
@@ -59,10 +60,11 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
     if (_assertion == TAssertion::LE && _num_rows_returned == 0) {
         _input_chunks.clear();
 
-        vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+        chunk = std::make_shared<vectorized::Chunk>();
         for (const auto& desc : row_desc().tuple_descriptors()) {
             for (const auto& slot : desc->slots()) {
-                chunk->append_column(ColumnHelper::create_const_null_column(_desired_num_rows), slot->id());
+                chunk->append_column(ColumnHelper::create_column(slot->type(), true, false, _desired_num_rows),
+                                     slot->id());
             }
         }
 
@@ -161,6 +163,10 @@ pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::Pipelin
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operator_before_assert_num_rows_source.back().get(), context,
                                            rc_rf_probe_collector);
+    if (limit() != -1) {
+        operator_before_assert_num_rows_source.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
     return operator_before_assert_num_rows_source;
 }
 

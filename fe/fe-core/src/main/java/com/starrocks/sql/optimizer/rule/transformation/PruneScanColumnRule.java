@@ -34,6 +34,7 @@ public class PruneScanColumnRule extends TransformationRule {
     public static final PruneScanColumnRule SCHEMA_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final PruneScanColumnRule MYSQL_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_MYSQL_SCAN);
     public static final PruneScanColumnRule ES_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_ES_SCAN);
+    public static final PruneScanColumnRule JDBC_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_JDBC_SCAN);
 
     public PruneScanColumnRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PRUNE_OLAP_SCAN_COLUMNS, Pattern.create(logicalOperatorType));
@@ -42,7 +43,7 @@ public class PruneScanColumnRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getOp();
-        ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
+        ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
 
         // The `outputColumns`s are some columns required but not specified by `requiredOutputColumns`.
         // including columns in predicate or some specialized columns defined by scan operator.

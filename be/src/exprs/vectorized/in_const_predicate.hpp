@@ -92,8 +92,8 @@ public:
         }
     }
 
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) override {
-        Expr::prepare(state, row_desc, context);
+    Status prepare(RuntimeState* state, ExprContext* context) override {
+        Expr::prepare(state, context);
 
         if (_is_prepare) {
             return Status::OK();
@@ -237,7 +237,11 @@ public:
             }
         }
 
-        return builder.build(lhs->is_constant());
+        auto result = builder.build(lhs->is_constant());
+        if (result->is_constant()) {
+            result->resize(lhs->size());
+        }
+        return result;
     }
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {

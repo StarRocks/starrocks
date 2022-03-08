@@ -124,6 +124,15 @@ public:
 
     virtual void append(const Column& src) { append(src, 0, src.size()); }
 
+    // This function will update data from src according to the input indexes. 'indexes' contains
+    // the row index will be update
+    // For example:
+    //      input indexes: [0, 3]
+    //      column data: [0, 1, 2, 3, 4]
+    //      src_column data: [5, 6]
+    // After call this function, column data will be set as [5, 1, 2, 6, 4]
+    virtual Status update_rows(const Column& src, const uint32_t* indexes) = 0;
+
     // This function will append data from src according to the input indexes. 'indexes' contains
     // the row index of the src.
     // This function will get row index from indexes and append the data to this column.
@@ -135,6 +144,10 @@ public:
     // This function will copy the [3, 2] row of src to this column.
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
+    virtual void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
+        return append_selective(src, indexes.data(), 0, indexes.size());
+    }
+
     // This function will get row through 'from' index from src, and copy size elements to this column.
     virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;
 
@@ -144,21 +157,17 @@ public:
 
     // Append multiple strings into this column.
     // Return false if the column is not a binary column.
-    [[nodiscard]] virtual bool append_strings(const std::vector<Slice>& strs) = 0;
+    [[nodiscard]] virtual bool append_strings(const Buffer<Slice>& strs) = 0;
 
     // Like append_strings. To achieve higher performance, this function will read 16 bytes out of
     // bounds. So the caller must make sure that no invalid address access exception occurs for
     // out-of-bounds reads
-    [[nodiscard]] virtual bool append_strings_overflow(const std::vector<Slice>& strs, size_t max_length) {
-        return false;
-    }
+    [[nodiscard]] virtual bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) { return false; }
 
     // Like `append_strings` but the corresponding storage of each slice is adjacent to the
     // next one's, the implementation can take advantage of this feature, e.g, copy the whole
     // memory at once.
-    [[nodiscard]] virtual bool append_continuous_strings(const std::vector<Slice>& strs) {
-        return append_strings(strs);
-    }
+    [[nodiscard]] virtual bool append_continuous_strings(const Buffer<Slice>& strs) { return append_strings(strs); }
 
     // Copy |length| bytes from |buff| into this column and cast them as integers.
     // The count of copied integers depends on |length| and the size of column value:
@@ -240,7 +249,7 @@ public:
     // deserialize one data and append to this column
     virtual const uint8_t* deserialize_and_append(const uint8_t* pos) = 0;
 
-    virtual void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) = 0;
+    virtual void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) = 0;
 
     // One element serialize_size
     virtual uint32_t serialize_size(size_t idx) const = 0;
@@ -289,6 +298,8 @@ public:
 
     virtual void fnv_hash_at(uint32_t* seed, int32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
 
+    virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
+
     // Push one row to MysqlRowBuffer
     virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const = 0;
 
@@ -331,6 +342,8 @@ public:
     virtual Status accept(ColumnVisitor* visitor) const = 0;
 
     virtual Status accept_mutable(ColumnVisitorMutable* visitor) = 0;
+
+    virtual void check_or_die() const = 0;
 
 protected:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;

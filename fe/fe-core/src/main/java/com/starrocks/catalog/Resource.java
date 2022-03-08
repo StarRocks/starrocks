@@ -40,7 +40,9 @@ public abstract class Resource implements Writable {
         SPARK,
         HIVE,
         ICEBERG,
-        ODBC_CATALOG;
+        HUDI,
+        ODBC_CATALOG,
+        JDBC;
 
         public static ResourceType fromString(String resourceType) {
             for (ResourceType type : ResourceType.values()) {
@@ -75,8 +77,14 @@ public abstract class Resource implements Writable {
             case ICEBERG:
                 resource = new IcebergResource(stmt.getResourceName());
                 break;
+            case HUDI:
+                resource = new HudiResource(stmt.getResourceName());
+                break;
             case ODBC_CATALOG:
                 resource = new OdbcCatalogResource(stmt.getResourceName());
+                break;
+            case JDBC:
+                resource = new JDBCResource(stmt.getResourceName());
                 break;
             default:
                 throw new DdlException("Unsupported resource type: " + type);

@@ -71,152 +71,223 @@ Status SchemaTablesScanner::start(RuntimeState* state) {
 
 Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
     const TTableStatus& tbl_status = _table_result.tables[_table_index];
-    // catalog
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[0]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // schema
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[1]->id());
-        std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
-        Slice value(db_name.c_str(), db_name.length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // name
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[2]->id());
-        const std::string* str = &tbl_status.name;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // type
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[3]->id());
-        const std::string* str = &tbl_status.type;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // engine
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[4]->id());
-        if (tbl_status.__isset.engine) {
-            const std::string* str = &tbl_status.engine;
-            Slice value(str->c_str(), str->length());
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-        } else {
-            NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
-            nullable_column->append_nulls(1);
-        }
-    }
-    // version
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[5]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // row_format
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[6]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // rows
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[7]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // avg_row_length
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[8]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // data_length
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[9]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // max_data_length
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[10]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // index_length
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[11]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // data_free
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[12]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // auto_increment
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[13]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // creation_time
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[14]->id());
-        NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
-        if (tbl_status.__isset.create_time) {
-            int64_t create_time = tbl_status.create_time;
-            if (create_time <= 0) {
-                nullable_column->append_nulls(1);
-            } else {
-                DateTimeValue t;
-                t.from_unixtime(create_time, TimezoneUtils::default_time_zone);
-                fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        switch (slot_id) {
+        case 1: {
+            // catalog
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                fill_data_column_with_null(column.get());
             }
-        } else {
-            nullable_column->append_nulls(1);
+            break;
         }
-    }
-    // update_time
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[15]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // check_time
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[16]->id());
-        NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
-        if (tbl_status.__isset.last_check_time) {
-            int64_t check_time = tbl_status.last_check_time;
-            if (check_time <= 0) {
-                nullable_column->append_nulls(1);
-            } else {
-                DateTimeValue t;
-                t.from_unixtime(check_time, TimezoneUtils::default_time_zone);
-                fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+        case 2: {
+            // schema
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
+                Slice value(db_name.c_str(), db_name.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
-        } else {
-            nullable_column->append_nulls(1);
+            break;
+        }
+        case 3: {
+            // name
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                const std::string* str = &tbl_status.name;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 4: {
+            // type
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                const std::string* str = &tbl_status.type;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 5: {
+            // engine
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                if (tbl_status.__isset.engine) {
+                    const std::string* str = &tbl_status.engine;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
+                    nullable_column->append_nulls(1);
+                }
+            }
+            break;
+        }
+        case 6: {
+            // version
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 7: {
+            // row_format
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 8: {
+            // rows
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 9: {
+            // avg_row_length
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 10: {
+            // data_length
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 11: {
+            // max_data_length
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 12: {
+            // index_length
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 13: {
+            // data_free
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 14: {
+            // auto_increment
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(14);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 15: {
+            // creation_time
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(15);
+                NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
+                if (tbl_status.__isset.create_time) {
+                    int64_t create_time = tbl_status.create_time;
+                    if (create_time <= 0) {
+                        nullable_column->append_nulls(1);
+                    } else {
+                        DateTimeValue t;
+                        t.from_unixtime(create_time, TimezoneUtils::default_time_zone);
+                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                    }
+                } else {
+                    nullable_column->append_nulls(1);
+                }
+            }
+            break;
+        }
+        case 16: {
+            // update_time
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 17: {
+            // check_time
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(17);
+                NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
+                if (tbl_status.__isset.last_check_time) {
+                    int64_t check_time = tbl_status.last_check_time;
+                    if (check_time <= 0) {
+                        nullable_column->append_nulls(1);
+                    } else {
+                        DateTimeValue t;
+                        t.from_unixtime(check_time, TimezoneUtils::default_time_zone);
+                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                    }
+                } else {
+                    nullable_column->append_nulls(1);
+                }
+            }
+            break;
+        }
+        case 18: {
+            // collation
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(18);
+                const char* collation_str = "utf8_general_ci";
+                Slice value(collation_str, strlen(collation_str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 19: {
+            // checksum
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(19);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 20: {
+            // create_options
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(20);
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 21: {
+            // create_comment
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(21);
+                const std::string* str = &tbl_status.comment;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        default:
+            break;
         }
     }
-    // collation
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[17]->id());
-        const char* collation_str = "utf8_general_ci";
-        Slice value(collation_str, strlen(collation_str));
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
-    // checksum
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[18]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // create_options
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[19]->id());
-        fill_data_column_with_null(column.get());
-    }
-    // create_comment
-    {
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(_slot_descs[20]->id());
-        const std::string* str = &tbl_status.comment;
-        Slice value(str->c_str(), str->length());
-        fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-    }
+
     _table_index++;
     return Status::OK();
 }

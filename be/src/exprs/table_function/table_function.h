@@ -6,12 +6,14 @@
 
 #include "column/column.h"
 #include "exprs/vectorized/function_helper.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 
 class TableFunctionState {
 public:
     TableFunctionState() = default;
+    virtual ~TableFunctionState() = default;
 
     void set_params(starrocks::vectorized::Columns columns) { this->_columns = std::move(columns); }
 
@@ -19,7 +21,7 @@ public:
 
     int get_offset() { return _offset; }
 
-    starrocks::vectorized::Columns get_columns() { return _columns; }
+    starrocks::vectorized::Columns& get_columns() { return _columns; }
 
 private:
     //Params of table function
@@ -38,16 +40,18 @@ public:
     virtual ~TableFunction() = default;
 
     //Initialize TableFunctionState
-    virtual Status init(TableFunctionState** state) const = 0;
+    virtual Status init(const TFunction& fn, TableFunctionState** state) const = 0;
 
     //Some preparations are made in prepare, such as establishing a connection or initializing initial values
     virtual Status prepare(TableFunctionState* state) const = 0;
+
+    virtual Status open(RuntimeState* runtime_state, TableFunctionState* state) const = 0;
 
     //Table function processing logic
     virtual std::pair<Columns, ColumnPtr> process(TableFunctionState* state, bool* eos) const = 0;
 
     //Release the resources constructed in init and prepare
-    virtual Status close(TableFunctionState* context) const = 0;
+    virtual Status close(RuntimeState* runtime_state, TableFunctionState* context) const = 0;
 };
 
 using TableFunctionPtr = std::shared_ptr<TableFunction>;

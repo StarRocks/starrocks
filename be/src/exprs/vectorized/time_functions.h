@@ -8,6 +8,7 @@
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
 #include "udf/udf.h"
+#include "util/timezone_hsscan.h"
 
 namespace starrocks {
 namespace vectorized {

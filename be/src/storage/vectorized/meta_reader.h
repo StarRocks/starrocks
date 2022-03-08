@@ -74,6 +74,8 @@ public:
 
     TabletSharedPtr tablet() { return _tablet; }
 
+    Status open();
+
     Status do_get_next(ChunkPtr* chunk);
 
     bool has_more();
@@ -117,6 +119,7 @@ public:
     SegmentMetaCollecter(SegmentSharedPtr segment);
     ~SegmentMetaCollecter();
     Status init(const SegmentMetaCollecterParams* params);
+    Status open();
     Status collect(std::vector<vectorized::Column*>* dsts);
 
 public:

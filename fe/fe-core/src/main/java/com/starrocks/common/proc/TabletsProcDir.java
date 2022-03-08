@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
@@ -82,14 +83,14 @@ public class TabletsProcDir implements ProcDirInterface {
         try {
             // get infos
             for (Tablet tablet : index.getTablets()) {
+                LocalTablet localTablet = (LocalTablet) tablet;
                 long tabletId = tablet.getId();
-                if (tablet.getReplicas().size() == 0) {
+                if (localTablet.getReplicas().size() == 0) {
                     List<Comparable> tabletInfo = new ArrayList<Comparable>();
                     tabletInfo.add(tabletId);
                     tabletInfo.add(-1); // replica id
                     tabletInfo.add(-1); // backend id
                     tabletInfo.add(-1); // schema hash
-                    tabletInfo.add(FeConstants.null_string); // host name
                     tabletInfo.add(-1); // version
                     tabletInfo.add(0); // version hash
                     tabletInfo.add(-1); // lst success version
@@ -110,7 +111,7 @@ public class TabletsProcDir implements ProcDirInterface {
 
                     tabletInfos.add(tabletInfo);
                 } else {
-                    for (Replica replica : tablet.getReplicas()) {
+                    for (Replica replica : localTablet.getReplicas()) {
                         if ((version > -1 && replica.getVersion() != version)
                                 || (backendId > -1 && replica.getBackendId() != backendId)
                                 || (state != null && replica.getState() != state)) {
@@ -134,7 +135,7 @@ public class TabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(replica.getState());
 
                         tabletInfo.add(TimeUtils.longToTimeString(tablet.getLastCheckTime()));
-                        tabletInfo.add(tablet.getCheckedVersion());
+                        tabletInfo.add(localTablet.getCheckedVersion());
                         tabletInfo.add(0);
                         tabletInfo.add(replica.getVersionCount());
                         tabletInfo.add(replica.getPathHash());

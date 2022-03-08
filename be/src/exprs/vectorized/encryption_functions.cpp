@@ -23,17 +23,12 @@ ColumnPtr EncryptionFunctions::aes_encrypt(FunctionContext* ctx, const Columns& 
     const int size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
-        if (src_viewer.is_null(row)) {
+        if (src_viewer.is_null(row) || key_viewer.is_null(row)) {
             result.append_null();
             continue;
         }
 
         auto src_value = src_viewer.value(row);
-        if (src_value.size == 0) {
-            result.append_null();
-            continue;
-        }
-
         int cipher_len = src_value.size + 16;
         char p[cipher_len];
 

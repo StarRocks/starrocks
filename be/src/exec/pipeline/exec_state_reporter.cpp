@@ -53,8 +53,10 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Frag
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
             params.__set_loaded_rows(runtime_state->num_rows_load_total());
         }
-        profile->to_thrift(&params.profile);
-        params.__isset.profile = true;
+        if (fragment_ctx->is_report_profile()) {
+            profile->to_thrift(&params.profile);
+            params.__isset.profile = true;
+        }
 
         if (!runtime_state->output_files().empty()) {
             params.__isset.delta_urls = true;

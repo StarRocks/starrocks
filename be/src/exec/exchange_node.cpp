@@ -37,6 +37,7 @@ namespace starrocks {
 
 ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
+          _texchange_node(tnode.exchange_node),
           _num_senders(0),
           _stream_recvr(nullptr),
           _input_row_desc(
@@ -70,7 +71,7 @@ Status ExchangeNode::prepare(RuntimeState* state) {
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _input_row_desc, state->fragment_instance_id(), _id, _num_senders,
             config::exchg_node_buffer_size_bytes, _runtime_profile, _is_merging, _sub_plan_query_statistics_recvr,
-            false, false);
+            false, DataStreamRecvr::INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE, false);
     if (_is_merging) {
         RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _row_descriptor, _row_descriptor));
     }
@@ -235,8 +236,8 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     using namespace pipeline;
     OpFactories operators;
     if (!_is_merging) {
-        auto exchange_source_op = std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
-                                                                                  _num_senders, _input_row_desc);
+        auto exchange_source_op = std::make_shared<ExchangeSourceOperatorFactory>(
+                context->next_operator_id(), id(), _texchange_node, _num_senders, _input_row_desc);
         exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
         operators.emplace_back(exchange_source_op);
         if (limit() != -1) {
@@ -253,6 +254,9 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
+    if (limit() != -1) {
+        operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
     return operators;
 }
 

@@ -31,6 +31,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -38,8 +40,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.Tablet.TabletStatus;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx;
@@ -82,6 +82,8 @@ import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.thrift.TWorkGroupOp;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.commons.lang3.tuple.Triple;
@@ -134,6 +136,7 @@ public class ReportHandler extends Daemon {
         Map<TTaskType, Set<Long>> tasks = null;
         Map<String, TDisk> disks = null;
         Map<Long, TTablet> tablets = null;
+        List<TWorkGroup> activeWorkGroups = null;
         long reportVersion = -1;
 
         String reportType = "";
@@ -162,7 +165,13 @@ public class ReportHandler extends Daemon {
             backend.setTabletMaxCompactionScore(request.getTablet_max_compaction_score());
         }
 
-        ReportTask reportTask = new ReportTask(beId, tasks, disks, tablets, reportVersion);
+        if (request.isSetActive_workgroups()) {
+            activeWorkGroups = request.active_workgroups;
+        }
+        List<TWorkGroupOp> workGroupOps = Catalog.getCurrentCatalog().getWorkGroupMgr().getWorkGroupsNeedToDeliver(beId);
+        result.setWorkgroup_ops(workGroupOps);
+
+        ReportTask reportTask = new ReportTask(beId, tasks, disks, tablets, reportVersion, activeWorkGroups);
         try {
             putToQueue(reportTask);
         } catch (Exception e) {
@@ -209,15 +218,18 @@ public class ReportHandler extends Daemon {
         private Map<String, TDisk> disks;
         private Map<Long, TTablet> tablets;
         private long reportVersion;
+        private List<TWorkGroup> activeWorkGroups;
 
         public ReportTask(long beId, Map<TTaskType, Set<Long>> tasks,
                           Map<String, TDisk> disks,
-                          Map<Long, TTablet> tablets, long reportVersion) {
+                          Map<Long, TTablet> tablets, long reportVersion,
+                          List<TWorkGroup> activeWorkGroups) {
             this.beId = beId;
             this.tasks = tasks;
             this.disks = disks;
             this.tablets = tablets;
             this.reportVersion = reportVersion;
+            this.activeWorkGroups = activeWorkGroups;
         }
 
         @Override
@@ -230,6 +242,9 @@ public class ReportHandler extends Daemon {
             }
             if (tablets != null) {
                 ReportHandler.tabletReport(beId, tablets, reportVersion);
+            }
+            if (activeWorkGroups != null) {
+                ReportHandler.workgroupReport(beId, activeWorkGroups);
             }
         }
     }
@@ -372,6 +387,18 @@ public class ReportHandler extends Daemon {
                 backendId, (System.currentTimeMillis() - start));
     }
 
+    private static void workgroupReport(long backendId, List<TWorkGroup> workGroups) {
+        LOG.debug("begin to handle workgroup report from backend{}", backendId);
+        long start = System.currentTimeMillis();
+        Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
+        if (backend == null) {
+            LOG.warn("backend does't exist. id: " + backendId);
+        }
+        Catalog.getCurrentCatalog().getWorkGroupMgr().saveActiveWorkGroupsForBe(backendId, workGroups);
+        LOG.debug("finished to handle workgroup report from backend{}, cost: {} ms, num: {}",
+                backendId, System.currentTimeMillis() - start, workGroups.size());
+    }
+
     private static void sync(Map<Long, TTablet> backendTablets, ListMultimap<Long, Long> tabletSyncMap,
                              long backendId, long backendReportVersion) {
         TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
@@ -413,7 +440,7 @@ public class ReportHandler extends Daemon {
                     }
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
 
-                    Tablet tablet = index.getTablet(tabletId);
+                    LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                     if (tablet == null) {
                         continue;
                     }
@@ -552,7 +579,7 @@ public class ReportHandler extends Daemon {
                         continue;
                     }
 
-                    Tablet tablet = index.getTablet(tabletId);
+                    LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                     if (tablet == null) {
                         continue;
                     }
@@ -813,7 +840,7 @@ public class ReportHandler extends Daemon {
 
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
 
-                    Tablet tablet = index.getTablet(tabletId);
+                    LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                     if (tablet == null) {
                         continue;
                     }
@@ -988,7 +1015,7 @@ public class ReportHandler extends Daemon {
                 throw new MetaNotFoundException("index[" + indexId + "] does not exist");
             }
 
-            Tablet tablet = materializedIndex.getTablet(tabletId);
+            LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(tabletId);
             if (tablet == null) {
                 throw new MetaNotFoundException("tablet[" + tabletId + "] does not exist");
             }

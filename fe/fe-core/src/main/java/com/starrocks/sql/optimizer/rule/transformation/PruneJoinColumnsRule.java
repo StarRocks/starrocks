@@ -26,7 +26,7 @@ public class PruneJoinColumnsRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
 
-        ColumnRefSet requiredColumns = context.getTaskContext().get(0).getRequiredColumns();
+        ColumnRefSet requiredColumns = context.getTaskContext().getRequiredColumns();
         ColumnRefSet outputColumns = (ColumnRefSet) joinOperator.getOutputColumns(new ExpressionContext(input)).clone();
         outputColumns.intersect(requiredColumns);
 

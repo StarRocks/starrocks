@@ -12,12 +12,12 @@ namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
     SourceOperator::prepare(state);
     _stream_recvr = std::move(
-            static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state, _runtime_profile));
+            static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state, _unique_metrics));
     return Status::OK();
 }
 
 bool ExchangeSourceOperator::has_output() const {
-    return _stream_recvr->has_output();
+    return _stream_recvr->has_output_for_pipeline(_driver_sequence);
 }
 
 bool ExchangeSourceOperator::is_finished() const {
@@ -26,12 +26,13 @@ bool ExchangeSourceOperator::is_finished() const {
 
 void ExchangeSourceOperator::set_finishing(RuntimeState* state) {
     _is_finishing = true;
+    _stream_recvr->short_circuit_for_pipeline(_driver_sequence);
     static_cast<ExchangeSourceOperatorFactory*>(_factory)->close_stream_recvr();
 }
 
 StatusOr<vectorized::ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* state) {
-    std::unique_ptr<vectorized::Chunk> chunk = std::make_unique<vectorized::Chunk>();
-    RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk));
+    auto chunk = std::make_unique<vectorized::Chunk>();
+    RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk, _driver_sequence));
     eval_runtime_bloom_filters(chunk.get());
     return std::move(chunk);
 }
@@ -43,7 +44,7 @@ std::shared_ptr<DataStreamRecvr> ExchangeSourceOperatorFactory::create_stream_re
     }
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
-            config::exchg_node_buffer_size_bytes, profile, false, nullptr, true, false);
+            config::exchg_node_buffer_size_bytes, profile, false, nullptr, true, _degree_of_parallelism, false);
     return _stream_recvr;
 }
 

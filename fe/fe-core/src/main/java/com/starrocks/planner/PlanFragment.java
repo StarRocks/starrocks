@@ -172,6 +172,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+    public boolean canUsePipeline() {
+        return getPlanRoot().canUsePipeLine() && getSink().canUsePipeLine();
+    }
+
     /**
      * Assign ParallelExecNum by PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM in SessionVariable for synchronous request
      * Assign ParallelExecNum by default value for Asynchronous request
@@ -192,17 +196,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public ExchangeNode getDestNode() {
         return destNode;
-    }
-
-    public void getOlapScanNodes(PlanNode root, List<PlanNode> scanNodes) {
-        if (root instanceof OlapScanNode) {
-            scanNodes.add(root);
-            return;
-        }
-
-        for (PlanNode child : root.getChildren()) {
-            getOlapScanNodes(child, scanNodes);
-        }
     }
 
     public ArrayList<Expr> getOutputExprs() {
@@ -239,6 +232,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public void setDopEstimated() {
         dopEstimated = true;
     }
+
     public boolean isDopEstimated() {
         return dopEstimated;
     }
@@ -246,8 +240,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public void setNeedsLocalShuffle(boolean need) {
         this.needsLocalShuffle = need;
     }
-
-
 
     public boolean isNeedsLocalShuffle() {
         return needsLocalShuffle;
@@ -562,6 +554,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public List<Pair<Integer, ColumnDict>> getQueryGlobalDicts() {
         return this.queryGlobalDicts;
+    }
+
+    public List<Pair<Integer, ColumnDict>> getLoadGlobalDicts() {
+        return this.loadGlobalDicts;
     }
 
     public void setQueryGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {

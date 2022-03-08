@@ -5,10 +5,12 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
@@ -40,7 +42,6 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
     public PhysicalOlapScanOperator(Table table,
-                                    List<ColumnRefOperator> outputColumns,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                     HashDistributionSpec hashDistributionDesc,
                                     long limit,
@@ -49,8 +50,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                                     List<Long> selectedPartitionId,
                                     List<Long> selectedTabletId,
                                     Projection projection) {
-        super(OperatorType.PHYSICAL_OLAP_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate,
-                projection);
+        super(OperatorType.PHYSICAL_OLAP_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
         this.hashDistributionSpec = hashDistributionDesc;
         this.selectedIndexId = selectedIndexId;
         this.selectedPartitionId = selectedPartitionId;
@@ -109,6 +109,14 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public void setDictStringIdToIntIds(Map<Integer, Integer> dictStringIdToIntIds) {
         this.dictStringIdToIntIds = dictStringIdToIntIds;
+    }
+
+    public void setOutputColumns(List<ColumnRefOperator> outputColumns) {
+        this.outputColumns = outputColumns;
+    }
+
+    public boolean canDoReplicatedJoin() {
+        return Utils.canDoReplicatedJoin((OlapTable) table, selectedIndexId, selectedPartitionId, selectedTabletId);
     }
 
     @Override

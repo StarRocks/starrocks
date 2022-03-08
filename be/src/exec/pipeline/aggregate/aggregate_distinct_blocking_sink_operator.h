@@ -25,7 +25,7 @@ public:
     void set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
@@ -54,7 +54,7 @@ public:
 
     Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(OperatorFactory::prepare(state));
-        RETURN_IF_ERROR(Expr::prepare(_partition_by_exprs, state, _row_desc));
+        RETURN_IF_ERROR(Expr::prepare(_partition_by_exprs, state));
         RETURN_IF_ERROR(Expr::open(_partition_by_exprs, state));
         return Status::OK();
     }

@@ -1,6 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -9,6 +8,7 @@ import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 
@@ -65,7 +65,7 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("group_concat")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
             if (functionCallExpr.getChildren().size() > 2 || functionCallExpr.getChildren().isEmpty()) {
                 throw new SemanticException(
                         "group_concat requires one or two parameters: " + functionCallExpr.toSql());
@@ -125,18 +125,44 @@ public class FunctionAnalyzer {
             return;
         }
 
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+            if (fnParams.isDistinct()) {
+                throw new SemanticException("array_agg does not support DISTINCT");
+            }
+            if (arg.getType().isDecimalV3()) {
+                throw new SemanticException("array_agg does not support DecimalV3");
+            }
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_OVERLAP)) {
+            if (functionCallExpr.getChildren().size() != 2) {
+                throw new SemanticException("array_overlap only support 2 parameters");
+            }
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.RETENTION)) {
+            if (!arg.getType().isArrayType()) {
+                throw new SemanticException("retention only support Array<BOOLEAN>");
+            }
+            ArrayType type = (ArrayType) arg.getType();
+            if (!type.getItemType().isBoolean()) {
+                throw new SemanticException("retention only support Array<BOOLEAN>");
+            }
+            // For Array<BOOLEAN> that have different size, we just extend result array to Compatible with it
+        }
+
         // SUM and AVG cannot be applied to non-numeric types
         if ((fnName.getFunction().equalsIgnoreCase("sum")
                 || fnName.getFunction().equalsIgnoreCase("avg"))
                 && ((!arg.getType().isNumericType() && !arg.getType().isBoolean() && !arg.getType().isNull() &&
                 !(arg instanceof NullLiteral)) ||
-                arg.getType().isOnlyMetricType())) {
+                !arg.getType().canApplyToNumeric())) {
             throw new SemanticException(
                     fnName.getFunction() + " requires a numeric parameter: " + functionCallExpr.toSql());
         }
         if (fnName.getFunction().equalsIgnoreCase("sum_distinct")
                 && ((!arg.getType().isNumericType() && !arg.getType().isNull() && !(arg instanceof NullLiteral)) ||
-                arg.getType().isOnlyMetricType())) {
+                !arg.getType().canApplyToNumeric())) {
             throw new SemanticException(
                     "SUM_DISTINCT requires a numeric parameter: " + functionCallExpr.toSql());
         }
@@ -145,7 +171,7 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.MAX)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.NDV)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.APPROX_COUNT_DISTINCT))
-                && arg.getType().isOnlyMetricType()) {
+                && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
         }
 

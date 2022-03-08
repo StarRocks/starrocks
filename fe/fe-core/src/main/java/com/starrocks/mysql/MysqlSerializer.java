@@ -34,11 +34,11 @@ public class MysqlSerializer {
     private ByteArrayOutputStream out;
     private MysqlCapability capability;
 
-    public MysqlSerializer(ByteArrayOutputStream out) {
+    private MysqlSerializer(ByteArrayOutputStream out) {
         this(out, MysqlCapability.DEFAULT_CAPABILITY);
     }
 
-    public MysqlSerializer(ByteArrayOutputStream out, MysqlCapability capability) {
+    private MysqlSerializer(ByteArrayOutputStream out, MysqlCapability capability) {
         this.out = out;
         this.capability = capability;
     }

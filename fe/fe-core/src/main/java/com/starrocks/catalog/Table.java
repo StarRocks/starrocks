@@ -59,7 +59,9 @@ public class Table extends MetaObject implements Writable {
         ELASTICSEARCH,
         HIVE,
         ICEBERG,
-        ODBC
+        HUDI,
+        ODBC,
+        JDBC,
     }
 
     protected long id;
@@ -192,12 +194,16 @@ public class Table extends MetaObject implements Writable {
             table = new EsTable();
         } else if (type == TableType.HIVE) {
             table = new HiveTable();
+        } else if (type == TableType.HUDI) {
+            table = new HudiTable();
         } else if (type == TableType.ODBC) {
             table = new OdbcTable();
         } else if (type == TableType.OLAP_EXTERNAL) {
             table = new ExternalOlapTable();
         } else if (type == TableType.ICEBERG) {
             table = new IcebergTable();
+        } else if (type == TableType.JDBC) {
+            table = new JDBCTable();
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }
@@ -363,5 +369,9 @@ public class Table extends MetaObject implements Writable {
 
     // onDrop is called when this table is dropped
     public void onDrop() {
+    }
+
+    public boolean isSupported() {
+        return false;
     }
 }

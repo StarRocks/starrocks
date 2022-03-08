@@ -331,6 +331,12 @@ public:
     // in any of the child profiles to 'counters'.
     void get_counters(const std::string& name, std::vector<Counter*>* counters);
 
+    // Copy all but the bucket counters from src profile
+    void copy_all_counters_from(RuntimeProfile* src_profile);
+
+    // Clean all the counters except saved_counter_names
+    void remove_counters(const std::set<std::string>& saved_counter_names);
+
     // Helper to append to the "ExecOption" info string.
     void append_exec_option(const std::string& option) { add_info_string("ExecOption", option); }
 
@@ -348,6 +354,9 @@ public:
     // the key does not exist.
     const std::string* get_info_string(const std::string& key);
 
+    // Copy all the string infos from src profile
+    void copy_all_info_strings_from(RuntimeProfile* src_profile);
+
     // Returns the counter for the total elapsed time.
     Counter* total_time_counter() { return &_counter_total_time; }
 
@@ -363,6 +372,15 @@ public:
     // Divides all counters by n
     void divide(int n);
 
+    size_t num_children() const { return _child_map.size(); }
+
+    // Get child of given name
+    RuntimeProfile* get_child(const std::string& name);
+
+    // Get child of given index
+    RuntimeProfile* get_child(const size_t index);
+
+    // Gets all direct children's profiles
     void get_children(std::vector<RuntimeProfile*>* children);
 
     // Gets all profiles in tree, including this one.
@@ -479,7 +497,7 @@ private:
     std::set<std::vector<Counter*>*> _bucketing_counters;
 
     // protects _counter_map, _counter_child_map and _bucketing_counters
-    mutable std::mutex _counter_map_lock;
+    mutable std::mutex _counter_lock;
 
     // Child profiles.  Does not own memory.
     // We record children in both a map (to facilitate updates) and a vector
@@ -593,6 +611,31 @@ private:
     static void print_child_counters(const std::string& prefix, const std::string& counter_name,
                                      const CounterMap& counter_map, const ChildCounterMap& child_counter_map,
                                      std::ostream* s);
+
+public:
+    // Merge all the isomorphic sub profiles and the caller must known for sure
+    // that all the children are isomorphic, otherwise, the behavior is undefined
+    // The merged result will be stored in the first profile
+    static void merge_isomorphic_profiles(std::vector<RuntimeProfile*>& profiles);
+
+private:
+    // Merge all the isomorphic counters
+    // The exact semantics of merge depends on TUnit::type
+    // TODO(hcf) is the classification right?
+    // TODO(hcf) merge bucket counters
+    // sum:
+    //     UNIT / UNIT_PER_SECOND
+    //     BYTES / BYTES_PER_SECOND
+    //     DOUBLE_VALUE / NONE
+    // average:
+    //     CPU_TICKS / TIME_NS / TIME_MS / TIME_S
+    typedef std::tuple<int64_t, int64_t, int64_t> MergedInfo;
+    static MergedInfo merge_isomorphic_counters(TUnit::type type, std::vector<Counter*>& counters);
+
+    static bool is_average_type(TUnit::type type) {
+        return TUnit::type::CPU_TICKS == type || TUnit::type::TIME_NS == type || TUnit::type::TIME_MS == type ||
+               TUnit::type::TIME_S == type;
+    }
 };
 
 // Utility class to update the counter at object construction and destruction.

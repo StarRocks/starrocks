@@ -4,6 +4,7 @@
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
 #include "exec/pipeline/set/union_const_source_operator.h"
@@ -72,11 +73,11 @@ Status UnionNode::prepare(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(exprs, state, row_desc()));
+        RETURN_IF_ERROR(Expr::prepare(exprs, state));
     }
 
     for (size_t i = 0; i < _child_expr_lists.size(); i++) {
-        RETURN_IF_ERROR(Expr::prepare(_child_expr_lists[i], state, child(i)->row_desc()));
+        RETURN_IF_ERROR(Expr::prepare(_child_expr_lists[i], state));
     }
 
     return Status::OK();
@@ -105,6 +106,11 @@ Status UnionNode::open(RuntimeState* state) {
 Status UnionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
+
+    if (reached_limit()) {
+        *eos = true;
+        return Status::OK();
+    }
 
     while (true) {
         //@TODO: There seems to be no difference between passthrough and materialize, can be
@@ -135,6 +141,13 @@ Status UnionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     } else {
         _num_rows_returned += (*chunk)->num_rows();
+    }
+
+    if (reached_limit()) {
+        int64_t num_rows_over = _num_rows_returned - _limit;
+        DCHECK_GE((*chunk)->num_rows(), num_rows_over);
+        (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
+        COUNTER_SET(_rows_returned_counter, _limit);
     }
 
     DCHECK_CHUNK(*chunk);
@@ -246,13 +259,14 @@ void UnionNode::_move_passthrough_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chun
     }
 }
 
-void UnionNode::_move_materialize_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chunk) {
+Status UnionNode::_move_materialize_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chunk) {
     for (size_t i = 0; i < _child_expr_lists[_child_idx].size(); i++) {
         auto* dest_slot = _tuple_desc->slots()[i];
         ColumnPtr column = _child_expr_lists[_child_idx][i]->evaluate(src_chunk.get());
-
         _move_column(dest_chunk, column, dest_slot, src_chunk->num_rows());
     }
+    RETURN_IF_HAS_ERROR(_child_expr_lists[_child_idx]);
+    return Status::OK();
 }
 
 Status UnionNode::_move_const_chunk(ChunkPtr& dest_chunk) {
@@ -263,6 +277,7 @@ Status UnionNode::_move_const_chunk(ChunkPtr& dest_chunk) {
         _move_column(dest_chunk, column, dest_slot, 1);
     }
 
+    RETURN_IF_HAS_ERROR(_const_expr_lists[_const_expr_list_idx]);
     return Status::OK();
 }
 
@@ -309,7 +324,8 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
 }
 
 pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    std::vector<pipeline::OpFactories> operators_list;
+    using namespace pipeline;
+    std::vector<OpFactories> operators_list;
     operators_list.reserve(_children.size() + 1);
     const auto num_operators_generated = _children.size() + !_const_expr_lists.empty();
     auto&& rc_rf_probe_collector =
@@ -319,7 +335,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     for (; i < _first_materialized_child_idx; i++) {
         operators_list.emplace_back(child(i)->decompose_to_pipeline(context));
 
-        pipeline::UnionPassthroughOperator::SlotMap* dst2src_slot_map = nullptr;
+        UnionPassthroughOperator::SlotMap* dst2src_slot_map = nullptr;
         if (!_pass_through_slot_maps.empty()) {
             dst2src_slot_map = &_pass_through_slot_maps[i];
         }
@@ -332,7 +348,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         const auto& tuple_descs = child(i)->row_desc().tuple_descriptors();
         const auto& src_slots = tuple_descs[0]->slots();
 
-        auto union_passthrough_op = std::make_shared<pipeline::UnionPassthroughOperatorFactory>(
+        auto union_passthrough_op = std::make_shared<UnionPassthroughOperatorFactory>(
                 context->next_operator_id(), id(), dst2src_slot_map, dst_slots, src_slots);
         operators_list[i].emplace_back(std::move(union_passthrough_op));
         // Initialize OperatorFactory's fields involving runtime filters.
@@ -356,7 +372,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
             dst_column_is_nullables.emplace_back(dst_slot->is_nullable());
         }
 
-        auto project_op = std::make_shared<pipeline::ProjectOperatorFactory>(
+        auto project_op = std::make_shared<ProjectOperatorFactory>(
                 context->next_operator_id(), id(), std::move(dst_column_ids), std::move(_child_expr_lists[i]),
                 std::move(dst_column_is_nullables), std::vector<int32_t>(), std::vector<ExprContext*>());
         operators_list[i].emplace_back(std::move(project_op));
@@ -366,12 +382,12 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
 
     // UnionConstSourceOperatorFactory is used for the const sub exprs.
     if (!_const_expr_lists.empty()) {
-        operators_list.emplace_back(pipeline::OpFactories());
+        operators_list.emplace_back(OpFactories());
 
         const auto& dst_tuple_desc =
                 context->fragment_context()->runtime_state()->desc_tbl().get_tuple_descriptor(_tuple_id);
         const auto& dst_slots = dst_tuple_desc->slots();
-        auto union_const_source_op = std::make_shared<pipeline::UnionConstSourceOperatorFactory>(
+        auto union_const_source_op = std::make_shared<UnionConstSourceOperatorFactory>(
                 context->next_operator_id(), id(), dst_slots, _const_expr_lists);
 
         // Each _const_expr_list is project to one row.
@@ -387,7 +403,12 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
-    return context->maybe_gather_pipelines_to_one(runtime_state(), operators_list);
+    auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), operators_list);
+    if (limit() != -1) {
+        final_operators.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+    return final_operators;
 }
 
 } // namespace starrocks::vectorized

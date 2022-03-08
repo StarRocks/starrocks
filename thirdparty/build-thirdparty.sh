@@ -370,7 +370,7 @@ build_lz4() {
     check_if_source_exist $LZ4_SOURCE
     cd $TP_SOURCE_DIR/$LZ4_SOURCE
 
-    make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR \
+    make -C lib -j$PARALLEL install PREFIX=$TP_INSTALL_DIR \
     INCLUDEDIR=$TP_INCLUDE_DIR/lz4/ BUILD_SHARED=no
 }
 
@@ -734,6 +734,33 @@ build_aliyun_oss_jars() {
     cp -r $TP_SOURCE_DIR/$ALIYUN_OSS_JARS_SOURCE $TP_INSTALL_DIR/aliyun_oss_jars
 }
 
+build_aws_cpp_sdk() {
+    check_if_source_exist $AWS_SDK_CPP_SOURCE
+    cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
+    # only build s3, s3-crt and transfer manager, you can add more components if you want.
+    $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+               -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
+               -DCURL_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libcurl.a -DZLIB_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libz.a
+    cd build
+    make -j$PARALLEL && make install
+}
+
+# velocypack
+build_vpack() {
+    check_if_source_exist $VPACK_SOURCE
+    cd $TP_SOURCE_DIR/$VPACK_SOURCE
+    mkdir -p build && cd build
+    $CMAKE_CMD .. \
+        -DCMAKE_CXX_STANDARD="17" \
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
+        -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc
+
+    make -j$PARALLEL && make install
+}
+
+export CXXFLAGS="-fno-omit-frame-pointer ${CXXFLAGS}"
+export CFLAGS="-fno-omit-frame-pointer ${CFLAGS}"
+
 build_libevent
 build_zlib
 build_lz4
@@ -769,10 +796,12 @@ build_ragel
 build_hyperscan
 build_mariadb
 build_aliyun_oss_jars
+build_aws_cpp_sdk
+build_vpack
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
 fi
 
-echo "Finihsed to build all thirdparties"
+echo "Finished to build all thirdparties"
 

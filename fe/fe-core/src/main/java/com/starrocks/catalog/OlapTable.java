@@ -32,11 +32,11 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
+import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.catalog.Tablet.TabletStatus;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.DdlException;
@@ -488,7 +488,7 @@ public class OlapTable extends Table {
                 idx.clearTabletsForRestore();
                 for (int i = 0; i < tabletNum; i++) {
                     long newTabletId = catalog.getNextId();
-                    Tablet newTablet = new Tablet(newTabletId);
+                    LocalTablet newTablet = new LocalTablet(newTabletId);
                     idx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
 
                     // replicas
@@ -1227,7 +1227,7 @@ public class OlapTable extends Table {
                 for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
                     idx.setState(IndexState.NORMAL);
                     for (Tablet tablet : idx.getTablets()) {
-                        for (Replica replica : tablet.getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                             replica.setState(ReplicaState.NORMAL);
                         }
                     }
@@ -1324,16 +1324,17 @@ public class OlapTable extends Table {
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : mIndex.getTablets()) {
+                    LocalTablet localTablet = (LocalTablet) tablet;
                     if (tabletScheduler.containsTablet(tablet.getId())) {
                         return false;
                     }
 
-                    Pair<TabletStatus, TabletSchedCtx.Priority> statusPair = tablet.getHealthStatusWithPriority(
+                    Pair<TabletStatus, TabletSchedCtx.Priority> statusPair = localTablet.getHealthStatusWithPriority(
                             infoService, clusterName, visibleVersion, replicationNum,
                             aliveBeIdsInCluster);
                     if (statusPair.first != TabletStatus.HEALTHY) {
                         LOG.info("table {} is not stable because tablet {} status is {}. replicas: {}",
-                                id, tablet.getId(), statusPair.first, tablet.getReplicas());
+                                id, tablet.getId(), statusPair.first, localTablet.getReplicas());
                         return false;
                     }
                 }
@@ -1349,7 +1350,7 @@ public class OlapTable extends Table {
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             MaterializedIndex baseIdx = partition.getBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
-                Tablet tablet = baseIdx.getTablet(tabletId);
+                LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
                 if (replicaBackendIds.size() < replicationNum) {
                     // this should not happen, but in case, throw an exception to terminate this process
@@ -1375,7 +1376,7 @@ public class OlapTable extends Table {
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
                     long tabletRowCount = 0L;
-                    for (Replica replica : tablet.getReplicas()) {
+                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                         if (replica.checkVersionCatchUp(version, false)
                                 && replica.getRowCount() > tabletRowCount) {
                             tabletRowCount = replica.getRowCount();
@@ -1476,7 +1477,24 @@ public class OlapTable extends Table {
     }
 
     public void setHasDelete() {
+        if (tableProperty == null) {
+            return;
+        }
         tableProperty.setHasDelete(true);
+    }
+
+    public boolean hasForbitGlobalDict() {
+        if (tableProperty == null) {
+            return false;
+        }
+        return tableProperty.hasForbitGlobalDict();
+    }
+
+    public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
+        if (tableProperty == null) {
+            return;
+        }
+        tableProperty.setHasForbitGlobalDict(hasForbitGlobalDict);
     }
 
     // return true if partition with given name already exist, both in partitions and temp partitions.
@@ -1628,5 +1646,10 @@ public class OlapTable extends Table {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
+    }
+
+    @Override
+    public boolean isSupported() {
+        return true;
     }
 }

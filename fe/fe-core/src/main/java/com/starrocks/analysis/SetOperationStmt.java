@@ -273,7 +273,7 @@ public class SetOperationStmt extends QueryStmt {
         if (!distinctOperands_.isEmpty()) {
             // forbidden metric type
             for (Expr expr : resultExprs) {
-                if (expr.getType().isOnlyMetricType()) {
+                if (!expr.getType().canDistinct()) {
                     throw new AnalysisException("Don't support distinct metric type: " + expr.getType());
                 }
             }

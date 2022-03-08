@@ -24,17 +24,17 @@ import java.util.Objects;
  * referring to the same CTEProducer.
  * */
 public class LogicalCTEConsumeOperator extends LogicalOperator {
-    private final String cteId;
+    private final int cteId;
 
     private final Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap;
 
-    public LogicalCTEConsumeOperator(String cteId, Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
+    public LogicalCTEConsumeOperator(int cteId, Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
         super(OperatorType.LOGICAL_CTE_CONSUME, Operator.DEFAULT_LIMIT, null, null);
         this.cteId = cteId;
         this.cteOutputColumnRefMap = cteOutputColumnRefMap;
     }
 
-    public LogicalCTEConsumeOperator(long limit, ScalarOperator predicate, Projection projection, String cteId,
+    public LogicalCTEConsumeOperator(long limit, ScalarOperator predicate, Projection projection, int cteId,
                                      Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
         super(OperatorType.LOGICAL_CTE_CONSUME, limit, predicate, projection);
         this.cteId = cteId;
@@ -54,7 +54,7 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
         }
     }
 
-    public String getCteId() {
+    public int getCteId() {
         return cteId;
     }
 
@@ -91,7 +91,7 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
 
     public static class Builder
             extends LogicalOperator.Builder<LogicalCTEConsumeOperator, LogicalCTEConsumeOperator.Builder> {
-        private String cteId;
+        private int cteId;
 
         private Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap;
 
@@ -105,6 +105,11 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
             super.withOperator(operator);
             this.cteId = operator.cteId;
             this.cteOutputColumnRefMap = operator.cteOutputColumnRefMap;
+            return this;
+        }
+
+        public Builder setCteOutputColumnRefMap(Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
+            this.cteOutputColumnRefMap = cteOutputColumnRefMap;
             return this;
         }
     }

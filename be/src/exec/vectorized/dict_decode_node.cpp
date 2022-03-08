@@ -10,6 +10,7 @@
 #include "column/column_helper.h"
 #include "common/logging.h"
 #include "exec/pipeline/dict_decode_operator.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
@@ -47,7 +48,7 @@ void DictDecodeNode::_init_counter() {
 Status DictDecodeNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc()));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -61,35 +62,37 @@ Status DictDecodeNode::open(RuntimeState* state) {
     const auto& global_dict = state->get_query_global_dict_map();
     _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
 
+    for (auto& [slot_id, v] : _string_functions) {
+        auto dict_iter = global_dict.find(slot_id);
+        auto dict_not_contains_cid = dict_iter == global_dict.end();
+        if (dict_not_contains_cid) {
+            auto& [expr_ctx, dict_ctx] = v;
+            DCHECK(expr_ctx->root()->fn().could_apply_dict_optimize);
+            _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
+            if (!dict_ctx.could_apply_dict_optimize) {
+                return Status::InternalError(fmt::format(
+                        "Not found dict for function-called cid:{} it may cause by unsupported function", slot_id));
+            }
+
+            _dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, slot_id);
+            auto dict_iter = global_dict.find(slot_id);
+            DCHECK(dict_iter != global_dict.end());
+            if (dict_iter == global_dict.end()) {
+                return Status::InternalError(fmt::format("Eval Expr Error for cid:{}", slot_id));
+            }
+        }
+    }
+
     DCHECK_EQ(_encode_column_cids.size(), _decode_column_cids.size());
     int need_decode_size = _decode_column_cids.size();
     for (int i = 0; i < need_decode_size; ++i) {
         int need_encode_cid = _encode_column_cids[i];
         auto dict_iter = global_dict.find(need_encode_cid);
         auto dict_not_contains_cid = dict_iter == global_dict.end();
-        auto input_has_string_function = _string_functions.find(need_encode_cid) != _string_functions.end();
 
-        if (dict_not_contains_cid && !input_has_string_function) {
+        if (dict_not_contains_cid) {
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
-        } else if (dict_not_contains_cid && input_has_string_function) {
-            auto& [expr_ctx, dict_ctx] = _string_functions[need_encode_cid];
-            DCHECK(expr_ctx->root()->fn().could_apply_dict_optimize);
-            _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
-
-            if (!dict_ctx.could_apply_dict_optimize) {
-                return Status::InternalError(
-                        fmt::format("Not found dict for function-called cid:{} it may cause by unsupported function",
-                                    need_encode_cid));
-            }
-
-            _dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, need_encode_cid);
-            dict_iter = global_dict.find(need_encode_cid);
-            DCHECK(dict_iter != global_dict.end());
-            if (dict_iter == global_dict.end()) {
-                return Status::InternalError(fmt::format("Eval Expr Error for cid:{}", need_encode_cid));
-            }
         }
-
         DefaultDecoderPtr decoder = std::make_unique<DefaultDecoder>();
         // TODO : avoid copy dict
         decoder->dict = dict_iter->second.second;
@@ -164,6 +167,9 @@ pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBu
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
+    if (limit() != -1) {
+        operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
     return operators;
 }
 

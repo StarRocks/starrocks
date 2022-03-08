@@ -26,8 +26,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -38,6 +36,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -45,14 +44,17 @@ import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.Planner;
-import com.starrocks.planner.PlannerContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.OperatorStrings;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -64,20 +66,18 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.statistic.Constants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.MockedFrontend.EnvVarNotSetException;
 import com.starrocks.utframe.MockedFrontend.FeStartException;
 import com.starrocks.utframe.MockedFrontend.NotInitException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.FileUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
@@ -93,13 +93,12 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
 
 public class UtFrameUtils {
-    private static final Logger LOG = LogManager.getLogger(UtFrameUtils.class);
-
     public static final String createStatisticsTableStmt = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
             "  `column_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
@@ -122,6 +121,25 @@ public class UtFrameUtils {
             "\"in_memory\" = \"false\",\n" +
             "\"storage_format\" = \"DEFAULT\"\n" +
             ");";
+
+    static {
+        try {
+            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
+
+            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/");
+            addMockBackend(10001);
+
+            // sleep to wait first heartbeat
+            int retry = 0;
+            while (Catalog.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+                    retry++ < 600) {
+                Thread.sleep(100);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     // Help to create a mocked ConnectContext.
     public static ConnectContext createDefaultCtx() throws IOException {
@@ -147,6 +165,27 @@ public class UtFrameUtils {
     }
 
     // Parse an origin stmt . Return a StatementBase instance.
+    public static StatementBase parseStmtWithNewParser(String originStmt, ConnectContext ctx)
+            throws Exception {
+        StatementBase statementBase;
+        com.starrocks.sql.analyzer.Analyzer analyzer =
+                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
+        try {
+            statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+            Relation relation = analyzer.analyze(statementBase);
+        } catch (ParsingException | SemanticException e) {
+            System.err.println("parse failed: " + e.getMessage());
+            if (e.getMessage() == null) {
+                throw e;
+            } else {
+                throw new AnalysisException(e.getMessage(), e);
+            }
+        }
+
+        return statementBase;
+    }
+
+    // Parse an origin stmt . Return a StatementBase instance.
     public static StatementBase parseStmtWithNewAnalyzer(String originStmt, ConnectContext ctx)
             throws Exception {
         SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
@@ -165,7 +204,6 @@ public class UtFrameUtils {
                 throw new AnalysisException(errorMessage, e);
             }
         }
-        Relation relation = analyzer.analyze(statementBase);
         return statementBase;
     }
 
@@ -215,70 +253,34 @@ public class UtFrameUtils {
         return statementBases;
     }
 
-    public static void startFEServer(String runningDir) throws EnvVarNotSetException, IOException,
-            FeStartException, NotInitException, DdlException, InterruptedException {
+    private static void startFEServer(String runningDir) throws EnvVarNotSetException, IOException,
+            FeStartException, NotInitException {
         // get STARROCKS_HOME
         String starRocksHome = System.getenv("STARROCKS_HOME");
         if (Strings.isNullOrEmpty(starRocksHome)) {
             starRocksHome = Files.createTempDirectory("STARROCKS_HOME").toAbsolutePath().toString();
         }
+
         Config.plugin_dir = starRocksHome + "/plugins";
-
-        // fe only need edit_log_port
-        int fe_edit_log_port = findValidPort();
-
         // start fe in "STARROCKS_HOME/fe/mocked/"
         MockedFrontend frontend = MockedFrontend.getInstance();
         Map<String, String> feConfMap = Maps.newHashMap();
         // set additional fe config
-        feConfMap.put("edit_log_port", String.valueOf(fe_edit_log_port));
+        feConfMap.put("edit_log_port", String.valueOf(8110));
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
         frontend.start(new String[0]);
     }
 
-    public static void createMinStarRocksCluster(String runningDir) throws EnvVarNotSetException, IOException,
-            FeStartException, NotInitException, DdlException, InterruptedException {
-        startFEServer(runningDir);
-        addMockBackend(10001);
-
-        // sleep to wait first heartbeat
-        int retry = 0;
-        while (Catalog.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
-                retry++ < 600) {
-            Thread.sleep(1000);
-        }
+    public static void createMinStarRocksCluster(String runningDir) {
     }
 
-    public static void addMockBackend(int backendId) throws IOException {
-        int fe_rpc_port = MockedFrontend.getInstance().getRpcPort();
+    public static void addMockBackend(int backendId) throws Exception {
         // start be
-        MockedBackend backend = null;
-        for (int retry = 1; retry <= 5; retry++) {
-            int be_heartbeat_port = findValidPort();
-            int be_thrift_port = findValidPort();
-            int be_brpc_port = findValidPort();
-            int be_http_port = findValidPort();
-
-            backend = MockedBackendFactory.createBackend("127.0.0.1",
-                    be_heartbeat_port, be_thrift_port, be_brpc_port, be_http_port,
-                    new MockedBackendFactory.DefaultHeartbeatServiceImpl(be_thrift_port, be_http_port, be_brpc_port),
-                    new MockedBackendFactory.DefaultBeThriftServiceImpl(),
-                    new MockedBackendFactory.DefaultPBackendServiceImpl());
-            backend.setFeAddress(new TNetworkAddress("127.0.0.1", fe_rpc_port));
-            try {
-                backend.start();
-                break;
-            } catch (IOException ex) {
-                System.out.println("start be fail, message : " + ex.getMessage());
-                if (retry == 5) {
-                    throw ex;
-                }
-            }
-        }
+        MockedBackend backend = new MockedBackend("127.0.0.1");
 
         // add be
-        Backend be = new Backend(backendId, backend.getHost(), backend.getHeartbeatPort());
+        Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
         DiskInfo diskInfo1 = new DiskInfo(backendId + "/path1");
         diskInfo1.setTotalCapacityB(1000000);
@@ -288,6 +290,9 @@ public class UtFrameUtils {
         be.setDisks(ImmutableMap.copyOf(disks));
         be.setAlive(true);
         be.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
+        be.setBePort(backend.getBeThriftPort());
+        be.setBrpcPort(backend.getBrpcPort());
+        be.setHttpPort(backend.getHttpPort());
         Catalog.getCurrentSystemInfo().addBackend(be);
     }
 
@@ -349,21 +354,22 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
-        SqlScanner input =
-                new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-        connectContext.getDumpInfo().setOriginStmt(originStmt);
 
+        List<StatementBase> statements = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode());
+        connectContext.getDumpInfo().setOriginStmt(originStmt);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
+        StatementBase statementBase = statements.get(0);
         try {
             // update session variable by adding optional hints.
-            if (statementBase instanceof SelectStmt) {
-                Map<String, String> optHints = ((SelectStmt) statementBase).getSelectList().getOptHints();
+            if (statementBase instanceof QueryStatement &&
+                    ((QueryStatement) statementBase).getQueryRelation() instanceof SelectRelation) {
+                SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+                Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
                 if (optHints != null) {
                     SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
                     for (String key : optHints.keySet()) {
-                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))),
+                                true);
                     }
                     connectContext.setSessionVariable(sessionVariable);
                 }
@@ -373,19 +379,16 @@ public class UtFrameUtils {
             OperatorStrings operatorPrinter = new OperatorStrings();
             return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
         } finally {
-            // before returing we have to restore session varibale.
+            // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
         }
     }
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
-        SqlScanner input =
-                new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-        Preconditions.checkState(statementBase instanceof QueryStmt);
-        QueryStmt queryStmt = (QueryStmt) statementBase;
-        String digest = queryStmt.toDigest();
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
+        Preconditions.checkState(statementBase instanceof QueryStatement);
+        QueryStatement queryStmt = (QueryStatement) statementBase;
+        String digest = SqlDigestBuilder.build(queryStmt);
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
@@ -396,8 +399,7 @@ public class UtFrameUtils {
         }
     }
 
-    public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
-                                                                       QueryDumpInfo replayDumpInfo) throws Exception {
+    private static String initMockEnv(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
         // mock statistics table
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         if (!starRocksAssert.databaseExist("_statistics_")) {
@@ -461,35 +463,51 @@ public class UtFrameUtils {
                         columnStatisticEntry.getValue());
             }
         }
+        return replaySql;
+    }
 
-        SqlScanner input =
-                new SqlScanner(new StringReader(replaySql), replayDumpInfo.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
+    private static void tearMockEnv() {
+        int backendId = 10002;
+        int backendIdSize = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
+        for (int i = 1; i < backendIdSize; ++i) {
+            try {
+                UtFrameUtils.dropMockBackend(backendId++);
+            } catch (DdlException e) {
+                e.printStackTrace();
+            }
+        }
+    }
 
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(Catalog.getCurrentCatalog(), connectContext);
-        Relation relation = analyzer.analyze(statementBase);
+    public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
+                                                                       QueryDumpInfo replayDumpInfo) throws Exception {
+        String replaySql = initMockEnv(connectContext, replayDumpInfo);
 
-        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext).transform(relation);
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql, connectContext.getSessionVariable().getSqlMode()).get(0);
+            com.starrocks.sql.analyzer.Analyzer analyzer =
+                    new com.starrocks.sql.analyzer.Analyzer(Catalog.getCurrentCatalog(), connectContext);
+            Relation relation = analyzer.analyze(statementBase);
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression optimizedPlan = optimizer.optimize(
-                connectContext,
-                logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext).transform(relation);
 
-        PlannerContext plannerContext =
-                new PlannerContext(null, null, connectContext.getSessionVariable().toThrift(), null);
-        ExecPlan execPlan = new PlanFragmentBuilder()
-                .createPhysicalPlan(optimizedPlan, plannerContext, connectContext,
-                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
+            Optimizer optimizer = new Optimizer();
+            OptExpression optimizedPlan = optimizer.optimize(
+                    connectContext,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
 
-        OperatorStrings operatorPrinter = new OperatorStrings();
-        return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
+            ExecPlan execPlan = new PlanFragmentBuilder()
+                    .createPhysicalPlan(optimizedPlan, connectContext,
+                            logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
+
+            OperatorStrings operatorPrinter = new OperatorStrings();
+            return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
+        } finally {
+            tearMockEnv();
+        }
     }
 
     private static String getThriftString(List<PlanFragment> fragments) {

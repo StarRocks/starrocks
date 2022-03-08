@@ -96,7 +96,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                                  << ", err_msg=" << status.get_error_msg() << ", " << ctx->brief();
                     // cancel body_sink, make sender known it
                     if (ctx->body_sink != nullptr) {
-                        ctx->body_sink->cancel();
+                        ctx->body_sink->cancel(status);
                     }
 
                     switch (ctx->load_src_type) {

@@ -23,6 +23,7 @@
 
 #include <string>
 
+#include "gen_cpp/persistent_index.pb.h"
 #include "storage/data_dir.h"
 #include "storage/kv_store.h"
 #include "storage/olap_define.h"
@@ -81,6 +82,8 @@ public:
     static Status get_tablet_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
                                   TabletMeta* tablet_meta);
 
+    static Status get_persistent_index_meta(DataDir* store, TTabletId tablet_id, PersistentIndexMetaPB* index_meta);
+
     static Status get_json_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash, std::string* json_meta);
 
     static Status build_primary_meta(DataDir* store, rapidjson::Document& doc, rocksdb::ColumnFamilyHandle* cf,
@@ -110,6 +113,12 @@ public:
     // commit a rowset into tablet
     static Status rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, EditVersionMetaPB* edit,
                                 const RowsetMetaPB& rowset, const string& rowset_meta_key);
+    // write rowset_meta into rocksdb
+    // this function is used for partial update so far
+    static Status write_rowset_meta(DataDir* store, TTabletId tablet_id, const RowsetMetaPB& rowset,
+                                    const string& rowset_meta_key);
+
+    static Status write_persistent_index_meta(DataDir* store, TTabletId tablet_id, const PersistentIndexMetaPB& meta);
 
     using RowsetIterateFunc = std::function<bool(RowsetMetaSharedPtr rowset_meta)>;
     static Status rowset_iterate(DataDir* store, TTabletId tablet_id, const RowsetIterateFunc& func);

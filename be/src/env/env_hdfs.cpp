@@ -2,103 +2,121 @@
 
 #include "env/env_hdfs.h"
 
-#include "env/env.h"
-#include "fmt/core.h"
-#include "gutil/strings/substitute.h"
-#include "hdfs/hdfs.h"
+#include <hdfs/hdfs.h>
+
+#include <atomic>
+
+#include "fmt/format.h"
+#include "runtime/hdfs/hdfs_fs_cache.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {
 
-HdfsRandomAccessFile::HdfsRandomAccessFile(hdfsFS fs, std::string filename, bool usePread)
-        : _opened(false), _fs(fs), _file(nullptr), _filename(std::move(filename)), _usePread(usePread) {}
+// ==================================  HdfsRandomAccessFile  ==========================================
 
-HdfsRandomAccessFile::~HdfsRandomAccessFile() noexcept {
-    close();
+// class for remote read hdfs file
+// Now this is not thread-safe.
+class HdfsRandomAccessFile : public RandomAccessFile {
+public:
+    HdfsRandomAccessFile(hdfsFS fs, hdfsFile file, const std::string& file_name)
+            : _fs(fs), _file(file), _file_name(file_name), _file_size(0) {}
+
+    ~HdfsRandomAccessFile() override;
+
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override;
+    Status read_at_fully(int64_t offset, void* data, int64_t size) const override;
+    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
+    Status size(uint64_t* size) const override;
+    const std::string& filename() const override { return _file_name; }
+    StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override;
+
+private:
+    hdfsFS _fs;
+    hdfsFile _file;
+    std::string _file_name;
+    mutable uint64_t _file_size;
+};
+
+HdfsRandomAccessFile::~HdfsRandomAccessFile() {
+    int r = hdfsCloseFile(_fs, _file);
+    PLOG_IF(ERROR, r != 0) << "close " << _file_name << " failed";
 }
 
-Status HdfsRandomAccessFile::open() {
-    DCHECK(!_opened);
-    if (_fs) {
-        _file = hdfsOpenFile(_fs, _filename.c_str(), O_RDONLY, 0, 0, 0);
-        if (_file == nullptr) {
-            return Status::InternalError(fmt::format("open file failed, file={}", _filename));
-        }
+StatusOr<int64_t> HdfsRandomAccessFile::read_at(int64_t offset, void* data, int64_t size) const {
+    if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
+        return Status::NotSupported("read size is greater than std::numeric_limits<tSize>::max()");
     }
-    _opened = true;
-    return Status::OK();
-}
-
-void HdfsRandomAccessFile::close() noexcept {
-    if (_opened) {
-        if (_fs && _file) {
-            hdfsCloseFile(_fs, _file);
-        }
-        _opened = false;
+    tSize r = hdfsPread(_fs, _file, offset, data, static_cast<tSize>(size));
+    if (UNLIKELY(r == -1)) {
+        return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _file_name, get_hdfs_err_msg()));
     }
+    return r;
 }
 
-static Status read_at_internal(hdfsFS fs, hdfsFile file, const std::string& file_name, int64_t offset, Slice* res,
-                               bool usePread) {
-    if (usePread) {
-        if (hdfsPreadFully(fs, file, offset, res->data, res->size) == -1) {
-            return Status::IOError(strings::Substitute("fail to hdfsPreadFully file, file=$0, error=$1", file_name,
-                                                       get_hdfs_err_msg()));
-        }
-    } else {
-        auto cur_offset = hdfsTell(fs, file);
-        if (cur_offset == -1) {
-            return Status::IOError(
-                    strings::Substitute("fail to get offset, file=$0, error=$1", file_name, get_hdfs_err_msg()));
-        }
-        if (cur_offset != offset) {
-            if (hdfsSeek(fs, file, offset)) {
-                return Status::IOError(strings::Substitute("fail to seek offset, file=$0, offset=$1, error=$2",
-                                                           file_name, offset, get_hdfs_err_msg()));
-            }
-        }
-        size_t bytes_read = 0;
-        while (bytes_read < res->size) {
-            size_t to_read = res->size - bytes_read;
-            auto hdfs_res = hdfsRead(fs, file, res->data + bytes_read, to_read);
-            if (hdfs_res < 0) {
-                return Status::IOError(
-                        strings::Substitute("fail to hdfsRead file, file=$0, error=$1", file_name, get_hdfs_err_msg()));
-            } else if (hdfs_res == 0) {
-                break;
-            }
-            bytes_read += hdfs_res;
-        }
-        res->size = bytes_read;
+Status HdfsRandomAccessFile::read_at_fully(int64_t offset, void* data, int64_t size) const {
+    if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
+        return Status::NotSupported("read size is greater than std::numeric_limits<tSize>::max()");
+    }
+    tSize r = hdfsPreadFully(_fs, _file, offset, data, static_cast<tSize>(size));
+    if (UNLIKELY(r == -1)) {
+        return Status::IOError(fmt::format("fail to hdfsPreadFully {}: {}", _file_name, get_hdfs_err_msg()));
     }
     return Status::OK();
-}
-
-Status HdfsRandomAccessFile::read(uint64_t offset, Slice* res) const {
-    DCHECK(_opened);
-    RETURN_IF_ERROR(read_at_internal(_fs, _file, _filename, offset, res, _usePread));
-    return Status::OK();
-}
-
-Status HdfsRandomAccessFile::read_at(uint64_t offset, const Slice& res) const {
-    DCHECK(_opened);
-    Slice slice = res;
-    RETURN_IF_ERROR(read_at_internal(_fs, _file, _filename, offset, &slice, _usePread));
-    if (slice.size != res.size) {
-        return Status::InternalError(
-                strings::Substitute("fail to read enough data, file=$0, offset=$1, size=$2, expect=$3", _filename,
-                                    offset, slice.size, res.size));
-    }
-    return Status::OK();
-}
-
-Status HdfsRandomAccessFile::readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const {
-    // TODO: implement
-    return Status::InternalError("HdfsRandomAccessFile::readv_at not implement");
 }
 
 Status HdfsRandomAccessFile::size(uint64_t* size) const {
-    // TODO: implement
-    return Status::InternalError("HdfsRandomAccessFile::size not implement");
+    if (_file_size == 0) {
+        auto info = hdfsGetPathInfo(_fs, _file_name.c_str());
+        if (UNLIKELY(info == nullptr)) {
+            return Status::InternalError(fmt::format("hdfsGetPathInfo failed, file={}", _file_name));
+        }
+        _file_size = info->mSize;
+        hdfsFreeFileInfo(info, 1);
+    }
+    *size = _file_size;
+    return Status::OK();
 }
+
+StatusOr<std::unique_ptr<NumericStatistics>> HdfsRandomAccessFile::get_numeric_statistics() {
+    struct hdfsReadStatistics* hdfs_statistics = nullptr;
+    auto r = hdfsFileGetReadStatistics(_file, &hdfs_statistics);
+    if (r != 0) return Status::InternalError(fmt::format("hdfsFileGetReadStatistics failed: {}", r));
+    auto statistics = std::make_unique<NumericStatistics>();
+    statistics->reserve(4);
+    statistics->append("TotalBytesRead", hdfs_statistics->totalBytesRead);
+    statistics->append("TotalLocalBytesRead", hdfs_statistics->totalLocalBytesRead);
+    statistics->append("TotalShortCircuitBytesRead", hdfs_statistics->totalShortCircuitBytesRead);
+    statistics->append("TotalZeroCopyBytesRead", hdfs_statistics->totalZeroCopyBytesRead);
+    hdfsFileFreeReadStatistics(hdfs_statistics);
+    return std::move(statistics);
+}
+
+Status HdfsRandomAccessFile::readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const {
+    for (size_t i = 0; i < res_cnt; i++) {
+        RETURN_IF_ERROR(HdfsRandomAccessFile::read_at_fully(offset, res[i].data, res[i].size));
+        offset += res[i].size;
+    }
+    return Status::OK();
+}
+
+StatusOr<std::unique_ptr<RandomAccessFile>> EnvHdfs::new_random_access_file(const std::string& path) {
+    return EnvHdfs::new_random_access_file(RandomAccessFileOptions(), path);
+}
+
+StatusOr<std::unique_ptr<RandomAccessFile>> EnvHdfs::new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                            const std::string& path) {
+    std::string namenode;
+    RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
+    HdfsFsHandle handle;
+    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle));
+    if (handle.type != HdfsFsHandle::Type::HDFS) {
+        return Status::InvalidArgument("invalid hdfs path");
+    }
+    hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, 0, 0, 0);
+    if (file == nullptr) {
+        return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+    }
+    return std::make_unique<HdfsRandomAccessFile>(handle.hdfs_fs, file, path);
+}
+
 } // namespace starrocks

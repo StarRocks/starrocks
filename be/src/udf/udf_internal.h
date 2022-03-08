@@ -24,6 +24,8 @@
 #include <cstdint>
 #include <cstring>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -37,6 +39,7 @@ class RuntimeState;
 
 namespace vectorized {
 class Column;
+class JavaUDAFContext;
 using ColumnPtr = std::shared_ptr<Column>;
 } // namespace vectorized
 
@@ -59,7 +62,7 @@ public:
             const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size,
             bool debug);
 
-    ~FunctionContextImpl() = default;
+    ~FunctionContextImpl();
 
     FunctionContextImpl(starrocks_udf::FunctionContext* parent);
 
@@ -75,8 +78,6 @@ public:
     void set_constant_columns(std::vector<vectorized::ColumnPtr> columns) { _constant_columns = std::move(columns); }
 
     uint8_t* varargs_buffer() { return _varargs_buffer; }
-
-    std::vector<starrocks_udf::AnyVal*>* staging_input_vals() { return &_staging_input_vals; }
 
     bool closed() const { return _closed; }
 
@@ -107,6 +108,11 @@ public:
     bool check_local_allocations_empty();
 
     RuntimeState* state() { return _state; }
+    void set_error(const char* error_msg);
+    bool has_error();
+    const char* error_msg();
+
+    vectorized::JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
 
     std::string& string_result() { return _string_result; }
 
@@ -144,6 +150,7 @@ private:
     starrocks_udf::FunctionContext::StarRocksVersion _version;
 
     // Empty if there's no error
+    std::mutex _error_msg_mutex;
     std::string _error_msg;
 
     // The number of warnings reported.
@@ -179,11 +186,6 @@ private:
 
     std::vector<vectorized::ColumnPtr> _constant_columns;
 
-    // Used by ScalarFnCall to store the arguments when running without codegen. Allows us
-    // to pass AnyVal* arguments to the scalar function directly, rather than codegening a
-    // call that passes the correct AnyVal subclass pointer type.
-    std::vector<starrocks_udf::AnyVal*> _staging_input_vals;
-
     // Indicates whether this context has been closed. Used for verification/debugging.
     bool _closed;
 
@@ -191,6 +193,9 @@ private:
 
     // this is used for count memory usage of aggregate state
     size_t _mem_usage = 0;
+
+    // UDAF Context
+    std::unique_ptr<vectorized::JavaUDAFContext> _jvm_udaf_ctxs;
 };
 
 } // namespace starrocks

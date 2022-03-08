@@ -4,9 +4,11 @@
 
 #include <memory>
 
+#include "column/json_column.h"
 #include "column/type_traits.h"
 #include "common/logging.h"
 #include "runtime/current_thread.h"
+#include "runtime/primitive_type_infra.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/schema.h"
@@ -254,24 +256,33 @@ void MemTable::_sort(bool is_final) {
     } else {
         _sort_chunk_by_rows();
     }
-    _result_chunk = _chunk->clone_empty_with_schema();
-    _append_to_sorted_chunk(_chunk.get(), _result_chunk.get());
     if (is_final) {
+        // No need to reserve, it will be reserve in IColumn::append_selective(),
+        // Otherwise it will use more peak memory
+        _result_chunk = _chunk->clone_empty_with_schema(0);
+        _append_to_sorted_chunk<true>(_chunk.get(), _result_chunk.get());
         _chunk.reset();
     } else {
+        _result_chunk = _chunk->clone_empty_with_schema();
+        _append_to_sorted_chunk<false>(_chunk.get(), _result_chunk.get());
         _chunk->reset();
     }
     _chunk_memory_usage = 0;
     _chunk_bytes_usage = 0;
 }
 
+template <bool is_final>
 void MemTable::_append_to_sorted_chunk(Chunk* src, Chunk* dest) {
     _selective_values.clear();
     _selective_values.reserve(src->num_rows());
     for (size_t i = 0; i < src->num_rows(); ++i) {
         _selective_values.push_back(_permutations[i].index_in_chunk);
     }
-    dest->append_selective(*src, _selective_values.data(), 0, src->num_rows());
+    if constexpr (is_final) {
+        dest->rolling_append_selective(*src, _selective_values.data(), 0, src->num_rows());
+    } else {
+        dest->append_selective(*src, _selective_values.data(), 0, src->num_rows());
+    }
 }
 
 Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes) {
@@ -469,66 +480,34 @@ private:
     }
 };
 
-#define CASE_FOR_NULLABLE_COLUMN_SORT(PrimitiveTypeName, ColumnPtr, Permutation)                                    \
-    case PrimitiveTypeName: {                                                                                       \
-        SortHelper::sort_on_nullable_column<RunTimeTypeTraits<PrimitiveTypeName>::ColumnType,                       \
-                                            RunTimeTypeTraits<PrimitiveTypeName>::CppType>(ColumnPtr, Permutation); \
-        break;                                                                                                      \
-    }
-
-#define CASE_FOR_NOT_NULL_COLUMN_SORT(PrimitiveTypeName, ColumnPtr, Permutation)                                    \
-    case PrimitiveTypeName: {                                                                                       \
-        SortHelper::sort_on_not_null_column<RunTimeTypeTraits<PrimitiveTypeName>::ColumnType,                       \
-                                            RunTimeTypeTraits<PrimitiveTypeName>::CppType>(ColumnPtr, Permutation); \
-        break;                                                                                                      \
-    }
-
 void MemTable::_sort_chunk_by_columns() {
     for (int i = _tablet_schema->num_key_columns() - 1; i >= 0; --i) {
         Column* column = _chunk->get_column_by_index(i).get();
+        PrimitiveType slot_type = (*_slot_descs)[i]->type().type;
         if (column->is_nullable()) {
-            switch ((*_slot_descs)[i]->type().type) {
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_BOOLEAN, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_TINYINT, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_SMALLINT, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_INT, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_BIGINT, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_LARGEINT, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_FLOAT, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DOUBLE, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DECIMALV2, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DECIMAL32, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DECIMAL64, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DECIMAL128, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_CHAR, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_VARCHAR, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DATE, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_DATETIME, column, &_permutations)
-                CASE_FOR_NULLABLE_COLUMN_SORT(TYPE_TIME, column, &_permutations)
+            switch (slot_type) {
+#define M(ptype)                                                                                                      \
+    case ptype: {                                                                                                     \
+        SortHelper::sort_on_nullable_column<RunTimeColumnType<ptype>, RunTimeCppType<ptype>>(column, &_permutations); \
+        break;                                                                                                        \
+    }
+                APPLY_FOR_ALL_SCALAR_TYPE(M)
+#undef M
+
             default: {
                 CHECK(false) << "This type couldn't be key column";
                 break;
             }
             }
         } else {
-            switch ((*_slot_descs)[i]->type().type) {
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_BOOLEAN, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_TINYINT, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_SMALLINT, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_INT, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_BIGINT, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_LARGEINT, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_FLOAT, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DOUBLE, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DECIMALV2, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DECIMAL32, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DECIMAL64, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DECIMAL128, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_CHAR, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_VARCHAR, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DATE, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_DATETIME, column, &_permutations)
-                CASE_FOR_NOT_NULL_COLUMN_SORT(TYPE_TIME, column, &_permutations)
+            switch (slot_type) {
+#define M(ptype)                                                                                                      \
+    case ptype: {                                                                                                     \
+        SortHelper::sort_on_not_null_column<RunTimeColumnType<ptype>, RunTimeCppType<ptype>>(column, &_permutations); \
+        break;                                                                                                        \
+    }
+                APPLY_FOR_ALL_SCALAR_TYPE(M)
+#undef M
             default: {
                 CHECK(false) << "This type couldn't be key column";
                 break;

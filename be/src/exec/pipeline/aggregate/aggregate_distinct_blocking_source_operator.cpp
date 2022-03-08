@@ -18,13 +18,12 @@ void AggregateDistinctBlockingSourceOperator::set_finished(RuntimeState* state) 
     _aggregator->set_finished();
 }
 
-Status AggregateDistinctBlockingSourceOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_aggregator->unref(state));
-    return SourceOperator::close(state);
+void AggregateDistinctBlockingSourceOperator::close(RuntimeState* state) {
+    _aggregator->unref(state);
+    SourceOperator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
 
     int32_t chunk_size = state->chunk_size();

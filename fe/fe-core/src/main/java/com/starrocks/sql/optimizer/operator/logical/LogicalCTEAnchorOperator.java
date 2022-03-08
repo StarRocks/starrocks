@@ -18,9 +18,9 @@ import java.util.Objects;
  *
  * */
 public class LogicalCTEAnchorOperator extends LogicalOperator {
-    private final String cteId;
+    private final int cteId;
 
-    public LogicalCTEAnchorOperator(String cteId) {
+    public LogicalCTEAnchorOperator(int cteId) {
         super(OperatorType.LOGICAL_CTE_ANCHOR);
         this.cteId = cteId;
     }
@@ -30,7 +30,7 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
         return expressionContext.getChildLogicalProperty(1).getOutputColumns();
     }
 
-    public String getCteId() {
+    public int getCteId() {
         return cteId;
     }
 

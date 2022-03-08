@@ -26,6 +26,7 @@
 #include <ctime>
 #include <limits>
 #include <sstream>
+#include <string_view>
 
 #include "common/logging.h"
 #include "util/timezone_utils.h"
@@ -1538,7 +1539,7 @@ bool DateTimeValue::date_add_interval(const TimeInterval& interval, TimeUnit uni
     return true;
 }
 
-bool DateTimeValue::unix_timestamp(int64_t* timestamp, const std::string& timezone) const {
+bool DateTimeValue::unix_timestamp(int64_t* timestamp, const std::string_view& timezone) const {
     cctz::time_zone ctz;
     if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
         return false;
@@ -1550,6 +1551,11 @@ bool DateTimeValue::unix_timestamp(int64_t* timestamp, const cctz::time_zone& ct
     const auto tp = cctz::convert(cctz::civil_second(_year, _month, _day, _hour, _minute, _second), ctz);
     *timestamp = tp.time_since_epoch().count();
     return true;
+}
+
+bool DateTimeValue::from_cctz_timezone(const TimezoneHsScan& timezone_hsscan, const std::string_view& timezone,
+                                       cctz::time_zone& ctz) {
+    return TimezoneUtils::find_cctz_time_zone(timezone_hsscan, timezone, ctz);
 }
 
 bool DateTimeValue::from_unixtime(int64_t timestamp, const std::string& timezone) {

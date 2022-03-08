@@ -9,9 +9,10 @@ namespace starrocks::vectorized {
 
 class TableFunctionFactory {
 public:
-    static TableFunctionPtr MakeUnnest();
 };
 
 extern const TableFunction* get_table_function(const std::string& name, const std::vector<PrimitiveType>& arg_type,
-                                               const std::vector<PrimitiveType>& return_type);
+                                               const std::vector<PrimitiveType>& return_type,
+                                               TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN);
+
 } // namespace starrocks::vectorized

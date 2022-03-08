@@ -22,7 +22,7 @@ namespace starrocks::vectorized {
 //};
 
 template <typename T>
-class ObjectColumn final : public ColumnFactory<Column, ObjectColumn<T>> {
+class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
     friend class ColumnFactory<Column, ObjectColumn>;
 
 public:
@@ -89,7 +89,7 @@ public:
 
     bool append_nulls(size_t count) override { return false; }
 
-    bool append_strings(const std::vector<Slice>& strs) override;
+    bool append_strings(const Buffer<Slice>& strs) override;
 
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
@@ -100,6 +100,8 @@ public:
 
     void append_default(size_t count) override;
 
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
+
     uint32_t serialize(size_t idx, uint8_t* pos) override;
     uint32_t serialize_default(uint8_t* pos) override;
 
@@ -108,7 +110,7 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
+    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override;
 
@@ -125,6 +127,8 @@ public:
     void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+
+    int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
@@ -171,9 +175,9 @@ public:
         _buffer.clear();
     }
 
-    std::vector<T>& get_pool() { return _pool; }
+    Buffer<T>& get_pool() { return _pool; }
 
-    const std::vector<T>& get_pool() const { return _pool; }
+    const Buffer<T>& get_pool() const { return _pool; }
 
     std::string debug_item(uint32_t idx) const override;
 
@@ -214,13 +218,15 @@ private:
     // Currently, only for data loading
     void _build_slices() const;
 
+    void check_or_die() const override {}
+
 private:
-    std::vector<T> _pool;
+    Buffer<T> _pool;
     mutable bool _cache_ok = false;
     mutable Buffer<T*> _cache;
 
     // Only for data loading
-    mutable std::vector<Slice> _slices;
-    mutable std::vector<uint8_t> _buffer;
+    mutable Buffer<Slice> _slices;
+    mutable Buffer<uint8_t> _buffer;
 };
 } // namespace starrocks::vectorized

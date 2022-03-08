@@ -25,12 +25,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -53,8 +55,11 @@ import java.net.URLClassLoader;
 import java.net.URLConnection;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 // create a user define function
 public class CreateFunctionStmt extends DdlStmt {
@@ -73,14 +78,19 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String STATE_CLASS_NAME = "State";
     public static final String SERIALIZE_LENGTH_METHOD_NAME = "serializeLength";
     public static final String RETURN_FIELD_NAME = "Return";
+    public static final String WINDOW_UPDATE_METHOD_NAME = "windowUpdate";
+    public static final String IS_ANALYTIC_NAME = "Analytic";
+    public static final String PROCESS_METHOD_NAME = "process";
 
     private final FunctionName functionName;
     private final boolean isAggregate;
+    private final boolean isTable;
     private final FunctionArgsDef argsDef;
     private final TypeDef returnType;
     private TypeDef intermediateType;
     private final Map<String, String> properties;
     private boolean isStarrocksJar = false;
+    private boolean isAnalyticFn = false;
 
     // needed item set after analyzed
     private String objectFile;
@@ -210,10 +220,11 @@ public class CreateFunctionStmt extends DdlStmt {
     private UDFInternalClass mainClass;
     private UDFInternalClass udafStateClass;
 
-    public CreateFunctionStmt(boolean isAggregate, FunctionName functionName, FunctionArgsDef argsDef,
+    public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
                               TypeDef returnType, TypeDef intermediateType, Map<String, String> properties) {
         this.functionName = functionName;
-        this.isAggregate = isAggregate;
+        this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
+        this.isTable = functionType.equalsIgnoreCase("TABLE");
         this.argsDef = argsDef;
         this.returnType = returnType;
         this.intermediateType = intermediateType;
@@ -245,6 +256,8 @@ public class CreateFunctionStmt extends DdlStmt {
         analyzeUdfClassInStarrocksJar();
         if (isAggregate) {
             analyzeStarrocksJarUdaf();
+        } else if (isTable) {
+            analyzeStarrocksJarUdtf();
         } else {
             analyzeStarrocksJarUdf();
         }
@@ -262,11 +275,7 @@ public class CreateFunctionStmt extends DdlStmt {
         // check argument
         argsDef.analyze(analyzer);
         returnType.analyze(analyzer);
-        if (intermediateType != null) {
-            intermediateType.analyze(analyzer);
-        } else {
-            intermediateType = returnType;
-        }
+        intermediateType = TypeDef.createVarchar(ScalarType.MAX_VARCHAR_LENGTH);
 
         String type = properties.get(TYPE_KEY);
         if (TYPE_STARROCKS_JAR.equals(type)) {
@@ -381,7 +390,7 @@ public class CreateFunctionStmt extends DdlStmt {
             // long serializeLength();
             Method method = udafStateClass.getMethod(SERIALIZE_LENGTH_METHOD_NAME, true);
             udafStateClass.checkMethodNonStaticAndPublic(method);
-            udafStateClass.checkReturnJavaType(method, long.class);
+            udafStateClass.checkReturnJavaType(method, int.class);
             udafStateClass.checkArgumentCount(method, 0);
         }
     }
@@ -439,15 +448,45 @@ public class CreateFunctionStmt extends DdlStmt {
             mainClass.checkArgumentCount(method, 1);
             mainClass.checkParamJavaType(method, udafStateClass.clazz, method.getParameters()[0]);
         }
+        if (isAnalyticFn) {
+            {
+                Method method = mainClass.getMethod(WINDOW_UPDATE_METHOD_NAME, true);
+                mainClass.checkMethodNonStaticAndPublic(method);
+            }
+        }
+    }
+
+    private void analyzeStarrocksJarUdtf() throws AnalysisException {
+        {
+            // TYPE[] process(INPUT)
+            Method method = mainClass.getMethod(PROCESS_METHOD_NAME, true);
+            mainClass.checkMethodNonStaticAndPublic(method);
+            mainClass.checkArgumentCount(method, argsDef.getArgTypes().length);
+            for (int i = 0; i < method.getParameters().length; i++) {
+                Parameter p = method.getParameters()[i];
+                mainClass.checkUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
+            }
+        }
+        final List<Type> argList = Arrays.stream(argsDef.getArgTypes()).collect(Collectors.toList());
+        TableFunction tableFunction = new TableFunction(functionName,
+                Lists.newArrayList(functionName.getFunction()),
+                argList, Lists.newArrayList(returnType.getType()));
+        tableFunction.setBinaryType(TFunctionBinaryType.SRJAR);
+        tableFunction.setChecksum(checksum);
+        tableFunction.setLocation(new HdfsURI(objectFile));
+        tableFunction.setSymbolName(mainClass.getCanonicalName());
+        function = tableFunction;
     }
 
     private void analyzeStarrocksJarUdaf() throws AnalysisException {
+        isAnalyticFn = "true".equalsIgnoreCase(properties.get(IS_ANALYTIC_NAME));
         checkStarrocksJarUdafStateClass();
         checkStarrocksJarUdafClass();
         AggregateFunction.AggregateFunctionBuilder builder =
                 AggregateFunction.AggregateFunctionBuilder.createUdfBuilder(TFunctionBinaryType.SRJAR);
         builder.name(functionName).argsType(argsDef.getArgTypes()).retType(returnType.getType()).
                 hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType.getType()).objectFile(objectFile)
+                .isAnalyticFn(isAnalyticFn)
                 .symbolName(mainClass.getCanonicalName());
         function = builder.build();
         function.setChecksum(checksum);

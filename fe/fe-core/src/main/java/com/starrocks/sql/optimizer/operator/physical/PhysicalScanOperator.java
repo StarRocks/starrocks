@@ -17,7 +17,7 @@ import java.util.Objects;
 
 public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected final Table table;
-    protected final ImmutableList<ColumnRefOperator> outputColumns;
+    protected List<ColumnRefOperator> outputColumns;
     /**
      * ColumnRefMap is the map from column reference to starrocks column in meta
      * The ColumnRefMap contains Scan output columns and predicate used columns
@@ -25,18 +25,36 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
 
     public PhysicalScanOperator(OperatorType type, Table table,
-                                List<ColumnRefOperator> outputColumns,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                 long limit,
                                 ScalarOperator predicate,
                                 Projection projection) {
         super(type);
         this.table = Objects.requireNonNull(table, "table is null");
-        this.outputColumns = ImmutableList.copyOf(outputColumns);
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
+
+        if (this.projection != null) {
+            ColumnRefSet usedColumns = new ColumnRefSet();
+            for (ScalarOperator scalarOperator : this.projection.getColumnRefMap().values()) {
+                usedColumns.union(scalarOperator.getUsedColumns());
+            }
+            for (ScalarOperator scalarOperator : this.projection.getCommonSubOperatorMap().values()) {
+                usedColumns.union(scalarOperator.getUsedColumns());
+            }
+
+            ImmutableList.Builder<ColumnRefOperator> outputBuilder = ImmutableList.builder();
+            for (ColumnRefOperator columnRefOperator : colRefToColumnMetaMap.keySet()) {
+                if (usedColumns.contains(columnRefOperator)) {
+                    outputBuilder.add(columnRefOperator);
+                }
+            }
+            outputColumns = outputBuilder.build();
+        } else {
+            outputColumns = ImmutableList.copyOf(colRefToColumnMetaMap.keySet());
+        }
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
@@ -70,12 +88,12 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
             return false;
         }
         PhysicalOlapScanOperator that = (PhysicalOlapScanOperator) o;
-        return Objects.equals(table.getId(), that.table.getId()) && outputColumns.equals(that.getOutputColumns()) &&
+        return Objects.equals(table.getId(), that.table.getId()) &&
                 Objects.equals(colRefToColumnMetaMap, that.getColRefToColumnMetaMap());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), table.getId(), outputColumns, colRefToColumnMetaMap.keySet());
+        return Objects.hash(super.hashCode(), table.getId(), colRefToColumnMetaMap.keySet());
     }
 }

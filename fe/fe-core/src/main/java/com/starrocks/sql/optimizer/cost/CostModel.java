@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
@@ -17,7 +18,6 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -37,11 +37,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.statistic.Constants;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class CostModel {
     public static double calculateCost(GroupExpression expression) {
@@ -69,7 +70,7 @@ public class CostModel {
                 costEstimate.getNetworkCost() * networkCostWeight;
     }
 
-    public static class CostEstimator extends OperatorVisitor<CostEstimate, ExpressionContext> {
+    private static class CostEstimator extends OperatorVisitor<CostEstimate, ExpressionContext> {
         @Override
         public CostEstimate visitOperator(Operator node, ExpressionContext context) {
             return CostEstimate.zero();
@@ -105,7 +106,7 @@ public class CostModel {
             // Disable one phased sort, Currently, we always use two phase sort
             if (!node.isEnforced() && !node.isSplit()
                     && node.getSortPhase().isFinal()
-                    && !((LogicalOperator) context.getChildOperator(0)).hasLimit()) {
+                    && !context.getChildOperator(0).hasLimit()) {
                 return CostEstimate.infinite();
             }
 
@@ -187,9 +188,30 @@ public class CostModel {
         public CostEstimate computeAggFunExtraCost(PhysicalHashAggregateOperator node, Statistics statistics,
                                                    Statistics inputStatistics) {
             CostEstimate costEstimate = CostEstimate.zero();
+            // If the statistics with inaccurate row count，It don't need to compute the extra cost.
+            if (statistics.isTableRowCountMayInaccurate()) {
+                return costEstimate;
+            }
             int distinctCount =
-                    node.getAggregations().values().stream().filter(aggregation -> isDistinctAggFun(aggregation, node))
-                            .collect(Collectors.toList()).size();
+                    (int) node.getAggregations().values().stream()
+                            .filter(aggregation -> isDistinctAggFun(aggregation, node)).count();
+            // Use the number of aggregated rows as buckets, does not equal statistics.getOutputRowCount(),
+            // Because limit is computed in statistics.getOutputRowCount().
+            double buckets = StatisticsCalculator.computeGroupByStatistics(node.getGroupBys(), inputStatistics,
+                    Maps.newHashMap());
+            // If the Local aggregate node enable streaming mode, this aggregation could not compute the extra
+            // costs when the cardinality GE (child output rows count) * STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT.
+            // We estimate this aggregate node use streaming mode, so there is no extra overhead of multi
+            // distinct functions.
+            String streamingPreAggregationMode =
+                    ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
+            if (node.getType().isLocal() && (streamingPreAggregationMode.equals("auto") ||
+                    streamingPreAggregationMode.equals("force_streaming"))) {
+                if (buckets >= inputStatistics.getOutputRowCount() *
+                        StatisticsEstimateCoefficient.STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT) {
+                    return CostEstimate.zero();
+                }
+            }
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : node.getAggregations().entrySet()) {
                 CallOperator aggregation = entry.getValue();
@@ -203,18 +225,11 @@ public class CostModel {
 
                     ColumnRefOperator distinctColumn = (ColumnRefOperator) aggregation.getChild(0);
                     distinctColumnStats = inputStatistics.getColumnStatistic(distinctColumn);
-                    // use output row count as bucket
-                    double buckets = statistics.getOutputRowCount();
+
                     double rowSize = distinctColumnStats.getAverageRowSize();
                     // In second phase of aggregation, do not compute extra row size costs
                     if (distinctColumn.getType().isStringType() && !(node.getType().isGlobal() && node.isSplit())) {
                         rowSize = rowSize + 16;
-                    }
-
-                    // only when distinct count == 1, consider to avoid OOM
-                    // because of distinct count more than 1, we must use multi_distinct function
-                    if (distinctCount == 1 && (buckets >= 15000000 && rowSize >= 20)) {
-                        return CostEstimate.infinite();
                     }
 
                     double hashSetSize;
@@ -230,7 +245,8 @@ public class CostModel {
                         // 40 bytes is the state cost of hashset
                         hashSetSize = rowSize * distinctValuesPerBucket + 40;
                     }
-                    costEstimate = CostEstimate.addCost(costEstimate, CostEstimate.ofMemory(buckets * hashSetSize));
+                    costEstimate = CostEstimate
+                            .addCost(costEstimate, CostEstimate.ofMemory(statistics.getOutputRowCount() * hashSetSize));
                 }
             }
             return costEstimate;
@@ -246,7 +262,7 @@ public class CostModel {
             Statistics inputStatistics = context.getChildStatistics(0);
             CostEstimate otherExtraCost = computeAggFunExtraCost(node, statistics, inputStatistics);
             return CostEstimate.addCost(CostEstimate.of(inputStatistics.getComputeSize(),
-                    CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
+                            CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
                     otherExtraCost);
         }
 
@@ -326,7 +342,6 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
-            //TODO: Add cost estimate
             return CostEstimate.zero();
         }
 
@@ -352,9 +367,6 @@ public class CostModel {
         public CostEstimate visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
-
-            // @TODO:
-            //  there only compute CTEConsume output columns, but we need compute CTEProduce output columns in fact
             return CostEstimate.of(statistics.getComputeSize(), 0, statistics.getComputeSize());
         }
 

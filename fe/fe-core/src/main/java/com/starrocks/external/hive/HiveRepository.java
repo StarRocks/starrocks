@@ -8,6 +8,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveResource;
+import com.starrocks.catalog.HudiResource;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Resource.ResourceType;
@@ -66,11 +67,16 @@ public class HiveRepository {
             if (resource == null) {
                 throw new DdlException("get hive client failed, resource[" + resourceName + "] not exists");
             }
-            if (resource.getType() != ResourceType.HIVE) {
-                throw new DdlException("resource [" + resourceName + "] is not hive resource");
+            if (resource.getType() != ResourceType.HIVE && resource.getType() != ResourceType.HUDI) {
+                throw new DdlException("resource [" + resourceName + "] is not hive/hudi resource");
             }
 
-            client = new HiveMetaClient(((HiveResource) resource).getHiveMetastoreURIs());
+            if (resource.getType() == ResourceType.HIVE) {
+                client = new HiveMetaClient(((HiveResource) resource).getHiveMetastoreURIs());
+            } else if (resource.getType() == ResourceType.HUDI) {
+                client = new HiveMetaClient(((HudiResource) resource).getHiveMetastoreURIs());
+            }
+
             metaClients.put(resourceName, client);
         } finally {
             metaClientsLock.writeLock().unlock();
@@ -146,6 +152,28 @@ public class HiveRepository {
         return result;
     }
 
+    public List<HivePartition> getHudiPartitions(String resourceName, String dbName, String tableName,
+                                                 List<PartitionKey> partitionKeys)
+            throws DdlException {
+        HiveMetaCache metaCache = getMetaCache(resourceName);
+        List<Future<HivePartition>> futures = Lists.newArrayList();
+        for (PartitionKey partitionKey : partitionKeys) {
+            Future<HivePartition> future = partitionDaemonExecutor
+                    .submit(() -> metaCache.getHudiPartition(dbName, tableName, partitionKey));
+            futures.add(future);
+        }
+        List<HivePartition> result = Lists.newArrayList();
+        for (Future<HivePartition> future : futures) {
+            try {
+                result.add(future.get());
+            } catch (InterruptedException | ExecutionException e) {
+                LOG.warn("Get table {}.{} partition meta info failed.", dbName, tableName,  e);
+                throw new DdlException(e.getMessage());
+            }
+        }
+        return result;
+    }
+
     public HiveTableStats getTableStats(String resourceName, String dbName, String tableName) throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
         return metaCache.getTableStats(dbName, tableName);
@@ -197,6 +225,13 @@ public class HiveRepository {
             throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
         metaCache.refreshPartition(dbName, tableName, partNames);
+    }
+
+    public void refreshTableColumnStats(String resourceName, String dbName, String tableName, List<Column> partColumns,
+                                        List<String> columnNames)
+            throws DdlException {
+        HiveMetaCache metaCache = getMetaCache(resourceName);
+        metaCache.refreshColumnStats(dbName, tableName, partColumns, columnNames);
     }
 
     public void clearCache(String resourceName, String dbName, String tableName) {

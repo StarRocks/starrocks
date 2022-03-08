@@ -202,11 +202,9 @@ Status FileUtils::split_pathes(const char* path, std::vector<std::string>* path_
 }
 
 Status FileUtils::copy_file(const std::string& src_path, const std::string& dest_path) {
-    std::unique_ptr<SequentialFile> src_file;
-    RETURN_IF_ERROR(Env::Default()->new_sequential_file(src_path, &src_file));
+    ASSIGN_OR_RETURN(auto src_file, Env::Default()->new_sequential_file(src_path));
 
-    std::unique_ptr<WritableFile> dest_file;
-    RETURN_IF_ERROR(Env::Default()->new_writable_file(dest_path, &dest_file));
+    ASSIGN_OR_RETURN(auto dest_file, Env::Default()->new_writable_file(dest_path));
 
     return copy(src_file.get(), dest_file.get()).status();
 }
@@ -216,13 +214,12 @@ StatusOr<int64_t> FileUtils::copy(SequentialFile* src, WritableFile* dest, size_
     std::unique_ptr<char[]> guard(buf);
     int64_t ncopy = 0;
     while (true) {
-        Slice read_buf(buf, buff_size);
-        RETURN_IF_ERROR(src->read(&read_buf));
-        if (read_buf.size == 0) {
+        ASSIGN_OR_RETURN(auto nread, src->read(buf, buff_size));
+        if (nread == 0) {
             break;
         }
-        ncopy += read_buf.size;
-        RETURN_IF_ERROR(dest->append(read_buf));
+        ncopy += nread;
+        RETURN_IF_ERROR(dest->append(Slice(buf, nread)));
     }
     return ncopy;
 }

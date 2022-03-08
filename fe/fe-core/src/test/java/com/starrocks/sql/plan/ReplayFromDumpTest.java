@@ -178,8 +178,8 @@ public class ReplayFromDumpTest {
                 "  |    \n" +
                 "  18:UNION\n" +
                 "  |  child exprs:\n" +
-                "  |      [143, INT, true] | [164, DECIMAL64(7,2), true]\n" +
-                "  |      [177, INT, true] | [198, DECIMAL64(7,2), true]"));
+                "  |      [325, INT, true] | [346, DECIMAL64(7,2), true]\n" +
+                "  |      [359, INT, true] | [380, DECIMAL64(7,2), true]"));
     }
 
     @Test
@@ -241,15 +241,17 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
         Assert.assertTrue(replayPair.second.contains("3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n" +
-                "  |  equal join conjunct: [1: ss_item_sk, INT, false] = [24: sr_item_sk, INT, true]\n" +
-                "  |  other predicates: 25: sr_ticket_number IS NULL\n" +
+                "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
+                "  |  equal join conjunct: [256: ss_item_sk, INT, false] = [279: sr_item_sk, INT, true]\n" +
+                "  |  other predicates: 280: sr_ticket_number IS NULL\n" +
+                "  |  output columns: 256, 258, 260, 266, 267, 269\n" +
                 "  |  cardinality: 39142590"));
         Assert.assertTrue(replayPair.second.contains("16:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [76: ws_order_number, INT, false] = [110: wr_order_number, INT, true]\n" +
-                "  |  equal join conjunct: [75: ws_item_sk, INT, false] = [109: wr_item_sk, INT, true]\n" +
-                "  |  other predicates: 110: wr_order_number IS NULL\n" +
+                "  |  equal join conjunct: [331: ws_order_number, INT, false] = [365: wr_order_number, INT, true]\n" +
+                "  |  equal join conjunct: [330: ws_item_sk, INT, false] = [364: wr_item_sk, INT, true]\n" +
+                "  |  other predicates: 365: wr_order_number IS NULL\n" +
+                "  |  output columns: 330, 332, 335, 348, 349, 351\n" +
                 "  |  cardinality: 7916106"));
     }
 
@@ -262,6 +264,7 @@ public class ReplayFromDumpTest {
                 "  |  equal join conjunct: [1: inv_date_sk, INT, false] = [5: d_date_sk, INT, false]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (5: d_date_sk), remote = false\n" +
+                "  |  output columns: 2, 4\n" +
                 "  |  cardinality: 399330000\n" +
                 "  |  column statistics: \n" +
                 "  |  * inv_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
@@ -302,7 +305,6 @@ public class ReplayFromDumpTest {
     public void testJoinReorderPushColumnsNoHandleProject() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder"), null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("  |  <slot 40> : CAST(15: id_smallint AS INT)\n" +
                 "  |  <slot 41> : CAST(23: id_date AS DATETIME)\n"));
         Assert.assertTrue(replayPair.second.contains("  5:OlapScanNode\n" +
@@ -335,5 +337,44 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("  11:Decode\n" +
                 "  |  <dict id 42> : <string id 18>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
+    }
+
+    @Test
+    public void testCountDistinctWithLimit() throws Exception {
+        // check use two stage agg
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/count_distinct_limit"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
+               "  |  STREAMING\n" +
+               "  |  output: multi_distinct_count(5: lo_suppkey)"));
+        Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)\n" +
+               "  |  output: multi_distinct_count(18: count)\n" +
+               "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
+    }
+
+    @Test
+    public void testEighteenTablesJoin() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/eighteen_tables_join"), null, TExplainLevel.NORMAL);
+        // check optimizer finish task
+        Assert.assertTrue(replayPair.second.contains("52:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)"));
+    }
+
+    @Test
+    public void testLocalAggregateWithoutTableRowCount() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_without_table_rowcount"), null, TExplainLevel.NORMAL);
+        // check local aggregate
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(4: lo_partkey)"));
+    }
+
+    @Test
+    public void testLogicalAggWithOneTablet() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_with_one_tablet"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(4: t0d)"));
     }
 }

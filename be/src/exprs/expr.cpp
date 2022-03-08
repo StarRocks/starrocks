@@ -277,11 +277,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::COMPUTE_FUNCTION_CALL:
     case TExprNodeType::FUNCTION_CALL: {
         if (texpr_node.fn.binary_type == TFunctionBinaryType::SRJAR) {
-#ifdef STARROCKS_WITH_HDFS
             *expr = pool->add(new vectorized::JavaFunctionCallExpr(texpr_node));
-#else
-            return Status::InternalError("you should rebuild StarRocks with WITH_HDFS option ON");
-#endif
         } else if (texpr_node.fn.name.function_name == "if") {
             *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_if_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "nullif") {
@@ -409,17 +405,17 @@ inline static int get_byte_size_of_primitive_type(PrimitiveType type) {
     return 0;
 }
 
-Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state, const RowDescriptor& row_desc) {
+Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
     for (auto ctx : ctxs) {
-        RETURN_IF_ERROR(ctx->prepare(state, row_desc));
+        RETURN_IF_ERROR(ctx->prepare(state));
     }
     return Status::OK();
 }
 
-Status Expr::prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) {
+Status Expr::prepare(RuntimeState* state, ExprContext* context) {
     DCHECK(_type.type != INVALID_TYPE);
     for (auto& i : _children) {
-        RETURN_IF_ERROR(i->prepare(state, row_desc, context));
+        RETURN_IF_ERROR(i->prepare(state, context));
     }
     return Status::OK();
 }

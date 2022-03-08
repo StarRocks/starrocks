@@ -54,6 +54,8 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.ExprRewriter;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
@@ -97,6 +99,7 @@ public class InsertStmt extends DdlStmt {
     private List<Long> targetPartitionIds = Lists.newArrayList();
     private final List<String> targetColumnNames;
     private QueryStmt queryStmt;
+    private QueryStatement queryStatement;
     private final List<String> planHints;
     private Boolean isRepartition;
     private boolean isStreaming = false;
@@ -143,12 +146,26 @@ public class InsertStmt extends DdlStmt {
         }
     }
 
+    public InsertStmt(InsertTarget target, String label, List<String> cols, QueryStatement queryStatement,
+                      List<String> hints) {
+        this.tblName = target.getTblName();
+        this.targetPartitionNames = target.getPartitionNames();
+        this.label = label;
+        this.queryStatement = queryStatement;
+        this.planHints = hints;
+        this.targetColumnNames = cols;
+
+        if (!Strings.isNullOrEmpty(label)) {
+            isUserSpecifiedLabel = true;
+        }
+    }
+
     // Ctor for CreateTableAsSelectStmt
-    public InsertStmt(TableName name, QueryStmt queryStmt) {
+    public InsertStmt(TableName name, QueryStatement queryStatement) {
         this.tblName = name;
         this.targetPartitionNames = null;
         this.targetColumnNames = null;
-        this.queryStmt = queryStmt;
+        this.queryStatement = queryStatement;
         this.planHints = null;
     }
 
@@ -213,6 +230,14 @@ public class InsertStmt extends DdlStmt {
         this.queryStmt = queryStmt;
     }
 
+    public QueryStatement getQueryStatement() {
+        return queryStatement;
+    }
+
+    public void setQueryStatement(QueryStatement queryStatement) {
+        this.queryStatement = queryStatement;
+    }
+
     @Override
     public void rewriteExprs(ExprRewriter rewriter) throws AnalysisException {
         Preconditions.checkState(isAnalyzed());
@@ -221,7 +246,7 @@ public class InsertStmt extends DdlStmt {
 
     @Override
     public boolean isExplain() {
-        return queryStmt.isExplain();
+        return queryStatement.isExplain();
     }
 
     public boolean isStreaming() {
@@ -290,13 +315,14 @@ public class InsertStmt extends DdlStmt {
 
             if (targetTable instanceof ExternalOlapTable) {
                 LoadJobSourceType sourceType = LoadJobSourceType.INSERT_STREAMING;
-                ExternalOlapTable externalTable = (ExternalOlapTable)targetTable;
-                transactionId = Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(externalTable.getSourceTableDbId(),
-                        Lists.newArrayList(externalTable.getSourceTableId()), label,
-                        externalTable.getSourceTableHost(),
-                        externalTable.getSourceTablePort(),
-                        new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                        sourceType, timeoutSecond);
+                ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                transactionId = Catalog.getCurrentGlobalTransactionMgr()
+                        .beginRemoteTransaction(externalTable.getSourceTableDbId(),
+                                Lists.newArrayList(externalTable.getSourceTableId()), label,
+                                externalTable.getSourceTableHost(),
+                                externalTable.getSourceTablePort(),
+                                new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                                sourceType, timeoutSecond);
             } else if (targetTable instanceof OlapTable) {
                 LoadJobSourceType sourceType = LoadJobSourceType.INSERT_STREAMING;
                 MetricRepo.COUNTER_LOAD_ADD.increase(1L);
@@ -756,7 +782,7 @@ public class InsertStmt extends DdlStmt {
                      */
                     Preconditions.checkState(col.isAllowNull());
                     resultExprs.add(NullLiteral.create(col.getType()));
-                } else if (defaultValueType == Column.DefaultValueType.CONST){
+                } else if (defaultValueType == Column.DefaultValueType.CONST) {
                     resultExprs.add(checkTypeCompatibility(col,
                             new StringLiteral(col.calculatedDefaultValue())));
                 } else if (defaultValueType == Column.DefaultValueType.VARY) {
@@ -851,5 +877,9 @@ public class InsertStmt extends DdlStmt {
 
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
+    }
+
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitInsertStatement(this, context);
     }
 }

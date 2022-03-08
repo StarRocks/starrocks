@@ -127,6 +127,41 @@ public class AgentTaskQueue {
         --taskNum;
     }
 
+    /*
+     * we cannot define a push task with only 'backendId', 'signature' and 'TTaskType'
+     * add version, and TPushType to help
+     */
+    public static synchronized void removePushTaskByTransactionId(long backendId, long transactionId,
+                                                   TPushType pushType, TTaskType taskType) {
+        if (!tasks.contains(backendId, taskType)) {
+            return;
+        }
+
+        Map<Long, AgentTask> signatureMap = tasks.get(backendId, taskType);
+        if (signatureMap == null) {
+            return;
+        }
+
+        int numOfRemove = 0;
+        Iterator<Long> signatureIt = signatureMap.keySet().iterator();
+        while (signatureIt.hasNext()) {
+            Long signature = signatureIt.next();
+            AgentTask agentTask = signatureMap.get(signature);
+            if (agentTask instanceof PushTask) {
+                PushTask pushTask = (PushTask) agentTask;
+                if (pushTask.getPushType() == pushType && pushTask.getTransactionId() == transactionId) {
+                    signatureIt.remove();
+                    --taskNum;
+                    ++numOfRemove;
+                }
+            }
+        }
+
+        LOG.info("remove task: type[{}], backend[{}], transactionId[{}], numOfRemove[{}]",
+                taskType, backendId, transactionId, numOfRemove);
+
+    }
+
     public static synchronized void removeTaskOfType(TTaskType type, long signature) {
         // be id -> (signature -> task)
         Map<Long, Map<Long, AgentTask>> map = tasks.column(type);

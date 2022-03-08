@@ -32,6 +32,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
@@ -147,7 +148,10 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
         _query_options.max_errors = 100;
     }
 
-    if (_query_options.batch_size <= 0) {
+    // if BE was in grayscale upgrade. old BE chunk size was 4096.
+    // if FE set a zero batch_size, batch_size will be set to DEFAULT_CHUNK_SIZE
+    // (DEFAULT_CHUNK_SIZE was 2048 before version 2.0/2.1.0). which will cause overflow
+    if (_query_options.batch_size <= DEFAULT_CHUNK_SIZE) {
         _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     }
 
@@ -161,14 +165,18 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
     return Status::OK();
 }
 
-void RuntimeState::init_mem_trackers(const TUniqueId& query_id) {
+void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* parent) {
     bool has_query_mem_tracker = _query_options.__isset.mem_limit && (_query_options.mem_limit > 0);
     int64_t bytes_limit = has_query_mem_tracker ? _query_options.mem_limit : -1;
     auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
     mem_tracker_counter->set(bytes_limit);
 
-    _query_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, runtime_profile()->name(),
-                                                      _exec_env->query_pool_mem_tracker());
+    if (parent == nullptr) {
+        parent = _exec_env->query_pool_mem_tracker();
+    }
+
+    _query_mem_tracker =
+            std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, runtime_profile()->name(), parent);
     _instance_mem_tracker =
             std::make_shared<MemTracker>(_profile.get(), -1, runtime_profile()->name(), _query_mem_tracker.get());
     _instance_mem_pool = std::make_unique<MemPool>();
@@ -178,6 +186,13 @@ Status RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
     _instance_mem_pool = std::make_unique<MemPool>();
     return Status::OK();
+}
+
+ObjectPool* RuntimeState::global_obj_pool() const {
+    if (_query_ctx == nullptr) {
+        return obj_pool();
+    }
+    return _query_ctx->object_pool();
 }
 
 std::string RuntimeState::error_log() {

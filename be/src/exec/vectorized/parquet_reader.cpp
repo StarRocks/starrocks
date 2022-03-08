@@ -44,6 +44,8 @@ Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
             *batch = nullptr;
             _state = END_OF_FILE;
             return Status::EndOfFile(Slice());
+        } else if (!status.ok()) {
+            return status;
         }
         break;
     }
@@ -109,11 +111,9 @@ arrow::Result<int64_t> ParquetChunkFile::Read(int64_t nbytes, void* buffer) {
 
 arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes, void* out) {
     _pos += nbytes;
-    Slice s;
-    s.data = (char*)out;
-    s.size = nbytes;
-    auto status = _file->read_at(position, s);
-    return status.ok() ? nbytes : -1;
+    auto status = _file->read_at_fully(position, out, nbytes);
+    return status.ok() ? nbytes
+                       : arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError, status.get_error_msg()));
 }
 
 arrow::Result<int64_t> ParquetChunkFile::GetSize() {

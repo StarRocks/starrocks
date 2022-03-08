@@ -82,8 +82,6 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.KeysDesc;
-import com.starrocks.analysis.LinkDbStmt;
-import com.starrocks.analysis.MigrateDbStmt;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionRenameClause;
@@ -152,6 +150,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.hive.HiveRepository;
+import com.starrocks.external.hive.events.MetastoreEventsProcessor;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
@@ -336,6 +335,7 @@ public class Catalog {
     private EsRepository esRepository;  // it is a daemon, so add it here
     private StarRocksRepository starRocksRepository;
     private HiveRepository hiveRepository;
+    private MetastoreEventsProcessor metastoreEventsProcessor;
 
     private boolean isFirstTimeStartUp = false;
     private boolean isElectable;
@@ -445,6 +445,8 @@ public class Catalog {
     private long imageJournalId;
 
     private long feStartTime;
+
+    private WorkGroupMgr workGroupMgr;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
@@ -582,9 +584,12 @@ public class Catalog {
         this.auth = new Auth();
         this.domainResolver = new DomainResolver(auth);
 
+        this.workGroupMgr = new WorkGroupMgr(this);
+
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
         this.hiveRepository = new HiveRepository();
+        this.metastoreEventsProcessor = new MetastoreEventsProcessor(hiveRepository);
 
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
@@ -671,6 +676,10 @@ public class Catalog {
 
     public Auth getAuth() {
         return auth;
+    }
+
+    public WorkGroupMgr getWorkGroupMgr() {
+        return workGroupMgr;
     }
 
     public TabletScheduler getTabletScheduler() {
@@ -800,6 +809,7 @@ public class Catalog {
         // we already set these variables in constructor. but Catalog is a singleton class.
         // so they may be set before Config is initialized.
         // set them here again to make sure these variables use values in fe.conf.
+
         setMetaDir();
 
         // 0. get local node and helper node info
@@ -818,11 +828,12 @@ public class Catalog {
             File newMeta = new File(newDefaultMetaDir);
             if (oldMeta.exists() && newMeta.exists()) {
                 LOG.error("New default meta dir: {} and Old default meta dir: {} are both present. " +
-                        "Please make sure {} has the latest data, and remove the another one.",
+                                "Please make sure {} has the latest data, and remove the another one.",
                         newDefaultMetaDir, oldDefaultMetaDir, newDefaultMetaDir);
                 System.exit(-1);
             }
         }
+
         File meta = new File(metaDir);
         if (!meta.exists()) {
             // If metaDir is not the default config, it means the user has specified the other directory
@@ -868,6 +879,7 @@ public class Catalog {
         // 3. Load image first and replay edits
         this.editLog = new EditLog(nodeName);
         loadImage(this.imageDir); // load image file
+
         editLog.open(); // open bdb env
         this.globalTransactionMgr.setEditLog(editLog);
         this.idGenerator.setEditLog(editLog);
@@ -1216,7 +1228,7 @@ public class Catalog {
         LOG.info("get helper nodes: {}", helperNodes);
     }
 
-    private void transferToMaster() {
+    private void transferToMaster(FrontendNodeType oldType) {
         // stop replayer
         if (replayer != null) {
             replayer.exit();
@@ -1249,52 +1261,61 @@ public class Catalog {
 
         editLog.rollEditLog();
 
-        // Log meta_version
-        int communityMetaVersion = MetaContext.get().getMetaVersion();
-        int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
-        if (communityMetaVersion < FeConstants.meta_version ||
-                starrocksMetaVersion < FeConstants.starrocks_meta_version) {
-            editLog.logMetaVersion(new MetaVersion(FeConstants.meta_version, FeConstants.starrocks_meta_version));
-            MetaContext.get().setMetaVersion(FeConstants.meta_version);
-            MetaContext.get().setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+        // Set the feType to MASTER before writing edit log, because the feType must be Master when writing edit log.
+        // It will be set to the old type if any error happens in the following procedure
+        feType = FrontendNodeType.MASTER;
+        try {
+            // Log meta_version
+            int communityMetaVersion = MetaContext.get().getMetaVersion();
+            int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
+            if (communityMetaVersion < FeConstants.meta_version ||
+                    starrocksMetaVersion < FeConstants.starrocks_meta_version) {
+                editLog.logMetaVersion(new MetaVersion(FeConstants.meta_version, FeConstants.starrocks_meta_version));
+                MetaContext.get().setMetaVersion(FeConstants.meta_version);
+                MetaContext.get().setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+            }
+
+            // Log the first frontend
+            if (isFirstTimeStartUp) {
+                // if isFirstTimeStartUp is true, frontends must contains this Node.
+                Frontend self = frontends.get(nodeName);
+                Preconditions.checkNotNull(self);
+                // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
+                editLog.logAddFirstFrontend(self);
+            }
+
+            if (!isDefaultClusterCreated) {
+                initDefaultCluster();
+            }
+
+            // MUST set master ip before starting checkpoint thread.
+            // because checkpoint thread need this info to select non-master FE to push image
+            this.masterIp = FrontendOptions.getLocalHostAddress();
+            this.masterRpcPort = Config.rpc_port;
+            this.masterHttpPort = Config.http_port;
+            MasterInfo info = new MasterInfo(this.masterIp, this.masterHttpPort, this.masterRpcPort);
+            editLog.logMasterInfo(info);
+
+            // start all daemon threads that only running on MASTER FE
+            startMasterOnlyDaemonThreads();
+            // start other daemon threads that should running on all FE
+            startNonMasterDaemonThreads();
+
+            MetricRepo.init();
+
+            canRead.set(true);
+            isReady.set(true);
+
+            String msg = "master finished to replay journal, can write now.";
+            Util.stdoutWithTime(msg);
+            LOG.info(msg);
+            // for master, there are some new thread pools need to register metric
+            ThreadPoolManager.registerAllThreadPoolMetric();
+        } catch (Throwable t) {
+            LOG.warn("transfer to master failed with error", t);
+            feType = oldType;
+            throw t;
         }
-
-        // Log the first frontend
-        if (isFirstTimeStartUp) {
-            // if isFirstTimeStartUp is true, frontends must contains this Node.
-            Frontend self = frontends.get(nodeName);
-            Preconditions.checkNotNull(self);
-            // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
-            editLog.logAddFirstFrontend(self);
-        }
-
-        if (!isDefaultClusterCreated) {
-            initDefaultCluster();
-        }
-
-        // MUST set master ip before starting checkpoint thread.
-        // because checkpoint thread need this info to select non-master FE to push image
-        this.masterIp = FrontendOptions.getLocalHostAddress();
-        this.masterRpcPort = Config.rpc_port;
-        this.masterHttpPort = Config.http_port;
-        MasterInfo info = new MasterInfo(this.masterIp, this.masterHttpPort, this.masterRpcPort);
-        editLog.logMasterInfo(info);
-
-        // start all daemon threads that only running on MASTER FE
-        startMasterOnlyDaemonThreads();
-        // start other daemon threads that should running on all FE
-        startNonMasterDaemonThreads();
-
-        MetricRepo.init();
-
-        canRead.set(true);
-        isReady.set(true);
-
-        String msg = "master finished to replay journal, can write now.";
-        Util.stdoutWithTime(msg);
-        LOG.info(msg);
-        // for master, there are some new thread pools need to register metric
-        ThreadPoolManager.registerAllThreadPoolMetric();
     }
 
     // start all daemon threads only running on Master
@@ -1362,6 +1383,12 @@ public class Catalog {
         // ES state store
         esRepository.start();
         starRocksRepository.start();
+
+        if (Config.enable_hms_events_incremental_sync) {
+            // load hive table to event processor and start to process hms events.
+            metastoreEventsProcessor.init();
+            metastoreEventsProcessor.start();
+        }
         // domain resolver
         domainResolver.start();
     }
@@ -1546,6 +1573,7 @@ public class Catalog {
             remoteChecksum = dis.readLong();
             checksum = loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = loadWorkGroups(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1587,7 +1615,7 @@ public class Catalog {
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            for (Replica replica : tablet.getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                                 if (MetaContext.get().getMetaVersion() < FeMetaVersion.VERSION_48) {
                                     // set replica's schema hash
@@ -1870,8 +1898,23 @@ public class Catalog {
         return checksum;
     }
 
+    public long loadWorkGroups(DataInputStream dis, long checksum) throws IOException {
+        try {
+            this.getWorkGroupMgr().readFields(dis);
+            LOG.info("finished replaying WorkGroups from image");
+        } catch (EOFException e) {
+            LOG.info("no WorkGroups to replay.");
+        }
+        return checksum;
+    }
+
     public long saveDeleteHandler(DataOutputStream dos, long checksum) throws IOException {
         getDeleteHandler().write(dos);
+        return checksum;
+    }
+
+    public long saveWorkGroups(DataOutputStream dos, long checksum) throws IOException {
+        getWorkGroupMgr().write(dos);
         return checksum;
     }
 
@@ -2005,6 +2048,7 @@ public class Catalog {
             dos.writeLong(checksum);
             checksum = saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
+            checksum = saveWorkGroups(dos, checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -2390,7 +2434,7 @@ public class Catalog {
                         case INIT: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMaster();
+                                    transferToMaster(feType);
                                     break;
                                 }
                                 case FOLLOWER:
@@ -2408,7 +2452,7 @@ public class Catalog {
                         case UNKNOWN: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMaster();
+                                    transferToMaster(feType);
                                     break;
                                 }
                                 case FOLLOWER:
@@ -2424,7 +2468,7 @@ public class Catalog {
                         case FOLLOWER: {
                             switch (newType) {
                                 case MASTER: {
-                                    transferToMaster();
+                                    transferToMaster(feType);
                                     break;
                                 }
                                 case UNKNOWN: {
@@ -3068,6 +3112,12 @@ public class Catalog {
         } else if (engineName.equalsIgnoreCase("iceberg")) {
             createIcebergTable(db, stmt);
             return;
+        } else if (engineName.equalsIgnoreCase("hudi")) {
+            createHudiTable(db, stmt);
+            return;
+        } else if (engineName.equalsIgnoreCase("jdbc")) {
+            createJDBCTable(db, stmt);
+            return;
         } else {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
         }
@@ -3091,10 +3141,12 @@ public class Catalog {
             } finally {
                 db.readUnlock();
             }
-            StatementBase statementBase = SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+            StatementBase statementBase =
+                    SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
             if (statementBase instanceof CreateTableStmt) {
                 CreateTableStmt parsedCreateTableStmt =
-                        (CreateTableStmt) SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+                        (CreateTableStmt) SqlParserUtils
+                                .parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
                 parsedCreateTableStmt.setTableName(stmt.getTableName());
                 if (stmt.isSetIfNotExists()) {
                     parsedCreateTableStmt.setIfNotExists();
@@ -3113,7 +3165,8 @@ public class Catalog {
             throws DdlException, AnalysisException {
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
         if (partitionDesc instanceof SingleRangePartitionDesc) {
-            addPartitions(db, tableName, ImmutableList.of((SingleRangePartitionDesc) partitionDesc), addPartitionClause);
+            addPartitions(db, tableName, ImmutableList.of((SingleRangePartitionDesc) partitionDesc),
+                    addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
             db.readLock();
             RangePartitionInfo rangePartitionInfo;
@@ -3269,10 +3322,12 @@ public class Catalog {
 
                 copiedTable.getPartitionInfo().setDataProperty(partitionId, dataProperty);
                 copiedTable.getPartitionInfo().setTabletType(partitionId, singleRangePartitionDesc.getTabletType());
-                copiedTable.getPartitionInfo().setReplicationNum(partitionId, singleRangePartitionDesc.getReplicationNum());
+                copiedTable.getPartitionInfo()
+                        .setReplicationNum(partitionId, singleRangePartitionDesc.getReplicationNum());
                 copiedTable.getPartitionInfo().setIsInMemory(partitionId, singleRangePartitionDesc.isInMemory());
 
-                Partition partition = createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
+                Partition partition =
+                        createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
 
                 partitionList.add(partition);
                 tabletIdSetForAll.addAll(tabletIdSet);
@@ -3468,7 +3523,7 @@ public class Catalog {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        for (Replica replica : tablet.getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }
                     }
@@ -3594,9 +3649,11 @@ public class Catalog {
             MaterializedIndexMeta indexMeta = table.getIndexIdToMeta().get(indexId);
 
             // create tablets
-            TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
-                    storageMedium);
-            createTablets(db.getClusterName(), index, ReplicaState.NORMAL, distributionInfo, partition.getVisibleVersion(),
+            TabletMeta tabletMeta =
+                    new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
+                            storageMedium);
+            createTablets(db.getClusterName(), index, ReplicaState.NORMAL, distributionInfo,
+                    partition.getVisibleVersion(),
                     replicationNum, tabletMeta, tabletIdSet);
             if (index.getId() != table.getBaseIndexId()) {
                 // add rollup index to partition
@@ -3678,7 +3735,8 @@ public class Catalog {
                     }
                     List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
                     for (CreateReplicaTask task : tasks) {
-                        List<Long> signatures = taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
+                        List<Long> signatures =
+                                taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
                         signatures.add(task.getSignature());
                     }
                     sendCreateReplicaTasks(tasks, countDownLatch);
@@ -3740,7 +3798,7 @@ public class Catalog {
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
-            for (Replica replica : tablet.getReplicas()) {
+            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                 CreateReplicaTask task = new CreateReplicaTask(
                         replica.getBackendId(),
                         dbId,
@@ -3903,7 +3961,7 @@ public class Catalog {
         double bfFpp = 0;
         try {
             bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
-                olapTable.getKeysType() == KeysType.PRIMARY_KEYS);
+                    olapTable.getKeysType() == KeysType.PRIMARY_KEYS);
             if (bfColumns != null && bfColumns.isEmpty()) {
                 bfColumns = null;
             }
@@ -4077,12 +4135,15 @@ public class Catalog {
                         }
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                                 DataProperty.DEFAULT_DATA_PROPERTY);
+                        DynamicPartitionUtil
+                                .checkAndSetDynamicPartitionBuckets(properties, distributionDesc.getBuckets());
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
                         if (olapTable.dynamicPartitionExists() && olapTable.getColocateGroup() != null) {
                             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
-                            if (info.getBucketNum() != olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
+                            if (info.getBucketNum() !=
+                                    olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
                                 throw new DdlException("dynamic_partition.buckets should equal the distribution buckets"
-                                                       + " if creating a colocate table");
+                                        + " if creating a colocate table");
                             }
                         }
                         if (hasMedium) {
@@ -4118,13 +4179,14 @@ public class Catalog {
                 throw new DdlException("Failed to acquire catalog lock. Try again");
             }
             try {
-                if (getDb(db.getFullName()) == null) {
+                if (getDb(db.getId()) == null) {
                     throw new DdlException("database has been dropped when creating table");
                 }
                 createTblSuccess = db.createTableWithLock(olapTable, false);
                 if (!createTblSuccess) {
                     if (!stmt.isSetIfNotExists()) {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                        ErrorReport
+                                .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
                     } else {
                         LOG.info("Create table[{}] which already exists", tableName);
                         return;
@@ -4177,7 +4239,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(mysqlTable, false)) {
@@ -4224,7 +4286,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(esTable, false)) {
@@ -4260,7 +4322,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(hiveTable, false)) {
@@ -4292,7 +4354,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(icebergTable, false)) {
@@ -4308,6 +4370,72 @@ public class Catalog {
         }
 
         LOG.info("successfully create table[{}-{}]", tableName, tableId);
+    }
+
+    private void createHudiTable(Database db, CreateTableStmt stmt) throws DdlException {
+        String tableName = stmt.getTableName();
+        List<Column> columns = stmt.getColumns();
+        long tableId = getNextId();
+        HudiTable hudiTable = new HudiTable(tableId, tableName, columns, stmt.getProperties());
+        // partition key, commented for show partition key
+        String partitionCmt = "PARTITION BY (" + String.join(", ", hudiTable.getPartitionColumnNames()) + ")";
+        if (Strings.isNullOrEmpty(stmt.getComment())) {
+            hudiTable.setComment(partitionCmt);
+        } else {
+            hudiTable.setComment(stmt.getComment());
+        }
+
+        // check database exists again, because database can be dropped when creating table
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire catalog lock. Try again");
+        }
+        try {
+            if (getDb(db.getFullName()) == null) {
+                throw new DdlException("Database has been dropped when creating table");
+            }
+            if (!db.createTableWithLock(hudiTable, false)) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("Create table[{}] which already exists", tableName);
+                    return;
+                }
+            }
+        } finally {
+            unlock();
+        }
+
+        LOG.info("Successfully create table[{}-{}]", tableName, tableId);
+    }
+
+    private void createJDBCTable(Database db, CreateTableStmt stmt) throws DdlException {
+        String tableName = stmt.getTableName();
+        List<Column> columns = stmt.getColumns();
+        Map<String, String> properties = stmt.getProperties();
+        long tableId = getNextId();
+        JDBCTable jdbcTable = new JDBCTable(tableId, tableName, columns, properties);
+
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire catalog lock. Try again");
+        }
+
+        try {
+            if (getDb(db.getFullName()) == null) {
+                throw new DdlException("database has been dropped when creating table");
+            }
+            if (!db.createTableWithLock(jdbcTable, false)) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("create table [{}] which already exists", tableName);
+                    return;
+                }
+            }
+        } finally {
+            unlock();
+        }
+
+        LOG.info("successfully create jdbc table[{}-{}]", tableName, tableId);
     }
 
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
@@ -4335,7 +4463,7 @@ public class Catalog {
         sb.append("CREATE ");
         if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
                 || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE
-                || table.getType() == TableType.OLAP_EXTERNAL) {
+                || table.getType() == TableType.OLAP_EXTERNAL || table.getType() == TableType.JDBC) {
             sb.append("EXTERNAL ");
         }
         sb.append("TABLE ");
@@ -4452,7 +4580,6 @@ public class Catalog {
             sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
 
-
             // storage media
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
@@ -4554,6 +4681,17 @@ public class Catalog {
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\",\n");
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
             sb.append("\n)");
+        } else if (table.getType() == TableType.JDBC) {
+            JDBCTable jdbcTable = (JDBCTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
+            sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
+            sb.append("\n)");
         }
         sb.append(";");
 
@@ -4633,7 +4771,7 @@ public class Catalog {
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            for (Replica replica : tablet.getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
                         }
@@ -4677,7 +4815,7 @@ public class Catalog {
             }
             for (int i = 0; i < distributionInfo.getBucketNum(); ++i) {
                 // create a new tablet with random chosen backends
-                Tablet tablet = new Tablet(getNextId());
+                LocalTablet tablet = new LocalTablet(getNextId());
 
                 // add tablet to inverted index first
                 index.addTablet(tablet, tabletMeta);
@@ -4860,7 +4998,7 @@ public class Catalog {
         OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
         Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
         MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
-        Tablet tablet = materializedIndex.getTablet(info.getTabletId());
+        LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
 
         // for compatibility
         int schemaHash = info.getSchemaHash();
@@ -4882,7 +5020,7 @@ public class Catalog {
         OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
         Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
         MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
-        Tablet tablet = materializedIndex.getTablet(info.getTabletId());
+        LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
         Replica replica = tablet.getReplicaByBackendId(info.getBackendId());
         Preconditions.checkNotNull(replica, info);
         replica.updateRowCount(info.getVersion(), info.getDataSize(), info.getRowCount());
@@ -4914,7 +5052,7 @@ public class Catalog {
         OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
         Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
         MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
-        Tablet tablet = materializedIndex.getTablet(info.getTabletId());
+        LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
         tablet.deleteReplicaByBackendId(info.getBackendId());
     }
 
@@ -5350,6 +5488,10 @@ public class Catalog {
 
     public HiveRepository getHiveRepository() {
         return this.hiveRepository;
+    }
+
+    public MetastoreEventsProcessor getMetastoreEventsProcessor() {
+        return this.metastoreEventsProcessor;
     }
 
     public void setMaster(MasterInfo info) {
@@ -5927,6 +6069,32 @@ public class Catalog {
         editLog.logModifyInMemory(info);
     }
 
+    public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
+        Map<String, String> property = new HashMap<>();
+        Database db = getDb(dbName);
+        if (db == null) {
+            throw new DdlException("the DB " + dbName + "isn't  exist");
+        }
+
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            throw new DdlException("the DB " + dbName + " table: " + tableName + "isn't  exist");
+        }
+
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            olapTable.setHasForbitGlobalDict(isForbit);
+            if (isForbit) {
+                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
+            } else {
+                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
+            }
+            ModifyTablePropertyOperationLog info =
+                    new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
+            editLog.logSetHasForbitGlobalDict(info);
+        }
+    }
+
     public void replayModifyTableProperty(short opCode, ModifyTablePropertyOperationLog info) {
         long dbId = info.getDbId();
         long tableId = info.getTableId();
@@ -5936,27 +6104,39 @@ public class Catalog {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            TableProperty tableProperty = olapTable.getTableProperty();
-            if (tableProperty == null) {
-                olapTable.setTableProperty(new TableProperty(properties).buildProperty(opCode));
-            } else {
-                tableProperty.modifyTableProperties(properties);
-                tableProperty.buildProperty(opCode);
-            }
-
-            // need to replay partition info meta
-            if (opCode == OperationType.OP_MODIFY_IN_MEMORY) {
-                for (Partition partition : olapTable.getPartitions()) {
-                    olapTable.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
+            if (opCode == OperationType.OP_SET_FORBIT_GLOBAL_DICT) {
+                String enAble = properties.get(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE);
+                Preconditions.checkState(enAble != null);
+                if (olapTable != null) {
+                    if (enAble == PropertyAnalyzer.DISABLE_LOW_CARD_DICT) {
+                        olapTable.setHasForbitGlobalDict(true);
+                    } else {
+                        olapTable.setHasForbitGlobalDict(false);
+                    }
                 }
-            } else if (opCode == OperationType.OP_MODIFY_REPLICATION_NUM) {
-                // update partition replication num if this table is unpartitioned table
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    String partitionName = olapTable.getName();
-                    Partition partition = olapTable.getPartition(partitionName);
-                    if (partition != null) {
-                        partitionInfo.setReplicationNum(partition.getId(), tableProperty.getReplicationNum());
+            } else {
+                TableProperty tableProperty = olapTable.getTableProperty();
+                if (tableProperty == null) {
+                    olapTable.setTableProperty(new TableProperty(properties).buildProperty(opCode));
+                } else {
+                    tableProperty.modifyTableProperties(properties);
+                    tableProperty.buildProperty(opCode);
+                }
+
+                // need to replay partition info meta
+                if (opCode == OperationType.OP_MODIFY_IN_MEMORY) {
+                    for (Partition partition : olapTable.getPartitions()) {
+                        olapTable.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
+                    }
+                } else if (opCode == OperationType.OP_MODIFY_REPLICATION_NUM) {
+                    // update partition replication num if this table is unpartitioned table
+                    PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                    if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                        String partitionName = olapTable.getName();
+                        Partition partition = olapTable.getPartition(partitionName);
+                        if (partition != null) {
+                            partitionInfo.setReplicationNum(partition.getId(), tableProperty.getReplicationNum());
+                        }
                     }
                 }
             }
@@ -6074,7 +6254,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating view");
             }
             if (!db.createTableWithLock(newView, false)) {
@@ -6110,8 +6290,8 @@ public class Catalog {
         return functionSet.getBuiltinFunctions();
     }
 
-    public boolean isNonNullResultWithNullParamFunction(String funcName) {
-        return functionSet.isNonNullResultWithNullParamFunctions(funcName);
+    public boolean isNotAlwaysNullResultWithNullParamFunction(String funcName) {
+        return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
     }
 
     /**
@@ -6374,199 +6554,6 @@ public class Catalog {
         ctx.setCluster(clusterName);
     }
 
-    /**
-     * migrate db to link dest cluster
-     *
-     * @param stmt
-     * @throws DdlException
-     */
-    public void migrateDb(MigrateDbStmt stmt) throws DdlException {
-        final String srcClusterName = stmt.getSrcCluster();
-        final String destClusterName = stmt.getDestCluster();
-        final String srcDbName = stmt.getSrcDb();
-        final String destDbName = stmt.getDestDb();
-
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
-        }
-        try {
-            if (!nameToCluster.containsKey(srcClusterName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_SRC_CLUSTER_NOT_EXIST, srcClusterName);
-            }
-            if (!nameToCluster.containsKey(destClusterName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_DEST_CLUSTER_NOT_EXIST, destClusterName);
-            }
-
-            if (srcClusterName.equals(destClusterName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_MIGRATE_SAME_CLUSTER);
-            }
-
-            final Cluster srcCluster = this.nameToCluster.get(srcClusterName);
-            if (!srcCluster.containDb(srcDbName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_SRC_DB_NOT_EXIST, srcDbName);
-            }
-            final Cluster destCluster = this.nameToCluster.get(destClusterName);
-            if (!destCluster.containLink(destDbName, srcDbName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_MIGRATION_NO_LINK, srcDbName, destDbName);
-            }
-
-            final Database db = fullNameToDb.get(srcDbName);
-
-            // if the max replication num of the src db is larger then the backends num of the dest cluster,
-            // the migration will not be processed.
-            final int maxReplicationNum = db.getMaxReplicationNum();
-            if (maxReplicationNum > destCluster.getBackendIdList().size()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_MIGRATE_BE_NOT_ENOUGH, destClusterName);
-            }
-
-            if (db.getDbState() == DbState.LINK) {
-                final BaseParam param = new BaseParam();
-                param.addStringParam(destDbName);
-                param.addLongParam(db.getId());
-                param.addStringParam(srcDbName);
-                param.addStringParam(destClusterName);
-                param.addStringParam(srcClusterName);
-                fullNameToDb.remove(db.getFullName());
-                srcCluster.removeDb(db.getFullName(), db.getId());
-                destCluster.removeLinkDb(param);
-                destCluster.addDb(destDbName, db.getId());
-                db.writeLock();
-                try {
-                    db.setDbState(DbState.MOVE);
-                    // set cluster to the dest cluster.
-                    // and Clone process will do the migration things.
-                    db.setClusterName(destClusterName);
-                    db.setName(destDbName);
-                    db.setAttachDb(srcDbName);
-                } finally {
-                    db.writeUnlock();
-                }
-                editLog.logMigrateCluster(param);
-            } else {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_MIGRATION_NO_LINK, srcDbName, destDbName);
-            }
-        } finally {
-            unlock();
-        }
-    }
-
-    public void replayMigrateDb(BaseParam param) {
-        final String desDbName = param.getStringParam();
-        final String srcDbName = param.getStringParam(1);
-        final String desClusterName = param.getStringParam(2);
-        final String srcClusterName = param.getStringParam(3);
-        tryLock(true);
-        try {
-            final Cluster desCluster = this.nameToCluster.get(desClusterName);
-            final Cluster srcCluster = this.nameToCluster.get(srcClusterName);
-            final Database db = fullNameToDb.get(srcDbName);
-            if (db.getDbState() == DbState.LINK) {
-                fullNameToDb.remove(db.getFullName());
-                srcCluster.removeDb(db.getFullName(), db.getId());
-                desCluster.removeLinkDb(param);
-                desCluster.addDb(param.getStringParam(), db.getId());
-
-                db.writeLock();
-                db.setName(desDbName);
-                db.setAttachDb(srcDbName);
-                db.setDbState(DbState.MOVE);
-                db.setClusterName(desClusterName);
-                db.writeUnlock();
-            }
-        } finally {
-            unlock();
-        }
-    }
-
-    public void replayLinkDb(BaseParam param) {
-        final String desClusterName = param.getStringParam(2);
-        final String srcDbName = param.getStringParam(1);
-        final String desDbName = param.getStringParam();
-
-        tryLock(true);
-        try {
-            final Cluster desCluster = this.nameToCluster.get(desClusterName);
-            final Database srcDb = fullNameToDb.get(srcDbName);
-            srcDb.writeLock();
-            srcDb.setDbState(DbState.LINK);
-            srcDb.setAttachDb(desDbName);
-            srcDb.writeUnlock();
-            desCluster.addLinkDb(param);
-            fullNameToDb.put(desDbName, srcDb);
-        } finally {
-            unlock();
-        }
-    }
-
-    /**
-     * link src db to dest db. we use java's quotation Mechanism to realize db hard links
-     *
-     * @param stmt
-     * @throws DdlException
-     */
-    public void linkDb(LinkDbStmt stmt) throws DdlException {
-        final String srcClusterName = stmt.getSrcCluster();
-        final String destClusterName = stmt.getDestCluster();
-        final String srcDbName = stmt.getSrcDb();
-        final String destDbName = stmt.getDestDb();
-
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
-        }
-        try {
-            if (!nameToCluster.containsKey(srcClusterName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_SRC_CLUSTER_NOT_EXIST, srcClusterName);
-            }
-
-            if (!nameToCluster.containsKey(destClusterName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_DEST_CLUSTER_NOT_EXIST, destClusterName);
-            }
-
-            if (srcClusterName.equals(destClusterName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_MIGRATE_SAME_CLUSTER);
-            }
-
-            if (fullNameToDb.containsKey(destDbName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DB_CREATE_EXISTS, destDbName);
-            }
-
-            final Cluster srcCluster = this.nameToCluster.get(srcClusterName);
-            final Cluster destCluster = this.nameToCluster.get(destClusterName);
-
-            if (!srcCluster.containDb(srcDbName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_SRC_DB_NOT_EXIST, srcDbName);
-            }
-            final Database srcDb = fullNameToDb.get(srcDbName);
-
-            if (srcDb.getDbState() != DbState.NORMAL) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_DB_STATE_LINK_OR_MIGRATE,
-                        ClusterNamespace.getNameFromFullName(srcDbName));
-            }
-
-            srcDb.writeLock();
-            try {
-                srcDb.setDbState(DbState.LINK);
-                srcDb.setAttachDb(destDbName);
-            } finally {
-                srcDb.writeUnlock();
-            }
-
-            final long id = getNextId();
-            final BaseParam param = new BaseParam();
-            param.addStringParam(destDbName);
-            param.addStringParam(srcDbName);
-            param.addLongParam(id);
-            param.addLongParam(srcDb.getId());
-            param.addStringParam(destClusterName);
-            param.addStringParam(srcClusterName);
-            destCluster.addLinkDb(param);
-            fullNameToDb.put(destDbName, srcDb);
-            editLog.logLinkCluster(param);
-        } finally {
-            unlock();
-        }
-    }
-
     public Cluster getCluster(String clusterName) {
         return nameToCluster.get(clusterName);
     }
@@ -6609,7 +6596,7 @@ public class Catalog {
                                 for (Tablet tablet : materializedIndex.getTablets()) {
                                     int replicaNum = 0;
                                     int quorum = replicationNum / 2 + 1;
-                                    for (Replica replica : tablet.getReplicas()) {
+                                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                         if (replica.getState() != ReplicaState.CLONE
                                                 && beIds.contains(replica.getBackendId())) {
                                             replicaNum++;
@@ -7000,7 +6987,8 @@ public class Catalog {
                 partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
-                Partition newPartition = createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
+                Partition newPartition =
+                        createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
                 newPartitions.add(newPartition);
             }
             buildPartitions(db, copiedTbl, newPartitions);
@@ -7121,7 +7109,7 @@ public class Catalog {
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            for (Replica replica : tablet.getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
                         }
@@ -7261,7 +7249,7 @@ public class Catalog {
                 if (mindex == null) {
                     continue;
                 }
-                Tablet tablet = mindex.getTablet(info.getTabletId());
+                LocalTablet tablet = (LocalTablet) mindex.getTablet(info.getTabletId());
                 if (tablet == null) {
                     continue;
                 }
@@ -7521,7 +7509,7 @@ public class Catalog {
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         long tabletId = tablet.getId();
-                        List<Replica> replicas = tablet.getReplicas();
+                        List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
                         for (Replica replica : replicas) {
                             long backendId = replica.getBackendId();
                             DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);

@@ -15,6 +15,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
+#include "common/status.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
@@ -78,8 +79,8 @@ Status ProjectNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
 
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc()));
-    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, row_desc()));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state));
 
     _expr_compute_timer = ADD_TIMER(runtime_profile(), "ExprComputeTime");
     _common_sub_expr_compute_timer = ADD_TIMER(runtime_profile(), "CommonSubExprComputeTime");
@@ -132,6 +133,7 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         for (size_t i = 0; i < _common_sub_slot_ids.size(); ++i) {
             (*chunk)->append_column(_common_sub_expr_ctxs[i]->evaluate((*chunk).get()), _common_sub_slot_ids[i]);
         }
+        RETURN_IF_HAS_ERROR(_common_sub_expr_ctxs);
     }
 
     // ToDo(kks): we could reuse result columns, if the parent node isn't sort node
@@ -160,6 +162,7 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
                         NullableColumn::create(result_columns[i], NullColumn::create(result_columns[i]->size(), 0));
             }
         }
+        RETURN_IF_HAS_ERROR(_expr_ctxs);
     }
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();

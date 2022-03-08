@@ -5,6 +5,7 @@
 
 #include "common/object_pool.h"
 #include "exprs/expr.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 struct JavaUDFContext;
@@ -17,13 +18,14 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new JavaFunctionCallExpr(*this)); }
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) override;
+    Status prepare(RuntimeState* state, ExprContext* context) override;
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     bool is_constant() const override;
 
 private:
     void _call_udf_close();
+    RuntimeState* _runtime_state;
     std::shared_ptr<JavaUDFContext> _func_desc;
     std::shared_ptr<UDFFunctionCallHelper> _call_helper;
     bool _is_returning_random_value;

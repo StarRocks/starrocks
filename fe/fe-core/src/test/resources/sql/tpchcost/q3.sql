@@ -23,12 +23,12 @@ order by
     o_orderdate limit 10;
 
 [fragment statistics]
-PLAN FRAGMENT 0(F06)
+PLAN FRAGMENT 0(F05)
 Output Exprs:20: L_ORDERKEY | 38: sum | 14: O_ORDERDATE | 17: O_SHIPPRIORITY
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-15:MERGING-EXCHANGE
+13:MERGING-EXCHANGE
 limit: 10
 cardinality: 10
 column statistics:
@@ -37,13 +37,13 @@ column statistics:
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.1799208766687468E7] ESTIMATE
 * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 
-PLAN FRAGMENT 1(F05)
+PLAN FRAGMENT 1(F00)
 
-Input Partition: HASH_PARTITIONED: 20: L_ORDERKEY, 14: O_ORDERDATE, 17: O_SHIPPRIORITY
+Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 15
+OutPut Exchange Id: 13
 
-14:TOP-N
+12:TOP-N
 |  order by: [38, DOUBLE, true] DESC, [14, DATE, false] ASC
 |  offset: 0
 |  limit: 10
@@ -54,27 +54,7 @@ OutPut Exchange Id: 15
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.1799208766687468E7] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
-13:AGGREGATE (merge finalize)
-|  aggregate: sum[([38: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
-|  group by: [20: L_ORDERKEY, INT, false], [14: O_ORDERDATE, DATE, false], [17: O_SHIPPRIORITY, INT, false]
-|  cardinality: 8364983
-|  column statistics:
-|  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
-|  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.1799208766687468E7] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|
-12:EXCHANGE
-cardinality: 19828107
-
-PLAN FRAGMENT 2(F00)
-
-Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 20: L_ORDERKEY, 14: O_ORDERDATE, 17: O_SHIPPRIORITY
-OutPut Exchange Id: 12
-
-11:AGGREGATE (update serialize)
-|  STREAMING
+11:AGGREGATE (update finalize)
 |  aggregate: sum[([37: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [20: L_ORDERKEY, INT, false], [14: O_ORDERDATE, DATE, false], [17: O_SHIPPRIORITY, INT, false]
 |  cardinality: 19828107
@@ -101,6 +81,7 @@ OutPut Exchange Id: 12
 |  equal join conjunct: [20: L_ORDERKEY, INT, false] = [10: O_ORDERKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (10: O_ORDERKEY), remote = false
+|  output columns: 14, 17, 20, 25, 26
 |  cardinality: 46999957
 |  column statistics:
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.1799208766687468E7] ESTIMATE
@@ -140,7 +121,7 @@ column statistics:
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 * L_SHIPDATE-->[7.948512E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE
 
-PLAN FRAGMENT 3(F01)
+PLAN FRAGMENT 2(F01)
 
 Input Partition: RANDOM
 OutPut Partition: BUCKET_SHFFULE_HASH_PARTITIONED: 10: O_ORDERKEY
@@ -162,6 +143,7 @@ OutPut Exchange Id: 08
 |  equal join conjunct: [11: O_CUSTKEY, INT, false] = [1: C_CUSTKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (1: C_CUSTKEY), remote = false
+|  output columns: 10, 14, 17
 |  cardinality: 21799209
 |  column statistics:
 |  * C_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 3000000.0] ESTIMATE
@@ -189,7 +171,7 @@ column statistics:
 * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
 * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 
-PLAN FRAGMENT 4(F02)
+PLAN FRAGMENT 3(F02)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED

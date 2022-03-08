@@ -35,6 +35,7 @@
 #include "gen_cpp/HeartbeatService_types.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -59,6 +60,7 @@ public:
         REPORT_TASK,
         REPORT_DISK_STATE,
         REPORT_OLAP_TABLE,
+        REPORT_WORKGROUP,
         UPLOAD,
         DOWNLOAD,
         MAKE_SNAPSHOT,
@@ -84,6 +86,7 @@ public:
     // Input parameters:
     // * task: the task need callback thread to do
     void submit_task(const TAgentTaskRequest& task);
+    void submit_tasks(std::vector<TAgentTaskRequest>* task);
 
 private:
     bool _register_task_info(const TTaskType::type task_type, int64_t signature);
@@ -95,6 +98,9 @@ private:
     static void* _create_tablet_worker_thread_callback(void* arg_this);
     static void* _drop_tablet_worker_thread_callback(void* arg_this);
     static void* _push_worker_thread_callback(void* arg_this);
+    static Status _publish_version_in_parallel(void* arg_this, std::unique_ptr<ThreadPool>& threadpool,
+                                               const TPublishVersionRequest publish_version_req, size_t* tablet_n,
+                                               std::vector<TTabletId>* error_tablet_ids);
     static void* _publish_version_worker_thread_callback(void* arg_this);
     static void* _clear_transaction_task_worker_thread_callback(void* arg_this);
     static void* _alter_tablet_worker_thread_callback(void* arg_this);
@@ -104,6 +110,7 @@ private:
     static void* _report_task_worker_thread_callback(void* arg_this);
     static void* _report_disk_state_worker_thread_callback(void* arg_this);
     static void* _report_tablet_worker_thread_callback(void* arg_this);
+    static void* _report_workgroup_thread_callback(void* arg_this);
     static void* _upload_worker_thread_callback(void* arg_this);
     static void* _download_worker_thread_callback(void* arg_this);
     static void* _make_snapshot_thread_callback(void* arg_this);
@@ -139,8 +146,8 @@ private:
     static FrontendServiceClientCache _master_service_client_cache;
     static std::atomic_ulong _s_report_version;
 
-    static std::mutex _s_task_signatures_lock;
-    static std::map<TTaskType::type, std::set<int64_t>> _s_task_signatures;
+    static std::mutex _s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
+    static std::set<int64_t> _s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
 
     std::atomic<bool> _stopped{false};
     std::vector<std::thread> _worker_threads;

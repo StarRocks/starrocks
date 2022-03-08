@@ -28,6 +28,7 @@ import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -213,7 +214,7 @@ public class GroupByClause implements ParseNode {
                                 + groupingExpr.toSql());
             }
 
-            if (groupingExpr.type.isOnlyMetricType()) {
+            if (!groupingExpr.type.canGroupBy()) {
                 throw new AnalysisException(Type.OnlyMetricTypeErrorMsg);
             }
         }
@@ -363,5 +364,10 @@ public class GroupByClause implements ParseNode {
         GROUPING_SETS,
         ROLLUP,
         CUBE
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitGroupByClause(this, context);
     }
 }

@@ -26,6 +26,9 @@
 #include <memory>
 #include <vector>
 
+#include "runtime/primitive_type.h"
+#include "runtime/types.h"
+
 // This is the only StarRocks header required to develop UDFs and UDAs. This header
 // contains the types that need to be used and the FunctionContext object. The context
 // object serves as the interface object between the UDF/UDA and the starrocks process.
@@ -45,16 +48,6 @@ namespace starrocks_udf {
 // object containing a boolean to store if the value is NULL and the value itself. The
 // value is unspecified if the NULL boolean is set.
 struct AnyVal;
-struct BooleanVal;
-struct TinyIntVal;
-struct SmallIntVal;
-struct IntVal;
-struct BigIntVal;
-struct StringVal;
-struct DateTimeVal;
-struct DecimalVal;
-struct DecimalV2Val;
-struct HllVal;
 
 // The FunctionContext is passed to every UDF/UDA and is the interface for the UDF to the
 // rest of the system. It contains APIs to examine the system state, report errors
@@ -65,35 +58,10 @@ public:
         V2_0,
     };
 
-    enum Type {
-        INVALID_TYPE = 0,
-        TYPE_NULL,
-        TYPE_BOOLEAN,
-        TYPE_TINYINT,
-        TYPE_SMALLINT,
-        TYPE_INT,
-        TYPE_BIGINT,
-        TYPE_LARGEINT,
-        TYPE_FLOAT,
-        TYPE_DOUBLE,
-        TYPE_DECIMAL,
-        TYPE_DATE,
-        TYPE_DATETIME,
-        TYPE_CHAR,
-        TYPE_VARCHAR,
-        TYPE_HLL,
-        TYPE_STRING,
-        TYPE_FIXED_BUFFER,
-        TYPE_DECIMALV2,
-        TYPE_OBJECT,
-        TYPE_PERCENTILE,
-        TYPE_DECIMAL32,
-        TYPE_DECIMAL64,
-        TYPE_DECIMAL128,
-    };
+    // keep the order with PrimitiveType
 
     struct TypeDesc {
-        Type type;
+        ::starrocks::PrimitiveType type;
 
         /// Only valid if type == TYPE_DECIMAL
         int precision;
@@ -241,10 +209,13 @@ public:
 
     std::shared_ptr<starrocks::vectorized::Column> get_constant_column(int arg_idx) const;
 
+    bool is_udf() { return _is_udf; }
+    void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
+
     // Create a test FunctionContext object. The caller is responsible for calling delete
     // on it. This context has additional debugging validation enabled.
     static FunctionContext* create_test_context();
-    static FunctionContext* create_test_context(std::vector<FunctionContext::TypeDesc>&& arg_types);
+    static FunctionContext* create_test_context(std::vector<TypeDesc>&& arg_types, const TypeDesc& return_type);
 
     ~FunctionContext();
 
@@ -256,7 +227,10 @@ private:
     FunctionContext(const FunctionContext& other);
     FunctionContext& operator=(const FunctionContext& other);
 
-    starrocks::FunctionContextImpl* _impl; // Owned by this object.
+    bool _is_udf = false;
+
+    // Owned by this object.
+    starrocks::FunctionContextImpl* _impl;
 };
 
 //----------------------------------------------------------------------------
@@ -391,395 +365,7 @@ struct AnyVal {
     AnyVal(bool is_null) : is_null(is_null) {}
 };
 
-struct BooleanVal : public AnyVal {
-    bool val{false};
-
-    BooleanVal() {}
-    BooleanVal(bool val) : val(val) {}
-
-    static BooleanVal null() {
-        BooleanVal result;
-        result.is_null = true;
-        return result;
-    }
-
-    bool operator==(const BooleanVal& other) const {
-        if (is_null && other.is_null) {
-            return true;
-        }
-
-        if (is_null || other.is_null) {
-            return false;
-        }
-
-        return val == other.val;
-    }
-    bool operator!=(const BooleanVal& other) const { return !(*this == other); }
-};
-
-struct TinyIntVal : public AnyVal {
-    int8_t val{0};
-
-    TinyIntVal() {}
-    TinyIntVal(int8_t val) : val(val) {}
-
-    static TinyIntVal null() {
-        TinyIntVal result;
-        result.is_null = true;
-        return result;
-    }
-
-    bool operator==(const TinyIntVal& other) const {
-        if (is_null && other.is_null) {
-            return true;
-        }
-
-        if (is_null || other.is_null) {
-            return false;
-        }
-
-        return val == other.val;
-    }
-    bool operator!=(const TinyIntVal& other) const { return !(*this == other); }
-};
-
-struct SmallIntVal : public AnyVal {
-    int16_t val{0};
-
-    SmallIntVal() {}
-    SmallIntVal(int16_t val) : val(val) {}
-
-    static SmallIntVal null() {
-        SmallIntVal result;
-        result.is_null = true;
-        return result;
-    }
-
-    bool operator==(const SmallIntVal& other) const {
-        if (is_null && other.is_null) {
-            return true;
-        }
-
-        if (is_null || other.is_null) {
-            return false;
-        }
-
-        return val == other.val;
-    }
-    bool operator!=(const SmallIntVal& other) const { return !(*this == other); }
-};
-
-struct IntVal : public AnyVal {
-    int32_t val{0};
-
-    IntVal() {}
-    IntVal(int32_t val) : val(val) {}
-
-    static IntVal null() {
-        IntVal result;
-        result.is_null = true;
-        return result;
-    }
-
-    bool operator==(const IntVal& other) const {
-        if (is_null && other.is_null) {
-            return true;
-        }
-
-        if (is_null || other.is_null) {
-            return false;
-        }
-
-        return val == other.val;
-    }
-    bool operator!=(const IntVal& other) const { return !(*this == other); }
-};
-
-struct BigIntVal : public AnyVal {
-    int64_t val{0};
-
-    BigIntVal() {}
-    BigIntVal(int64_t val) : val(val) {}
-
-    static BigIntVal null() {
-        BigIntVal result;
-        result.is_null = true;
-        return result;
-    }
-
-    bool operator==(const BigIntVal& other) const {
-        if (is_null && other.is_null) {
-            return true;
-        }
-
-        if (is_null || other.is_null) {
-            return false;
-        }
-
-        return val == other.val;
-    }
-    bool operator!=(const BigIntVal& other) const { return !(*this == other); }
-};
-
-struct FloatVal : public AnyVal {
-    float val{0.0};
-
-    FloatVal() {}
-    FloatVal(float val) : val(val) {}
-
-    static FloatVal null() {
-        FloatVal result;
-        result.is_null = true;
-        return result;
-    }
-
-    bool operator==(const FloatVal& other) const { return is_null == other.is_null && val == other.val; }
-    bool operator!=(const FloatVal& other) const { return !(*this == other); }
-};
-
-struct DoubleVal : public AnyVal {
-    double val{0.0};
-
-    DoubleVal() {}
-    DoubleVal(double val) : val(val) {}
-
-    static DoubleVal null() {
-        DoubleVal result;
-        result.is_null = true;
-        return result;
-    }
-
-    bool operator==(const DoubleVal& other) const {
-        if (is_null && other.is_null) {
-            return true;
-        }
-
-        if (is_null || other.is_null) {
-            return false;
-        }
-
-        return val == other.val;
-    }
-    bool operator!=(const DoubleVal& other) const { return !(*this == other); }
-};
-
-// This object has a compatible storage format with boost::ptime.
-struct DateTimeVal : public AnyVal {
-    // MySQL packet time
-    int64_t packed_time{0};
-    // Indicate which type of this value.
-    int type{3};
-
-    // NOTE: Type 3 is TIME_DATETIME in runtime/datetime_value.h
-    DateTimeVal() {}
-
-    static DateTimeVal null() {
-        DateTimeVal result;
-        result.is_null = true;
-        return result;
-    }
-
-    bool operator==(const DateTimeVal& other) const {
-        if (is_null && other.is_null) {
-            return true;
-        }
-
-        if (is_null || other.is_null) {
-            return false;
-        }
-
-        return packed_time == other.packed_time;
-    }
-    bool operator!=(const DateTimeVal& other) const { return !(*this == other); }
-};
-
-// Note: there is a difference between a NULL string (is_null == true) and an
-// empty string (len == 0).
-struct StringVal : public AnyVal {
-    static const int MAX_LENGTH = (1 << 30);
-
-    int64_t len{0};
-    uint8_t* ptr{nullptr};
-
-    // Construct a StringVal from ptr/len. Note: this does not make a copy of ptr
-    // so the buffer must exist as long as this StringVal does.
-    StringVal() {}
-
-    // Construct a StringVal from ptr/len. Note: this does not make a copy of ptr
-    // so the buffer must exist as long as this StringVal does.
-    StringVal(uint8_t* ptr, int64_t len) : len(len), ptr(ptr) {}
-
-    // Construct a StringVal from NULL-terminated c-string. Note: this does not make a
-    // copy of ptr so the underlying string must exist as long as this StringVal does.
-    StringVal(const char* ptr) : len(strlen(ptr)), ptr((uint8_t*)ptr) {}
-
-    static StringVal null() {
-        StringVal sv;
-        sv.is_null = true;
-        return sv;
-    }
-
-    // Creates a StringVal, allocating a new buffer with 'len'. This should
-    // be used to return StringVal objects in UDF/UDAs that need to allocate new
-    // string memory.
-    StringVal(FunctionContext* context, int64_t len);
-
-    // Creates a StringVal, which memory is avaliable when this funciont context is used next time
-    static StringVal create_temp_string_val(FunctionContext* ctx, int64_t len);
-
-    bool resize(FunctionContext* context, int64_t len);
-
-    bool operator==(const StringVal& other) const {
-        if (is_null != other.is_null) {
-            return false;
-        }
-
-        if (is_null) {
-            return true;
-        }
-
-        if (len != other.len) {
-            return false;
-        }
-
-        return len == 0 || ptr == other.ptr || memcmp(ptr, other.ptr, len) == 0;
-    }
-
-    bool operator!=(const StringVal& other) const { return !(*this == other); }
-
-    /// Will create a new StringVal with the given dimension and copy the data from the
-    /// parameters. In case of an error will return a NULL string and set an error on the
-    /// function context.
-    static StringVal copy_from(FunctionContext* ctx, const uint8_t* buf, size_t len);
-
-    /// Append the passed buffer to this StringVal. Reallocate memory to fit the buffer. If
-    /// the memory allocation becomes too large, will set an error on FunctionContext and
-    /// return a NULL string.
-    void append(FunctionContext* ctx, const uint8_t* buf, size_t len);
-    void append(FunctionContext* ctx, const uint8_t* buf, size_t len, const uint8_t* buf2, size_t buf2_len);
-};
-
-struct DecimalVal : public AnyVal {
-    int8_t int_len{0};
-    int8_t frac_len{0};
-    bool sign{false};
-    int32_t buffer[9] = {0};
-
-    // Default value is zero
-    DecimalVal() {
-        // Do nothing here
-    }
-
-    static DecimalVal null() {
-        DecimalVal result;
-        result.is_null = true;
-        return result;
-    }
-
-    void set_to_zero() {
-        memset(buffer, 0, sizeof(int32_t) * 9);
-        int_len = 0;
-        frac_len = 0;
-        sign = false;
-    }
-
-    void set_to_abs_value() { sign = false; }
-
-    bool operator==(const DecimalVal& other) const;
-
-    bool operator!=(const DecimalVal& other) const { return !(*this == other); }
-};
-
-struct DecimalV2Val : public AnyVal {
-    __int128 val{0};
-
-    // Default value is zero
-    DecimalV2Val() {}
-
-    const __int128& value() const { return val; }
-
-    DecimalV2Val(__int128 value) : val(value) {}
-
-    static DecimalV2Val null() {
-        DecimalV2Val result;
-        result.is_null = true;
-        return result;
-    }
-
-    void set_to_zero() { val = 0; }
-
-    void set_to_abs_value() {
-        if (val < 0) val = -val;
-    }
-
-    bool operator==(const DecimalV2Val& other) const {
-        if (is_null && other.is_null) {
-            return true;
-        }
-
-        if (is_null || other.is_null) {
-            return false;
-        }
-
-        return val == other.val;
-    }
-
-    bool operator!=(const DecimalV2Val& other) const { return !(*this == other); }
-};
-
-struct LargeIntVal : public AnyVal {
-    __int128 val{0};
-
-    LargeIntVal() {}
-
-    LargeIntVal(__int128 large_value) : val(large_value) {}
-
-    static LargeIntVal null() {
-        LargeIntVal result;
-        result.is_null = true;
-        return result;
-    }
-
-    bool operator==(const LargeIntVal& other) const {
-        if (is_null && other.is_null) {
-            return true;
-        }
-
-        if (is_null || other.is_null) {
-            return false;
-        }
-
-        return val == other.val;
-    }
-    bool operator!=(const LargeIntVal& other) const { return !(*this == other); }
-};
-
-// todo(kks): keep HllVal struct only for backward compatibility, we should remove it
-//            when starrocks 0.12 release
-struct HllVal : public StringVal {
-    HllVal() {}
-
-    void init(FunctionContext* ctx);
-
-    void agg_parse_and_cal(FunctionContext* ctx, const HllVal& other);
-
-    void agg_merge(const HllVal& other);
-};
-
 typedef uint8_t* BufferVal;
 } // namespace starrocks_udf
 
-using starrocks_udf::BooleanVal;
-using starrocks_udf::TinyIntVal;
-using starrocks_udf::SmallIntVal;
-using starrocks_udf::IntVal;
-using starrocks_udf::BigIntVal;
-using starrocks_udf::LargeIntVal;
-using starrocks_udf::FloatVal;
-using starrocks_udf::DoubleVal;
-using starrocks_udf::StringVal;
-using starrocks_udf::DecimalVal;
-using starrocks_udf::DecimalV2Val;
-using starrocks_udf::DateTimeVal;
-using starrocks_udf::HllVal;
 using starrocks_udf::FunctionContext;

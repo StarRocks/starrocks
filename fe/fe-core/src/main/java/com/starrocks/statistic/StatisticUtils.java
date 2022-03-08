@@ -6,6 +6,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -73,6 +74,31 @@ public class StatisticUtils {
         }
 
         return false;
+    }
+
+    public static boolean checkStatisticTableStateNormal() {
+        Database db = Catalog.getCurrentCatalog().getDb(Constants.StatisticsDBName);
+
+        // check database
+        if (db == null) {
+            return false;
+        }
+
+        // check table
+        OlapTable table = (OlapTable) db.getTable(Constants.StatisticsTableName);
+        if (table == null) {
+            return false;
+        }
+
+        // check replicate miss
+        for (Partition partition : table.getPartitions()) {
+            if (partition.getBaseIndex().getTablets().stream()
+                    .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {

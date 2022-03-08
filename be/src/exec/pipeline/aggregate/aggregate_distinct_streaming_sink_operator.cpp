@@ -8,13 +8,13 @@ namespace starrocks::pipeline {
 
 Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), get_runtime_profile(), _mem_tracker.get()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get(), _mem_tracker));
     return _aggregator->open(state);
 }
 
-Status AggregateDistinctStreamingSinkOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_aggregator->unref(state));
-    return Operator::close(state);
+void AggregateDistinctStreamingSinkOperator::close(RuntimeState* state) {
+    _aggregator->unref(state);
+    Operator::close(state);
 }
 
 void AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state) {

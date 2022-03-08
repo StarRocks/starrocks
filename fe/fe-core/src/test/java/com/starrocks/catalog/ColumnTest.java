@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -35,6 +36,10 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+
+import static com.starrocks.analysis.ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
+import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NOT_SET;
+import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
 
 public class ColumnTest {
 
@@ -111,8 +116,104 @@ public class ColumnTest {
         file.delete();
     }
 
+    @Test
+    public void testSchemaChangeAllowNormal() throws DdlException {
+        Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                NULL_DEFAULT_VALUE, "");
+        Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.VARCHAR), true, null, false,
+                NULL_DEFAULT_VALUE, "");
+        oldColumn.checkSchemaChangeAllowed(newColumn);
+
+        oldColumn = new Column("user", ScalarType.createType(PrimitiveType.VARCHAR), true, null, false,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+        newColumn = new Column("user", ScalarType.createType(PrimitiveType.VARCHAR), true, null, false,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+        oldColumn.checkSchemaChangeAllowed(newColumn);
+
+        oldColumn = new Column("user", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+                CURRENT_TIMESTAMP_VALUE, "");
+        newColumn = new Column("user", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+                CURRENT_TIMESTAMP_VALUE, "");
+        oldColumn.checkSchemaChangeAllowed(newColumn);
+    }
+
+    @Test
+    public void testSchemaChangeAllowedDefaultValue() {
+        try {
+            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                    new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                    NOT_SET, "");
+            oldColumn.checkSchemaChangeAllowed(newColumn);
+            Assert.fail("No exception throws.");
+        } catch (DdlException ex) {
+        }
+
+        try {
+            Column oldColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+                    CURRENT_TIMESTAMP_VALUE, "");
+            Column newColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+                    NOT_SET, "");
+            oldColumn.checkSchemaChangeAllowed(newColumn);
+            Assert.fail("No exception throws.");
+        } catch (DdlException ex) {
+        }
+
+        try {
+            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                    NOT_SET, "");
+            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                    new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+            oldColumn.checkSchemaChangeAllowed(newColumn);
+            Assert.fail("No exception throws.");
+        } catch (DdlException ex) {
+        }
+
+        try {
+            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                    NOT_SET, "");
+            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                    CURRENT_TIMESTAMP_VALUE, "");
+            oldColumn.checkSchemaChangeAllowed(newColumn);
+            Assert.fail("No exception throws.");
+        } catch (DdlException ex) {
+        }
+
+        try {
+            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                    new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                    CURRENT_TIMESTAMP_VALUE, "");
+            oldColumn.checkSchemaChangeAllowed(newColumn);
+            Assert.fail("No exception throws.");
+        } catch (DdlException ex) {
+        }
+
+        try {
+            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                    new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                    new ColumnDef.DefaultValueDef(true, new StringLiteral("1")), "");
+            oldColumn.checkSchemaChangeAllowed(newColumn);
+            Assert.fail("No exception throws.");
+        } catch (DdlException ex) {
+        }
+
+        try {
+            Column oldColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+                    CURRENT_TIMESTAMP_VALUE, "");
+            Column newColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+                    new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+            oldColumn.checkSchemaChangeAllowed(newColumn);
+            Assert.fail("No exception throws.");
+        } catch (DdlException ex) {
+        }
+
+    }
+
+
     @Test(expected = DdlException.class)
-    public void testSchemaChangeAllowed() throws DdlException {
+    public void testSchemaChangeAllowedNullToNonNull() throws DdlException {
         Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,

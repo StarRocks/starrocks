@@ -1697,5 +1697,157 @@ TEST_F(VecBitmapFunctionsTest, bitmapValueXorOperator) {
     }
 }
 
+TEST_F(VecBitmapFunctionsTest, bitmapMaxTest) {
+    BitmapValue b1;
+    BitmapValue b2;
+    BitmapValue b3;
+    BitmapValue b4;
+
+    b1.add(0);
+    b1.add(0);
+    b1.add(0);
+    b1.add(0);
+
+    b3.add(1);
+    b3.add(2);
+    b3.add(3);
+    b3.add(4);
+
+    b4.add(4123102120);
+    b4.add(23074);
+    b4.add(4123123);
+    b4.add(23074);
+
+    {
+        Columns columns;
+
+        auto s = BitmapColumn::create();
+
+        s->append(&b1);
+        s->append(&b2);
+        s->append(&b3);
+        s->append(&b4);
+
+        columns.push_back(s);
+
+        auto column = BitmapFunctions::bitmap_max(ctx, columns);
+
+        ASSERT_TRUE(column->is_numeric());
+
+        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(column);
+
+        ASSERT_EQ(0, p->get_data()[0]);
+        ASSERT_EQ(0, p->get_data()[1]);
+        ASSERT_EQ(4, p->get_data()[2]);
+        ASSERT_EQ(4123102120, p->get_data()[3]);
+    }
+
+    {
+        Columns columns;
+        auto s = BitmapColumn::create();
+
+        s->append(&b1);
+        s->append(&b2);
+        s->append(&b3);
+        s->append(&b4);
+
+        auto n = NullColumn::create();
+
+        n->append(0);
+        n->append(1);
+        n->append(1);
+        n->append(0);
+
+        columns.push_back(NullableColumn::create(s, n));
+
+        auto v = BitmapFunctions::bitmap_max(ctx, columns);
+
+        ASSERT_TRUE(v->is_nullable());
+
+        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
+
+        ASSERT_EQ(0, p->get_data()[0]);
+        ASSERT_TRUE(v->is_null(1));
+        ASSERT_TRUE(v->is_null(2));
+        ASSERT_EQ(4123102120, p->get_data()[3]);
+    }
+}
+
+TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
+    BitmapValue b1;
+    BitmapValue b2;
+    BitmapValue b3;
+    BitmapValue b4;
+
+    b1.add(0);
+    b1.add(0);
+    b1.add(0);
+    b1.add(0);
+
+    b3.add(1);
+    b3.add(2);
+    b3.add(3);
+    b3.add(4);
+
+    b4.add(4123102120);
+    b4.add(23074);
+    b4.add(4123123);
+    b4.add(23074);
+
+    {
+        Columns columns;
+
+        auto s = BitmapColumn::create();
+
+        s->append(&b1);
+        s->append(&b2);
+        s->append(&b3);
+        s->append(&b4);
+
+        columns.push_back(s);
+
+        auto column = BitmapFunctions::bitmap_min(ctx, columns);
+
+        ASSERT_TRUE(column->is_numeric());
+
+        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(column);
+
+        ASSERT_EQ(0, p->get_data()[0]);
+        ASSERT_EQ(-1, p->get_data()[1]);
+        ASSERT_EQ(1, p->get_data()[2]);
+        ASSERT_EQ(23074, p->get_data()[3]);
+    }
+
+    {
+        Columns columns;
+        auto s = BitmapColumn::create();
+
+        s->append(&b1);
+        s->append(&b2);
+        s->append(&b3);
+        s->append(&b4);
+
+        auto n = NullColumn::create();
+
+        n->append(0);
+        n->append(1);
+        n->append(1);
+        n->append(0);
+
+        columns.push_back(NullableColumn::create(s, n));
+
+        auto v = BitmapFunctions::bitmap_min(ctx, columns);
+
+        ASSERT_TRUE(v->is_nullable());
+
+        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
+
+        ASSERT_EQ(0, p->get_data()[0]);
+        ASSERT_TRUE(v->is_null(1));
+        ASSERT_TRUE(v->is_null(2));
+        ASSERT_EQ(23074, p->get_data()[3]);
+    }
+}
+
 } // namespace vectorized
 } // namespace starrocks

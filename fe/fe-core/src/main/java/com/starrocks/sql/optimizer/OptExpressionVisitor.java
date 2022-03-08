@@ -113,6 +113,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitPhysicalHudiScan(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitPhysicalSchemaScan(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -126,6 +130,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalMetaScan(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalJDBCScan(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 

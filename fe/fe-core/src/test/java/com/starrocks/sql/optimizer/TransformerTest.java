@@ -8,7 +8,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.relation.Relation;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;

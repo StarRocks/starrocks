@@ -11,7 +11,6 @@
 #include "util/coding.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
-#include "util/types.h"
 
 namespace starrocks::vectorized {
 
@@ -40,6 +39,17 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
     for (size_t i = 0; i < size; ++i) {
         _data[orig_size + i] = src_data[index];
     }
+}
+
+template <typename T>
+Status FixedLengthColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
+    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    size_t replace_num = src.size();
+    for (uint32_t i = 0; i < replace_num; ++i) {
+        DCHECK_LT(indexes[i], _data.size());
+        _data[indexes[i]] = src_data[i];
+    }
+    return Status::OK();
 }
 
 template <typename T>
@@ -158,7 +168,7 @@ const uint8_t* FixedLengthColumnBase<T>::deserialize_and_append(const uint8_t* p
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+void FixedLengthColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     raw::make_room(&_data, chunk_size);
     for (size_t i = 0; i < chunk_size; ++i) {
         memcpy(&_data[i], srcs[i].data, sizeof(T));
@@ -189,6 +199,37 @@ void FixedLengthColumnBase<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_
             hash[i] = HashUtil::zlib_crc_hash(&_data[i], sizeof(ValueType), hash[i]);
         }
     }
+}
+
+template <typename T>
+int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
+    int64_t xor_checksum = 0;
+    if constexpr (IsDate<T>) {
+        for (size_t i = from; i < to; ++i) {
+            xor_checksum ^= _data[i].to_date_literal();
+        }
+    } else if constexpr (IsTimestamp<T>) {
+        for (size_t i = from; i < to; ++i) {
+            xor_checksum ^= _data[i].to_timestamp_literal();
+        }
+    } else if constexpr (IsDecimal<T>) {
+        for (size_t i = from; i < to; ++i) {
+            xor_checksum ^= _data[i].int_value();
+            xor_checksum ^= _data[i].frac_value();
+        }
+    } else if constexpr (is_signed_integer<T>) {
+        const T* src = reinterpret_cast<const T*>(_data.data());
+        for (size_t i = from; i < to; ++i) {
+            if constexpr (std::is_same_v<T, int128_t>) {
+                xor_checksum ^= (src[i] >> 64);
+                xor_checksum ^= (src[i] & ULLONG_MAX);
+            } else {
+                xor_checksum ^= src[i];
+            }
+        }
+    }
+
+    return xor_checksum;
 }
 
 template <typename T>

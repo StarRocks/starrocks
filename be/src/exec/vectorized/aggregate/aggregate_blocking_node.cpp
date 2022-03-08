@@ -4,6 +4,8 @@
 
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
+#include "exec/pipeline/exchange/exchange_source_operator.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
@@ -157,6 +159,9 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     _aggregator->process_limit(chunk);
 
     DCHECK_CHUNK(*chunk);
+
+    RETURN_IF_ERROR(_aggregator->check_has_error());
+
     return Status::OK();
 }
 
@@ -168,10 +173,28 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     if (agg_node.need_finalize) {
         // If finalize aggregate with group by clause, then it can be paralized
         if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
-            std::vector<ExprContext*> group_by_expr_ctxs;
-            Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-            operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(
-                    runtime_state(), operators_with_sink, group_by_expr_ctxs);
+            // There are two ways of shuffle
+            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHFFULE_HASH_PARTITIONED
+            // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
+            // there is no need to perform local shuffle again at receiver side
+            // 2. Otherwise, add LocalExchangeOperator
+            // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into AggregateBlockingSinkOperator.
+            bool need_local_shuffle = true;
+            if (auto* exchange_op = dynamic_cast<ExchangeSourceOperatorFactory*>(operators_with_sink[0].get());
+                exchange_op != nullptr) {
+                auto& texchange_node = exchange_op->texchange_node();
+                DCHECK(texchange_node.__isset.partition_type);
+                if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
+                    texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    need_local_shuffle = false;
+                }
+            }
+            if (need_local_shuffle) {
+                std::vector<ExprContext*> group_by_expr_ctxs;
+                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+                operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(
+                        runtime_state(), operators_with_sink, group_by_expr_ctxs);
+            }
         } else {
             operators_with_sink =
                     context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_with_sink);
@@ -203,6 +226,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
+    if (limit() != -1) {
+        operators_with_source.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
     return operators_with_source;
 }
 

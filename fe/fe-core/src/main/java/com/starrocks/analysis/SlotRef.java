@@ -29,7 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
-import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -65,6 +65,13 @@ public class SlotRef extends Expr {
         this.tblName = tblName;
         this.col = col;
         this.label = "`" + col + "`";
+    }
+
+    public SlotRef(TableName tblName, String col, String label) {
+        super();
+        this.tblName = tblName;
+        this.col = col;
+        this.label = label;
     }
 
     // C'tor for a "pre-analyzed" ref to slot that doesn't correspond to
@@ -175,7 +182,7 @@ public class SlotRef extends Expr {
     public String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
         if (tblName != null) {
-            return tblName.toSql() + "." + label + sb.toString();
+            return tblName.toSql() + "." + "`" + col + "`";
         } else if (label != null) {
             return label + sb.toString();
         } else if (desc.getSourceExprs() != null) {
@@ -227,8 +234,7 @@ public class SlotRef extends Expr {
 
     @Override
     public String toColumnLabel() {
-        // return tblName == null ? col : tblName.getTbl() + "." + col;
-        return col;
+        return label;
     }
 
     @Override
@@ -327,6 +333,10 @@ public class SlotRef extends Expr {
         this.col = col;
     }
 
+    public String getLabel() {
+        return label;
+    }
+
     @Override
     public boolean supportSerializable() {
         return true;
@@ -362,7 +372,7 @@ public class SlotRef extends Expr {
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitSlot(this, context);
     }
 

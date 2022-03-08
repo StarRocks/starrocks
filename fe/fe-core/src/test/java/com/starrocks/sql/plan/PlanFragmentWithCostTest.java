@@ -286,7 +286,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "select count(distinct v2) from t0 group by v3";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n"
                 + "  |  output: multi_distinct_count(2: v2)\n"
                 + "  |  group by: 3: v3"));
@@ -354,8 +353,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 + "    HASH_PARTITIONED: 2: v2\n"
                 + "\n"
                 + "  0:OlapScanNode"));
-        Catalog.getCurrentSystemInfo().dropBackend(10002);
-        Catalog.getCurrentSystemInfo().dropBackend(10003);
+        UtFrameUtils.dropMockBackend(10002);
+        UtFrameUtils.dropMockBackend(10003);
     }
 
     @Test
@@ -484,7 +483,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("rollup: bitmap_mv"));
     }
 
-    @Test
+    // todo(ywb) disable replicate join temporarily
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
@@ -567,7 +566,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         sql = "select SUM(v3) from t0 group by grouping sets(())";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  3:EXCHANGE\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
@@ -595,7 +593,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
         sql = "select count(distinct O_ORDERKEY) from orders group by O_CUSTKEY, O_ORDERDATE";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge serialize)"));
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
     }
 
     @Test
@@ -662,7 +660,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  0:INTERSECT\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
@@ -733,7 +730,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t0, 400000);
         setTableStatistics(t1, 400000);
 
-        String sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 union select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        String sql =
+                "select * from (select v1+1 as v1 ,v2,v3 from t0 union select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         String plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -741,7 +739,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t2, 200000);
         setTableStatistics(t0, 800000);
         setTableStatistics(t1, 400000);
-        sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 except select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        sql =
+                "select * from (select v1+1 as v1 ,v2,v3 from t0 except select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -750,7 +749,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t0, 400000);
         setTableStatistics(t1, 400000);
 
-        sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 intersect select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        sql =
+                "select * from (select v1+1 as v1 ,v2,v3 from t0 intersect select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -903,7 +903,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Catalog catalog = connectContext.getCatalog();
         connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
-
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
 
         OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
         OlapTable t2 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t2");
@@ -922,19 +922,20 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     preAggregation: on\n" +
                 "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                 "     tabletList=10015,10017,10019\n" +
-                "     actualRows=0, avgRowSize=3.0\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
                 "     cardinality: 400000"));
 
-        Assert.assertTrue(plan.contains("  6:EXCHANGE\n" +
+        Assert.assertTrue(plan.contains("5:EXCHANGE\n" +
                 "     cardinality: 400000\n" +
                 "     probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (1: v4)"));
 
-        Assert.assertTrue(plan.contains("  11:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("  10:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [10: v4, BIGINT, true] = [7: v7, BIGINT, true]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (7: v7), remote = false\n" +
+                "  |  output columns: 10\n" +
                 "  |  cardinality: 400000"));
 
         connectContext.getSessionVariable().setCboCteReuse(false);

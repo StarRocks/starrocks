@@ -12,7 +12,7 @@
 
 namespace starrocks {
 
-// See Status::_state for details.
+// See 'Status::_state' for details.
 static const char g_moved_from_state[5] = {'\x00', '\x00', '\x00', '\x00', TStatusCode::INTERNAL_ERROR};
 
 inline const char* assemble_state(TStatusCode::type code, Slice msg, Slice ctx) {

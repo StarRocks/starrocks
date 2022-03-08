@@ -6,11 +6,14 @@
 #include "common/status.h"
 #include "exec/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
+#include "util/bit_stream_utils.h"
 #include "util/coding.h"
 #include "util/faststring.h"
 #include "util/slice.h"
 
 namespace starrocks::parquet {
+
+static constexpr int kBooleanBitPackedBitWidth = 1;
 
 template <typename T>
 class PlainEncoder final : public Encoder {
@@ -51,6 +54,30 @@ public:
 
 private:
     faststring _buffer;
+};
+
+template <>
+class PlainEncoder<bool> final : public Encoder {
+public:
+    PlainEncoder() : _bit_writer(&_buffer) {}
+    ~PlainEncoder() override = default;
+
+    Status append(const uint8_t* vals, size_t count) override {
+        // TODO(@DorianZheng) Plain boolean encoder is using by UT currently, optimize it in the future.
+        for (int i = 0; i < count; i++) {
+            _bit_writer.PutValue(vals[i], kBooleanBitPackedBitWidth);
+        }
+        return Status::OK();
+    }
+
+    Slice build() override {
+        _bit_writer.Flush();
+        return {_buffer.data(), _buffer.size()};
+    }
+
+private:
+    faststring _buffer;
+    BitWriter _bit_writer;
 };
 
 template <typename T>
@@ -162,6 +189,98 @@ public:
 private:
     Slice _data;
     size_t _offset = 0;
+};
+
+// plain encoding for boolean type is stored as `Bit Packed`, `LSB` first format
+// more details refer to: https://github.com/apache/parquet-format/blob/master/Encodings.md#PLAIN
+template <>
+class PlainDecoder<bool> final : public Decoder {
+public:
+    PlainDecoder() = default;
+    ~PlainDecoder() override = default;
+
+    Status set_data(const Slice& data) override {
+        _batched_bit_reader.reset(reinterpret_cast<const uint8_t*>(data.data), data.size);
+        return Status::OK();
+    }
+
+    Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
+        auto original_size = dst->size();
+        dst->resize(original_size + count);
+        auto num_unpacked_values = unpack_batch(count, dst->mutable_raw_data() + original_size);
+        if (num_unpacked_values < count) {
+            return Status::InternalError(strings::Substitute(
+                    "going to read out-of-bounds data, count=$0,num_unpacked_values=$1", count, num_unpacked_values));
+        }
+        return Status::OK();
+    }
+
+    Status next_batch(size_t count, uint8_t* dst) override {
+        auto num_unpacked_values = unpack_batch(count, dst);
+        if (num_unpacked_values < count) {
+            return Status::InternalError(strings::Substitute(
+                    "going to read out-of-bounds data, count=$0,num_unpacked_values=$1", count, num_unpacked_values));
+        }
+        return Status::OK();
+    }
+
+private:
+    static const int kBitPackedBatchSize = 32;
+    static const int kBitPackedDefaultValue = 8;
+
+    BatchedBitReader _batched_bit_reader;
+
+    std::unique_ptr<uint8_t[]> _decoded_values_buffer;
+    std::size_t _decoded_buffer_size;
+    std::size_t _decoded_values_size;
+    std::size_t _decoded_values_offset;
+
+    std::size_t read_decoded_values(std::size_t num_values, uint8_t* v) {
+        if (_decoded_values_buffer != nullptr && _decoded_values_offset < _decoded_values_size) {
+            auto read_count = std::min(num_values, _decoded_values_size - _decoded_values_offset);
+            memcpy(v, &_decoded_values_buffer[_decoded_values_offset], read_count * sizeof(uint8_t));
+            _decoded_values_offset += read_count;
+            return read_count;
+        } else {
+            return 0;
+        }
+    }
+
+    void unpack_round_up_num_values(int bit_width, std::size_t num_values) {
+        auto round_up_num_values = BitUtil::round_up_numi32(num_values) << 5;
+        if (_decoded_values_buffer == nullptr || _decoded_buffer_size < round_up_num_values) {
+            _decoded_values_buffer = std::make_unique<uint8_t[]>(round_up_num_values);
+            _decoded_buffer_size = round_up_num_values;
+        }
+        _decoded_values_size = _batched_bit_reader.unpack_batch(bit_width, static_cast<int>(round_up_num_values),
+                                                                _decoded_values_buffer.get());
+        _decoded_values_offset = 0;
+    }
+
+    // BatchedBitReader::unpack_batch may drop trailing bits, for safety, we should decode 32*n value a batch
+    // and buffer it.
+    std::size_t unpack_batch(std::size_t num_values, uint8_t* v) {
+        // if _decoded_values_buffer has remaining unread values, read it first
+        auto read_count = read_decoded_values(num_values, v);
+        if (read_count == num_values) {
+            return num_values;
+        }
+        num_values -= read_count;
+
+        // If 'num_values' is a multiple of 32 or 'bit_width' * 'num_values' must be a multiple of 8.
+        // We will not drop any trailing bits.
+        if (num_values % kBitPackedBatchSize == 0 ||
+            (num_values * kBooleanBitPackedBitWidth) % kBitPackedDefaultValue == 0) {
+            read_count += _batched_bit_reader.unpack_batch(kBooleanBitPackedBitWidth, static_cast<int>(num_values),
+                                                           v + read_count);
+        } else {
+            // Else, read round up number to 32 of values and buffer it
+            unpack_round_up_num_values(kBooleanBitPackedBitWidth, num_values);
+            read_count += read_decoded_values(num_values, v + read_count);
+        }
+
+        return read_count;
+    }
 };
 
 // Fixed length byte array encoder and decoder

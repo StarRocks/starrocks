@@ -14,8 +14,8 @@ Status ProjectOperator::prepare(RuntimeState* state) {
     return Operator::prepare(state);
 }
 
-Status ProjectOperator::close(RuntimeState* state) {
-    return Operator::close(state);
+void ProjectOperator::close(RuntimeState* state) {
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) {
@@ -65,8 +65,8 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
 
 Status ProjectOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, _row_desc));
-    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, _row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state));
 
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));

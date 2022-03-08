@@ -2,9 +2,12 @@
 
 #include "exprs/vectorized/time_functions.h"
 
+#include <string_view>
+
 #include "column/column_helper.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
+#include "runtime/date_value.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
 
@@ -98,8 +101,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
 Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context,
                                          starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || context->get_num_args() != 3 ||
-        context->get_arg_type(1)->type != starrocks_udf::FunctionContext::Type::TYPE_VARCHAR ||
-        context->get_arg_type(2)->type != starrocks_udf::FunctionContext::Type::TYPE_VARCHAR ||
+        context->get_arg_type(1)->type != TYPE_VARCHAR || context->get_arg_type(2)->type != TYPE_VARCHAR ||
         !context->is_constant_column(1) || !context->is_constant_column(2)) {
         return Status::OK();
     }
@@ -115,7 +117,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
     }
 
     auto from_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(from);
-    if (!TimezoneUtils::find_cctz_time_zone(std::string(from_value.data, from_value.size), ctc->from_tz)) {
+    if (!TimezoneUtils::find_cctz_time_zone(std::string_view(from_value), ctc->from_tz)) {
         ctc->is_valid = false;
         return Status::OK();
     }
@@ -128,7 +130,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
     }
 
     auto to_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(to);
-    if (!TimezoneUtils::find_cctz_time_zone(std::string(to_value.data, to_value.size), ctc->to_tz)) {
+    if (!TimezoneUtils::find_cctz_time_zone(std::string_view(to_value), ctc->to_tz)) {
         ctc->is_valid = false;
         return Status::OK();
     }
@@ -157,6 +159,8 @@ ColumnPtr TimeFunctions::convert_tz_general(FunctionContext* context, const Colu
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
+    TimezoneHsScan timezone_hsscan;
+    timezone_hsscan.compile();
     for (int row = 0; row < size; ++row) {
         if (time_viewer.is_null(row) || from_str.is_null(row) || to_str.is_null(row)) {
             result.append_null();
@@ -171,15 +175,25 @@ ColumnPtr TimeFunctions::convert_tz_general(FunctionContext* context, const Colu
         datetime_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
         DateTimeValue ts_value(TIME_DATETIME, year, month, day, hour, minute, second, usec);
 
+        cctz::time_zone ctz;
         int64_t timestamp;
-        // TODO find a better approach to replace datetime_value.unix_timestamp
-        if (!ts_value.unix_timestamp(&timestamp, std::string(from_format.data, from_format.size))) {
+        int64_t offset;
+        if (TimezoneUtils::timezone_offsets(from_format, to_format, &offset)) {
+            TimestampValue ts = TimestampValue::create(year, month, day, hour, minute, second);
+            ts.from_unix_second(ts.to_unix_second() + offset);
+            result.append(ts);
+            continue;
+        }
+
+        if (!ts_value.from_cctz_timezone(timezone_hsscan, from_format, ctz) ||
+            !ts_value.unix_timestamp(&timestamp, ctz)) {
             result.append_null();
             continue;
         }
+
         DateTimeValue ts_value2;
-        // TODO find a better approach to replace datetime_value.from_unixtime
-        if (!ts_value2.from_unixtime(timestamp, std::string(to_format.data, to_format.size))) {
+        if (!ts_value2.from_cctz_timezone(timezone_hsscan, to_format, ctz) ||
+            !ts_value2.from_unixtime(timestamp, ctz)) {
             result.append_null();
             continue;
         }
@@ -886,7 +900,7 @@ ColumnPtr TimeFunctions::from_unix_with_format_const(std::string& format_content
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
-        if (data_column.is_null(row)) {
+        if (data_column.is_null(row) || format_content.empty()) {
             result.append_null();
             continue;
         }
@@ -1379,6 +1393,10 @@ bool standard_format_one_row(const TimestampValue& timestamp_value, char* buf, c
 
 template <PrimitiveType Type>
 ColumnPtr standard_format(const std::string& fmt, int len, const starrocks::vectorized::Columns& columns) {
+    if (fmt.size() <= 0) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
+    }
+
     auto ts_viewer = ColumnViewer<Type>(columns[0]);
 
     size_t size = columns[0]->size();
@@ -1419,7 +1437,7 @@ ColumnPtr do_format(const TimeFunctions::FormatCtx* ctx, const Columns& cols) {
 template <PrimitiveType Type>
 void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VARCHAR>* viewer_format,
                            ColumnBuilder<TYPE_VARCHAR>* builder, int i) {
-    if (viewer_format->is_null(i)) {
+    if (viewer_format->is_null(i) || viewer_format->value(i).empty()) {
         builder->append_null();
         return;
     }

@@ -87,6 +87,7 @@ import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.WorkGroupOpEntry;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.statistic.AnalyzeJob;
@@ -493,6 +494,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_WORKGROUP: {
+                data = WorkGroupOpEntry.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_CREATE_SMALL_FILE:
             case OperationType.OP_DROP_SMALL_FILE: {
                 data = SmallFile.read(in);
@@ -521,6 +527,7 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DYNAMIC_PARTITION:
             case OperationType.OP_MODIFY_IN_MEMORY:
+            case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
             case OperationType.OP_MODIFY_REPLICATION_NUM: {
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;

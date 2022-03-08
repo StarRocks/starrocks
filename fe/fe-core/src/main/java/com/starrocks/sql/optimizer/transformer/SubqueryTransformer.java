@@ -14,12 +14,12 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.ExprVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
-import com.starrocks.sql.analyzer.relation.Relation;
-import com.starrocks.sql.analyzer.relation.SelectRelation;
-import com.starrocks.sql.analyzer.relation.ValuesRelation;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -44,7 +44,7 @@ public class SubqueryTransformer {
     }
 
     public OptExprBuilder handleSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt, Expr expression,
-                                           Map<String, ExpressionMapping> cteContext) {
+                                           Map<Integer, ExpressionMapping> cteContext) {
         FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory, session);
         subOpt = expression.accept(handler, new SubqueryContext(subOpt, true, cteContext));
 
@@ -53,7 +53,7 @@ public class SubqueryTransformer {
 
     // Only support scalar-subquery in `SELECT` clause
     public OptExprBuilder handleScalarSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt,
-                                                 Expr expression, Map<String, ExpressionMapping> cteContext) {
+                                                 Expr expression, Map<Integer, ExpressionMapping> cteContext) {
         FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory, session);
         subOpt = expression.accept(handler, new SubqueryContext(subOpt, false, cteContext));
 
@@ -92,16 +92,16 @@ public class SubqueryTransformer {
     private static class SubqueryContext {
         public OptExprBuilder builder;
         public boolean useSemiAnti;
-        public Map<String, ExpressionMapping> cteContext;
+        public Map<Integer, ExpressionMapping> cteContext;
 
-        public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti, Map<String, ExpressionMapping> cteContext) {
+        public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti, Map<Integer, ExpressionMapping> cteContext) {
             this.builder = builder;
             this.useSemiAnti = useSemiAnti;
             this.cteContext = cteContext;
         }
     }
 
-    private static class FilterWithSubqueryHandler extends ExprVisitor<OptExprBuilder, SubqueryContext> {
+    private static class FilterWithSubqueryHandler extends AstVisitor<OptExprBuilder, SubqueryContext> {
         private final ColumnRefFactory columnRefFactory;
         private final ConnectContext session;
 
@@ -111,7 +111,7 @@ public class SubqueryTransformer {
         }
 
         private LogicalPlan getLogicalPlan(Relation relation, ConnectContext session, ExpressionMapping outer,
-                                           Map<String, ExpressionMapping> cteContext) {
+                                           Map<Integer, ExpressionMapping> cteContext) {
             if (!(relation instanceof SelectRelation) && !(relation instanceof ValuesRelation)) {
                 throw new SemanticException("Unsupported subquery relation");
             }

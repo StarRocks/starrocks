@@ -2,12 +2,14 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <random>
 
 #include "column/array_column.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
+#include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks {
@@ -192,16 +194,16 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstUtf8Test) {
     std::string s;
     s.append("\x7f");
     s.append("\xdf\xbf");
-    s.append("\xef\xbf\xbf");
-    s.append("\xf7\xbf\xbf\xbf");
+    s.append("\xe0\xbf\xbf");
+    s.append("\xf3\xbf\xbf\xbf");
     s.append("\x7f");
     s.append("\xdf\xbf");
-    s.append("\xef\xbf\xbf");
-    s.append("\xf7\xbf\xbf\xbf");
+    s.append("\xe0\xbf\xbf");
+    s.append("\xf3\xbf\xbf\xbf");
     s.append("\x7f");
     s.append("\xdf\xbf");
-    s.append("\xef\xbf\xbf");
-    s.append("\xf7\xbf\xbf\xbf");
+    s.append("\xe0\xbf\xbf");
+    s.append("\xf3\xbf\xbf\xbf");
 
     str->append(s);
     str->append("");
@@ -209,27 +211,27 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstUtf8Test) {
     std::vector<std::tuple<int, int, std::string>> cases = {
             {1, 1, "\x7f"},
             {1, 2, "\x7f\xdf\xbf"},
-            {1, 3, "\x7f\xdf\xbf\xef\xbf\xbf"},
-            {1, 4, "\x7f\xdf\xbf\xef\xbf\xbf\xf7\xbf\xbf\xbf"},
+            {1, 3, "\x7f\xdf\xbf\xe0\xbf\xbf"},
+            {1, 4, "\x7f\xdf\xbf\xe0\xbf\xbf\xf3\xbf\xbf\xbf"},
             {1, 100, s},
             {2, 1, "\xdf\xbf"},
-            {2, 2, "\xdf\xbf\xef\xbf\xbf"},
-            {2, 3, "\xdf\xbf\xef\xbf\xbf\xf7\xbf\xbf\xbf"},
-            {2, 4, "\xdf\xbf\xef\xbf\xbf\xf7\xbf\xbf\xbf\x7f"},
+            {2, 2, "\xdf\xbf\xe0\xbf\xbf"},
+            {2, 3, "\xdf\xbf\xe0\xbf\xbf\xf3\xbf\xbf\xbf"},
+            {2, 4, "\xdf\xbf\xe0\xbf\xbf\xf3\xbf\xbf\xbf\x7f"},
             {2, 100, s.substr(1)},
-            {3, 1, "\xef\xbf\xbf"},
-            {3, 2, "\xef\xbf\xbf\xf7\xbf\xbf\xbf"},
-            {3, 3, "\xef\xbf\xbf\xf7\xbf\xbf\xbf\x7f"},
-            {3, 4, "\xef\xbf\xbf\xf7\xbf\xbf\xbf\x7f\xdf\xbf"},
+            {3, 1, "\xe0\xbf\xbf"},
+            {3, 2, "\xe0\xbf\xbf\xf3\xbf\xbf\xbf"},
+            {3, 3, "\xe0\xbf\xbf\xf3\xbf\xbf\xbf\x7f"},
+            {3, 4, "\xe0\xbf\xbf\xf3\xbf\xbf\xbf\x7f\xdf\xbf"},
             {3, 100, s.substr(3)},
-            {4, 2, "\xf7\xbf\xbf\xbf\x7f"},
-            {4, 3, "\xf7\xbf\xbf\xbf\x7f\xdf\xbf"},
-            {4, 4, "\xf7\xbf\xbf\xbf\x7f\xdf\xbf\xef\xbf\xbf"},
+            {4, 2, "\xf3\xbf\xbf\xbf\x7f"},
+            {4, 3, "\xf3\xbf\xbf\xbf\x7f\xdf\xbf"},
+            {4, 4, "\xf3\xbf\xbf\xbf\x7f\xdf\xbf\xe0\xbf\xbf"},
             {4, 100, s.substr(6)},
             {5, 1, "\x7f"},
             {5, 2, "\x7f\xdf\xbf"},
-            {5, 3, "\x7f\xdf\xbf\xef\xbf\xbf"},
-            {5, 4, "\x7f\xdf\xbf\xef\xbf\xbf\xf7\xbf\xbf\xbf"},
+            {5, 3, "\x7f\xdf\xbf\xe0\xbf\xbf"},
+            {5, 4, "\x7f\xdf\xbf\xe0\xbf\xbf\xf3\xbf\xbf\xbf"},
             {5, 100, s.substr(10)},
             {-12, 2, s.substr(0, 3)},
             {-11, 3, s.substr(1, 9)},
@@ -1766,6 +1768,24 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceConstPattern) {
     ASSERT_TRUE(
             StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
+
+    // Test Binary input data
+    {
+        FunctionContext::FunctionStateScope scope =
+                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL;
+        std::unique_ptr<FunctionContext> ctx0(FunctionContext::create_test_context());
+        int binary_size = 10;
+        std::unique_ptr<char[]> binary_datas = std::make_unique<char[]>(binary_size);
+        memset(binary_datas.get(), 0xff, binary_size);
+
+        auto par0 = BinaryColumn::create();
+        auto par1 = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(binary_datas.get(), binary_size), 1);
+
+        ctx0->impl()->set_constant_columns({par0, par1});
+
+        ASSERT_ERROR(StringFunctions::regexp_prepare(ctx0.get(), scope));
+        ASSERT_OK(StringFunctions::regexp_close(ctx0.get(), scope));
+    }
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, regexpReplace) {

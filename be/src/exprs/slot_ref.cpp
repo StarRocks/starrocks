@@ -25,7 +25,6 @@
 
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/runtime_state.h"
-#include "util/types.h"
 
 namespace starrocks {
 
@@ -51,70 +50,11 @@ SlotRef::SlotRef(const SlotDescriptor* desc, const TypeDescriptor& type)
 SlotRef::SlotRef(const TypeDescriptor& type, int offset, SlotId slot)
         : Expr(type, true), _slot_offset(offset), _null_indicator_offset(0, -1), _slot_id(slot) {}
 
-Status SlotRef::prepare(const SlotDescriptor* slot_desc, const RowDescriptor& row_desc) {
-    if (!slot_desc->is_materialized()) {
-        std::stringstream error;
-        error << "reference to non-materialized slot. slot_id: " << _slot_id;
-        return Status::InternalError(error.str());
-    }
-    _tuple_idx = row_desc.get_tuple_idx(slot_desc->parent());
-    if (_tuple_idx == RowDescriptor::INVALID_IDX) {
-        return Status::InternalError("can't support");
-    }
-    _slot_offset = slot_desc->tuple_offset();
-    _null_indicator_offset = slot_desc->null_indicator_offset();
-    _is_nullable = slot_desc->is_nullable();
+Status SlotRef::prepare(const SlotDescriptor* slot_desc) {
     return Status::OK();
 }
 
-Status SlotRef::prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* ctx) {
-    DCHECK_EQ(_children.size(), 0);
-    if (_slot_id == -1) {
-        return Status::OK();
-    }
-
-    const SlotDescriptor* slot_desc = nullptr;
-    auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
-
-    if (tuple_desc == nullptr) {
-        std::stringstream error;
-        error << "couldn't resolve tuple descriptor " << _tuple_id;
-        return Status::InternalError(error.str());
-    }
-
-    for (const auto& slot : tuple_desc->slots()) {
-        if (slot->id() == _slot_id) {
-            slot_desc = slot;
-            break;
-        }
-    }
-
-    if (slot_desc == nullptr) {
-        slot_desc = state->desc_tbl().get_slot_descriptor(_slot_id);
-    }
-
-    if (slot_desc == nullptr) {
-        // TODO: create macro MAKE_ERROR() that returns a stream
-        std::stringstream error;
-        error << "couldn't resolve slot descriptor " << _slot_id;
-        return Status::InternalError(error.str());
-    }
-
-    if (!slot_desc->is_materialized()) {
-        std::stringstream error;
-        error << "reference to non-materialized slot. slot_id: " << _slot_id;
-        return Status::InternalError(error.str());
-    }
-
-    // TODO(marcel): get from runtime state
-    _tuple_idx = row_desc.get_tuple_idx(slot_desc->parent());
-    if (_tuple_idx == RowDescriptor::INVALID_IDX) {
-        return Status::InternalError("can't support");
-    }
-    DCHECK(_tuple_idx != RowDescriptor::INVALID_IDX);
-    _slot_offset = slot_desc->tuple_offset();
-    _null_indicator_offset = slot_desc->null_indicator_offset();
-    _is_nullable = slot_desc->is_nullable();
+Status SlotRef::prepare(RuntimeState* state, ExprContext* ctx) {
     return Status::OK();
 }
 

@@ -210,6 +210,8 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("grant", new Integer(SqlParserSymbols.KW_GRANT));
         keywordMap.put("grants", new Integer(SqlParserSymbols.KW_GRANTS));
         keywordMap.put("group", new Integer(SqlParserSymbols.KW_GROUP));
+        keywordMap.put("resource_group", new Integer(SqlParserSymbols.KW_RESOURCE_GROUP));
+        keywordMap.put("resource_groups", new Integer(SqlParserSymbols.KW_RESOURCE_GROUPS));
         keywordMap.put("grouping", new Integer(SqlParserSymbols.KW_GROUPING));
         keywordMap.put("hash", new Integer(SqlParserSymbols.KW_HASH));
         keywordMap.put("having", new Integer(SqlParserSymbols.KW_HAVING));
@@ -239,6 +241,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("isolation", new Integer(SqlParserSymbols.KW_ISOLATION));
         keywordMap.put("install", new Integer(SqlParserSymbols.KW_INSTALL));
         keywordMap.put("join", new Integer(SqlParserSymbols.KW_JOIN));
+        keywordMap.put("json", new Integer(SqlParserSymbols.KW_JSON));
         keywordMap.put("key", new Integer(SqlParserSymbols.KW_KEY));
         keywordMap.put("keys", new Integer(SqlParserSymbols.KW_KEYS));
         keywordMap.put("kill", new Integer(SqlParserSymbols.KW_KILL));
@@ -455,6 +458,7 @@ import com.starrocks.qe.SqlModeHelper;
     tokenIdMap.put(new Integer(SqlParserSymbols.error), "ERROR");
     tokenIdMap.put(new Integer(SqlParserSymbols.BITXOR), "^");
     tokenIdMap.put(new Integer(SqlParserSymbols.NUMERIC_OVERFLOW), "NUMERIC OVERFLOW");
+    tokenIdMap.put(new Integer(SqlParserSymbols.ARROW), "->");
   }
 
   public static boolean isKeyword(Integer tokenId) {
@@ -594,6 +598,7 @@ EndOfLineComment = "--" !({HintContent}|{ContainsLineTerminator}) {LineTerminato
 "\"" { return newToken(SqlParserSymbols.UNMATCHED_STRING_LITERAL, null); }
 "'" { return newToken(SqlParserSymbols.UNMATCHED_STRING_LITERAL, null); }
 "`" { return newToken(SqlParserSymbols.UNMATCHED_STRING_LITERAL, null); }
+"->" { return newToken(SqlParserSymbols.ARROW, null); }
 
 {QuotedIdentifier} {
     // Remove the quotes

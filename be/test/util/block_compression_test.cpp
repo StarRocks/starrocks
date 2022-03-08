@@ -72,6 +72,18 @@ void test_single_slice(starrocks::CompressionTypePB type) {
 
                 ASSERT_STREQ(orig.c_str(), uncompressed.c_str());
             }
+
+            if (type == starrocks::CompressionTypePB::LZ4) {
+                Slice uncompressed_slice(uncompressed);
+                const BlockCompressionCodec* lz4_hadoop_codec = nullptr;
+                st = get_block_compression_codec(starrocks::CompressionTypePB::LZ4_HADOOP, &lz4_hadoop_codec);
+                ASSERT_TRUE(st.ok());
+                st = lz4_hadoop_codec->decompress(compressed_slice, &uncompressed_slice);
+                ASSERT_TRUE(st.ok());
+
+                ASSERT_STREQ(orig.c_str(), uncompressed.c_str());
+            }
+
             // buffer not enough for decompress
             // snappy has no return value if given buffer is not enough
             // NOTE: For ZLIB, we even get OK with a insufficient output
@@ -84,7 +96,8 @@ void test_single_slice(starrocks::CompressionTypePB type) {
                 ASSERT_FALSE(st.ok());
             }
             // corrupt compressed data
-            if (type != starrocks::CompressionTypePB::SNAPPY) {
+            // we use inflate for gzip decompressor, it will return Z_OK for this case
+            if (type != starrocks::CompressionTypePB::SNAPPY && type != starrocks::CompressionTypePB::GZIP) {
                 Slice uncompressed_slice(uncompressed);
                 compressed_slice.size -= 1;
                 st = codec->decompress(compressed_slice, &uncompressed_slice);
@@ -107,6 +120,8 @@ TEST_F(BlockCompressionTest, single) {
     test_single_slice(starrocks::CompressionTypePB::ZLIB);
     test_single_slice(starrocks::CompressionTypePB::LZ4);
     test_single_slice(starrocks::CompressionTypePB::LZ4_FRAME);
+    test_single_slice(starrocks::CompressionTypePB::GZIP);
+    test_single_slice(starrocks::CompressionTypePB::LZ4_HADOOP);
 }
 
 void test_multi_slices(starrocks::CompressionTypePB type) {
@@ -146,6 +161,17 @@ void test_multi_slices(starrocks::CompressionTypePB type) {
 
             ASSERT_STREQ(orig.c_str(), uncompressed.c_str());
         }
+
+        if (type == starrocks::CompressionTypePB::LZ4) {
+            Slice uncompressed_slice(uncompressed);
+            const BlockCompressionCodec* lz4_hadoop_codec = nullptr;
+            st = get_block_compression_codec(starrocks::CompressionTypePB::LZ4_HADOOP, &lz4_hadoop_codec);
+            ASSERT_TRUE(st.ok());
+            st = lz4_hadoop_codec->decompress(compressed_slice, &uncompressed_slice);
+            ASSERT_TRUE(st.ok());
+
+            ASSERT_STREQ(orig.c_str(), uncompressed.c_str());
+        }
     }
 
     // buffer not enough failed
@@ -163,6 +189,7 @@ TEST_F(BlockCompressionTest, multi) {
     test_multi_slices(starrocks::CompressionTypePB::LZ4);
     test_multi_slices(starrocks::CompressionTypePB::LZ4_FRAME);
     test_multi_slices(starrocks::CompressionTypePB::ZSTD);
+    test_multi_slices(starrocks::CompressionTypePB::GZIP);
 }
 
 } // namespace starrocks

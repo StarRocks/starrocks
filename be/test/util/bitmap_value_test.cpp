@@ -333,4 +333,30 @@ TEST(BitmapValueTest, bitmap_single_convert) {
     bitmap |= bitmap_u;
     ASSERT_EQ(BitmapValue::SET, bitmap._type);
 }
+
+TEST(BitmapValueTest, bitmap_max) {
+    BitmapValue bitmap;
+    ASSERT_EQ(bitmap.max(), 0);
+    bitmap.add(0);
+    ASSERT_EQ(bitmap.max(), 0);
+    bitmap.add(1);
+    ASSERT_EQ(bitmap.max(), 1);
+    bitmap.add(std::numeric_limits<uint64_t>::max());
+    ASSERT_EQ(bitmap.max(), std::numeric_limits<uint64_t>::max());
+    bitmap.add(std::numeric_limits<uint64_t>::lowest());
+    ASSERT_EQ(bitmap.max(), std::numeric_limits<uint64_t>::max());
+}
+
+TEST(BitmapValueTest, bitmap_min) {
+    BitmapValue bitmap;
+    ASSERT_EQ(bitmap.min(), -1);
+    bitmap.add(std::numeric_limits<uint64_t>::max());
+    ASSERT_EQ(bitmap.min(), std::numeric_limits<uint64_t>::max());
+    bitmap.add(1);
+    ASSERT_EQ(bitmap.min(), 1);
+    bitmap.add(5);
+    ASSERT_EQ(bitmap.min(), 1);
+    bitmap.add(0);
+    ASSERT_EQ(bitmap.min(), 0);
+}
 } // namespace starrocks

@@ -27,10 +27,13 @@
 #include <variant>
 
 #include "column/column_helper.h"
+#include "column/json_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "fmt/compile.h"
 #include "fmt/core.h"
+#include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 #include "storage/null_predicate.h"
 #include "util/radix_sort.h"
 #include "util/slice.h"
@@ -40,7 +43,6 @@
 
 #include "exprs/expr.h"
 #include "runtime/mysql_table_writer.h"
-#include "util/types.h"
 
 namespace starrocks {
 
@@ -88,6 +90,17 @@ Status MysqlTableWriter::open(const MysqlConnInfo& conn_info, const std::string&
     return Status::OK();
 }
 
+struct ViewerBuilder {
+    template <PrimitiveType ptype>
+    void operator()(std::vector<MysqlTableWriter::VariantViewer>* _viewers, vectorized::ColumnPtr* column) {
+        if constexpr (ptype == PrimitiveType::TYPE_TIME) {
+            *column = vectorized::ColumnHelper::convert_time_column_from_double_to_str(*column);
+        } else {
+            _viewers->emplace_back(vectorized::ColumnViewer<ptype>(*column));
+        }
+    }
+};
+
 Status MysqlTableWriter::_build_viewers(vectorized::Columns& columns) {
     _viewers.clear();
     DCHECK_EQ(columns.size(), _output_expr_ctxs.size());
@@ -101,24 +114,7 @@ Status MysqlTableWriter::_build_viewers(vectorized::Columns& columns) {
             return Status::InternalError(fmt::format("unsupported type in mysql sink:{}", type.type));
         }
 
-        switch (type.type) {
-#define M(NAME)                                                                           \
-    case PrimitiveType::NAME: {                                                           \
-        _viewers.emplace_back(vectorized::ColumnViewer<PrimitiveType::NAME>(columns[i])); \
-        break;                                                                            \
-    }
-            APPLY_FOR_ALL_PRIMITIVE_TYPE(M)
-            APPLY_FOR_ALL_NULL_TYPE(M)
-#undef M
-        case PrimitiveType::TYPE_TIME: {
-            columns[i] = vectorized::ColumnHelper::convert_time_column_from_double_to_str(columns[i]);
-            _viewers.emplace_back(vectorized::ColumnViewer<TYPE_VARCHAR>(columns[i]));
-            break;
-        }
-
-        default:
-            return Status::InternalError(fmt::format("unsupported type in mysql sink:{}", type.type));
-        }
+        type_dispatch_basic(type.type, ViewerBuilder(), &_viewers, &columns[i]);
     }
 
     return Status::OK();
@@ -170,6 +166,8 @@ Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* s
                             _stmt_buffer.push_back('"');
                         } else if constexpr (type == TYPE_TINYINT || type == TYPE_BOOLEAN) {
                             fmt::format_to(_stmt_buffer, "{}", (int32_t)viewer.value(i));
+                        } else if constexpr (type == TYPE_JSON) {
+                            fmt::format_to(_stmt_buffer, "{}", *viewer.value(i));
                         } else {
                             fmt::format_to(_stmt_buffer, "{}", viewer.value(i));
                         }

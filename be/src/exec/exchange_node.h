@@ -69,6 +69,8 @@ private:
     // call to the underlying DataStreamRecvr.
     Status get_next_merging(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
+    const TExchangeNode& _texchange_node;
+
     int _num_senders; // needed for _stream_recvr construction
 
     // created in prepare() and owned by the RuntimeState

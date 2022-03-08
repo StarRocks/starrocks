@@ -3,6 +3,7 @@
 #include "exec/vectorized/except_node.h"
 
 #include "column/column_helper.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/set/except_build_sink_operator.h"
 #include "exec/pipeline/set/except_context.h"
@@ -44,7 +45,7 @@ Status ExceptNode::prepare(RuntimeState* state) {
     _get_result_timer = ADD_TIMER(runtime_profile(), "GetResultTime");
 
     for (size_t i = 0; i < _child_expr_lists.size(); ++i) {
-        RETURN_IF_ERROR(Expr::prepare(_child_expr_lists[i], state, child(i)->row_desc()));
+        RETURN_IF_ERROR(Expr::prepare(_child_expr_lists[i], state));
         DCHECK_EQ(_child_expr_lists[i].size(), _tuple_desc->slots().size());
     }
 
@@ -215,17 +216,18 @@ Status ExceptNode::close(RuntimeState* state) {
 }
 
 pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
     const auto num_operators_generated = _children.size() + 1;
     auto&& rc_rf_probe_collector =
             std::make_shared<RcRfProbeCollector>(num_operators_generated, std::move(this->runtime_filter_collector()));
-    pipeline::ExceptPartitionContextFactoryPtr except_partition_ctx_factory =
-            std::make_shared<pipeline::ExceptPartitionContextFactory>(_tuple_id);
+    ExceptPartitionContextFactoryPtr except_partition_ctx_factory =
+            std::make_shared<ExceptPartitionContextFactory>(_tuple_id);
 
     // Use the first child to build the hast table by ExceptBuildSinkOperator.
-    pipeline::OpFactories operators_with_except_build_sink = child(0)->decompose_to_pipeline(context);
+    OpFactories operators_with_except_build_sink = child(0)->decompose_to_pipeline(context);
     operators_with_except_build_sink = context->maybe_interpolate_local_shuffle_exchange(
             runtime_state(), operators_with_except_build_sink, _child_expr_lists[0]);
-    operators_with_except_build_sink.emplace_back(std::make_shared<pipeline::ExceptBuildSinkOperatorFactory>(
+    operators_with_except_build_sink.emplace_back(std::make_shared<ExceptBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[0]));
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators_with_except_build_sink.back().get(), context,
@@ -234,10 +236,10 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
 
     // Use the rest children to erase keys from the hast table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
-        pipeline::OpFactories operators_with_except_probe_sink = child(i)->decompose_to_pipeline(context);
+        OpFactories operators_with_except_probe_sink = child(i)->decompose_to_pipeline(context);
         operators_with_except_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
                 runtime_state(), operators_with_except_probe_sink, _child_expr_lists[i]);
-        operators_with_except_probe_sink.emplace_back(std::make_shared<pipeline::ExceptProbeSinkOperatorFactory>(
+        operators_with_except_probe_sink.emplace_back(std::make_shared<ExceptProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i], i - 1));
         // Initialize OperatorFactory's fields involving runtime filters.
         this->init_runtime_filter_for_operator(operators_with_except_probe_sink.back().get(), context,
@@ -246,13 +248,17 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     }
 
     // ExceptOutputSourceOperator is used to assemble the undeleted keys to output chunks.
-    pipeline::OpFactories operators_with_except_output_source;
-    auto except_output_source = std::make_shared<pipeline::ExceptOutputSourceOperatorFactory>(
+    OpFactories operators_with_except_output_source;
+    auto except_output_source = std::make_shared<ExceptOutputSourceOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _children.size() - 1);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(except_output_source.get(), context, rc_rf_probe_collector);
     except_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
     operators_with_except_output_source.emplace_back(std::move(except_output_source));
+    if (limit() != -1) {
+        operators_with_except_output_source.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
 
     return operators_with_except_output_source;
 }

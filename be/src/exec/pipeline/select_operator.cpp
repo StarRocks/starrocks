@@ -12,8 +12,8 @@ Status SelectOperator::prepare(RuntimeState* state) {
     return Operator::prepare(state);
 }
 
-Status SelectOperator::close(RuntimeState* state) {
-    return Operator::close(state);
+void SelectOperator::close(RuntimeState* state) {
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
@@ -23,7 +23,7 @@ StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
      *  case pre chunk is empty:
      *  if input chunk is big enough( > chunk_size/2)
      *      return it;
-     *  else 
+     *  else
      *      merge it into _pre_output_chunk.
      */
     if (!_pre_output_chunk) {
@@ -42,7 +42,7 @@ StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
              *  case pre chunk is not-empty:
              *  if _pre_output_chunk is big enough(+input_chunk > chunk_size)
              *      return it and merge input chunk into _pre_output_chunk;
-             *  else 
+             *  else
              *      merge input chunk into _pre_output_chunk.
              */
             auto cur_size = _curr_chunk->num_rows();
@@ -79,7 +79,7 @@ Status SelectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPt
 
 Status SelectOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, _row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }

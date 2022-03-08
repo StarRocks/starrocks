@@ -38,6 +38,7 @@ import com.starrocks.catalog.ColumnStats;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THashJoinNode;
@@ -78,6 +79,8 @@ public class HashJoinNode extends PlanNode {
 
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     private final List<Integer> filter_null_value_columns = Lists.newArrayList();
+    private List<Expr> partitionExprs;
+    private List<Integer> outputSlots;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -153,6 +156,7 @@ public class HashJoinNode extends PlanNode {
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator,
                                     PlanNode inner, List<BinaryPredicate> eqJoinConjuncts,
                                     JoinOperator joinOp) {
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin()) {
             return;
         }
@@ -162,7 +166,7 @@ public class HashJoinNode extends PlanNode {
             // then it's hard to estimate right bloom filter size, or it's too big.
             // so we'd better to skip this global runtime filter.
             long card = inner.getCardinality();
-            if (card <= 0 || card > RuntimeFilterDescription.BuildMaxSize) {
+            if (card <= 0 || card > sessionVariable.getGlobalRuntimeFilterBuildMaxSize()) {
                 return;
             }
         }
@@ -171,7 +175,7 @@ public class HashJoinNode extends PlanNode {
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
                     BinaryPredicate.IS_EQ_PREDICATE.apply(joinConjunct));
-            RuntimeFilterDescription rf = new RuntimeFilterDescription();
+            RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
             rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
             rf.setBuildPlanNodeId(this.id.asInt());
             rf.setExprOrder(i);
@@ -231,10 +235,6 @@ public class HashJoinNode extends PlanNode {
         return isLocalHashBucket;
     }
 
-    public boolean isShuffleHashBucket() {
-        return isShuffleHashBucket;
-    }
-
     public void setColocate(boolean colocate, String reason) {
         isColocate = colocate;
         colocateReason = reason;
@@ -244,8 +244,8 @@ public class HashJoinNode extends PlanNode {
         isLocalHashBucket = localHashBucket;
     }
 
-    public void setShuffleHashBucket(boolean runtimeBucketShuffle) {
-        isShuffleHashBucket = runtimeBucketShuffle;
+    public void setPartitionExprs(List<Expr> exprs) {
+        partitionExprs = exprs;
     }
 
     @Override
@@ -412,7 +412,14 @@ public class HashJoinNode extends PlanNode {
         }
         msg.hash_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
+        if (partitionExprs != null) {
+            msg.hash_join_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
+        }
         msg.setFilter_null_value_columns(filter_null_value_columns);
+
+        if (outputSlots != null) {
+            msg.hash_join_node.setOutput_columns(outputSlots);
+        }
     }
 
     @Override
@@ -469,6 +476,13 @@ public class HashJoinNode extends PlanNode {
                 output.append(detailPrefix).append("- ").append(rf.toExplainString(-1)).append("\n");
             }
         }
+
+        if (outputSlots != null) {
+            output.append(detailPrefix).append("output columns: ");
+            output.append(outputSlots.stream().map(Object::toString).collect(Collectors.joining(", ")));
+            output.append("\n");
+        }
+
         return output.toString();
     }
 
@@ -540,5 +554,9 @@ public class HashJoinNode extends PlanNode {
         if (joinOp.isOuterJoin() && !description.getEqualForNull() && slotRefWithNullValue) {
             filter_null_value_columns.add(slotId.asInt());
         }
+    }
+
+    public void setOutputSlots(List<Integer> outputSlots) {
+        this.outputSlots = outputSlots;
     }
 }

@@ -42,7 +42,7 @@ struct NullableAggregateFunctionState {
 // If an aggregate function has at least one nullable argument, we should use this class.
 // If all row all are NULL, we will return NULL.
 // The State must be NullableAggregateFunctionState
-template <typename State>
+template <typename State, bool IgnoreNull = true>
 class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State> {
 public:
     explicit NullableAggregateFunctionBase(AggregateFunctionPtr nested_function_)
@@ -56,15 +56,17 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        const Column* data_column = nullptr;
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.
         if (column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column);
             if (!nullable_column->null_column()->get_data()[row_num]) {
                 this->data(state).is_null = false;
-                data_column = nullable_column->data_column().get();
+                const Column* data_column = nullable_column->data_column().get();
                 nested_function->merge(ctx, data_column, this->data(state).mutable_nest_state(), row_num);
+            } else if constexpr (!IgnoreNull) {
+                this->data(state).is_null = false;
+                nested_function->process_null(ctx, this->data(state).mutable_nest_state());
             }
         } else {
             this->data(state).is_null = false;
@@ -113,11 +115,13 @@ public:
         }
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
             if (nullable_column->has_null()) {
+                dst_nullable_column->set_has_null(true);
                 const NullData& src_null_data = nullable_column->immutable_null_column_data();
                 size_t null_size = SIMD::count_nonzero(src_null_data);
                 if (null_size == chunk_size) {
@@ -125,22 +129,27 @@ public:
                 } else {
                     NullData& dst_null_data = dst_nullable_column->null_column_data();
                     dst_null_data = src_null_data;
-                    Columns src_data_columns(1);
-                    src_data_columns[0] = nullable_column->data_column();
-                    nested_function->convert_to_serialize_format(src_data_columns, chunk_size,
-                                                                 &dst_nullable_column->data_column());
+                    if constexpr (IgnoreNull) {
+                        Columns src_data_columns(1);
+                        src_data_columns[0] = nullable_column->data_column();
+                        nested_function->convert_to_serialize_format(ctx, src_data_columns, chunk_size,
+                                                                     &dst_nullable_column->data_column());
+                    } else {
+                        nested_function->convert_to_serialize_format(ctx, src, chunk_size,
+                                                                     &dst_nullable_column->data_column());
+                    }
                 }
             } else {
                 dst_nullable_column->null_column_data().resize(chunk_size);
 
                 Columns src_data_columns(1);
                 src_data_columns[0] = nullable_column->data_column();
-                nested_function->convert_to_serialize_format(src_data_columns, chunk_size,
+                nested_function->convert_to_serialize_format(ctx, src_data_columns, chunk_size,
                                                              &dst_nullable_column->data_column());
             }
         } else {
             dst_nullable_column->null_column_data().resize(chunk_size);
-            nested_function->convert_to_serialize_format(src, chunk_size, &dst_nullable_column->data_column());
+            nested_function->convert_to_serialize_format(ctx, src, chunk_size, &dst_nullable_column->data_column());
         }
     }
 
@@ -201,11 +210,11 @@ protected:
     AggregateFunctionPtr nested_function;
 };
 
-template <typename State>
-class NullableAggregateFunctionUnary final : public NullableAggregateFunctionBase<State> {
+template <typename State, bool IgnoreNull = true>
+class NullableAggregateFunctionUnary final : public NullableAggregateFunctionBase<State, IgnoreNull> {
 public:
     explicit NullableAggregateFunctionUnary(const AggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<State>(nested_function) {}
+            : NullableAggregateFunctionBase<State, IgnoreNull>(nested_function) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {}
@@ -228,21 +237,32 @@ public:
                 // TODO(kks): when our memory allocate could align 32-byte, we could use _mm256_load_si256
                 __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + offset));
                 int mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
-                // all not null
                 if (mask == 0) {
+                    // all not null
                     for (size_t i = offset; i < offset + batch_nums; i++) {
                         this->data(states[i] + state_offset).is_null = false;
                         this->nested_function->update(ctx, &data_column,
                                                       this->data(states[i] + state_offset).mutable_nest_state(), i);
                     }
-                    // all null
                 } else if (mask == 0xffffffff) {
+                    // all null
+                    if constexpr (!IgnoreNull) {
+                        for (size_t i = offset; i < offset + batch_nums; i++) {
+                            this->data(states[i] + state_offset).is_null = false;
+                            this->nested_function->process_null(
+                                    ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                        }
+                    }
                 } else {
                     for (size_t i = offset; i < offset + batch_nums; i++) {
                         if (f_data[i] == 0) {
                             this->data(states[i] + state_offset).is_null = false;
                             this->nested_function->update(ctx, &data_column,
                                                           this->data(states[i] + state_offset).mutable_nest_state(), i);
+                        } else if constexpr (!IgnoreNull) {
+                            this->data(states[i] + state_offset).is_null = false;
+                            this->nested_function->process_null(
+                                    ctx, this->data(states[i] + state_offset).mutable_nest_state());
                         }
                     }
                 }
@@ -254,6 +274,9 @@ public:
                     this->data(states[i] + state_offset).is_null = false;
                     this->nested_function->update(ctx, &data_column,
                                                   this->data(states[i] + state_offset).mutable_nest_state(), i);
+                } else if constexpr (!IgnoreNull) {
+                    this->data(states[i] + state_offset).is_null = false;
+                    this->nested_function->process_null(ctx, this->data(states[i] + state_offset).mutable_nest_state());
                 }
             }
         } else {
@@ -283,8 +306,8 @@ public:
                 // TODO(kks): when our memory allocate could align 32-byte, we could use _mm256_load_si256
                 __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + offset));
                 int mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
-                // all not null
                 if (mask == 0) {
+                    // all not null
                     for (size_t i = offset; i < offset + batch_nums; i++) {
                         // TODO: optimize with simd
                         if (!selection[i]) {
@@ -293,14 +316,36 @@ public:
                                                           this->data(states[i] + state_offset).mutable_nest_state(), i);
                         }
                     }
-                    // all null
                 } else if (mask == 0xffffffff) {
+                    // all null
+                    if constexpr (!IgnoreNull) {
+                        for (size_t i = offset; i < offset + batch_nums; i++) {
+                            this->data(states[i] + state_offset).is_null = false;
+                            this->nested_function->process_null(
+                                    ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                        }
+                    }
                 } else {
                     for (size_t i = offset; i < offset + batch_nums; i++) {
-                        if (!f_data[i] & !selection[i]) {
-                            this->data(states[i] + state_offset).is_null = false;
-                            this->nested_function->update(ctx, &data_column,
-                                                          this->data(states[i] + state_offset).mutable_nest_state(), i);
+                        if constexpr (!IgnoreNull) {
+                            if (!selection[i]) {
+                                this->data(states[i] + state_offset).is_null = false;
+                                if (!f_data[i]) {
+                                    this->nested_function->update(
+                                            ctx, &data_column,
+                                            this->data(states[i] + state_offset).mutable_nest_state(), i);
+                                } else {
+                                    this->nested_function->process_null(
+                                            ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                                }
+                            }
+                        } else {
+                            if (!f_data[i] & !selection[i]) {
+                                this->data(states[i] + state_offset).is_null = false;
+                                this->nested_function->update(ctx, &data_column,
+                                                              this->data(states[i] + state_offset).mutable_nest_state(),
+                                                              i);
+                            }
                         }
                     }
                 }
@@ -309,10 +354,23 @@ public:
 #endif
 
             for (size_t i = offset; i < chunk_size; ++i) {
-                if (!f_data[i] & !selection[i]) {
-                    this->data(states[i] + state_offset).is_null = false;
-                    this->nested_function->update(ctx, &data_column,
-                                                  this->data(states[i] + state_offset).mutable_nest_state(), i);
+                if constexpr (!IgnoreNull) {
+                    if (!selection[i]) {
+                        this->data(states[i] + state_offset).is_null = false;
+                        if (!f_data[i]) {
+                            this->nested_function->update(ctx, &data_column,
+                                                          this->data(states[i] + state_offset).mutable_nest_state(), i);
+                        } else {
+                            this->nested_function->process_null(
+                                    ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                        }
+                    }
+                } else {
+                    if (!f_data[i] & !selection[i]) {
+                        this->data(states[i] + state_offset).is_null = false;
+                        this->nested_function->update(ctx, &data_column,
+                                                      this->data(states[i] + state_offset).mutable_nest_state(), i);
+                    }
                 }
             }
         } else {
@@ -351,19 +409,30 @@ public:
             while (offset + batch_nums < chunk_size) {
                 __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + offset));
                 int mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
-                // all not null
                 if (mask == 0) {
+                    // all not null
                     this->data(state).is_null = false;
                     for (size_t i = offset; i < offset + batch_nums; i++) {
                         this->nested_function->update(ctx, &data_column, this->data(state).mutable_nest_state(), i);
                     }
-                    // all null
                 } else if (mask == 0xffffffff) {
+                    // all null
+                    if constexpr (!IgnoreNull) {
+                        this->data(state).is_null = false;
+                        for (size_t i = offset; i < offset + batch_nums; i++) {
+                            this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
+                        }
+                    }
                 } else {
                     for (size_t i = offset; i < offset + batch_nums; i++) {
                         if (f_data[i] == 0) {
                             this->nested_function->update(ctx, &data_column, this->data(state).mutable_nest_state(), i);
                             this->data(state).is_null = false;
+                        } else {
+                            if constexpr (!IgnoreNull) {
+                                this->data(state).is_null = false;
+                                this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
+                            }
                         }
                     }
                 }
@@ -375,6 +444,9 @@ public:
                 if (f_data[i] == 0) {
                     this->nested_function->update(ctx, &data_column, this->data(state).mutable_nest_state(), i);
                     this->data(state).is_null = false;
+                } else if constexpr (!IgnoreNull) {
+                    this->data(state).is_null = false;
+                    this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
                 }
             }
         } else {
@@ -415,6 +487,10 @@ public:
                     this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(),
                                                                      &data_column, peer_group_start, peer_group_end, i,
                                                                      i + 1);
+                } else if constexpr (!IgnoreNull) {
+                    this->data(state).is_null = false;
+                    this->nested_function->update_single_state_null(ctx, this->data(state).mutable_nest_state(),
+                                                                    peer_group_start, peer_group_end);
                 }
             }
         } else {
@@ -426,7 +502,7 @@ public:
 };
 
 template <typename State>
-class NullableAggregateFunctionVariadic final : public NullableAggregateFunctionBase<State> {
+class NullableAggregateFunctionVariadic final : public NullableAggregateFunctionBase<State, true> {
 public:
     NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function)
             : NullableAggregateFunctionBase<State>(nested_function) {}
@@ -531,7 +607,8 @@ public:
         }
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
 
         // dst's null_column, initial with false.
@@ -564,9 +641,10 @@ public:
         }
 
         if (!has_nullable_column) {
-            this->nested_function->convert_to_serialize_format(src, chunk_size, &dst_nullable_column->data_column());
+            this->nested_function->convert_to_serialize_format(ctx, src, chunk_size,
+                                                               &dst_nullable_column->data_column());
         } else {
-            this->nested_function->convert_to_serialize_format(data_columns, chunk_size,
+            this->nested_function->convert_to_serialize_format(ctx, data_columns, chunk_size,
                                                                &dst_nullable_column->data_column());
         }
     }

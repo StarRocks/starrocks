@@ -15,10 +15,15 @@
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "udf/java/utils.h"
 #include "udf/udf.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
+namespace vectorized {
+Status window_init_jvm_context(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
+                               starrocks_udf::FunctionContext* context);
+} // namespace vectorized
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                    const TupleDescriptor* result_tuple_desc)
@@ -122,8 +127,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         if (fn.name.function_name == "count" || fn.name.function_name == "row_number" ||
             fn.name.function_name == "rank" || fn.name.function_name == "dense_rank") {
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
-            auto* func = vectorized::get_aggregate_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT,
-                                                            is_input_nullable);
+            auto* func =
+                    vectorized::get_window_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
             _agg_functions[i] = func;
             _agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), false, false};
             // count(*) no input column, we manually resize it to 1 to process count(*)
@@ -149,8 +154,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             is_input_nullable = true;
             VLOG_ROW << "try get function " << fn.name.function_name << " arg_type.type " << arg_type.type
                      << " return_type.type " << return_type.type;
-            auto* func = vectorized::get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                            is_input_nullable);
+            auto* func = vectorized::get_window_function(fn.name.function_name, arg_type.type, return_type.type,
+                                                         is_input_nullable, fn.binary_type);
             if (func == nullptr) {
                 return Status::InternalError(
                         strings::Substitute("Invalid window function plan: $0", fn.name.function_name));
@@ -219,7 +224,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
     SCOPED_TIMER(_compute_timer);
     for (const auto& ctx : _agg_expr_ctxs) {
-        Expr::prepare(ctx, state, _child_row_desc);
+        Expr::prepare(ctx, state);
     }
 
     if (!_partition_ctxs.empty() || !_order_ctxs.empty()) {
@@ -228,15 +233,18 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         tuple_ids.push_back(_buffered_tuple_id);
         RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids, vector<bool>(2, false));
         if (!_partition_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state, cmp_row_desc));
+            RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state));
         }
         if (!_order_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state, cmp_row_desc));
+            RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state));
         }
     }
 
-    vectorized::AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-    _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(agg_states, this));
+    // save TFunction object
+    _fns.reserve(_agg_fn_ctxs.size());
+    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+        _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
+    }
 
     return Status::OK();
 }
@@ -249,37 +257,71 @@ Status Analytor::open(RuntimeState* state) {
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
     }
+
+    _has_udaf = std::any_of(_fns.begin(), _fns.end(),
+                            [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
+
+    auto create_fn_states = [this]() {
+        for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+            if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                const auto& fn = _fns[i];
+                auto st = vectorized::window_init_jvm_context(fn.id, fn.hdfs_location, fn.checksum,
+                                                              fn.aggregate_fn.symbol, _agg_fn_ctxs[i]);
+                RETURN_IF_ERROR(st);
+            }
+        }
+        vectorized::AggDataPtr agg_states =
+                _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
+        return Status::OK();
+    };
+
+    if (_has_udaf) {
+        auto promise_st = call_function_in_pthread(state, create_fn_states);
+        RETURN_IF_ERROR(promise_st->get_future().get());
+    } else {
+        RETURN_IF_ERROR(create_fn_states());
+    }
+
     return Status::OK();
 }
 
-Status Analytor::close(RuntimeState* state) {
+void Analytor::close(RuntimeState* state) {
     if (_is_closed) {
-        return Status::OK();
+        return;
     }
 
     _is_closed = true;
 
-    for (auto* ctx : _agg_fn_ctxs) {
-        if (ctx != nullptr && ctx->impl()) {
-            ctx->impl()->close();
+    auto agg_close = [this, state]() {
+        for (auto* ctx : _agg_fn_ctxs) {
+            if (ctx != nullptr && ctx->impl()) {
+                ctx->impl()->close();
+            }
         }
+
+        // Note: we must free agg_states before _mem_pool free_all;
+        _managed_fn_states.clear();
+        _managed_fn_states.shrink_to_fit();
+
+        if (_mem_pool != nullptr) {
+            _mem_pool->free_all();
+        }
+
+        Expr::close(_order_ctxs, state);
+        Expr::close(_partition_ctxs, state);
+        for (const auto& i : _agg_expr_ctxs) {
+            Expr::close(i, state);
+        }
+        return Status::OK();
+    };
+
+    if (_has_udaf) {
+        auto promise_st = call_function_in_pthread(state, agg_close);
+        promise_st->get_future().get();
+    } else {
+        agg_close();
     }
-
-    // Note: we must free agg_states before _mem_pool free_all;
-    _managed_fn_states.clear();
-    _managed_fn_states.shrink_to_fit();
-
-    if (_mem_pool != nullptr) {
-        _mem_pool->free_all();
-    }
-
-    Expr::close(_order_ctxs, state);
-    Expr::close(_partition_ctxs, state);
-    for (const auto& i : _agg_expr_ctxs) {
-        Expr::close(i, state);
-    }
-
-    return Status::OK();
 }
 
 bool Analytor::is_chunk_buffer_empty() {
@@ -335,17 +377,19 @@ void Analytor::get_window_function_result(int32_t start, int32_t end) {
     }
 }
 
-bool Analytor::is_partition_finished() {
+bool Analytor::is_partition_finished(int64_t found_partition_end) {
     if (_input_eos) {
         return true;
     }
 
-    // No partition or hasn't fecth one chunk
-    if (_partition_ctxs.empty() || _partition_end == 0) {
+    // There is no partition, or it hasn't fetched any chunk.
+    if (_partition_ctxs.empty() || found_partition_end == 0) {
         return false;
     }
 
-    return _current_row_position >= _partition_end;
+    // If found_partition_end == _partition_columns[0]->size(),
+    // the next chunk maybe also belongs to the current partition.
+    return found_partition_end != _partition_columns[0]->size();
 }
 
 Status Analytor::output_result_chunk(vectorized::ChunkPtr* chunk) {

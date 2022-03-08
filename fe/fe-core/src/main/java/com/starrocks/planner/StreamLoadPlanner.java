@@ -64,6 +64,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 // Used to generate a plan fragment for a streaming load.
 // we only support OlapTable now.
@@ -134,8 +135,10 @@ public class StreamLoadPlanner {
 
             if (col.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
                     col.getName())) {
-                ColumnDict dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
-                globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict));
+                Optional<ColumnDict>  dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
+                if (dict != null && dict.isPresent()) {
+                    globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict.get()));
+                }
             }
         }
         if (isPrimaryKey) {
@@ -199,6 +202,7 @@ public class StreamLoadPlanner {
         queryOptions.setQuery_type(TQueryType.LOAD);
         queryOptions.setQuery_timeout(streamLoadTask.getTimeout());
         // for stream load, we use exec_mem_limit to limit the memory usage of load channel.
+        queryOptions.setMem_limit(streamLoadTask.getExecMemLimit());
         queryOptions.setLoad_mem_limit(streamLoadTask.getLoadMemLimit());
         params.setQuery_options(queryOptions);
         TQueryGlobals queryGlobals = new TQueryGlobals();

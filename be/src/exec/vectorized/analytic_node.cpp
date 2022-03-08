@@ -10,6 +10,7 @@
 #include "column/column_helper.h"
 #include "exec/pipeline/analysis/analytic_sink_operator.h"
 #include "exec/pipeline/analysis/analytic_source_operator.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/agg/count.h"
@@ -291,7 +292,7 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_rows_frame(RuntimeState* 
 
 Status AnalyticNode::_try_fetch_next_partition_data(RuntimeState* state, int64_t* partition_end) {
     *partition_end = _analytor->find_partition_end();
-    while (!_analytor->is_partition_finished()) {
+    while (!_analytor->is_partition_finished(*partition_end)) {
         RETURN_IF_ERROR(state->check_mem_limit("analytic node fetch next partition data"));
         RETURN_IF_ERROR(_fetch_next_chunk(state));
         *partition_end = _analytor->find_partition_end();
@@ -377,6 +378,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AnalyticNode::decompose
 
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
+    if (limit() != -1) {
+        operators_with_source.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
     return operators_with_source;
 }
 

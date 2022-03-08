@@ -31,6 +31,7 @@ include "Planner.thrift"
 include "DataSinks.thrift"
 include "Data.thrift"
 include "RuntimeProfile.thrift"
+include "WorkGroup.thrift"
 
 // constants for TQueryOptions.num_nodes
 const i32 NUM_NODES_ALL = 0
@@ -80,8 +81,9 @@ struct TLoadErrorHubInfo {
     3: optional TBrokerErrorHubInfo broker_info;
 }
 
-enum TPipelineProfileMode {
-  BRIEF,
+enum TPipelineProfileLevel {
+  CORE_METRICS,
+  ALL_METRICS,
   DETAIL
 }
 
@@ -156,7 +158,7 @@ struct TQueryOptions {
   // For pipeline query engine
   54: optional i32 pipeline_dop;
   // For pipeline query engine
-  55: optional TPipelineProfileMode pipeline_profile_mode;
+  55: optional TPipelineProfileLevel pipeline_profile_level;
 }
 
 
@@ -295,7 +297,10 @@ struct TExecPlanFragmentParams {
 
   50: optional bool is_pipeline
   51: optional i32 pipeline_dop
-  52: optional map<Types.TPlanNodeId, i32> per_scan_node_dop;
+  52: optional map<Types.TPlanNodeId, i32> per_scan_node_dop
+
+  53: optional WorkGroup.TWorkGroup workgroup
+  54: optional bool enable_resource_group
 }
 
 struct TExecPlanFragmentResult {
@@ -441,3 +446,4 @@ struct TExportStatusResult {
     2: required Types.TExportState state
     3: optional list<string> files
 }
+

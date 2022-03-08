@@ -1297,6 +1297,42 @@ public class Config extends ConfigBase {
     public static long hive_meta_store_timeout_s = 10L;
 
     /**
+     * If set to true, StarRocks will automatically synchronize hms metadata to the cache in fe.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_hms_events_incremental_sync = false;
+
+    /**
+     * HMS polling interval in milliseconds.
+     */
+    @ConfField(mutable = true)
+    public static int hms_events_polling_interval_ms = 5000;
+
+    /**
+     * Maximum number of events to poll in each RPC.
+     */
+    @ConfField(mutable = true)
+    public static int hms_events_batch_size_per_rpc = 500;
+
+    /**
+     * If set to true, StarRocks will process events in parallel.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_hms_parallel_process_evens = true;
+
+    /**
+     * Num of thread to process events in parallel.
+     */
+    @ConfField(mutable = true)
+    public static int hms_process_events_parallel_num = 4;
+
+    /**
+     * Metastore event processor refresh table column statistic interval in seconds.
+     */
+    @ConfField(mutable = true)
+    public static int hms_refresh_columns_statistic_interval_s = 600;
+
+    /**
      * Used to split files stored in dfs such as object storage
      * or hdfs into smaller files for hive external table
      */

@@ -15,7 +15,7 @@
 
 namespace starrocks::vectorized {
 
-struct JsonPath;
+struct SimpleJsonPath;
 class JsonReader;
 class JsonParser;
 class JsonScanner : public FileScanner {
@@ -35,7 +35,7 @@ public:
 private:
     Status _construct_json_types();
     Status _construct_cast_exprs();
-    Status _parse_json_paths(const std::string& jsonpath, std::vector<std::vector<JsonPath>>* path_vecs);
+    Status _parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
     Status _create_src_chunk(ChunkPtr* chunk);
     Status _open_next_reader();
     ChunkPtr _cast_chunk(const ChunkPtr& src_chunk);
@@ -56,8 +56,8 @@ private:
     std::vector<Expr*> _cast_exprs;
     ObjectPool _pool;
 
-    std::vector<std::vector<JsonPath>> _json_paths;
-    std::vector<JsonPath> _root_paths;
+    std::vector<std::vector<SimpleJsonPath>> _json_paths;
+    std::vector<SimpleJsonPath> _root_paths;
     bool _strip_outer_array = false;
 };
 
@@ -105,8 +105,8 @@ private:
     bool _closed;
     bool _strip_outer_array;
 
-    std::vector<std::vector<JsonPath>> _json_paths;
-    std::vector<JsonPath> _root_paths;
+    std::vector<std::vector<SimpleJsonPath>> _json_paths;
+    std::vector<SimpleJsonPath> _root_paths;
 
     std::unique_ptr<uint8_t[]> _json_binary_ptr;
 

@@ -5,11 +5,16 @@ package com.starrocks.external.hive;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.external.ObjectStorageUtils;
+import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,7 +51,6 @@ public class HiveMetaCache {
 
     public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor) {
         this.client = hiveMetaClient;
-
         init(executor);
     }
 
@@ -92,10 +96,14 @@ public class HiveMetaCache {
                 }, executor));
     }
 
+    /**
+     * Currently we only support either refreshAfterWrite or automatic refresh by events.
+     */
     private static CacheBuilder<Object, Object> newCacheBuilder(long maximumSize) {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
         cacheBuilder.expireAfterWrite(Config.hive_meta_cache_ttl_s, SECONDS);
-        if (Config.hive_meta_cache_ttl_s > Config.hive_meta_cache_refresh_interval_s) {
+        if (!Config.enable_hms_events_incremental_sync &&
+                Config.hive_meta_cache_ttl_s > Config.hive_meta_cache_refresh_interval_s) {
             cacheBuilder.refreshAfterWrite(Config.hive_meta_cache_refresh_interval_s, SECONDS);
         }
         cacheBuilder.maximumSize(maximumSize);
@@ -110,7 +118,11 @@ public class HiveMetaCache {
     }
 
     private HivePartition loadPartition(HivePartitionKey key) throws DdlException {
-        return client.getPartition(key.getDatabaseName(), key.getTableName(), key.getPartitionValues());
+        if (key.isHudiTable()) {
+            return client.getHudiPartition(key.getDatabaseName(), key.getTableName(), key.getPartitionValues());
+        } else {
+            return client.getPartition(key.getDatabaseName(), key.getTableName(), key.getPartitionValues());
+        }
     }
 
     private HiveTableStats loadTableStats(HiveTableKey key) throws DdlException {
@@ -167,6 +179,15 @@ public class HiveMetaCache {
         }
     }
 
+    public HivePartition getHudiPartition(String dbName, String tableName, PartitionKey partitionKey) throws DdlException {
+        List<String> partitionValues = Utils.getPartitionValues(partitionKey);
+        try {
+            return partitionsCache.get(new HivePartitionKey(dbName, tableName, partitionValues, true));
+        } catch (ExecutionException e) {
+            throw new DdlException("get partition detail failed: " + e.getMessage());
+        }
+    }
+
     public HiveTableStats getTableStats(String dbName, String tableName) throws DdlException {
         try {
             return tableStatsCache.get(new HiveTableKey(dbName, tableName));
@@ -200,11 +221,77 @@ public class HiveMetaCache {
         }
     }
 
+    public void alterTableByEvent(HiveTableKey tableKey, HivePartitionKey hivePartitionKey,
+                                  StorageDescriptor sd, Map<String, String> params) throws Exception {
+        HiveTableStats tableStats = new HiveTableStats(Utils.getRowCount(params), Utils.getTotalSize(params));
+        tableStatsCache.put(tableKey, tableStats);
+        alterPartitionByEvent(hivePartitionKey, sd, params);
+    }
+
+    public synchronized void addPartitionKeyByEvent(HivePartitionKeysKey hivePartitionKeysKey,
+                                                    PartitionKey partitionKey, HivePartitionKey hivePartitionKey) {
+        ImmutableMap<PartitionKey, Long> cachedPartitions = partitionKeysCache.getIfPresent(hivePartitionKeysKey);
+        if (cachedPartitions == null) {
+            return;
+        }
+        Map<PartitionKey, Long> partitions = Maps.newHashMap(cachedPartitions);
+        partitions.putIfAbsent(partitionKey, client.nextPartitionId());
+        partitionKeysCache.put(hivePartitionKeysKey, ImmutableMap.copyOf(partitions));
+        partitionsCache.invalidate(hivePartitionKey);
+        partitionStatsCache.invalidate(hivePartitionKey);
+    }
+
+    private HivePartition getPartitionByEvent(StorageDescriptor sd) throws Exception {
+        HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
+        String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
+        boolean isSplittable = ObjectStorageUtils.isObjectStorage(path) ||
+                HdfsFileFormat.isSplittable(sd.getInputFormat());
+        List<HdfsFileDesc> fileDescs = client.getHdfsFileDescs(path, isSplittable, sd);
+        return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
+    }
+
+    public void alterPartitionByEvent(HivePartitionKey hivePartitionKey,
+                                      StorageDescriptor sd, Map<String, String> params) throws Exception {
+        HivePartition updatedHivePartition = getPartitionByEvent(sd);
+        partitionsCache.put(hivePartitionKey, updatedHivePartition);
+
+        HivePartitionStats partitionStats = new HivePartitionStats(Utils.getRowCount(params));
+        long totalFileBytes = 0;
+        for (HdfsFileDesc fileDesc : updatedHivePartition.getFiles()) {
+            totalFileBytes += fileDesc.getLength();
+        }
+        partitionStats.setTotalFileBytes(totalFileBytes);
+        partitionStatsCache.put(hivePartitionKey, partitionStats);
+    }
+
+    public synchronized void dropPartitionKeyByEvent(HivePartitionKeysKey hivePartitionKeysKey,
+                                                     PartitionKey partitionKey, HivePartitionKey hivePartitionKey) {
+        ImmutableMap<PartitionKey, Long> cachedPartitions = partitionKeysCache.getIfPresent(hivePartitionKeysKey);
+        if (cachedPartitions == null) {
+            return;
+        }
+
+        Map<PartitionKey, Long> partitions = Maps.newHashMap(cachedPartitions);
+        partitions.remove(partitionKey);
+        partitionKeysCache.put(hivePartitionKeysKey, ImmutableMap.copyOf(partitions));
+        partitionsCache.invalidate(hivePartitionKey);
+        partitionStatsCache.invalidate(hivePartitionKey);
+    }
+
+    public boolean tableExistInCache(HiveTableKey tableKey) {
+        return tableStatsCache.asMap().containsKey(tableKey);
+    }
+
+    public boolean partitionExistInCache(HivePartitionKey partitionKey) {
+        return partitionsCache.asMap().containsKey(partitionKey);
+    }
+
     public void refreshTable(String dbName, String tableName, List<Column> partColumns, List<String> columnNames)
             throws DdlException {
         HivePartitionKeysKey hivePartitionKeysKey = HivePartitionKeysKey.gen(dbName, tableName, partColumns);
         HiveTableKey hiveTableKey = HiveTableKey.gen(dbName, tableName);
         HiveTableColumnsKey hiveTableColumnsKey = HiveTableColumnsKey.gen(dbName, tableName, partColumns, columnNames);
+        Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
         try {
             ImmutableMap<PartitionKey, Long> partitionKeys = loadPartitionKeys(hivePartitionKeysKey);
             partitionKeysCache.put(hivePartitionKeysKey, partitionKeys);
@@ -220,10 +307,13 @@ public class HiveMetaCache {
         } catch (Exception e) {
             LOG.warn("refresh table cache failed", e);
             throw new DdlException("refresh table cache failed: " + e.getMessage());
+        } finally {
+            Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
         }
     }
 
     public void refreshPartition(String dbName, String tableName, List<String> partNames) throws DdlException {
+        Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
         try {
             for (String partName : partNames) {
                 List<String> partValues = client.partitionNameToVals(partName);
@@ -234,6 +324,19 @@ public class HiveMetaCache {
         } catch (Exception e) {
             LOG.warn("refresh partition cache failed", e);
             throw new DdlException("refresh partition cached failed: " + e.getMessage());
+        } finally {
+            Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
+        }
+    }
+
+    public void refreshColumnStats(String dbName, String tableName, List<Column> partColumns, List<String> columnNames)
+            throws DdlException {
+        try {
+            HiveTableColumnsKey hiveTableColumnsKey =
+                    HiveTableColumnsKey.gen(dbName, tableName, partColumns, columnNames);
+            tableColumnStatsCache.put(hiveTableColumnsKey, loadTableColumnStats(hiveTableColumnsKey));
+        } catch (Exception e) {
+            throw new DdlException("refresh table column statistic cached failed: " + e.getMessage());
         }
     }
 

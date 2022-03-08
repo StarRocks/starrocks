@@ -23,6 +23,8 @@
 
 #include <gperftools/malloc_extension.h>
 
+#include <shared_mutex>
+
 #include "common/compiler_util.h"
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
@@ -341,7 +343,7 @@ public:
     bool register_metric(const std::string& name, const MetricLabels& labels, Metric* metric);
     // Now this function is not used frequently, so this is a little time consuming
     void deregister_metric(Metric* metric) {
-        std::lock_guard<SpinLock> l(_lock);
+        std::shared_lock lock(_mutex);
         _deregister_locked(metric);
     }
     Metric* get_metric(const std::string& name) const { return get_metric(name, MetricLabels::EmptyLabels); }
@@ -352,7 +354,7 @@ public:
     void deregister_hook(const std::string& name);
 
     void collect(MetricsVisitor* visitor) {
-        std::lock_guard<SpinLock> l(_lock);
+        std::shared_lock lock(_mutex);
         if (!config::enable_metric_calculator) {
             // Before we collect, need to call hooks
             unprotected_trigger_hook();
@@ -364,7 +366,7 @@ public:
     }
 
     void trigger_hook() {
-        std::lock_guard<SpinLock> l(_lock);
+        std::shared_lock lock(_mutex);
         unprotected_trigger_hook();
     }
 
@@ -380,7 +382,8 @@ private:
 
     const std::string _name;
 
-    mutable SpinLock _lock;
+    // mutable SpinLock _lock;
+    mutable std::shared_mutex _mutex;
     std::map<std::string, MetricCollector*> _collectors;
     std::map<std::string, std::function<void()>> _hooks;
 };

@@ -129,6 +129,15 @@ public class RoleManager implements Writable {
         }
     }
 
+    public String getRoleName(UserIdentity userIdentity) {
+        for (Role role : roles.values()) {
+            if (role.getUsers().contains(userIdentity)) {
+                return role.getRoleName();
+            }
+        }
+        return null;
+    }
+
     public void getRoleInfo(List<List<String>> results) {
         for (Role role : roles.values()) {
             List<String> info = Lists.newArrayList();

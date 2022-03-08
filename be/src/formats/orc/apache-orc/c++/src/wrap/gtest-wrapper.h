@@ -54,8 +54,7 @@ DIAGNOSTIC_IGNORE("-Wweak-vtables")
 
 #ifdef _MSC_VER
 DIAGNOSTIC_IGNORE(4146) // unary minus operator applied to unsigned type, result still unsigned
-DIAGNOSTIC_IGNORE(4805) // '==': unsafe mix of type 'const bool' and type 'const int64_t' in
-                        // operation
+DIAGNOSTIC_IGNORE(4805) // '==': unsafe mix of type 'const bool' and type 'const int64_t' in operation
 #endif
 
 #include "gtest/gtest.h"

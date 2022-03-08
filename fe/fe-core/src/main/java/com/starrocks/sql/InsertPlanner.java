@@ -19,7 +19,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
-import com.starrocks.planner.PlannerContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -28,10 +27,10 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.relation.InsertRelation;
-import com.starrocks.sql.analyzer.relation.Relation;
-import com.starrocks.sql.analyzer.relation.SelectRelation;
-import com.starrocks.sql.analyzer.relation.ValuesRelation;
+import com.starrocks.sql.ast.InsertRelation;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -57,7 +56,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
+
 
 public class InsertPlanner {
     public ExecPlan plan(Relation relation, ConnectContext session) {
@@ -96,18 +97,16 @@ public class InsertPlanner {
                 columnRefFactory);
 
         //7. Build fragment exec plan
-        PlannerContext plannerContext = new PlannerContext(null, null, session.getSessionVariable().toThrift(), null);
-
         ExecPlan execPlan;
         if ((insertRelation.getQueryRelation() instanceof SelectRelation &&
-                ((SelectRelation) insertRelation.getQueryRelation()).hasLimit())
+                insertRelation.getQueryRelation().hasLimit())
                 || insertRelation.getTargetTable() instanceof MysqlTable) {
             execPlan = new PlanFragmentBuilder().createPhysicalPlan(
-                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                     insertRelation.getQueryRelation().getColumnOutputNames());
         } else {
             execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                    optimizedPlan, plannerContext, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                     insertRelation.getQueryRelation().getColumnOutputNames());
         }
 
@@ -123,8 +122,10 @@ public class InsertPlanner {
             slotDescriptor.setColumn(column);
             slotDescriptor.setIsNullable(column.isAllowNull());
             if (column.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
-                ColumnDict dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
-                globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), dict));
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                if (dict != null && dict.isPresent()) {
+                    globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), dict.get()));
+                }
             }
         }
         olapTuple.computeMemLayout();

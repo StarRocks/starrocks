@@ -518,8 +518,8 @@ ColumnPtr right_const_not_null(const Columns& columns, BinaryColumn* src, Substr
     raw_offsets.resize(size + 1);
     raw_offsets[0] = 0;
     offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
-
-    if (validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size)) {
+    auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size);
+    if (is_ascii) {
         // off_is_negative=true, off=-len
         // allow_out_of_left_bound=true
         ascii_substr<true, true>(src, &bytes, &offsets, -len, len);
@@ -539,11 +539,17 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
             ColumnPtr binary = func(columns, src_binary, std::forward<Args>(args)...);
             NullColumnPtr src_null = NullColumn::create(*(src_nullable->null_column()));
 
-            // if binary is ConstColumn, just return it.
-            // if binary is NullableColumn, then the null column inside of the binary should
-            // be merged with the null column inside of columns[0].
-            if (binary->is_constant()) {
+            // - if binary is null ConstColumn, just return it.
+            // - if binary is non-null ConstColumn, unfold it and wrap with src_null.
+            // - if binary is NullableColumn, then the null column inside the binary should
+            //   be merged with the null column inside of columns[0].
+            if (binary->only_null()) {
                 return binary;
+            }
+            if (binary->is_constant()) {
+                ConstColumn* dst_const = down_cast<ConstColumn*>(binary.get());
+                dst_const->data_column()->assign(dst_const->size(), 0);
+                return NullableColumn::create(dst_const->data_column(), src_null);
             }
             if (binary->is_nullable()) {
                 NullableColumn* binary_nullable = down_cast<NullableColumn*>(binary.get());
@@ -703,7 +709,7 @@ static inline ColumnPtr substr_not_const(FunctionContext* context, const starroc
     result.resize(rows_num, src->byte_size());
 
     Bytes& src_bytes = src->get_bytes();
-    bool is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
+    auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (is_ascii) {
         ascii_substr_not_const(rows_num, &str_viewer, &off_viewer, &len_viewer, &result);
     } else {
@@ -723,7 +729,7 @@ static inline ColumnPtr right_not_const(FunctionContext* context, const starrock
     NullableBinaryColumnBuilder result;
 
     Bytes& src_bytes = src->get_bytes();
-    bool is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
+    auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     result.resize(rows_num, src->byte_size());
 
     if (is_ascii) {
@@ -1383,7 +1389,7 @@ template <bool pad_is_const, PadType pad_type>
 ColumnPtr pad_not_const_check_ascii(const Columns& columns, [[maybe_unused]] const PadState* state) {
     auto src = ColumnHelper::get_binary_column(columns[0].get());
     auto& bytes = src->get_bytes();
-    bool is_ascii = validate_ascii_fast((const char*)bytes.data(), bytes.size());
+    auto is_ascii = validate_ascii_fast((const char*)bytes.data(), bytes.size());
     if (is_ascii) {
         return pad_not_const<true, pad_is_const, pad_type>(columns, state);
     } else {
@@ -1660,6 +1666,10 @@ static inline void utf8_reverse_per_slice(const char* src_begin, const char* src
     auto src_curr = src_begin;
     for (auto char_size = 0; src_curr < src_end; src_curr += char_size) {
         char_size = UTF8_BYTE_LENGTH_TABLE[(uint8_t)*src_curr];
+        // utf8 chars are copied from src_curr to  dst_curr one by one reversely, an illegal utf8 char
+        // would give a larger char_size than expected, which would cause dst_curr advance to exceed its lower,
+        // so protect char_size to not exceeds src_end-src_curr.
+        char_size = std::min<size_t>(src_end - src_curr, char_size);
         dst_curr -= char_size;
         strings::memcpy_inlined(dst_curr, src_curr, char_size);
     }
@@ -2535,7 +2545,7 @@ Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
 
     if (!state->regex->ok()) {
         std::stringstream error;
-        error << "Invalid regex expression: " << pattern.data;
+        error << "Invalid regex expression: " << pattern.to_string();
         context->set_error(error.str().c_str());
         return Status::InvalidArgument(error.str());
     }

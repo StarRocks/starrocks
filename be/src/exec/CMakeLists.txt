@@ -42,7 +42,6 @@ set(EXEC_FILES
     olap_common.cpp
     tablet_info.cpp
     tablet_sink.cpp
-    plain_text_line_reader.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
@@ -83,6 +82,7 @@ set(EXEC_FILES
     vectorized/orc_scanner.cpp
     vectorized/orc_scanner_adapter.cpp
     vectorized/arrow_to_starrocks_converter.cpp
+    vectorized/arrow_to_json_converter.cpp
     vectorized/parquet_scanner.cpp
     vectorized/parquet_reader.cpp
     vectorized/file_scan_node.cpp
@@ -147,13 +147,14 @@ set(EXEC_FILES
     pipeline/dict_decode_operator.cpp
     pipeline/result_sink_operator.cpp
     pipeline/scan_operator.cpp
+    pipeline/olap_scan_operator.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
     pipeline/sort/sort_context.cpp
-    pipeline/pipeline_driver_dispatcher.cpp
+    pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp
@@ -187,6 +188,8 @@ set(EXEC_FILES
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
     workgroup/work_group.cpp
+    workgroup/scan_executor.cpp
+    workgroup/scan_task_queue.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
@@ -200,12 +203,7 @@ set(EXEC_FILES
     ${EXEC_FILES}
     vectorized/mysql_scan_node.cpp
     mysql_scanner.cpp
-)
-
-IF (WITH_HDFS)
-    set(EXEC_FILES ${EXEC_FILES}
-        vectorized/hdfs_scan_node.cpp)
-endif()
+    vectorized/hdfs_scan_node.cpp)
 
 add_library(Exec STATIC
     ${EXEC_FILES}

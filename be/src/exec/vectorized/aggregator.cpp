@@ -2,11 +2,21 @@
 
 #include "aggregator.h"
 
+#include <algorithm>
+
+#include "common/status.h"
 #include "exprs/anyval_util.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
+#include "udf/java/utils.h"
 
 namespace starrocks {
+namespace vectorized {
+Status init_udaf_context(int id, const std::string& url, const std::string& checksum, const std::string& symbol,
+                         starrocks_udf::FunctionContext* context);
 
+} // namespace vectorized
 Aggregator::Aggregator(const TPlanNode& tnode) : _tnode(tnode) {}
 
 Status Aggregator::open(RuntimeState* state) {
@@ -16,6 +26,59 @@ Status Aggregator::open(RuntimeState* state) {
         _evaluate_const_columns(i);
     }
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+
+    // init function context
+    _has_udaf = std::any_of(_fns.begin(), _fns.end(),
+                            [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
+    if (_has_udaf) {
+        auto promise_st = call_function_in_pthread(state, [this]() {
+            for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+                if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                    const auto& fn = _fns[i];
+                    auto st = vectorized::init_udaf_context(fn.id, fn.hdfs_location, fn.checksum,
+                                                            fn.aggregate_fn.symbol, _agg_fn_ctxs[i]);
+                    RETURN_IF_ERROR(st);
+                }
+            }
+            return Status::OK();
+        });
+        RETURN_IF_ERROR(promise_st->get_future().get());
+    }
+
+    // AggregateFunction::create needs to call create in JNI,
+    // but prepare is executed in bthread, which will cause the JNI code to crash
+
+    if (_group_by_expr_ctxs.empty()) {
+        _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        RETURN_IF_UNLIKELY_NULL(_single_agg_state, Status::MemoryAllocFailed("alloc single agg state failed"));
+        auto call_agg_create = [this]() {
+            for (int i = 0; i < _agg_functions.size(); i++) {
+                _agg_functions[i]->create(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+            }
+            return Status::OK();
+        };
+        if (_has_udaf) {
+            auto promise_st = call_function_in_pthread(state, call_agg_create);
+            promise_st->get_future().get();
+        } else {
+            call_agg_create();
+        }
+
+        if (_agg_expr_ctxs.empty()) {
+            return Status::InternalError("Invalid agg query plan");
+        }
+    }
+
+    // For SQL: select distinct id from table or select id from from table group by id;
+    // we don't need to allocate memory for agg states.
+    if (_is_only_group_by_columns) {
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
+    } else {
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
+    }
+
+    RETURN_IF_ERROR(check_has_error());
+
     return Status::OK();
 }
 
@@ -88,8 +151,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             {
                 bool is_input_nullable =
                         !fn.arg_types.empty() && (has_outer_join_child || desc.nodes[0].has_nullable_child);
-                auto* func = vectorized::get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_input_nullable,
-                                                                agg_func_set_version);
+                auto* func = vectorized::get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
                 _agg_functions[i] = func;
             }
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
@@ -117,7 +179,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             auto* func = vectorized::get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                            is_input_nullable, agg_func_set_version);
+                                                            is_input_nullable, fn.binary_type, agg_func_set_version);
             if (func == nullptr) {
                 return Status::InternalError(
                         strings::Substitute("Invalid agg function plan: $0", fn.name.function_name));
@@ -178,14 +240,12 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
     DCHECK_EQ(_intermediate_tuple_desc->slots().size(), _output_tuple_desc->slots().size());
 
-    // create an empty RowDescriptor, and it will be removed sooner or later
-    RowDescriptor child_row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state, child_row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state));
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state, child_row_desc));
+        RETURN_IF_ERROR(Expr::prepare(ctx, state));
     }
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, child_row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
 
     _mem_pool = std::make_unique<MemPool>();
 
@@ -197,68 +257,64 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         state->obj_pool()->add(_agg_fn_ctxs[i]);
     }
 
-    if (_group_by_expr_ctxs.empty()) {
-        _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-        THROW_BAD_ALLOC_IF_NULL(_single_agg_state);
-        for (int i = 0; i < _agg_functions.size(); i++) {
-            _agg_functions[i]->create(_single_agg_state + _agg_states_offsets[i]);
-        }
-        if (_agg_expr_ctxs.empty()) {
-            return Status::InternalError("Invalid agg query plan");
-        }
-    }
-
-    // For SQL: select distinct id from table or select id from from table group by id;
-    // we don't need to allocate memory for agg states.
-    if (_is_only_group_by_columns) {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
-    } else {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
+    // save TFunction object
+    _fns.reserve(_agg_fn_ctxs.size());
+    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+        _fns.emplace_back(_tnode.agg_node.aggregate_functions[i].nodes[0].fn);
     }
 
     return Status::OK();
 }
 
-Status Aggregator::close(RuntimeState* state) {
+void Aggregator::close(RuntimeState* state) {
     if (_is_closed) {
-        return Status::OK();
+        return;
     }
 
     _is_closed = true;
 
-    for (auto ctx : _agg_fn_ctxs) {
-        if (ctx != nullptr && ctx->impl()) {
-            ctx->impl()->close();
-        }
-    }
-
-    // _mem_pool is nullptr means prepare phase failed
-    if (_mem_pool != nullptr) {
-        // Note: we must free agg_states object before _mem_pool free_all;
-        if (_single_agg_state != nullptr) {
-            for (int i = 0; i < _agg_functions.size(); i++) {
-                _agg_functions[i]->destroy(_single_agg_state + _agg_states_offsets[i]);
-            }
-        } else if (!_is_only_group_by_columns) {
-            if (false) {
-            }
+    auto agg_close = [this, state]() {
+        // _mem_pool is nullptr means prepare phase failed
+        if (_mem_pool != nullptr) {
+            // Note: we must free agg_states object before _mem_pool free_all;
+            if (_single_agg_state != nullptr) {
+                for (int i = 0; i < _agg_functions.size(); i++) {
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+                }
+            } else if (!_is_only_group_by_columns) {
+                if (false) {
+                }
 #define HASH_MAP_METHOD(NAME)                                                  \
     else if (_hash_map_variant.type == vectorized::HashMapVariant::Type::NAME) \
             _release_agg_memory<decltype(_hash_map_variant.NAME)::element_type>(_hash_map_variant.NAME.get());
-            APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+                APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
+            }
+
+            _mem_pool->free_all();
         }
 
-        _mem_pool->free_all();
-    }
+        // AggregateFunction::destroy depends FunctionContext.
+        // so we close function context after destroy stage
+        for (auto ctx : _agg_fn_ctxs) {
+            if (ctx != nullptr && ctx->impl()) {
+                ctx->impl()->close();
+            }
+        }
 
-    Expr::close(_group_by_expr_ctxs, state);
-    for (const auto& i : _agg_expr_ctxs) {
-        Expr::close(i, state);
+        Expr::close(_group_by_expr_ctxs, state);
+        for (const auto& i : _agg_expr_ctxs) {
+            Expr::close(i, state);
+        }
+        Expr::close(_conjunct_ctxs, state);
+        return Status::OK();
+    };
+    if (_has_udaf) {
+        auto promise_st = call_function_in_pthread(state, agg_close);
+        promise_st->get_future().get();
+    } else {
+        agg_close();
     }
-    Expr::close(_conjunct_ctxs, state);
-
-    return Status::OK();
 }
 
 bool Aggregator::is_chunk_buffer_empty() {
@@ -428,8 +484,8 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
         vectorized::Columns agg_result_column = _create_agg_result_columns();
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
-            _agg_functions[i]->convert_to_serialize_format(_agg_intput_columns[i], result_chunk->num_rows(),
-                                                           &agg_result_column[i]);
+            _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_intput_columns[i],
+                                                           result_chunk->num_rows(), &agg_result_column[i]);
             result_chunk->append_column(std::move(agg_result_column[i]), _intermediate_tuple_desc->slots()[id]->id());
         }
     }
@@ -505,6 +561,15 @@ void Aggregator::try_convert_to_two_level_set() {
         CONVERT_TO_TWO_LEVEL_SET(phase1_slice_two_level, phase1_slice);
         CONVERT_TO_TWO_LEVEL_SET(phase2_slice_two_level, phase2_slice);
     }
+}
+
+Status Aggregator::check_has_error() {
+    for (const auto* ctx : _agg_fn_ctxs) {
+        if (ctx->has_error()) {
+            return Status::RuntimeError(ctx->error_msg());
+        }
+    }
+    return Status::OK();
 }
 
 #undef CONVERT_TO_TWO_LEVEL
