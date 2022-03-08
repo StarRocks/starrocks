@@ -22,10 +22,6 @@
 
 #include "orc/MemoryPool.hh"
 
-#ifdef __x86_64__
-#include <immintrin.h>
-#endif
-
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -119,6 +115,12 @@ void DataBuffer<T>::reserve(uint64_t newCapacity) {
 inline int CountTrailingZerosNonZero32(uint32_t n) {
     return __builtin_ctz(n);
 }
+
+#ifdef __x86_64__
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+#endif
 
 // it's copied from `filter_range` in column_helper.h with some minor changes.
 template <class T>

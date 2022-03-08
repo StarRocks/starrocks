@@ -305,7 +305,7 @@ TEST(TestFileMetadata, testAttributes) {
             "\"iceberg.required\": \"false\"}},\n"
             "  \"rows\": 1,\n"
             "  \"stripe count\": 1,\n"
-            "  \"format\": \"0.12\", \"writer version\": \"future - 9\",\n"
+            "  \"format\": \"0.12\", \"writer version\": \"ORC-14\",\n"
             "  \"compression\": \"zlib\", \"compression block\": 131072,\n"
             "  \"file length\": 1734,\n"
             "  \"content\": 1006, \"stripe stats\": 167, \"footer\": 535, \"postscript\": 25,\n"
