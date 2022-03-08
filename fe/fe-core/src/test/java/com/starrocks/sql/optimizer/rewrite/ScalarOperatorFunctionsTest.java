@@ -47,8 +47,6 @@ public class ScalarOperatorFunctionsTest {
 
     @Before
     public void setUp() throws AnalysisException {
-        Config.enable_decimal_v3 = true;
-
         O_DT_20101102_183010 = ConstantOperator.createDatetime(LocalDateTime.of(2010, 11, 2, 18, 30, 10));
         O_DT_20101202_023010 = ConstantOperator.createDatetime(LocalDateTime.of(2010, 12, 2, 2, 30, 10));
         O_DT_20150323_092355 = ConstantOperator.createDatetime(LocalDateTime.of(2015, 3, 23, 9, 23, 55));

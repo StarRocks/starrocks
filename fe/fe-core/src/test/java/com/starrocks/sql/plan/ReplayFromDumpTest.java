@@ -239,7 +239,6 @@ public class ReplayFromDumpTest {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
@@ -259,7 +258,6 @@ public class ReplayFromDumpTest {
     @Test
     public void testTPCDS22() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds22"));
-        System.out.println(replayPair.second);
         // check d_date_sk distinct values has adjusted according to the cardinality
         Assert.assertTrue(replayPair.second.contains("4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
@@ -307,7 +305,6 @@ public class ReplayFromDumpTest {
     public void testJoinReorderPushColumnsNoHandleProject() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder"), null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("  |  <slot 40> : CAST(15: id_smallint AS INT)\n" +
                 "  |  <slot 41> : CAST(23: id_date AS DATETIME)\n" +
                 "  |  \n" +

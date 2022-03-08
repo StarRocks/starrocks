@@ -286,7 +286,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "select count(distinct v2) from t0 group by v3";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n"
                 + "  |  output: multi_distinct_count(2: v2)\n"
                 + "  |  group by: 3: v3"));
@@ -567,7 +566,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         sql = "select SUM(v3) from t0 group by grouping sets(())";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  3:EXCHANGE\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
@@ -662,7 +660,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  0:INTERSECT\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +

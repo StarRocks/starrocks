@@ -53,7 +53,6 @@ public class InsertPlanTest extends PlanTestBase {
                 "         2"));
 
         explainString = getInsertExecPlan("insert into t0(v1) select v5 from t1");
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: v5 | 4: expr | 5: expr\n" +
                 "  PARTITION: RANDOM\n" +
@@ -152,7 +151,6 @@ public class InsertPlanTest extends PlanTestBase {
                         "  |  <slot 3> : NULL\n" +
                         "  |  <slot 4> : if(NULL IS NULL, 0, 1)"));
 
-        System.out.println(explainString);
         explainString = getInsertExecPlan("insert into test_insert_mv_count(v3,v1) values(3,1)");
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:2: expr | 3: expr | 1: expr | 4: if"));
         Assert.assertTrue(explainString.contains(
@@ -337,7 +335,6 @@ public class InsertPlanTest extends PlanTestBase {
         ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
 
         String ret = execPlan.getExplainString(TExplainLevel.NORMAL);
-        //        System.out.println(ret);
         return ret;
     }
 
