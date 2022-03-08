@@ -42,11 +42,11 @@ public class QeService {
 
     public QeService(int port, boolean nioEnabled, ConnectScheduler scheduler) {
         // Set up help module
-        try {
-            HelpModule.getInstance().setUpModule();
-        } catch (Exception e) {
-            LOG.error("Help module failed, because:", e);
-        }
+        // try {
+        //     HelpModule.getInstance().setUpModule();
+        // } catch (Exception e) {
+        //     LOG.error("Help module failed, because:", e);
+        // }
         this.port = port;
         if (nioEnabled) {
             mysqlServer = new NMysqlServer(port, scheduler);
