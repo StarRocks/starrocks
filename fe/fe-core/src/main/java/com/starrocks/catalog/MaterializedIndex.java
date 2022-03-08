@@ -144,11 +144,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         tablets.clear();
     }
 
-    public void addTablet(Tablet tablet, TabletMeta tabletMeta) {
+    public void addTablet(LocalTablet tablet, TabletMeta tabletMeta) {
         addTablet(tablet, tabletMeta, false);
     }
 
-    public void addTablet(Tablet tablet, TabletMeta tabletMeta, boolean isRestore) {
+    public void addTablet(LocalTablet tablet, TabletMeta tabletMeta, boolean isRestore) {
         idToTablets.put(tablet.getId(), tablet);
         tablets.add(tablet);
         if (!isRestore) {
@@ -201,7 +201,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     public long getDataSize() {
         long dataSize = 0;
         for (Tablet tablet : getTablets()) {
-            dataSize += tablet.getDataSize(false);
+            dataSize += tablet.getDataSize();
         }
         return dataSize;
     }
@@ -209,7 +209,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     public long getReplicaCount() {
         long replicaCount = 0;
         for (Tablet tablet : getTablets()) {
-            replicaCount += tablet.getReplicas().size();
+            LocalTablet localTablet = (LocalTablet) tablet;
+            replicaCount += localTablet.getReplicas().size();
         }
         return replicaCount;
     }
@@ -254,7 +255,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
         int tabletCount = in.readInt();
         for (int i = 0; i < tabletCount; ++i) {
-            Tablet tablet = Tablet.read(in);
+            LocalTablet tablet = LocalTablet.read(in);
             tablets.add(tablet);
             idToTablets.put(tablet.getId(), tablet);
         }

@@ -70,7 +70,7 @@ public class GsonDerivedClassSerializationTest {
         @SerializedName(value = "flag")
         public int flag = 0;
 
-        public ParentClass(int flag, String clazz) {
+        public ParentClass(int flag) {
             this.flag = flag;
         }
 
@@ -95,8 +95,7 @@ public class GsonDerivedClassSerializationTest {
         public String postTagA;
 
         public ChildClassA(int flag, String tag) {
-            // pass "ChildClassA.class.getSimpleName()" to field "clazz"
-            super(flag, ChildClassA.class.getSimpleName());
+            super(flag);
             this.tagA = tag;
         }
 
@@ -112,8 +111,7 @@ public class GsonDerivedClassSerializationTest {
         public Map<Long, String> mapB = Maps.newConcurrentMap();
 
         public ChildClassB(int flag) {
-            // pass "ChildClassB.class.getSimpleName()" to field "clazz"
-            super(flag, ChildClassB.class.getSimpleName());
+            super(flag);
             this.mapB.put(1L, "B1");
             this.mapB.put(2L, "B2");
         }
@@ -141,11 +139,39 @@ public class GsonDerivedClassSerializationTest {
         }
     }
 
+    // Class A = ParentClass + ChildClassA
+    public static class ClassA implements Writable {
+        @SerializedName(value = "flag")
+        public int flag = 0;
+        @SerializedName(value = "tag")
+        public String tagA;
+
+        public String postTagA = "post tag a";
+
+        public ClassA(int flag, String tag) {
+            this.flag = flag;
+            this.tagA = tag;
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            String json = TEST_GSON.toJson(this);
+            System.out.println("write ClassA: " + json);
+            Text.writeString(out, json);
+        }
+
+        public static ClassA read(DataInput in) throws IOException {
+            String json = Text.readString(in);
+            System.out.println("read ClassA: " + json);
+            return TEST_GSON.fromJson(json, ClassA.class);
+        }
+    }
+
     private static RuntimeTypeAdapterFactory<ParentClass> runtimeTypeAdapterFactory = RuntimeTypeAdapterFactory
             // the "clazz" is a custom defined name
             .of(ParentClass.class, "clazz")
             // register 2 derived classes, the second parameter will be the value of "clazz"
-            .registerSubtype(ChildClassA.class, ChildClassA.class.getSimpleName())
+            .registerSubtype(ChildClassA.class, ChildClassA.class.getSimpleName(), true)
             .registerSubtype(ChildClassB.class, ChildClassB.class.getSimpleName());
 
     private static Gson TEST_GSON = new GsonBuilder()
@@ -217,4 +243,44 @@ public class GsonDerivedClassSerializationTest {
         Assert.assertEquals(1, ((ChildClassA) readWrapperClass.clz).flag);
     }
 
+    @Test
+    public void testDeserializeChildClassAFromClassA() throws IOException {
+        // 1. Write objects to file
+        File file = new File(fileName);
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+
+        ClassA classA = new ClassA(2, "B");
+        classA.write(out);
+        out.flush();
+        out.close();
+
+        // 2. Read objects from file
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        ParentClass parentClass = ParentClass.read(in);
+        Assert.assertTrue(parentClass instanceof ChildClassA);
+        Assert.assertEquals(2, ((ChildClassA) parentClass).flag);
+        Assert.assertEquals("B", ((ChildClassA) parentClass).tagA);
+        Assert.assertEquals("after post", ((ChildClassA) parentClass).postTagA);
+    }
+
+    @Test
+    public void testDeserializeClassAFromChildClassA() throws IOException {
+        // 1. Write objects to file
+        File file = new File(fileName);
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+
+        ChildClassA childClassA = new ChildClassA(3, "C");
+        childClassA.write(out);
+        out.flush();
+        out.close();
+
+        // 2. Read objects from file
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        ClassA classA = ClassA.read(in);
+        Assert.assertEquals(3, classA.flag);
+        Assert.assertEquals("C", classA.tagA);
+        Assert.assertEquals(null, classA.postTagA);
+    }
 }

@@ -102,7 +102,7 @@ public class TabletStatMgr extends MasterDaemon {
                             long indexRowCount = 0L;
                             for (Tablet tablet : index.getTablets()) {
                                 long tabletRowCount = 0L;
-                                for (Replica replica : tablet.getReplicas()) {
+                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                     if (replica.checkVersionCatchUp(version, false)
                                             && replica.getRowCount() > tabletRowCount) {
                                         tabletRowCount = replica.getRowCount();
