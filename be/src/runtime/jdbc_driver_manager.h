@@ -12,7 +12,6 @@ namespace starrocks {
 
 struct JDBCDriverEntry;
 
-
 // JDBCDriverManager is responsible for managing jdbc driver jar files.
 // All jar files will be placed in `${STARROCKS_HOME}/lib/jdbc_drivers` and named in the format of ${name}_${checksum}_${first_access_ts}.jar
 // `first_access_ts` represents the time when the driver is accessed for the first time on this node.
@@ -36,15 +35,17 @@ public:
 
     Status init(const std::string& driver_dir);
 
-    Status get_driver_location(const std::string& name, const std::string& url, const std::string& checksum, std::string* location);
+    Status get_driver_location(const std::string& name, const std::string& url, const std::string& checksum,
+                               std::string* location);
 
 private:
-
     Status _download_driver(const std::string& url, JDBCDriverEntryPtr& entry);
 
-    bool _parse_from_file_name(std::string_view file_name, std::string* name, std::string* checksum, int64_t* frist_access_ts);
+    bool _parse_from_file_name(std::string_view file_name, std::string* name, std::string* checksum,
+                               int64_t* frist_access_ts);
 
-    std::string _generate_driver_location(const std::string& name, const std::string& checksum, int64_t first_access_ts);
+    std::string _generate_driver_location(const std::string& name, const std::string& checksum,
+                                          int64_t first_access_ts);
 
     std::string _driver_dir;
 
@@ -54,4 +55,4 @@ private:
     static constexpr const char* TMP_FILE_SUFFIX = ".tmp";
     static constexpr const char* JAR_FILE_SUFFIX = ".jar";
 };
-}
+} // namespace starrocks

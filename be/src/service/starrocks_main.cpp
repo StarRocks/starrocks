@@ -189,7 +189,8 @@ int main(int argc, char** argv) {
     daemon->init(argc, argv, paths);
 
     // init jdbc driver manager
-    EXIT_IF_ERROR(starrocks::JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) + "/lib/jdbc_drivers"));
+    EXIT_IF_ERROR(starrocks::JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) +
+                                                                    "/lib/jdbc_drivers"));
 
     if (!starrocks::BackendOptions::init()) {
         exit(-1);

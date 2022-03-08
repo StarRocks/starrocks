@@ -3,10 +3,11 @@
 #include "runtime/jdbc_driver_manager.h"
 
 #include <atomic>
-#include <boost/algorithm/string/predicate.hpp>      // boost::algorithm::ends_with
+#include <boost/algorithm/string/predicate.hpp> // boost::algorithm::ends_with
 #include <chrono>
 
 #include "env/env.h"
+#include "fmt/format.h"
 #include "gutil/strings/split.h"
 #include "http/http_client.h"
 #include "util/defer_op.h"
@@ -14,13 +15,11 @@
 #include "util/file_utils.h"
 #include "util/md5.h"
 #include "util/slice.h"
-#include "fmt/format.h"
 
 namespace starrocks {
 
 struct JDBCDriverEntry {
-    JDBCDriverEntry(const std::string& name_, const std::string& checksum_)
-        : name(name_), checksum(checksum_) {}
+    JDBCDriverEntry(const std::string& name_, const std::string& checksum_) : name(name_), checksum(checksum_) {}
 
     ~JDBCDriverEntry();
 
@@ -49,10 +48,7 @@ JDBCDriverEntry::~JDBCDriverEntry() {
     }
 }
 
-
-JDBCDriverManager::JDBCDriverManager() {
-
-}
+JDBCDriverManager::JDBCDriverManager() {}
 
 JDBCDriverManager::~JDBCDriverManager() {
     std::unique_lock<std::mutex> l(_lock);
@@ -66,7 +62,6 @@ JDBCDriverManager* JDBCDriverManager::getInstance() {
     }
     return manager.get();
 }
-
 
 Status JDBCDriverManager::init(const std::string& driver_dir) {
     std::unique_lock<std::mutex> l(_lock);
@@ -104,7 +99,8 @@ Status JDBCDriverManager::init(const std::string& driver_dir) {
                 entry->is_downloaded = true;
                 entry->is_available.store(true);
                 _entry_map[name] = entry;
-                LOG(INFO) << fmt::format("load jdbc driver from file[{}], name[{}], checksum[{}], first_access_ts[{}]", file, entry->name, entry->checksum, entry->first_access_ts);
+                LOG(INFO) << fmt::format("load jdbc driver from file[{}], name[{}], checksum[{}], first_access_ts[{}]",
+                                         file, entry->name, entry->checksum, entry->first_access_ts);
             } else {
                 entry = iter->second;
                 // replace old with new and delete the old driver
@@ -118,7 +114,9 @@ Status JDBCDriverManager::init(const std::string& driver_dir) {
                     entry->is_downloaded = true;
                     entry->is_available.store(true);
                     _entry_map[name] = entry;
-                    LOG(INFO) << fmt::format("load jdbc driver from file[{}], name[{}], checksum[{}], first_access_ts[{}]", file, entry->name, entry->checksum, entry->first_access_ts);
+                    LOG(INFO) << fmt::format(
+                            "load jdbc driver from file[{}], name[{}], checksum[{}], first_access_ts[{}]", file,
+                            entry->name, entry->checksum, entry->first_access_ts);
                 } else {
                     // this driver is old, just remove
                     LOG(INFO) << fmt::format("try to remove an old jdbc driver, name[{}], file[{}]", name, target_file);
@@ -130,7 +128,8 @@ Status JDBCDriverManager::init(const std::string& driver_dir) {
     return Status::OK();
 }
 
-Status JDBCDriverManager::get_driver_location(const std::string& name, const std::string& url, const std::string& checksum, std::string* location) {
+Status JDBCDriverManager::get_driver_location(const std::string& name, const std::string& url,
+                                              const std::string& checksum, std::string* location) {
     JDBCDriverEntryPtr entry;
     {
         using namespace std::chrono;
@@ -167,16 +166,15 @@ Status JDBCDriverManager::get_driver_location(const std::string& name, const std
 }
 
 Status JDBCDriverManager::_download_driver(const std::string& url, JDBCDriverEntryPtr& entry) {
-    std::unique_lock<std::mutex> l (entry->download_lock);
+    std::unique_lock<std::mutex> l(entry->download_lock);
     if (entry->is_downloaded) {
         return Status::OK();
     }
-    LOG(INFO) << fmt::format("download jdbc driver {} from url {}, expected checksum is: {}", entry->name, url, entry->checksum);
+    LOG(INFO) << fmt::format("download jdbc driver {} from url {}, expected checksum is: {}", entry->name, url,
+                             entry->checksum);
     std::string tmp_file = fmt::format("{}/{}_{}.tmp", _driver_dir, entry->name, entry->checksum);
     auto fp = fopen(tmp_file.c_str(), "w");
-    DeferOp defer([&] () {
-        fclose(fp);
-    });
+    DeferOp defer([&]() { fclose(fp); });
 
     if (fp == nullptr) {
         LOG(ERROR) << fmt::format("fail to open file {}, error={}", tmp_file, ferror(fp));
@@ -189,7 +187,7 @@ Status JDBCDriverManager::_download_driver(const std::string& url, JDBCDriverEnt
     RETURN_IF_ERROR(client.init(url));
     Status status;
 
-    auto download_cb = [&status, &tmp_file, fp, &digest] (const void* data, size_t length) {
+    auto download_cb = [&status, &tmp_file, fp, &digest](const void* data, size_t length) {
         digest.update(data, length);
         auto res = fwrite(data, length, 1, fp);
         if (res != 1) {
@@ -204,7 +202,8 @@ Status JDBCDriverManager::_download_driver(const std::string& url, JDBCDriverEnt
 
     digest.digest();
     if (!boost::iequals(digest.hex(), entry->checksum)) {
-        LOG(ERROR) << fmt::format("JDBC Driver's checksum is not equal, expected={}, actual={}", entry->checksum, digest.hex());
+        LOG(ERROR) << fmt::format("JDBC Driver's checksum is not equal, expected={}, actual={}", entry->checksum,
+                                  digest.hex());
         return Status::InternalError("JDBC Driver's checksum is not match");
     }
 
@@ -219,7 +218,8 @@ Status JDBCDriverManager::_download_driver(const std::string& url, JDBCDriverEnt
     return Status::OK();
 }
 
-bool JDBCDriverManager::_parse_from_file_name(std::string_view file_name, std::string* name, std::string* checksum, int64_t* first_access_ts) {
+bool JDBCDriverManager::_parse_from_file_name(std::string_view file_name, std::string* name, std::string* checksum,
+                                              int64_t* first_access_ts) {
     // remove '.jar' suffix
     file_name.remove_suffix(std::strlen(JAR_FILE_SUFFIX));
 
@@ -256,9 +256,9 @@ bool JDBCDriverManager::_parse_from_file_name(std::string_view file_name, std::s
     return true;
 }
 
-std::string JDBCDriverManager::_generate_driver_location(const std::string& name, const std::string& checksum, int64_t first_access_ts) {
+std::string JDBCDriverManager::_generate_driver_location(const std::string& name, const std::string& checksum,
+                                                         int64_t first_access_ts) {
     return fmt::format("{}/{}_{}_{}.jar", _driver_dir, name, checksum, first_access_ts);
 }
 
-
-}
+} // namespace starrocks
