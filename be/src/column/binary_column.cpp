@@ -101,7 +101,7 @@ void BinaryColumn::append_value_multiple_times(const Column& src, uint32_t index
     _slices_cache = false;
 }
 
-bool BinaryColumn::append_strings(const std::vector<Slice>& strs) {
+bool BinaryColumn::append_strings(const Buffer<Slice>& strs) {
     for (const auto& s : strs) {
         const uint8_t* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
         _bytes.insert(_bytes.end(), p, p + s.size);
@@ -114,11 +114,11 @@ bool BinaryColumn::append_strings(const std::vector<Slice>& strs) {
 // NOTE: this function should not be inlined. If this function is inlined,
 // the append_strings_overflow will be slower by 30%
 template <size_t copy_length>
-void append_fixed_length(const std::vector<Slice>& strs, Bytes* bytes, BinaryColumn::Offsets* offsets)
+void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, BinaryColumn::Offsets* offsets)
         __attribute__((noinline));
 
 template <size_t copy_length>
-void append_fixed_length(const std::vector<Slice>& strs, Bytes* bytes, BinaryColumn::Offsets* offsets) {
+void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, BinaryColumn::Offsets* offsets) {
     size_t size = bytes->size();
     for (const auto& s : strs) {
         size += s.size;
@@ -134,7 +134,7 @@ void append_fixed_length(const std::vector<Slice>& strs, Bytes* bytes, BinaryCol
     bytes->resize(offset);
 }
 
-bool BinaryColumn::append_strings_overflow(const std::vector<Slice>& strs, size_t max_length) {
+bool BinaryColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
     if (max_length <= 16) {
         append_fixed_length<16>(strs, &_bytes, &_offsets);
     } else if (max_length <= 32) {
@@ -154,7 +154,7 @@ bool BinaryColumn::append_strings_overflow(const std::vector<Slice>& strs, size_
     return true;
 }
 
-bool BinaryColumn::append_continuous_strings(const std::vector<Slice>& strs) {
+bool BinaryColumn::append_continuous_strings(const Buffer<Slice>& strs) {
     if (strs.empty()) {
         return true;
     }
@@ -420,7 +420,7 @@ const uint8_t* BinaryColumn::deserialize_and_append(const uint8_t* pos) {
     return pos + string_size;
 }
 
-void BinaryColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+void BinaryColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     uint32_t string_size = *((uint32_t*)srcs[0].data);
     _bytes.reserve(chunk_size * string_size * 2);
     for (size_t i = 0; i < chunk_size; ++i) {
