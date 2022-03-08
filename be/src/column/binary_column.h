@@ -149,11 +149,11 @@ public:
         _slices_cache = false;
     }
 
-    bool append_strings(const std::vector<Slice>& strs) override;
+    bool append_strings(const Buffer<Slice>& strs) override;
 
-    bool append_strings_overflow(const std::vector<Slice>& strs, size_t max_length) override;
+    bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;
 
-    bool append_continuous_strings(const std::vector<Slice>& strs) override;
+    bool append_continuous_strings(const Buffer<Slice>& strs) override;
 
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
@@ -182,7 +182,7 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
+    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override { return sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]; }
 
