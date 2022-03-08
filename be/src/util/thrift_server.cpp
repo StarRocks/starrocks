@@ -135,11 +135,30 @@ Status ThriftServer::ThriftServerEventProcessor::start_and_wait_for_server() {
 void ThriftServer::ThriftServerEventProcessor::supervise() {
     DCHECK(_thrift_server->_server.get() != nullptr);
 
+    // serve() will call preServe() internal to set _started = true before serve loop start
     try {
         _thrift_server->_server->serve();
     } catch (apache::thrift::TException& e) {
         LOG(ERROR) << "ThriftServer '" << _thrift_server->_name << "' (on port: " << _thrift_server->_port
                    << ") exited due to TException: " << e.what();
+    }
+    // There are three scenario of serve loop
+    // 1. Accept timeout and client disconnect - ThriftServer continue processing.
+    // 2. Server was interrupted.  This only happens when stop() called. - ThriftServer serve return
+    // 3. All other transport exceptions are only logged. - ThriftServer serve return.
+    // In scenario 3 we prefer to retry before stop() called, it will reset the transport
+    while (!_thrift_server->_stopped && _thrift_server->_started) {
+        try {
+            _thrift_server->_server->serve();
+            if (!_thrift_server->_stopped) {
+                LOG(ERROR) << "ThriftServer '" << _thrift_server->_name << "' (on port: " << _thrift_server->_port
+                           << ") exited unexpected. ";
+            }
+        } catch (apache::thrift::TException& e) {
+            LOG(ERROR) << "ThriftServer '" << _thrift_server->_name << "' (on port: " << _thrift_server->_port
+                       << ") exited due to TException: " << e.what();
+        }
+        SleepFor(MonoDelta::FromSeconds(3));
     }
 
     {
@@ -360,6 +379,7 @@ Status ThriftServer::start() {
 }
 
 void ThriftServer::stop() {
+    _stopped = true;
     _server->stop();
 }
 
