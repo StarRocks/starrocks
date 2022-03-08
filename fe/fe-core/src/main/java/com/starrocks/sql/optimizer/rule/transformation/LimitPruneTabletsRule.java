@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -60,7 +61,7 @@ public class LimitPruneTabletsRule extends TransformationRule {
 
             for (Tablet tablet : index.getTablets()) {
                 long tabletRowCount = 0L;
-                for (Replica replica : tablet.getReplicas()) {
+                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                     if (replica.checkVersionCatchUp(version, false)
                             && replica.getRowCount() > tabletRowCount) {
                         tabletRowCount = replica.getRowCount();

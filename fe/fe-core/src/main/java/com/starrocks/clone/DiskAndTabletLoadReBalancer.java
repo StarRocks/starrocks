@@ -10,6 +10,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -890,7 +891,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             int cnt = 0;
             for (Tablet tablet : index.getTablets()) {
-                List<Replica> replicas = tablet.getReplicas();
+                List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
                 if (replicas == null) {
                     continue;
                 }
@@ -1232,7 +1233,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 }
             }
             for (Tablet tablet : index.getTablets()) {
-                List<Replica> replicas = tablet.getReplicas();
+                List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
                 if (replicas == null) {
                     continue;
                 }
@@ -1295,7 +1296,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return false;
             }
 
-            Tablet tablet = index.getTablet(tabletId);
+            LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
             if (tablet == null) {
                 return false;
             }
@@ -1305,14 +1306,14 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return false;
             }
 
-            Pair<Tablet.TabletStatus, TabletSchedCtx.Priority> statusPair =
+            Pair<LocalTablet.TabletStatus, TabletSchedCtx.Priority> statusPair =
                     tablet.getHealthStatusWithPriority(infoService,
                             db.getClusterName(),
                             partition.getVisibleVersion(),
                             replicaNum,
                             aliveBeIds);
 
-            return statusPair.first == Tablet.TabletStatus.HEALTHY;
+            return statusPair.first == LocalTablet.TabletStatus.HEALTHY;
         } finally {
             db.readUnlock();
         }
@@ -1427,7 +1428,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                 }
                             }
                             for (Tablet tablet : idx.getTablets()) {
-                                List<Replica> replicas = tablet.getReplicas();
+                                List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
                                 if (replicas != null) {
                                     for (Replica replica : replicas) {
                                         if (replica.getState() != ReplicaState.NORMAL) {

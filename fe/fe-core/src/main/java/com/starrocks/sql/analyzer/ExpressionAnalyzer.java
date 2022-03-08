@@ -335,7 +335,7 @@ public class ExpressionAnalyzer {
                                     + " is invalid.");
                 }
 
-                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[]{commonType, commonType},
+                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {commonType, commonType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
                 /*
@@ -348,7 +348,7 @@ public class ExpressionAnalyzer {
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
 
                 Function fn = Expr.getBuiltinFunction(
-                        node.getOp().getName(), new Type[]{Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
+                        node.getOp().getName(), new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
 
                 node.setType(Type.BIGINT);
                 node.setFn(fn);
@@ -411,6 +411,10 @@ public class ExpressionAnalyzer {
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
 
             for (Type type : list) {
+                // TODO(mofei) support it
+                if (type.isJsonType()) {
+                    throw new SemanticException("InPredicate of JSON is not supported");
+                }
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
@@ -508,7 +512,7 @@ public class ExpressionAnalyzer {
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
-                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[]{argumentTypes[0]},
+                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

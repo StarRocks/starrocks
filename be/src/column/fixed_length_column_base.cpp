@@ -168,7 +168,7 @@ const uint8_t* FixedLengthColumnBase<T>::deserialize_and_append(const uint8_t* p
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+void FixedLengthColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     raw::make_room(&_data, chunk_size);
     for (size_t i = 0; i < chunk_size; ++i) {
         memcpy(&_data[i], srcs[i].data, sizeof(T));

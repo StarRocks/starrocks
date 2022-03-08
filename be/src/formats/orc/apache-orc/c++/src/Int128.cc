@@ -32,11 +32,11 @@
 namespace orc {
 
 Int128 Int128::maximumValue() {
-    return {0x7fffffffffffffff, 0xfffffffffffffff};
+    return Int128(0x7fffffffffffffff, 0xfffffffffffffff);
 }
 
 Int128 Int128::minimumValue() {
-    return {static_cast<int64_t>(0x8000000000000000), 0x0};
+    return Int128(static_cast<int64_t>(0x8000000000000000), 0x0);
 }
 
 Int128::Int128(const std::string& str) {
