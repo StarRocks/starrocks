@@ -356,7 +356,7 @@ intervalField
 
 type
     : baseType
-    | decimalType ('(' precision=typeParameter (',' scale=typeParameter)? ')')?
+    | decimalType ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
     | arrayType
     ;
 
@@ -365,7 +365,7 @@ arrayType
     ;
 
 typeParameter
-    : INTEGER_VALUE
+    : '(' INTEGER_VALUE ')'
     ;
 
 baseType

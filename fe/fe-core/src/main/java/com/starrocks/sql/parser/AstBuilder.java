@@ -1592,11 +1592,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
             }
 
-            int precision = Integer.parseInt(type.precision.INTEGER_VALUE().toString());
+            int precision = Integer.parseInt(type.precision.getText());
             int scale = ScalarType.DEFAULT_SCALE;
 
             if (type.scale != null) {
-                scale = Integer.parseInt(type.scale.INTEGER_VALUE().toString());
+                scale = Integer.parseInt(type.scale.getText());
             }
 
             if (type.decimalType().DECIMAL() != null) {
