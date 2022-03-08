@@ -510,4 +510,47 @@ TEST(FixedLengthColumnTest, test_swap_column) {
     ASSERT_EQ(3, c2->get_data()[2]);
 }
 
+TEST(FixedLengthColumnTest, test_update_rows) {
+    auto column = FixedLengthColumn<int32_t>::create();
+    for (int i = 0; i < 100; i++) {
+        column->append(i);
+    }
+
+    ASSERT_EQ(true, column->is_numeric());
+    ASSERT_EQ(100, column->size());
+    ASSERT_EQ(100 * 4, column->byte_size());
+
+    for (int i = 0; i < 100; i++) {
+        ASSERT_EQ(column->get_data()[i], i);
+    }
+
+    auto replace_column = FixedLengthColumn<int32_t>::create();
+    for (int i = 0; i < 10; i++) {
+        replace_column->append(i + 100);
+    }
+
+    std::vector<uint32_t> replace_idxes = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    ASSERT_TRUE(column->update_rows(*replace_column.get(), replace_idxes.data()).ok());
+
+    for (int i = 0; i < 10; i++) {
+        ASSERT_EQ(column->get_data()[i], i + 100);
+    }
+
+    for (int i = 10; i < 100; i++) {
+        ASSERT_EQ(column->get_data()[i], i);
+    }
+}
+
+TEST(FixedLengthColumnTest, test_xor_checksum) {
+    auto column = FixedLengthColumn<int32_t>::create();
+    for (int i = 0; i <= 100; i++) {
+        column->append(i);
+    }
+
+    int64_t checksum = column->xor_checksum(0, 101);
+    int64_t expected_checksum = 100;
+
+    ASSERT_EQ(checksum, expected_checksum);
+}
+
 } // namespace starrocks::vectorized

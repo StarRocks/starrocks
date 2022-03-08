@@ -335,6 +335,19 @@ void ArrayColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     }
 }
 
+int64_t ArrayColumn::xor_checksum(uint32_t from, uint32_t to) const {
+    // The XOR of ArrayColumn
+    // XOR the offsets column and elements column
+    int64_t xor_checksum = 0;
+    for (size_t idx = from; idx < to; ++idx) {
+        int64_t array_size = _offsets->get_data()[idx + 1] - _offsets->get_data()[idx];
+        xor_checksum ^= array_size;
+    }
+    uint32_t element_from = _offsets->get_data()[from];
+    uint32_t element_to = _offsets->get_data()[to];
+    return (xor_checksum ^ _elements->xor_checksum(element_from, element_to));
+}
+
 void ArrayColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     DCHECK_LT(idx, size());
     const size_t offset = _offsets->get_data()[idx];

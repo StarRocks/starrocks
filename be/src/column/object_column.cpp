@@ -203,6 +203,12 @@ void ObjectColumn<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) con
 }
 
 template <typename T>
+int64_t ObjectColumn<T>::xor_checksum(uint32_t from, uint32_t to) const {
+    DCHECK(false) << "object column shouldn't call xor_checksum";
+    return 0;
+}
+
+template <typename T>
 void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const {
     buf->push_null();
 }

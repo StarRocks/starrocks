@@ -192,6 +192,37 @@ void FixedLengthColumnBase<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_
 }
 
 template <typename T>
+int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
+    int64_t xor_checksum = 0;
+    if constexpr (IsDate<T>) {
+        for (size_t i = from; i < to; ++i) {
+            xor_checksum ^= _data[i].to_date_literal();
+        }
+    } else if constexpr (IsTimestamp<T>) {
+        for (size_t i = from; i < to; ++i) {
+            xor_checksum ^= _data[i].to_timestamp_literal();
+        }
+    } else if constexpr (IsDecimal<T>) {
+        for (size_t i = from; i < to; ++i) {
+            xor_checksum ^= _data[i].int_value();
+            xor_checksum ^= _data[i].frac_value();
+        }
+    } else if constexpr (is_signed_integer<T>) {
+        const T* src = reinterpret_cast<const T*>(_data.data());
+        for (size_t i = from; i < to; ++i) {
+            if constexpr (std::is_same_v<T, int128_t>) {
+                xor_checksum ^= (src[i] >> 64);
+                xor_checksum ^= (src[i] & ULLONG_MAX);
+            } else {
+                xor_checksum ^= src[i];
+            }
+        }
+    }
+
+    return xor_checksum;
+}
+
+template <typename T>
 void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     if constexpr (IsDecimal<T>) {
         buf->push_decimal(_data[idx].to_string());

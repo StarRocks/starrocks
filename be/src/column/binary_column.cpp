@@ -386,6 +386,48 @@ void BinaryColumn::crc32_hash(uint32_t* hashes, uint32_t from, uint32_t to) cons
     }
 }
 
+int64_t BinaryColumn::xor_checksum(uint32_t from, uint32_t to) const {
+    // The XOR of BinaryColumn
+    // For one string, treat it as a number of 64-bit integers and 8-bit integers.
+    // XOR all of the integers to get a checksum for one string.
+    // XOR all of the checksums to get xor_checksum.
+    int64_t xor_checksum = 0;
+
+    for (size_t i = from; i < to; ++i) {
+        size_t num = _offsets[i + 1] - _offsets[i];
+        const uint8_t* src = reinterpret_cast<const uint8_t*>(_bytes.data() + _offsets[i]);
+
+#ifdef __AVX2__
+        // AVX2 intructions can improve the speed of XOR procedure of one string.
+        __m256i avx2_checksum = _mm256_setzero_si256();
+        size_t step = sizeof(__m256i) / sizeof(uint8_t);
+
+        while (num >= step) {
+            const __m256i left = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
+            avx2_checksum = _mm256_xor_si256(left, avx2_checksum);
+            src += step;
+            num -= step;
+        }
+        int64_t* checksum_vec = reinterpret_cast<int64_t*>(&avx2_checksum);
+        size_t eight_byte_step = sizeof(__m256i) / sizeof(int64_t);
+        for (size_t j = 0; j < eight_byte_step; ++j) {
+            xor_checksum ^= checksum_vec[j];
+        }
+#endif
+
+        while (num >= 8) {
+            xor_checksum ^= *reinterpret_cast<const int64_t*>(src);
+            src += 8;
+            num -= 8;
+        }
+        for (size_t j = 0; j < num; ++j) {
+            xor_checksum ^= src[j];
+        }
+    }
+
+    return xor_checksum;
+}
+
 void BinaryColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     uint32_t start = _offsets[idx];
     uint32_t len = _offsets[idx + 1] - start;

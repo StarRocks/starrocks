@@ -290,6 +290,26 @@ void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) cons
     }
 }
 
+int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
+    if (!_has_null) {
+        return _data_column->xor_checksum(from, to);
+    }
+
+    int64_t xor_checksum = 0;
+    size_t num = _null_column->size();
+    uint8_t* src = _null_column->get_data().data();
+
+    // The XOR of NullableColumn
+    // XOR all the 8-bit integers one by one
+    for (size_t i = 0; i < num; ++i) {
+        xor_checksum ^= src[i];
+        if (!src[i]) {
+            xor_checksum ^= _data_column->xor_checksum(i, i + 1);
+        }
+    }
+    return xor_checksum;
+}
+
 void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     if (_has_null && _null_column->get_data()[idx]) {
         buf->push_null();
