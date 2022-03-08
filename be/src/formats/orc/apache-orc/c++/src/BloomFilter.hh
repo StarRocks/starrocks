@@ -167,10 +167,10 @@ private:
     friend struct BloomFilterUTF8Utils;
 
     // compute k hash values from hash64 and set bits
-    void addHash(uint64_t hash64);
+    void addHash(int64_t hash64);
 
     // compute k hash values from hash64 and check bits
-    bool testHash(uint64_t hash64) const;
+    bool testHash(int64_t hash64) const;
 
     void serialize(proto::BloomFilter& bloomFilter) const;
 
@@ -191,4 +191,17 @@ struct BloomFilterUTF8Utils {
                                                     const proto::BloomFilter& bloomFilter);
 };
 
+// Thomas Wang's integer hash function
+// http://web.archive.org/web/20071223173210/http://www.concentric.net/~Ttwang/tech/inthash.htm
+// Put this in header file so tests can use it as well.
+inline int64_t getLongHash(int64_t key) {
+    key = (~key) + (key << 21); // key = (key << 21) - key - 1;
+    key = key ^ (key >> 24);
+    key = (key + (key << 3)) + (key << 8); // key * 265
+    key = key ^ (key >> 14);
+    key = (key + (key << 2)) + (key << 4); // key * 21
+    key = key ^ (key >> 28);
+    key = key + (key << 31);
+    return key;
+}
 } // namespace orc

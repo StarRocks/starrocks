@@ -1,7 +1,3 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/orc/tree/main/c++/test/TestPredicateLeaf.cc
-
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -250,6 +246,10 @@ TEST(TestPredicateLeaf, testLessThanEquals) {
     EXPECT_EQ(TruthValue::YES_NO_NULL, evaluate(pred, createIntStats(10L, 30L, true)));
     EXPECT_EQ(TruthValue::YES_NULL, evaluate(pred, createIntStats(10L, 15L, true)));
     EXPECT_EQ(TruthValue::YES_NULL, evaluate(pred, createIntStats(0L, 10L, true)));
+    // Edge cases where minValue == maxValue
+    EXPECT_EQ(TruthValue::YES_NULL, evaluate(pred, createIntStats(10L, 10L, true)));
+    EXPECT_EQ(TruthValue::YES_NULL, evaluate(pred, createIntStats(15L, 15L, true)));
+    EXPECT_EQ(TruthValue::NO_NULL, evaluate(pred, createIntStats(20L, 20L, true)));
     // Edge case where stats contain NaN or Inf numbers
     PredicateLeaf pred4(PredicateLeaf::Operator::LESS_THAN, PredicateDataType::FLOAT, "x", Literal(10.0));
     const auto& dInf = static_cast<double>(INFINITY);
@@ -264,6 +264,13 @@ TEST(TestPredicateLeaf, testIn) {
     EXPECT_EQ(TruthValue::NO_NULL, evaluate(pred, createIntStats(30L, 30L, true)));
     EXPECT_EQ(TruthValue::YES_NO_NULL, evaluate(pred, createIntStats(10L, 30L, true)));
     EXPECT_EQ(TruthValue::NO_NULL, evaluate(pred, createIntStats(12L, 18L, true)));
+
+    std::vector<Literal> inList{static_cast<int64_t>(10), static_cast<int64_t>(15), static_cast<int64_t>(20)};
+    PredicateLeaf pred2(PredicateLeaf::Operator::IN, PredicateDataType::LONG, "y", inList);
+    EXPECT_EQ(TruthValue::YES_NULL, evaluate(pred2, createIntStats(20L, 20L, true)));
+    EXPECT_EQ(TruthValue::NO_NULL, evaluate(pred2, createIntStats(12L, 14L, true)));
+    EXPECT_EQ(TruthValue::NO_NULL, evaluate(pred2, createIntStats(16L, 19L, true)));
+    EXPECT_EQ(TruthValue::YES_NO_NULL, evaluate(pred2, createIntStats(12L, 18L, true)));
 }
 
 TEST(TestPredicateLeaf, testBetween) {
@@ -327,7 +334,10 @@ TEST(TestPredicateLeaf, testLessThanEqualsWithNullInStats) {
     EXPECT_EQ(TruthValue::YES_NULL, evaluate(pred, createStringStats("b", "c", true)));
     EXPECT_EQ(TruthValue::YES_NO_NULL, evaluate(pred, createStringStats("c", "d", true)));
     EXPECT_EQ(TruthValue::YES_NO_NULL, evaluate(pred, createStringStats("b", "d", true)));
-    EXPECT_EQ(TruthValue::YES_NO_NULL, evaluate(pred, createStringStats("c", "c", true)));
+    // Edge cases where minValue == maxValue
+    EXPECT_EQ(TruthValue::YES_NULL, evaluate(pred, createStringStats("a", "a", true)));
+    EXPECT_EQ(TruthValue::YES_NULL, evaluate(pred, createStringStats("c", "c", true)));
+    EXPECT_EQ(TruthValue::NO_NULL, evaluate(pred, createStringStats("d", "d", true)));
 }
 
 TEST(TestPredicateLeaf, testInWithNullInStats) {
@@ -566,7 +576,9 @@ TEST(TestPredicateLeaf, testTimestampWithNanos) {
 
     PredicateLeaf pred2(PredicateLeaf::Operator::LESS_THAN_EQUALS, PredicateDataType::TIMESTAMP, "x",
                         Literal(static_cast<int64_t>(0), 500000));
-    EXPECT_EQ(TruthValue::YES_NO, evaluate(pred2, createTimestampStats(0, 500000, 0, 500000)));
+    EXPECT_EQ(TruthValue::YES, evaluate(pred2, createTimestampStats(0, 499999, 0, 499999)));
+    EXPECT_EQ(TruthValue::YES, evaluate(pred2, createTimestampStats(0, 500000, 0, 500000)));
+    EXPECT_EQ(TruthValue::NO, evaluate(pred2, createTimestampStats(0, 500001, 0, 500001)));
 
     PredicateLeaf pred3(PredicateLeaf::Operator::LESS_THAN, PredicateDataType::TIMESTAMP, "x",
                         Literal(static_cast<int64_t>(0), 500000));

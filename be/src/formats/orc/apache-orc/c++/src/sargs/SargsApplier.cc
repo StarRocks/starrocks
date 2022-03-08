@@ -29,7 +29,8 @@ namespace orc {
 // find column id from column name
 uint64_t SargsApplier::findColumn(const Type& type, const std::string& colName) {
     for (uint64_t i = 0; i != type.getSubtypeCount(); ++i) {
-        if (i < type.getFieldNamesCount() && (type.getFieldName(i) == colName)) {
+        // Only STRUCT type has field names
+        if (type.getKind() == STRUCT && i < type.getFieldNamesCount() && type.getFieldName(i) == colName) {
             return type.getSubtype(i)->getColumnId();
         } else {
             uint64_t ret = findColumn(*type.getSubtype(i), colName);
