@@ -85,6 +85,7 @@ uint64_t key_index_hash(const void* data, size_t len) {
 }
 
 static std::tuple<size_t, size_t> estimate_nshard_and_npage(size_t kv_size, size_t size, size_t usage_percent) {
+    // if size == 0, will return { nshard:1, npage:0 }, meaning an empty shard
     size_t usage = size * kv_size;
     size_t cap = usage * 100 / usage_percent;
     size_t nshard = 1;
@@ -151,7 +152,11 @@ struct ImmutableIndexShard {
 };
 
 Status ImmutableIndexShard::write(fs::WritableBlock& wb) const {
-    return wb.append(Slice((uint8_t*)pages.data(), page_size * pages.size()));
+    if (pages.size() > 0) {
+        return wb.append(Slice((uint8_t*)pages.data(), page_size * pages.size()));
+    } else {
+        return Status::OK();
+    }
 }
 
 inline size_t num_pack_for_bucket(size_t kv_size, size_t num_kv) {
@@ -315,6 +320,9 @@ static void copy_kv_to_page(size_t kv_size, size_t num_kv, const KVPairPtr* kv_p
 StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_t kv_size,
                                                                            const std::vector<KVRef>& kv_refs,
                                                                            size_t npage_hint) {
+    if (kv_refs.size() == 0) {
+        return std::make_unique<ImmutableIndexShard>(0);
+    }
     size_t npage = npage_hint;
     size_t bucket_size_limit = std::min(bucket_size_max, (page_size - page_header_size) / (kv_size + 1));
     size_t nbucket = npage * bucket_per_page;
@@ -438,7 +446,7 @@ public:
             _fixed_key_size = key_size;
             _fixed_value_size = value_size;
         } else {
-            CHECK(key_size == _fixed_key_size && value_size == _fixed_value_size) << "key/value size not the same";
+            CHECK(key_size == _fixed_key_size && value_size == _fixed_value_size) << "key/value sizes not the same";
         }
         size_t kv_size = key_size + value_size;
         auto rs_create = ImmutableIndexShard::create(kv_size, kvs, npage_hint);
@@ -466,8 +474,8 @@ public:
     Status finish() {
         LOG(INFO) << strings::Substitute(
                 "finish writing immutable index $0 #shard:$1 #kv:$2 #moved:$3($4) bytes:$5 usage:$6",
-                _idx_file_path_tmp, _nshard, _total, _total_moved, _total_moved * 1000 / _total / 1000.0, _total_bytes,
-                _total_kv_size * 1000 / _total_bytes / 1000.0);
+                _idx_file_path_tmp, _nshard, _total, _total_moved, _total_moved * 1000 / std::max(_total, 1UL) / 1000.0,
+                _total_bytes, _total_kv_size * 1000 / std::max(_total_bytes, 1UL) / 1000.0);
         _version.to_pb(_meta.mutable_version());
         _meta.set_size(_total);
         _meta.set_fixed_key_size(_fixed_key_size);
@@ -668,11 +676,13 @@ public:
         size_t value_size = sizeof(IndexValue);
         size_t kv_size = KeySize + value_size;
         auto [nshard, npage_hint] = estimate_nshard_and_npage(kv_size, size(), default_usage_percent);
-        auto kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), true);
         ImmutableIndexWriter writer;
         RETURN_IF_ERROR(writer.init(dir, version));
-        for (auto& kvs : kv_ref_by_shard) {
-            RETURN_IF_ERROR(writer.write_shard(KeySize, value_size, npage_hint, kvs));
+        if (nshard > 0) {
+            auto kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), true);
+            for (auto& kvs : kv_ref_by_shard) {
+                RETURN_IF_ERROR(writer.write_shard(KeySize, value_size, npage_hint, kvs));
+            }
         }
         return writer.finish();
     }
@@ -778,7 +788,7 @@ Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_b
 Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info,
                                      IndexValue* values, size_t* num_found) const {
     const auto& shard_info = _shards[shard_idx];
-    if (shard_info.size == 0 || keys_info.size() == 0) {
+    if (shard_info.size == 0 || shard_info.npage == 0 || keys_info.size() == 0) {
         return Status::OK();
     }
     size_t found = 0;
