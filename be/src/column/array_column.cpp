@@ -6,6 +6,7 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "exec/vectorized/sorting/sort_helper.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
@@ -322,6 +323,15 @@ size_t ArrayColumn::filter_range(const Column::Filter& filter, size_t from, size
     DCHECK_EQ(offsets[result_offset], ret);
     resize(result_offset);
     return result_offset;
+}
+
+void ArrayColumn::sort_and_tie(bool is_asc_order, bool is_null_first, Permutation& permutation,
+                               std::vector<uint8_t>& tie) {
+    auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
+        // TODO(mofei) direction
+        return compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *this, is_null_first);
+    };
+    sort_and_tie_helper(this, is_asc_order, permutation, tie, cmp);
 }
 
 int ArrayColumn::compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const {

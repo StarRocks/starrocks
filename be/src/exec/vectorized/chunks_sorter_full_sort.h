@@ -42,6 +42,7 @@ private:
     Status _sort_chunks(RuntimeState* state);
     Status _build_sorting_data(RuntimeState* state);
 
+    Status _sort_by_column_inc(RuntimeState* state);
     Status _sort_by_row_cmp(RuntimeState* state);
     Status _sort_by_columns(RuntimeState* state);
 

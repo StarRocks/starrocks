@@ -4,6 +4,7 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "exec/vectorized/sorting/sort_helper.h"
 #include "gutil/casts.h"
 #include "runtime/large_int_value.h"
 #include "storage/decimal12.h"
@@ -57,6 +58,16 @@ size_t FixedLengthColumnBase<T>::filter_range(const Column::Filter& filter, size
     auto size = ColumnHelper::filter_range<T>(filter, _data.data(), from, to);
     this->resize(size);
     return size;
+}
+
+template <typename T>
+void FixedLengthColumnBase<T>::sort_and_tie(bool is_asc_order, bool is_null_first, Permutation& permutation,
+                                            std::vector<uint8_t>& tie) {
+    DCHECK_GE(size(), permutation.size());
+    auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) -> int {
+        return SorterComparator<T>::compare(_data[lhs.index_in_chunk], _data[rhs.index_in_chunk]);
+    };
+    sort_and_tie_helper(this, is_asc_order, permutation, tie, cmp);
 }
 
 template <typename T>

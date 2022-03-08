@@ -2,6 +2,8 @@
 
 #include "column/binary_column.h"
 
+#include "exec/vectorized/sorting/sort_helper.h"
+
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -367,6 +369,15 @@ size_t BinaryColumn::filter_range(const Column::Filter& filter, size_t from, siz
 
     this->resize(result_offset);
     return result_offset;
+}
+
+void BinaryColumn::sort_and_tie(bool is_asc_order, bool is_null_first, Permutation& permutation,
+                                std::vector<uint8_t>& tie) {
+    DCHECK_GE(size(), permutation.size());
+    auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) -> int {
+        return SorterComparator<Slice>::compare(get_slice(lhs.index_in_chunk), get_slice(rhs.index_in_chunk));
+    };
+    sort_and_tie_helper(this, is_asc_order, permutation, tie, cmp);
 }
 
 int BinaryColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {

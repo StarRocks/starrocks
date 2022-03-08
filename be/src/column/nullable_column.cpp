@@ -5,8 +5,10 @@
 #include <gutil/strings/fastmem.h>
 
 #include "column/column_helper.h"
+#include "exec/vectorized/sorting/sort_helper.h"
 #include "gutil/casts.h"
 #include "simd/simd.h"
+#include "storage/null_predicate.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks::vectorized {
@@ -181,6 +183,11 @@ size_t NullableColumn::filter_range(const Column::Filter& filter, size_t from, s
     update_has_null();
     DCHECK_EQ(s1, s2);
     return s1;
+}
+
+void NullableColumn::sort_and_tie(bool is_asc_order, bool is_null_first, Permutation& permutation,
+                                  std::vector<uint8_t>& tie) {
+    sort_and_tie_helper_nullable(this, is_asc_order, is_null_first, permutation, tie);
 }
 
 int NullableColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
