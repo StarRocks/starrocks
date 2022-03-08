@@ -3868,6 +3868,7 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testUnionNullConstant() throws Exception {
+        Config.enable_decimal_v3 = true;
         String sql = "select count(*) from (select null as c1 union all select null as c1) t group by t.c1";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("0:UNION\n" +
@@ -3885,6 +3886,7 @@ public class PlanFragmentTest extends PlanTestBase {
         sql =
                 "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("0:UNION\n" +
                 "  |  child exprs:\n" +
                 "  |      [1, DECIMAL64(12,2), true]\n" +
@@ -3897,6 +3899,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  child exprs:\n" +
                 "  |      [1, DECIMAL64(12,2), true]\n" +
                 "  |      [2, DECIMAL64(12,2), true]"));
+        Config.enable_decimal_v3 = false;
     }
 
     @Test
