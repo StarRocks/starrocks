@@ -204,6 +204,9 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
     } else if (!config::object_storage_endpoint.empty()) {
         config.endpointOverride = config::object_storage_endpoint;
     }
+    if (!config::object_storage_region.empty()) {
+        config.region = config::object_storage_region;
+    }
     config.maxConnections = config::object_storage_max_connection;
     return S3ClientFactory::instance().new_client(config);
 }
