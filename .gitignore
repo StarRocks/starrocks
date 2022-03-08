@@ -30,6 +30,7 @@ fe_plugins/output
 fe/mocked
 fe/ut_ports
 fe/*/target
+fe/fe-core/gen
 fe/fe-common/.classpath
 fs_brokers/apache_hdfs_broker/src/main/resources/
 fs_brokers/apache_hdfs_broker/src/main/thrift/

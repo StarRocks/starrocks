@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -194,4 +196,280 @@ public class SetTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("0:EXCEPT"));
     }
 
+    @Test
+    public void testSetOpCast() throws Exception {
+        String sql = "select * from t0 union all (select * from t1 union all select k1,k7,k8 from  baseall)";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(
+                "  0:UNION\n" +
+                        "  |  child exprs:\n" +
+                        "  |      [1, BIGINT, true] | [4, VARCHAR(20), true] | [5, DOUBLE, true]\n" +
+                        "  |      [23, BIGINT, true] | [24, VARCHAR(20), true] | [25, DOUBLE, true]"));
+        Assert.assertTrue(plan.contains(
+                "  |  19 <-> [19: k7, VARCHAR, true]\n" +
+                        "  |  20 <-> [20: k8, DOUBLE, true]\n" +
+                        "  |  22 <-> cast([11: k1, TINYINT, true] as BIGINT)"));
+
+        sql =
+                "select * from t0 union all (select cast(v4 as int), v5,v6 from t1 except select cast(v7 as int), v8, v9 from t2)";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [1, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
+                "  |      [15, BIGINT, true] | [13, BIGINT, true] | [14, BIGINT, true]\n" +
+                "  |  pass-through-operands: all\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  |----11:EXCHANGE\n" +
+                "  |       cardinality: 1\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n" +
+                "     cardinality: 1\n" +
+                "\n" +
+                "PLAN FRAGMENT 1(F02)\n" +
+                "\n" +
+                "  Input Partition: RANDOM\n" +
+                "  OutPut Partition: RANDOM\n" +
+                "  OutPut Exchange Id: 11\n" +
+                "\n" +
+                "  10:Project\n" +
+                "  |  output columns:\n" +
+                "  |  13 <-> [13: v5, BIGINT, true]\n" +
+                "  |  14 <-> [14: v6, BIGINT, true]\n" +
+                "  |  15 <-> cast([12: cast, INT, true] as BIGINT)\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:EXCEPT\n" +
+                "  |  child exprs:\n" +
+                "  |      [7, INT, true] | [5, BIGINT, true] | [6, BIGINT, true]\n" +
+                "  |      [11, INT, true] | [9, BIGINT, true] | [10, BIGINT, true]"));
+    }
+
+    @Test
+    public void testUnionNullConstant() throws Exception {
+        String sql = "select count(*) from (select null as c1 union all select null as c1) t group by t.c1";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [1, NULL_TYPE, true]\n" +
+                "  |      [2, NULL_TYPE, true]"));
+
+        sql = "select count(*) from (select 1 as c1 union all select null as c1) t group by t.c1";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(" 0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [1, TINYINT, false]\n" +
+                "  |      [2, TINYINT, true]"));
+
+        sql =
+                "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
+        plan = getVerboseExplain(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [1, DECIMAL64(12,2), true]\n" +
+                "  |      [2, DECIMAL64(12,2), true]"));
+
+        sql =
+                "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [1, DECIMAL64(12,2), true]\n" +
+                "  |      [2, DECIMAL64(12,2), true]"));
+    }
+
+    @Test
+    public void testUnionDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(2);
+        String sql = "select * from t0 union all select * from t0;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       limit: 2\n" +
+                "  |    \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 2"));
+    }
+
+    @Test
+    public void testValuesDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(1);
+        String sql = "select * from (values (1,2,3), (4,5,6)) x";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1 | 2 | 3\n" +
+                "         4 | 5 | 6\n" +
+                "     limit: 1"));
+    }
+
+    @Test
+    public void testExceptEmptyNode() throws Exception {
+        String sql;
+        String plan;
+        sql = "select * from (select * from t0 except select * from t1 except select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:EXCEPT\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n"));
+
+        sql =
+                "select * from (select * from (select * from t0 limit 0) t except select * from t1 except select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:EMPTYSET\n"));
+
+        sql = "select * from ( select * from t2 except (select * from t0 limit 0) except " +
+                "select * from t1) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:EXCEPT\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n"));
+    }
+
+    @Test
+    public void testUnionEmptyNode() throws Exception {
+        String sql;
+        String plan;
+        sql = "select * from (select * from t0 union all select * from t1 union all select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n"));
+
+        sql =
+                "select * from (select * from (select * from t0 limit 0) t union all select * from t1 union all select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n"));
+
+        sql = "select * from (select * from (select * from t0 limit 0) t union all select * from t1 where false" +
+                " union all select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 10> : 7: v7\n" +
+                "  |  <slot 11> : 8: v8\n" +
+                "  |  <slot 12> : 9: v9\n" +
+                "  |  \n" +
+                "  0:OlapScanNode"));
+    }
+
+    @Test
+    public void testIntersectEmptyNode() throws Exception {
+        String sql;
+        String plan;
+        sql = "select * from (select * from t0 intersect select * from t1 intersect select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:INTERSECT\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE"));
+
+        sql =
+                "select * from (select * from (select * from t0 limit 0) t intersect select * from t1 intersect select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:EMPTYSET\n"));
+
+        sql = "select * from (select * from (select * from t0 limit 0) t intersect select * from t1 where false " +
+                "intersect select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:EMPTYSET\n"));
+    }
+
+    @Test
+    public void testUnionAll() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from t1 union all select * from t2;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("    EXCHANGE ID: 04\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  3:OlapScanNode\n" +
+                "     TABLE: t2"));
+        Assert.assertTrue(plan.contains("    EXCHANGE ID: 02\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t1"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testUnionChildProjectHasNullable() throws Exception {
+        String sql = "SELECT \n" +
+                "  DISTINCT * \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      DISTINCT DAY(\"292269055-12-03 00:47:04\") \n" +
+                "    FROM \n" +
+                "      t1\n" +
+                "    WHERE \n" +
+                "      true \n" +
+                "    UNION ALL \n" +
+                "    SELECT \n" +
+                "      DISTINCT DAY(\"292269055-12-03 00:47:04\") \n" +
+                "    FROM \n" +
+                "      t1\n" +
+                "    WHERE \n" +
+                "      (\n" +
+                "        (true) IS NULL\n" +
+                "      )\n" +
+                "  ) t;";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("8:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: [9: day, TINYINT, true]\n" +
+                "  |  cardinality: 0\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [4, TINYINT, true]\n" +
+                "  |      [8, TINYINT, true]\n" +
+                "  |  pass-through-operands: all"));
+    }
 }

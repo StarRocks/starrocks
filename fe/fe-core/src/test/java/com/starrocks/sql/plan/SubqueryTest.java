@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -54,5 +56,66 @@ public class SubqueryTest extends PlanTestBase {
         Assert.assertNotNull(plan);
     }
 
+    @Test
+    public void testSubqueryLimit() throws Exception {
+        String sql = "select * from t0 where 2 = (select v4 from t1 limit 1);";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:ASSERT NUMBER OF ROWS\n" +
+                "  |  assert number of rows: LE 1"));
+    }
+
+    @Test
+    public void testUnionSubqueryDefaultLimit() throws Exception {
+        connectContext.getSessionVariable().setSqlSelectLimit(2);
+        String sql = "select * from (select * from t0 union all select * from t0) xx limit 10;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       limit: 10\n" +
+                "  |    \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 10"));
+    }
+
+    @Test
+    public void testExistsRewrite() throws Exception {
+        String sql =
+                "select count(*) FROM  test.join1 WHERE  EXISTS (select max(id) from test.join2 where join2.id = join1.id)";
+        String explainString = getFragmentPlan(sql);
+        Assert.assertTrue(explainString.contains("LEFT SEMI JOIN"));
+    }
+
+    @Test
+    public void testMultiNotExistPredicatePushDown() throws Exception {
+        FeConstants.runningUnitTest = true;
+        connectContext.setDatabase("default_cluster:test");
+
+        String sql =
+                "select * from join1 where join1.dt > 1 and NOT EXISTS (select * from join1 as a where join1.dt = 1 and a.id = join1.id)" +
+                        "and NOT EXISTS (select * from join1 as a where join1.dt = 2 and a.id = join1.id);";
+        String explainString = getFragmentPlan(sql);
+        System.out.println(explainString);
+
+        Assert.assertTrue(explainString.contains("  5:HASH JOIN\n" +
+                "  |  join op: RIGHT ANTI JOIN (COLOCATE)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: 9: id = 2: id\n" +
+                "  |  other join predicates: 1: dt = 2"));
+        Assert.assertTrue(explainString.contains("  |    3:HASH JOIN\n" +
+                "  |    |  join op: LEFT ANTI JOIN (COLOCATE)\n" +
+                "  |    |  hash predicates:\n" +
+                "  |    |  colocate: true\n" +
+                "  |    |  equal join conjunct: 2: id = 5: id\n" +
+                "  |    |  other join predicates: 1: dt = 1"));
+        Assert.assertTrue(explainString.contains("  |    1:OlapScanNode\n" +
+                "  |       TABLE: join1\n" +
+                "  |       PREAGGREGATION: ON\n" +
+                "  |       PREDICATES: 1: dt > 1"));
+        FeConstants.runningUnitTest = false;
+    }
 
 }

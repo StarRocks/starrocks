@@ -2,10 +2,18 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class ExternalTableType extends PlanTestBase {
+public class ExternalTableTest extends PlanTestBase {
     @Test
     public void testMysqlTableFilter() throws Exception {
         String sql = "select * from ods_order where order_dt = '2025-08-07' and order_no = 'p' limit 10;";
@@ -176,4 +184,38 @@ public class ExternalTableType extends PlanTestBase {
         Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)"));
     }
+
+    @Test
+    public void testJoinWithMysqlTable() throws Exception {
+        // set data size and row count for the olap table
+        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        OlapTable tbl = (OlapTable) db.getTable("jointest");
+        for (Partition partition : tbl.getPartitions()) {
+            partition.updateVisibleVersion(2);
+            for (MaterializedIndex mIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                mIndex.setRowCount(10000);
+                for (Tablet tablet : mIndex.getTablets()) {
+                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        replica.updateRowCount(2, 200000, 10000);
+                    }
+                }
+            }
+        }
+
+        String queryStr = "select * from mysql_table t2, jointest t1 where t1.k1 = t2.k1";
+        String explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("INNER JOIN (BUCKET_SHUFFLE)"));
+        Assert.assertTrue(explainString.contains("1:SCAN MYSQL"));
+
+        queryStr = "select * from jointest t1, mysql_table t2 where t1.k1 = t2.k1";
+        explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("INNER JOIN (BUCKET_SHUFFLE)"));
+        Assert.assertTrue(explainString.contains("1:SCAN MYSQL"));
+
+        queryStr = "select * from jointest t1, mysql_table t2, mysql_table t3 where t1.k1 = t3.k1";
+        explainString = getFragmentPlan(queryStr);
+        Assert.assertFalse(explainString.contains("INNER JOIN (BUCKET_SHUFFLE))"));
+        Assert.assertTrue(explainString.contains("1:SCAN MYSQL"));
+    }
+
 }

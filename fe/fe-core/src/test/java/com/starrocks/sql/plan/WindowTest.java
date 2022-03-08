@@ -96,4 +96,62 @@ public class WindowTest extends PlanTestBase {
         starRocksAssert.query(sql).analysisError("No matching function with signature: lag(hll,");
     }
 
+    @Test
+    public void testWindowWithAgg() throws Exception {
+        String sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY v1) AS `rank` FROM t0 group BY v1, v2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
+
+        sql =
+                "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS `rank`  FROM t0 group BY v1, v2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
+    }
+
+    @Test
+    public void testWindowWithChildProjectAgg() throws Exception {
+        String sql = "SELECT v1, sum(v2) as x1, row_number() over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS `rank` " +
+                "FROM t0 group BY v1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : 4: sum\n" +
+                "  |  <slot 8> : if(CAST(1: v1 AS BOOLEAN), 1, NULL)"));
+    }
+
+    @Test
+    public void testWindowPartitionAndSortSameColumn() throws Exception {
+        String sql = "SELECT k3, avg(k3) OVER (partition by k3 order by k3) AS sum FROM baseall;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  3:ANALYTIC\n" +
+                "  |  functions: [, avg(3: k3), ]\n" +
+                "  |  partition by: 3: k3\n" +
+                "  |  order by: 3: k3 ASC"));
+        Assert.assertTrue(plan.contains("  2:SORT\n" +
+                "  |  order by: <slot 3> 3: k3 ASC"));
+    }
+
+    @Test
+    public void testWindowDuplicatePartition() throws Exception {
+        String sql = "select max(v3) over (partition by v2,v2,v2 order by v2,v2) from t0;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:SORT\n"
+                + "  |  order by: <slot 2> 2: v2 ASC\n"
+                + "  |  offset: 0"));
+
+    }
+
+    @Test
+    public void testWindowDuplicatedColumnInPartitionExprAndOrderByExpr() throws Exception {
+        String sql = "select v1, sum(v2) over (partition by v1, v2 order by v2 desc) as sum1 from t0";
+        String plan = getFragmentPlan(sql);
+        Assert.assertNotNull(plan);
+    }
+
+    @Test
+    public void testSupersetEnforce() throws Exception {
+        String sql = "select * from (select v3, rank() over (partition by v1 order by v2) as j1 from t0) as x0 "
+                + "join t1 on x0.v3 = t1.v4 order by x0.v3, t1.v4 limit 100;";
+        getFragmentPlan(sql);
+    }
 }
