@@ -381,7 +381,8 @@ public class HiveTable extends Table {
             if (hiveColumn == null) {
                 throw new DdlException("column [" + column.getName() + "] not exists in hive");
             }
-            if (!validateColumnType(hiveColumn.getType(), column.getType())) {
+            Set<PrimitiveType> validColumnTypes = getValidColumnType(hiveColumn.getType());
+            if (!validColumnTypes.contains(column.getPrimitiveType())) {
                 throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "]");
             }
@@ -413,54 +414,47 @@ public class HiveTable extends Table {
         }
     }
 
-    private boolean validateColumnType(String hiveType, Type type) {
+    private Set<PrimitiveType> getValidColumnType(String hiveType) {
         if (hiveType == null) {
-            return false;
+            return Sets.newHashSet();
         }
 
         // for type with length, like char(10), we only check the type and ignore the length
-        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
-        PrimitiveType primitiveType = type.getPrimitiveType();
+        hiveType = Utils.getTypeKeyword(hiveType);
+        String typeUpperCase = hiveType.toUpperCase();
         switch (typeUpperCase) {
             case "TINYINT":
-                return primitiveType == PrimitiveType.TINYINT;
+                return Sets.newHashSet(PrimitiveType.TINYINT);
             case "SMALLINT":
-                return primitiveType == PrimitiveType.SMALLINT;
+                return Sets.newHashSet(PrimitiveType.SMALLINT);
             case "INT":
             case "INTEGER":
-                return primitiveType == PrimitiveType.INT;
+                return Sets.newHashSet(PrimitiveType.INT);
             case "BIGINT":
-                return primitiveType == PrimitiveType.BIGINT;
+                return Sets.newHashSet(PrimitiveType.BIGINT);
             case "FLOAT":
-                return primitiveType == PrimitiveType.FLOAT;
+                return Sets.newHashSet(PrimitiveType.FLOAT);
             case "DOUBLE":
             case "DOUBLE PRECISION":
-                return primitiveType == PrimitiveType.DOUBLE;
+                return Sets.newHashSet(PrimitiveType.DOUBLE);
             case "DECIMAL":
             case "NUMERIC":
-                return primitiveType == PrimitiveType.DECIMALV2 || primitiveType == PrimitiveType.DECIMAL32 ||
-                        primitiveType == PrimitiveType.DECIMAL64 || primitiveType == PrimitiveType.DECIMAL128;
+                return Sets.newHashSet(PrimitiveType.DECIMALV2, PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64,
+                        PrimitiveType.DECIMAL128);
             case "TIMESTAMP":
-                return primitiveType == PrimitiveType.DATETIME;
+                return Sets.newHashSet(PrimitiveType.DATETIME);
             case "DATE":
-                return primitiveType == PrimitiveType.DATE;
+                return Sets.newHashSet(PrimitiveType.DATE);
             case "STRING":
             case "VARCHAR":
             case "BINARY":
-                return primitiveType == PrimitiveType.VARCHAR;
+                return Sets.newHashSet(PrimitiveType.VARCHAR);
             case "CHAR":
-                return primitiveType == PrimitiveType.CHAR ||
-                        primitiveType == PrimitiveType.VARCHAR;
+                return Sets.newHashSet(PrimitiveType.CHAR, PrimitiveType.VARCHAR);
             case "BOOLEAN":
-                return primitiveType == PrimitiveType.BOOLEAN;
-            case "ARRAY":
-                if (!type.isArrayType()) {
-                    return false;
-                }
-                return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
-                        ((ArrayType) type).getItemType());
+                return Sets.newHashSet(PrimitiveType.BOOLEAN);
             default:
-                return false;
+                return Sets.newHashSet();
         }
     }
 

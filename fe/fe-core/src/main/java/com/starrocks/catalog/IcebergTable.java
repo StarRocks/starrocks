@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -30,6 +31,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class IcebergTable extends Table {
@@ -159,7 +161,8 @@ public class IcebergTable extends Table {
             if (icebergColumn == null) {
                 throw new DdlException("column [" + column.getName() + "] not exists in iceberg");
             }
-            if (!validateColumnType(icebergColumn.type(), column.getType())) {
+            Set<PrimitiveType> validColumnTypes = getValidColumnType(icebergColumn.type().typeId());
+            if (!validColumnTypes.contains(column.getPrimitiveType())) {
                 throw new DdlException("can not convert iceberg column type [" + icebergColumn.type() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName());
             }
@@ -174,55 +177,41 @@ public class IcebergTable extends Table {
         }
     }
 
-    private boolean validateColumnType(Type icebergType, com.starrocks.catalog.Type type) {
+    private Set<PrimitiveType> getValidColumnType(Type.TypeID icebergType) {
         if (icebergType == null) {
-            return false;
+            return Sets.newHashSet();
         }
 
-        if (icebergType.isListType()) {
-            return validateColumnType(icebergType.asListType().elementType(), ((ArrayType) type).getItemType());
-        }
-
-        if (!icebergType.isPrimitiveType()) {
-            return false;
-        }
-        PrimitiveType primitiveType = type.getPrimitiveType();
         // for type with length, like char(10), we only check the type and ignore the length
         // TODO: fixed and binary should be considered as binary
-        switch (icebergType.typeId()) {
+        switch (icebergType) {
             case BOOLEAN:
-                return primitiveType == PrimitiveType.BOOLEAN;
+                return Sets.newHashSet(PrimitiveType.BOOLEAN);
             case INTEGER:
-                return primitiveType == PrimitiveType.INT ||
-                        primitiveType == PrimitiveType.TINYINT ||
-                        primitiveType == PrimitiveType.SMALLINT;
-            case LONG:
-                return primitiveType == PrimitiveType.BIGINT;
-            case FLOAT:
-                return primitiveType == PrimitiveType.FLOAT;
-            case DOUBLE:
-                return primitiveType == PrimitiveType.DOUBLE;
-            case DATE:
-                return primitiveType == PrimitiveType.DATE;
+                return Sets.newHashSet(PrimitiveType.INT, PrimitiveType.TINYINT, PrimitiveType.SMALLINT);
+            case TIME:
             case TIMESTAMP:
-                return primitiveType == PrimitiveType.DATETIME;
+            case LONG:
+                return Sets.newHashSet(PrimitiveType.BIGINT);
+            case FLOAT:
+                return Sets.newHashSet(PrimitiveType.FLOAT);
+            case DOUBLE:
+                return Sets.newHashSet(PrimitiveType.DOUBLE);
+            case DATE:
+                return Sets.newHashSet(PrimitiveType.DATE, PrimitiveType.DATETIME);
             case STRING:
             case UUID:
-                return primitiveType == PrimitiveType.VARCHAR ||
-                        primitiveType == PrimitiveType.CHAR;
+                return Sets.newHashSet(PrimitiveType.VARCHAR, PrimitiveType.CHAR);
             case DECIMAL:
-                return primitiveType == PrimitiveType.DECIMALV2 ||
-                        primitiveType == PrimitiveType.DECIMAL32 ||
-                        primitiveType == PrimitiveType.DECIMAL64 ||
-                        primitiveType == PrimitiveType.DECIMAL128;
-            case TIME:
+                return Sets.newHashSet(PrimitiveType.DECIMALV2, PrimitiveType.DECIMAL32,
+                        PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128);
             case FIXED:
             case BINARY:
             case STRUCT:
             case LIST:
             case MAP:
             default:
-                return false;
+                return Sets.newHashSet();
         }
     }
 
