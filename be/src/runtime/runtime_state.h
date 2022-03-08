@@ -33,6 +33,7 @@
 #include "common/constexpr.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/global_dicts.h"
@@ -55,6 +56,10 @@ class ResultBufferMgr;
 class LoadErrorHub;
 class RowDescriptor;
 class RuntimeFilterPort;
+
+namespace pipeline {
+class QueryContext;
+}
 
 // A collection of items that are part of the global state of a
 // query and shared across all execution nodes of that query.
@@ -89,6 +94,8 @@ public:
 
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
+    ObjectPool* global_obj_pool() const;
+    void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
 
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
@@ -369,6 +376,8 @@ private:
 
     vectorized::GlobalDictMaps _query_global_dicts;
     vectorized::GlobalDictMaps _load_global_dicts;
+
+    pipeline::QueryContext* _query_ctx = nullptr;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \
