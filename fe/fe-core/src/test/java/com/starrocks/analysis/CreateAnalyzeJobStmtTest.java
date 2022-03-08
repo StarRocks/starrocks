@@ -44,11 +44,9 @@ public class CreateAnalyzeJobStmtTest {
 
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
         StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
 
-        analyzer.analyze(statementBase);
+        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
 
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) statementBase;
 
@@ -64,11 +62,9 @@ public class CreateAnalyzeJobStmtTest {
 
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
         StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
 
-        analyzer.analyze(statementBase);
+        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
 
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) statementBase;
 
@@ -84,11 +80,9 @@ public class CreateAnalyzeJobStmtTest {
 
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
         StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
 
-        analyzer.analyze(statementBase);
+        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
 
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) statementBase;
 

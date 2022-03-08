@@ -47,9 +47,7 @@ public class AnalyzeUtilTest {
         sql = "select v1 from basic";
         statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
         final ConnectContext session = AnalyzeTestUtil.getConnectContext();
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(session.getCatalog(), session);
-        analyzer.analyze(statementBase.get(0));
+        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase.get(0), session);
         stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
         Assert.assertEquals(stringDatabaseMap.size(), 2);
     }

@@ -37,7 +37,7 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-        <jacoco.version>0.8.5</jacoco.version> 
+        <jacoco.version>0.8.5</jacoco.version>
         <starrocks.thridparty>${basedir}/../../thirdparty</starrocks.thridparty>
         <iceberg.version>0.12.1</iceberg.version>
     </properties>
@@ -534,7 +534,6 @@ under the License.
 
     <build>
         <finalName>starrocks-fe</finalName>
-
         <plugins>
             <!-- fe ut coverage-->
             <plugin>
@@ -560,20 +559,20 @@ under the License.
                     <execution>
                         <id>default-check</id>
                         <goals>
-                             <goal>check</goal>
+                            <goal>check</goal>
                         </goals>
                         <configuration>
                             <rules>
-                                 <rule>
-                                     <element>BUNDLE</element>
-                                     <limits>
-                                         <limit>
-                                             <counter>COMPLEXITY</counter>
-                                             <value>COVEREDRATIO</value>
-                                             <minimum>0.60</minimum>
-                                         </limit>
-                                     </limits>
-                                 </rule>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>COMPLEXITY</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.60</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
                             </rules>
                         </configuration>
                     </execution>
@@ -737,7 +736,9 @@ under the License.
                             <executable>${java.home}/bin/java</executable>
                             <arguments>
                                 <argument>-jar</argument>
-                                <argument>${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar</argument>
+                                <argument>
+                                    ${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar
+                                </argument>
                                 <argument>--java_out=${basedir}/target/generated-sources/proto</argument>
                                 <argument>${starrocks.home}/gensrc/proto/internal_service.proto</argument>
                             </arguments>

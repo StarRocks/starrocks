@@ -2,10 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.InsertRelation;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.StarRocksAssert;
@@ -154,23 +151,11 @@ public class AnalyzeTestUtil {
         return starRocksAssert;
     }
 
-    public static QueryRelation analyzeSuccess(String originStmt) {
+    public static StatementBase analyzeSuccess(String originStmt) {
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
-            Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            return (QueryRelation) analyzer.analyze(statementBase);
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            Assert.fail();
-            return null;
-        }
-    }
-
-    public static InsertRelation analyzeSuccessUseInsert(String originStmt) {
-        try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
-            Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            return (InsertRelation) analyzer.analyze(statementBase);
+            Analyzer.analyze(statementBase, connectContext);
+            return statementBase;
         } catch (Exception ex) {
             ex.printStackTrace();
             Assert.fail();
@@ -185,8 +170,7 @@ public class AnalyzeTestUtil {
     public static void analyzeFail(String originStmt, String exceptMessage) {
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
-            Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            analyzer.analyze(statementBase);
+            Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {
             if (!exceptMessage.equals("")) {
