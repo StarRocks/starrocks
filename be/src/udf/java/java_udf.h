@@ -292,11 +292,10 @@ public:
 
     // WindowFunction reset
     void reset(jobject state);
-    // WindowFunction getValues
-    jobject get_values(jobject state, int start, int end);
+
     // WindowFunction updateBatch
-    jobject window_update_batch(jobject state, int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                int64_t frame_end, int col_sz, jobject* cols);
+    jobject window_update_batch(jobject state, int peer_group_start, int peer_group_end, int frame_start, int frame_end,
+                                int col_sz, jobject* cols);
 
 private:
     jobject _udaf_handle;

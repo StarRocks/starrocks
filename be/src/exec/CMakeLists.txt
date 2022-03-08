@@ -203,12 +203,7 @@ set(EXEC_FILES
     ${EXEC_FILES}
     vectorized/mysql_scan_node.cpp
     mysql_scanner.cpp
-)
-
-IF (WITH_HDFS)
-    set(EXEC_FILES ${EXEC_FILES}
-        vectorized/hdfs_scan_node.cpp)
-endif()
+    vectorized/hdfs_scan_node.cpp)
 
 add_library(Exec STATIC
     ${EXEC_FILES}

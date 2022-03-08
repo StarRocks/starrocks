@@ -1,13 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#ifdef STARROCKS_WITH_AWS
-
 #include "env/env_s3.h"
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/utils/threading/Executor.h>
-#include <aws/s3/model/BucketLocationConstraint.h>
 #include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
@@ -15,7 +12,6 @@
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/ListObjectsRequest.h>
 #include <aws/s3/model/PutObjectRequest.h>
-#include <aws/transfer/TransferHandle.h>
 #include <fmt/core.h>
 #include <time.h>
 
@@ -45,7 +41,7 @@ public:
     Status read_at_fully(int64_t offset, void* data, int64_t size) const override;
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
     Status size(uint64_t* size) const override;
-    const std::string& file_name() const override { return _object_path; }
+    const std::string& filename() const override { return _object_path; }
 
 private:
     std::unique_ptr<io::SeekableInputStream> _input;
@@ -127,6 +123,13 @@ bool operator==(const Aws::Client::ClientConfiguration& lhs, const Aws::Client::
 
 class S3ClientFactory {
 public:
+    // We cached config here and make a deep copy each time.Since aws sdk has changed the
+    // Aws::Client::ClientConfiguration default constructor to search for the region
+    // (where as before 1.8 it has been hard coded default of "us-east-1").
+    // Part of that change is looking through the ec2 metadata, which can take a long time.
+    // For more details, please refer https://github.com/aws/aws-sdk-cpp/issues/1440
+    static Aws::Client::ClientConfiguration s_config;
+
     using ClientConfiguration = Aws::Client::ClientConfiguration;
     using S3Client = Aws::S3::S3Client;
     using S3ClientPtr = std::shared_ptr<S3Client>;
@@ -157,6 +160,8 @@ private:
     S3ClientPtr _clients[kMaxItems];
     Random _rand;
 };
+
+Aws::Client::ClientConfiguration S3ClientFactory::s_config;
 
 S3ClientFactory::S3ClientFactory() : _items(0), _rand((int)::time(NULL)) {}
 
@@ -191,7 +196,7 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 }
 
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::s_config;
     config.scheme = Aws::Http::Scheme::HTTP; // TODO: use the scheme in uri
     if (!uri.endpoint().empty()) {
         config.endpointOverride = uri.endpoint();
@@ -237,5 +242,3 @@ StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const WritableF
 }
 
 } // namespace starrocks
-
-#endif

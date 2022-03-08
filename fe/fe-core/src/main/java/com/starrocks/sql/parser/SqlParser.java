@@ -31,10 +31,11 @@ public class SqlParser {
                 StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
                 CommonTokenStream tokenStream = new CommonTokenStream(lexer);
                 StarRocksParser parser = new StarRocksParser(tokenStream);
+                StarRocksParser.sqlMode = sqlMode;
                 parser.removeErrorListeners();
                 parser.addErrorListener(new ErrorHandler());
                 StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-                StatementBase statement = (StatementBase) new AstBuilder(sqlMode)
+                StatementBase statement = (StatementBase) new AstBuilder()
                         .visitSingleStatement(sqlStatements.singleStatement(0));
                 statement.setOrigStmt(new OriginStatement(sql, idx));
                 statements.add(statement);

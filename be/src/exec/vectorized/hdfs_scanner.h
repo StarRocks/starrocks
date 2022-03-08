@@ -21,6 +21,7 @@ class HdfsScanNode;
 class RuntimeFilterProbeCollector;
 
 struct HdfsScanStats {
+    int64_t scan_ns = 0;
     int64_t raw_rows_read = 0;
     int64_t expr_filter_ns = 0;
     int64_t io_ns = 0;
@@ -28,6 +29,7 @@ struct HdfsScanStats {
     int64_t bytes_read = 0;
     int64_t column_read_ns = 0;
     int64_t column_convert_ns = 0;
+    int64_t reader_init_ns = 0;
 
     // parquet only!
     // read & decode
@@ -41,6 +43,29 @@ struct HdfsScanStats {
     int64_t group_chunk_read_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
+};
+
+class HdfsParquetProfile;
+
+struct HdfsScanProfile {
+    RuntimeProfile* runtime_profile = nullptr;
+    ObjectPool* pool = nullptr;
+
+    RuntimeProfile::Counter* rows_read_counter = nullptr;
+    RuntimeProfile::Counter* bytes_read_counter = nullptr;
+    RuntimeProfile::Counter* scan_timer = nullptr;
+    RuntimeProfile::Counter* scanner_queue_timer = nullptr;
+    RuntimeProfile::Counter* scan_ranges_counter = nullptr;
+    RuntimeProfile::Counter* scan_files_counter = nullptr;
+    RuntimeProfile::Counter* reader_init_timer = nullptr;
+    RuntimeProfile::Counter* open_file_timer = nullptr;
+    RuntimeProfile::Counter* expr_filter_timer = nullptr;
+
+    RuntimeProfile::Counter* io_timer = nullptr;
+    RuntimeProfile::Counter* io_counter = nullptr;
+    RuntimeProfile::Counter* column_read_timer = nullptr;
+    RuntimeProfile::Counter* column_convert_timer = nullptr;
+    HdfsParquetProfile* parquet_profile = nullptr;
 };
 
 struct HdfsScannerParams {
@@ -84,7 +109,7 @@ struct HdfsScannerParams {
 
     std::vector<std::string>* hive_column_names;
 
-    HdfsScanNode* parent = nullptr;
+    HdfsScanProfile* profile = nullptr;
 
     std::atomic<int32_t>* open_limit;
 };
@@ -159,6 +184,7 @@ public:
     void close(RuntimeState* runtime_state) noexcept;
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
+    void cleanup();
 
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }
     void set_keep_priority(bool v) { _keep_priority = v; }
@@ -191,6 +217,7 @@ public:
     virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
+    virtual void do_update_counter(HdfsScanProfile* profile);
 
     void enter_pending_queue();
     // how long it stays inside pending queue.
@@ -202,6 +229,7 @@ private:
     bool _keep_priority = false;
     void _build_file_read_param();
     MonotonicStopWatch _pending_queue_sw;
+    void update_hdfs_counter(HdfsScanProfile* profile);
 
 protected:
     std::atomic_bool _pending_token = false;

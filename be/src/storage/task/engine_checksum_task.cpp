@@ -117,8 +117,9 @@ Status EngineChecksumTask::_compute_checksum() {
         }
 #endif
 
+        size_t size = chunk->num_rows();
         for (auto& column : chunk->columns()) {
-            checksum ^= column->xor_checksum();
+            checksum ^= column->xor_checksum(0, size);
         }
         chunk->reset();
         st = reader.get_next(chunk.get());

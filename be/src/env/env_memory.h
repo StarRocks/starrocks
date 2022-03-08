@@ -51,7 +51,7 @@ public:
         return Status::OK();
     }
 
-    const std::string& file_name() const override {
+    const std::string& filename() const override {
         static std::string s_name = "StringRandomAccessFile";
         return s_name;
     }

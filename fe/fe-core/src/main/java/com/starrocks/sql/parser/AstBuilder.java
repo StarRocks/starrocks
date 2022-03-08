@@ -79,7 +79,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -118,10 +117,7 @@ import java.util.stream.Collectors;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
-    private long sqlMode;
-
-    public AstBuilder(long sqlMode) {
-        this.sqlMode = sqlMode;
+    public AstBuilder() {
     }
 
     @Override
@@ -928,11 +924,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Expr right = (Expr) visit(context.right);
 
         if (context.operator.getType() == StarRocksLexer.LOGICAL_OR) {
-            if ((this.sqlMode & SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0) {
-                return new CompoundPredicate(CompoundPredicate.Operator.OR, left, right);
-            } else {
-                return new FunctionCallExpr("concat", new FunctionParams(Lists.newArrayList(left, right)));
-            }
+            return new CompoundPredicate(CompoundPredicate.Operator.OR, left, right);
         } else {
             return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right);
         }
@@ -1258,6 +1250,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new InformationFunction(context.name.getText().toUpperCase());
         }
         throw new ParsingException("Unknown special function " + context.name.getText());
+    }
+
+    @Override
+    public ParseNode visitConcat(StarRocksParser.ConcatContext context) {
+        Expr left = (Expr) visit(context.left);
+        Expr right = (Expr) visit(context.right);
+        return new FunctionCallExpr("concat", new FunctionParams(Lists.newArrayList(left, right)));
     }
 
     // ------------------------------------------- Literal -------------------------------------------

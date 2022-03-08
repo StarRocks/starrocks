@@ -1,6 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 lexer grammar StarRocksLex;
+@parser::members {public static long sqlMode;}
+tokens {
+    CONCAT
+}
 
 ALL: 'ALL';
 ALTER: 'ALTER';
@@ -158,7 +162,7 @@ MINUS_SYMBOL: '-';
 ASTERISK_SYMBOL: '*';
 SLASH_SYMBOL: '/';
 PERCENT_SYMBOL: '%';
-LOGICAL_OR: '||';
+LOGICAL_OR: '||' {setType((StarRocksParser.sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
 
 INT_DIV: 'DIV';
 BITAND: '&';
