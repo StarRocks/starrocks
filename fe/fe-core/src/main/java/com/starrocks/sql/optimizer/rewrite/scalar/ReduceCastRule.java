@@ -6,6 +6,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
@@ -138,7 +139,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         LocalDateTime targetDateTime;
         BinaryPredicateOperator.BinaryType binaryType = operator.getBinaryType();
         int offset;
-        ScalarOperator resultBinaryPredicateOperator;
+        BinaryPredicateOperator resultBinaryPredicateOperator;
         ConstantOperator newDate;
         switch (binaryType) {
             case GE:
@@ -193,9 +194,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                 // when the BinaryType is = ,cast dateTime to equivalent date type；
                 // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-28)
                 if (!originalDateTime.isEqual(bottomDateTime)) {
-                    // Since the format of cast(id_date as datetime) must be yyyy-MM-dd 00:00:00
-                    // yyyy-MM-dd 00:00:00 can never equal to yyyy-MM-dd ab:cd:ef (at least one of a/b/c/d/e/f is not zero)
-                    resultBinaryPredicateOperator = ConstantOperator.createBoolean(false);
+                    resultBinaryPredicateOperator = operator;
                 } else {
                     newDate = ConstantOperator.createDate(bottomDateTime.truncatedTo(ChronoUnit.DAYS));
                     resultBinaryPredicateOperator =
@@ -218,7 +217,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         LocalDateTime targetDate;
         BinaryPredicateOperator.BinaryType binaryType = operator.getBinaryType();
         int offset;
-        BinaryPredicateOperator resultBinaryPredicateOperator;
+        ScalarOperator resultBinaryPredicateOperator;
         ConstantOperator newDatetime;
         switch (binaryType) {
             case GE:
@@ -262,9 +261,19 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                         new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, castChild, newDatetime);
                 break;
             case EQ:
-                // Do not optimize when the BinaryType is =, otherwise we need replace it with BetweenPredicateOperator
-                // which is more complicated than cast itself
-                resultBinaryPredicateOperator = operator;
+                // when the BinaryType is = , replace it with compound operator
+                // E.g. cast(id_datetime as date) = 2021-12-28
+                // optimized to id_datetime >= 2021-12-28 and id_datetime < 2021-12-29
+                ConstantOperator beginDatetime =
+                        ConstantOperator.createDatetime(originalDate.plusDays(0).toLocalDate().atTime(0, 0, 0, 0));
+                ConstantOperator endDatetime =
+                        ConstantOperator.createDatetime(originalDate.plusDays(1).toLocalDate().atTime(0, 0, 0, 0));
+                resultBinaryPredicateOperator =
+                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild,
+                                        beginDatetime),
+                                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, castChild,
+                                        endDatetime));
                 break;
             default:
                 resultBinaryPredicateOperator = operator;

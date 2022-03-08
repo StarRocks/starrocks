@@ -8,6 +8,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteRule;
@@ -294,8 +295,7 @@ public class ReduceCastRuleTest {
                     beforeOptimize,
                     null);
 
-            Assert.assertTrue(afterOptimize instanceof ConstantOperator);
-            Assert.assertFalse((boolean) ((ConstantOperator) afterOptimize).getValue());
+            Assert.assertSame(beforeOptimize, afterOptimize);
         }
     }
 
@@ -391,7 +391,24 @@ public class ReduceCastRuleTest {
                     beforeOptimize,
                     null);
 
-            Assert.assertSame(beforeOptimize, afterOptimize);
+            Assert.assertTrue(afterOptimize instanceof CompoundPredicateOperator);
+            Assert.assertTrue(((CompoundPredicateOperator) afterOptimize).isAnd());
+            ScalarOperator left = afterOptimize.getChild(0);
+            ScalarOperator right = afterOptimize.getChild(1);
+            Assert.assertTrue(left instanceof BinaryPredicateOperator);
+            Assert.assertTrue(right instanceof BinaryPredicateOperator);
+            Assert.assertEquals(BinaryPredicateOperator.BinaryType.GE,
+                    ((BinaryPredicateOperator) left).getBinaryType());
+            Assert.assertTrue(left.getChild(0) instanceof ColumnRefOperator);
+            Assert.assertTrue(left.getChild(1) instanceof ConstantOperator);
+            Assert.assertEquals("2021-12-28 00:00:00",
+                    ((ConstantOperator) left.getChild(1)).getDatetime().format(formatter));
+            Assert.assertEquals(BinaryPredicateOperator.BinaryType.LT,
+                    ((BinaryPredicateOperator) right).getBinaryType());
+            Assert.assertTrue(right.getChild(0) instanceof ColumnRefOperator);
+            Assert.assertTrue(right.getChild(1) instanceof ConstantOperator);
+            Assert.assertEquals("2021-12-29 00:00:00",
+                    ((ConstantOperator) right.getChild(1)).getDatetime().format(formatter));
         }
     }
 }
