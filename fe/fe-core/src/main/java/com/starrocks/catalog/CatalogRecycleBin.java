@@ -134,8 +134,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     }
 
     public synchronized List<Table> getTables(long dbId) {
-        return idToTableInfo.values().stream()
-                .filter(v -> (v.getDbId() == dbId))
+        return idToTableInfo.row(dbId).values().stream()
                 .map(RecycleTableInfo::getTable)
                 .collect(Collectors.toList());
     }
