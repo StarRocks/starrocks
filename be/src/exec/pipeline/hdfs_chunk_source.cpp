@@ -316,6 +316,10 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
     return Status::OK();
 }
 
+void HdfsChunkSource::_init_chunk(ChunkPtr* chunk) {
+    *chunk = ChunkHelper::new_chunk(*_tuple_desc, _runtime_state->chunk_size());
+}
+
 void HdfsChunkSource::close(RuntimeState* state) {
     if (_closed) return;
     if (_scanner != nullptr) {
@@ -414,6 +418,7 @@ Status HdfsChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");
     }
+    _init_chunk(chunk);
     SCOPED_TIMER(_profile.scan_timer);
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk));

@@ -61,6 +61,7 @@ private:
 
     void _init_partition_values();
     Status _init_scanner(RuntimeState* state);
+    void _init_chunk(ChunkPtr* chunk);
 
     // =====================================
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::ChunkPtr* chunk);
