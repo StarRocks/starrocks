@@ -95,7 +95,7 @@ Flink 可以通过 flink-connector-starrocks 的 source 功能读取 StarRocks �
    </dependency>
    ```
 
-2. 参考如下示例代码，调用 flink-connector-starrocks，读取 StarRocks 的数据。相关参数说明，请参见[参数说明](~~https://docs.starrocks.com/zh-cn/main/unloading/Flink_connector#参数说明~~)。
+2. 参考如下示例代码，调用 flink-connector-starrocks，读取 StarRocks 的数据。相关参数说明，请参见[参数说明](#参数说明)。
 
    ```Java
    StarRocksSourceOptions options = StarRocksSourceOptions.builder()
