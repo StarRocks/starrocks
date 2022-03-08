@@ -140,7 +140,6 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
     }
-
     // erase
     vector<Key> erase_keys;
     for (int i = 0; i < N / 2; i++) {
@@ -163,30 +162,21 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     }
 
     {
-        const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(invalid_keys.data());
+        std::vector<IndexValue> get_values(keys.size());
+        ASSERT_TRUE(index.get(keys.size(), keys.data(), get_values.data()).ok());
+        ASSERT_EQ(keys.size(), get_values.size());
         for (int i = 0; i < N / 2; i++) {
-            fixed_buf.append(fkeys + i * sizeof(Key), sizeof(Key));
-            put_fixed64_le(&fixed_buf, invalid_values[i]);
+            ASSERT_EQ(NullIndexValue, get_values[i]);
         }
-
-        fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-        std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions wblock_opts({"./ut_dir/persistent_index_test/index.l0.1.0"});
-        wblock_opts.mode = Env::MUST_EXIST;
-        ASSERT_TRUE((block_mgr->create_block(wblock_opts, &wblock)).ok());
-        ASSERT_TRUE(wblock->append(fixed_buf).ok());
-        wblock->close();
+        for (int i = N / 2; i < values.size(); i++) {
+            ASSERT_EQ(values[i], get_values[i]);
+        }
     }
 
     // rebuild mutableindex according PersistentIndexMetaPB
     PersistentIndex new_index(kPersistentIndexDir);
     ASSERT_TRUE(new_index.create(sizeof(Key), EditVersion(3, 0)).ok());
-    //ASSERT_TRUE(new_index.load(index_meta).ok());
-    Status st = new_index.load(index_meta);
-    if (!st.ok()) {
-        LOG(WARNING) << "load failed, status is " << st.to_string();
-        ASSERT_TRUE(false);
-    }
+    ASSERT_TRUE(new_index.load(index_meta).ok());
     std::vector<IndexValue> get_values(keys.size());
 
     ASSERT_TRUE(new_index.get(keys.size(), keys.data(), get_values.data()).ok());

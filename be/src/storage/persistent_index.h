@@ -17,6 +17,8 @@ namespace starrocks {
 using IndexValue = uint64_t;
 static constexpr IndexValue NullIndexValue = -1;
 
+class ImmutableIndexShard;
+
 uint64_t key_index_hash(const void* data, size_t len);
 
 struct KeysInfo {
@@ -100,9 +102,6 @@ public:
     virtual bool load_snapshot(phmap::BinaryInputArchive& ar_in) = 0;
 
     // [not thread-safe]
-    virtual size_t size() = 0;
-
-    // [not thread-safe]
     virtual size_t capacity() = 0;
 
     // get all key-values pair references by shard, the result will remain valid until next modification
@@ -135,6 +134,13 @@ public:
     // batch check key existence
     Status check_not_exist(size_t n, const void* keys);
 
+    // get Immutable index file size;
+    void file_size(uint64_t* file_size) {
+        if (_rb != nullptr) {
+            _rb->size(file_size);
+        }
+    }
+
     static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<fs::ReadableBlock>&& rb);
 
 private:
@@ -143,7 +149,8 @@ private:
     // get all the kv refs of a single shard by `shard_idx`, and add them to `kvs_by_shard`, the shard number of
     // kvs_by_shard may be different from this object's own shard number
     // NOTE: used by PersistentIndex only
-    Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx) const;
+    Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t pow,
+                              std::unique_ptr<ImmutableIndexShard>* shard) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values,
                          size_t* num_found) const;
@@ -260,7 +267,7 @@ private:
 
     bool _load_snapshot(phmap::BinaryInputArchive& ar_in);
 
-    Status _delete_expired_index_file(const EditVersion& version);
+    Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
 
     // batch append wal
     // |n|: size of key/value array
@@ -268,16 +275,22 @@ private:
     // |values|: value array, if operation is erase, |values| is nullptr
     Status _append_wal(size_t n, const void* key, const IndexValue* values);
 
+    Status _check_and_flush_l0();
+
     Status _flush_l0();
 
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();
+
+    Status _rebuild();
 
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
     size_t _size = 0;
     EditVersion _version;
+    // _l1_version is used to get l1 file name, update in on_committed
+    EditVersion _l1_version;
     std::unique_ptr<MutableIndex> _l0;
     std::unique_ptr<ImmutableIndex> _l1;
     // |_offset|: the start offset of last wal in index file
