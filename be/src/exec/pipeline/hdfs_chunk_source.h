@@ -101,6 +101,7 @@ private:
     std::vector<ExprContext*> _partition_values;
     bool _has_partition_conjuncts = false;
     bool _filter_by_eval_partition_conjuncts = false;
+    bool _no_data = false;
 
     // ============ tuples and slots ==========
     const TupleDescriptor* _tuple_desc = nullptr;

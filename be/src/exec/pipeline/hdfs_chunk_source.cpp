@@ -21,31 +21,6 @@
 namespace starrocks::pipeline {
 using namespace vectorized;
 
-class OpenLimitAllocator {
-public:
-    OpenLimitAllocator() = default;
-    ~OpenLimitAllocator() = default;
-
-    OpenLimitAllocator(const OpenLimitAllocator&) = delete;
-    void operator=(const OpenLimitAllocator&) = delete;
-
-    static OpenLimitAllocator& instance() {
-        static OpenLimitAllocator obj;
-        return obj;
-    }
-
-    std::atomic<int32_t>* allocate(const std::string& key);
-
-private:
-    std::mutex _lock;
-    std::unordered_map<std::string, std::atomic<int32_t>*> _data;
-};
-
-std::atomic<int32_t>* OpenLimitAllocator::allocate(const std::string& key) {
-    std::lock_guard l(_lock);
-    return LookupOrInsertNew(&_data, key, 0);
-}
-
 HdfsChunkSource::HdfsChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorized::HdfsScanNode* scan_node)
         : ChunkSource(std::move(morsel)),
           _scan_node(scan_node),
@@ -74,6 +49,11 @@ Status HdfsChunkSource::prepare(RuntimeState* state) {
         return Status::RuntimeError("env 'JAVA_HOME' is not set");
     }
 
+    if (_scan_range->file_length == 0) {
+        _no_data = true;
+        return Status::OK();
+    }
+
     const auto& hdfs_scan_node = _scan_node->thrift_hdfs_scan_node();
     _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
@@ -86,7 +66,10 @@ Status HdfsChunkSource::prepare(RuntimeState* state) {
     _init_tuples_and_slots(state);
     _init_counter(state);
     _init_partition_values();
-    if (_filter_by_eval_partition_conjuncts) return Status::OK();
+    if (_filter_by_eval_partition_conjuncts) {
+        _no_data = true;
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_init_scanner(state));
     return Status::OK();
 }
@@ -264,24 +247,11 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
     }
 
     COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
-    std::string name_node;
-    RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &name_node));
-
-    auto* hdfs_file_desc = _pool->add(new vectorized::HdfsFileDesc());
-    hdfs_file_desc->env = env;
-    hdfs_file_desc->path = native_file_path;
-    hdfs_file_desc->partition_id = scan_range.partition_id;
-    hdfs_file_desc->scan_range_path = scan_range_path;
-    hdfs_file_desc->file_length = scan_range.file_length;
-    hdfs_file_desc->splits.emplace_back(&scan_range);
-    hdfs_file_desc->hdfs_file_format = scan_range.file_format;
-    hdfs_file_desc->open_limit = OpenLimitAllocator::instance().allocate(name_node);
-
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_bloom_filters;
-    scanner_params.scan_ranges = hdfs_file_desc->splits;
-    scanner_params.env = hdfs_file_desc->env;
-    scanner_params.path = hdfs_file_desc->path;
+    scanner_params.scan_ranges = {&scan_range};
+    scanner_params.env = env;
+    scanner_params.path = native_file_path;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -295,10 +265,10 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
     scanner_params.profile = &_profile;
-    scanner_params.open_limit = hdfs_file_desc->open_limit;
+    scanner_params.open_limit = nullptr;
 
     HdfsScanner* scanner = nullptr;
-    auto format = hdfs_file_desc->hdfs_file_format;
+    auto format = scan_range.file_format;
     if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool->add(new HdfsParquetScanner());
     } else if (format == THdfsFileFormat::ORC) {
@@ -415,6 +385,9 @@ Status HdfsChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
 }
 
 Status HdfsChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+    if (_no_data) {
+        return Status::EndOfFile("no data");
+    }
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");
     }
