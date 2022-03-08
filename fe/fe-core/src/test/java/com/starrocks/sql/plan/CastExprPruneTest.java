@@ -84,7 +84,6 @@ public class CastExprPruneTest extends PlanTestBase {
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
                 "     numNodes=0";
-        System.out.println(explain);
         Assert.assertTrue(explain.contains(snippet));
     }
 
