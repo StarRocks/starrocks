@@ -12,14 +12,15 @@ namespace starrocks::vectorized {
 class HdfsScannerCSVReader : public CSVReader {
 public:
     // |file| must outlive HdfsScannerCSVReader
-    HdfsScannerCSVReader(RandomAccessFile* file, string record_delimiter, string field_delimiter, size_t offset,
+    HdfsScannerCSVReader(RandomAccessFile* file, const string& row_delimiter, const string& column_separator, size_t offset,
                          size_t remain_length, size_t file_length)
-            : CSVReader(std::move(record_delimiter), std::move(field_delimiter), record_delimiter.size(),
-                        field_delimiter.size()) {
+            : CSVReader(row_delimiter, column_separator) {
         _file = file;
         _offset = offset;
         _remain_length = remain_length;
         _file_length = file_length;
+        _row_delimiter_length = row_delimiter.size();
+        _column_separator_length = column_separator.size();
     }
 
     void reset(size_t offset, size_t remain_length);
@@ -75,11 +76,11 @@ Status HdfsScannerCSVReader::_fill_buffer() {
             _should_stop_scan = true;
             LOG(INFO) << "Reach end of file!";
             return Status::EndOfFile(_file->filename());
-        } else if (n < _record_delimiter_length ||
-                   _buff.find(_record_delimiter, n - _record_delimiter_length) == nullptr) {
+        } else if (n < _row_delimiter_length ||
+                   _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
             // Has reached the end of file but still no record delimiter found, which
             // is valid, according the RFC, add the record delimiter ourself.
-            for (char ch : _record_delimiter) {
+            for (char ch : _row_delimiter) {
                 _buff.append(ch);
             }
         }
@@ -88,7 +89,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     // For each scan range we always read the first record of next scan range,so _remain_length
     // may be negative here. Once we have read the first record of next scan range we
     // should stop scan in the next round.
-    if ((_remain_length < 0 && _buff.find(_record_delimiter, 0) != nullptr)) {
+    if ((_remain_length < 0 && _buff.find(_row_delimiter, 0) != nullptr)) {
         _should_stop_scan = true;
     }
 

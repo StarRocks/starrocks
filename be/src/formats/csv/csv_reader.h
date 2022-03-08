@@ -71,14 +71,14 @@ public:
     using Field = Slice;
     using Fields = std::vector<Field>;
 
-    CSVReader(string record_delimiter, string field_delimiter, size_t _record_delimiter_length,
-              size_t _field_delimiter_length)
-            : _record_delimiter(std::move(record_delimiter)),
-              _field_delimiter(std::move(field_delimiter)),
-              _record_delimiter_length(_record_delimiter_length),
-              _field_delimiter_length(_field_delimiter_length),
+    CSVReader(const string& row_delimiter, const string& column_separator)
+            : _row_delimiter(row_delimiter),
+              _column_separator(column_separator),
               _storage(kMinBufferSize),
-              _buff(_storage.data(), _storage.size()) {}
+              _buff(_storage.data(), _storage.size()) {
+        _row_delimiter_length = row_delimiter.size();
+        _column_separator_length = column_separator.size();
+    }
 
     virtual ~CSVReader() {}
 
@@ -89,10 +89,10 @@ public:
     void split_record(const Record& record, Fields* fields) const;
 
 protected:
-    string _record_delimiter;
-    string _field_delimiter;
-    size_t _record_delimiter_length;
-    size_t _field_delimiter_length;
+    string _row_delimiter;
+    string _column_separator;
+    size_t _row_delimiter_length;
+    size_t _column_separator_length;
     raw::RawVector<char> _storage;
     CSVBuffer _buff;
 

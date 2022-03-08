@@ -33,11 +33,11 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
         if (n == 0) {
             // Has reached the end of file and the buffer is empty.
             return Status::EndOfFile(_file->filename());
-        } else if (n < _record_delimiter_length ||
-                   _buff.find(_record_delimiter, n - _record_delimiter_length) == nullptr) {
+        } else if (n < _row_delimiter_length ||
+                   _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
             // Has reached the end of file but still no record delimiter found, which
             // is valid, according the RFC, add the record delimiter ourself.
-            for (char ch : _record_delimiter) {
+            for (char ch : _row_delimiter) {
                 _buff.append(ch);
             }
         }
