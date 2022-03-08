@@ -302,6 +302,8 @@ primaryExpression
     | RIGHT '(' expression ',' expression ')'                                             #functionCall
     | qualifiedName '(' ASTERISK_SYMBOL ')' over?                                         #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
+    | TIMESTAMPDIFF '(' unitIdentifier ',' expression ',' expression ')'                  #functionCall
+    | TIMESTAMPADD '(' unitIdentifier ',' expression ',' expression ')'                   #functionCall
     | windowFunction over                                                                 #windowFunctionCall
     | CAST '(' expression AS type ')'                                                     #cast
     ;
@@ -347,10 +349,10 @@ booleanValue
     ;
 
 interval
-    : INTERVAL value=expression from=intervalField
+    : INTERVAL value=expression from=unitIdentifier
     ;
 
-intervalField
+unitIdentifier
     : YEAR | MONTH | DAY | HOUR | MINUTE | SECOND
     ;
 
