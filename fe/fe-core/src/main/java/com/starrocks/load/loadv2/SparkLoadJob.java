@@ -39,6 +39,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -472,7 +473,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                         indexId, bucket++, schemaHash);
                                 Set<Long> tabletAllReplicas = Sets.newHashSet();
                                 Set<Long> tabletFinishedReplicas = Sets.newHashSet();
-                                for (Replica replica : tablet.getReplicas()) {
+                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                     long replicaId = replica.getId();
                                     tabletAllReplicas.add(replicaId);
                                     if (!tabletToSentReplicaPushTask.containsKey(tabletId)

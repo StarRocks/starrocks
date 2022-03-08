@@ -25,6 +25,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -97,7 +98,7 @@ public class RowCountAction extends RestBaseAction {
                     long indexRowCount = 0L;
                     for (Tablet tablet : index.getTablets()) {
                         long tabletRowCount = 0L;
-                        for (Replica replica : tablet.getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                             if (replica.checkVersionCatchUp(version, false)
                                     && replica.getRowCount() > tabletRowCount) {
                                 tabletRowCount = replica.getRowCount();

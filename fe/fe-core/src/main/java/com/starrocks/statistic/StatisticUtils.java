@@ -6,6 +6,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -92,7 +93,7 @@ public class StatisticUtils {
         // check replicate miss
         for (Partition partition : table.getPartitions()) {
             if (partition.getBaseIndex().getTablets().stream()
-                    .anyMatch(t -> t.getNormalReplicaBackendIds().isEmpty())) {
+                    .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
                 return false;
             }
         }

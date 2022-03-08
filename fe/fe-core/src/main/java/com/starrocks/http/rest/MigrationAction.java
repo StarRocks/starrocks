@@ -25,6 +25,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -107,7 +108,7 @@ public class MigrationAction extends RestBaseAction {
                         row.add(partitionName);
                         row.add(tablet.getId());
                         row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
-                        for (Replica replica : tablet.getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                             row.add(replica.getBackendId());
                             break;
                         }
@@ -133,7 +134,7 @@ public class MigrationAction extends RestBaseAction {
                             row.add(partitionName);
                             row.add(tablet.getId());
                             row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
-                            for (Replica replica : tablet.getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 row.add(replica.getBackendId());
                                 break;
                             }

@@ -9,6 +9,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -66,14 +67,15 @@ public class MetaScanNode extends ScanNode {
                 internalRange.setTablet_id(tabletId);
 
                 // random shuffle List && only collect one copy
+                LocalTablet localTablet = (LocalTablet) tablet;
                 List<Replica> allQueryableReplicas = com.google.common.collect.Lists.newArrayList();
-                tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                localTablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
                         visibleVersion, -1, schemaHash);
                 if (allQueryableReplicas.isEmpty()) {
                     LOG.error("no queryable replica found in tablet {}. visible version {}",
                             tabletId, visibleVersion);
                     if (LOG.isDebugEnabled()) {
-                        for (Replica replica : tablet.getReplicas()) {
+                        for (Replica replica : localTablet.getReplicas()) {
                             LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
                         }
                     }

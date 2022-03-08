@@ -36,6 +36,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
@@ -201,7 +202,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         int totalReplicaNum = 0;
         for (MaterializedIndex rollupIdx : partitionIdToRollupIndex.values()) {
             for (Tablet tablet : rollupIdx.getTablets()) {
-                totalReplicaNum += tablet.getReplicas().size();
+                totalReplicaNum += ((LocalTablet) tablet).getReplicas().size();
             }
         }
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<Long, Long>(totalReplicaNum);
@@ -226,7 +227,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 Map<Long, Long> tabletIdMap = this.partitionIdToBaseRollupTabletIdMap.get(partitionId);
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
-                    List<Replica> rollupReplicas = rollupTablet.getReplicas();
+                    List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getReplicas();
                     for (Replica rollupReplica : rollupReplicas) {
                         long backendId = rollupReplica.getBackendId();
                         Preconditions.checkNotNull(tabletIdMap.get(rollupTabletId)); // baseTabletId
@@ -376,7 +377,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         }
                     }
 
-                    List<Replica> rollupReplicas = rollupTablet.getReplicas();
+                    List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getReplicas();
                     for (Replica rollupReplica : rollupReplicas) {
                         AlterReplicaTask rollupTask = new AlterReplicaTask(
                                 rollupReplica.getBackendId(), dbId, tableId, partitionId,
@@ -463,7 +464,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
                 MaterializedIndex rollupIndex = entry.getValue();
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
-                    List<Replica> replicas = rollupTablet.getReplicas();
+                    List<Replica> replicas = ((LocalTablet) rollupTablet).getReplicas();
                     int healthyReplicaNum = 0;
                     for (Replica replica : replicas) {
                         if (replica.getLastFailedVersion() < 0
@@ -498,7 +499,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             MaterializedIndex rollupIndex = partition.getIndex(rollupIndexId);
             Preconditions.checkNotNull(rollupIndex, rollupIndexId);
             for (Tablet tablet : rollupIndex.getTablets()) {
-                for (Replica replica : tablet.getReplicas()) {
+                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                     replica.setState(ReplicaState.NORMAL);
                 }
             }
@@ -602,7 +603,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
             for (Tablet rollupTablet : rollupIndex.getTablets()) {
                 invertedIndex.addTablet(rollupTablet.getId(), rollupTabletMeta);
-                for (Replica rollupReplica : rollupTablet.getReplicas()) {
+                for (Replica rollupReplica : ((LocalTablet) rollupTablet).getReplicas()) {
                     invertedIndex.addReplica(rollupTablet.getId(), rollupReplica);
                 }
             }
