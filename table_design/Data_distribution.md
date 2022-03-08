@@ -350,7 +350,7 @@ PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
 
 ### 4 建表后批量创建分区
 
-与建表时批量创建分区类似，StarRocks也支持通过ALTER语句批量创建分区。通过指定ADD PARITIONS关键字，配合START和END以及EVERY的值来创建分区。
+与建表时批量创建分区类似，StarRocks也支持通过ALTER语句批量创建分区。通过指定ADD PARTITIONS关键字，配合START和END以及EVERY的值来创建分区。
 
 ~~~ SQL
 ALTER TABLE site_access ADD
