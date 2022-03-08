@@ -22,6 +22,7 @@ class RuntimeState;
 namespace vectorized {
 class ColumnRef;
 
+constexpr auto LowCardDictType = TYPE_INT;
 // TODO: we need to change the dict type to int16 later
 using DictId = int32_t;
 
@@ -178,7 +179,7 @@ struct DictDecoder {
     }
 };
 
-using DefaultDecoder = DictDecoder<TYPE_INT, RGlobalDictMap, TYPE_VARCHAR>;
+using DefaultDecoder = DictDecoder<LowCardDictType, RGlobalDictMap, TYPE_VARCHAR>;
 using DefaultDecoderPtr = std::unique_ptr<DefaultDecoder>;
 
 } // namespace vectorized
