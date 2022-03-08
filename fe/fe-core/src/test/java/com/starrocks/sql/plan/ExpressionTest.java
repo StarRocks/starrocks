@@ -283,4 +283,70 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(
                 "PREDICATES: CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) >= 1.341067345E9, CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) <= -1.725533361E9"));
     }
+
+    @Test
+    public void testConnectionId() throws Exception {
+        String queryStr = "select connection_id()";
+        String explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("0:UNION"));
+
+        queryStr = "select database();";
+        explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("0:UNION"));
+    }
+
+    @Test
+    public void testBetweenDate() throws Exception {
+        String sql = "select * from test_all_type where id_date between '2020-12-12' and '2021-12-12'";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: 9: id_date >= '2020-12-12', 9: id_date <= '2021-12-12'"));
+    }
+
+    @Test
+    public void testNullAddNull() throws Exception {
+        String sql = "select null+null as c3 from test.join2;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" OUTPUT EXPRS:4: expr"));
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 4> : NULL"));
+    }
+
+    @Test
+    public void testDateDateTimeFunctionMatch() throws Exception {
+        String sql = "select if(3, date('2021-01-12'), STR_TO_DATE('2020-11-02', '%Y-%m-%d %H:%i:%s'));";
+        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         if(CAST(3 AS BOOLEAN), '2021-01-12 00:00:00', str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
+
+        sql = "select nullif(date('2021-01-12'), date('2021-01-11'));";
+        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         nullif('2021-01-12', '2021-01-11')");
+
+        sql = "select nullif(date('2021-01-12'), STR_TO_DATE('2020-11-02', '%Y-%m-%d %H:%i:%s'));";
+        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         nullif('2021-01-12 00:00:00', str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
+
+        sql = "select if(3, 4, 5);";
+        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         if(CAST(3 AS BOOLEAN), 4, 5)");
+
+        sql = "select ifnull(date('2021-01-12'), 123);";
+        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         ifnull(CAST('2021-01-12' AS INT), 123)");
+
+        sql = "select ifnull(date('2021-01-12'), 'kks');";
+        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         '2021-01-12'");
+
+        sql = "select ifnull(1234, 'kks');";
+        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         '1234'");
+    }
+
 }

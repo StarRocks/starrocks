@@ -37,4 +37,22 @@ public class SubqueryTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("<slot 7> : CAST(1: v1 AS INT)"));
         Assert.assertTrue(plan.contains("<slot 8> : CAST(4: v4 AS INT)"));
     }
+
+    @Test
+    public void testMultiScalarSubquery() throws Exception {
+        String sql = "SELECT CASE \n"
+                + "    WHEN (SELECT count(*) FROM t1 WHERE v4 BETWEEN 1 AND 20) > 74219\n"
+                + "    THEN ( \n"
+                + "        SELECT avg(v7) FROM t2 WHERE v7 BETWEEN 1 AND 20\n"
+                + "        )\n"
+                + "    ELSE (\n"
+                + "        SELECT avg(v8) FROM t2 WHERE v8 BETWEEN 1 AND 20\n"
+                + "        ) END AS bucket1\n"
+                + "FROM t0\n"
+                + "WHERE v1 = 1;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertNotNull(plan);
+    }
+
+
 }

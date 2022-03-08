@@ -129,7 +129,6 @@ public class AggregateTest extends PlanTestBase {
                 + "  0:OlapScanNode"));
     }
 
-
     @Test
     public void testAggregateConst() throws Exception {
         String sql = "select 'a', v2, sum(v1) from t0 group by 'a', v2; ";
@@ -160,6 +159,16 @@ public class AggregateTest extends PlanTestBase {
                 + "  |  \n"
                 + "  0:OlapScanNode\n"
                 + "     TABLE: t0"));
+    }
+
+    @Test
+    public void testAggConstPredicate() throws Exception {
+        String queryStr = "select MIN(v1) from t0 having abs(1) = 2";
+        String explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("  1:AGGREGATE (update finalize)\n"
+                + "  |  output: min(1: v1)\n"
+                + "  |  group by: \n"
+                + "  |  having: abs(1) = 2\n"));
     }
 
 }

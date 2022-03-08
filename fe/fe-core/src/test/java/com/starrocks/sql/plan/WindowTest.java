@@ -77,4 +77,23 @@ public class WindowTest extends PlanTestBase {
                 "  |  functions: [, sum(1: v1), ], [, sum(3: v3), ]"));
     }
 
+    @Test
+    public void testLeadAndLagFunction() {
+        String sql = "select LAG(k7, 3, 3) OVER () from baseall";
+        starRocksAssert.query(sql).analysisError("The third parameter of `lag` can't not convert");
+
+        sql = "select lead(k7, 3, 3) OVER () from baseall";
+        starRocksAssert.query(sql).analysisError("The third parameter of `lead` can't not convert");
+
+        sql = "select lead(k3, 3, 'kks') OVER () from baseall";
+        starRocksAssert.query(sql)
+                .analysisError("Convert type error in offset fn(default value); old_type=VARCHAR new_type=INT");
+
+        sql = "select lead(id2, 1, 1) OVER () from bitmap_table";
+        starRocksAssert.query(sql).analysisError("No matching function with signature: lead(bitmap,");
+
+        sql = "select lag(id2, 1, 1) OVER () from hll_table";
+        starRocksAssert.query(sql).analysisError("No matching function with signature: lag(hll,");
+    }
+
 }

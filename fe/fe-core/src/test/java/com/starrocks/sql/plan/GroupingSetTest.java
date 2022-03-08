@@ -13,4 +13,5 @@ public class GroupingSetTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("REPEAT_NODE"));
     }
 
+
 }

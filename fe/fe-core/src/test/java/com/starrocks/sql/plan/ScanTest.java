@@ -84,4 +84,25 @@ public class ScanTest extends PlanTestBase {
                 "     TABLE: baseall\n" +
                 "     PREAGGREGATION: OFF. Reason: Group columns isn't bound table baseall"));
     }
+
+    @Test
+    public void testInformationSchema() throws Exception {
+        String sql = "select column_name from information_schema.columns limit 1;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  0:SCAN SCHEMA\n" +
+                "     limit: 1\n"));
+    }
+
+    @Test
+    public void testInformationSchema1() throws Exception {
+        String sql = "select column_name, UPPER(DATA_TYPE) from information_schema.columns;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:Project\n"
+                + "  |  <slot 4> : 4: COLUMN_NAME\n"
+                + "  |  <slot 25> : upper(8: DATA_TYPE)\n"
+                + "  |  \n"
+                + "  0:SCAN SCHEMA\n"));
+    }
 }

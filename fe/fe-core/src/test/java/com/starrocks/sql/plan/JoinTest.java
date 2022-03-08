@@ -554,4 +554,63 @@ public class JoinTest extends PlanTestBase {
                 "  |  <slot 40> : CAST(37 AS INT)"));
     }
 
+    @Test
+    public void testNullSafeEqualJoin() throws Exception {
+        String sql = "select * from t0 join t1 on t0.v3 <=> t1.v4";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("equal join conjunct: 3: v3 <=> 4: v4"));
+
+        sql = "select * from t0 left join t1 on t0.v3 <=> t1.v4";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("equal join conjunct: 3: v3 <=> 4: v4"));
+    }
+
+    @Test
+    public void testColocateHint() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from t0 as x0 inner join t0 as x1 on x0.v1 = x1.v1;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: INNER JOIN (COLOCATE)\n"
+                + "  |  hash predicates:\n"
+                + "  |  colocate: true"));
+
+        sql = "select * from t0 as x0 inner join[shuffle] t0 as x1 on x0.v1 = x1.v1;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: INNER JOIN (PARTITIONED)\n"
+                + "  |  hash predicates:\n"
+                + "  |  colocate: false, reason: "));
+
+        sql = "select * from t0 as x0 inner join[colocate] t0 as x1 on x0.v1 = x1.v1;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: INNER JOIN (COLOCATE)\n"
+                + "  |  hash predicates:\n"
+                + "  |  colocate: true"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testBucketHint() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from t0 as x0 inner join t1 as x1 on x0.v1 = x1.v4;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n"
+                + "  |  hash predicates:\n"
+                + "  |  colocate: false, reason: "));
+
+        sql = "select * from t0 as x0 inner join[shuffle] t1 as x1 on x0.v1 = x1.v4;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: INNER JOIN (PARTITIONED)\n"
+                + "  |  hash predicates:\n"
+                + "  |  colocate: false, reason: "));
+
+        sql = "select * from t0 as x0 inner join[bucket] t1 as x1 on x0.v1 = x1.v4;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n"
+                + "  |  hash predicates:\n"
+                + "  |  colocate: false, reason: "));
+        FeConstants.runningUnitTest = false;
+    }
+
+
+
 }
