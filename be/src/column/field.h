@@ -54,7 +54,7 @@ public:
               _agg_method(rhs._agg_method),
               _name(rhs._name),
               _type(rhs._type),
-              _sub_fields(rhs._sub_fields ? new std::vector<Field>(*rhs._sub_fields) : nullptr),
+              _sub_fields(rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr),
               _short_key_length(rhs._short_key_length),
               _flags(rhs._flags) {}
 
@@ -78,7 +78,7 @@ public:
             _agg_method = rhs._agg_method;
             _short_key_length = rhs._short_key_length;
             _flags = rhs._flags;
-            _sub_fields = rhs._sub_fields ? new std::vector<Field>(*rhs._sub_fields) : nullptr;
+            _sub_fields = rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr;
         }
         return *this;
     }
