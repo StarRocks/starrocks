@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -290,6 +291,9 @@ public class BinaryPredicate extends Predicate implements Writable {
 
         // Following logical is compatible with MySQL:
         //    Cast to DOUBLE by default, because DOUBLE has the largest range of values.
+        if (type1.isJsonType() || type2.isJsonType()) {
+            return ScalarType.createJsonType();
+        }
         if (t1 == PrimitiveType.VARCHAR && t2 == PrimitiveType.VARCHAR) {
             return Type.VARCHAR;
         }
