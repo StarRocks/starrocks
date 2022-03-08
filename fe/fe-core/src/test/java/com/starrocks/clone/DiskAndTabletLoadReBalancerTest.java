@@ -13,6 +13,7 @@ import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
@@ -20,7 +21,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
@@ -560,7 +560,7 @@ public class DiskAndTabletLoadReBalancerTest {
         invertedIndex.addTablet(tabletId, tabletMeta);
         replica.setPathHash(pathHash);
         invertedIndex.addReplica(tabletId, replica);
-        Tablet tablet1 = new Tablet(tabletId, Lists.newArrayList(replica));
+        LocalTablet tablet1 = new LocalTablet(tabletId, Lists.newArrayList(replica));
         materializedIndex.addTablet(tablet1, tabletMeta, false);
     }
 }
