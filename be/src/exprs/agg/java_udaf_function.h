@@ -220,20 +220,12 @@ public:
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
         std::vector<DirectByteBuffer> buffers;
+        std::vector<jobject> args;
         ConvertDirectBufferVistor vistor(buffers);
         int num_cols = ctx->get_num_args();
-        PrimitiveType types[num_cols];
-        jobject args[num_cols];
-        for (int i = 0; i < num_cols; ++i) {
-            types[i] = ctx->get_arg_type(i)->type;
-            int buffers_idx = buffers.size();
-            columns[i]->accept(&vistor);
-            int buffers_sz = buffers.size() - buffers_idx;
-            args[i] = helper.create_boxed_array(types[i], batch_size, columns[i]->is_nullable(), &buffers[buffers_idx],
-                                                buffers_sz);
-        }
+        JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
         helper.batch_update_single(ctx, ctx->impl()->udaf_ctxs()->handle, ctx->impl()->udaf_ctxs()->update->method,
-                                   this->data(state).handle, args, num_cols);
+                                   this->data(state).handle, args.data(), num_cols);
         for (int i = 0; i < num_cols; ++i) {
             env->DeleteLocalRef(args[i]);
         }

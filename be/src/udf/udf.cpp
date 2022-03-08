@@ -26,15 +26,11 @@
 #include <sstream>
 
 #include "common/logging.h"
+#include "exprs/agg/java_udaf_function.h"
 #include "runtime/decimal_value.h"
 #include "runtime/decimalv2_value.h"
 #include "runtime/types.h"
 #include "storage/hll.h"
-
-#ifdef STARROCKS_WITH_HDFS
-#include "exprs/agg/java_udaf_function.h"
-#endif
-
 #include "udf/udf_internal.h"
 #include "util/debug_util.h"
 
@@ -145,6 +141,32 @@ bool FunctionContextImpl::check_local_allocations_empty() {
     return false;
 }
 
+void FunctionContextImpl::set_error(const char* error_msg) {
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    if (_error_msg.empty()) {
+        _error_msg = error_msg;
+        std::stringstream ss;
+        ss << "UDF ERROR: " << error_msg;
+        if (_state != nullptr) {
+            _state->set_process_status(ss.str());
+        }
+    }
+}
+
+bool FunctionContextImpl::has_error() {
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    return !_error_msg.empty();
+}
+
+const char* FunctionContextImpl::error_msg() {
+    std::lock_guard<std::mutex> lock(_error_msg_mutex);
+    if (!_error_msg.empty()) {
+        return _error_msg.c_str();
+    } else {
+        return nullptr;
+    }
+}
+
 starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
         RuntimeState* state, MemPool* pool, const starrocks_udf::FunctionContext::TypeDesc& return_type,
         const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size, bool debug) {
@@ -174,9 +196,7 @@ starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
     ctx->_impl->_varargs_buffer = reinterpret_cast<uint8_t*>(malloc(varargs_buffer_size));
     ctx->_impl->_varargs_buffer_size = varargs_buffer_size;
     ctx->_impl->_debug = debug;
-#ifdef STARROCKS_WITH_HDFS
     ctx->_impl->_jvm_udaf_ctxs = std::make_unique<vectorized::JavaUDAFContext>();
-#endif
     VLOG_ROW << "Created FunctionContext: " << ctx << " with pool " << ctx->_impl->_pool;
     return ctx;
 }
@@ -246,7 +266,7 @@ FunctionContext::UniqueId FunctionContext::query_id() const {
 }
 
 bool FunctionContext::has_error() const {
-    return !_impl->_error_msg.empty();
+    return _impl->has_error();
 }
 
 const char* FunctionContext::error_msg() const {
@@ -322,19 +342,7 @@ void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
 }
 
 void FunctionContext::set_error(const char* error_msg) {
-    if (_impl->_error_msg.empty()) {
-        _impl->_error_msg = error_msg;
-        std::stringstream ss;
-        ss << "UDF ERROR: " << error_msg;
-
-        if (_impl->_state != nullptr) {
-            _impl->_state->set_process_status(ss.str());
-        }
-    }
-}
-
-void FunctionContext::clear_error_msg() {
-    _impl->_error_msg.clear();
+    _impl->set_error(error_msg);
 }
 
 bool FunctionContext::add_warning(const char* warning_msg) {

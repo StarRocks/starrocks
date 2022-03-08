@@ -60,10 +60,6 @@ Usage: $0 <options>
      --clean            clean and build target
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
-     --with-hdfs        enable hdfs support
-     --without-hdfs     disable hdfs support
-     --with-aws         enable aws support
-     --without-aws      disable aws support
 
   Eg.
     $0                                      build all
@@ -85,10 +81,6 @@ OPTS=$(getopt \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'without-gcov' \
-  -l 'with-hdfs' \
-  -l 'without-hdfs' \
-  -l 'with-aws' \
-  -l 'without-aws' \
   -l 'help' \
   -- "$@")
 
@@ -104,8 +96,6 @@ BUILD_SPARK_DPP=
 CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
-WITH_HDFS=ON
-WITH_AWS=ON
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
@@ -134,10 +124,6 @@ else
             --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
-            --with-hdfs) WITH_HDFS=ON; shift ;;
-            --without-hdfs) WITH_HDFS=OFF; shift ;;
-            --with-aws) WITH_AWS=ON; shift ;;
-            --without-aws) WITH_AWS=OFF; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             --) shift ;  break ;;
@@ -163,8 +149,6 @@ echo "Get params:
     CLEAN               -- $CLEAN
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
-    WITH_HDFS           -- $WITH_HDFS
-    WITH_AWS            -- $WITH_AWS
     USE_AVX2            -- $USE_AVX2
 "
 
@@ -179,13 +163,13 @@ fi
 make
 cd ${STARROCKS_HOME}
 
-if [ "${WITH_HDFS}" == "ON" ]; then
-    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-        export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
-    else
-        export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
-    fi
+
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
+else
+    export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi
+
 
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] ; then
@@ -202,7 +186,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     mkdir -p ${CMAKE_BUILD_DIR}
     cd ${CMAKE_BUILD_DIR}
     ${CMAKE_CMD} .. -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} -DSTARROCKS_HOME=${STARROCKS_HOME} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-                    -DMAKE_TEST=OFF -DWITH_HDFS=${WITH_HDFS} -DWITH_AWS=${WITH_AWS} -DWITH_GCOV=${WITH_GCOV} -DUSE_AVX2=$USE_AVX2 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+                    -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV} -DUSE_AVX2=$USE_AVX2 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     time make -j${PARALLEL}
     make install
     cd ${STARROCKS_HOME}

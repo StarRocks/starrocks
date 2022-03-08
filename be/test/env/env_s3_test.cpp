@@ -1,7 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#ifdef STARROCKS_WITH_AWS
-
 #include "env/env_s3.h"
 
 #include <aws/core/Aws.h>
@@ -50,5 +48,3 @@ TEST_F(EnvS3Test, write_and_read) {
 }
 
 } // namespace starrocks
-
-#endif

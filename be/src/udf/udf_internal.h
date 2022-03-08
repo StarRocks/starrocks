@@ -25,6 +25,7 @@
 #include <cstring>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -107,10 +108,11 @@ public:
     bool check_local_allocations_empty();
 
     RuntimeState* state() { return _state; }
+    void set_error(const char* error_msg);
+    bool has_error();
+    const char* error_msg();
 
-#ifdef STARROCKS_WITH_HDFS
     vectorized::JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
-#endif
 
     std::string& string_result() { return _string_result; }
 
@@ -148,6 +150,7 @@ private:
     starrocks_udf::FunctionContext::StarRocksVersion _version;
 
     // Empty if there's no error
+    std::mutex _error_msg_mutex;
     std::string _error_msg;
 
     // The number of warnings reported.
@@ -191,10 +194,8 @@ private:
     // this is used for count memory usage of aggregate state
     size_t _mem_usage = 0;
 
-#ifdef STARROCKS_WITH_HDFS
     // UDAF Context
     std::unique_ptr<vectorized::JavaUDAFContext> _jvm_udaf_ctxs;
-#endif
 };
 
 } // namespace starrocks

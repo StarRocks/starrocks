@@ -277,11 +277,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::COMPUTE_FUNCTION_CALL:
     case TExprNodeType::FUNCTION_CALL: {
         if (texpr_node.fn.binary_type == TFunctionBinaryType::SRJAR) {
-#ifdef STARROCKS_WITH_HDFS
             *expr = pool->add(new vectorized::JavaFunctionCallExpr(texpr_node));
-#else
-            return Status::InternalError("you should rebuild StarRocks with WITH_HDFS option ON");
-#endif
         } else if (texpr_node.fn.name.function_name == "if") {
             *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_if_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "nullif") {

@@ -289,7 +289,7 @@ public:
         return Status::OK();
     }
 
-    const std::string& file_name() const override { return _filename; }
+    const std::string& filename() const override { return _filename; }
 
 private:
     std::string _filename;

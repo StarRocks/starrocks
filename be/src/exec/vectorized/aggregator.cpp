@@ -27,7 +27,6 @@ Status Aggregator::open(RuntimeState* state) {
     }
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
-#ifdef STARROCKS_WITH_HDFS
     // init function context
     _has_udaf = std::any_of(_fns.begin(), _fns.end(),
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
@@ -45,8 +44,6 @@ Status Aggregator::open(RuntimeState* state) {
         });
         RETURN_IF_ERROR(promise_st->get_future().get());
     }
-
-#endif
 
     // AggregateFunction::create needs to call create in JNI,
     // but prepare is executed in bthread, which will cause the JNI code to crash

@@ -114,11 +114,11 @@ set(EXEC_FILES
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
-        io/array_input_stream_test.cpp
+        ./io/array_input_stream_test.cpp
         ./io/fd_output_stream_test.cpp
-        io/fd_input_stream_test.cpp
         ./io/s3_output_stream_test.cpp
-        io/s3_input_stream_test.cpp
+        ./io/s3_input_stream_test.cpp
+        ./io/fd_input_stream_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
@@ -256,8 +256,8 @@ set(EXEC_FILES
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
         ./gutil/sysinfo-test.cc
+        ./exec/vectorized/hdfs_scan_node_test.cpp
         )
-
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 
@@ -274,10 +274,6 @@ endif()
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif()
-
-if (WITH_HDFS)
-    set(EXEC_FILES ${EXEC_FILES} ./exec/vectorized/hdfs_scan_node_test.cpp)
-endif ()
 
 add_executable(starrocks_test ${EXEC_FILES})
 
