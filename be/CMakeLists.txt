@@ -702,7 +702,6 @@ install(FILES
 
 install(FILES
     ${BASE_DIR}/../conf/be.conf
-    ${BASE_DIR}/../conf/jdbc_drivers.json
     ${BASE_DIR}/../conf/hadoop_env.sh
     DESTINATION ${OUTPUT_DIR}/conf)
 

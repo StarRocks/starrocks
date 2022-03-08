@@ -253,7 +253,6 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
 
     LOG(INFO) << get_version_string(false);
 
-
     init_thrift_logging();
     CpuInfo::init();
     DiskInfo::init();
