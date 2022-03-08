@@ -26,7 +26,6 @@
 #include <functional>
 #include <sstream>
 #include <type_traits>
-#include <utility>
 
 #include "orc/BloomFilter.hh"
 #include "orc/Common.hh"
@@ -209,7 +208,6 @@ bool PredicateLeaf::operator==(const PredicateLeaf& r) const {
     }
     return true;
 }
-
 // enum to mark the position of predicate in the range
 enum class Location { BEFORE, MIN, MIDDLE, MAX, AFTER };
 
@@ -282,7 +280,7 @@ TruthValue evaluatePredicateRange(const PredicateLeaf::Operator op, const std::v
         }
     case PredicateLeaf::Operator::LESS_THAN_EQUALS:
         loc = compareToRange(values.at(0), minValue, maxValue);
-        if (loc == Location::AFTER || loc == Location::MAX) {
+        if (loc == Location::AFTER || loc == Location::MAX || (loc == Location::MIN && minValue == maxValue)) {
             return hasNull ? TruthValue::YES_NULL : TruthValue::YES;
         } else if (loc == Location::BEFORE) {
             return hasNull ? TruthValue::NO_NULL : TruthValue::NO;

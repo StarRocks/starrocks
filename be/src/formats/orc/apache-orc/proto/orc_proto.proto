@@ -1,3 +1,8 @@
+// This file is made available under Elastic License 2.0.
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/orc/tree/main/proto/orc_proto.proto
+
+
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -372,6 +377,11 @@ message Footer {
   // information about the encryption in this file
   optional Encryption encryption = 10;
   optional CalendarKind calendar = 11;
+
+  // informative description about the version of the software that wrote
+  // the file. It is assumed to be within a given writer, so for example
+  // ORC 1.7.2 = "1.7.2". It may include suffixes, such as "-SNAPSHOT".
+  optional string softwareVersion = 12;
 }
 
 enum CompressionKind {
