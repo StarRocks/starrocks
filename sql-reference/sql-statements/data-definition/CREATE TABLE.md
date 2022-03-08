@@ -57,7 +57,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     * FLOAT（4字节）
     支持科学计数法
 
-    * DOUBLE（12字节）
+    * DOUBLE（8字节）
     支持科学计数法
 
     * DECIMAL[(precision, scale)] (16字节)
