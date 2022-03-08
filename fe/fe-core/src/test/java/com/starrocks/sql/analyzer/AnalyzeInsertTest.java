@@ -10,7 +10,7 @@ import java.io.File;
 import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccessUseInsert;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeInsertTest {
     // use a unique dir so that it won't be conflict with other unit test which
@@ -41,7 +41,7 @@ public class AnalyzeInsertTest {
         analyzeFail("insert into tnotnull(v1,v3) values(1,3)",
                 "must be explicitly mentioned in column permutation");
 
-        analyzeSuccessUseInsert("insert into tarray(v1,v4) values (1,[NULL,9223372036854775808])");
+        analyzeSuccess("insert into tarray(v1,v4) values (1,[NULL,9223372036854775808])");
 
         analyzeFail("insert into t0 values (170141183460469231731687303715884105728)", "Number Overflow. literal");
     }

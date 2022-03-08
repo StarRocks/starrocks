@@ -464,20 +464,19 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().enableJoinReorder();
     }
 
-    @Test(expected = NullPointerException.class)
+    @Test
     public void testSetVar() throws Exception {
         String sql = "explain select c2 from db1.tbl3;";
-        String plan = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, sql);
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
 
         sql = "explain select /*+ SET_VAR(enable_vectorized_engine=false) */c2 from db1.tbl3";
-        plan = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, sql);
+        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
 
         sql = "explain select c2 from db1.tbl3";
-        plan = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, sql);
+        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
 
-        // will throw NullPointException
         sql = "explain select /*+ SET_VAR(enable_vectorized_engine=true, enable_cbo=true) */ c2 from db1.tbl3";
-        plan = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, sql);
+        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
     }
 
     @Test

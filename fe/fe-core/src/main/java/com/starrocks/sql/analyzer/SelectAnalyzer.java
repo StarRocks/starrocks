@@ -19,7 +19,6 @@ import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.TreeNode;
@@ -52,11 +51,9 @@ import static com.starrocks.sql.analyzer.AggregationAnalyzer.verifySourceAggrega
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
 public class SelectAnalyzer {
-    private final Catalog catalog;
     private final ConnectContext session;
 
-    public SelectAnalyzer(Catalog catalog, ConnectContext session) {
-        this.catalog = catalog;
+    public SelectAnalyzer(ConnectContext session) {
         this.session = session;
     }
 
@@ -582,7 +579,7 @@ public class SelectAnalyzer {
     }
 
     private void analyzeExpression(Expr expr, AnalyzeState analyzeState, Scope scope) {
-        ExpressionAnalyzer.analyzeExpression(expr, analyzeState, scope, catalog, session);
+        ExpressionAnalyzer.analyzeExpression(expr, analyzeState, scope, session);
     }
 
     public static List<Expr> expandStar(SelectListItem item, Relation fromRelation) {

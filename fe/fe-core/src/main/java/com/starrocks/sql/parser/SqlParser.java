@@ -13,6 +13,7 @@ import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.SqlParserUtils;
+import com.starrocks.qe.OriginStatement;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 
@@ -24,7 +25,8 @@ public class SqlParser {
         List<String> splitSql = splitSQL(originSql);
         List<StatementBase> statements = Lists.newArrayList();
 
-        for (String sql : splitSql) {
+        for (int idx = 0; idx < splitSql.size(); ++idx) {
+            String sql = splitSql.get(idx);
             try {
                 StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
                 CommonTokenStream tokenStream = new CommonTokenStream(lexer);
@@ -33,8 +35,10 @@ public class SqlParser {
                 parser.removeErrorListeners();
                 parser.addErrorListener(new ErrorHandler());
                 StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-                statements.add((StatementBase) new AstBuilder()
-                        .visitSingleStatement(sqlStatements.singleStatement(0)));
+                StatementBase statement = (StatementBase) new AstBuilder()
+                        .visitSingleStatement(sqlStatements.singleStatement(0));
+                statement.setOrigStmt(new OriginStatement(sql, idx));
+                statements.add(statement);
             } catch (ParsingException parsingException) {
                 StatementBase statement = parseWithOldParser(sql, sqlMode);
                 if (statement instanceof QueryStmt

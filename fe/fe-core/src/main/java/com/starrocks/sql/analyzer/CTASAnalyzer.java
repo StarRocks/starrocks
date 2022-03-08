@@ -21,7 +21,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 
@@ -29,16 +28,9 @@ import java.util.List;
 import java.util.Map;
 
 public class CTASAnalyzer {
-    private final Catalog catalog;
-    private final ConnectContext session;
-
-    public CTASAnalyzer(Catalog catalog, ConnectContext session) {
-        this.catalog = catalog;
-        this.session = session;
-    }
 
     @Deprecated
-    public Relation transformCTASStmt(CreateTableAsSelectStmt createTableAsSelectStmt) {
+    public static void transformCTASStmt(CreateTableAsSelectStmt createTableAsSelectStmt, ConnectContext session) {
         List<String> columnNames = createTableAsSelectStmt.getColumnNames();
         QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
         CreateTableStmt createTableStmt = createTableAsSelectStmt.getCreateTableStmt();
@@ -47,7 +39,7 @@ public class CTASAnalyzer {
             throw new SemanticException("CTAS does not support create external table");
         }
 
-        new Analyzer(catalog, session).analyze(queryStatement);
+        Analyzer.analyze(queryStatement, session);
 
         // Pair<TableName, Pair<ColumnName, ColumnAlias>>
         Map<Pair<String, Pair<String, String>>, Table> columnNameToTable = Maps.newHashMap();
@@ -120,19 +112,17 @@ public class CTASAnalyzer {
             createTableStmt.setDistributionDesc(distributionDesc);
         }
 
-        Relation relation = new CreateTableAnalyzer(catalog, session).transformCreateTableStmt(createTableStmt);
+        CreateTableAnalyzer.transformCreateTableStmt(createTableStmt, session);
 
         InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
         insertStmt.setQueryStatement(queryStatement);
-
-        return relation;
     }
 
     // For char and varchar types, use the inferred length if the length can be inferred,
     // otherwise use the longest varchar value.
     // For double and float types, since they may be selected as key columns,
     // the key column must be an exact value, so we unified into a default decimal type.
-    private Type transformType(Type srcType) {
+    private static Type transformType(Type srcType) {
         Type newType;
         if (srcType.isScalarType()) {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||

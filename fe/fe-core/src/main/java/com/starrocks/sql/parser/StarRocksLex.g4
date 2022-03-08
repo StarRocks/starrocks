@@ -193,7 +193,7 @@ SINGLE_QUOTED_TEXT
     ;
 
 DOUBLE_QUOTED_TEXT
-    : '"' (('\\' .)? ( ~'"' | '""' ))*? '"'
+    : '"' ( '\\'. | '""' | ~('"'| '\\') )* '"'
     ;
 
 INTEGER_VALUE

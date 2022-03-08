@@ -221,7 +221,7 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitSubquery(Subquery node, Void context) {
-            QueryRelation qb = node.getQueryBlock();
+            QueryRelation qb = node.getQueryRelation();
             List<FieldId> fieldIds = qb.getColumnReferences().values().stream()
                     .filter(fieldId -> fieldId.getRelationId().equals(sourceScope.getRelationId()))
                     .collect(Collectors.toList());
