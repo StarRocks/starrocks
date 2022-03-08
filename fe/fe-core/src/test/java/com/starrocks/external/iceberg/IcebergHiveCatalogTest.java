@@ -12,7 +12,7 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.hive.HiveCatalog;
+import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -28,7 +28,7 @@ public class IcebergHiveCatalogTest {
     }
 
     @Test
-    public void testLoadTable(@Mocked HiveCatalog hiveCatalog) {
+    public void testLoadTable(@Mocked IcebergHiveCatalog hiveCatalog) {
         TableIdentifier identifier = IcebergUtil.getIcebergTableIdentifier("db", "table");
         new Expectations() {
             {
@@ -52,4 +52,13 @@ public class IcebergHiveCatalogTest {
         Assert.assertTrue(table.name().equals("test"));
     }
 
+    @Test
+    public void testInitialize() {
+        try {
+            IcebergHiveCatalog catalog = new IcebergHiveCatalog();
+            catalog.initialize("hive", Maps.newHashMap());
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
 }
