@@ -141,8 +141,7 @@ public:
 
     S3ClientPtr new_client(const ClientConfiguration& config);
 
-    static ClientConfiguration& getClientConfig()
-    {
+    static ClientConfiguration& getClientConfig() {
         // We cached config here and make a deep copy each time.Since aws sdk has changed the
         // Aws::Client::ClientConfiguration default constructor to search for the region
         // (where as before 1.8 it has been hard coded default of "us-east-1").
