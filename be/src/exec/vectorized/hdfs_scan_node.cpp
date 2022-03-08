@@ -581,15 +581,15 @@ Status HdfsScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
 }
 
 void HdfsScanNode::_init_partition_values_map() {
-    if (_scan_ranges.empty()) {
+    if (_scan_ranges.empty() || !_lake_table->has_partition()) {
         return;
     }
 
     for (auto& scan_range : _scan_ranges) {
         auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
-
-        if (_partition_values_map.find(scan_range.partition_id) == _partition_values_map.end()) {
-            _partition_values_map[scan_range.partition_id] = partition_desc->partition_key_value_evals();
+        auto partition_id = scan_range.partition_id;
+        if (_partition_values_map.find(partition_id) == _partition_values_map.end()) {
+            _partition_values_map[partition_id] = partition_desc->partition_key_value_evals();
         }
     }
 
@@ -654,7 +654,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
 
     COUNTER_UPDATE(_profile.scan_files_counter, 1);
     std::string native_file_path = scan_range.full_path;
-    if (_lake_table != nullptr) {
+    if (_lake_table != nullptr && _lake_table->has_partition()) {
         auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
 
         SCOPED_TIMER(_profile.open_file_timer);
