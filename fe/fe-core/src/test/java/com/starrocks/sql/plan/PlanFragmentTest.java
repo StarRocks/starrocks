@@ -37,17 +37,6 @@ public class PlanFragmentTest extends PlanTestBase {
         starRocksAssert.withTable("create table test_array(c0 INT, c1 array<varchar(65533)>)" +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
-        starRocksAssert.withTable("create table test.colocate1\n" +
-                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
-                "properties(\"replication_num\" = \"1\"," +
-                "\"colocate_with\" = \"group1\");")
-                .withTable("create table test.colocate2\n" +
-                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
-                        "properties(\"replication_num\" = \"1\"," +
-                        "\"colocate_with\" = \"group1\");")
-                .withTable("create table test.nocolocate3\n" +
-                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 10\n" +
-                        "properties(\"replication_num\" = \"1\");");
     }
 
     @Test
@@ -867,7 +856,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("4:AGGREGATE (update finalize)"));
     }
 
-
     @Test
     public void testWindowDuplicatedColumnInPartitionExprAndOrderByExpr() throws Exception {
         String sql = "select v1, sum(v2) over (partition by v1, v2 order by v2 desc) as sum1 from t0";
@@ -1124,7 +1112,6 @@ public class PlanFragmentTest extends PlanTestBase {
         starRocksAssert.query(castSql3).explainContains("  1:Project\n" +
                 "  |  <slot 12> : str_to_date('11/09/2011', 6: k6)");
     }
-
 
     @Test
     public void testPushDown() throws Exception {
@@ -1427,7 +1414,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 2: id > 1"));
     }
-
 
     @Test
     public void testJoinConst() throws Exception {

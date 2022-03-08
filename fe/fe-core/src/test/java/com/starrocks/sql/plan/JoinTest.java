@@ -611,6 +611,4 @@ public class JoinTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
-
-
 }
