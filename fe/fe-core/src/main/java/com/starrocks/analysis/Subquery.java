@@ -67,7 +67,7 @@ public class Subquery extends Expr {
         if (stmt != null) {
             return "(" + stmt.toSql() + ")";
         } else {
-            return "(" + queryBlock.toSql() + ")";
+            return "(" + queryRelation.toSql() + ")";
         }
     }
 
@@ -100,7 +100,7 @@ public class Subquery extends Expr {
 
     public Subquery(QueryRelation queryBlock) {
         super();
-        this.queryBlock = queryBlock;
+        this.queryRelation = queryBlock;
     }
 
     /**
@@ -214,11 +214,11 @@ public class Subquery extends Expr {
             return false;
         }
 
-        if (queryBlock != null) {
-            if (((Subquery) o).getQueryBlock() == null) {
+        if (queryRelation != null) {
+            if (((Subquery) o).getQueryRelation() == null) {
                 return false;
             } else {
-                return o.equals(queryBlock);
+                return o.equals(queryRelation);
             }
         }
 
@@ -249,13 +249,13 @@ public class Subquery extends Expr {
     /**
      * Analyzed subquery is store as QueryBlock
      */
-    private QueryRelation queryBlock;
+    private QueryRelation queryRelation;
 
-    public void setQueryBlock(QueryRelation queryBlock) {
-        this.queryBlock = queryBlock;
+    public void setQueryRelation(QueryRelation queryRelation) {
+        this.queryRelation = queryRelation;
     }
 
-    public QueryRelation getQueryBlock() {
-        return queryBlock;
+    public QueryRelation getQueryRelation() {
+        return queryRelation;
     }
 }

@@ -1,15 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql;
 
-import com.google.common.collect.Maps;
 import com.starrocks.analysis.InsertStmt;
-import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.QueryRelation;
@@ -31,33 +30,16 @@ import java.util.stream.Collectors;
 
 public class StatementPlanner {
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(session.getCatalog(), session);
-        Relation relation = analyzer.analyze(stmt);
-
+        Analyzer.analyze(stmt, session);
         PrivilegeChecker.check(stmt, session.getCatalog().getAuth(), session);
 
-        if (stmt instanceof QueryStmt || stmt instanceof QueryStatement) {
-
-            Map<String, Database> dbs = Maps.newTreeMap();
-            if (stmt instanceof QueryStmt) {
-                QueryStmt queryStmt = (QueryStmt) stmt;
-                queryStmt.getDbs(session, dbs);
-            }
-            if (stmt instanceof QueryStatement) {
-                dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
-            }
-
+        if (stmt instanceof QueryStatement) {
+            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
             try {
                 lock(dbs);
                 session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-                ExecPlan plan = createQueryPlan(relation, session);
-
-                if (stmt instanceof QueryStmt) {
-                    setOutfileSink((QueryStmt) stmt, plan);
-                } else {
-                    setOutfileSink((QueryStatement) stmt, plan);
-                }
+                ExecPlan plan = createQueryPlan(((QueryStatement) stmt).getQueryRelation(), session);
+                setOutfileSink((QueryStatement) stmt, plan);
 
                 return plan;
             } finally {
@@ -68,7 +50,7 @@ public class StatementPlanner {
             Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, insertStmt);
             try {
                 lock(dbs);
-                return createInsertPlan(relation, session);
+                return new InsertPlanner().plan((InsertStmt) stmt, session);
             } finally {
                 unLock(dbs);
             }
@@ -108,10 +90,6 @@ public class StatementPlanner {
         }
     }
 
-    private ExecPlan createInsertPlan(Relation relation, ConnectContext session) {
-        return new InsertPlanner().plan(relation, session);
-    }
-
     // Lock all database before analyze
     private void lock(Map<String, Database> dbs) {
         if (dbs == null) {
@@ -130,21 +108,6 @@ public class StatementPlanner {
         for (Database db : dbs.values()) {
             db.readUnlock();
         }
-    }
-
-    // if query stmt has OUTFILE clause, set info into ResultSink.
-    // this should be done after fragments are generated.
-    private void setOutfileSink(QueryStmt queryStmt, ExecPlan plan) {
-        if (!queryStmt.hasOutFileClause()) {
-            return;
-        }
-        PlanFragment topFragment = plan.getFragments().get(0);
-        if (!(topFragment.getSink() instanceof ResultSink)) {
-            return;
-        }
-
-        ResultSink resultSink = (ResultSink) topFragment.getSink();
-        resultSink.setOutfileInfo(queryStmt.getOutFileClause());
     }
 
     // if query stmt has OUTFILE clause, set info into ResultSink.

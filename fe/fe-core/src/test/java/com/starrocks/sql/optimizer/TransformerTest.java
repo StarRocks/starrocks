@@ -8,6 +8,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -21,6 +22,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ErrorCollector;
 
+import javax.management.Query;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -143,14 +145,12 @@ public class TransformerTest {
     public static void analyzeAndBuildOperator(String originStmt, String operatorString, String except,
                                                ErrorCollector collector) {
         try {
-            SqlScanner input =
-                    new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
-            SqlParser parser = new SqlParser(input);
-            StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable().getSqlMode()).get(0);
 
-            Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            Relation relation = analyzer.analyze(statementBase);
-            LogicalPlan logicalPlan = new RelationTransformer(new ColumnRefFactory(), connectContext).transform(relation);
+            Analyzer.analyze(statementBase, connectContext);
+            LogicalPlan logicalPlan = new RelationTransformer(new ColumnRefFactory(), connectContext)
+                    .transform(((QueryStatement) statementBase).getQueryRelation());
 
             OperatorStrings operatorPrinter = new OperatorStrings();
             try {

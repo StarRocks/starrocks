@@ -266,6 +266,11 @@ public class SelectRelation extends QueryRelation {
         this.orderScope = orderScope;
     }
 
+    public boolean hasAnalyticInfo() {
+        return (outputAnalytic != null && outputAnalytic.size() > 0)
+                || (orderByAnalytic != null && orderByAnalytic.size() > 0);
+    }
+
     @Override
     public List<Expr> getOutputExpression() {
         return outputExpr;

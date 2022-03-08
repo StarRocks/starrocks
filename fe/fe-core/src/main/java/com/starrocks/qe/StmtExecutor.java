@@ -312,9 +312,7 @@ public class StmtExecutor {
                         context.getDumpInfo().reset();
                         context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                         if (parsedStmt instanceof ShowStmt) {
-                            com.starrocks.sql.analyzer.Analyzer analyzer =
-                                    new com.starrocks.sql.analyzer.Analyzer(context.getCatalog(), context);
-                            analyzer.analyze(parsedStmt);
+                            com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
 
                             SelectStmt selectStmt =
                                     ((ShowStmt) parsedStmt).toSelectStmt(new Analyzer(context.getCatalog(), context));

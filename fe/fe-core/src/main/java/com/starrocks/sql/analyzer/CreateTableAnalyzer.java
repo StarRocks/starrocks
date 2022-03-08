@@ -41,9 +41,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
 
 public class CreateTableAnalyzer {
-
-    private final Catalog catalog;
-    private final ConnectContext session;
     private static final Set<String> engineNames;
 
     static {
@@ -54,15 +51,10 @@ public class CreateTableAnalyzer {
         engineNames.add("hive");
     }
 
-    public CreateTableAnalyzer(Catalog catalog, ConnectContext session) {
-        this.catalog = catalog;
-        this.session = session;
-    }
-
-    public Relation transformCreateTableStmt(CreateTableStmt createTableStmt) {
+    public static void transformCreateTableStmt(CreateTableStmt createTableStmt, ConnectContext session) {
         createTableStmt.setClusterName(session.getClusterName());
         TableName tableName = createTableStmt.getDbTbl();
-        analyzeTableName(tableName);
+        analyzeTableName(tableName, session);
 
         FeNameFormat.verifyTableName(tableName.getTbl());
 
@@ -301,10 +293,9 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("same index columns have multiple index name is not allowed.");
             }
         }
-        return null;
     }
 
-    private void analyzeIndexDef(IndexDef indexDef) {
+    private static void analyzeIndexDef(IndexDef indexDef) {
         IndexDef.IndexType indexType = indexDef.getIndexType();
         List<String> columns = indexDef.getColumns();
         String indexName = indexDef.getIndexName();
@@ -327,7 +318,7 @@ public class CreateTableAnalyzer {
     }
 
 
-    private Relation analyzeTableName(TableName tableName) {
+    private static Relation analyzeTableName(TableName tableName, ConnectContext session) {
         String db = tableName.getDb();
         if (Strings.isNullOrEmpty(db)) {
             db = session.getDatabase();
@@ -347,7 +338,7 @@ public class CreateTableAnalyzer {
         return null;
     }
 
-    private void analyzeEngineName(String engineName) {
+    private static void analyzeEngineName(String engineName) {
         if (Strings.isNullOrEmpty(engineName)) {
             engineName = "olap";
         }

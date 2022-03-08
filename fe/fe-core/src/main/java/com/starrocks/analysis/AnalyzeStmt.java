@@ -2,6 +2,8 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.AstVisitor;
+
 import java.util.List;
 import java.util.Map;
 
@@ -45,5 +47,10 @@ public class AnalyzeStmt extends StatementBase {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAnalyzeStatement(this, context);
     }
 }

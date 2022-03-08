@@ -2,7 +2,7 @@
 package com.starrocks.analysis;
 
 
-import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.AstVisitor;
 
 // Drop WorkGroup specified by name
 // DROP RESOURCE_GROUP <name>
@@ -13,11 +13,12 @@ public class DropWorkGroupStmt extends DdlStmt {
         this.name = name;
     }
 
-    public Relation analyze() {
-        return null;
-    }
-
     public String getName() {
         return name;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropWorkGroupStatement(this, context);
     }
 }
