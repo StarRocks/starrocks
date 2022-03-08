@@ -341,7 +341,6 @@ enum ReaderType {
     READER_BASE_COMPACTION = 2,
     READER_CUMULATIVE_COMPACTION = 3,
     READER_CHECKSUM = 4,
-    READER_LEVEL_COMPACTION = 5,
 };
 
 inline bool is_query(ReaderType reader_type) {
@@ -349,8 +348,7 @@ inline bool is_query(ReaderType reader_type) {
 }
 
 inline bool is_compaction(ReaderType reader_type) {
-    return reader_type == READER_BASE_COMPACTION || reader_type == READER_CUMULATIVE_COMPACTION ||
-           reader_type == READER_LEVEL_COMPACTION;
+    return reader_type == READER_BASE_COMPACTION || reader_type == READER_CUMULATIVE_COMPACTION;
 }
 
 // <start_version_id, end_version_id>, such as <100, 110>

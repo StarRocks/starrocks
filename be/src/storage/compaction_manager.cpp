@@ -7,10 +7,13 @@
 #include "util/thread.h"
 namespace starrocks {
 
-std::unique_ptr<CompactionManager> CompactionManager::_instance(new CompactionManager());
-
-CompactionManager* CompactionManager::instance() {
-    return _instance.get();
+CompactionManager::CompactionManager() : _next_task_id(0) {
+    auto st = ThreadPoolBuilder("up_candidates")
+                      .set_min_threads(1)
+                      .set_max_threads(5)
+                      .set_max_queue_size(100000)
+                      .build(&_update_candidate_pool);
+    DCHECK(st.ok());
 }
 
 void CompactionManager::update_candidates(std::vector<CompactionCandidate> candidates) {
@@ -52,15 +55,11 @@ CompactionCandidate CompactionManager::pick_candidate() {
 }
 
 void CompactionManager::update_tablet_async(TabletSharedPtr tablet, bool need_update_context, bool is_compaction) {
-    PriorityThreadPool::Task task;
-    task.work_function = [tablet, need_update_context, is_compaction, this] {
+    Status st = _update_candidate_pool->submit_func([tablet, need_update_context, is_compaction, this] {
         update_tablet(tablet, need_update_context, is_compaction);
-    };
-    bool ret = _update_candidate_pool.try_offer(task);
-    if (!ret) {
-        LOG(FATAL) << "update candidate failed for queue is full. capacity:"
-                   << _update_candidate_pool.get_queue_capacity()
-                   << ", queue size:" << _update_candidate_pool.get_queue_size();
+    });
+    if (!st.ok()) {
+        LOG(WARNING) << "update candidate failed. status:" << st.to_string();
     }
 }
 

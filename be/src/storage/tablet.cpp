@@ -194,8 +194,8 @@ Status Tablet::revise_tablet_meta(MemTracker* mem_tracker, const std::vector<Row
     }
 
     if (config::enable_new_compaction_framework) {
-        CompactionManager::instance()->update_tablet_async(std::static_pointer_cast<Tablet>(shared_from_this()), true,
-                                                           false);
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(
+                std::static_pointer_cast<Tablet>(shared_from_this()), true, false);
     }
 
     // reconstruct from tablet meta
@@ -274,8 +274,8 @@ void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const st
 
     // must be put after modify_rs_metas
     if (config::enable_new_compaction_framework) {
-        CompactionManager::instance()->update_tablet_async(std::static_pointer_cast<Tablet>(shared_from_this()), true,
-                                                           false);
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(
+                std::static_pointer_cast<Tablet>(shared_from_this()), true, false);
     }
 
     // add rs_metas_to_delete to tracker
@@ -354,8 +354,8 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
 
     _timestamped_version_tracker.add_version(rowset->version());
     if (config::enable_new_compaction_framework) {
-        CompactionManager::instance()->update_tablet_async(std::static_pointer_cast<Tablet>(shared_from_this()), true,
-                                                           false);
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(
+                std::static_pointer_cast<Tablet>(shared_from_this()), true, false);
     }
 
     RETURN_IF_ERROR(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));

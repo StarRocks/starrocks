@@ -10,7 +10,7 @@
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
-#include "util/priority_thread_pool.hpp"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -45,7 +45,7 @@ private:
     bool _can_do_compaction_task(Tablet* tablet, CompactionTask* compaction_task);
 
 private:
-    PriorityThreadPool _compaction_pool;
+    std::unique_ptr<ThreadPool> _compaction_pool;
 
     std::mutex _mutex;
     std::condition_variable _cv;

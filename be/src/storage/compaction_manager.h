@@ -14,7 +14,7 @@
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
-#include "util/priority_thread_pool.hpp"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -22,9 +22,9 @@ class CompactionScheduler;
 
 class CompactionManager {
 public:
-    ~CompactionManager() = default;
+    CompactionManager();
 
-    static CompactionManager* instance();
+    ~CompactionManager() = default;
 
     size_t candidates_size() {
         std::lock_guard lg(_candidates_mutex);
@@ -74,7 +74,6 @@ public:
     uint64_t next_compaction_task_id() { return ++_next_task_id; }
 
 private:
-    CompactionManager() : _next_task_id(0), _update_candidate_pool("up_candidates", 1, 100000) {}
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;
     CompactionManager& operator=(const CompactionManager& compaction_manager) = delete;
@@ -92,12 +91,10 @@ private:
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_cumulative_task_num_map;
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_base_task_num_map;
     std::unordered_map<CompactionType, uint16_t> _type_to_task_num_map;
-    PriorityThreadPool _update_candidate_pool;
+    std::unique_ptr<ThreadPool> _update_candidate_pool;
 
     std::mutex _scheduler_mutex;
     std::vector<CompactionScheduler*> _schedulers;
-
-    static std::unique_ptr<CompactionManager> _instance;
 };
 
 } // namespace starrocks

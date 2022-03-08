@@ -60,10 +60,10 @@ void CompactionTask::run() {
         // it will not be able to run another one for that type
         _tablet->reset_compaction(compaction_type());
         _task_info.end_time = UnixMillis();
-        CompactionManager::instance()->unregister_task(this);
+        StorageEngine::instance()->compaction_manager()->unregister_task(this);
         // compaction context has been updated when commit
         // so do not update context here
-        CompactionManager::instance()->update_tablet_async(_tablet, false, true);
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet, false, true);
         // must be put after unregister_task
         _scheduler->notify();
         TRACE("[Compaction] $0", _task_info.to_string());
@@ -74,7 +74,7 @@ void CompactionTask::run() {
     }
 
     set_compaction_task_state(COMPACTION_RUNNING);
-    bool registered = CompactionManager::instance()->register_task(this);
+    bool registered = StorageEngine::instance()->compaction_manager()->register_task(this);
     if (!registered) {
         LOG(WARNING) << "register compaction task failed. task_id:" << _task_info.task_id
                      << ", tablet:" << _task_info.tablet_id;

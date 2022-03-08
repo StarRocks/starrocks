@@ -43,20 +43,20 @@ TEST(CompactionManagerTest, test_candidates) {
     std::shuffle(tablets.begin(), tablets.end(), g);
 
     for (auto& tablet : tablets) {
-        CompactionManager::instance()->update_tablet(tablet, false, false);
+        StorageEngine::instance()->compaction_manager()->update_tablet(tablet, false, false);
     }
 
     {
-        ASSERT_EQ(22, CompactionManager::instance()->candidates_size());
-        CompactionCandidate candidate_1 = CompactionManager::instance()->pick_candidate();
+        ASSERT_EQ(22, StorageEngine::instance()->compaction_manager()->candidates_size());
+        CompactionCandidate candidate_1 = StorageEngine::instance()->compaction_manager()->pick_candidate();
         ASSERT_EQ(9, candidate_1.tablet->tablet_id());
-        CompactionCandidate candidate_2 = CompactionManager::instance()->pick_candidate();
+        CompactionCandidate candidate_2 = StorageEngine::instance()->compaction_manager()->pick_candidate();
         ASSERT_EQ(10, candidate_2.tablet->tablet_id());
         ASSERT_EQ(candidate_1.tablet->compaction_score(CUMULATIVE_COMPACTION),
                   candidate_2.tablet->compaction_score(CUMULATIVE_COMPACTION));
         double last_score = candidate_2.tablet->compaction_score(CUMULATIVE_COMPACTION);
         while (true) {
-            CompactionCandidate candidate = CompactionManager::instance()->pick_candidate();
+            CompactionCandidate candidate = StorageEngine::instance()->compaction_manager()->pick_candidate();
             if (!candidate.is_valid()) {
                 break;
             }
@@ -107,59 +107,62 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
     }
 
     for (int i = 0; i < config::max_compaction_task_num; i++) {
-        bool ret = CompactionManager::instance()->register_task(tasks[i].get());
+        bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
         ASSERT_TRUE(ret);
     }
-    bool ret = CompactionManager::instance()->register_task(tasks[config::max_compaction_task_num].get());
+    bool ret = StorageEngine::instance()->compaction_manager()->register_task(
+            tasks[config::max_compaction_task_num].get());
     ASSERT_FALSE(ret);
 
-    ASSERT_EQ(config::max_compaction_task_num, CompactionManager::instance()->running_tasks_num());
+    ASSERT_EQ(config::max_compaction_task_num, StorageEngine::instance()->compaction_manager()->running_tasks_num());
     ASSERT_EQ(config::max_compaction_task_num,
-              CompactionManager::instance()->running_tasks_num_for_type(CUMULATIVE_COMPACTION));
-    ASSERT_EQ(0, CompactionManager::instance()->running_tasks_num_for_type(BASE_COMPACTION));
-    CompactionManager::instance()->clear_tasks();
-    ASSERT_EQ(0, CompactionManager::instance()->running_tasks_num());
+              StorageEngine::instance()->compaction_manager()->running_tasks_num_for_type(CUMULATIVE_COMPACTION));
+    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num_for_type(BASE_COMPACTION));
+    StorageEngine::instance()->compaction_manager()->clear_tasks();
+    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
 
     config::cumulative_compaction_num_threads_per_disk = 1;
     for (int i = 0; i < config::max_compaction_task_num; i++) {
-        bool ret = CompactionManager::instance()->register_task(tasks[i].get());
+        bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
         if (i == 0) {
             ASSERT_TRUE(ret);
         } else {
             ASSERT_FALSE(ret);
         }
     }
-    ASSERT_EQ(1, CompactionManager::instance()->running_tasks_num());
-    CompactionManager::instance()->clear_tasks();
-    ASSERT_EQ(0, CompactionManager::instance()->running_tasks_num());
+    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    StorageEngine::instance()->compaction_manager()->clear_tasks();
+    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
 
     config::cumulative_compaction_num_threads_per_disk = 4;
     config::max_cumulative_compaction_task = 1;
     for (int i = 0; i < config::max_cumulative_compaction_task; i++) {
-        bool ret = CompactionManager::instance()->register_task(tasks[i].get());
+        bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
         ASSERT_TRUE(ret);
     }
 
-    ret = CompactionManager::instance()->register_task(tasks[config::max_cumulative_compaction_task].get());
+    ret = StorageEngine::instance()->compaction_manager()->register_task(
+            tasks[config::max_cumulative_compaction_task].get());
     ASSERT_FALSE(ret);
 
-    ASSERT_EQ(config::max_cumulative_compaction_task, CompactionManager::instance()->running_tasks_num());
-    ASSERT_EQ(1, CompactionManager::instance()->running_tasks_num_for_type(CUMULATIVE_COMPACTION));
-    CompactionManager::instance()->clear_tasks();
+    ASSERT_EQ(config::max_cumulative_compaction_task,
+              StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num_for_type(CUMULATIVE_COMPACTION));
+    StorageEngine::instance()->compaction_manager()->clear_tasks();
 
     config::base_compaction_num_threads_per_disk = 4;
     config::max_base_compaction_task = 1;
     for (int i = 0; i < config::max_base_compaction_task + 1; i++) {
         tasks[i]->set_compaction_type(BASE_COMPACTION);
-        bool ret = CompactionManager::instance()->register_task(tasks[i].get());
+        bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
         if (i < config::max_base_compaction_task) {
             ASSERT_TRUE(ret);
         } else {
             ASSERT_FALSE(ret);
         }
     }
-    ASSERT_EQ(config::max_base_compaction_task, CompactionManager::instance()->running_tasks_num());
-    ASSERT_EQ(1, CompactionManager::instance()->running_tasks_num_for_type(BASE_COMPACTION));
+    ASSERT_EQ(config::max_base_compaction_task, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num_for_type(BASE_COMPACTION));
     for (int i = 0; i < tablets.size(); i++) {
         std::unique_ptr<CompactionContext> compaction_context;
         tablets[i]->set_compaction_context(compaction_context);
@@ -167,7 +170,7 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
 }
 
 TEST(CompactionManagerTest, test_next_compaction_task_id) {
-    uint64_t start_task_id = CompactionManager::instance()->next_compaction_task_id();
+    uint64_t start_task_id = StorageEngine::instance()->compaction_manager()->next_compaction_task_id();
     ASSERT_LT(0, start_task_id);
 }
 
