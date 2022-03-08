@@ -62,7 +62,9 @@ std::atomic<int32_t>* OpenLimitAllocator::allocate(const std::string& key) {
 }
 
 HdfsScanNode::HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ScanNode(pool, tnode, descs), _hdfs_scan_node(tnode.hdfs_scan_node) {}
+        : ScanNode(pool, tnode, descs), _hdfs_scan_node(tnode.hdfs_scan_node), _status(Status::OK()) {
+    _name = "hdfs_scan";
+}
 
 HdfsScanNode::~HdfsScanNode() {
     if (runtime_state() != nullptr) {

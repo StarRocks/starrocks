@@ -18,7 +18,7 @@ using starrocks::workgroup::WorkGroupManager;
 // ========== ScanOperator ==========
 
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node)
-        : SourceOperator(factory, id, "olap_scan", scan_node->id()),
+        : SourceOperator(factory, id, scan_node->name(), scan_node->id()),
           _scan_node(scan_node),
           _is_io_task_running(MAX_IO_TASKS_PER_OP),
           _chunk_sources(MAX_IO_TASKS_PER_OP) {}
@@ -252,7 +252,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 // ========== ScanOperatorFactory ==========
 
 ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
-        : SourceOperatorFactory(id, "olap_scan", scan_node->id()), _scan_node(scan_node) {}
+        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()), _scan_node(scan_node) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));

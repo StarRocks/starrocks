@@ -263,6 +263,7 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
         env = Env::Default();
     }
 
+    COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     std::string name_node;
     RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &name_node));
 

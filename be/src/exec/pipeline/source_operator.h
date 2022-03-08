@@ -14,7 +14,7 @@ using SourceOperatorPtr = std::shared_ptr<SourceOperator>;
 
 class SourceOperator : public Operator {
 public:
-    SourceOperator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id)
+    SourceOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id)
             : Operator(factory, id, name, plan_node_id) {}
     ~SourceOperator() override = default;
 
