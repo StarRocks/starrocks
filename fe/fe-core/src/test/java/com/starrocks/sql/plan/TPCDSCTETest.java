@@ -24,13 +24,11 @@ public class TPCDSCTETest extends TPCDSPlanTestBase {
 
     public void testCTE(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("MultiCastDataSinks"));
     }
 
     public void testAllInlineCTE(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertFalse(plan.contains("MultiCastDataSinks"));
     }
 
