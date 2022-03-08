@@ -5,6 +5,7 @@ package com.starrocks.catalog;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -35,13 +36,16 @@ public class JDBCTableTest {
     }
 
     private Resource getMockedJDBCResource(String name) throws Exception {
+        FeConstants.runningUnitTest = true;
         Resource jdbcResource = new JDBCResource(name);
         Map<String, String> resourceProperties = Maps.newHashMap();
         resourceProperties.put("jdbc_uri", "jdbc_uri");
         resourceProperties.put("user", "user0");
         resourceProperties.put("password", "password0");
-        resourceProperties.put("driver", "driver0");
+        resourceProperties.put("driver_url", "driver_url");
+        resourceProperties.put("driver_class", "driver_class");
         jdbcResource.setProperties(resourceProperties);
+        FeConstants.runningUnitTest = false;
         return jdbcResource;
     }
 

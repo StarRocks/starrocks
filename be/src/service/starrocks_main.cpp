@@ -42,6 +42,7 @@
 #include "common/status.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
+#include "runtime/jdbc_driver_manager.h"
 #include "service/backend_options.h"
 #include "service/backend_service.h"
 #include "service/brpc_service.h"
@@ -186,6 +187,9 @@ int main(int argc, char** argv) {
 
     std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
     daemon->init(argc, argv, paths);
+
+    // init jdbc driver manager
+    EXIT_IF_ERROR(starrocks::JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) + "/lib/jdbc_drivers"));
 
     if (!starrocks::BackendOptions::init()) {
         exit(-1);
