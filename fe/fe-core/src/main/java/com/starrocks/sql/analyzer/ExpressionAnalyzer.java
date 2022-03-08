@@ -55,7 +55,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
-import com.starrocks.sql.analyzer.relation.QueryRelation;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
@@ -98,7 +99,7 @@ public class ExpressionAnalyzer {
         visitor.visit(expression, scope);
     }
 
-    private class Visitor extends ExprVisitor<Void, Scope> {
+    private class Visitor extends AstVisitor<Void, Scope> {
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
         private final Catalog catalog;

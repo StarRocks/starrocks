@@ -1,5 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-package com.starrocks.sql.analyzer.relation;
+package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -41,7 +41,7 @@ public abstract class QueryRelation extends Relation {
         return cteRelations;
     }
 
-    public <R, C> R accept(RelationVisitor<R, C> visitor, C context) {
-        return visitor.visitQuery(this, context);
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitQueryRelation(this, context);
     }
 }

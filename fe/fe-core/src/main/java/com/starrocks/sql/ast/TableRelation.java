@@ -1,5 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-package com.starrocks.sql.analyzer.relation;
+package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.TableName;
@@ -60,7 +60,7 @@ public class TableRelation extends Relation {
         return isMetaQuery;
     }
 
-    public <R, C> R accept(RelationVisitor<R, C> visitor, C context) {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitTable(this, context);
     }
 
