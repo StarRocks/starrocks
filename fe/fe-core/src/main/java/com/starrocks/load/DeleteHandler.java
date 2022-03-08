@@ -42,6 +42,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -239,7 +240,7 @@ public class DeleteHandler implements Writable {
                 for (Partition partition : partitions) {
                     for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         for (Tablet tablet : index.getTablets()) {
-                            totalReplicaNum += tablet.getReplicas().size();
+                            totalReplicaNum += ((LocalTablet) tablet).getReplicas().size();
                         }
                     }
                 }
@@ -257,7 +258,7 @@ public class DeleteHandler implements Writable {
                             // set push type
                             TPushType type = TPushType.DELETE;
 
-                            for (Replica replica : tablet.getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 long replicaId = replica.getId();
                                 long backendId = replica.getBackendId();
                                 countDownLatch.addMark(backendId, tabletId);

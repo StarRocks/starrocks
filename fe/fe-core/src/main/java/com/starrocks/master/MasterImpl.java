@@ -39,6 +39,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -531,7 +532,7 @@ public class MasterImpl {
             }
             index = rollupIndex;
         }
-        Tablet tablet = index.getTablet(tabletId);
+        LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
         if (tablet == null) {
             LOG.warn("could not find tablet {} in rollup index {} ", tabletId, indexId);
             return null;
@@ -757,7 +758,7 @@ public class MasterImpl {
         if (materializedIndex == null) {
             throw new MetaNotFoundException("Cannot find index[" + pushIndexId + "]");
         }
-        Tablet tablet = materializedIndex.getTablet(tabletId);
+        LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(tabletId);
         if (tablet == null) {
             throw new MetaNotFoundException("Cannot find tablet[" + tabletId + "]");
         }
@@ -1118,10 +1119,11 @@ public class MasterImpl {
                     indexMeta.setSchema_meta(schemaMeta);
                     // fill in tablet info
                     for (Tablet tablet : index.getTablets()) {
+                        LocalTablet localTablet = (LocalTablet) tablet;
                         TTabletMeta tTabletMeta = new TTabletMeta();
                         tTabletMeta.setTablet_id(tablet.getId());
-                        tTabletMeta.setChecked_version(tablet.getCheckedVersion());
-                        tTabletMeta.setConsistent(tablet.isConsistent());
+                        tTabletMeta.setChecked_version(localTablet.getCheckedVersion());
+                        tTabletMeta.setConsistent(localTablet.isConsistent());
                         TabletMeta tabletMeta = Catalog.getCurrentInvertedIndex().getTabletMeta(tablet.getId());
                         tTabletMeta.setDb_id(tabletMeta.getDbId());
                         tTabletMeta.setTable_id(tabletMeta.getTableId());
@@ -1131,7 +1133,7 @@ public class MasterImpl {
                         tTabletMeta.setOld_schema_hash(tabletMeta.getOldSchemaHash());
                         tTabletMeta.setNew_schema_hash(tabletMeta.getNewSchemaHash());
                         // fill replica info
-                        for (Replica replica : tablet.getReplicas()) {
+                        for (Replica replica : localTablet.getReplicas()) {
                             TReplicaMeta replicaMeta = new TReplicaMeta();
                             replicaMeta.setReplica_id(replica.getId());
                             replicaMeta.setBackend_id(replica.getBackendId());

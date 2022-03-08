@@ -52,6 +52,7 @@ import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -1189,12 +1190,12 @@ public class SchemaChangeHandler extends AlterHandler {
                     long originTabletId = originTablet.getId();
                     long shadowTabletId = catalog.getNextId();
 
-                    Tablet shadowTablet = new Tablet(shadowTabletId);
+                    LocalTablet shadowTablet = new LocalTablet(shadowTabletId);
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
                     addedTablets.add(shadowTablet);
 
                     schemaChangeJob.addTabletIdMap(partitionId, shadowIndexId, shadowTabletId, originTabletId);
-                    List<Replica> originReplicas = originTablet.getReplicas();
+                    List<Replica> originReplicas = ((LocalTablet) originTablet).getReplicas();
 
                     int healthyReplicaNum = 0;
                     for (Replica originReplica : originReplicas) {
@@ -1562,7 +1563,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
                     for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : tablet.getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                             ClearAlterTask alterTask = new ClearAlterTask(replica.getBackendId(), db.getId(),
                                     olapTable.getId(), partition.getId(), index.getId(), tablet.getId(), schemaHash);
                             batchTask.addTask(alterTask);
@@ -1670,7 +1671,7 @@ public class SchemaChangeHandler extends AlterHandler {
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
                 for (Tablet tablet : index.getTablets()) {
-                    for (Replica replica : tablet.getReplicas()) {
+                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                         Set<Pair<Long, Integer>> tabletIdWithHash =
                                 beIdToTabletIdWithHash.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
                         tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
