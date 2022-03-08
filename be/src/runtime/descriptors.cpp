@@ -233,7 +233,10 @@ std::string MySQLTableDescriptor::debug_string() const {
 
 JDBCTableDescriptor::JDBCTableDescriptor(const TTableDescriptor& tdesc)
         : TableDescriptor(tdesc),
-          _jdbc_driver(tdesc.jdbcTable.jdbc_driver),
+          _jdbc_driver_name(tdesc.jdbcTable.jdbc_driver_name),
+          _jdbc_driver_url(tdesc.jdbcTable.jdbc_driver_url),
+          _jdbc_driver_checksum(tdesc.jdbcTable.jdbc_driver_checksum),
+          _jdbc_driver_class(tdesc.jdbcTable.jdbc_driver_class),
           _jdbc_url(tdesc.jdbcTable.jdbc_url),
           _jdbc_table(tdesc.jdbcTable.jdbc_table),
           _jdbc_user(tdesc.jdbcTable.jdbc_user),
@@ -241,7 +244,9 @@ JDBCTableDescriptor::JDBCTableDescriptor(const TTableDescriptor& tdesc)
 
 std::string JDBCTableDescriptor::debug_string() const {
     std::stringstream out;
-    out << "JDBCTable(" << TableDescriptor::debug_string() << " jdbc_driver=" << _jdbc_driver
+    out << "JDBCTable(" << TableDescriptor::debug_string() << " jdbc_driver_name=" << _jdbc_driver_name
+        << " jdbc_driver_url=" << _jdbc_driver_url << " jdbc_driver_checksum=" << _jdbc_driver_checksum
+        << " jdbc_driver_class=" << _jdbc_driver_class
         << " jdbc_url=" << _jdbc_url << " jdbc_table=" << _jdbc_table
         << " jdbc_user=" << _jdbc_user << " jdbc_passwd=" << _jdbc_passwd << "}";
     return out.str();

@@ -61,6 +61,12 @@ Status JDBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
     int chunk_size = state->chunk_size();
     jobject jchunk;
+    DeferOp defer([&jchunk, this] () {
+        if (jchunk != nullptr) {
+            _jni_env->DeleteLocalRef(jchunk);
+        }
+    });
+
     RETURN_IF_ERROR(_get_next_chunk(chunk_size, &jchunk));
     RETURN_IF_ERROR(_fill_chunk(jchunk, chunk));
     return Status::OK();
@@ -86,6 +92,7 @@ Status JDBCScanner::_init_jdbc_bridge() {
 
     jstring driver_location = _jni_env->NewStringUTF(_scan_ctx.driver_path.c_str());
     _jni_env->CallVoidMethod(_jdbc_bridge, set_class_loader, driver_location);
+    _jni_env->DeleteLocalRef(driver_location);
     CHECK_JAVA_EXCEPTION("set class loader failed")
 
     return Status::OK();
@@ -106,6 +113,12 @@ Status JDBCScanner::_init_jdbc_scan_context() {
 
     _jdbc_scan_context =
             _jni_env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql);
+
+    _jni_env->DeleteLocalRef(driver_class_name);
+    _jni_env->DeleteLocalRef(jdbc_url);
+    _jni_env->DeleteLocalRef(user);
+    _jni_env->DeleteLocalRef(passwd);
+    _jni_env->DeleteLocalRef(sql);
     CHECK_JAVA_EXCEPTION("construct JDBCScanContext failed")
 
     return Status::OK();
@@ -222,6 +235,7 @@ Status JDBCScanner::_init_column_class_name() {
         RETURN_IF_ERROR(_precheck_data_type(class_name, _slot_descs[i]));
         _column_class_name.emplace_back(class_name);
     }
+    _jni_env->DeleteLocalRef(column_class_names);
 
     return Status::OK();
 }
@@ -352,6 +366,7 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
     auto& helper = JVMFunctionHelper::getInstance();
     jobject first_column = helper.list_get(jchunk, 0);
     int num_rows = helper.list_size(first_column);
+    _jni_env->DeleteLocalRef(first_column);
 
     for (size_t col_idx = 0; col_idx < _slot_descs.size(); col_idx++) {
         SlotDescriptor* slot_desc = _slot_descs[col_idx];
@@ -359,6 +374,9 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
         const auto& column_class = _column_class_name[col_idx];
 
         jobject jcolumn = helper.list_get(jchunk, col_idx);
+        DeferOp defer([&jcolumn, this] () {
+            _jni_env->DeleteLocalRef(jcolumn);
+        });
 
 #define FILL_COLUMN(get_value_func, cpp_type)                                                                         \
     {                                                                                                                 \
@@ -403,6 +421,9 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
 
 Status JDBCScanner::_append_datetime_val(jobject jval, SlotDescriptor* slot_desc, Column* column) {
     PROCESS_NULL_VALUE(jval, column)
+    DeferOp defer([&jval, this] () {
+        _jni_env->DeleteLocalRef(jval);
+    });
 
     std::string origin_str = JVMFunctionHelper::getInstance().to_string(jval);
     std::string datetime_str = origin_str.substr(0, origin_str.find('.'));
@@ -417,6 +438,9 @@ Status JDBCScanner::_append_datetime_val(jobject jval, SlotDescriptor* slot_desc
 
 Status JDBCScanner::_append_date_val(jobject jval, SlotDescriptor* slot_desc, Column* column) {
     PROCESS_NULL_VALUE(jval, column)
+    DeferOp defer([&jval, this] () {
+        _jni_env->DeleteLocalRef(jval);
+    });
 
     std::string date_str = _get_date_string(jval);
     DateValue dv;
@@ -434,12 +458,18 @@ std::string JDBCScanner::_get_date_string(jobject jval) {
     jmethodID format_date =
             _jni_env->GetStaticMethodID(jdbc_util_cls, "formatDate", "(Ljava/sql/Date;)Ljava/lang/String;");
     DCHECK(format_date != nullptr);
-    return JVMFunctionHelper::getInstance().to_string(
-            (jstring)_jni_env->CallStaticObjectMethod(jdbc_util_cls, format_date, jval));
+    jstring date_str = (jstring) _jni_env->CallStaticObjectMethod(jdbc_util_cls, format_date, jval);
+    std::string result = JVMFunctionHelper::getInstance().to_string(date_str);
+    _jni_env->DeleteLocalRef(date_str);
+    return result;
 }
 
 Status JDBCScanner::_append_decimal_val(jobject jval, SlotDescriptor* slot_desc, Column* column) {
     PROCESS_NULL_VALUE(jval, column)
+    DeferOp defer([&jval, this] () {
+        _jni_env->DeleteLocalRef(jval);
+    });
+
     auto type = slot_desc->type().type;
     int precision = slot_desc->type().precision;
     int scale = slot_desc->type().scale;

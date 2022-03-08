@@ -1,11 +1,13 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 #include "exec/pipeline/jdbc_scan_operator.h"
 
 #include <sstream>
 
 #include "common/config.h"
-#include "common/jdbc_config.h"
 #include "exec/vectorized/jdbc_scanner.h"
 #include "runtime/descriptors.h"
+#include "runtime/jdbc_driver_manager.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -28,11 +30,11 @@ Status JDBCScanOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status JDBCScanOperator::close(RuntimeState* state) {
+void JDBCScanOperator::close(RuntimeState* state) {
     if (_scanner_thread) {
         _scanner_thread->join();
     }
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 bool JDBCScanOperator::has_output() const {
@@ -87,16 +89,20 @@ void JDBCScanOperator::_start_scanner(RuntimeState* state) {
 
     Status status;
     vectorized::JDBCScanContext scan_ctx;
-    std::string driver_name = jdbc_table->jdbc_driver();
-    config::JDBCDriverInfo driver_info;
-    if (!config::JDBCDriverConfig::getInstance().get_driver_info(driver_name, &driver_info)) {
-        LOG(ERROR) << fmt::format("JDBC driver[{}] is not found", driver_name);
-        _set_scanner_state(true, Status::InternalError(fmt::format("JDBC Driver[{}] is not found", driver_name)));
+    std::string driver_name = jdbc_table->jdbc_driver_name();
+    std::string driver_url = jdbc_table->jdbc_driver_url();
+    std::string driver_checksum = jdbc_table->jdbc_driver_checksum();
+    std::string driver_class = jdbc_table->jdbc_driver_class();
+    std::string driver_location;
+
+    if (status = JDBCDriverManager::getInstance()->get_driver_location(driver_name, driver_url, driver_checksum, &driver_location); !status.ok()) {
+        LOG(ERROR) << fmt::format("Get JDBC Driver[{}] error, error is {}", driver_name, status.to_string());
+        _set_scanner_state(true, status);
         return;
     }
 
-    scan_ctx.driver_path = driver_info.driver_path;
-    scan_ctx.driver_class_name = driver_info.class_name;
+    scan_ctx.driver_path = driver_location;
+    scan_ctx.driver_class_name = driver_class;
     scan_ctx.jdbc_url = jdbc_table->jdbc_url();
     scan_ctx.user = jdbc_table->jdbc_user();
     scan_ctx.passwd = jdbc_table->jdbc_passwd();
