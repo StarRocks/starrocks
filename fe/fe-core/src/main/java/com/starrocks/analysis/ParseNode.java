@@ -23,9 +23,9 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import com.starrocks.sql.ast.AstVisitor;
 
 public interface ParseNode {
+
     /**
      * Perform semantic analysis of node and all of its children.
      * Throws exception if any errors found.
@@ -33,18 +33,11 @@ public interface ParseNode {
      * @param analyzer
      * @throws AnalysisException, InternalException
      */
-    default void analyze(Analyzer analyzer) throws UserException {
-        throw new RuntimeException("New AST not support analyze function");
-    }
+    void analyze(Analyzer analyzer) throws UserException;
 
     /**
      * @return SQL syntax corresponding to this node.
      */
-    default String toSql() {
-        throw new RuntimeException("New AST not implement toSql function");
-    }
+    String toSql();
 
-    default <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        throw new RuntimeException("Not implement accept function");
-    }
 }

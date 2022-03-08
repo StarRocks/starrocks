@@ -20,13 +20,11 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.analyzer.relation.QueryRelation;
 
 import java.util.List;
 import java.util.Objects;
@@ -98,9 +96,9 @@ public class AggregationAnalyzer {
      * visitor returns true if all expressions are constant with respect to the group.
      */
     private class VerifyExpressionVisitor
-            extends AstVisitor<Boolean, Void> {
+            extends ExprVisitor<Boolean, Void> {
         @Override
-        public Boolean visit(ParseNode expr) {
+        public Boolean visit(Expr expr) {
             if (groupingExpressions.stream().anyMatch(expr::equals)) {
                 return true;
             }

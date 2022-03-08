@@ -11,8 +11,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
-import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.expressions.UnboundPredicate;
 
 import java.util.List;
 import java.util.Optional;
@@ -95,19 +94,17 @@ public class IcebergUtil {
      */
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
-                                         List<Expression> icebergPredicates,
+                                         List<UnboundPredicate> icebergPredicates,
                                          boolean refresh) {
         if (refresh) {
             refreshTable(table);
         }
 
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
-        Expression filterExpressions = Expressions.alwaysTrue();
-        if (!icebergPredicates.isEmpty()) {
-            filterExpressions = icebergPredicates.stream().reduce(Expressions.alwaysTrue(), Expressions::and);
+        for (UnboundPredicate predicate : icebergPredicates) {
+            tableScan = tableScan.filter(predicate);
         }
-
-        return tableScan.filter(filterExpressions);
+        return tableScan;
     }
 
     private static void refreshTable(Table table) {
