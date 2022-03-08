@@ -11,6 +11,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "common/statusor.h"
 #include "util/slice.h"
@@ -28,6 +29,8 @@ struct RandomRWFileOptions;
 
 class Env {
 public:
+    using FactoryFunc = std::function<StatusOr<std::unique_ptr<Env>>(std::string_view uri)>;
+
     // Governs if/how the file is created.
     //
     // enum value                   | file exists       | file does not exist
@@ -40,6 +43,12 @@ public:
 
     Env() = default;
     virtual ~Env() = default;
+
+    static void Register(std::string_view pattern, FactoryFunc func);
+
+    static StatusOr<std::unique_ptr<Env>> CreateUniqueFromString(std::string_view uri);
+
+    static StatusOr<std::unique_ptr<Env>> CreateUniqueFromStringOrDefault(std::string_view uri);
 
     // Return a default environment suitable for the current operating
     // system.  Sophisticated users may wish to provide their own Env
