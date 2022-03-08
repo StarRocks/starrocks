@@ -15,33 +15,26 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowStmtAnalyzer {
-    private final ConnectContext session;
 
-    public ShowStmtAnalyzer(ConnectContext session) {
-        this.session = session;
+    public static void analyze(ShowStmt stmt, ConnectContext session) {
+        new ShowStmtAnalyzerVisitor().visit(stmt, session);
     }
 
-    public void analyze(ShowStmt stmt) {
-        new ShowStmtAnalyzerVisitor(this.session).visit(stmt);
-    }
-
-    static class ShowStmtAnalyzerVisitor extends AstVisitor<Void, Void> {
-        private final ConnectContext session;
-
-        public ShowStmtAnalyzerVisitor(ConnectContext session) {
-            this.session = session;
+    static class ShowStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+        public void analyze(ShowStmt statement, ConnectContext session) {
+            visit(statement, session);
         }
 
         @Override
-        public Void visitShowTableStmt(ShowTableStmt node, Void context) {
+        public Void visitShowTableStmt(ShowTableStmt node, ConnectContext context) {
             String db = node.getDb();
-            db = getFullDatabaseName(db);
+            db = getFullDatabaseName(db, context);
             node.setDb(db);
             return null;
         }
 
         @Override
-        public Void visitShowVariablesStmt(ShowVariablesStmt node, Void context) {
+        public Void visitShowVariablesStmt(ShowVariablesStmt node, ConnectContext context) {
             if (node.getType() == null) {
                 node.setType(SetType.DEFAULT);
             }
@@ -49,23 +42,23 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowColumnStmt(ShowColumnStmt node, Void context) {
+        public Void visitShowColumnStmt(ShowColumnStmt node, ConnectContext context) {
             node.init();
             String db = node.getTableName().getDb();
-            db = getFullDatabaseName(db);
+            db = getFullDatabaseName(db, context);
             node.getTableName().setDb(db);
             return null;
         }
 
         @Override
-        public Void visitShowTableStatusStmt(ShowTableStatusStmt node, Void context) {
+        public Void visitShowTableStatusStmt(ShowTableStatusStmt node, ConnectContext context) {
             String db = node.getDb();
-            db = getFullDatabaseName(db);
+            db = getFullDatabaseName(db, context);
             node.setDb(db);
             return null;
         }
 
-        String getFullDatabaseName(String db) {
+        String getFullDatabaseName(String db, ConnectContext session) {
             if (Strings.isNullOrEmpty(db)) {
                 db = session.getDatabase();
                 db = ClusterNamespace.getFullName(session.getClusterName(), db);

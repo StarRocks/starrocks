@@ -13,16 +13,10 @@ import com.starrocks.sql.ast.QueryRelation;
 
 import java.util.List;
 
-public class ViewAnalyzer {
-    private final ConnectContext session;
-
-    public ViewAnalyzer(ConnectContext session) {
-        this.session = session;
-    }
-
-    public void analyze(BaseViewStmt stmt) {
+public  class ViewAnalyzer {
+    public static void analyze(BaseViewStmt stmt, ConnectContext session) {
         stmt.getTableName().normalization(session);
-        new Analyzer(session.getCatalog(), session).analyze(stmt.getQueryStatement());
+        Analyzer.analyze(stmt.getQueryStatement(), session);
         QueryRelation queryRelation = stmt.getQueryStatement().getQueryRelation();
 
         List<Column> viewColumns = Lists.newArrayList();

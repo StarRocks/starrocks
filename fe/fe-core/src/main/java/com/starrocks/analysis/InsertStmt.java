@@ -97,7 +97,7 @@ public class InsertStmt extends DdlStmt {
     // parsed from targetPartitionNames.
     // if targetPartitionNames is not set, add all formal partitions' id of the table into it
     private List<Long> targetPartitionIds = Lists.newArrayList();
-    private final List<String> targetColumnNames;
+    private List<String> targetColumnNames;
     private QueryStmt queryStmt;
     private QueryStatement queryStatement;
     private final List<String> planHints;
@@ -877,6 +877,18 @@ public class InsertStmt extends DdlStmt {
 
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
+    }
+
+    public void setTargetPartitionIds(List<Long> targetPartitionIds) {
+        this.targetPartitionIds = targetPartitionIds;
+    }
+
+    public List<Long> getTargetPartitionIds() {
+        return targetPartitionIds;
+    }
+
+    public void setTargetColumns(List<Column> targetColumns) {
+        this.targetColumns = targetColumns;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

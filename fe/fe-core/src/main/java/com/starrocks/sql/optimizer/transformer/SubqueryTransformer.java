@@ -143,7 +143,7 @@ public class SubqueryTransformer {
                 return context.builder;
             }
 
-            QueryRelation qb = ((Subquery) inPredicate.getChild(1)).getQueryBlock();
+            QueryRelation qb = ((Subquery) inPredicate.getChild(1)).getQueryRelation();
             LogicalPlan subqueryPlan = getLogicalPlan(qb, session, context.builder.getExpressionMapping(),
                     context.cteContext);
             if (qb instanceof SelectRelation &&
@@ -181,7 +181,7 @@ public class SubqueryTransformer {
         public OptExprBuilder visitExistsPredicate(ExistsPredicate existsPredicate, SubqueryContext context) {
             Preconditions.checkState(existsPredicate.getChild(0) instanceof Subquery);
 
-            QueryRelation qb = ((Subquery) existsPredicate.getChild(0)).getQueryBlock();
+            QueryRelation qb = ((Subquery) existsPredicate.getChild(0)).getQueryRelation();
             LogicalPlan subqueryPlan = getLogicalPlan(qb, session, context.builder.getExpressionMapping(),
                     context.cteContext);
 
@@ -244,10 +244,10 @@ public class SubqueryTransformer {
         @Override
         public OptExprBuilder visitSubquery(Subquery subquery, SubqueryContext context) {
             LogicalPlan subqueryPlan =
-                    getLogicalPlan(subquery.getQueryBlock(), session, context.builder.getExpressionMapping(),
+                    getLogicalPlan(subquery.getQueryRelation(), session, context.builder.getExpressionMapping(),
                             context.cteContext);
-            if (!subqueryPlan.getCorrelation().isEmpty() && subquery.getQueryBlock() instanceof SelectRelation
-                    && !((SelectRelation) subquery.getQueryBlock()).hasAggregation()) {
+            if (!subqueryPlan.getCorrelation().isEmpty() && subquery.getQueryRelation() instanceof SelectRelation
+                    && !((SelectRelation) subquery.getQueryRelation()).hasAggregation()) {
                 throw new SemanticException("Correlated scalar subquery should aggregation query");
             }
 
@@ -263,9 +263,9 @@ public class SubqueryTransformer {
              * So we need to do special processing on count,
              * other aggregate functions do not need special processing because they return NULL
              */
-            if (!subqueryPlan.getCorrelation().isEmpty() && subquery.getQueryBlock() instanceof SelectRelation &&
-                    ((SelectRelation) subquery.getQueryBlock()).hasAggregation() &&
-                    ((SelectRelation) subquery.getQueryBlock()).getAggregate().get(0).getFnName().getFunction()
+            if (!subqueryPlan.getCorrelation().isEmpty() && subquery.getQueryRelation() instanceof SelectRelation &&
+                    ((SelectRelation) subquery.getQueryRelation()).hasAggregation() &&
+                    ((SelectRelation) subquery.getQueryRelation()).getAggregate().get(0).getFnName().getFunction()
                             .equalsIgnoreCase(FunctionSet.COUNT)) {
 
                 subqueryOutput = new CallOperator("ifnull", Type.BIGINT,

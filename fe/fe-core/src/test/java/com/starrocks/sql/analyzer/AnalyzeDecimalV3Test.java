@@ -16,6 +16,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -90,12 +91,10 @@ public class AnalyzeDecimalV3Test {
     }
 
     public static QueryRelation analyzeSuccess(String originStmt) throws Exception {
-        SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-
-        Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), ctx);
-        return (QueryRelation) analyzer.analyze(statementBase);
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser
+                .parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statementBase, ctx);
+        return ((QueryStatement) statementBase).getQueryRelation();
     }
 
     @Test
