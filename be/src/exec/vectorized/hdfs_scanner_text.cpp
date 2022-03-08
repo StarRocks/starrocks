@@ -12,8 +12,8 @@ namespace starrocks::vectorized {
 class HdfsScannerCSVReader : public CSVReader {
 public:
     // |file| must outlive HdfsScannerCSVReader
-    HdfsScannerCSVReader(RandomAccessFile* file, const string& row_delimiter, const string& column_separator, size_t offset,
-                         size_t remain_length, size_t file_length)
+    HdfsScannerCSVReader(RandomAccessFile* file, const string& row_delimiter, const string& column_separator,
+                         size_t offset, size_t remain_length, size_t file_length)
             : CSVReader(row_delimiter, column_separator) {
         _file = file;
         _offset = offset;
@@ -76,8 +76,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
             _should_stop_scan = true;
             LOG(INFO) << "Reach end of file!";
             return Status::EndOfFile(_file->filename());
-        } else if (n < _row_delimiter_length ||
-                   _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
+        } else if (n < _row_delimiter_length || _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
             // Has reached the end of file but still no record delimiter found, which
             // is valid, according the RFC, add the record delimiter ourself.
             for (char ch : _row_delimiter) {
