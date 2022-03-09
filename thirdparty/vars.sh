@@ -270,10 +270,10 @@ RAGEL_SOURCE="ragel-6.10"
 RAGEL_MD5SUM="748cae8b50cffe9efcaa5acebc6abf0d"
 
 # mariadb-connector-c
-MARIADB_DOWNLOAD="https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.2.5.tar.gz"
-MARIADB_NAME="mariadb-connector-c-3.2.5.tar.gz"
-MARIADB_SOURCE="mariadb-connector-c-3.2.5"
-MARIADB_MD5SUM="9ab9205418a933b0a7920e7cf424cc36"
+MARIADB_DOWNLOAD="https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.1.14.tar.gz"
+MARIADB_NAME="mariadb-connector-c-3.1.14.tar.gz"
+MARIADB_SOURCE="mariadb-connector-c-3.1.14"
+MARIADB_MD5SUM="86c4052adeb8447900bf33b4e2ddd1f9"
 
 # aliyun_oss_jars
 ALIYUN_OSS_JARS_DOWNLOAD="http://cdn-thirdparty.starrocks.com/aliyun-oss-sdk-3.7.2.tar.gz"
