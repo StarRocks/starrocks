@@ -1105,8 +1105,15 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "select * from test_partition_prune_optimize_by_date where dt >= timestamp('2021-12-27 00:00:00.123456') " +
                         "and dt <= timestamp('2021-12-29 00:00:00.123456')";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("partitions=2/4"));
-
+/*
+                "(PARTITION p_20211227 VALUES [('2021-12-27'), ('2021-12-28')),\n" +
+                "PARTITION p_20211228 VALUES [('2021-12-28'), ('2021-12-29')),\n" +
+                "PARTITION p_20211229 VALUES [('2021-12-29'), ('2021-12-30')),\n" +
+                "PARTITION p_20211230 VALUES [('2021-12-30'), ('2021-12-31'))\n" +
+                ")\n" +
+ */
         sql =
                 "select * from test_partition_prune_optimize_by_date where dt > timestamp('2021-12-27 00:00:00.123456') " +
                         "and dt < timestamp('2021-12-29 00:00:00.123456')";

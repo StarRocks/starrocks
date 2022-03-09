@@ -19,7 +19,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.temporal.TemporalAccessor;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -60,7 +59,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
         if (null == dateTime || dateTime.isBefore(MIN_DATETIME) || dateTime.isAfter(MAX_DATETIME)) {
-            throw new SemanticException("Invalid date value");
+            throw new SemanticException("Invalid date value: " + (dateTime == null ? "NULL" : dateTime.toString()));
         }
     }
 
@@ -245,7 +244,9 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     @Override
     public String toString() {
-        if (type.isDatetime()) {
+        if (isNull()) {
+            return "null";
+        } else if (type.isDatetime()) {
             LocalDateTime time = (LocalDateTime) Optional.ofNullable(value).orElse(LocalDateTime.MIN);
             return String.format("%04d-%02d-%02d %02d:%02d:%02d",
                     time.getYear(), time.getMonthValue(), time.getDayOfMonth(),
@@ -398,10 +399,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                     literal = new DateLiteral(childString, Type.DATETIME);
                 } else {
                     // try cast by format "yyyy-MM-dd HH:mm:ss.SSS"
-                    TemporalAccessor parse = DATE_TIME_FORMATTER_MS.parse(childString);
-                    LocalDateTime localDateTime = LocalDateTime.from(parse);
-                    ConstantOperator datetime = ConstantOperator.createDatetime(localDateTime, desc);
-                    return datetime;
+                    LocalDateTime localDateTime = LocalDateTime.from(DATE_TIME_FORMATTER_MS.parse(childString));
+                    return ConstantOperator.createDatetime(localDateTime, desc);
                 }
             } catch (Exception e) {
                 // 2.try cast by format "yyyy-MM-dd", will original operator if failed
