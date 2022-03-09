@@ -30,7 +30,7 @@ public class ShowVariablesStmtTest {
     @Test
     public void testNormal() {
         ShowVariablesStmt stmt = new ShowVariablesStmt(null, null);
-        stmt.analyze((Analyzer) null);
+        stmt.setType(SetType.DEFAULT);
         assertEquals("SHOW DEFAULT VARIABLES", stmt.toString());
         assertEquals(2, stmt.getMetaData().getColumnCount());
         assertEquals("Variable_name", stmt.getMetaData().getColumn(0).getName());
@@ -39,7 +39,6 @@ public class ShowVariablesStmtTest {
         assertEquals(SetType.DEFAULT, stmt.getType());
 
         stmt = new ShowVariablesStmt(SetType.GLOBAL, "abc");
-        stmt.analyze((Analyzer) null);
         assertEquals("SHOW GLOBAL VARIABLES LIKE 'abc'", stmt.toString());
         assertEquals(2, stmt.getMetaData().getColumnCount());
         assertEquals("Variable_name", stmt.getMetaData().getColumn(0).getName());
