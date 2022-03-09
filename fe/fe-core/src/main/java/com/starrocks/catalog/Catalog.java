@@ -3173,8 +3173,8 @@ public class Catalog {
             Map<String, String> tableProperties;
             try {
                 Table table = db.getTable(tableName);
-                CatalogChecker.checkTableExist(db, tableName);
-                CatalogChecker.checkTableTypeOLAP(db, table);
+                CatalogUtils.checkTableExist(db, tableName);
+                CatalogUtils.checkTableTypeOLAP(db, table);
                 OlapTable olapTable = (OlapTable) table;
                 tableProperties = olapTable.getTableProperty().getProperties();
                 PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -3218,10 +3218,10 @@ public class Catalog {
         db.readLock();
         try {
             Table table = db.getTable(tableName);
-            CatalogChecker.checkTableExist(db, tableName);
-            CatalogChecker.checkTableTypeOLAP(db, table);
+            CatalogUtils.checkTableExist(db, tableName);
+            CatalogUtils.checkTableTypeOLAP(db, table);
             olapTable = (OlapTable) table;
-            CatalogChecker.checkTableState(olapTable, tableName);
+            CatalogUtils.checkTableState(olapTable, tableName);
             // check partition type
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (partitionInfo.getType() != PartitionType.RANGE) {
@@ -3229,7 +3229,7 @@ public class Catalog {
             }
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Set<String> existPartitionNameSet =
-                    CatalogChecker.checkPartitionNameExistForAddPartitions(olapTable, singleRangePartitionDescs);
+                    CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, singleRangePartitionDescs);
             // partition properties is prior to clause properties
             // clause properties is prior to table properties
             Map<String, String> properties = Maps.newHashMap();
@@ -3340,12 +3340,12 @@ public class Catalog {
             db.writeLock();
             Set<String> existPartitionNameSet = Sets.newHashSet();
             try {
-                CatalogChecker.checkTableExist(db, tableName);
+                CatalogUtils.checkTableExist(db, tableName);
                 Table table = db.getTable(tableName);
-                CatalogChecker.checkTableTypeOLAP(db, table);
+                CatalogUtils.checkTableTypeOLAP(db, table);
                 olapTable = (OlapTable) table;
-                CatalogChecker.checkTableState(olapTable, tableName);
-                existPartitionNameSet = CatalogChecker.checkPartitionNameExistForAddPartitions(olapTable,
+                CatalogUtils.checkTableState(olapTable, tableName);
+                existPartitionNameSet = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable,
                         singleRangePartitionDescs);
 
                 if (existPartitionNameSet.size() > 0) {
