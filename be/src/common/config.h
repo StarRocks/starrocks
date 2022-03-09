@@ -667,6 +667,7 @@ CONF_String(object_storage_region, "");
 CONF_Int64(object_storage_max_connection, "102400");
 
 CONF_Bool(enable_orc_late_materialization, "true");
+CONF_Int32(add_hdfs_read_latency_ms, "0");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");

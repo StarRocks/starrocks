@@ -5,7 +5,9 @@
 #include <hdfs/hdfs.h>
 
 #include <atomic>
+#include <thread>
 
+#include "common/config.h"
 #include "fmt/format.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
 #include "util/hdfs_util.h"
@@ -46,6 +48,9 @@ StatusOr<int64_t> HdfsRandomAccessFile::read_at(int64_t offset, void* data, int6
     if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
         return Status::NotSupported("read size is greater than std::numeric_limits<tSize>::max()");
     }
+    if (config::add_hdfs_read_latency_ms > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(config::add_hdfs_read_latency_ms));
+    }
     tSize r = hdfsPread(_fs, _file, offset, data, static_cast<tSize>(size));
     if (UNLIKELY(r == -1)) {
         return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _file_name, get_hdfs_err_msg()));
@@ -56,6 +61,9 @@ StatusOr<int64_t> HdfsRandomAccessFile::read_at(int64_t offset, void* data, int6
 Status HdfsRandomAccessFile::read_at_fully(int64_t offset, void* data, int64_t size) const {
     if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
         return Status::NotSupported("read size is greater than std::numeric_limits<tSize>::max()");
+    }
+    if (config::add_hdfs_read_latency_ms > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(config::add_hdfs_read_latency_ms));
     }
     tSize r = hdfsPreadFully(_fs, _file, offset, data, static_cast<tSize>(size));
     if (UNLIKELY(r == -1)) {
