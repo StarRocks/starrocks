@@ -64,10 +64,15 @@ template <typename T>
 void FixedLengthColumnBase<T>::sort_and_tie(bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
                                             std::vector<uint8_t>& tie, bool build_tie) {
     DCHECK_GE(size(), permutation.size());
-    auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) -> int {
-        return SorterComparator<T>::compare(_data[lhs.index_in_chunk], _data[rhs.index_in_chunk]);
+    using ItemType = InlinePermuteItem<T>;
+    
+    auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
+        return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
     };
-    sort_and_tie_helper(this, is_asc_order, permutation, tie, cmp, build_tie);
+    
+    auto inlined = create_inline_permutation<T>(permutation, _data);
+    sort_and_tie_helper(this, is_asc_order, inlined, tie, cmp, build_tie);
+    restore_inline_permutation(inlined, permutation);
 }
 
 template <typename T>

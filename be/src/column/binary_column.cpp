@@ -374,10 +374,14 @@ size_t BinaryColumn::filter_range(const Column::Filter& filter, size_t from, siz
 void BinaryColumn::sort_and_tie(bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
                                 std::vector<uint8_t>& tie, bool build_tie) {
     DCHECK_GE(size(), permutation.size());
-    auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) -> int {
-        return SorterComparator<Slice>::compare(get_slice(lhs.index_in_chunk), get_slice(rhs.index_in_chunk));
+    using ItemType = InlinePermuteItem<Slice>;
+    auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
+        return SorterComparator<Slice>::compare(lhs.inline_value, rhs.inline_value);
     };
-    sort_and_tie_helper(this, is_asc_order, permutation, tie, cmp, build_tie);
+    
+    auto inlined = create_inline_permutation<Slice>(permutation, get_data());
+    sort_and_tie_helper(this, is_asc_order, inlined, tie, cmp, build_tie);
+    restore_inline_permutation(inlined, permutation);
 }
 
 int BinaryColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
