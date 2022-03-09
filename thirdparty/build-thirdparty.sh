@@ -711,21 +711,19 @@ build_hyperscan() {
 }
 
 #mariadb-connector-c
-# static link plugins refer to:
-# https://mariadb.com/kb/en/configuration-settings-for-building-connectorc/
 build_mariadb() {
     check_if_source_exist $MARIADB_SOURCE
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE
     mkdir -p build && cd build
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release                \
-                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}  \
-                  -DCLIENT_PLUGIN_SHA256_PASSWORD=STATIC    \
-                  -DCLIENT_PLUGIN_AUTH_GSSAPI=STATIC        \
-                  -DCLIENT_PLUGIN_CLEARTEXT=STATIC          \
-                  -DCLIENT_PLUGIN_DIALOG=STATIC             \
-                  -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}      \
-                  -DOPENSSL_LIBRARYIES=${TP_INSTALL_DIR}/lib
-    make -j$PARALLEL && make install
+                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    # we only need build libmariadbclient and headers
+    make -j$PARALLEL mariadbclient
+    cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/libmariadb
+    make install
+    # install mariadb headers
+    cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/include
+    make install
 }
 
 # aliyun_oss_jars
