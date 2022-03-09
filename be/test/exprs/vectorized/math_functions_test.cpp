@@ -239,18 +239,18 @@ TEST_F(VecMathFunctionsTest, truncateDecimalTest) {
 }
 
 TEST_F(VecMathFunctionsTest, truncateDecimalNullTest) {
-    testTruncateDecimal({"18450.76"}, {}, 10, 2, {0}, {1}, {"anything"}, {1});
-    testTruncateDecimal({"18450.76"}, {1}, 10, 2, {2}, {}, {"anything"}, {1});
-    testTruncateDecimal({"18450.76"}, {1}, 10, 2, {0}, {1}, {"anything"}, {1});
+    testTruncateDecimal({"18450.76"}, {}, 10, 2, {0}, {1}, {"INVALID"}, {1});
+    testTruncateDecimal({"INVALID"}, {1}, 10, 2, {2}, {}, {"INVALID"}, {1});
+    testTruncateDecimal({"INVALID"}, {1}, 10, 2, {0}, {1}, {"INVALID"}, {1});
 }
 
 TEST_F(VecMathFunctionsTest, truncateDecimalByColTest) {
     testTruncateDecimal({"123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"}, {},
                         15, 5, {0, 1, 2, 3, 4, 5, 6}, {},
                         {"123", "123.40000", "123.45000", "123.45600", "123.45670", "123.45678", "123.45678"}, {});
-    testTruncateDecimal({"123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"},
+    testTruncateDecimal({"123.45678", "INVALID", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"},
                         {0, 1, 0, 0, 0, 0, 0}, 15, 5, {0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 1},
-                        {"123", "anything", "123.45000", "123.45600", "123.45670", "123.45678", "anything"},
+                        {"123", "INVALID", "123.45000", "123.45600", "123.45670", "123.45678", "INVALID"},
                         {0, 1, 0, 0, 0, 0, 1});
 }
 
