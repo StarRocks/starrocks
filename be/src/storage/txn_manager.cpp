@@ -323,7 +323,7 @@ Status TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId part
     }
 }
 
-Status TxnManager::persist_tablet_related_txns(std::vector<TabletSharedPtr> tablets) {
+Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets) {
     std::unordered_set<std::string> persited;
     for (auto& tablet : tablets) {
         if (tablet == nullptr) {

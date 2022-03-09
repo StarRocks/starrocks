@@ -915,7 +915,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
     }
     threadpool->shutdown();
     return (void*)nullptr;
-} // namespace starrocks
+}
 
 void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_this) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;

@@ -34,7 +34,6 @@
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "storage/storage_engine.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
@@ -111,15 +110,6 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 }
                 ctx->write_data_cost_nanos = MonotonicNanos() - ctx->start_write_data_nanos;
                 ctx->promise.set_value(status);
-
-                std::vector<TabletSharedPtr> tablets;
-                for (auto& info : ctx->commit_infos) {
-                    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(info.tabletId);
-                    if (tablet != nullptr) {
-                        tablets.push_back(tablet);
-                    }
-                }
-                (void)StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
 
                 if (ctx->unref()) {
                     delete ctx;

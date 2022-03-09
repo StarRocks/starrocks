@@ -31,6 +31,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/load_channel.h"
 #include "serde/protobuf_serde.h"
+#include "storage/storage_engine.h"
 #include "storage/vectorized/delta_writer.h"
 #include "storage/vectorized/memtable.h"
 #include "util/starrocks_metrics.h"
@@ -187,6 +188,17 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
                 delta_writer->commit(cb);
             }
         }
+
+        // persist txn.
+        auto tablet_ids = request.tablet_ids();
+        std::vector<TabletSharedPtr> tablets(tablet_ids.size());
+        for (const auto tablet_id : tablet_ids) {
+            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+            if (tablet != nullptr) {
+                tablets.push_back(tablet);
+            }
+        }
+        (void)StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
     }
 
     // Must reset the context pointer before waiting on the |count_down_latch|,
