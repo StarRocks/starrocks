@@ -33,7 +33,7 @@ private:
     static TSlotDescriptor create_slot_descriptor(const std::string& column_name, PrimitiveType column_type,
                                                   int32_t column_pos, bool nullable);
     static void add_tuple_descriptor(TDescriptorTableBuilder* table_desc_builder, PrimitiveType column_type,
-                                     bool nullable);
+                                     bool nullable, size_t column_count = 3);
     static std::shared_ptr<RuntimeProfile> create_runtime_profile();
     static std::shared_ptr<RowDescriptor> create_row_desc(const std::shared_ptr<ObjectPool>& object_pool,
                                                           TDescriptorTableBuilder* table_desc_builder, bool nullable);
@@ -644,17 +644,12 @@ TSlotDescriptor JoinHashMapTest::create_slot_descriptor(const std::string& colum
 }
 
 void JoinHashMapTest::add_tuple_descriptor(TDescriptorTableBuilder* table_desc_builder, PrimitiveType column_type,
-                                           bool nullable) {
+                                           bool nullable, size_t column_count) {
     TTupleDescriptorBuilder tuple_desc_builder;
-
-    auto slot_desc_0 = create_slot_descriptor("c0", column_type, 0, nullable);
-    auto slot_desc_1 = create_slot_descriptor("c1", column_type, 1, nullable);
-    auto slot_desc_2 = create_slot_descriptor("c2", column_type, 2, nullable);
-
-    tuple_desc_builder.add_slot(slot_desc_0);
-    tuple_desc_builder.add_slot(slot_desc_1);
-    tuple_desc_builder.add_slot(slot_desc_2);
-
+    for (size_t i = 0; i < column_count; i++) {
+        auto slot = create_slot_descriptor("c" + std::to_string(i), column_type, i, nullable);
+        tuple_desc_builder.add_slot(slot);
+    }
     tuple_desc_builder.build(table_desc_builder);
 }
 
@@ -928,6 +923,135 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
             ASSERT_EQ(found_count, 1);
         }
     }
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, false, 1);
+    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, false, 1);
+
+    auto row_desc = create_row_desc(_object_pool, &row_desc_builder, false);
+    auto probe_row_desc = create_probe_desc(_object_pool, &row_desc_builder, false);
+    auto build_row_desc = create_build_desc(_object_pool, &row_desc_builder, false);
+
+    HashTableParam param;
+    param.need_create_tuple_columns = false;
+    param.with_other_conjunct = false;
+    param.join_type = TJoinOp::INNER_JOIN;
+    param.row_desc = row_desc.get();
+    param.probe_row_desc = probe_row_desc.get();
+    param.build_row_desc = build_row_desc.get();
+    param.output_slots.emplace(1);
+    param.join_keys.emplace_back(JoinKeyDesc{TYPE_TINYINT, false});
+    param.search_ht_timer = ADD_TIMER(_runtime_profile, "search_ht");
+    param.output_build_column_timer = ADD_TIMER(_runtime_profile, "output_build_column");
+    param.output_probe_column_timer = ADD_TIMER(_runtime_profile, "output_probe_column");
+    param.output_build_column_timer = ADD_TIMER(_runtime_profile, "output_tuple_column");
+
+    JoinHashTable ht;
+
+    // build chunk
+    auto build_chunk = std::make_shared<Chunk>();
+    auto build_column = Int8Column::create();
+    down_cast<Int8Column*>(build_column.get())->append({-5, -3, -1, 0, 1, 3, 5});
+    build_chunk->append_column(build_column, 1);
+
+    // probe chunk
+    auto probe_chunk = std::make_shared<Chunk>();
+    auto probe_column = Int8Column::create();
+    down_cast<Int8Column*>(probe_column.get())->append({-8, -5, 0, 1, 2, 3, 4, 5});
+    probe_chunk->append_column(probe_column, 0);
+    Columns probe_key_columns = {probe_column};
+
+    // result chunk
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    bool eos = false;
+
+    // build and probe
+    ht.create(param);
+    ASSERT_TRUE(ht.append_chunk(_runtime_state.get(), build_chunk).ok());
+    ht.get_key_columns().emplace_back(ht._table_items->build_chunk->columns()[0]);
+    ASSERT_TRUE(ht.build(_runtime_state.get()).ok());
+    ASSERT_TRUE(ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
+
+    // check
+    ASSERT_EQ(result_chunk->columns().size(), 2);
+    auto result_data = down_cast<Int8Column*>(result_chunk->get_column_by_slot_id(1).get())->get_data();
+    std::sort(result_data.begin(), result_data.end());
+    Buffer<int8_t> check_data = {-5, 0, 1, 3, 5};
+    ASSERT_TRUE(result_data == check_data);
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, true, 1);
+    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, true, 1);
+
+    auto row_desc = create_row_desc(_object_pool, &row_desc_builder, true);
+    auto probe_row_desc = create_probe_desc(_object_pool, &row_desc_builder, true);
+    auto build_row_desc = create_build_desc(_object_pool, &row_desc_builder, true);
+
+    HashTableParam param;
+    param.need_create_tuple_columns = false;
+    param.with_other_conjunct = false;
+    param.join_type = TJoinOp::INNER_JOIN;
+    param.row_desc = row_desc.get();
+    param.probe_row_desc = probe_row_desc.get();
+    param.build_row_desc = build_row_desc.get();
+    param.output_slots.emplace(1);
+    param.join_keys.emplace_back(JoinKeyDesc{TYPE_TINYINT, false});
+    param.search_ht_timer = ADD_TIMER(_runtime_profile, "search_ht");
+    param.output_build_column_timer = ADD_TIMER(_runtime_profile, "output_build_column");
+    param.output_probe_column_timer = ADD_TIMER(_runtime_profile, "output_probe_column");
+    param.output_build_column_timer = ADD_TIMER(_runtime_profile, "output_tuple_column");
+
+    JoinHashTable ht;
+
+    // build chunk
+    auto build_chunk = std::make_shared<Chunk>();
+    auto build_data_column = FixedLengthColumn<int8_t>::create();
+    auto build_null_column = NullColumn::create();
+    build_data_column->append({-5, 0, 0, 0, 1, 3, 5});
+    build_null_column->append({0, 1, 0, 1, 0, 0, 0});
+    auto build_column = NullableColumn::create(build_data_column, build_null_column);
+    build_chunk->append_column(build_column, 1);
+
+    // probe chunk
+    auto probe_chunk = std::make_shared<Chunk>();
+    auto probe_data_column = FixedLengthColumn<int8_t>::create();
+    auto probe_null_column = NullColumn::create();
+    probe_data_column->append({-5, 0, 0, 0, 3, 0, 5, 0});
+    probe_null_column->append({0, 1, 0, 1, 0, 1, 0, 1});
+    auto probe_column = NullableColumn::create(probe_data_column, probe_null_column);
+    probe_chunk->append_column(probe_column, 0);
+    Columns probe_key_columns = {probe_column};
+
+    // result chunk
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    bool eos = false;
+
+    // build and probe
+    ht.create(param);
+    ASSERT_TRUE(ht.append_chunk(_runtime_state.get(), build_chunk).ok());
+    ht.get_key_columns().emplace_back(ht._table_items->build_chunk->columns()[0]);
+    ASSERT_TRUE(ht.build(_runtime_state.get()).ok());
+    ASSERT_TRUE(ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos).ok());
+
+    // check
+    ASSERT_EQ(result_chunk->columns().size(), 2);
+    auto* result_column = down_cast<NullableColumn*>(result_chunk->get_column_by_slot_id(1).get());
+    auto* result_data_column = down_cast<Int8Column*>(result_column->data_column().get());
+    auto* result_null_column = down_cast<UInt8Column*>(result_column->null_column().get());
+    auto result_data = result_data_column->get_data();
+    auto result_null = result_null_column->get_data();
+    std::sort(result_data.begin(), result_data.end());
+    std::sort(result_null.begin(), result_null.end());
+    Buffer<int8_t> check_data = {-5, 0, 3, 5};
+    Buffer<uint8_t> check_null = {0, 0, 0, 0};
+    ASSERT_TRUE(result_data == check_data);
+    ASSERT_TRUE(result_null == check_null);
 }
 
 // NOLINTNEXTLINE
