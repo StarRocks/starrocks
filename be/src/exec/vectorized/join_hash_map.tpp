@@ -47,7 +47,8 @@ Status JoinBuildFunc<PT>::construct_hash_table(RuntimeState* state, JoinHashTabl
 
 template <PrimitiveType PT>
 void DirectMappingJoinBuildFunc<PT>::prepare(RuntimeState* runtime, JoinHashTableItems* table_items) {
-    static constexpr size_t BUCKET_SIZE = 1L << std::numeric_limits<CppType>::digits;
+    static constexpr size_t BUCKET_SIZE =
+            (int64_t)(RunTimeTypeLimits<PT>::max_value()) - (int64_t)(RunTimeTypeLimits<PT>::min_value()) + 1L;
     table_items->bucket_size = BUCKET_SIZE;
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
