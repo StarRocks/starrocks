@@ -97,6 +97,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     } else {
         LOG(ERROR) << "failed to read file: " << _scanner_params.path;
     }
+    _stats.num_rows_read += (*chunk)->num_rows();
     return status;
 }
 
