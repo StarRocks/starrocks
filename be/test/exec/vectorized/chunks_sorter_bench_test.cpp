@@ -12,6 +12,7 @@
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
+#include "exec/vectorized/sorting/sort_helper.h"
 #include "exprs/slot_ref.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
@@ -274,6 +275,33 @@ BENCHMARK(BM_mergesort_row_wise)->Apply(CustomArgsFull);
 
 BENCHMARK(BM_topn_limit_heapsort)->Apply(CustomArgsLimit);
 BENCHMARK(BM_topn_limit_mergesort)->Apply(CustomArgsLimit);
+
+static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
+    for (size_t i = 0; i < bytes.size(); i++) {
+        if (bytes[i] == 0) {
+            return i;
+        }
+    }
+    return bytes.size();
+}
+
+static void BM_find_zero(benchmark::State& state) {
+    std::vector<uint8_t> bytes(1024, 1);
+    
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(plain_find_zero(bytes));
+    }
+}
+BENCHMARK(BM_find_zero);
+
+static void BM_find_zero_simd(benchmark::State& state) {
+    std::vector<uint8_t> bytes(1024, 1);
+    
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(find_zero(bytes, 0));
+    }
+}
+BENCHMARK(BM_find_zero_simd);
 
 } // namespace starrocks::vectorized
 

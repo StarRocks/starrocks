@@ -6,6 +6,7 @@
 #include "column/datum_tuple.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
+#include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/slot_ref.h"
 #include "fmt/core.h"
@@ -278,13 +279,12 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
         ASSERT_EQ(16, total_rows);
         ASSERT_EQ(16, page_1->num_rows());
         const size_t Size = 16;
-        int32_t permutation[Size] = {2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58, 69, 70, 71};
+        std::vector<int32_t> permutation{2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58, 69, 70, 71};
         std::vector<int32_t> result;
         for (size_t i = 0; i < Size; ++i) {
-            ASSERT_EQ(permutation[i], page_1->get(i).get(0).get_int32());
             result.push_back(page_1->get(i).get(0).get_int32());
         }
-        fmt::print("result: {}\n", fmt::join(result, ","));
+        ASSERT_EQ(permutation, result);
     }
 
     clear_sort_exprs(sort_exprs);
@@ -523,6 +523,31 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
     }
 
     clear_sort_exprs(sort_exprs);
+}
+
+TEST_F(ChunksSorterTest, find_zero) {
+    std::vector<uint8_t> bytes;
+    for (int len : std::vector<int>{1, 3, 7, 8, 12, 15, 16, 17, 127, 128}) {
+        for (int zero_pos = 0; zero_pos < len; zero_pos++) {
+            bytes = std::vector<uint8_t>(len, 1);
+            bytes[zero_pos] = 0;
+            
+            size_t result = find_zero(bytes, 0);
+            EXPECT_EQ(zero_pos, result);
+            
+            // test non-zero
+            std::fill(bytes.begin(), bytes.end(), 0);
+            bytes[zero_pos] = 1;
+            result = find_nonzero(bytes, 0);
+            EXPECT_EQ(zero_pos, result);
+        }
+        
+        bytes = std::vector<uint8_t>(len, 1);
+        EXPECT_EQ(len, find_zero(bytes, 0));
+        // test nonzero
+        std::fill(bytes.begin(), bytes.end(), 0);
+        EXPECT_EQ(len, find_nonzero(bytes, 0));
+    }
 }
 
 } // namespace starrocks::vectorized

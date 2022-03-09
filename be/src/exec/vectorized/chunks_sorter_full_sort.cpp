@@ -453,7 +453,7 @@ Status ChunksSorterFullSort::_sort_by_column_inc(RuntimeState* state) {
         return Status::OK();
     }
     size_t num_rows = _sorted_permutation.size();
-    std::vector<uint8_t> tie(num_rows, 1);
+    Tie tie(num_rows, 1);
     SmallPermutation permutation(num_rows);
     for (int i = 0; i < num_rows; i++) {
         permutation[i].index_in_chunk = i;
