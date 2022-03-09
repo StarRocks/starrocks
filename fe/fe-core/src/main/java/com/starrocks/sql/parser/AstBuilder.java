@@ -98,6 +98,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 import org.antlr.v4.runtime.ParserRuleContext;
@@ -298,7 +299,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     ((StringLiteral) visit(context.string(0))).getStringValue(),
                     ((StringLiteral) visit(context.string(1))).getStringValue(),
                     Long.parseLong(intervalLiteral.getValue().toString()),
-                    intervalLiteral.getTimeUnitIdent());
+                    intervalLiteral.getUnitIdentifier().getDescription());
         } else {
             return new MultiRangePartitionDesc(
                     ((StringLiteral) visit(context.string(0))).getStringValue(),
@@ -1083,12 +1084,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Expr right = (Expr) visit(context.right);
         if (left instanceof IntervalLiteral) {
             return new TimestampArithmeticExpr(getArithmeticBinaryOperator(context.operator), right,
-                    ((IntervalLiteral) left).getValue(), ((IntervalLiteral) left).getTimeUnitIdent(), true);
+                    ((IntervalLiteral) left).getValue(),
+                    ((IntervalLiteral) left).getUnitIdentifier().getDescription(), true);
         }
 
         if (right instanceof IntervalLiteral) {
             return new TimestampArithmeticExpr(getArithmeticBinaryOperator(context.operator), left,
-                    ((IntervalLiteral) right).getValue(), ((IntervalLiteral) right).getTimeUnitIdent(), false);
+                    ((IntervalLiteral) right).getValue(),
+                    ((IntervalLiteral) right).getUnitIdentifier().getDescription(), false);
         }
 
         return new ArithmeticExpr(getArithmeticBinaryOperator(context.operator), left, right);
@@ -1119,6 +1122,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         throw new UnsupportedOperationException("Unsupported operator: " + operator.getText());
     }
 
+    private static final List<String> DATE_FUNCTIONS =
+            Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB");
+
     @Override
     public ParseNode visitFunctionCall(StarRocksParser.FunctionCallContext context) {
         if (context.IF() != null) {
@@ -1129,14 +1135,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("right", visit(context.expression(), Expr.class));
         }
 
+        if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {
+            String functionName = context.TIMESTAMPADD() != null ? "TIMESTAMPADD" : "TIMESTAMPDIFF";
+            UnitIdentifier e1 = (UnitIdentifier) visit(context.unitIdentifier());
+            Expr e2 = (Expr) visit(context.expression(0));
+            Expr e3 = (Expr) visit(context.expression(1));
+
+            return new TimestampArithmeticExpr(functionName, e3, e2, e1.getDescription());
+        }
+
         boolean isStar = context.ASTERISK_SYMBOL() != null;
         boolean distinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
 
         String functionName = getQualifiedName(context.qualifiedName()).toString();
-        if (functionName.equalsIgnoreCase("DATE_ADD")
-                || functionName.equalsIgnoreCase("ADDDATE")
-                || functionName.equalsIgnoreCase("DATE_SUB")
-                || functionName.equalsIgnoreCase("SUBDATE")) {
+
+        if (DATE_FUNCTIONS.contains(functionName.toUpperCase())) {
             if (context.expression().size() != 2) {
                 throw new ParsingException(
                         functionName + " must as format " + functionName + "(date,INTERVAL expr unit)");
@@ -1145,24 +1158,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Expr e1 = (Expr) visit(context.expression(0));
             Expr e2 = (Expr) visit(context.expression(1));
             if (!(e2 instanceof IntervalLiteral)) {
-                e2 = new IntervalLiteral(e2, "DAY");
+                e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
             }
             IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
 
             return new TimestampArithmeticExpr(functionName, e1, intervalLiteral.getValue(),
-                    intervalLiteral.getTimeUnitIdent());
-        }
-
-        if (functionName.equalsIgnoreCase("TIMESTAMPADD") || functionName.equalsIgnoreCase("TIMESTAMPDIFF")) {
-            if (context.expression().size() != 3) {
-                throw new ParsingException(
-                        functionName + " must as format " + functionName + "(unit,interval,datetime_expr)");
-            }
-            Identifier e1 = (Identifier) visit(context.expression(0));
-            Expr e2 = (Expr) visit(context.expression(1));
-            Expr e3 = (Expr) visit(context.expression(2));
-
-            return new TimestampArithmeticExpr(functionName, e3, e2, e1.getValue());
+                    intervalLiteral.getUnitIdentifier().getDescription());
         }
 
         if (functionName.equalsIgnoreCase("isnull")) {
@@ -1403,7 +1404,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitInterval(StarRocksParser.IntervalContext context) {
-        return new IntervalLiteral((Expr) visit(context.value), context.from.getText());
+        return new IntervalLiteral((Expr) visit(context.value), (UnitIdentifier) visit(context.from));
+    }
+
+    @Override
+    public ParseNode visitUnitIdentifier(StarRocksParser.UnitIdentifierContext context) {
+        return new UnitIdentifier(context.getText());
     }
 
     @Override
