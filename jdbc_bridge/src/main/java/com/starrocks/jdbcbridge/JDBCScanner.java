@@ -25,7 +25,7 @@ public class JDBCScanner {
         this.scanContext = scanContext;
     }
 
-    public void open(int chunkSize) throws Exception {
+    public void open() throws Exception {
         HikariConfig config = new HikariConfig();
         config.setDriverClassName(scanContext.getDriverClassName());
         config.setJdbcUrl(scanContext.getJdbcURL());
