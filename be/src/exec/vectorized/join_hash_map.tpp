@@ -47,7 +47,8 @@ Status JoinBuildFunc<PT>::construct_hash_table(RuntimeState* state, JoinHashTabl
 
 template <PrimitiveType PT>
 void DirectMappingJoinBuildFunc<PT>::prepare(RuntimeState* runtime, JoinHashTableItems* table_items) {
-    table_items->bucket_size = (int64_t)(std::numeric_limits<CppType>::max()) - (int64_t)(std::numeric_limits<CppType>::min() + 1l);
+    table_items->bucket_size =
+            (int64_t)(std::numeric_limits<CppType>::max()) - (int64_t)(std::numeric_limits<CppType>::min() + 1l);
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
 }
@@ -180,7 +181,8 @@ void FixedSizeJoinBuildFunc<PT>::_build_nullable_columns(JoinHashTableItems* tab
 }
 
 template <PrimitiveType PT>
-Status DirectMappingJoinProbeFunc<PT>::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state) {
+Status DirectMappingJoinProbeFunc<PT>::lookup_init(const JoinHashTableItems& table_items,
+                                                   HashTableProbeState* probe_state) {
     size_t probe_row_count = probe_state->probe_row_count;
     auto& data = get_key_data(*probe_state);
 
