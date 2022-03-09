@@ -358,7 +358,7 @@ TEST_F(TestPipelineControlFlow, test_two_operatories) {
 
     start_test();
 
-    ASSERT_TRUE(_fragment_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+    ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
     ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num);
     ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num, 0);
     ASSERT_EQ(lifecycle_error_num, 0);
@@ -388,7 +388,7 @@ TEST_F(TestPipelineControlFlow, test_three_operatories) {
 
     start_test();
 
-    ASSERT_TRUE(_fragment_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+    ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
     ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num);
     ASSERT_COUNTER_CHUNK_NUM(normalCounter, chunk_num, chunk_num);
     ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num, 0);
@@ -427,7 +427,7 @@ TEST_F(TestPipelineControlFlow, test_multi_operators) {
 
         start_test();
 
-        ASSERT_TRUE(_fragment_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+        ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
         ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num);
         for (size_t j = 0; j < i; ++j) {
             ASSERT_COUNTER_CHUNK_NUM(normalCounters[j], chunk_num, chunk_num);
@@ -461,7 +461,7 @@ TEST_F(TestPipelineControlFlow, test_full_chunk_size) {
 
     start_test();
 
-    ASSERT_TRUE(_fragment_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+    ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
     ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num);
     ASSERT_COUNTER_CHUNK_NUM(normalCounter, chunk_num, chunk_num);
     ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num, 0);
@@ -492,7 +492,7 @@ TEST_F(TestPipelineControlFlow, test_multi_chunks) {
 
     start_test();
 
-    ASSERT_TRUE(_fragment_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+    ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
     ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num);
     ASSERT_COUNTER_CHUNK_NUM(normalCounter, chunk_num, chunk_num);
     ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num, 0);
@@ -531,7 +531,7 @@ TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_non_full_chunk
 
         start_test();
 
-        ASSERT_TRUE(_fragment_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+        ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
         ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num * i);
         if (i == 1) {
             // Without local exchange sink/source operator
@@ -581,7 +581,7 @@ TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_full_chunk) {
 
         start_test();
 
-        ASSERT_TRUE(_fragment_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+        ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
         ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num * i);
         ASSERT_COUNTER_CHUNK_NUM(normalCounter, chunk_num * i, chunk_num * i);
         ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num * i, 0);

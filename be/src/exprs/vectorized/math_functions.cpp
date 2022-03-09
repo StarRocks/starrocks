@@ -476,8 +476,8 @@ ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const sta
 
     const int32_t original_scale = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->scale();
 
-    int128_t* raw_c1 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->get_data().data();
-    int32_t* raw_c2 = ColumnHelper::cast_to_raw<TYPE_INT>(c1)->get_data().data();
+    int128_t* raw_c0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->get_data().data();
+    int32_t* raw_c1 = ColumnHelper::cast_to_raw<TYPE_INT>(c1)->get_data().data();
     int128_t* raw_res = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(res)->get_data().data();
     uint8_t* raw_null_flags = null_flags->get_data().data();
 
@@ -487,16 +487,16 @@ ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const sta
     // TODO(hcf) For truncate(v, d), we also to keep the scale if d is constant
     if (c0_is_const && c1_is_const) {
         bool is_over_flow;
-        MathFunctions::decimal_truncate<false>(raw_c1[0], original_scale, raw_c2[0], &raw_res[0], &is_over_flow);
-        res = ConstColumn::create(res, res->size());
+        MathFunctions::decimal_truncate<false>(raw_c0[0], original_scale, raw_c1[0], &raw_res[0], &is_over_flow);
         if (is_over_flow) {
-            has_null = true;
-            raw_null_flags[0] = 1;
+            res = ColumnHelper::create_const_null_column(c0->size());
+        } else {
+            res = ConstColumn::create(res, c0->size());
         }
     } else if (c0_is_const) {
         for (auto i = 0; i < size; i++) {
             bool is_over_flow;
-            MathFunctions::decimal_truncate<true>(raw_c1[0], original_scale, raw_c2[i], &raw_res[i], &is_over_flow);
+            MathFunctions::decimal_truncate<true>(raw_c0[0], original_scale, raw_c1[i], &raw_res[i], &is_over_flow);
             if (is_over_flow) {
                 has_null = true;
                 raw_null_flags[i] = 1;
@@ -505,7 +505,7 @@ ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const sta
     } else if (c1_is_const) {
         for (auto i = 0; i < size; i++) {
             bool is_over_flow;
-            MathFunctions::decimal_truncate<false>(raw_c1[i], original_scale, raw_c2[0], &raw_res[i], &is_over_flow);
+            MathFunctions::decimal_truncate<false>(raw_c0[i], original_scale, raw_c1[0], &raw_res[i], &is_over_flow);
             if (is_over_flow) {
                 has_null = true;
                 raw_null_flags[i] = 1;
@@ -514,7 +514,7 @@ ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const sta
     } else {
         for (auto i = 0; i < size; i++) {
             bool is_over_flow;
-            MathFunctions::decimal_truncate<true>(raw_c1[i], original_scale, raw_c2[i], &raw_res[i], &is_over_flow);
+            MathFunctions::decimal_truncate<true>(raw_c0[i], original_scale, raw_c1[i], &raw_res[i], &is_over_flow);
             if (is_over_flow) {
                 has_null = true;
                 raw_null_flags[i] = 1;
