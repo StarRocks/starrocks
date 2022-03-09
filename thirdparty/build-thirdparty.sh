@@ -745,8 +745,6 @@ build_hyperscan() {
 }
 
 #mariadb-connector-c
-# static link plugins refer to:
-# https://mariadb.com/kb/en/configuration-settings-for-building-connectorc/
 build_mariadb() {
     check_if_source_exist $MARIADB_SOURCE
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE
