@@ -5158,7 +5158,7 @@ public class Catalog {
     public Table getTableIncludeRecycleBin(Database db, long tableId) {
         Table table = db.getTable(tableId);
         if (table == null) {
-            table = recycleBin.getTable(tableId);
+            table = recycleBin.getTable(db.getId(), tableId);
         }
         return table;
     }
