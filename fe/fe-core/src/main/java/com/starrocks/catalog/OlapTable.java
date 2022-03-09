@@ -1375,14 +1375,7 @@ public class OlapTable extends Table {
             long version = partition.getVisibleVersion();
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
-                    long tabletRowCount = 0L;
-                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                        if (replica.checkVersionCatchUp(version, false)
-                                && replica.getRowCount() > tabletRowCount) {
-                            tabletRowCount = replica.getRowCount();
-                        }
-                    }
-                    totalCount += tabletRowCount;
+                    totalCount += tablet.getRowCount(version);
                 }
             }
         }
