@@ -314,8 +314,7 @@ public class StmtExecutor {
                         if (parsedStmt instanceof ShowStmt) {
                             com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
 
-                            SelectStmt selectStmt =
-                                    ((ShowStmt) parsedStmt).toSelectStmt(new Analyzer(context.getCatalog(), context));
+                            QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
                             if (selectStmt != null) {
                                 parsedStmt = selectStmt;
                                 execPlan = new StatementPlanner().plan(parsedStmt, context);
@@ -615,7 +614,7 @@ public class StmtExecutor {
         analyzer = new Analyzer(context.getCatalog(), context);
         // Convert show statement to select statement here
         if (parsedStmt instanceof ShowStmt) {
-            SelectStmt selectStmt = ((ShowStmt) parsedStmt).toSelectStmt(analyzer);
+            QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
             if (selectStmt != null) {
                 Preconditions.checkState(false, "Shouldn't reach here");
             }
@@ -1041,11 +1040,11 @@ public class StmtExecutor {
                 || statement instanceof QueryStatement
                 || statement instanceof CreateViewStmt
                 || statement instanceof AlterViewStmt
-                || statement instanceof ShowDbStmt
-                || statement instanceof ShowTableStmt
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof DropWorkGroupStmt
+                || statement instanceof ShowDbStmt
+                || statement instanceof ShowTableStmt
                 || statement instanceof ShowWorkGroupStmt
                 || statement instanceof ShowColumnStmt
                 || statement instanceof ShowTableStatusStmt

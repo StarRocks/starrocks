@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
@@ -36,6 +35,10 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.common.MetaUtils;
 
 // SHOW TABLE STATUS
 public class ShowTableStatusStmt extends ShowStmt {
@@ -65,7 +68,6 @@ public class ShowTableStatusStmt extends ShowStmt {
     private String db;
     private String wild;
     private Expr where;
-    private SelectStmt selectStmt;
 
     public ShowTableStatusStmt(String db, String wild, Expr where) {
         this.db = db;
@@ -101,15 +103,10 @@ public class ShowTableStatusStmt extends ShowStmt {
     }
 
     @Override
-    public SelectStmt toSelectStmt(Analyzer analyzer) throws AnalysisException {
+    public QueryStatement toSelectStmt() throws AnalysisException {
         if (where == null) {
             return null;
         }
-        if (selectStmt != null) {
-            return selectStmt;
-        }
-
-        analyze(analyzer);
 
         // Columns
         SelectList selectList = new SelectList();
@@ -187,12 +184,9 @@ public class ShowTableStatusStmt extends ShowStmt {
         aliasMap.put(new SlotRef(null, "Comment"), item.getExpr().clone(null));
 
         where = where.substitute(aliasMap);
-        selectStmt = new SelectStmt(selectList,
-                new FromClause(Lists.newArrayList(new TableRef(TABLE_NAME, null))),
-                where, null, null, null, LimitElement.NO_LIMIT);
-        analyzer.setSchemaInfo(db, null, null);
 
-        return selectStmt;
+        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME, null),
+                where, null, null));
     }
 
     @Override
