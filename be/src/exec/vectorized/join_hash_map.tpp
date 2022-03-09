@@ -47,8 +47,8 @@ Status JoinBuildFunc<PT>::construct_hash_table(RuntimeState* state, JoinHashTabl
 
 template <PrimitiveType PT>
 void DirectMappingJoinBuildFunc<PT>::prepare(RuntimeState* runtime, JoinHashTableItems* table_items) {
-    table_items->bucket_size = static_cast<int64_t>(RunTimeTypeLimits<PT>::max_value()) -
-                               static_cast<int64_t>(RunTimeTypeLimits<PT>::min_value()) + 1l;
+    static constexpr size_t BUCKET_SIZE = 1L << std::numeric_limits<CppType>::digits;
+    table_items->bucket_size = BUCKET_SIZE;
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
 }
@@ -67,20 +67,22 @@ const Buffer<typename DirectMappingJoinBuildFunc<PT>::CppType>& DirectMappingJoi
 template <PrimitiveType PT>
 Status DirectMappingJoinBuildFunc<PT>::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
                                                             HashTableProbeState* probe_state) {
+    static constexpr CppType MIN_VALUE = RunTimeTypeLimits<PT>::min_value();
+
     auto& data = get_key_data(*table_items);
     if (table_items->key_columns[0]->is_nullable()) {
         auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[0]);
         auto& null_array = nullable_column->null_column()->get_data();
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
             if (null_array[i] == 0) {
-                size_t buckets = data[i] - RunTimeTypeLimits<PT>::min_value();
+                size_t buckets = data[i] - MIN_VALUE;
                 table_items->next[i] = table_items->first[buckets];
                 table_items->first[buckets] = i;
             }
         }
     } else {
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
-            size_t buckets = data[i] - RunTimeTypeLimits<PT>::min_value();
+            size_t buckets = data[i] - MIN_VALUE;
             table_items->next[i] = table_items->first[buckets];
             table_items->first[buckets] = i;
         }
@@ -183,6 +185,7 @@ void FixedSizeJoinBuildFunc<PT>::_build_nullable_columns(JoinHashTableItems* tab
 template <PrimitiveType PT>
 Status DirectMappingJoinProbeFunc<PT>::lookup_init(const JoinHashTableItems& table_items,
                                                    HashTableProbeState* probe_state) {
+    static constexpr CppType MIN_VALUE = RunTimeTypeLimits<PT>::min_value();
     size_t probe_row_count = probe_state->probe_row_count;
     auto& data = get_key_data(*probe_state);
 
@@ -193,7 +196,7 @@ Status DirectMappingJoinProbeFunc<PT>::lookup_init(const JoinHashTableItems& tab
             auto& null_array = nullable_column->null_column()->get_data();
             for (size_t i = 0; i < probe_row_count; i++) {
                 if (null_array[i] == 0) {
-                    probe_state->next[i] = table_items.first[data[i] - RunTimeTypeLimits<PT>::min_value()];
+                    probe_state->next[i] = table_items.first[data[i] - MIN_VALUE];
                 } else {
                     probe_state->next[i] = 0;
                 }
@@ -201,7 +204,7 @@ Status DirectMappingJoinProbeFunc<PT>::lookup_init(const JoinHashTableItems& tab
             probe_state->null_array = &null_array;
         } else {
             for (size_t i = 0; i < probe_row_count; i++) {
-                probe_state->next[i] = table_items.first[data[i] - RunTimeTypeLimits<PT>::min_value()];
+                probe_state->next[i] = table_items.first[data[i] - MIN_VALUE];
             }
             probe_state->null_array = nullptr;
         }
@@ -209,7 +212,7 @@ Status DirectMappingJoinProbeFunc<PT>::lookup_init(const JoinHashTableItems& tab
     }
 
     for (size_t i = 0; i < probe_row_count; i++) {
-        probe_state->next[i] = table_items.first[data[i] - RunTimeTypeLimits<PT>::min_value()];
+        probe_state->next[i] = table_items.first[data[i] - MIN_VALUE];
     }
     probe_state->null_array = nullptr;
     return Status::OK();
