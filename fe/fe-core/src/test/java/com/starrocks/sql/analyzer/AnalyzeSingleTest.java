@@ -8,12 +8,11 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
+import java.util.List;
 import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
@@ -29,12 +28,6 @@ public class AnalyzeSingleTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(runningDir);
         AnalyzeTestUtil.init();
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test
@@ -366,23 +359,27 @@ public class AnalyzeSingleTest {
 
         query = ((QueryStatement) analyzeSuccess(
                 "select * from (select v1 as v, sum(v2) from t0 group by v1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v"))
-        .getQueryRelation();
+                .getQueryRelation();
         Assert.assertEquals("v,sum(v2),v,v2", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess(
-                "select * from (select v1 as tt from t0,t1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.tt = b.v")).getQueryRelation();
+                "select * from (select v1 as tt from t0,t1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.tt = b.v"))
+                .getQueryRelation();
         Assert.assertEquals("tt,v,v2", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select *, v1+1 from t0")).getQueryRelation();
         Assert.assertEquals("v1,v2,v3,v1 + 1", String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess("select t1.* from t0 left outer join t1 on t0.v1+3=t1.v4")).getQueryRelation();
+        query = ((QueryStatement) analyzeSuccess("select t1.* from t0 left outer join t1 on t0.v1+3=t1.v4"))
+                .getQueryRelation();
         Assert.assertEquals("v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select v1+1,a.* from (select * from t0) a")).getQueryRelation();
         Assert.assertEquals("v1 + 1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess("select v2+1,a.* from (select v1 as v, v2, v3+2 from t0) a left join t1 on a.v = t1.v4")).getQueryRelation();
+        query = ((QueryStatement) analyzeSuccess(
+                "select v2+1,a.* from (select v1 as v, v2, v3+2 from t0) a left join t1 on a.v = t1.v4"))
+                .getQueryRelation();
         Assert.assertEquals("v2 + 1,v,v2,v3 + 2", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select 1 as a, 2 as b")).getQueryRelation();
@@ -391,13 +388,16 @@ public class AnalyzeSingleTest {
         query = ((QueryStatement) analyzeSuccess("select * from (values (1,2,3), (4,5,6)) v;")).getQueryRelation();
         Assert.assertEquals("column_0,column_1,column_2", String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess("select * from (select t0.*, v4 from t0 inner join t1 on v1 = v5) tmp")).getQueryRelation();
+        query = ((QueryStatement) analyzeSuccess(
+                "select * from (select t0.*, v4 from t0 inner join t1 on v1 = v5) tmp")).getQueryRelation();
         Assert.assertEquals("v1,v2,v3,v4", String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess("select t1.* from t0 inner join t1 on v1 = v4 order by v1")).getQueryRelation();
+        query = ((QueryStatement) analyzeSuccess("select t1.* from t0 inner join t1 on v1 = v4 order by v1"))
+                .getQueryRelation();
         Assert.assertEquals("v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess("select v4,v1,t1.* from t0 inner join t1 on v1 = v4 order by v1")).getQueryRelation();
+        query = ((QueryStatement) analyzeSuccess("select v4,v1,t1.* from t0 inner join t1 on v1 = v4 order by v1"))
+                .getQueryRelation();
         Assert.assertEquals("v4,v1,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select v1+2 as v, * from t0 order by v+1")).getQueryRelation();
@@ -432,17 +432,34 @@ public class AnalyzeSingleTest {
         statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT * FROM `default_cluster:test`.`tall` WHERE ta LIKE concat(concat('h', 'a', 'i'), '%')",
+        Assert.assertEquals(
+                "SELECT * FROM `default_cluster:test`.`tall` WHERE ta LIKE concat(concat('h', 'a', 'i'), '%')",
                 AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(0);
         statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")|| true",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT * FROM `default_cluster:test`.`tall` WHERE (ta LIKE concat('h', 'a', 'i')) OR (TRUE)",
+        Assert.assertEquals(
+                "SELECT * FROM `default_cluster:test`.`tall` WHERE (ta LIKE concat('h', 'a', 'i')) OR (TRUE)",
                 AST2SQL.toString(statementBase));
 
         analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
                 "LIKE concat('h', 'a', 'i')) OR ('%')' part of predicate ''%'' should return type 'BOOLEAN'");
+    }
+
+    @Test
+    public void testSqlSplit() {
+        List<StatementBase> list = SqlParser.parse("select * from t1;", 0);
+        Assert.assertEquals(1, list.size());
+
+        list = SqlParser.parse("select * from t1", 0);
+        Assert.assertEquals(1, list.size());
+
+        list = SqlParser.parse("select * from t1;select * from t2;", 0);
+        Assert.assertEquals(2, list.size());
+
+        list = SqlParser.parse("select * from t1 where a1 = 'x\"x;asf';", 0);
+        Assert.assertEquals(1, list.size());
     }
 }
