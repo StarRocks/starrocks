@@ -23,7 +23,7 @@ public:
         return instance;
     }
 
-    DISALLOW_COPY_AND_ASSIGNMENT(EnvRegistry);
+    DISALLOW_COPY_AND_ASSIGN(EnvRegistry);
 
     void register_env(std::string_view pattern, FactoryFunc func) {
         _entries.emplace_back(Entry{std::regex(pattern.begin(), pattern.end()), std::move(func)});
