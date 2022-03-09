@@ -374,7 +374,7 @@ DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES
 (
     "host" = "127.0.0.1",
-    "port" = "9030",
+    "port" = "9020",
     "user" = "user",
     "password" = "passwd",
     "database" = "db_test",
