@@ -78,7 +78,7 @@ Status JDBCScanner::close(RuntimeState* state) {
 
 Status JDBCScanner::_init_jdbc_bridge() {
     // 1. construct JDBCBridge
-    _jdbc_bridge_cls = _jni_env->FindClass("com/starrocks/jdbcbridge/JDBCBridge");
+    _jdbc_bridge_cls = _jni_env->FindClass(JDBC_BRIDGE_CLASS_NAME);
     DCHECK(_jdbc_bridge_cls != nullptr);
 
     jmethodID constructor = _jni_env->GetMethodID(_jdbc_bridge_cls, "<init>", "()V");
@@ -99,7 +99,7 @@ Status JDBCScanner::_init_jdbc_bridge() {
 }
 
 Status JDBCScanner::_init_jdbc_scan_context() {
-    jclass scan_context_cls = _jni_env->FindClass("com/starrocks/jdbcbridge/JDBCScanContext");
+    jclass scan_context_cls = _jni_env->FindClass(JDBC_SCAN_CONTEXT_CLASS_NAME);
     DCHECK(scan_context_cls != nullptr);
 
     jmethodID constructor = _jni_env->GetMethodID(
@@ -131,10 +131,12 @@ Status JDBCScanner::_init_jdbc_scanner() {
     DCHECK(get_scanner != nullptr);
 
     _jdbc_scanner = _jni_env->CallObjectMethod(_jdbc_bridge, get_scanner, _jdbc_scan_context);
+    _jni_env->DeleteLocalRef(_jdbc_scan_context);
+    _jni_env->DeleteLocalRef(_jdbc_bridge);
     CHECK_JAVA_EXCEPTION("get JDBCScanner failed")
 
     // open scanner
-    _jdbc_scanner_cls = _jni_env->FindClass("com/starrocks/jdbcbridge/JDBCScanner");
+    _jdbc_scanner_cls = _jni_env->FindClass(JDBC_SCANNER_CLASS_NAME);
     DCHECK(_jdbc_scanner_cls != nullptr);
 
     jmethodID scanner_open = _jni_env->GetMethodID(_jdbc_scanner_cls, "open", "()V");
@@ -258,6 +260,7 @@ Status JDBCScanner::_close_jdbc_scanner() {
         return Status::OK();
     }
     _jni_env->CallVoidMethod(_jdbc_scanner, _scanner_close);
+    _jni_env->DeleteLocalRef(_jdbc_scanner);
     CHECK_JAVA_EXCEPTION("close JDBCScanner failed")
     return Status::OK();
 }
@@ -453,7 +456,7 @@ Status JDBCScanner::_append_date_val(jobject jval, SlotDescriptor* slot_desc, Co
 }
 
 std::string JDBCScanner::_get_date_string(jobject jval) {
-    jclass jdbc_util_cls = _jni_env->FindClass("com/starrocks/jdbcbridge/JDBCUtil");
+    jclass jdbc_util_cls = _jni_env->FindClass(JDBC_UTIL_CLASS_NAME);
     DCHECK(jdbc_util_cls != nullptr);
     jmethodID format_date =
             _jni_env->GetStaticMethodID(jdbc_util_cls, "formatDate", "(Ljava/sql/Date;)Ljava/lang/String;");

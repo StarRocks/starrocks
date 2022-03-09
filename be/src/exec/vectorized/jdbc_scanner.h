@@ -86,8 +86,16 @@ private:
     jmethodID _scanner_get_next_chunk;
     jmethodID _scanner_close;
 
+    // _jdbc_bridge and _jdbc_scan_context are only used for cross-function passing,
+    // they will be invalid after invoking _init_jdbc_scanner
     jobject _jdbc_bridge;
     jobject _jdbc_scan_context;
     jobject _jdbc_scanner;
+
+    static constexpr const char* JDBC_BRIDGE_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCBridge";
+    static constexpr const char* JDBC_SCAN_CONTEXT_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCScanContext";
+    static constexpr const char* JDBC_SCANNER_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCScanner";
+    static constexpr const char* JDBC_UTIL_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCUtil";
+
 };
 } // namespace starrocks::vectorized

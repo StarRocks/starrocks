@@ -68,7 +68,7 @@ Status JDBCScanOperator::_start_scanner_thread(RuntimeState* state) {
 
 void JDBCScanOperator::_start_scanner(RuntimeState* state) {
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_jdbc_scan_node.tuple_id);
-    const auto* jdbc_table = dynamic_cast<const JDBCTableDescriptor*>(tuple_desc->table_desc());
+    const auto* jdbc_table = down_cast<const JDBCTableDescriptor*>(tuple_desc->table_desc());
 
     Status status;
     vectorized::JDBCScanContext scan_ctx;

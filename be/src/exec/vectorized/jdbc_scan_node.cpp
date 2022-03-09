@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 #include "exec/vectorized/jdbc_scan_node.h"
 
 #include "exec/pipeline/jdbc_scan_operator.h"
