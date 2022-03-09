@@ -95,7 +95,7 @@ public:
 
     bool append_nulls(size_t count __attribute__((unused))) override { return false; }
 
-    bool append_strings(const std::vector<Slice>& slices __attribute__((unused))) override { return false; }
+    bool append_strings(const Buffer<Slice>& slices __attribute__((unused))) override { return false; }
 
     bool contain_value(size_t start, size_t end, T value) const {
         DCHECK_LE(start, end);
@@ -145,7 +145,7 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
+    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override { return sizeof(ValueType); }
 
@@ -158,6 +158,8 @@ public:
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+
+    int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 

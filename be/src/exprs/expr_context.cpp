@@ -165,6 +165,17 @@ Status ExprContext::get_error(int start_idx, int end_idx) const {
     return Status::OK();
 }
 
+Status ExprContext::get_udf_error() {
+    for (int idx = 0; idx < _fn_contexts.size(); ++idx) {
+        DCHECK_LT(idx, _fn_contexts.size());
+        FunctionContext* fn_ctx = _fn_contexts[idx];
+        if (fn_ctx->is_udf() && fn_ctx->has_error()) {
+            return Status::InternalError(fn_ctx->error_msg());
+        }
+    }
+    return Status::OK();
+}
+
 std::string ExprContext::get_error_msg() const {
     for (auto fn_ctx : _fn_contexts) {
         if (fn_ctx->has_error()) {
@@ -172,12 +183,6 @@ std::string ExprContext::get_error_msg() const {
         }
     }
     return "";
-}
-
-void ExprContext::clear_error_msg() {
-    for (auto fn_ctx : _fn_contexts) {
-        fn_ctx->clear_error_msg();
-    }
 }
 
 ColumnPtr ExprContext::evaluate(vectorized::Chunk* chunk) {

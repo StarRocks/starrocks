@@ -23,13 +23,11 @@ import java.util.List;
  * so a physical transformation rule is applied before a logical transformation rule.
  */
 public class OptimizeExpressionTask extends OptimizerTask {
-    private final boolean exploreOnly;
     private final GroupExpression groupExpression;
 
-    OptimizeExpressionTask(TaskContext context, GroupExpression expression, boolean exploreOnly) {
+    OptimizeExpressionTask(TaskContext context, GroupExpression expression) {
         super(context);
         this.groupExpression = expression;
-        this.exploreOnly = exploreOnly;
     }
 
     private List<Rule> getValidRules() {
@@ -38,18 +36,15 @@ public class OptimizeExpressionTask extends OptimizerTask {
                 getTransformRules();
         filterInValidRules(groupExpression, logicalRules, validRules);
 
-        if (!exploreOnly) {
-            List<Rule> physicalRules = context.getOptimizerContext().getRuleSet().
-                    getImplementRules();
-            filterInValidRules(groupExpression, physicalRules, validRules);
-        }
+        List<Rule> physicalRules = context.getOptimizerContext().getRuleSet().
+                getImplementRules();
+        filterInValidRules(groupExpression, physicalRules, validRules);
         return validRules;
     }
 
     @Override
     public String toString() {
-        return "OptimizeExpressionTask for groupExpression " + groupExpression +
-                "\n exploreOnly " + exploreOnly;
+        return "OptimizeExpressionTask for groupExpression " + groupExpression;
     }
 
     @Override
@@ -58,7 +53,7 @@ public class OptimizeExpressionTask extends OptimizerTask {
         rules.sort(Comparator.comparingInt(Rule::promise));
 
         for (Rule rule : rules) {
-            pushTask(new ApplyRuleTask(context, groupExpression, rule, exploreOnly));
+            pushTask(new ApplyRuleTask(context, groupExpression, rule));
         }
     }
 }

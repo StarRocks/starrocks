@@ -3,6 +3,7 @@
 #include "chunks_sorter_full_sort.h"
 
 #include "column/type_traits.h"
+#include "exec/vectorized/chunks_sorter.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type_infra.h"
@@ -341,7 +342,17 @@ Status ChunksSorterFullSort::_sort_chunks(RuntimeState* state) {
     // Step2: sort by columns or row
     // For no more than three order-by columns, sorting by columns can benefit from reducing
     // the cost of calling virtual functions of Column::compare_at.
-    if (_get_number_of_order_by_columns() <= 3) {
+    CompareStrategy strategy = Default;
+    if (_compare_strategy != Default) {
+        strategy = _compare_strategy;
+    } else {
+        if (_get_number_of_order_by_columns() <= 3) {
+            strategy = ColumnWise;
+        } else {
+            strategy = RowWise;
+        }
+    }
+    if (strategy == ColumnWise) {
         RETURN_IF_ERROR(_sort_by_columns(state));
     } else {
         RETURN_IF_ERROR(_sort_by_row_cmp(state));

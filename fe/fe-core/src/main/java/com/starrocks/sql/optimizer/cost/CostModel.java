@@ -43,6 +43,7 @@ import com.starrocks.statistic.Constants;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class CostModel {
     public static double calculateCost(GroupExpression expression) {
@@ -188,9 +189,16 @@ public class CostModel {
         public CostEstimate computeAggFunExtraCost(PhysicalHashAggregateOperator node, Statistics statistics,
                                                    Statistics inputStatistics) {
             CostEstimate costEstimate = CostEstimate.zero();
-            int distinctCount =
-                    (int) node.getAggregations().values().stream()
-                            .filter(aggregation -> isDistinctAggFun(aggregation, node)).count();
+            List<ColumnStatistic> groupByColumnStat =
+                    node.getGroupBys().stream().map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
+
+            // If the statistics with inaccurate row count or have Unknown column statistics，
+            // it don't need to compute the extra cost.
+            if (statistics.isTableRowCountMayInaccurate() ||
+                    groupByColumnStat.stream().anyMatch(ColumnStatistic::isUnknown)) {
+                return costEstimate;
+            }
+
             // Use the number of aggregated rows as buckets, does not equal statistics.getOutputRowCount(),
             // Because limit is computed in statistics.getOutputRowCount().
             double buckets = StatisticsCalculator.computeGroupByStatistics(node.getGroupBys(), inputStatistics,
@@ -228,12 +236,6 @@ public class CostModel {
                         rowSize = rowSize + 16;
                     }
 
-                    // only when distinct count == 1, consider to avoid OOM
-                    // because of distinct count more than 1, we must use multi_distinct function
-                    if (distinctCount == 1 && (buckets >= 15000000 && rowSize >= 20)) {
-                        return CostEstimate.infinite();
-                    }
-
                     double hashSetSize;
                     if (distinctColumnStats.isUnknown()) {
                         hashSetSize = rowSize * inputStatistics.getOutputRowCount() / statistics.getOutputRowCount();
@@ -264,7 +266,7 @@ public class CostModel {
             Statistics inputStatistics = context.getChildStatistics(0);
             CostEstimate otherExtraCost = computeAggFunExtraCost(node, statistics, inputStatistics);
             return CostEstimate.addCost(CostEstimate.of(inputStatistics.getComputeSize(),
-                            CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
+                    CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
                     otherExtraCost);
         }
 

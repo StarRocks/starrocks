@@ -26,11 +26,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
+import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
@@ -46,9 +48,12 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetVar;
+import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -216,7 +221,8 @@ public class StmtExecutor {
         }
 
         // this is a query stmt, but this non-master FE can not read, forward it to master
-        if ((parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) && !Catalog.getCurrentCatalog().isMaster()
+        if ((parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) &&
+                !Catalog.getCurrentCatalog().isMaster()
                 && !Catalog.getCurrentCatalog().canRead()) {
             return true;
         }
@@ -306,11 +312,9 @@ public class StmtExecutor {
                         context.getDumpInfo().reset();
                         context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                         if (parsedStmt instanceof ShowStmt) {
-                            com.starrocks.sql.analyzer.Analyzer analyzer =
-                                    new com.starrocks.sql.analyzer.Analyzer(context.getCatalog(), context);
-                            analyzer.analyze(parsedStmt);
+                            com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
 
-                            SelectStmt selectStmt = ((ShowStmt) parsedStmt).toSelectStmt(null);
+                            QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
                             if (selectStmt != null) {
                                 parsedStmt = selectStmt;
                                 execPlan = new StatementPlanner().plan(parsedStmt, context);
@@ -610,9 +614,9 @@ public class StmtExecutor {
         analyzer = new Analyzer(context.getCatalog(), context);
         // Convert show statement to select statement here
         if (parsedStmt instanceof ShowStmt) {
-            SelectStmt selectStmt = ((ShowStmt) parsedStmt).toSelectStmt(analyzer);
+            QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
             if (selectStmt != null) {
-                parsedStmt = selectStmt;
+                Preconditions.checkState(false, "Shouldn't reach here");
             }
         }
 
@@ -637,7 +641,10 @@ public class StmtExecutor {
     public void cancel() {
         if (parsedStmt instanceof DeleteStmt) {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
-            Catalog.getCurrentCatalog().getDeleteHandler().killJob(deleteStmt.getJobId());
+            long jobId = deleteStmt.getJobId();
+            if (jobId != -1) {
+                Catalog.getCurrentCatalog().getDeleteHandler().killJob(jobId);
+            }
         } else {
             Coordinator coordRef = coord;
             if (coordRef != null) {
@@ -1031,16 +1038,21 @@ public class StmtExecutor {
                 || statement instanceof InsertStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof QueryStatement
-                || statement instanceof ShowDbStmt
-                || statement instanceof ShowTableStmt
+                || statement instanceof CreateViewStmt
+                || statement instanceof AlterViewStmt
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof DropWorkGroupStmt
-                || statement instanceof ShowWorkGroupStmt;
+                || statement instanceof ShowDbStmt
+                || statement instanceof ShowTableStmt
+                || statement instanceof ShowWorkGroupStmt
+                || statement instanceof ShowColumnStmt
+                || statement instanceof ShowTableStatusStmt
+                || statement instanceof ShowVariablesStmt;
     }
 
     public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {
-        if (stmt.getQueryStmt().isExplain()) {
+        if (stmt.getQueryStatement().isExplain()) {
             handleExplainStmt(execPlan.getExplainString(TExplainLevel.NORMAL));
             return;
         }

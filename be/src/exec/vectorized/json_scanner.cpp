@@ -392,6 +392,7 @@ Status JsonReader::_read_chunk_from_document_stream(Chunk* chunk, int32_t rows_t
             // Try to reorder the column according to the column order of first json row.
             // It is much faster when we access the json field as the json key order.
             _reorder_column(&reordered_slot_descs, row);
+            // Resetting the row after for-range iterating in _reorder_column.
             row.reset();
         }
 
@@ -401,7 +402,6 @@ Status JsonReader::_read_chunk_from_document_stream(Chunk* chunk, int32_t rows_t
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                 // We would continue to construct row even if error is returned,
                 // hence the number of error appended to the file should be limited.
-                row.reset();
                 std::string_view sv;
                 (void)!row.raw_json().get(sv);
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
@@ -460,6 +460,7 @@ Status JsonReader::_read_chunk_from_array(Chunk* chunk, int32_t rows_to_read,
             // Try to reorder the column according to the column order of first json row.
             // It is much faster when we access the json field as the json key order.
             _reorder_column(&reordered_slot_descs, row);
+            // Resetting the row after for-range iterating in _reorder_column.
             row.reset();
         }
 
@@ -469,7 +470,6 @@ Status JsonReader::_read_chunk_from_array(Chunk* chunk, int32_t rows_to_read,
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                 // We would continue to construct row even if error is returned,
                 // hence the number of error appended to the file should be limited.
-                row.reset();
                 std::string_view sv;
                 (void)!row.raw_json().get(sv);
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
@@ -504,7 +504,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
 
             // The columns in JsonReader's chunk are all in NullableColumn type;
             auto column = chunk->get_column_by_slot_id(slot_desc->id());
-            auto col_name = slot_desc->col_name();
+            const auto& col_name = slot_desc->col_name();
 
             try {
                 simdjson::ondemand::value val = row->find_field_unordered(col_name);
@@ -512,7 +512,11 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             } catch (simdjson::simdjson_error& e) {
                 if (col_name == "__op") {
                     // special treatment for __op column, fill default value '0' rather than null
-                    column->append_strings(std::vector{Slice{"0"}});
+                    if (column->is_binary()) {
+                        column->append_strings(std::vector{Slice{"0"}});
+                    } else {
+                        column->append_datum(Datum((uint8_t)0));
+                    }
                 } else {
                     // Column name not found, fill column with null.
                     column->append_nulls(1);
@@ -537,7 +541,11 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             if (i >= jsonpath_size) {
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
-                    column->append_strings(std::vector{Slice{"0"}});
+                    if (column->is_binary()) {
+                        column->append_strings(std::vector{Slice{"0"}});
+                    } else {
+                        column->append_datum(Datum((uint8_t)0));
+                    }
                 } else {
                     column->append_nulls(1);
                 }
@@ -551,12 +559,21 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
             // As a workaround, extract procedure is duplicated, for both ondemand::object and ondemand::value
             // TODO(mofei) make it more elegant
             if (_scanner->_json_paths[i].size() == 1 && _scanner->_json_paths[i][0].key == "$") {
+                // add_nullable_column may invoke a for-range iterating to the row.
+                // If the for-range iterating is invoked after field access, or a second for-range iterating is invoked,
+                // it would get an error "Objects and arrays can only be iterated when they are first encountered",
+                // Hence, resetting the row object is necessary here.
+                row->reset();
                 RETURN_IF_ERROR(add_nullable_column(column, slot_descs[i]->type(), slot_descs[i]->col_name(), row,
                                                     !_strict_mode));
             } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], val)) {
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
-                    column->append_strings(std::vector{Slice{"0"}});
+                    if (column->is_binary()) {
+                        column->append_strings(std::vector{Slice{"0"}});
+                    } else {
+                        column->append_datum(Datum((uint8_t)0));
+                    }
                 } else {
                     column->append_nulls(1);
                 }
@@ -647,14 +664,13 @@ Status JsonReader::_read_and_parse_json() {
 #ifdef BE_TEST
 
     [[maybe_unused]] size_t message_size = 0;
-    Slice result(_buf.data(), _buf_size);
-    RETURN_IF_ERROR(_file->read(&result));
-    if (result.size == 0) {
+    ASSIGN_OR_RETURN(auto nread, _file->read(_buf.data(), _buf_size));
+    if (nread == 0) {
         return Status::EndOfFile("EOF of reading file");
     }
 
-    data = reinterpret_cast<uint8_t*>(result.data);
-    length = result.size;
+    data = reinterpret_cast<uint8_t*>(_buf.data());
+    length = nread;
 
 #else
 

@@ -42,7 +42,6 @@ set(EXEC_FILES
     olap_common.cpp
     tablet_info.cpp
     tablet_sink.cpp
-    plain_text_line_reader.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
@@ -148,6 +147,9 @@ set(EXEC_FILES
     pipeline/dict_decode_operator.cpp
     pipeline/result_sink_operator.cpp
     pipeline/scan_operator.cpp
+    pipeline/olap_scan_operator.cpp
+    pipeline/hdfs_scan_operator.cpp
+    pipeline/hdfs_chunk_source.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp
@@ -203,12 +205,7 @@ set(EXEC_FILES
     ${EXEC_FILES}
     vectorized/mysql_scan_node.cpp
     mysql_scanner.cpp
-)
-
-IF (WITH_HDFS)
-    set(EXEC_FILES ${EXEC_FILES}
-        vectorized/hdfs_scan_node.cpp)
-endif()
+    vectorized/hdfs_scan_node.cpp)
 
 add_library(Exec STATIC
     ${EXEC_FILES}

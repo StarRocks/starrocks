@@ -850,9 +850,7 @@ const AggregateFunction* get_aggregate_function(const std::string& name, Primiti
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type, is_null);
     } else if (binary_type == TFunctionBinaryType::SRJAR) {
-#ifdef STARROCKS_WITH_HDFS
         return getJavaUDAFFunction(is_null);
-#endif
     }
     return nullptr;
 }
@@ -862,9 +860,7 @@ const AggregateFunction* get_window_function(const std::string& name, PrimitiveT
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         return AggregateFuncResolver::instance()->get_aggregate_info(name, arg_type, return_type, is_null);
     } else if (binary_type == TFunctionBinaryType::SRJAR) {
-#ifdef STARROCKS_WITH_HDFS
         return getJavaWindowFunction();
-#endif
     }
     return nullptr;
 }

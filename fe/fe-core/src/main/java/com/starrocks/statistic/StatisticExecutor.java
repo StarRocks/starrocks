@@ -7,9 +7,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -19,7 +16,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.OriginStatement;
@@ -27,7 +23,8 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -48,7 +45,6 @@ import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
-import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharsetDecoder;
@@ -119,14 +115,16 @@ public class StatisticExecutor {
         StatementBase parsedStmt;
         try {
             parsedStmt = parseSQL(sql, context);
-            ((QueryStmt) parsedStmt).getDbs(context, dbs);
+            if (parsedStmt instanceof QueryStatement) {
+                dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
+            }
         } catch (Exception e) {
             LOG.warn("Parse statistic table query fail.", e);
             throw e;
         }
 
         try {
-            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true);
+            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true, true);
             List<TResultBatch> sqlResult = executeStmt(context, execPlan);
             return deserializerStatisticData(sqlResult);
         } catch (Exception e) {
@@ -139,6 +137,7 @@ public class StatisticExecutor {
         return queryDictSync(dbId, tableId, ImmutableList.of(column));
     }
 
+    // If you call this function, you must ensure that the db lock is added
     public static List<TStatisticData> queryDictSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         if (dbId == -1) {
             return Collections.emptyList();
@@ -171,7 +170,9 @@ public class StatisticExecutor {
         StatementBase parsedStmt;
         try {
             parsedStmt = parseSQL(sql, context);
-            ((QueryStmt) parsedStmt).getDbs(context, dbs);
+            if (parsedStmt instanceof QueryStatement) {
+                dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
+            }
             Preconditions.checkState(dbs.size() == 1);
         } catch (Exception e) {
             LOG.warn("Parse statistic dict query {} fail.", sql, e);
@@ -179,7 +180,7 @@ public class StatisticExecutor {
         }
 
         try {
-            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true);
+            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true, false);
             List<TResultBatch> sqlResult = executeStmt(context, execPlan);
             LOG.warn("Parse success {}", sql);
             return deserializerStatisticData(sqlResult);
@@ -276,14 +277,16 @@ public class StatisticExecutor {
         StatementBase parsedStmt;
         try {
             parsedStmt = parseSQL(sql.toString(), context);
-            ((QueryStmt) parsedStmt).getDbs(context, dbs);
+            if (parsedStmt instanceof QueryStatement) {
+                dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
+            }
         } catch (Exception e) {
             LOG.warn("Parse statistic table query fail. SQL: " + sql, e);
             throw e;
         }
 
         try {
-            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, false);
+            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, false, true);
             List<TResultBatch> sqlResult = executeStmt(context, execPlan);
 
             CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
@@ -303,16 +306,18 @@ public class StatisticExecutor {
     }
 
     private static ExecPlan getExecutePlan(Map<String, Database> dbs, ConnectContext context,
-                                           StatementBase parsedStmt, boolean isStatistic) {
+                                           StatementBase parsedStmt, boolean isStatistic, boolean isLockDb) {
         ExecPlan execPlan;
         try {
-            lock(dbs);
-
-            Analyzer analyzer = new Analyzer(context.getCatalog(), context);
-            QueryRelation query = (QueryRelation) analyzer.analyze(parsedStmt);
+            if (isLockDb) { 
+                lock(dbs);
+            }
+            
+            Analyzer.analyze(parsedStmt, context);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, context).transform(query);
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, context).transform(
+                    ((QueryStatement) parsedStmt).getQueryRelation());
 
             Optimizer optimizer = new Optimizer();
             OptExpression optimizedPlan = optimizer.optimize(
@@ -326,7 +331,9 @@ public class StatisticExecutor {
                     .createStatisticPhysicalPlan(optimizedPlan, context, logicalPlan.getOutputColumn(),
                             columnRefFactory, isStatistic);
         } finally {
-            unLock(dbs);
+            if (isLockDb) { 
+                unLock(dbs); 
+            }
         }
         return execPlan;
     }
@@ -358,8 +365,8 @@ public class StatisticExecutor {
     }
 
     public static StatementBase parseSQL(String sql, ConnectContext context) throws Exception {
-        SqlScanner scanner = new SqlScanner(new StringReader(sql), context.getSessionVariable().getSqlMode());
-        StatementBase parsedStmt = SqlParserUtils.getStmt(new SqlParser(scanner), 0);
+        StatementBase parsedStmt = com.starrocks.sql.parser.SqlParser.parse(sql,
+                context.getSessionVariable().getSqlMode()).get(0);
         parsedStmt.setOrigStmt(new OriginStatement(sql, 0));
         return parsedStmt;
     }

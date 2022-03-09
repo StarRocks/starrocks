@@ -1,7 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#ifdef STARROCKS_WITH_AWS
-
 #pragma once
 
 #include "env/env.h"
@@ -30,14 +28,12 @@ public:
         return Status::NotSupported("EnvS3::new_sequential_file");
     }
 
-    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
-        return Status::NotSupported("EnvS3::new_writable_file");
-    }
+    // FIXME: `new_writable_file()` will not truncate an already-exist file/object, which does not satisfy
+    // the API requirement.
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override;
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
-                                                              const std::string& path) override {
-        return Status::NotSupported("EnvS3::new_writable_file");
-    }
+                                                              const std::string& path) override;
 
     StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const std::string& path) override {
         return Status::NotSupported("EnvS3::new_random_rw_file");
@@ -96,5 +92,3 @@ public:
 };
 
 } // namespace starrocks
-
-#endif

@@ -461,7 +461,7 @@ public class ExternalOlapTable extends OlapTable {
                     index.setRowCount(indexMeta.getRow_count());
                     index.setRollupIndexInfo(indexMeta.getRollup_index_id(), indexMeta.getRollup_finished_version());
                     for (TTabletMeta tTabletMeta : indexMeta.getTablets()) {
-                        Tablet tablet = new Tablet(tTabletMeta.getTablet_id());
+                        LocalTablet tablet = new LocalTablet(tTabletMeta.getTablet_id());
                         tablet.setCheckedVersion(tTabletMeta.getChecked_version());
                         tablet.setIsConsistent(tTabletMeta.isConsistent());
                         for (TReplicaMeta replicaMeta : tTabletMeta.getReplicas()) {

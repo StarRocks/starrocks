@@ -29,7 +29,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
@@ -96,14 +95,7 @@ public class RowCountAction extends RestBaseAction {
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     long indexRowCount = 0L;
                     for (Tablet tablet : index.getTablets()) {
-                        long tabletRowCount = 0L;
-                        for (Replica replica : tablet.getReplicas()) {
-                            if (replica.checkVersionCatchUp(version, false)
-                                    && replica.getRowCount() > tabletRowCount) {
-                                tabletRowCount = replica.getRowCount();
-                            }
-                        }
-                        indexRowCount += tabletRowCount;
+                        indexRowCount += tablet.getRowCount(version);
                     } // end for tablets
                     index.setRowCount(indexRowCount);
                     String indexName = olapTable.getIndexNameById(index.getId());

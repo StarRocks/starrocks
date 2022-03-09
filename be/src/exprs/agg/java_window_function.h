@@ -3,51 +3,18 @@
 #pragma once
 
 #include <cstring>
+#include <limits>
 #include <vector>
 
-#include "column/column_visitor.h"
-#include "column/column_visitor_adapter.h"
-#include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "exprs/agg/java_udaf_function.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
+#include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 
 namespace starrocks::vectorized {
 void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val);
-
-// Column to DirectByteBuffer, which could avoid some memory copy,
-// directly access the C++ address space in Java
-// Because DirectBuffer does not hold the referece of these memory,
-// we must ensure that it is valid during accesses to it
-
-class ConvertDirectBufferVistor : public ColumnVisitorAdapter<ConvertDirectBufferVistor> {
-public:
-    ConvertDirectBufferVistor(std::vector<DirectByteBuffer>& buffers) : ColumnVisitorAdapter(this), _buffers(buffers) {}
-    Status do_visit(const NullableColumn& column);
-    Status do_visit(const BinaryColumn& column);
-
-    template <typename T>
-    Status do_visit(const vectorized::FixedLengthColumn<T>& column) {
-        get_buffer_data(column, &_buffers);
-        return Status::OK();
-    }
-
-    template <typename T>
-    Status do_visit(const T& column) {
-        return Status::NotSupported("UDF Not Support Type");
-    }
-
-private:
-    template <class ColumnType>
-    void get_buffer_data(const ColumnType& column, std::vector<DirectByteBuffer>* buffers) {
-        const auto& container = column.get_data();
-        buffers->emplace_back((void*)container.data(), container.size() * sizeof(typename ColumnType::ValueType));
-    }
-
-private:
-    std::vector<DirectByteBuffer>& _buffers;
-};
 
 class JavaWindowFunction final : public JavaUDAFAggregateFunction<true> {
 public:
@@ -62,38 +29,37 @@ public:
                                    int64_t frame_end) const override {
         int num_rows = columns[0]->size();
         int num_args = ctx->get_num_args();
+        if (UNLIKELY(frame_start > std::numeric_limits<int32_t>::max() ||
+                     frame_end > std::numeric_limits<int32_t>::max())) {
+            ctx->set_error(fmt::format("too big window: start:{}, end:{}", frame_start, frame_end).c_str());
+        }
 
-        jobject input_cols[num_args];
+        std::vector<jobject> args;
         std::vector<DirectByteBuffer> buffers;
         ConvertDirectBufferVistor vistor(buffers);
-
-        for (int i = 0; i < num_args; ++i) {
-            auto type = ctx->get_arg_type(i)->type;
-            int buffers_idx = buffers.size();
-            columns[i]->accept(&vistor);
-            int buffers_sz = buffers.size() - buffers_idx;
-            input_cols[i] = ctx->impl()->udaf_ctxs()->udf_helper->create_boxed_array(
-                    type, num_rows, columns[i]->is_nullable(), &buffers[buffers_idx], buffers_sz);
-        }
+        auto& helper = JVMFunctionHelper::getInstance();
+        JNIEnv* env = helper.getEnv();
+        JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_args, num_rows, &args);
         ctx->impl()->udaf_ctxs()->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end,
-                                                             frame_start, frame_end, num_args, input_cols);
+                                                             frame_start, frame_end, num_args, args.data());
+        // release input cols
+        for (int i = 0; i < num_args; ++i) {
+            env->DeleteLocalRef(args[i]);
+        }
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
-        jobject val = ctx->impl()->udaf_ctxs()->_func->get_values(this->data(state).handle, start, end);
-        // insert values to column
         auto& helper = JVMFunctionHelper::getInstance();
+        jvalue val = ctx->impl()->udaf_ctxs()->_func->finalize(this->data(state).handle);
+        // insert values to column
         JNIEnv* env = helper.getEnv();
-        helper.getEnv()->PushLocalFrame(end - start);
         MethodTypeDescriptor desc = {(PrimitiveType)ctx->get_return_type().type, true};
         int sz = end - start;
         for (int i = 0; i < sz; ++i) {
-            jobject vi = env->GetObjectArrayElement((jobjectArray)val, i);
-            assign_jvalue(desc, dst, start + i, {.l = vi});
+            assign_jvalue(desc, dst, start + i, val);
         }
-        helper.getEnv()->PopLocalFrame(nullptr);
-        env->DeleteLocalRef(val);
+        env->DeleteLocalRef(val.l);
     }
 };
 } // namespace starrocks::vectorized

@@ -60,6 +60,7 @@ import java.util.stream.Collectors;
 
 public class ScalarOperatorToExpr {
     private static final Logger LOG = LogManager.getLogger(ScalarOperatorToExpr.class);
+
     public static Expr buildExecExpression(ScalarOperator expression, FormatterContext descTbl) {
         return expression.accept(new Formatter(), descTbl);
     }
@@ -255,9 +256,7 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitInPredicate(InPredicateOperator predicate, FormatterContext context) {
             List<Expr> args = Lists.newArrayList();
-            boolean allConstant = true;
             for (int i = 1; i < predicate.getChildren().size(); ++i) {
-                allConstant &= predicate.getChild(i).isConstant();
                 args.add(buildExecExpression(predicate.getChild(i), context));
             }
 
@@ -265,21 +264,17 @@ public class ScalarOperatorToExpr {
             InPredicate expr =
                     new InPredicate(buildExecExpression(predicate.getChild(0), context), args, predicate.isNotIn());
 
-            if (allConstant) {
-                expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN);
-            } else {
-                expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NEW_NOT_IN : TExprOpcode.FILTER_NEW_IN);
-            }
+            expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN);
 
             expr.setType(Type.BOOLEAN);
             return expr;
         }
 
-
         static Function isNullFN = new Function(new FunctionName("is_null_pred"),
                 new Type[] {Type.INVALID}, Type.BOOLEAN, false);
         static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
                 new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+
         {
             isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
             isNotNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);

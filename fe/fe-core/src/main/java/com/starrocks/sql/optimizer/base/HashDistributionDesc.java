@@ -18,7 +18,8 @@ public class HashDistributionDesc {
         //  the result will be error
         SHUFFLE_AGG, // hash property from shuffle agg
         SHUFFLE_JOIN, // hash property from shuffle join
-        BUCKET_JOIN // hash property from bucket join
+        BUCKET_JOIN, // hash property from bucket join
+        SHUFFLE_ENFORCE // parent node which can not satisfy the requirement will enforce child this hash property
     }
 
     private final List<Integer> columns;
@@ -43,16 +44,27 @@ public class HashDistributionDesc {
         if (item == this) {
             return true;
         }
-
-        if (!sourceType.equals(item.sourceType)) {
-            return false;
-        }
-
         return isColumnsSatisfy(this.columns, item.columns);
     }
 
     public static boolean isColumnsSatisfy(List<Integer> left, List<Integer> right) {
         return right.containsAll(left);
+    }
+
+    public boolean isLocalShuffle() {
+        return this.sourceType == SourceType.LOCAL;
+    }
+
+    public boolean isJoinShuffle() {
+        return this.sourceType == SourceType.SHUFFLE_JOIN;
+    }
+
+    public boolean isShuffleEnforce() {
+        return this.sourceType == SourceType.SHUFFLE_ENFORCE;
+    }
+
+    public boolean isBucketJoin() {
+        return this.sourceType == sourceType.BUCKET_JOIN;
     }
 
     @Override

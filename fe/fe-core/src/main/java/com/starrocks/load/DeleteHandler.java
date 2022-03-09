@@ -21,9 +21,11 @@
 
 package com.starrocks.load;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BinaryPredicate;
@@ -40,13 +42,17 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -68,6 +74,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.DeleteJob.DeleteState;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.PartitionColumnFilter;
+import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.QueryStateException;
@@ -92,6 +100,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -172,7 +181,12 @@ public class DeleteHandler implements Writable {
                 boolean noPartitionSpecified = partitionNames.isEmpty();
                 if (noPartitionSpecified) {
                     if (olapTable.getPartitionInfo().getType() == PartitionType.RANGE) {
-                        partitionNames.addAll(olapTable.getPartitionNames());
+                        partitionNames = extractPartitionNamesByCondition(stmt, olapTable);
+                        if (partitionNames.isEmpty()) {
+                            LOG.info("The delete statement [{}] prunes all partitions",
+                                    stmt.getOrigStmt().originStmt);
+                            return;
+                        }
                     } else if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
                         // this is a unpartitioned table, use table name as partition name
                         partitionNames.add(olapTable.getName());
@@ -201,7 +215,8 @@ public class DeleteHandler implements Writable {
 
                 // generate label
                 String label = "delete_" + UUID.randomUUID();
-                long jobId = stmt.getJobId();
+                long jobId = Catalog.getCurrentCatalog().getNextId();
+                stmt.setJobId(jobId);
                 // begin txn here and generate txn id
                 transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                         Lists.newArrayList(table.getId()), label, null,
@@ -225,7 +240,7 @@ public class DeleteHandler implements Writable {
                 for (Partition partition : partitions) {
                     for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         for (Tablet tablet : index.getTablets()) {
-                            totalReplicaNum += tablet.getReplicas().size();
+                            totalReplicaNum += ((LocalTablet) tablet).getReplicas().size();
                         }
                     }
                 }
@@ -243,7 +258,7 @@ public class DeleteHandler implements Writable {
                             // set push type
                             TPushType type = TPushType.DELETE;
 
-                            for (Replica replica : tablet.getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 long replicaId = replica.getId();
                                 long backendId = replica.getBackendId();
                                 countDownLatch.addMark(backendId, tabletId);
@@ -372,6 +387,110 @@ public class DeleteHandler implements Writable {
                 clearJob(deleteJob);
             }
         }
+    }
+
+    @VisibleForTesting
+    public List<String> extractPartitionNamesByCondition(DeleteStmt stmt, OlapTable olapTable)
+            throws DdlException, AnalysisException {
+        List<String> partitionNames = Lists.newArrayList();
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        Map<String, PartitionColumnFilter> columnFilters = extractColumnFilter(stmt, olapTable,
+                rangePartitionInfo.getPartitionColumns());
+        Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
+        if (columnFilters.isEmpty()) {
+            partitionNames.addAll(olapTable.getPartitionNames());
+        } else {
+            RangePartitionPruner pruner = new RangePartitionPruner(keyRangeById,
+                    rangePartitionInfo.getPartitionColumns(), columnFilters);
+            Collection<Long> selectedPartitionIds = pruner.prune();
+
+            if (selectedPartitionIds == null) {
+                partitionNames.addAll(olapTable.getPartitionNames());
+            } else {
+                for (Long partitionId : selectedPartitionIds) {
+                    Partition partition = olapTable.getPartition(partitionId);
+                    partitionNames.add(partition.getName());
+                }
+            }
+        }
+        return partitionNames;
+    }
+
+    private Map<String, PartitionColumnFilter> extractColumnFilter(DeleteStmt stmt, Table table, 
+                                                                   List<Column> partitionColumns)
+            throws DdlException, AnalysisException {
+        Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
+        List<Predicate> deleteConditions = stmt.getDeleteConditions();
+        Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (Column column : table.getBaseSchema()) {
+            nameToColumn.put(column.getName(), column);
+        }
+        for (Predicate condition : deleteConditions) {
+            SlotRef slotRef = (SlotRef) condition.getChild(0);
+            String columnName = slotRef.getColumnName();
+            
+            // filter condition is not partition column;
+            if (partitionColumns.stream().noneMatch(e -> e.getName().equals(columnName))) {
+                continue;
+            }
+
+            if (!nameToColumn.containsKey(columnName)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FIELD_ERROR, columnName, table.getName());
+            }
+            if (condition instanceof BinaryPredicate) {
+                BinaryPredicate binaryPredicate = (BinaryPredicate) condition;
+                LiteralExpr literalExpr = (LiteralExpr) binaryPredicate.getChild(1);
+                Column column = nameToColumn.get(columnName);
+                literalExpr = LiteralExpr.create(literalExpr.getStringValue(),
+                        Objects.requireNonNull(Type.fromPrimitiveType(column.getPrimitiveType())));
+                PartitionColumnFilter filter = columnFilters.getOrDefault(slotRef.getColumnName(),
+                        new PartitionColumnFilter());
+                switch (binaryPredicate.getOp()) {
+                    case EQ:
+                        filter.setLowerBound(literalExpr, true);
+                        filter.setUpperBound(literalExpr, true);
+                        break;
+                    case LE:
+                        filter.setUpperBound(literalExpr, true);
+                        filter.lowerBoundInclusive = true;
+                        break;
+                    case LT:
+                        filter.setUpperBound(literalExpr, false);
+                        filter.lowerBoundInclusive = true;
+                        break;
+                    case GE:
+                        filter.setLowerBound(literalExpr, true);
+                        break;
+                    case GT:
+                        filter.setLowerBound(literalExpr, false);
+                        break;
+                    default:
+                        break;
+                }
+                columnFilters.put(slotRef.getColumnName(), filter);
+            } else if (condition instanceof InPredicate) {
+                InPredicate inPredicate = (InPredicate) condition;
+                if (inPredicate.isNotIn()) {
+                    continue;
+                }
+                List<LiteralExpr> list = Lists.newArrayList();
+                Column column = nameToColumn.get(columnName);
+                for (int i = 1; i < inPredicate.getChildren().size(); i++) {
+                    LiteralExpr literalExpr = (LiteralExpr) inPredicate.getChild(i);
+                    literalExpr = LiteralExpr.create(literalExpr.getStringValue(),
+                            Objects.requireNonNull(Type.fromPrimitiveType(column.getPrimitiveType())));
+                    list.add(literalExpr);
+                }
+
+                PartitionColumnFilter filter = columnFilters.getOrDefault(slotRef.getColumnName(),
+                        new PartitionColumnFilter());
+                filter.setInPredicateLiterals(list);
+                columnFilters.put(slotRef.getColumnName(), filter);
+            }
+
+        }
+        return columnFilters;
     }
 
     private void commitJob(DeleteJob job, Database db, long timeoutMs) throws DdlException, QueryStateException {
@@ -603,7 +722,7 @@ public class DeleteHandler implements Writable {
                     updatePredicate(binaryPredicate, column, 1);
                 } catch (AnalysisException e) {
                     // ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_VALUE, value);
-                    throw new DdlException("Invalid column value[" + value + "] for column " + columnName);
+                    throw new DdlException("Invalid value for column " + columnName + ": " + e.getMessage());
                 }
             } else if (condition instanceof InPredicate) {
                 String value = null;

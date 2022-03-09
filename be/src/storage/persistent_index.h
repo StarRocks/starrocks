@@ -3,59 +3,41 @@
 #pragma once
 
 #include <memory>
+#include <tuple>
 
 #include "common/statusor.h"
+#include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
+#include "storage/fs/block_manager.h"
 #include "util/phmap/phmap.h"
+#include "util/phmap/phmap_dump.h"
 
 namespace starrocks {
-
-template <size_t KeySize>
-struct FixedKey {
-    uint8_t data[KeySize];
-};
-
-template <size_t KeySize>
-bool operator==(const FixedKey<KeySize>& lhs, const FixedKey<KeySize>& rhs) {
-    return memcmp(lhs.data, rhs.data, KeySize) == 0;
-}
 
 using IndexValue = uint64_t;
 static constexpr IndexValue NullIndexValue = -1;
 
-constexpr size_t PageSize = 4096;
-constexpr size_t PageHeaderSize = 64;
-constexpr size_t BucketPadding = 16;
-constexpr size_t BucketPerPage = 16;
-
-template <class T, class P>
-T npad(T v, P p) {
-    return (v + p - 1) / p;
-}
-
-template <class T, class P>
-T pad(T v, P p) {
-    return npad(v, p) * p;
-}
-
-struct IndexHash {
-    IndexHash(uint64_t hash) : hash(hash) {}
-    uint64_t hash;
-    uint64_t shard() const { return hash >> 48; }
-    uint64_t page() const { return (hash >> 16) & 0xffffffff; }
-    uint64_t bucket() const { return (hash >> 8) & (BucketPerPage - 1); }
-    uint64_t tag() const { return hash & 0xff; }
-};
+uint64_t key_index_hash(const void* data, size_t len);
 
 struct KeysInfo {
     std::vector<uint32_t> key_idxes;
     std::vector<uint64_t> hashes;
+    size_t size() const { return key_idxes.size(); }
 };
 
 class MutableIndex {
 public:
     MutableIndex();
     virtual ~MutableIndex();
+
+    // get the number of entries in the index (including NullIndexValue)
+    virtual size_t size() const = 0;
+
+    // flush mutable index into immutable index
+    // |num_entry|: num of valid entries in this index(excluding NullIndexValue)
+    // |wb|: file block written to
+    virtual Status flush_to_immutable_index(size_t num_entry, const EditVersion& version,
+                                            fs::WritableBlock& wb) const = 0;
 
     // batch get
     // |n|: size of key/value array
@@ -85,6 +67,12 @@ public:
     virtual Status upsert(size_t n, const void* keys, const IndexValue* values, KeysInfo* not_found,
                           size_t* num_found) = 0;
 
+    // load wals
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    virtual Status load_wals(size_t n, const void* keys, const IndexValue* values) = 0;
+
     // batch insert
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -99,6 +87,19 @@ public:
     // |num_found|: add the number of keys found to this argument
     virtual Status erase(size_t n, const void* keys, IndexValue* old_values, KeysInfo* not_found,
                          size_t* num_found) = 0;
+
+    // get dump size of hashmap
+    virtual size_t dump_bound() = 0;
+
+    virtual bool dump(phmap::BinaryOutputArchive& ar_out) = 0;
+
+    virtual bool load_snapshot(phmap::BinaryInputArchive& ar_in) = 0;
+
+    // [not thread-safe]
+    virtual size_t size() = 0;
+
+    // [not thread-safe]
+    virtual size_t capacity() = 0;
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 };
@@ -115,6 +116,29 @@ public:
 
     // batch check key existence
     Status check_not_exist(size_t n, const void* keys);
+
+    static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<fs::ReadableBlock>&& rb);
+
+private:
+    Status _get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values,
+                         size_t* num_found) const;
+
+    Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info) const;
+
+    std::unique_ptr<fs::ReadableBlock> _rb;
+    EditVersion _version;
+    size_t _size = 0;
+    size_t _fixed_key_size = 0;
+    size_t _fixed_value_size = 0;
+
+    struct ShardInfo {
+        uint64_t offset;
+        uint64_t bytes;
+        uint32_t npage;
+        uint32_t size;
+    };
+
+    std::vector<ShardInfo> _shards;
 };
 
 // A persistent primary index contains an in-memory L0 and an on-SSD/NVMe L1,
@@ -128,7 +152,8 @@ public:
 //   if (pi.upsert(upsert_keys, values, old_values))
 //   pi.erase(delete_keys, old_values)
 //   pi.commit()
-// If any error occurred between prepare and commit, abort should be called, the
+//   pi.on_commited()
+// If any error occurred between prepare and on_commited, abort should be called, the
 // index maybe corrupted, currently for simplicity, the whole index is cleared and rebuilt.
 class PersistentIndex {
 public:
@@ -144,6 +169,7 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
+    size_t kv_size = key_size() + sizeof(IndexValue);
 
     EditVersion version() const { return _version; }
 
@@ -151,7 +177,7 @@ public:
     Status create(size_t key_size, const EditVersion& version);
 
     // load required states from underlying file
-    Status load();
+    Status load(const PersistentIndexMetaPB& index_meta);
 
     // start modification with intended version
     Status prepare(const EditVersion& version);
@@ -160,7 +186,10 @@ public:
     Status abort();
 
     // commit modification
-    Status commit();
+    Status commit(PersistentIndexMetaPB* index_meta);
+
+    // apply modification
+    Status on_commited();
 
     // batch index operations
 
@@ -190,7 +219,32 @@ public:
     // |old_values|: return old values if key exist, or set to NullValue if not
     Status erase(size_t n, const void* keys, IndexValue* old_values);
 
+    size_t mutable_index_size();
+
+    size_t mutable_index_capacity();
+
 private:
+    std::string _get_l0_index_file_name(std::string& dir, const EditVersion& version);
+
+    size_t _dump_bound();
+
+    bool _dump(phmap::BinaryOutputArchive& ar_out);
+
+    // check _l0 should dump as snapshot or not
+    bool _can_dump_directly();
+
+    bool _load_snapshot(phmap::BinaryInputArchive& ar_in);
+
+    Status _delete_expired_index_file(const EditVersion& version);
+
+    // batch append wal
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array, if operation is erase, |values| is nullptr
+    Status _append_wal(size_t n, const void* key, const IndexValue* values);
+
+    Status _flush_l0();
+
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
@@ -198,6 +252,13 @@ private:
     EditVersion _version;
     std::unique_ptr<MutableIndex> _l0;
     std::unique_ptr<ImmutableIndex> _l1;
+    // |_offset|: the start offset of last wal in index file
+    // |_page_size|: the size of last wal in index file
+    uint64_t _offset = 0;
+    uint32_t _page_size = 0;
+    std::unique_ptr<fs::WritableBlock> _index_block;
+
+    bool _dump_snapshot = false;
 };
 
 } // namespace starrocks

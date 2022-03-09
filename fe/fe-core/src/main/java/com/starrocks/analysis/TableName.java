@@ -29,6 +29,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -65,21 +66,25 @@ public class TableName implements Writable {
         }
     }
 
-    public void normalization(ConnectContext connectContext) throws AnalysisException {
-        if (Strings.isNullOrEmpty(db)) {
-            db = connectContext.getDatabase();
+    public void normalization(ConnectContext connectContext) {
+        try {
             if (Strings.isNullOrEmpty(db)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
+                db = connectContext.getDatabase();
+                if (Strings.isNullOrEmpty(db)) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
+                }
+            } else {
+                if (Strings.isNullOrEmpty(connectContext.getClusterName())) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NAME_NULL);
+                }
+                db = ClusterNamespace.getFullName(connectContext.getClusterName(), db);
             }
-        } else {
-            if (Strings.isNullOrEmpty(connectContext.getClusterName())) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NAME_NULL);
-            }
-            db = ClusterNamespace.getFullName(connectContext.getClusterName(), db);
-        }
 
-        if (Strings.isNullOrEmpty(tbl)) {
-            throw new AnalysisException("Table name is null");
+            if (Strings.isNullOrEmpty(tbl)) {
+                throw new SemanticException("Table name is null");
+            }
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
         }
     }
 

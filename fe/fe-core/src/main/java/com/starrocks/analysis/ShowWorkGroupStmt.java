@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.Relation;
 
 // Show WorkGroups
@@ -15,8 +16,8 @@ import com.starrocks.sql.ast.Relation;
 //  SHOW RESOURCE_GROUPS
 
 public class ShowWorkGroupStmt extends ShowStmt {
-    private String name;
-    private boolean listAll;
+    private final String name;
+    private final boolean listAll;
 
     public ShowWorkGroupStmt(String name, boolean listAll) {
         this.name = name;
@@ -38,5 +39,10 @@ public class ShowWorkGroupStmt extends ShowStmt {
 
     public Relation analyze() {
         return null;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowWorkGroupStmt(this, context);
     }
 }

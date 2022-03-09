@@ -29,8 +29,8 @@ enum TExprOpcode {
     CAST,
     FILTER_IN,
     FILTER_NOT_IN,
-    FILTER_NEW_IN,
-    FILTER_NEW_NOT_IN,
+    FILTER_NEW_IN, // deprecated
+    FILTER_NEW_NOT_IN, // deprecated
     EQ,
     NE,
     LT,

@@ -105,11 +105,7 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
     Sender& sender = _senders[request.sender_id()];
     std::lock_guard l(sender.lock);
 
-    if (sender.next_seq < 0) {
-        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-        response->mutable_status()->add_error_msgs("Tablet channel has been cancelled");
-        return;
-    } else if (request.packet_seq() == sender.next_seq) {
+    if (request.packet_seq() == sender.next_seq) {
         sender.next_seq++;
     } else if (request.packet_seq() < sender.next_seq) {
         LOG(INFO) << "Ignore outdated request from " << cntl->remote_side() << ". seq=" << request.packet_seq()
@@ -295,10 +291,6 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
 }
 
 void TabletsChannel::cancel() {
-    for (auto& sender : _senders) {
-        std::lock_guard l(sender.lock);
-        sender.next_seq = -1;
-    }
     for (auto& it : _delta_writers) {
         (void)it.second->abort();
     }

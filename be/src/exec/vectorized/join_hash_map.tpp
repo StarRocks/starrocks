@@ -4,6 +4,13 @@
 
 namespace starrocks::vectorized {
 template <PrimitiveType PT>
+void JoinBuildFunc<PT>::prepare(RuntimeState* runtime, JoinHashTableItems* table_items) {
+    table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
+    table_items->first.resize(table_items->bucket_size, 0);
+    table_items->next.resize(table_items->row_count + 1, 0);
+}
+
+template <PrimitiveType PT>
 const Buffer<typename JoinBuildFunc<PT>::CppType>& JoinBuildFunc<PT>::get_key_data(
         const JoinHashTableItems& table_items) {
     if (table_items.key_columns[0]->is_nullable()) {
@@ -39,12 +46,11 @@ Status JoinBuildFunc<PT>::construct_hash_table(RuntimeState* state, JoinHashTabl
 }
 
 template <PrimitiveType PT>
-Status FixedSizeJoinBuildFunc<PT>::prepare(RuntimeState* state, JoinHashTableItems* table_items,
-                                           HashTableProbeState* probe_state) {
+void FixedSizeJoinBuildFunc<PT>::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
+    table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
+    table_items->first.resize(table_items->bucket_size, 0);
+    table_items->next.resize(table_items->row_count + 1, 0);
     table_items->build_key_column = ColumnType::create(table_items->row_count + 1);
-    probe_state->buckets.resize(state->chunk_size());
-    probe_state->is_nulls.resize(state->chunk_size());
-    return Status::OK();
 }
 
 template <PrimitiveType PT>
@@ -75,18 +81,16 @@ Status FixedSizeJoinBuildFunc<PT>::construct_hash_table(RuntimeState* state, Joi
 
     if (!null_columns.empty()) {
         for (size_t i = 0; i < quo; i++) {
-            _build_nullable_columns(table_items, probe_state, data_columns, null_columns,
-                                    1 + state->chunk_size() * i, state->chunk_size());
+            _build_nullable_columns(table_items, probe_state, data_columns, null_columns, 1 + state->chunk_size() * i,
+                                    state->chunk_size());
         }
-        _build_nullable_columns(table_items, probe_state, data_columns, null_columns,
-                                1 + state->chunk_size() * quo, rem);
+        _build_nullable_columns(table_items, probe_state, data_columns, null_columns, 1 + state->chunk_size() * quo,
+                                rem);
     } else {
         for (size_t i = 0; i < quo; i++) {
-            _build_columns(table_items, probe_state, data_columns,
-                           1 + state->chunk_size() * i, state->chunk_size());
+            _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * i, state->chunk_size());
         }
-        _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * quo,
-                       rem);
+        _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * quo, rem);
     }
     return Status::OK();
 }
@@ -260,23 +264,40 @@ void FixedSizeJoinProbeFunc<PT>::_probe_nullable_column(const JoinHashTableItems
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<PT, BuildFunc, ProbeFunc>::build_prepare(RuntimeState* state) {
+    BuildFunc().prepare(state, _table_items);
+}
+
+template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<PT, BuildFunc, ProbeFunc>::probe_prepare(RuntimeState* state) {
+    size_t chunk_size = state->chunk_size();
+    _probe_state->build_index.resize(chunk_size + 8);
+    _probe_state->probe_index.resize(chunk_size + 8);
+    _probe_state->next.resize(chunk_size);
+    _probe_state->probe_match_index.resize(chunk_size);
+    _probe_state->probe_match_filter.resize(chunk_size);
+    _probe_state->buckets.resize(chunk_size);
+
+    if (_table_items->join_type == TJoinOp::RIGHT_OUTER_JOIN || _table_items->join_type == TJoinOp::FULL_OUTER_JOIN ||
+        _table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN) {
+        _probe_state->build_match_index.resize(_table_items->row_count + 1, 0);
+        _probe_state->build_match_index[0] = 1;
+    }
+
+    ProbeFunc().prepare(state, _probe_state);
+}
+
+template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 Status JoinHashMap<PT, BuildFunc, ProbeFunc>::build(RuntimeState* state) {
-    // prepare
-    RETURN_IF_ERROR(BuildFunc().prepare(state, _table_items, _probe_state));
-
-    // construct hash table
-    RETURN_IF_ERROR(BuildFunc().construct_hash_table(state, _table_items, _probe_state));
-
-    return Status::OK();
+    return BuildFunc().construct_hash_table(state, _table_items, _probe_state);
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Columns& key_columns,
-                                                    ChunkPtr* probe_chunk, ChunkPtr* chunk,
-                                                    bool* has_remain) {
+                                                    ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* has_remain) {
     _probe_state->key_columns = &key_columns;
     {
-        SCOPED_TIMER(_table_items->search_ht_timer);
+        SCOPED_TIMER(_probe_state->search_ht_timer);
         RETURN_IF_ERROR(_search_ht(state, probe_chunk));
         if (_probe_state->count <= 0) {
             *has_remain = false;
@@ -292,7 +313,7 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
         // don't need output the real probe column
         {
             // output default values for probe-columns as placeholder.
-            SCOPED_TIMER(_table_items->output_probe_column_timer);
+            SCOPED_TIMER(_probe_state->output_probe_column_timer);
             if (!_table_items->with_other_conjunct) {
                 RETURN_IF_ERROR(_probe_null_output(chunk, _probe_state->count));
             } else {
@@ -304,7 +325,7 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
             RETURN_IF_ERROR(_build_output(chunk));
         }
         {
-            SCOPED_TIMER(_table_items->output_tuple_column_timer);
+            SCOPED_TIMER(_probe_state->output_tuple_column_timer);
             if (_table_items->need_create_tuple_columns) {
                 _build_tuple_output(chunk);
             }
@@ -316,7 +337,7 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
         // anti anti join without other join conjunct
         // don't need output the real build column
         {
-            SCOPED_TIMER(_table_items->output_probe_column_timer);
+            SCOPED_TIMER(_probe_state->output_probe_column_timer);
             RETURN_IF_ERROR(_probe_output(probe_chunk, chunk));
         }
         {
@@ -329,14 +350,14 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
             }
         }
         {
-            SCOPED_TIMER(_table_items->output_tuple_column_timer);
+            SCOPED_TIMER(_probe_state->output_tuple_column_timer);
             if (_table_items->need_create_tuple_columns) {
                 _probe_tuple_output(probe_chunk, chunk);
             }
         }
     } else {
         {
-            SCOPED_TIMER(_table_items->output_probe_column_timer);
+            SCOPED_TIMER(_probe_state->output_probe_column_timer);
             RETURN_IF_ERROR(_probe_output(probe_chunk, chunk));
         }
         {
@@ -344,7 +365,7 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const C
             RETURN_IF_ERROR(_build_output(chunk));
         }
         {
-            SCOPED_TIMER(_table_items->output_tuple_column_timer);
+            SCOPED_TIMER(_probe_state->output_tuple_column_timer);
             if (_table_items->need_create_tuple_columns) {
                 _probe_tuple_output(probe_chunk, chunk);
                 _build_tuple_output(chunk);
@@ -395,7 +416,7 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chun
     for (size_t i = 0; i < _table_items->probe_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
         SlotDescriptor* slot = hash_table_slot.slot;
-        auto &column = (*probe_chunk)->get_column_by_slot_id(slot->id());
+        auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
         if (hash_table_slot.need_output) {
             if (!column->is_nullable()) {
                 _copy_probe_column(&column, chunk, slot, to_nullable);
@@ -463,14 +484,14 @@ Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
         SlotDescriptor* slot = hash_table_slot.slot;
-        ColumnPtr &column = _table_items->build_chunk->columns()[i];
+        ColumnPtr& column = _table_items->build_chunk->columns()[i];
         if (hash_table_slot.need_output) {
             if (!column->is_nullable()) {
                 _copy_build_column(column, chunk, slot, to_nullable);
             } else {
                 _copy_build_nullable_column(column, chunk, slot);
             }
-        }  else {
+        } else {
             ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
             default_column->append_default(_probe_state->count);
             (*chunk)->append_column(std::move(default_column), slot->id());
@@ -633,7 +654,6 @@ template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 Status JoinHashMap<PT, BuildFunc, ProbeFunc>::_search_ht(RuntimeState* state, ChunkPtr* probe_chunk) {
     if (!_probe_state->has_remain) {
         _probe_state->probe_row_count = (*probe_chunk)->num_rows();
-        ProbeFunc().prepare(state, _table_items, _probe_state);
         RETURN_IF_ERROR(ProbeFunc().lookup_init(*_table_items, _probe_state));
 
         auto& build_data = BuildFunc().get_key_data(*_table_items);
@@ -762,11 +782,11 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
     }
 
 #define RETURN_IF_CHUNK_FULL()                                   \
-    if (match_count > state->chunk_size()) {               \
+    if (match_count > state->chunk_size()) {                     \
         _probe_state->next[i] = _table_items->next[build_index]; \
         _probe_state->cur_probe_index = i;                       \
         _probe_state->has_remain = true;                         \
-        _probe_state->count = state->chunk_size();         \
+        _probe_state->count = state->chunk_size();               \
         return;                                                  \
     }
 
@@ -774,14 +794,14 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
 // a Probe Chunk may generate multiple ResultChunks,
 // so each probe will have search one more row to determine whether it has reached the boundary,
 // so the next probe will start from the last recorded position
-#define PROCESS_PROBE_STAGE_FOR_RIGHT_JOIN_WITH_OTHER_CONJUNCT()                             \
-    if constexpr (!first_probe) {                                                            \
+#define PROCESS_PROBE_STAGE_FOR_RIGHT_JOIN_WITH_OTHER_CONJUNCT()                       \
+    if constexpr (!first_probe) {                                                      \
         _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()]; \
         _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()]; \
-        match_count = 1;                                                                     \
-        if (_probe_state->next[i] == 0) {                                                    \
-            i++;                                                                             \
-        }                                                                                    \
+        match_count = 1;                                                               \
+        if (_probe_state->next[i] == 0) {                                              \
+            i++;                                                                       \
+        }                                                                              \
     }
 
 #define PROBE_OVER()                   \
@@ -817,7 +837,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
         size_t build_index = _probe_state->next[i];
         if (build_index != 0) {
             do {
-                if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+                if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                     _probe_state->probe_index[match_count] = i;
                     _probe_state->build_index[match_count] = build_index;
                     match_count++;
@@ -852,7 +872,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+                                                                               const Buffer<CppType>& build_data,
+                                                                               const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     size_t match_count = 0;
     bool one_to_many = false;
@@ -880,7 +901,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(R
             RETURN_IF_CHUNK_FULL()
         } else {
             while (build_index != 0) {
-                if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+                if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                     _probe_state->probe_index[match_count] = i;
                     _probe_state->build_index[match_count] = build_index;
                     match_count++;
@@ -917,7 +938,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(R
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+                                                                              const Buffer<CppType>& build_data,
+                                                                              const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t probe_row_count = _probe_state->probe_row_count;
     for (size_t i = 0; i < probe_row_count; i++) {
@@ -927,7 +949,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join(Ru
         }
 
         while (index != 0) {
-            if (JoinKeyEqual<CppType>()(build_data[index], probe_data[i])) {
+            if (ProbeFunc().equal(build_data[index], probe_data[i])) {
                 _probe_state->probe_index[match_count] = i;
                 match_count++;
                 break;
@@ -943,7 +965,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join(Ru
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+                                                                              const Buffer<CppType>& build_data,
+                                                                              const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t probe_row_count = _probe_state->probe_row_count;
@@ -964,7 +987,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
 
             bool found = false;
             while (index != 0) {
-                if (JoinKeyEqual<CppType>()(build_data[index], probe_data[i])) {
+                if (ProbeFunc().equal(build_data[index], probe_data[i])) {
                     found = true;
                     break;
                 }
@@ -985,7 +1008,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
             }
             bool found = false;
             while (index != 0) {
-                if (JoinKeyEqual<CppType>()(build_data[index], probe_data[i])) {
+                if (ProbeFunc().equal(build_data[index], probe_data[i])) {
                     found = true;
                     break;
                 }
@@ -1005,7 +1028,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+                                                                                const Buffer<CppType>& build_data,
+                                                                                const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1026,7 +1050,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join(
         }
 
         while (build_index != 0) {
-            if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = build_index;
                 _probe_state->build_match_index[build_index] = 1;
@@ -1045,7 +1069,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join(
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+                                                                               const Buffer<CppType>& build_data,
+                                                                               const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1063,7 +1088,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
         }
 
         while (build_index != 0) {
-            if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 if (_probe_state->build_match_index[build_index] == 0) {
                     _probe_state->probe_index[match_count] = i;
                     _probe_state->build_index[match_count] = build_index;
@@ -1083,7 +1108,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+                                                                               const Buffer<CppType>& build_data,
+                                                                               const Buffer<CppType>& probe_data) {
     size_t probe_row_count = _probe_state->probe_row_count;
     for (size_t i = 0; i < probe_row_count; i++) {
         size_t index = _probe_state->next[i];
@@ -1092,7 +1118,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join(R
         }
 
         while (index != 0) {
-            if (JoinKeyEqual<CppType>()(build_data[index], probe_data[i])) {
+            if (ProbeFunc().equal(build_data[index], probe_data[i])) {
                 _probe_state->build_match_index[index] = 1;
             }
             index = _table_items->next[index];
@@ -1104,7 +1130,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join(R
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+                                                                               const Buffer<CppType>& build_data,
+                                                                               const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1131,7 +1158,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join(R
             RETURN_IF_CHUNK_FULL()
         } else {
             while (build_index != 0) {
-                if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+                if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                     _probe_state->probe_index[match_count] = i;
                     _probe_state->build_index[match_count] = build_index;
                     _probe_state->build_match_index[build_index] = 1;
@@ -1158,8 +1185,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join(R
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
-void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join_with_other_conjunct(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t i = _probe_state->cur_probe_index;
@@ -1191,7 +1218,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join_w
         }
 
         while (build_index != 0) {
-            if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = build_index;
                 _probe_state->probe_match_index[i]++;
@@ -1218,8 +1245,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join_w
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
-void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_with_other_conjunct(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t i = _probe_state->cur_probe_index;
@@ -1245,7 +1272,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_wi
         }
 
         while (build_index != 0) {
-            if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = build_index;
                 match_count++;
@@ -1262,8 +1289,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_wi
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
-void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_with_other_conjunct(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t i = _probe_state->cur_probe_index;
@@ -1295,7 +1322,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_wi
         }
 
         while (build_index != 0) {
-            if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = build_index;
                 _probe_state->probe_match_index[i]++;
@@ -1322,8 +1349,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_wi
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
-void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join_with_other_conjunct(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1337,7 +1364,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join_
         }
 
         while (build_index != 0) {
-            if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = build_index;
                 match_count++;
@@ -1353,8 +1380,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join_
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
-void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join_with_other_conjunct(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1368,7 +1395,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join_w
         }
 
         while (build_index != 0) {
-            if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = build_index;
                 match_count++;
@@ -1384,8 +1411,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join_w
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
-void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join_with_other_conjunct(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1399,7 +1426,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join_w
         }
 
         while (build_index != 0) {
-            if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = build_index;
                 match_count++;
@@ -1415,8 +1442,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join_w
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
-void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_with_other_conjunct(RuntimeState* state,
-        const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t i = _probe_state->cur_probe_index;
@@ -1446,7 +1473,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_w
             RETURN_IF_CHUNK_FULL()
         } else {
             while (build_index != 0) {
-                if (JoinKeyEqual<CppType>()(build_data[build_index], probe_data[i])) {
+                if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                     _probe_state->probe_index[match_count] = i;
                     _probe_state->build_index[match_count] = build_index;
                     _probe_state->probe_match_index[i]++;

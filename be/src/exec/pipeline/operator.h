@@ -72,7 +72,7 @@ public:
     // close is used to do the cleanup work
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
-    virtual Status close(RuntimeState* state);
+    virtual void close(RuntimeState* state);
 
     // Whether we could pull chunk from this operator
     virtual bool has_output() const = 0;
@@ -133,6 +133,10 @@ public:
     // for example, ResultSink
     static const int32_t s_pseudo_plan_node_id_for_result_sink;
     static const int32_t s_pseudo_plan_node_id_upper_bound;
+
+    RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+    RuntimeProfile* common_metrics() { return _common_metrics.get(); }
+    RuntimeProfile* unique_metrics() { return _unique_metrics.get(); }
 
 protected:
     OperatorFactory* _factory;
@@ -258,14 +262,14 @@ protected:
     const std::string _name;
     const int32_t _plan_node_id;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
-    RuntimeFilterHub* _runtime_filter_hub;
+    RuntimeFilterHub* _runtime_filter_hub = nullptr;
     std::vector<TupleId> _tuple_ids;
     // a set of TPlanNodeIds of HashJoinNode who generates Local RF that take effects on this operator.
     LocalRFWaitingSet _rf_waiting_set;
     std::once_flag _prepare_runtime_in_filters_once;
     RowDescriptor _row_desc;
     std::vector<ExprContext*> _runtime_in_filters;
-    std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector;
+    std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector = nullptr;
     std::vector<SlotId> _filter_null_value_columns;
     // Mappings from input slot to output slot of ancestor exec nodes (include itself).
     // It is used to rewrite runtime in filters.

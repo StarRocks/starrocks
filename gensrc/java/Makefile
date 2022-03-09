@@ -30,7 +30,7 @@ ${UDFHELPER_CLAZZ} : ${UDFHELPER_SRC} ${BUILD_DIR}/gen_java
 	${JAVAC} -d ${BUILD_DIR}/gen_java ${UDFHELPER_SRC}
 
 ${TARGET} : ${ANALYZER_CLAZZ} ${CLASSLOADER_CLAZZ} ${UDFHELPER_CLAZZ}
-	cd ${BUILD_DIR}/gen_java && jar -cvf udf-class-loader.jar .
+	cd ${BUILD_DIR}/gen_java && ${JAR} -cvf udf-class-loader.jar .
 
 
 clean: 

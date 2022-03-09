@@ -23,8 +23,9 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.List;
 
@@ -37,16 +38,27 @@ import java.util.List;
 public class CreateTableAsSelectStmt extends StatementBase {
     private final CreateTableStmt createTableStmt;
     private final List<String> columnNames;
-    private final QueryStmt queryStmt;
+    private final QueryStatement queryStatement;
     private final InsertStmt insertStmt;
 
+    // This constructor is meaningless,
+    // but currently cannot be deleted because CUP generates a code that calls this function.
     public CreateTableAsSelectStmt(CreateTableStmt createTableStmt,
                                    List<String> columnNames,
                                    QueryStmt queryStmt) {
         this.createTableStmt = createTableStmt;
         this.columnNames = columnNames;
-        this.queryStmt = queryStmt;
-        this.insertStmt = new InsertStmt(createTableStmt.getDbTbl(), queryStmt);
+        this.queryStatement = null;
+        this.insertStmt = null;
+    }
+
+    public CreateTableAsSelectStmt(CreateTableStmt createTableStmt,
+                                   List<String> columnNames,
+                                   QueryStatement queryStatement) {
+        this.createTableStmt = createTableStmt;
+        this.columnNames = columnNames;
+        this.queryStatement = queryStatement;
+        this.insertStmt = new InsertStmt(createTableStmt.getDbTbl(), queryStatement);
     }
 
     @Override
@@ -84,8 +96,8 @@ public class CreateTableAsSelectStmt extends StatementBase {
         return columnNames;
     }
 
-    public QueryStmt getQueryStmt() {
-        return queryStmt;
+    public QueryStatement getQueryStatement() {
+        return queryStatement;
     }
 
     public CreateTableStmt getCreateTableStmt() {
@@ -99,5 +111,10 @@ public class CreateTableAsSelectStmt extends StatementBase {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateTableAsSelectStatement(this, context);
     }
 }

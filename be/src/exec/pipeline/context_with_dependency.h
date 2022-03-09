@@ -30,7 +30,7 @@ public:
     // For pipeline, it is called by unref() when the last operator is unreffed.
     // For non-pipeline, it is called by close() of the exec node directly
     // without calling ref and unref. For example, AggregateBaseNode uses Aggregator.
-    virtual Status close(RuntimeState* state) = 0;
+    virtual void close(RuntimeState* state) = 0;
 
     // ref and unref are used to close context
     // when the last running related operator is closed.
@@ -41,11 +41,10 @@ public:
     void ref() { _num_running_operators.fetch_add(1, std::memory_order_relaxed); }
 
     // Called by operator::close. Close the context when the last running operator is closed.
-    Status unref(RuntimeState* state) {
+    void unref(RuntimeState* state) {
         if (_num_running_operators.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-            return close(state);
+            close(state);
         }
-        return Status::OK();
     }
 
     // When the output operator is finished, the context can be finished regardless of other running operators.

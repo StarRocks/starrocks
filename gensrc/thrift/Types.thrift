@@ -180,7 +180,9 @@ enum TTaskType {
     // this type of task will replace both ROLLUP and SCHEMA_CHANGE
     ALTER,
     INSTALL_PLUGIN,
-    UNINSTALL_PLUGIN
+    UNINSTALL_PLUGIN,
+    // this use for calculate enum count
+    NUM_TASK_TYPE
 }
 
 enum TStmtType {
@@ -354,6 +356,7 @@ enum TTableType {
     HDFS_TABLE,
     ICEBERG_TABLE,
     HUDI_TABLE,
+    JDBC_TABLE,
     VIEW = 20
 }
 

@@ -41,6 +41,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.FakeCatalog;
 import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -174,7 +175,7 @@ public class SchemaChangeJobV2Test {
         assertEquals(PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
 
-        Tablet baseTablet = baseIndex.getTablets().get(0);
+        LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
         List<Replica> replicas = baseTablet.getReplicas();
         Replica replica1 = replicas.get(0);
         Replica replica2 = replicas.get(1);
@@ -218,7 +219,7 @@ public class SchemaChangeJobV2Test {
         }
         MaterializedIndex shadowIndex = testPartition.getMaterializedIndices(IndexExtState.SHADOW).get(0);
         for (Tablet shadowTablet : shadowIndex.getTablets()) {
-            for (Replica shadowReplica : shadowTablet.getReplicas()) {
+            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getReplicas()) {
                 shadowReplica
                         .updateRowCount(testPartition.getVisibleVersion(),
                                 shadowReplica.getDataSize(), shadowReplica.getRowCount());
@@ -252,7 +253,7 @@ public class SchemaChangeJobV2Test {
         assertEquals(PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
 
-        Tablet baseTablet = baseIndex.getTablets().get(0);
+        LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
         List<Replica> replicas = baseTablet.getReplicas();
         Replica replica1 = replicas.get(0);
         Replica replica2 = replicas.get(1);
@@ -302,7 +303,7 @@ public class SchemaChangeJobV2Test {
         }
         MaterializedIndex shadowIndex = testPartition.getMaterializedIndices(IndexExtState.SHADOW).get(0);
         for (Tablet shadowTablet : shadowIndex.getTablets()) {
-            for (Replica shadowReplica : shadowTablet.getReplicas()) {
+            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getReplicas()) {
                 shadowReplica
                         .updateRowCount(testPartition.getVisibleVersion(),
                                 shadowReplica.getDataSize(), shadowReplica.getRowCount());

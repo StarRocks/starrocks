@@ -187,23 +187,20 @@ set_target_properties(thriftnb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 add_library(mysql STATIC IMPORTED)
 set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/mariadb/libmariadbclient.a)
 
-if (WITH_HDFS)
-    add_library(hdfs STATIC IMPORTED)
-    set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
-endif()
+add_library(hdfs STATIC IMPORTED)
+set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
 
 add_library(crypto STATIC IMPORTED)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 
-if (WITH_AWS)
-    set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
-    set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n")
-    foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
-        list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
-    endforeach()
-    find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer)
-    include_directories(${AWSSDK_INCLUDE_DIRS})
-endif()
+set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
+set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n")
+foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
+    list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/${lib}/cmake)
+    list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
+endforeach()
+find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer)
+include_directories(${AWSSDK_INCLUDE_DIRS})
 
 add_library(libevent STATIC IMPORTED)
 set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
@@ -338,14 +335,6 @@ elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
 endif()
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}  -Wno-attributes -DS2_USE_GFLAGS -DS2_USE_GLOG")
 
-if (WITH_HDFS)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_HDFS")
-endif()
-
-if (WITH_AWS)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_AWS")
-endif()
-
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -faligned-new")
 endif()
@@ -465,7 +454,6 @@ set(STARROCKS_LINK_LIBS
     Tools
     Geo
     Plugin
-    ObjectStore
     ${WL_END_GROUP}
 )
 
@@ -473,25 +461,25 @@ set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     mysql
 )
 
-if (WITH_HDFS)
-    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        hdfs
-        jvm
-    )
-    set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
-    add_library(jvm SHARED IMPORTED)
-    FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/jre/lib/*/libjvm.so)
-    set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
-    include_directories(${JAVA_HOME}/include)
-    include_directories(${JAVA_HOME}/include/linux)
-endif()
 
-if (WITH_AWS)
-    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        ${AWSSDK_LINK_LIBRARIES}
-        ${AWSSDK_PLATFORM_DEPS}
-        )
-endif()
+set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+    hdfs
+    jvm
+)
+set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
+add_library(jvm SHARED IMPORTED)
+FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/jre/lib/*/libjvm.so)
+set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
+include_directories(${JAVA_HOME}/include)
+include_directories(${JAVA_HOME}/include/linux)
+
+
+
+set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+    ${AWSSDK_LINK_LIBRARIES}
+    ${AWSSDK_PLATFORM_DEPS}
+    )
+
 
 # Set thirdparty libraries
 set(STARROCKS_DEPENDENCIES
@@ -613,7 +601,6 @@ add_subdirectory(${SRC_DIR}/geo)
 add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/io)
-add_subdirectory(${SRC_DIR}/object_store)
 add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
@@ -642,6 +629,32 @@ FUNCTION(ADD_BE_TEST TEST_NAME)
     endif()
     ADD_TEST(${TEST_FILE_NAME} "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_NAME}")
 ENDFUNCTION()
+
+# Add a benchmark to BE
+FUNCTION(ADD_BE_BENCH TEST_NAME)
+
+    if (${WITH_BENCH} STREQUAL "OFF")
+        return()
+    endif()
+    
+    set(BUILD_OUTPUT_ROOT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")
+    # This gets the directory where the test is from (e.g. 'exprs' or 'runtime')
+    get_filename_component(DIR_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
+    get_filename_component(TEST_DIR_NAME ${TEST_NAME} PATH)
+    get_filename_component(TEST_FILE_NAME ${TEST_NAME} NAME)
+
+    find_package(benchmark REQUIRED)
+    ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
+    TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} benchmark)
+
+    SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
+    SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})
+    if (NOT "${TEST_DIR_NAME}" STREQUAL "")
+        SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_DIR_NAME}")
+    endif()
+    ADD_TEST(${TEST_FILE_NAME} "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_NAME}")
+ENDFUNCTION()
+
 
 FUNCTION(ADD_BE_PLUGIN PLUGIN_NAME)
     set(BUILD_OUTPUT_ROOT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")

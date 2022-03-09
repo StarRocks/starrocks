@@ -21,7 +21,24 @@ public:
 
     uint64_t getLength() const override { return _length; }
 
-    uint64_t getNaturalReadSize() const override { return 8 * 1024 * 1024; }
+    // refers to paper `Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores`
+    uint64_t getNaturalReadSize() const override { return 1 * 1024 * 1024; }
+
+    // It's for read size after doing seek.
+    // When doing read after seek, we make assumption that we are doing random read because of seeking row group.
+    // And if we still use NaturalReadSize we probably read many row groups
+    // after the row group we want to read, and that will amplify read IO bytes.
+
+    // So the best way is to reduce read size, hopefully we just read that row group in one shot.
+    // We also have chance that we may not read enough at this shot, then we fallback to NaturalReadSize to read.
+    // The cost is, there is a extra IO, and we read 1/4 of NaturalReadSize more data.
+    // And the potential gain is, we save 3/4 of NaturalReadSize IO bytes.
+
+    // Normally 256K can cover a row group of a column(like integer or double, but maybe not string)
+    // And this value can not be too small because if we can not read a row group in a single shot,
+    // we will fallback to read in normal size, and we pay cost of a extra read.
+
+    uint64_t getNaturalReadSizeAfterSeek() const override { return 256 * 1024; }
 
     void read(void* buf, uint64_t length, uint64_t offset) override {
         SCOPED_RAW_TIMER(&_stats->io_ns);
@@ -30,15 +47,15 @@ public:
             throw orc::ParseError("Buffer is null");
         }
 
-        Status status = _file->read_at(offset, Slice((char*)buf, length));
+        Status status = _file->read_at_fully(offset, buf, length);
         if (!status.ok()) {
-            auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
+            auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
             throw orc::ParseError(msg);
         }
         _stats->bytes_read += length;
     }
 
-    const std::string& getName() const override { return _file->file_name(); }
+    const std::string& getName() const override { return _file->filename(); }
 
 private:
     RandomAccessFile* _file;
@@ -96,14 +113,6 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
         VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_params.min_max_tuple_desc->debug_string();
         for (ExprContext* ctx : _scanner_params.min_max_conjunct_ctxs) {
             VLOG_FILE << "OrcRowReaderFilter: min_max_ctx = " << ctx->root()->debug_string();
-        }
-    }
-    for (const auto& col : reader_params.materialized_columns) {
-        if (col.slot_desc->type().is_complex_type()) {
-            // not support to do point filter on complex type
-            // because corresponing orc cvb struct is quite hard to do filter.
-            _can_do_filter_on_orc_cvb = false;
-            break;
         }
     }
     for (const auto& r : _scanner_params.scan_ranges) {
@@ -315,26 +324,10 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
     return false;
 }
 
-void HdfsOrcScanner::update_counter() {
-    HdfsScanner::update_counter();
-
-#ifndef BE_TEST
-    COUNTER_UPDATE(_scanner_params.parent->_rows_read_counter, _stats.raw_rows_read);
-    COUNTER_UPDATE(_scanner_params.parent->_expr_filter_timer, _stats.expr_filter_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_io_timer, _stats.io_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_io_counter, _stats.io_count);
-    COUNTER_UPDATE(_scanner_params.parent->_bytes_read_counter, _stats.bytes_read);
-    COUNTER_UPDATE(_scanner_params.parent->_column_read_timer, _stats.column_read_ns);
-    COUNTER_UPDATE(_scanner_params.parent->_column_convert_timer, _stats.column_convert_ns);
-#endif
-}
-
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     auto input_stream =
             std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length, &_stats);
-#ifndef BE_TEST
-    SCOPED_TIMER(_scanner_params.parent->_reader_init_timer);
-#endif
+    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {
         orc::ReaderOptions options;
@@ -356,11 +349,26 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
 
     // create orc adapter for further reading.
+    int src_slot_index = 0;
+    bool has_conjunct_ctxs_by_slot = (_conjunct_ctxs_by_slot.size() != 0);
     for (const auto& it : _scanner_params.materialize_slots) {
         const std::string& name = it->col_name();
-        if (known_column_names.find(name) != known_column_names.end()) {
-            _src_slot_descriptors.emplace_back(it);
+        if (known_column_names.find(name) == known_column_names.end()) continue;
+        if (has_conjunct_ctxs_by_slot && _conjunct_ctxs_by_slot.find(it->id()) == _conjunct_ctxs_by_slot.end()) {
+            VLOG_FILE << "[ORC] lazy load field = " << it->col_name();
+            _lazy_load_ctx.lazy_load_slots.emplace_back(it);
+            _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
+            // reserve room for later set in `OrcScannerAdapter`
+            _lazy_load_ctx.lazy_load_orc_positions.emplace_back(0);
+        } else {
+            VLOG_FILE << "[ORC] active load field = " << it->col_name();
+            _lazy_load_ctx.active_load_slots.emplace_back(it);
+            _lazy_load_ctx.active_load_indices.emplace_back(src_slot_index);
+            // reserve room for later set in `OrcScannerAdapter`
+            _lazy_load_ctx.active_load_orc_positions.emplace_back(0);
         }
+        _src_slot_descriptors.emplace_back(it);
+        src_slot_index++;
     }
 
     _orc_adapter = std::make_unique<OrcScannerAdapter>(runtime_state, _src_slot_descriptors);
@@ -382,13 +390,15 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _orc_adapter->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector);
     }
     _orc_adapter->set_hive_column_names(_scanner_params.hive_column_names);
+    if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0) {
+        _orc_adapter->set_lazy_load_context(&_lazy_load_ctx);
+    }
     RETURN_IF_ERROR(_orc_adapter->init(std::move(reader)));
     return Status::OK();
 }
 
 void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
     _orc_adapter.reset(nullptr);
-    update_counter();
 }
 
 Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
@@ -396,42 +406,93 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     if (_should_skip_file) {
         return Status::EndOfFile("");
     }
-    {
-        SCOPED_RAW_TIMER(&_stats.column_read_ns);
-        RETURN_IF_ERROR(_orc_adapter->read_next());
-        RETURN_IF_ERROR(_orc_adapter->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache));
-    }
-    // if there is no rows returned from orc, we just returned.
-    // but we have to set num rows to 0, otherwise user may see old data.
-    if (_orc_adapter->get_cvb_size() == 0) {
-        (*chunk)->set_num_rows(0);
-        return Status::OK();
-    }
-    {
-        SCOPED_RAW_TIMER(&_stats.column_convert_ns);
-        ChunkPtr ptr = _orc_adapter->create_chunk();
-        RETURN_IF_ERROR(_orc_adapter->fill_chunk(&ptr));
-        ChunkPtr result = _orc_adapter->cast_chunk(&ptr);
-        *chunk = std::move(result);
-    }
-    ChunkPtr ck = *chunk;
-    // important to add columns before evaluation
-    // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-    _file_read_param.append_not_exised_columns_to_chunk(chunk, ck->num_rows());
-    _file_read_param.append_partition_column_to_chunk(chunk, ck->num_rows());
-    // do stats before we filter rows which does not match.
-    _stats.raw_rows_read += ck->num_rows();
-    for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
-        // do evaluation.
-        SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
-        if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
-            continue;
+
+    ChunkPtr& ck = *chunk;
+    // this infinite for loop is for retry.
+    for (;;) {
+        orc::RowReader::ReadPosition position;
+        size_t read_num_values = 0;
+        bool has_used_dict_filter = false;
+        {
+            SCOPED_RAW_TIMER(&_stats.column_read_ns);
+            RETURN_IF_ERROR(_orc_adapter->read_next(&position));
+            // read num values is how many rows actually read before doing dict filtering.
+            read_num_values = position.num_values;
+            RETURN_IF_ERROR(_orc_adapter->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
+                                                                       &_dict_filter));
+            if (_orc_adapter->get_cvb_size() != read_num_values) {
+                has_used_dict_filter = true;
+            }
         }
-        ExecNode::eval_conjuncts(it.second, ck.get());
-        if (ck->num_rows() == 0) {
+
+        size_t chunk_size = 0;
+        if (_orc_adapter->get_cvb_size() != 0) {
+            {
+                StatusOr<ChunkPtr> ret;
+                SCOPED_RAW_TIMER(&_stats.column_convert_ns);
+                if (!_orc_adapter->has_lazy_load_context()) {
+                    ret = _orc_adapter->get_chunk();
+                } else {
+                    ret = _orc_adapter->get_active_chunk();
+                }
+                RETURN_IF_ERROR(ret);
+                *chunk = std::move(ret.value());
+            }
+
+            // important to add columns before evaluation
+            // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
+            _file_read_param.append_not_exised_columns_to_chunk(chunk, ck->num_rows());
+            _file_read_param.append_partition_column_to_chunk(chunk, ck->num_rows());
+            chunk_size = ck->num_rows();
+            // do stats before we filter rows which does not match.
+            _stats.raw_rows_read += chunk_size;
+            _chunk_filter.assign(chunk_size, 1);
+            {
+                SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
+                for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
+                    // do evaluation.
+                    if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
+                        continue;
+                    }
+                    chunk_size = ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter);
+                    if (chunk_size == 0) {
+                        break;
+                    }
+                }
+            }
+            if (chunk_size != 0 && chunk_size != ck->num_rows()) {
+                ck->filter(_chunk_filter);
+            }
+        }
+        ck->set_num_rows(chunk_size);
+
+        if (!_orc_adapter->has_lazy_load_context()) {
             return Status::OK();
         }
+
+        // if has lazy load fields, skip it if chunk_size == 0
+        if (chunk_size == 0) {
+            continue;
+        }
+        {
+            SCOPED_RAW_TIMER(&_stats.column_read_ns);
+            _orc_adapter->lazy_seek_to(position.row_in_stripe);
+            _orc_adapter->lazy_read_next(read_num_values);
+        }
+        {
+            SCOPED_RAW_TIMER(&_stats.column_convert_ns);
+            if (has_used_dict_filter) {
+                _orc_adapter->lazy_filter_on_cvb(&_dict_filter);
+            }
+            _orc_adapter->lazy_filter_on_cvb(&_chunk_filter);
+            StatusOr<ChunkPtr> ret = _orc_adapter->get_lazy_chunk();
+            RETURN_IF_ERROR(ret);
+            Chunk& ret_ck = *(ret.value());
+            ck->merge(std::move(ret_ck));
+        }
+        return Status::OK();
     }
+    __builtin_unreachable();
     return Status::OK();
 }
 

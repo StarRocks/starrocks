@@ -138,9 +138,9 @@ public class CatalogTestUtil {
                     if (slaveTablet == null) {
                         return false;
                     }
-                    List<Replica> allReplicas = masterTablet.getReplicas();
+                    List<Replica> allReplicas = ((LocalTablet) masterTablet).getReplicas();
                     for (Replica masterReplica : allReplicas) {
-                        Replica slaveReplica = slaveTablet.getReplicaById(masterReplica.getId());
+                        Replica slaveReplica = ((LocalTablet) slaveTablet).getReplicaById(masterReplica.getId());
                         if (slaveReplica.getBackendId() != masterReplica.getBackendId()
                                 || slaveReplica.getVersion() != masterReplica.getVersion()
                                 || slaveReplica.getLastFailedVersion() != masterReplica.getLastFailedVersion()
@@ -168,7 +168,7 @@ public class CatalogTestUtil {
                 ReplicaState.NORMAL, -1, 0);
 
         // tablet
-        Tablet tablet = new Tablet(tabletId);
+        LocalTablet tablet = new LocalTablet(tabletId);
 
         // index
         MaterializedIndex index = new MaterializedIndex(indexId, IndexState.NORMAL);

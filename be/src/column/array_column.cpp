@@ -144,7 +144,7 @@ Status ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
     }
 
     if (!need_resize) {
-        std::vector<uint32_t> element_idxes;
+        Buffer<uint32_t> element_idxes;
         for (size_t i = 0; i < replace_num; ++i) {
             size_t element_count = src_offsets.get_data()[i + 1] - src_offsets.get_data()[i];
             size_t element_offset = _offsets->get_data()[indexes[i]];
@@ -230,7 +230,7 @@ void ArrayColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, s
     }
 }
 
-void ArrayColumn::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+void ArrayColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     reserve(chunk_size);
     for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
@@ -382,6 +382,19 @@ void ArrayColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; ++i) {
         crc32_hash_at(hash + i, i);
     }
+}
+
+int64_t ArrayColumn::xor_checksum(uint32_t from, uint32_t to) const {
+    // The XOR of ArrayColumn
+    // XOR the offsets column and elements column
+    int64_t xor_checksum = 0;
+    for (size_t idx = from; idx < to; ++idx) {
+        int64_t array_size = _offsets->get_data()[idx + 1] - _offsets->get_data()[idx];
+        xor_checksum ^= array_size;
+    }
+    uint32_t element_from = _offsets->get_data()[from];
+    uint32_t element_to = _offsets->get_data()[to];
+    return (xor_checksum ^ _elements->xor_checksum(element_from, element_to));
 }
 
 void ArrayColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {

@@ -14,13 +14,8 @@ class OrcRowReaderFilter;
 class HdfsOrcScanner final : public HdfsScanner {
 public:
     HdfsOrcScanner() = default;
-    ~HdfsOrcScanner() override {
-        if (_runtime_state != nullptr) {
-            close(_runtime_state);
-        }
-    }
+    ~HdfsOrcScanner() override { cleanup(); }
 
-    void update_counter();
     Status do_open(RuntimeState* runtime_state) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
@@ -39,8 +34,11 @@ private:
     // writing unittest of customized filter
     bool _use_orc_sargs;
     std::vector<SlotDescriptor*> _src_slot_descriptors;
+    OrcScannerAdapter::LazyLoadContext _lazy_load_ctx;
     std::unique_ptr<OrcScannerAdapter> _orc_adapter;
     std::shared_ptr<OrcRowReaderFilter> _orc_row_reader_filter;
+    Filter _dict_filter;
+    Filter _chunk_filter;
 };
 
 } // namespace starrocks::vectorized

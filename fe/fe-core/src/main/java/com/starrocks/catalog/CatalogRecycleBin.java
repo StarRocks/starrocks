@@ -599,7 +599,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        for (Replica replica : tablet.getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }
                     }
@@ -651,7 +651,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 for (Tablet tablet : index.getTablets()) {
                     long tabletId = tablet.getId();
                     invertedIndex.addTablet(tabletId, tabletMeta);
-                    for (Replica replica : tablet.getReplicas()) {
+                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                         invertedIndex.addReplica(tabletId, replica);
                     }
                 }

@@ -37,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
@@ -286,6 +287,20 @@ public class Explain {
                                     .collect(Collectors.joining(", ")) + "]"))
                     .append("\n");
 
+            buildCostEstimate(sb, optExpression, context.step);
+            buildCommonProperty(sb, scan, context.step);
+            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
+
+        public OperatorStr visitPhysicalJDBCScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+            PhysicalJDBCScanOperator scan = (PhysicalJDBCScanOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("- JDBC-SCAN [")
+                    .append(scan.getTable().getName())
+                    .append("]")
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
             buildCostEstimate(sb, optExpression, context.step);
             buildCommonProperty(sb, scan, context.step);
             return new OperatorStr(sb.toString(), context.step, Collections.emptyList());

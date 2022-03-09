@@ -6,7 +6,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -59,14 +58,8 @@ public class LimitPruneTabletsRule extends TransformationRule {
             MaterializedIndex index = partition.getIndex(olapScanOperator.getSelectedIndexId());
 
             for (Tablet tablet : index.getTablets()) {
-                long tabletRowCount = 0L;
-                for (Replica replica : tablet.getReplicas()) {
-                    if (replica.checkVersionCatchUp(version, false)
-                            && replica.getRowCount() > tabletRowCount) {
-                        tabletRowCount = replica.getRowCount();
-                        break;
-                    }
-                }
+                long tabletRowCount = tablet.getRowCount(version);
+
                 // Needn't select empty tablet
                 if (tabletRowCount == 0) {
                     continue;

@@ -115,7 +115,7 @@ void gc_tcmalloc_memory(void* arg_this) {
 }
 
 /*
- * this thread will calculate some metrics at a fix interval(15 sec)
+ * This thread will calculate some metrics at a fix interval(15 sec)
  * 1. push bytes per second
  * 2. scan bytes per second
  * 3. max io util of all disks
@@ -147,25 +147,25 @@ void calculate_metrics(void* arg_this) {
             long interval = (current_ts - last_ts);
             last_ts = current_ts;
 
-            // 1. push bytes per second
+            // 1. push bytes per second.
             int64_t current_push_bytes = StarRocksMetrics::instance()->push_request_write_bytes.value();
             int64_t pps = (current_push_bytes - lst_push_bytes) / (interval == 0 ? 1 : interval);
             StarRocksMetrics::instance()->push_request_write_bytes_per_second.set_value(pps < 0 ? 0 : pps);
             lst_push_bytes = current_push_bytes;
 
-            // 2. query bytes per second
+            // 2. query bytes per second.
             int64_t current_query_bytes = StarRocksMetrics::instance()->query_scan_bytes.value();
             int64_t qps = (current_query_bytes - lst_query_bytes) / (interval == 0 ? 1 : interval);
             StarRocksMetrics::instance()->query_scan_bytes_per_second.set_value(qps < 0 ? 0 : qps);
             lst_query_bytes = current_query_bytes;
 
-            // 3. max disk io util
+            // 3. max disk io util.
             StarRocksMetrics::instance()->max_disk_io_util_percent.set_value(
                     StarRocksMetrics::instance()->system_metrics()->get_max_io_util(lst_disks_io_time, 15));
-            // update lst map
+            // Update lst map.
             StarRocksMetrics::instance()->system_metrics()->get_disks_io_time(&lst_disks_io_time);
 
-            // 4. max network traffic
+            // 4. max network traffic.
             int64_t max_send = 0;
             int64_t max_receive = 0;
             StarRocksMetrics::instance()->system_metrics()->get_max_net_traffic(

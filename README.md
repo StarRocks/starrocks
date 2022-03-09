@@ -25,17 +25,11 @@ StarRocks’s streamlined architecture is mainly composed of two modules, Fronte
 
 StarRocks can provide satisfying performance in various data analytics scenarios, including multi-dimensional screening and analysis, real-time data analytics, ad hoc analysis. StarRocks also supports thousands of concurrent users. As a result, StarRocks is widely used by companies in business intelligence, real-time data warehouse, user profiling, dashboards, order analysis, operation, and monitoring analysis, anti-fraud, and risk control. At present, over 100 medium-sized and large enterprises in various industries have used StarRocks in their online production environment, including Airbnb, JD.com, Tencent, Trip.com and other well-known companies. There are thousands of StarRocks servers running stably in the production environment.
 
-## Upstream
+## Fork
 
-[Apache Doris(incubating)](https://github.com/apache/incubator-doris) is the upstream of StarRocks. We are very grateful to Apache Doris(incubating) community for contributing such an excellent OLAP database.
+StarRocks forked from Apache Doris(incubating) 0.13 in early 2020. We recreated many important parts of the database from then, including a full vectorized execution engine, a brand new CBO optimizer, a novel real-time update engine, and query federation for data lakes.
 
-StarRocks was developed based on version 0.13 of Apache Doris (incubating) released in early 2020. We have adopted the framework and columnar storage engine from Apache Doris(incubating), while added a full vectorized execution engine, CBO optimizer, real-time update engine, and other important features. 
-
-Of the approximately 700K lines of code currently in StarRocks, about 40% is identical to Apache Doris(incubating), which is still under the Apache 2.0 license, leaving 60% as additions or modification.
-
-We will continue to contribute to Apache Doris(incubating) and help to build the open source ecosystem in the future. 
-
-\* Statistics from GitHub, September 2021
+Today, there are only about 30% of the code in StarRocks is identical to Apache Doris(incubating).
 
 ## Build
 

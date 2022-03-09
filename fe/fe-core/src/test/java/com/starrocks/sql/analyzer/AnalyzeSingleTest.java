@@ -1,7 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -13,6 +18,7 @@ import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeSingleTest {
     // use a unique dir so that it won't be conflict with other unit test which
@@ -59,6 +65,19 @@ public class AnalyzeSingleTest {
          */
         analyzeFail("select error from t0");
         analyzeFail("select v1 from t_error");
+
+        analyzeSuccess("select v1 from t0 temporary partition(t1,t2)");
+        analyzeFail("SELECT v1,v2,v3 FROM t0 INTO OUTFILE \"hdfs://path/to/result_\""
+                + "FORMAT AS PARQUET PROPERTIES" +
+                "(\"broker.name\" = \"my_broker\"," +
+                "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
+                "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");", "Only support CSV format");
+
+        analyzeSuccess("SELECT v1,v2,v3 FROM t0  INTO OUTFILE \"hdfs://path/to/result_\""
+                + "FORMAT AS CSV PROPERTIES" +
+                "(\"broker.name\" = \"my_broker\"," +
+                "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
+                "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
     }
 
     @Test
@@ -310,6 +329,9 @@ public class AnalyzeSingleTest {
         analyzeFail("select max(TIMEDIFF(NULL, NULL)) from t0");
         analyzeSuccess("select abs(TIMEDIFF(NULL, NULL)) from t0");
         analyzeFail(" SELECT t0.v1 FROM t0 GROUP BY t0.v1 HAVING ((MAX(TIMEDIFF(NULL, NULL))) IS NULL)");
+
+        analyzeSuccess("select right('foo', 1)");
+        analyzeSuccess("select left('foo', 1)");
     }
 
     @Test
@@ -320,70 +342,107 @@ public class AnalyzeSingleTest {
 
     @Test
     public void testColumnNames() {
-        QueryRelation query = analyzeSuccess("" +
+        QueryRelation query = ((QueryStatement) analyzeSuccess("" +
                 "select v1, v2, v3," +
                 "cast(v1 as int), cast(v1 as char), cast(v1 as varchar), cast(v1 as decimal(10,5)), cast(v1 as boolean)," +
-                "abs(v1), " +
+                "abs(v1)," +
                 "v1 * v1 / v1 % v1 + v1 - v1 DIV v1," +
                 "v2&~v1|v3^1,v1+20, case v2 when v3 then 1 else 0 end " +
-                "from t0");
+                "from t0")).getQueryRelation();
 
         Assert.assertEquals(
                 "v1,v2,v3," +
-                        "CAST(`v1` AS INT),CAST(`v1` AS CHAR),CAST(`v1` AS VARCHAR),CAST(`v1` AS DECIMAL64(10,5)),CAST(`v1` AS BOOLEAN)," +
-                        "abs(`v1`)," +
-                        "`v1` * `v1` / `v1` % `v1` + `v1` - `v1` DIV `v1`,`v2` & ~ `v1` | `v3` ^ 1," +
-                        "`v1` + 20," +
-                        "CASE `v2` WHEN `v3` THEN 1 ELSE 0 END",
+                        "CAST(v1 AS INT),CAST(v1 AS CHAR),CAST(v1 AS VARCHAR),CAST(v1 AS DECIMAL64(10,5)),CAST(v1 AS BOOLEAN)," +
+                        "abs(v1)," +
+                        "v1 * v1 / v1 % v1 + v1 - v1 DIV v1,v2 & ~ v1 | v3 ^ 1," +
+                        "v1 + 20," +
+                        "CASE v2 WHEN v3 THEN 1 ELSE 0 END",
                 String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess(
-                "select * from (select v1 as v, sum(v2) from t0 group by v1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v");
-        Assert.assertEquals("v,sum(`v2`),v,v2", String.join(",", query.getColumnOutputNames()));
+        query = ((QueryStatement) analyzeSuccess(
+                "select * from (select v1 as v, sum(v2) from t0 group by v1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v")
+        ).getQueryRelation();
+        Assert.assertEquals("v,sum(v2),v,v2", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess(
-                "select * from (select v1 as v, sum(v2) from t0 group by v1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v");
-        Assert.assertEquals("v,sum(`v2`),v,v2", String.join(",", query.getColumnOutputNames()));
+        query = ((QueryStatement) analyzeSuccess(
+                "select * from (select v1 as v, sum(v2) from t0 group by v1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v"))
+        .getQueryRelation();
+        Assert.assertEquals("v,sum(v2),v,v2", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess(
-                "select * from (select v1 as tt from t0,t1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.tt = b.v");
+        query = ((QueryStatement) analyzeSuccess(
+                "select * from (select v1 as tt from t0,t1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.tt = b.v")).getQueryRelation();
         Assert.assertEquals("tt,v,v2", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess("select *, v1+1 from t0");
-        Assert.assertEquals("v1,v2,v3,`v1` + 1", String.join(",", query.getColumnOutputNames()));
+        query = ((QueryStatement) analyzeSuccess("select *, v1+1 from t0")).getQueryRelation();
+        Assert.assertEquals("v1,v2,v3,v1 + 1", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess("select t1.* from t0 left outer join t1 on t0.v1+3=t1.v4");
+        query = ((QueryStatement) analyzeSuccess("select t1.* from t0 left outer join t1 on t0.v1+3=t1.v4")).getQueryRelation();
         Assert.assertEquals("v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess("select v1+1,a.* from (select * from t0) a");
-        Assert.assertEquals("`v1` + 1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
+        query = ((QueryStatement) analyzeSuccess("select v1+1,a.* from (select * from t0) a")).getQueryRelation();
+        Assert.assertEquals("v1 + 1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess("select v2+1,a.* from (select v1 as v, v2, v3+2 from t0) a left join t1 on a.v = t1.v4");
-        Assert.assertEquals("`v2` + 1,v,v2,`v3` + 2", String.join(",", query.getColumnOutputNames()));
+        query = ((QueryStatement) analyzeSuccess("select v2+1,a.* from (select v1 as v, v2, v3+2 from t0) a left join t1 on a.v = t1.v4")).getQueryRelation();
+        Assert.assertEquals("v2 + 1,v,v2,v3 + 2", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess("select 1 as a, 2 as b");
+        query = ((QueryStatement) analyzeSuccess("select 1 as a, 2 as b")).getQueryRelation();
         Assert.assertEquals("a,b", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess("select * from (values (1,2,3), (4,5,6)) v;");
+        query = ((QueryStatement) analyzeSuccess("select * from (values (1,2,3), (4,5,6)) v;")).getQueryRelation();
         Assert.assertEquals("column_0,column_1,column_2", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess("select * from (select t0.*, v4 from t0 inner join t1 on v1 = v5) tmp");
+        query = ((QueryStatement) analyzeSuccess("select * from (select t0.*, v4 from t0 inner join t1 on v1 = v5) tmp")).getQueryRelation();
         Assert.assertEquals("v1,v2,v3,v4", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess("select t1.* from t0 inner join t1 on v1 = v4 order by v1");
+        query = ((QueryStatement) analyzeSuccess("select t1.* from t0 inner join t1 on v1 = v4 order by v1")).getQueryRelation();
         Assert.assertEquals("v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess("select v4,v1,t1.* from t0 inner join t1 on v1 = v4 order by v1");
+        query = ((QueryStatement) analyzeSuccess("select v4,v1,t1.* from t0 inner join t1 on v1 = v4 order by v1")).getQueryRelation();
         Assert.assertEquals("v4,v1,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
-        query = analyzeSuccess("select v1+2 as v, * from t0 order by v+1");
+        query = ((QueryStatement) analyzeSuccess("select v1+2 as v, * from t0 order by v+1")).getQueryRelation();
         Assert.assertEquals("v,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
     }
-
 
     @Test
     public void testDual() {
         analyzeSuccess("select 1,2,3 from dual");
         analyzeFail("select * from dual", "No tables used");
+    }
+
+    @Test
+    public void testSqlMode() {
+        ConnectContext connectContext = getConnectContext();
+        analyzeFail("select 'a' || 'b' from t0",
+                "Operand '('a') OR ('b')' part of predicate ''a'' should return type 'BOOLEAN'");
+
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select true || false from t0",
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statementBase, connectContext);
+        Assert.assertEquals("SELECT (TRUE) OR (FALSE) FROM `default_cluster:test`.`t0`"
+                , AST2SQL.toString(statementBase));
+
+        connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select 'a' || 'b' from t0",
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statementBase, connectContext);
+        Assert.assertEquals("SELECT concat('a', 'b') FROM `default_cluster:test`.`t0`",
+                AST2SQL.toString(statementBase));
+
+        statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statementBase, connectContext);
+        Assert.assertEquals("SELECT * FROM `default_cluster:test`.`tall` WHERE ta LIKE concat(concat('h', 'a', 'i'), '%')",
+                AST2SQL.toString(statementBase));
+
+        connectContext.getSessionVariable().setSqlMode(0);
+        statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")|| true",
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statementBase, connectContext);
+        Assert.assertEquals("SELECT * FROM `default_cluster:test`.`tall` WHERE (ta LIKE concat('h', 'a', 'i')) OR (TRUE)",
+                AST2SQL.toString(statementBase));
+
+        analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
+                "LIKE concat('h', 'a', 'i')) OR ('%')' part of predicate ''%'' should return type 'BOOLEAN'");
     }
 }

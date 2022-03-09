@@ -10,22 +10,17 @@ import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.InsertStmt;
-import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 
@@ -33,54 +28,27 @@ import java.util.List;
 import java.util.Map;
 
 public class CTASAnalyzer {
-    private final Catalog catalog;
-    private final ConnectContext session;
-
-    public CTASAnalyzer(Catalog catalog, ConnectContext session) {
-        this.catalog = catalog;
-        this.session = session;
-    }
 
     @Deprecated
-    public Relation transformCTASStmt(CreateTableAsSelectStmt createTableAsSelectStmt) {
+    public static void transformCTASStmt(CreateTableAsSelectStmt createTableAsSelectStmt, ConnectContext session) {
         List<String> columnNames = createTableAsSelectStmt.getColumnNames();
-        QueryStmt queryStmt = createTableAsSelectStmt.getQueryStmt();
+        QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
         CreateTableStmt createTableStmt = createTableAsSelectStmt.getCreateTableStmt();
 
         if (createTableStmt.isExternal()) {
             throw new SemanticException("CTAS does not support create external table");
         }
 
-        QueryRelation queryRelation = new QueryAnalyzer(catalog, session)
-                .transformQueryStmt(queryStmt, new Scope(RelationId.anonymous(), new RelationFields()));
+        Analyzer.analyze(queryStatement, session);
 
         // Pair<TableName, Pair<ColumnName, ColumnAlias>>
         Map<Pair<String, Pair<String, String>>, Table> columnNameToTable = Maps.newHashMap();
-        Map<String, Table> tableRefToTable = Maps.newHashMap();
+        Map<String, Table> tableRefToTable = AnalyzerUtils.collectAllTable(queryStatement);
 
         // For replication_num, we select the maximum value of all tables replication_num
         int defaultReplicationNum = 1;
-        List<TableRef> tableRefs = ((SelectStmt) queryStmt).getTableRefs();
-        for (TableRef tableRef : tableRefs) {
-            String[] aliases = tableRef.getAliases();
-            Table table = catalog.getDb(tableRef.getName().getDb()).getTable(tableRef.getName().getTbl());
-            if (table instanceof OlapTable) {
-                OlapTable olapTable = (OlapTable) table;
-                Short replicationNum = olapTable.getDefaultReplicationNum();
-                if (replicationNum > defaultReplicationNum) {
-                    defaultReplicationNum = replicationNum;
-                }
-            }
-            if (aliases != null) {
-                for (String alias : aliases) {
-                    tableRefToTable.put(alias, table);
-                }
-            } else {
-                tableRefToTable.put(table.getName(), table);
-            }
-        }
 
-        List<Field> allFields = queryRelation.getRelationFields().getAllFields();
+        List<Field> allFields = queryStatement.getQueryRelation().getRelationFields().getAllFields();
         List<String> finalColumnNames = Lists.newArrayList();
 
         if (columnNames != null) {
@@ -139,26 +107,26 @@ public class CTASAnalyzer {
             }
 
             int defaultBucket = 10;
-            DistributionDesc distributionDesc = new HashDistributionDesc(defaultBucket, Lists.newArrayList(defaultColumnName));
+            DistributionDesc distributionDesc =
+                    new HashDistributionDesc(defaultBucket, Lists.newArrayList(defaultColumnName));
             createTableStmt.setDistributionDesc(distributionDesc);
         }
 
-        Relation relation = new CreateTableAnalyzer(catalog, session).transformCreateTableStmt(createTableStmt);
+        CreateTableAnalyzer.transformCreateTableStmt(createTableStmt, session);
 
         InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
-        insertStmt.setQueryStmt(queryStmt);
-
-        return relation;
+        insertStmt.setQueryStatement(queryStatement);
     }
 
     // For char and varchar types, use the inferred length if the length can be inferred,
     // otherwise use the longest varchar value.
     // For double and float types, since they may be selected as key columns,
     // the key column must be an exact value, so we unified into a default decimal type.
-    private Type transformType(Type srcType) {
+    private static Type transformType(Type srcType) {
         Type newType;
         if (srcType.isScalarType()) {
-            if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() || PrimitiveType.CHAR == srcType.getPrimitiveType()) {
+            if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
+                    PrimitiveType.CHAR == srcType.getPrimitiveType()) {
                 int len = ScalarType.MAX_VARCHAR_LENGTH;
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
@@ -170,11 +138,11 @@ public class CTASAnalyzer {
                 stringType.setAssignedStrLenInColDefinition();
                 newType = stringType;
             } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
-                       PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
+                    PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
                 newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
             } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
-                       PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
-                       PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
+                    PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
+                    PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
                 newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
                         srcType.getPrecision(), srcType.getDecimalDigits());
             } else {

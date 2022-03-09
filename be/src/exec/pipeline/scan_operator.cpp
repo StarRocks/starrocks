@@ -3,23 +3,29 @@
 #include "exec/pipeline/scan_operator.h"
 
 #include "column/chunk.h"
-#include "exec/pipeline/olap_chunk_source.h"
+#include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/vectorized/olap_scan_node.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
-#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
-#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 
 using starrocks::workgroup::WorkGroupManager;
 
+// ========== ScanOperator ==========
+
+ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node)
+        : SourceOperator(factory, id, scan_node->name(), scan_node->id()),
+          _scan_node(scan_node),
+          _is_io_task_running(MAX_IO_TASKS_PER_OP),
+          _chunk_sources(MAX_IO_TASKS_PER_OP) {}
+
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
-    _state = state;
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
         auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
@@ -31,15 +37,12 @@ Status ScanOperator::prepare(RuntimeState* state) {
         }
     }
 
-    // init filtered_ouput_columns
-    for (const auto& col_name : _olap_scan_node.unused_output_column_name) {
-        _unused_output_columns.emplace_back(col_name);
-    }
+    RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
 }
 
-Status ScanOperator::close(RuntimeState* state) {
+void ScanOperator::close(RuntimeState* state) {
     DCHECK(_num_running_io_tasks == 0);
 
     if (_workgroup == nullptr) {
@@ -47,12 +50,13 @@ Status ScanOperator::close(RuntimeState* state) {
     }
     for (auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr) {
-            chunk_source->close(_state);
+            chunk_source->close(state);
             chunk_source = nullptr;
         }
     }
 
-    return Operator::close(state);
+    do_close(state);
+    Operator::close(state);
 }
 
 bool ScanOperator::has_output() const {
@@ -232,43 +236,70 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     if (maybe_morsel.has_value()) {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
-
-        bool enable_column_expr_predicate = false;
-        if (_olap_scan_node.__isset.enable_column_expr_predicate) {
-            enable_column_expr_predicate = _olap_scan_node.enable_column_expr_predicate;
-        }
-
-        _chunk_sources[chunk_source_index] = std::make_shared<OlapChunkSource>(
-                std::move(morsel), _olap_scan_node.tuple_id, _limit, enable_column_expr_predicate, _conjunct_ctxs,
-                runtime_in_filters(), runtime_bloom_filters(), _olap_scan_node.key_column_name,
-                _olap_scan_node.is_preaggregation, &_unused_output_columns, _unique_metrics.get());
+        _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel));
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;
             _is_finished = true;
             return status;
         }
-
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
     }
 
     return Status::OK();
 }
 
+// ========== ScanOperatorFactory ==========
+
+ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
+        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()), _scan_node(scan_node) {}
+
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
-
-    auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
-    vectorized::DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, _olap_scan_node.dict_string_id_to_int_ids,
-                                                       &(tuple_desc->decoded_slots()));
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+    RETURN_IF_ERROR(do_prepare(state));
     return Status::OK();
 }
 
+OperatorPtr ScanOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    return do_create(degree_of_parallelism, driver_sequence);
+}
+
 void ScanOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_conjunct_ctxs, state);
+    do_close(state);
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    Expr::close(conjunct_ctxs, state);
     OperatorFactory::close(state);
+}
+
+// ====================
+
+pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> scan_operator,
+                                                      ScanNode* scan_node, pipeline::PipelineBuilderContext* context) {
+    OpFactories operators;
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto&& rc_rf_probe_collector =
+            std::make_shared<RcRfProbeCollector>(1, std::move(scan_node->runtime_filter_collector()));
+    // Initialize OperatorFactory's fields involving runtime filters.
+    scan_node->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
+    auto& morsel_queues = context->fragment_context()->morsel_queues();
+    auto source_id = scan_operator->plan_node_id();
+    DCHECK(morsel_queues.count(source_id));
+    auto& morsel_queue = morsel_queues[source_id];
+    // ScanOperator's degree_of_parallelism is not more than the number of morsels
+    // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
+    const auto degree_of_parallelism =
+            std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
+    scan_operator->set_degree_of_parallelism(degree_of_parallelism);
+    operators.emplace_back(std::move(scan_operator));
+    size_t limit = scan_node->limit();
+    if (limit != -1) {
+        operators.emplace_back(
+                std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), scan_node->id(), limit));
+    }
+    return operators;
 }
 
 } // namespace starrocks::pipeline

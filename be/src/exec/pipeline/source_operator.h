@@ -14,7 +14,7 @@ using SourceOperatorPtr = std::shared_ptr<SourceOperator>;
 
 class SourceOperator : public Operator {
 public:
-    SourceOperator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id)
+    SourceOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id)
             : Operator(factory, id, name, plan_node_id) {}
     ~SourceOperator() override = default;
 
@@ -25,6 +25,8 @@ public:
     }
 
     virtual void add_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; };
+
+    const MorselQueue* morsel_queue() const { return _morsel_queue; }
 
 protected:
     MorselQueue* _morsel_queue;
@@ -37,7 +39,7 @@ public:
             : OperatorFactory(id, name, plan_node_id) {}
     bool is_source() const override { return true; }
     // with_morsels returning true means that the SourceOperator needs attach to MorselQueue, only
-    // ScanOperator needs to do so.
+    // OlapScanOperator needs to do so.
     virtual bool with_morsels() const { return false; }
     // Set the DOP(degree of parallelism) of the SourceOperator, SourceOperator's DOP determine the Pipeline's DOP.
     virtual void set_degree_of_parallelism(size_t degree_of_parallelism) {

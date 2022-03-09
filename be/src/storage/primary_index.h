@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "common/status.h"
+#include "gen_cpp/persistent_index.pb.h"
 #include "storage/olap_common.h"
 #include "storage/vectorized/chunk_iterator.h"
 

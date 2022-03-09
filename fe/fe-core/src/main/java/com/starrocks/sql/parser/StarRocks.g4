@@ -12,20 +12,92 @@ singleStatement
     ;
 
 statement
-    : queryStatement                                                    #statementDefault
-    | EXPLAIN (LOGICAL | VERBOSE | COSTS) queryStatement                #explain
-    | USE schema=identifier                                             #use
+    : queryStatement                                                                    #statementDefault
+    | EXPLAIN (LOGICAL | VERBOSE | COSTS)? queryStatement                               #explain
+    | INSERT INTO qualifiedName (WITH LABEL lable=identifier)? columnAliases?
+    (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))    #insert
+    | CREATE TABLE (IF NOT EXISTS)? qualifiedName
+        ('(' identifier (',' identifier)* ')')? comment?
+        partitionDesc?
+        distributionDesc?
+        properties?
+        AS queryStatement                                                               #createTableAsSelect
+    | USE schema=identifier                                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
-        ((LIKE pattern=string) | (WHERE expression))?                   #showTables
-    | SHOW DATABASES
-        ((LIKE pattern=string) | (WHERE expression))?                   #showDatabases
+        ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
+    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
+    | CREATE VIEW (IF NOT EXISTS)? qualifiedName
+            ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+            viewComment=string? AS queryStatement                                       #createView
+    | ALTER VIEW qualifiedName
+        ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+        AS queryStatement                                                               #alterView
+    ;
+
+partitionDesc
+    : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
+    ;
+
+rangePartitionDesc
+    : singleRangePartition
+    | multiRangePartition
+    ;
+
+singleRangePartition
+    : PARTITION identifier VALUES partitionKeyDesc
+    ;
+
+multiRangePartition
+    : START '(' string ')' END '(' string ')' EVERY '(' interval ')'
+    | START '(' string ')' END '(' string ')' EVERY '(' INTEGER_VALUE ')'
+    ;
+
+partitionKeyDesc
+    : LESS THAN (MAXVALUE | partitionValueList)
+    | '[' partitionValueList ',' partitionValueList ']'
+    ;
+
+partitionValueList
+    : '(' partitionValue (',' partitionValue)* ')'
+    ;
+
+partitionValue
+    : MAXVALUE | string
+    ;
+
+distributionDesc
+    : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    ;
+
+properties
+    : PROPERTIES '(' property (',' property)* ')'
+    ;
+
+property
+    : key=string '=' value=string
+    ;
+
+comment
+    : COMMENT string
+    ;
+
+columnNameWithComment
+    : identifier string?
+    ;
+
+outfile
+    : INTO OUTFILE file=string fileFormat? properties?
+    ;
+
+fileFormat
+    : FORMAT AS (identifier | string)
     ;
 
 queryStatement
-    : query;
+    : query outfile?;
 
 query
-    :  withClause? queryNoWith
+    : withClause? queryNoWith
     ;
 
 withClause
@@ -39,7 +111,8 @@ queryNoWith
 queryTerm
     : queryPrimary                                                             #queryTermDefault
     | left=queryTerm operator=INTERSECT setQuantifier? right=queryTerm         #setOperation
-    | left=queryTerm operator=(UNION | EXCEPT) setQuantifier? right=queryTerm  #setOperation
+    | left=queryTerm operator=(UNION | EXCEPT | MINUS)
+        setQuantifier? right=queryTerm                                         #setOperation
     ;
 
 queryPrimary
@@ -66,7 +139,7 @@ limitElement
     ;
 
 querySpecification
-    : SELECT hint? setQuantifier? selectItem (',' selectItem)*
+    : SELECT hint* setQuantifier? selectItem (',' selectItem)*
       fromClause
       (WHERE where=expression)?
       (GROUP BY groupingElement)?
@@ -100,19 +173,25 @@ setQuantifier
 
 selectItem
     : expression (AS? (identifier | string))?                                            #selectSingle
-    | qualifiedName '.' ASTERISK                                                         #selectAll
-    | ASTERISK                                                                           #selectAll
+    | qualifiedName '.' ASTERISK_SYMBOL                                                  #selectAll
+    | ASTERISK_SYMBOL                                                                    #selectAll
     ;
 
 relation
-    : left=relation joinType hint? LATERAL? rightRelation=relation joinCriteria?         #joinRelation
+    : left=relation crossOrInnerJoinType hint?
+            LATERAL? rightRelation=relation joinCriteria?                                #joinRelation
+    | left=relation outerAndSemiJoinType hint?
+            LATERAL? rightRelation=relation joinCriteria                                 #joinRelation
     | aliasedRelation                                                                    #relationDefault
     ;
 
-joinType
+crossOrInnerJoinType
     : JOIN | INNER JOIN
     | CROSS | CROSS JOIN
-    | LEFT JOIN | RIGHT JOIN | FULL JOIN
+    ;
+
+outerAndSemiJoinType
+    : LEFT JOIN | RIGHT JOIN | FULL JOIN
     | LEFT OUTER JOIN | RIGHT OUTER JOIN
     | FULL OUTER JOIN
     | LEFT SEMI JOIN | RIGHT SEMI JOIN
@@ -149,14 +228,22 @@ relationPrimary
     ;
 
 partitionNames
-    : PARTITIONS '(' identifier (',' identifier)* ')'
+    : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    ;
+
+expressionsWithDefault
+    : '(' expressionOrDefault (',' expressionOrDefault)* ')'
+    ;
+
+expressionOrDefault
+    : expression | DEFAULT
     ;
 
 expression
     : booleanExpression                                                                   #expressionDefault
     | (NOT | LOGICAL_NOT) expression                                                      #logicalNot
     | left=expression operator=AND right=expression                                       #logicalBinary
-    | left=expression operator=OR right=expression                                        #logicalBinary
+    | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
     ;
 
 booleanExpression
@@ -174,17 +261,18 @@ predicateOperations [ParserRuleContext value]
     : NOT? IN '(' expression (',' expression)* ')'                                        #inList
     | NOT? IN '(' query ')'                                                               #inSubquery
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
-    | NOT? (LIKE | REGEXP) pattern=primaryExpression                                      #like
+    | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
     ;
 
 valueExpression
     : primaryExpression                                                                   #valueExpressionDefault
-    | operator = (MINUS | PLUS | BITNOT) valueExpression                                  #arithmeticUnary
-    | left = valueExpression operator =
-        (ASTERISK | SLASH | PERCENT | INT_DIV | BITAND| BITOR | BITXOR)
+    | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) valueExpression                    #arithmeticUnary
+    | left = valueExpression operator = (ASTERISK_SYMBOL | SLASH_SYMBOL |
+        PERCENT_SYMBOL | INT_DIV | BITAND| BITOR | BITXOR)
       right = valueExpression                                                             #arithmeticBinary
-    | left = valueExpression operator = (PLUS | MINUS) right=valueExpression              #arithmeticBinary
-    | left = valueExpression CONCAT right = valueExpression                               #concatenation
+    | left = valueExpression operator =
+        (PLUS_SYMBOL | MINUS_SYMBOL) right = valueExpression                              #arithmeticBinary
+    | left = valueExpression CONCAT right = valueExpression                               #concat
     ;
 
 primaryExpression
@@ -211,7 +299,11 @@ primaryExpression
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
     | IF '(' (expression (',' expression)*)? ')'                                          #functionCall
-    | qualifiedName '(' ASTERISK ')' over?                                                #functionCall
+    | LEFT '(' expression ',' expression ')'                                              #functionCall
+    | RIGHT '(' expression ',' expression ')'                                             #functionCall
+    | TIMESTAMPADD '(' unitIdentifier ',' expression ',' expression ')'                   #functionCall
+    | TIMESTAMPDIFF '(' unitIdentifier ',' expression ',' expression ')'                  #functionCall
+    | qualifiedName '(' ASTERISK_SYMBOL ')' over?                                         #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
     | windowFunction over                                                                 #windowFunctionCall
     | CAST '(' expression AS type ')'                                                     #cast
@@ -258,17 +350,17 @@ booleanValue
     ;
 
 interval
-    : INTERVAL value=expression from=intervalField
+    : INTERVAL value=expression from=unitIdentifier
     ;
 
-intervalField
+unitIdentifier
     : YEAR | MONTH | DAY | HOUR | MINUTE | SECOND
     ;
 
 type
-    : arrayType
-    | baseType ('(' typeParameter (',' typeParameter)* ')')?
-    | decimalType ('(' precision=typeParameter (',' scale=typeParameter)? ')')?
+    : baseType
+    | decimalType ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
+    | arrayType
     ;
 
 arrayType
@@ -276,11 +368,29 @@ arrayType
     ;
 
 typeParameter
-    : INTEGER_VALUE | type
+    : '(' INTEGER_VALUE ')'
     ;
 
 baseType
-    : identifier
+    : BOOLEAN
+    | TINYINT
+    | SMALLINT
+    | INT
+    | INTEGER
+    | BIGINT
+    | LARGEINT
+    | FLOAT
+    | DOUBLE
+    | DATE
+    | DATETIME
+    | TIME
+    | CHAR typeParameter?
+    | VARCHAR typeParameter?
+    | STRING
+    | BITMAP
+    | HLL
+    | PERCENTILE
+    | JSON
     ;
 
 decimalType
@@ -324,6 +434,10 @@ identifier
     | DIGIT_IDENTIFIER       #digitIdentifier
     ;
 
+identifierList
+    : '(' identifier (',' identifier)* ')'
+    ;
+
 number
     : DECIMAL_VALUE  #decimalValue
     | DOUBLE_VALUE   #doubleValue
@@ -332,21 +446,22 @@ number
 
 nonReserved
     : ARRAY
-    | CAST | CONNECTION_ID| CURRENT | COSTS
-    | DATA | DATE | DATETIME | DAY
-    | END | EXTRACT
-    | FILTER | FIRST | FOLLOWING
+    | BUCKETS
+    | CAST | CONNECTION_ID| CURRENT | COMMENT | COSTS
+    | DATA | DATABASE | DATE | DATETIME | DAY
+    | END | EXTRACT | EVERY
+    | FILTER | FIRST | FOLLOWING | FORMAT
     | GLOBAL
-    | HOUR
+    | HASH | HOUR
     | INTERVAL
-    | LAST | LOCAL | LOGICAL
+    | LAST | LESS | LOCAL | LOGICAL
     | MINUTE | MONTH
     | NONE | NULLS
     | OFFSET
-    | PRECEDING
+    | PRECEDING | PROPERTIES
     | ROLLUP
-    | SECOND | SESSION | SETS
-    | TABLES | TIME | TYPE
+    | SECOND | SESSION | SETS | START
+    | TABLES | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
     | YEAR

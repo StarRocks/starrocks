@@ -101,7 +101,7 @@ public:
         }
     }
 
-    bool append_strings(const std::vector<Slice>& strs) override { return false; }
+    bool append_strings(const Buffer<Slice>& strs) override { return false; }
 
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
@@ -137,7 +137,7 @@ public:
         return pos + _data->serialize_size(0);
     }
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override {
+    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override {
         _size += chunk_size;
         if (_data->empty()) {
             _data->deserialize_and_append((uint8_t*)srcs[0].data);
@@ -162,6 +162,8 @@ public:
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+
+    int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override { _data->put_mysql_row_buffer(buf, 0); }
 

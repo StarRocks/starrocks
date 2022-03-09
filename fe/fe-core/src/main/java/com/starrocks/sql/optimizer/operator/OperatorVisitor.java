@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
@@ -14,6 +13,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
@@ -56,6 +57,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+
 
 /**
  * OperatorVisitor is used to traverse Operator
@@ -103,6 +105,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalEsScan(LogicalEsScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
+    public R visitLogicalJDBCScan(LogicalJDBCScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
 
@@ -229,6 +235,10 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
+    public R visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
     public R visitPhysicalTopN(PhysicalTopNOperator node, C context) {
         return visitOperator(node, context);
     }
@@ -274,22 +284,18 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, C context) {
-        Preconditions.checkState(false);
         return visitOperator(node, context);
     }
 
     public R visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, C context) {
-        Preconditions.checkState(false);
         return visitOperator(node, context);
     }
 
     public R visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, C context) {
-        Preconditions.checkState(false);
         return visitOperator(node, context);
     }
 
     public R visitPhysicalNoCTE(PhysicalNoCTEOperator node, C context) {
-        Preconditions.checkState(false);
         return visitOperator(node, context);
     }
 

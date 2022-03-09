@@ -5,20 +5,15 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
+import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTableStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -26,77 +21,94 @@ import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
-
 public class Analyzer {
-    private static final Logger LOG = LogManager.getLogger(Analyzer.class);
-
-    private final Catalog catalog;
-    private final ConnectContext session;
-
-    public Analyzer(Catalog catalog, ConnectContext session) {
-        this.catalog = catalog;
-        this.session = session;
+    public static void analyze(StatementBase statement, ConnectContext session) {
+        new AnalyzerVisitor().analyze(statement, session);
     }
 
-    public Relation analyze(StatementBase node) {
-        node.setClusterName(session.getClusterName());
-        if (node instanceof QueryStmt) {
-            return new QueryAnalyzer(catalog, session)
-                    .transformQueryStmt((QueryStmt) node, new Scope(RelationId.anonymous(), new RelationFields()));
-        } else if (node instanceof QueryStatement) {
-            QueryAnalyzerV2 analyzerV2 = new QueryAnalyzerV2(catalog, session);
-            analyzerV2.analyze(node);
+    private static class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+        public void analyze(StatementBase statement, ConnectContext session) {
+            statement.setClusterName(session.getClusterName());
+            visit(statement, session);
+        }
 
-            QueryRelation queryRelation = ((QueryStatement) node).getQueryRelation();
+        @Override
+        public Void visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, ConnectContext session) {
+            statement.analyze();
+            return null;
+        }
+
+        @Override
+        public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
+            analyzeAnalyzeStmt(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitBaseViewStatement(BaseViewStmt statement, ConnectContext session) {
+            ViewAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
+            analyzeCreateAnalyzeStmt(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, ConnectContext session) {
+            // this phrase do not analyze insertStmt, insertStmt will analyze in
+            // StmtExecutor.handleCreateTableAsSelectStmt because planner will not do meta operations
+            CTASAnalyzer.transformCTASStmt((CreateTableAsSelectStmt) statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, ConnectContext session) {
+            statement.analyze();
+            return null;
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt statement, ConnectContext session) {
+            InsertAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowStatement(ShowStmt statement, ConnectContext session) {
+            ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitQueryStatement(QueryStatement stmt, ConnectContext session) {
+            new QueryAnalyzer(session).analyze(stmt);
+
+            QueryRelation queryRelation = stmt.getQueryRelation();
             long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
             if (!queryRelation.hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
                 queryRelation.setLimit(new LimitElement(selectLimit));
             }
-
-            return ((QueryStatement) node).getQueryRelation();
-        } else if (node instanceof InsertStmt) {
-            return new InsertAnalyzer(catalog, session).transformInsertStmt((InsertStmt) node);
-        } else if (node instanceof AnalyzeStmt) {
-            return analyzeAnalyzeStmt((AnalyzeStmt) node);
-        } else if (node instanceof CreateAnalyzeJobStmt) {
-            return analyzeCreateAnalyzeStmt((CreateAnalyzeJobStmt) node);
-        } else if (node instanceof CreateTableAsSelectStmt) {
-            // this phrase do not analyze insertStmt, insertStmt will analyze in
-            // StmtExecutor.handleCreateTableAsSelectStmt because planner will not do meta operations
-            return new CTASAnalyzer(catalog, session).transformCTASStmt((CreateTableAsSelectStmt) node);
-        } else if (node instanceof CreateWorkGroupStmt) {
-            return ((CreateWorkGroupStmt) node).analyze();
-        } else if (node instanceof AlterWorkGroupStmt) {
-            return ((AlterWorkGroupStmt) node).analyze();
-        } else if (node instanceof DropWorkGroupStmt) {
-            return ((DropWorkGroupStmt) node).analyze();
-        } else if (node instanceof ShowDbStmt || node instanceof ShowTableStmt) {
-            new ShowStmtAnalyzer(session).analyze((ShowStmt) node);
             return null;
-        } else if (node instanceof ShowWorkGroupStmt) {
-            return ((ShowWorkGroupStmt) node).analyze();
-        } else {
-            throw unsupportedException("New Planner only support Query Statement");
         }
     }
 
-    private Relation analyzeAnalyzeStmt(AnalyzeStmt node) {
+    private static void analyzeAnalyzeStmt(AnalyzeStmt node, ConnectContext session) {
         MetaUtils.normalizationTableName(session, node.getTableName());
         Table analyzeTable = MetaUtils.getStarRocksTable(session, node.getTableName());
 
@@ -130,7 +142,7 @@ public class Analyzer {
 
         if (null == properties) {
             node.setProperties(Maps.newHashMap());
-            return null;
+            return;
         }
 
         for (String key : AnalyzeJob.NUMBER_PROP_KEY_LIST) {
@@ -138,11 +150,9 @@ public class Analyzer {
                 throw new SemanticException("Property '%s' value must be numeric", key);
             }
         }
-
-        return null;
     }
 
-    private Relation analyzeCreateAnalyzeStmt(CreateAnalyzeJobStmt node) {
+    private static void analyzeCreateAnalyzeStmt(CreateAnalyzeJobStmt node, ConnectContext session) {
         if (null != node.getTableName()) {
             TableName tbl = node.getTableName();
 
@@ -189,7 +199,7 @@ public class Analyzer {
 
         if (null == properties) {
             node.setProperties(Maps.newHashMap());
-            return null;
+            return;
         }
 
         for (String key : AnalyzeJob.NUMBER_PROP_KEY_LIST) {
@@ -197,7 +207,5 @@ public class Analyzer {
                 throw new SemanticException("Property '%s' value must be numeric", key);
             }
         }
-
-        return null;
     }
 }

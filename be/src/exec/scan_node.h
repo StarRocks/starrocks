@@ -80,6 +80,8 @@ public:
     static const std::string _s_average_io_mgr_queue_capacity;
     static const std::string _s_num_scanner_threads_started;
 
+    const std::string& name() const { return _name; }
+
 protected:
     RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
@@ -93,6 +95,7 @@ protected:
     // Aggregated scanner thread counters
     RuntimeProfile::ThreadCounters* _scanner_thread_counters;
     RuntimeProfile::Counter* _num_scanner_threads_started_counter;
+    std::string _name;
 };
 
 } // namespace starrocks

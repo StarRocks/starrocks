@@ -4,6 +4,7 @@
 #include <ostream>
 #include <string>
 
+#include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -44,12 +45,16 @@ public:
     JsonValue(JsonValue&& rhs) : binary_(std::move(rhs.binary_)) {}
 
     JsonValue& operator=(const JsonValue& rhs) {
-        binary_ = rhs.binary_;
+        if (this != &rhs) {
+            binary_ = rhs.binary_;
+        }
         return *this;
     }
 
     JsonValue& operator=(JsonValue&& rhs) {
-        binary_ = std::move(rhs.binary_);
+        if (this != &rhs) {
+            binary_ = std::move(rhs.binary_);
+        }
         return *this;
     }
 
@@ -213,6 +218,8 @@ inline std::string to_string(const starrocks::JsonValue& value) {
     return value.to_string_uncheck();
 }
 
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wunused-value")
 template <>
 struct less<starrocks::JsonValue> {
     bool operator()(const starrocks::JsonValue& lhs, const starrocks::JsonValue& rhs) const {
@@ -298,5 +305,7 @@ struct not_equal_to<starrocks::JsonValue> {
         return starrocks::JsonValue::compare(lhs, rhs) != 0;
     }
 };
+
+DIAGNOSTIC_POP
 
 } // namespace std

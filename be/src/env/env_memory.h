@@ -14,22 +14,20 @@ public:
     explicit StringRandomAccessFile(std::string str) : _str(std::move(str)) {}
     ~StringRandomAccessFile() override = default;
 
-    Status read(uint64_t offset, Slice* res) const override {
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override {
         if (offset >= _str.size()) {
-            res->size = 0;
-            return Status::OK();
+            return 0;
         }
-        size_t to_read = std::min<size_t>(res->size, _str.size() - offset);
-        memcpy(res->data, _str.data() + offset, to_read);
-        res->size = to_read;
-        return Status::OK();
+        size_t to_read = std::min<size_t>(size, _str.size() - offset);
+        memcpy(data, _str.data() + offset, to_read);
+        return to_read;
     }
 
-    Status read_at(uint64_t offset, const Slice& result) const override {
-        if (offset + result.size > _str.size()) {
+    Status read_at_fully(int64_t offset, void* data, int64_t size) const override {
+        if (offset + size > _str.size()) {
             return Status::InternalError("");
         }
-        memcpy(result.data, _str.data() + offset, result.size);
+        memcpy(data, _str.data() + offset, size);
         return Status::OK();
     }
 
@@ -53,7 +51,7 @@ public:
         return Status::OK();
     }
 
-    const std::string& file_name() const override {
+    const std::string& filename() const override {
         static std::string s_name = "StringRandomAccessFile";
         return s_name;
     }
@@ -67,12 +65,10 @@ public:
     explicit StringSequentialFile(std::string str) : _random_file(std::move(str)) {}
     ~StringSequentialFile() override = default;
 
-    Status read(Slice* res) override {
-        Status st = _random_file.read(_offset, res);
-        if (st.ok()) {
-            _offset += res->size;
-        }
-        return st;
+    StatusOr<int64_t> read(void* data, int64_t size) override {
+        ASSIGN_OR_RETURN(auto nread, _random_file.read_at(_offset, data, size));
+        _offset += nread;
+        return nread;
     }
 
     const std::string& filename() const override {

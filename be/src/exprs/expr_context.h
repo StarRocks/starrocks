@@ -121,10 +121,9 @@ public:
     /// The default parameters correspond to the entire expr 'root_'.
     Status get_error(int start_idx, int end_idx) const;
 
-    std::string get_error_msg() const;
+    Status get_udf_error();
 
-    // when you reused this expr context, you maybe need clear the error status and message.
-    void clear_error_msg();
+    std::string get_error_msg() const;
 
     // vector query engine
     ColumnPtr evaluate(vectorized::Chunk* chunk);
@@ -164,5 +163,12 @@ private:
     // In operator, the ExprContext::close method will be called concurrently
     std::atomic<bool> _closed;
 };
+
+#define RETURN_IF_HAS_ERROR(expr_ctxs)             \
+    do {                                           \
+        for (auto* ctx : expr_ctxs) {              \
+            RETURN_IF_ERROR(ctx->get_udf_error()); \
+        }                                          \
+    } while (false)
 
 } // namespace starrocks

@@ -53,7 +53,7 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
 Morsels convert_scan_range_to_morsel(const std::vector<TScanRangeParams>& scan_ranges, int node_id) {
     Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
-        morsels.emplace_back(std::make_unique<OlapMorsel>(node_id, scan_range));
+        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
     }
     return morsels;
 }
@@ -107,8 +107,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     if (query_options.__isset.is_report_success && query_options.is_report_success) {
         _fragment_ctx->set_report_profile();
     }
-    if (query_options.__isset.pipeline_profile_mode) {
-        _fragment_ctx->set_profile_mode(query_options.pipeline_profile_mode);
+    if (query_options.__isset.pipeline_profile_level) {
+        _fragment_ctx->set_profile_level(query_options.pipeline_profile_level);
     }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
@@ -147,6 +147,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->init_mem_trackers(query_id, wg != nullptr ? wg->mem_tracker() : nullptr);
     runtime_state->set_be_number(backend_num);
+    runtime_state->set_query_ctx(_query_ctx);
 
     // RuntimeFilterWorker::open_query is idempotent
     if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
@@ -156,10 +157,23 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
     _fragment_ctx->prepare_pass_through_chunk_buffer();
 
-    // Set up desc tbl
     auto* obj_pool = runtime_state->obj_pool();
+    // Set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
-    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, t_desc_tbl, &desc_tbl, runtime_state->chunk_size()));
+    if (t_desc_tbl.__isset.is_cached) {
+        if (t_desc_tbl.is_cached) {
+            desc_tbl = _query_ctx->desc_tbl();
+            if (desc_tbl == nullptr) {
+                return Status::Cancelled("Query terminates prematurely");
+            }
+        } else {
+            RETURN_IF_ERROR(DescriptorTbl::create(_query_ctx->object_pool(), t_desc_tbl, &desc_tbl,
+                                                  runtime_state->chunk_size()));
+            _query_ctx->set_desc_tbl(desc_tbl);
+        }
+    } else {
+        RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, t_desc_tbl, &desc_tbl, runtime_state->chunk_size()));
+    }
     runtime_state->set_desc_tbl(desc_tbl);
     // Set up plan
     ExecNode* plan = nullptr;
@@ -227,7 +241,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                   << " fragment_instance_id=" << print_id(params.fragment_instance_id);
         const bool is_root = pipeline->is_root();
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
-        // at present, only ScanOperator need a MorselQueue attached.
+        // at present, only OlapScanOperator need a MorselQueue attached.
         setup_profile_hierarchy(runtime_state, pipeline);
         if (pipeline->source_operator_factory()->with_morsels()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();

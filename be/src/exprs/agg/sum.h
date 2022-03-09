@@ -85,7 +85,7 @@ public:
         }
     }
 
-    void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
+    void serialize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                              Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());
         down_cast<ResultColumnType*>(to)->append(this->data(state).sum);
@@ -100,13 +100,14 @@ public:
         }
     }
 
-    void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
+    void finalize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                             Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());
         down_cast<ResultColumnType*>(to)->append(this->data(state).sum);
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         Buffer<ResultType>& dst_data = down_cast<ResultColumnType*>((*dst).get())->get_data();
         const auto* src_data = down_cast<const InputColumnType*>(src[0].get())->get_data().data();
 

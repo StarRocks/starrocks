@@ -31,3 +31,6 @@ ADD_BE_TEST(vectorized/repeat_node_test)
 ADD_BE_TEST(vectorized/arrow_converter_test)
 ADD_BE_TEST(vectorized/parquet_scanner_test)
 ADD_BE_TEST(schema_scanner/schema_columns_scanner_test)
+
+# Benchmarks
+ADD_BE_BENCH(vectorized/chunks_sorter_bench_test)

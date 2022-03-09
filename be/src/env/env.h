@@ -182,16 +182,14 @@ public:
     SequentialFile() = default;
     virtual ~SequentialFile() = default;
 
-    // Read up to "result.size" bytes from the file.
-    // Copies the resulting data into "result.data".
+    // Read up to "size" bytes from the file.
+    // Copies the resulting data into "data".
     //
-    // If an error was encountered, returns a non-OK status
-    // and the contents of "result" are invalid.
-    //
-    // Return OK if reached the end of file.
+    // On success, return the number of bytes read, otherwise return
+    // an error and the contents of "result" are invalid.
     //
     // REQUIRES: External synchronization
-    virtual Status read(Slice* result) = 0;
+    virtual StatusOr<int64_t> read(void* data, int64_t size) = 0;
 
     // Skip "n" bytes from the file. This is guaranteed to be no
     // slower that reading the same data, but may be faster.
@@ -216,23 +214,18 @@ public:
     RandomAccessFile() = default;
     virtual ~RandomAccessFile() = default;
 
-    // Read up to "result.size" bytes from the file.
-    // Copies the resulting data into "result.data".
+    // Read up to "size" bytes from the file.
+    // Copies the resulting data into "data".
     //
-    // Return OK if reached the end of file.
-    virtual Status read(uint64_t offset, Slice* res) const = 0;
+    // Return the number of bytes read or error.
+    virtual StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const = 0;
 
-    // Read "result.size" bytes from the file starting at "offset".
-    // Copies the resulting data into "result.data".
-    //
-    // If an error was encountered, returns a non-OK status.
-    //
-    // This method will internally retry on EINTR and "short reads" in order to
-    // fully read the requested number of bytes. In the event that it is not
-    // possible to read exactly 'length' bytes, an IOError is returned.
-    //
-    // Safe for concurrent use by multiple threads.
-    virtual Status read_at(uint64_t offset, const Slice& result) const = 0;
+    // Read exactly the number of "size" bytes data from given position "offset".
+    // This method does not return the number of bytes read because either
+    // (1) the entire "size" bytes is read
+    // (2) the end of the stream is reached
+    // If the eof is reached, an IO error is returned.
+    virtual Status read_at_fully(int64_t offset, void* data, int64_t size) const = 0;
 
     // Reads up to the "results" aggregate size, based on each Slice's "size",
     // from the file starting at 'offset'. The Slices must point to already-allocated
@@ -251,7 +244,7 @@ public:
     virtual Status size(uint64_t* size) const = 0;
 
     // Return name of this file
-    virtual const std::string& file_name() const = 0;
+    virtual const std::string& filename() const = 0;
 
     // Get statistics about the reads which this RandomAccessFile has done.
     // If the RandomAccessFile implementation doesn't support statistics, a null pointer or

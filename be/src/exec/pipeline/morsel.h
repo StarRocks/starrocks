@@ -26,23 +26,30 @@ private:
     int32_t _plan_node_id;
 };
 
-class OlapMorsel final : public Morsel {
+class ScanMorsel final : public Morsel {
 public:
-    OlapMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range) : Morsel(plan_node_id) {
-        _scan_range = std::make_unique<TInternalScanRange>(scan_range.scan_range.internal_scan_range);
+    ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range) : Morsel(plan_node_id) {
+        _scan_range = std::make_unique<TScanRange>(scan_range.scan_range);
     }
 
-    TInternalScanRange* get_scan_range() { return _scan_range.get(); }
+    TScanRange* get_scan_range() { return _scan_range.get(); }
+
+    TInternalScanRange* get_olap_scan_range() { return &(_scan_range->internal_scan_range); }
+
+    THdfsScanRange* get_hdfs_scan_range() { return &(_scan_range->hdfs_scan_range); }
 
 private:
-    std::unique_ptr<TInternalScanRange> _scan_range;
+    std::unique_ptr<TScanRange> _scan_range;
 };
 
 class MorselQueue {
 public:
     MorselQueue(Morsels&& morsels) : _morsels(std::move(morsels)), _num_morsels(_morsels.size()), _pop_index(0) {}
 
+    const Morsels& morsels() const { return _morsels; }
+
     size_t num_morsels() const { return _num_morsels; }
+
     std::optional<MorselPtr> try_get() {
         auto idx = _pop_index.load();
         // prevent _num_morsels from superfluous addition

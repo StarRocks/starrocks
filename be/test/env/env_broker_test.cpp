@@ -97,15 +97,15 @@ public:
             return;
         }
         response.data.resize(request.length);
-        Slice buff(response.data);
         auto& f = iter->second;
-        Status st = f->read(request.offset, &buff);
-        response.data.resize(buff.size);
-        if (!st.ok()) {
+        auto res = f->read_at(request.offset, response.data.data(), response.data.size());
+        if (!res.ok()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::INVALID_INPUT_OFFSET);
-        } else if (buff.size == 0) {
+        } else if (*res == 0) {
+            response.data.resize(*res);
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::END_OF_FILE);
         } else {
+            response.data.resize(*res);
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::OK);
         }
     }
@@ -288,19 +288,15 @@ protected:
 
 std::string read(std::unique_ptr<SequentialFile>& f, int len) {
     std::string s(len, '\0');
-    Slice buff(s.data(), s.size());
-    Status st = f->read(&buff);
-    CHECK(st.ok()) << st.to_string();
-    s.resize(buff.size);
+    ASSIGN_OR_ABORT(auto nread, f->read(s.data(), s.size()));
+    s.resize(nread);
     return s;
 }
 
 std::string read(std::unique_ptr<RandomAccessFile>& f, size_t off, size_t len) {
     std::string s(len, '\0');
-    Slice buff(s.data(), s.size());
-    Status st = f->read(off, &buff);
-    CHECK(st.ok()) << st.to_string();
-    s.resize(buff.size);
+    ASSIGN_OR_ABORT(auto nread, f->read_at(off, s.data(), s.size()));
+    s.resize(nread);
     return s;
 }
 
@@ -370,8 +366,7 @@ TEST_F(EnvBrokerTest, test_random_read) {
     ASSERT_EQ(content.substr(1), read(f, 1, 100));
     ASSERT_EQ("a", read(f, 0, 1));
 
-    Slice s(_buff.data(), 1);
-    ASSERT_FALSE(f->read_at(content.size(), s).ok());
+    ASSERT_FALSE(f->read_at_fully(content.size(), _buff.data(), 1).ok());
 
     f.reset();
 }

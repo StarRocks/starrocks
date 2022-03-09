@@ -43,8 +43,6 @@ import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.IOException;
@@ -55,7 +53,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
-
 import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
 
 public class CreateTableStmt extends DdlStmt {
@@ -92,6 +89,7 @@ public class CreateTableStmt extends DdlStmt {
         engineNames.add("hive");
         engineNames.add("iceberg");
         engineNames.add("hudi");
+        engineNames.add("jdbc");
     }
 
     // for backup. set to -1 for normal use
@@ -267,7 +265,7 @@ public class CreateTableStmt extends DdlStmt {
         // analyze key desc
         if (!(engineName.equals("mysql") || engineName.equals("broker") ||
                 engineName.equals("hive") || engineName.equals("iceberg")) ||
-                engineName.equals("hudi")) {
+                engineName.equals("hudi") || engineName.equals("jdbc")) {
             // olap table
             if (keysDesc == null) {
                 List<String> keysColumnNames = Lists.newArrayList();
@@ -297,7 +295,7 @@ public class CreateTableStmt extends DdlStmt {
                             }
                             break;
                         }
-                        if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()) {
+                        if (!columnDef.getType().isKeyType()) {
                             break;
                         }
                         if (columnDef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
@@ -355,6 +353,7 @@ public class CreateTableStmt extends DdlStmt {
         int rowLengthBytes = 0;
         boolean hasHll = false;
         boolean hasBitmap = false;
+        boolean hasJson = false;
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             columnDef.analyze(engineName.equals("olap"));
@@ -365,6 +364,10 @@ public class CreateTableStmt extends DdlStmt {
 
             if (columnDef.getAggregateType() == BITMAP_UNION) {
                 hasBitmap = columnDef.getType().isBitmapType();
+            }
+
+            if (columnDef.getType().isJsonType()) {
+                hasJson = true;
             }
 
             if (!columnSet.add(columnDef.getName())) {
@@ -385,6 +388,11 @@ public class CreateTableStmt extends DdlStmt {
 
         if (hasBitmap && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
             throw new AnalysisException("BITMAP_UNION must be used in AGG_KEYS");
+        }
+
+        // TODO(mofei) support it
+        if (hasJson && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+            throw new AnalysisException("JSON type could only be used in DUPLICATE KEY table");
         }
 
         if (engineName.equals("olap")) {

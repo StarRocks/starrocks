@@ -106,6 +106,9 @@ private:
     // True if the server has been successfully started, for internal use only
     bool _started;
 
+    // True if the server has been stop()
+    bool _stopped = false;
+
     // The port on which the server interface is exposed
     int _port;
 

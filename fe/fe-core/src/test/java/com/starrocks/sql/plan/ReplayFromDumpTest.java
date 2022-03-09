@@ -239,7 +239,6 @@ public class ReplayFromDumpTest {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
@@ -259,7 +258,6 @@ public class ReplayFromDumpTest {
     @Test
     public void testTPCDS22() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds22"));
-        System.out.println(replayPair.second);
         // check d_date_sk distinct values has adjusted according to the cardinality
         Assert.assertTrue(replayPair.second.contains("4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
@@ -307,7 +305,6 @@ public class ReplayFromDumpTest {
     public void testJoinReorderPushColumnsNoHandleProject() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder"), null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("  |  <slot 40> : CAST(15: id_smallint AS INT)\n" +
                 "  |  <slot 41> : CAST(23: id_date AS DATETIME)\n" +
                 "  |  \n" +
@@ -348,11 +345,37 @@ public class ReplayFromDumpTest {
         // check use two stage agg
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/count_distinct_limit"), null, TExplainLevel.NORMAL);
-       Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
                "  |  STREAMING\n" +
                "  |  output: multi_distinct_count(5: lo_suppkey)"));
-       Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)\n" +
+        Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)\n" +
                "  |  output: multi_distinct_count(18: count)\n" +
                "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
+    }
+
+    @Test
+    public void testEighteenTablesJoin() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/eighteen_tables_join"), null, TExplainLevel.NORMAL);
+        // check optimizer finish task
+        Assert.assertTrue(replayPair.second.contains("52:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)"));
+    }
+
+    @Test
+    public void testLocalAggregateWithoutTableRowCount() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_without_table_rowcount"), null, TExplainLevel.NORMAL);
+        // check local aggregate
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(4: lo_partkey)"));
+    }
+
+    @Test
+    public void testLogicalAggWithOneTablet() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_with_one_tablet"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(4: t0d)"));
     }
 }

@@ -135,6 +135,9 @@ public class SystemInfoService {
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.put(backend.getId(), backend);
         idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+        Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVerions.put(backend.getId(), new AtomicLong(0L));
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
     }
 
     private void setBackendOwner(Backend backend, String clusterName) {

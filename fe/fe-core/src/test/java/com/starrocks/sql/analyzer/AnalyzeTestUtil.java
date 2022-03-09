@@ -1,21 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.catalog.Catalog;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.InsertRelation;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
-
-import java.io.StringReader;
 
 public class AnalyzeTestUtil {
 
@@ -25,6 +17,7 @@ public class AnalyzeTestUtil {
 
     public static void init() throws Exception {
         // create connect context
+        UtFrameUtils.createMinStarRocksCluster("analyze_test");
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
@@ -77,7 +70,8 @@ public class AnalyzeTestUtil {
                 "  `tf` double NULL COMMENT \"\",\n" +
                 "  `tg` bigint(20) NULL COMMENT \"\",\n" +
                 "  `th` datetime NULL COMMENT \"\",\n" +
-                "  `ti` date NULL COMMENT \"\"\n" +
+                "  `ti` date NULL COMMENT \"\",\n" +
+                "  `tj` decimal(9, 3) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`ta`)\n" +
                 "COMMENT \"OLAP\"\n" +
@@ -153,50 +147,19 @@ public class AnalyzeTestUtil {
         return connectContext;
     }
 
-    public static QueryRelation analyzeSuccess(String originStmt) {
+    public static StarRocksAssert getStarRocksAssert() {
+        return starRocksAssert;
+    }
+
+    public static StatementBase analyzeSuccess(String originStmt) {
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt).get(0);
-            Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            return (QueryRelation) analyzer.analyze(statementBase);
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(statementBase, connectContext);
+            return statementBase;
         } catch (Exception ex) {
             ex.printStackTrace();
             Assert.fail();
             return null;
-        }
-    }
-
-    public static InsertRelation analyzeSuccessUseInsert(String originStmt) {
-        try {
-            SqlScanner input =
-                    new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
-            SqlParser parser = new SqlParser(input);
-            StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-
-            Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            return (InsertRelation) analyzer.analyze(statementBase);
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            Assert.fail();
-            return null;
-        }
-    }
-
-    public static void analyzeFailUseInsert(String originStmt, String exceptMessage) {
-        try {
-            SqlScanner input =
-                    new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
-            SqlParser parser = new SqlParser(input);
-            StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-
-            Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            analyzer.analyze(statementBase);
-            Assert.fail("Miss semantic error exception");
-        } catch (ParsingException | SemanticException | UnsupportedException e) {
-            if (!exceptMessage.equals("")) {
-                Assert.assertTrue(e.getMessage().contains(exceptMessage));
-            }
-        } catch (Exception e) {
-            Assert.fail("analyze exception");
         }
     }
 
@@ -206,9 +169,8 @@ public class AnalyzeTestUtil {
 
     public static void analyzeFail(String originStmt, String exceptMessage) {
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt).get(0);
-            Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            analyzer.analyze(statementBase);
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {
             if (!exceptMessage.equals("")) {

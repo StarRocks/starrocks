@@ -528,4 +528,17 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     ASSERT_EQ("mno", slices[4]);
 }
 
+PARALLEL_TEST(BinaryColumnTest, test_xor_checksum) {
+    auto column = BinaryColumn::create();
+    std::string str;
+    str.reserve(3000);
+    for (int i = 0; i <= 1000; i++) {
+        str.append(std::to_string(i));
+    }
+    column->append(str);
+    int64_t checksum = column->xor_checksum(0, 1);
+    int64_t expected_checksum = 3546653113525744178L;
+    ASSERT_EQ(checksum, expected_checksum);
+}
+
 } // namespace starrocks::vectorized

@@ -36,6 +36,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
@@ -495,6 +496,21 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return "(" + Joiner.on(" ").join(strings) + ")";
     }
 
+    public static boolean containsSlotRef(Expr root) {
+        if (root == null) {
+            return false;
+        }
+        if (root instanceof SlotRef) {
+            return true;
+        }
+        for (Expr child : root.getChildren()) {
+            if (containsSlotRef(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Return true if l1[i].equals(l2[i]) for all i.
      */
@@ -857,6 +873,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     public String toMySql() {
+        return toSql();
+    }
+
+    public String toJDBCSQL() {
         return toSql();
     }
 
@@ -1514,7 +1534,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         List<Subquery> subqueries = Lists.newArrayList();
         collect(Subquery.class, subqueries);
         Preconditions.checkState(subqueries.size() == 1,
-                "only support one subquery in " + this.toSql());
+                "only support one subquery in " + AST2SQL.toString(this));
         return subqueries.get(0);
     }
 

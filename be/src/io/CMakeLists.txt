@@ -7,9 +7,11 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/io")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/io")
 
 add_library(IO STATIC
-        array_random_access_file.cpp
-        fd_random_access_file.cpp
-        random_access_file.cpp
+        array_input_stream.cpp
+        fd_output_stream.cpp
+        fd_input_stream.cpp
+        seekable_input_stream.cpp
         readable.cpp
-        s3_random_access_file.cpp
+        s3_input_stream.cpp
+        s3_output_stream.cpp
         )

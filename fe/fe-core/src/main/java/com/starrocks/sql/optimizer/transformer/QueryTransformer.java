@@ -66,7 +66,7 @@ class QueryTransformer {
         builder = filter(builder, queryBlock.getHaving());
         builder = window(builder, queryBlock.getOutputAnalytic());
 
-        if (queryBlock.hasOrderBy()) {
+        if (queryBlock.hasOrderByClause()) {
             if (!queryBlock.hasAggregation()) {
                 //requires both output and source fields to be visible if there are no aggregations
                 builder = projectForOrderWithoutAggregation(

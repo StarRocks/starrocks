@@ -12,9 +12,9 @@ Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     return _aggregator->open(state);
 }
 
-Status AggregateBlockingSinkOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(_aggregator->unref(state));
-    return Operator::close(state);
+void AggregateBlockingSinkOperator::close(RuntimeState* state) {
+    _aggregator->unref(state);
+    Operator::close(state);
 }
 
 void AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
@@ -95,6 +95,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
         }
     }
     _aggregator->update_num_input_rows(chunk_size);
+    RETURN_IF_ERROR(_aggregator->check_has_error());
 
     return Status::OK();
 }

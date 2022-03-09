@@ -21,29 +21,29 @@ TEST_F(VecMathFunctionsTest, truncateTest) {
     {
         Columns columns;
 
-        auto tc1 = DoubleColumn::create();
-        auto tc2 = Int32Column::create();
+        auto c0 = DoubleColumn::create();
+        auto c1 = Int32Column::create();
 
         double dous[] = {2341.2341111, 4999.90134, 2144.2855, 934.12439};
         int ints[] = {2, 3, 1, 4};
 
-        double res[] = {2341.23, 4999.901, 2144.2, 934.1243};
+        double expected_res[] = {2341.23, 4999.901, 2144.2, 934.1243};
 
         for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
-            tc1->append(dous[i]);
-            tc2->append(ints[i]);
+            c0->append(dous[i]);
+            c1->append(ints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(c0);
+        columns.emplace_back(c1);
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = MathFunctions::truncate(ctx.get(), columns);
+        ColumnPtr res = MathFunctions::truncate(ctx.get(), columns);
 
-        auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
+        auto* raw_res = ColumnHelper::cast_to<TYPE_DOUBLE>(res)->get_data().data();
 
-        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
-            ASSERT_EQ(res[i], v->get_data()[i]);
+        for (int i = 0; i < sizeof(expected_res) / sizeof(expected_res[0]); ++i) {
+            ASSERT_EQ(expected_res[i], raw_res[i]);
         }
     }
 }
@@ -52,20 +52,206 @@ TEST_F(VecMathFunctionsTest, truncateNanTest) {
     {
         Columns columns;
 
-        auto tc1 = DoubleColumn::create();
-        auto tc2 = Int32Column::create();
+        auto c0 = DoubleColumn::create();
+        auto c1 = Int32Column::create();
 
-        tc1->append(0);
-        tc2->append(1591994755);
+        c0->append(0);
+        c1->append(1591994755);
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(c0);
+        columns.emplace_back(c1);
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = MathFunctions::truncate(ctx.get(), columns);
+        ColumnPtr res = MathFunctions::truncate(ctx.get(), columns);
 
-        ASSERT_EQ(true, result->is_null(0));
+        ASSERT_EQ(true, res->is_null(0));
     }
+}
+
+static void testTruncateDecimal(const std::vector<std::string>& arg0_values,
+                                const std::vector<uint8_t>& arg0_null_flags, const int32_t precision,
+                                const int32_t scale, const std::vector<int32_t>& arg1_values,
+                                const std::vector<uint8_t>& arg1_null_flags, const std::vector<std::string>& res_values,
+                                const std::vector<uint8_t>& res_null_flags) {
+    ASSERT_GE(precision, 0);
+    ASSERT_LE(precision, decimal_precision_limit<int128_t>);
+    ASSERT_GE(scale, 0);
+    ASSERT_LE(scale, decimal_precision_limit<int128_t>);
+    ASSERT_TRUE(arg0_null_flags.empty() || arg0_null_flags.size() == arg0_values.size());
+    ASSERT_TRUE(arg1_null_flags.empty() || arg1_null_flags.size() == arg1_values.size());
+    ASSERT_TRUE(res_null_flags.empty() || res_null_flags.size() == res_values.size());
+
+    Columns columns;
+
+    auto arg0_data_column = DecimalV3Column<int128_t>::create(precision, scale);
+    auto arg1_data_column = Int32Column::create();
+
+    ASSERT_EQ(arg0_values.size(), arg1_values.size());
+    std::set<std::string> arg0_distinct_values;
+    bool arg0_has_null = false;
+    bool arg0_all_null = true;
+    for (auto i = 0; i < arg0_values.size(); i++) {
+        if (!arg0_null_flags.empty() && arg0_null_flags[i] == 1) {
+            arg0_has_null = true;
+            continue;
+        }
+        arg0_all_null = false;
+        int128_t value;
+        DecimalV3Cast::from_string<int128_t>(&value, precision, scale, arg0_values[i].c_str(), arg0_values[i].length());
+        arg0_data_column->append(value);
+        arg0_distinct_values.insert(arg0_values[i]);
+    }
+    std::set<int32_t> arg1_distinct_values;
+    bool arg1_has_null = false;
+    bool arg1_all_null = true;
+    for (auto i = 0; i < arg1_values.size(); i++) {
+        if (!arg1_null_flags.empty() && arg1_null_flags[i] == 1) {
+            arg1_has_null = true;
+            continue;
+        }
+        arg1_all_null = false;
+        arg1_data_column->append(arg1_values[i]);
+        arg1_distinct_values.insert(arg1_values[i]);
+    }
+
+    ColumnPtr c0;
+    bool c0_const = false;
+    bool c0_nullable = false;
+    if (arg0_all_null) {
+        // ConstNullColumn
+        c0_const = true;
+        c0_nullable = true;
+        c0 = ColumnHelper::create_const_null_column(arg0_data_column->size());
+    } else if (!arg0_has_null && arg0_distinct_values.size() == 1) {
+        // ConstColumn
+        c0_const = true;
+        c0 = ConstColumn::create(arg0_data_column, arg0_data_column->size());
+    } else {
+        if (arg0_null_flags.empty()) {
+            // normal Column
+            c0 = arg0_data_column;
+        } else {
+            // NullableColumn
+            c0_nullable = true;
+            auto null_flags = NullColumn::create();
+            for (int i = 0; i < arg0_values.size(); i++) {
+                null_flags->append(arg0_null_flags[i]);
+            }
+            c0 = NullableColumn::create(arg0_data_column, null_flags);
+        }
+    }
+
+    ColumnPtr c1;
+    bool c1_const = false;
+    bool c1_nullable = false;
+    if (arg1_all_null) {
+        // ConstNullColumn
+        c1_const = true;
+        c1_nullable = true;
+        c1 = ColumnHelper::create_const_null_column(arg1_data_column->size());
+    } else if (!arg1_has_null && arg1_distinct_values.size() == 1) {
+        // ConstColumn
+        c1_const = true;
+        c1 = ConstColumn::create(arg1_data_column, arg1_data_column->size());
+    } else {
+        if (arg1_null_flags.empty()) {
+            // normal Column
+            c1 = arg1_data_column;
+        } else {
+            // NullableColumn
+            c1_nullable = true;
+            auto null_flags = NullColumn::create();
+            for (int i = 0; i < arg1_values.size(); i++) {
+                null_flags->append(arg1_null_flags[i]);
+            }
+            c1 = NullableColumn::create(arg1_data_column, null_flags);
+        }
+    }
+
+    columns.emplace_back(c0);
+    columns.emplace_back(c1);
+
+    FunctionContext::TypeDesc return_type;
+    return_type.precision = decimal_precision_limit<int128_t>;
+    if (arg1_values.size() == 1) {
+        if (arg1_values[0] < 0) {
+            return_type.scale = 0;
+        } else if (arg1_values[0] > decimal_precision_limit<int128_t>) {
+            return_type.scale = decimal_precision_limit<int128_t>;
+        } else {
+            return_type.scale = arg1_values[0];
+        }
+    } else {
+        return_type.scale = scale;
+    }
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context(std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
+    auto res_column = MathFunctions::truncate_decimal128(ctx.get(), columns);
+    DecimalV3Column<int128_t>* decimal_res_column;
+    NullColumn* null_fags_res_column = nullptr;
+
+    if ((c0_const && c0_nullable) || (c1_const && c1_nullable)) {
+        ASSERT_TRUE(res_column->only_null());
+        return;
+    } else if (c0_const && c1_const) {
+        ASSERT_TRUE(res_column->is_constant());
+        decimal_res_column =
+                ColumnHelper::cast_to<TYPE_DECIMAL128>(FunctionHelper::get_data_column_of_const(res_column)).get();
+    } else if (c0_nullable || c1_nullable) {
+        ASSERT_TRUE(res_column->is_nullable());
+        decimal_res_column =
+                ColumnHelper::cast_to<TYPE_DECIMAL128>(FunctionHelper::get_data_column_of_nullable(res_column)).get();
+        null_fags_res_column = down_cast<NullableColumn*>(res_column.get())->null_column().get();
+    } else {
+        ASSERT_FALSE(res_column->is_constant());
+        ASSERT_FALSE(res_column->is_nullable());
+        decimal_res_column = ColumnHelper::cast_to<TYPE_DECIMAL128>(res_column).get();
+    }
+
+    ASSERT_EQ(decimal_precision_limit<int128_t>, decimal_res_column->precision());
+    ASSERT_EQ(return_type.scale, decimal_res_column->scale());
+    if (res_null_flags.size() == res_values.size()) {
+        ASSERT_TRUE(null_fags_res_column != nullptr);
+        for (auto i = 0; i < res_values.size(); i++) {
+            if (res_null_flags[i] > 0) {
+                ASSERT_EQ(res_null_flags[i], null_fags_res_column->get_data()[i]);
+            } else {
+                ASSERT_EQ(res_values[i], DecimalV3Cast::to_string<int128_t>(decimal_res_column->get_data()[i],
+                                                                            return_type.precision, return_type.scale));
+            }
+        }
+    } else {
+        for (auto i = 0; i < res_values.size(); i++) {
+            ASSERT_EQ(res_values[i], DecimalV3Cast::to_string<int128_t>(decimal_res_column->get_data()[i],
+                                                                        return_type.precision, return_type.scale));
+        }
+    }
+}
+
+TEST_F(VecMathFunctionsTest, truncateDecimalTest) {
+    testTruncateDecimal({"18450.76"}, {}, 10, 2, {-1}, {}, {"18450"}, {});
+    testTruncateDecimal({"18450.76"}, {}, 10, 2, {0}, {}, {"18450"}, {});
+    testTruncateDecimal({"18450.76"}, {}, 10, 2, {1}, {}, {"18450.7"}, {});
+    testTruncateDecimal({"18450.76"}, {}, 10, 2, {2}, {}, {"18450.76"}, {});
+    testTruncateDecimal({"18450.76"}, {}, 10, 2, {5}, {}, {"18450.76000"}, {});
+    testTruncateDecimal({"0.1"}, {}, 10, 2, {38}, {}, {"0.10000000000000000000000000000000000000"}, {});
+    testTruncateDecimal({"0.1"}, {}, 10, 2, {1000}, {}, {"0.10000000000000000000000000000000000000"}, {});
+}
+
+TEST_F(VecMathFunctionsTest, truncateDecimalNullTest) {
+    testTruncateDecimal({"18450.76"}, {}, 10, 2, {0}, {1}, {"INVALID"}, {1});
+    testTruncateDecimal({"INVALID"}, {1}, 10, 2, {2}, {}, {"INVALID"}, {1});
+    testTruncateDecimal({"INVALID"}, {1}, 10, 2, {0}, {1}, {"INVALID"}, {1});
+}
+
+TEST_F(VecMathFunctionsTest, truncateDecimalByColTest) {
+    testTruncateDecimal({"123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"}, {},
+                        15, 5, {0, 1, 2, 3, 4, 5, 6}, {},
+                        {"123", "123.40000", "123.45000", "123.45600", "123.45670", "123.45678", "123.45678"}, {});
+    testTruncateDecimal({"123.45678", "INVALID", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"},
+                        {0, 1, 0, 0, 0, 0, 0}, 15, 5, {0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 1},
+                        {"123", "INVALID", "123.45000", "123.45600", "123.45670", "123.45678", "INVALID"},
+                        {0, 1, 0, 0, 0, 0, 1});
 }
 
 TEST_F(VecMathFunctionsTest, Round_up_toTest) {

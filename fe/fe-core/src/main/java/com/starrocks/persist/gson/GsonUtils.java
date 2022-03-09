@@ -59,6 +59,8 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;
 import com.starrocks.catalog.IcebergResource;
+import com.starrocks.catalog.JDBCResource;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OdbcCatalogResource;
 import com.starrocks.catalog.PseudoType;
@@ -66,7 +68,9 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SparkResource;
+import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
@@ -126,7 +130,8 @@ public class GsonUtils {
             .registerSubtype(HiveResource.class, HiveResource.class.getSimpleName())
             .registerSubtype(IcebergResource.class, IcebergResource.class.getSimpleName())
             .registerSubtype(HudiResource.class, HudiResource.class.getSimpleName())
-            .registerSubtype(OdbcCatalogResource.class, OdbcCatalogResource.class.getSimpleName());
+            .registerSubtype(OdbcCatalogResource.class, OdbcCatalogResource.class.getSimpleName())
+            .registerSubtype(JDBCResource.class, JDBCResource.class.getSimpleName());
 
     // runtime adapter for class "AlterJobV2"
     private static final RuntimeTypeAdapterFactory<AlterJobV2> alterJobV2TypeAdapterFactory = RuntimeTypeAdapterFactory
@@ -139,6 +144,12 @@ public class GsonUtils {
             = RuntimeTypeAdapterFactory
             .of(LoadJobStateUpdateInfo.class, "clazz")
             .registerSubtype(SparkLoadJobStateUpdateInfo.class, SparkLoadJobStateUpdateInfo.class.getSimpleName());
+
+    // runtime adapter for class "Tablet"
+    private static final RuntimeTypeAdapterFactory<Tablet> tabletTypeAdapterFactory = RuntimeTypeAdapterFactory
+            .of(Tablet.class, "clazz")
+            .registerSubtype(LocalTablet.class, LocalTablet.class.getSimpleName(), true)
+            .registerSubtype(StarOSTablet.class, StarOSTablet.class.getSimpleName());
 
     private static final JsonSerializer<LocalDateTime> localDateTimeTypeSerializer =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
@@ -164,6 +175,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(resourceTypeAdapterFactory)
             .registerTypeAdapterFactory(alterJobV2TypeAdapterFactory)
             .registerTypeAdapterFactory(loadJobStateUpdateInfoTypeAdapterFactory)
+            .registerTypeAdapterFactory(tabletTypeAdapterFactory)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeSerializer)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeDeserializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoSerializer)

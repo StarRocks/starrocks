@@ -14,7 +14,6 @@ import com.starrocks.sql.analyzer.Scope;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class SelectRelation extends QueryRelation {
     /**
@@ -174,10 +173,6 @@ public class SelectRelation extends QueryRelation {
         this.groupBy = groupBy;
     }
 
-    public List<Expr> getOrderByExpressions() {
-        return sortClause.stream().map(OrderByElement::getExpr).collect(Collectors.toList());
-    }
-
     public Relation getRelation() {
         return relation;
     }
@@ -192,14 +187,6 @@ public class SelectRelation extends QueryRelation {
 
     public boolean hasAggregation() {
         return !(groupBy.isEmpty() && aggregate.isEmpty());
-    }
-
-    public boolean hasOrderBy() {
-        return !sortClause.isEmpty();
-    }
-
-    public void clearOrder() {
-        sortClause.clear();
     }
 
     public List<AnalyticExpr> getOutputAnalytic() {
@@ -279,51 +266,14 @@ public class SelectRelation extends QueryRelation {
         this.orderScope = orderScope;
     }
 
+    public boolean hasAnalyticInfo() {
+        return (outputAnalytic != null && outputAnalytic.size() > 0)
+                || (orderByAnalytic != null && orderByAnalytic.size() > 0);
+    }
+
     @Override
-    public String toSql() {
-        StringBuilder sqlBuilder = new StringBuilder();
-        if (hasWithClause()) {
-            for (CTERelation cteRelation : getCteRelations()) {
-                sqlBuilder.append(cteRelation.toSql());
-                sqlBuilder.append(" ");
-            }
-        }
-
-        sqlBuilder.append("SELECT ");
-        if (selectList.isDistinct()) {
-            sqlBuilder.append("DISTINCT");
-        }
-
-        for (int i = 0; i < selectList.getItems().size(); ++i) {
-            if (i != 0) {
-                sqlBuilder.append(", ");
-            }
-            sqlBuilder.append(selectList.getItems().get(i).toSql());
-        }
-
-        if (relation != null) {
-            sqlBuilder.append(" FROM ");
-            sqlBuilder.append(relation.toSql());
-        }
-
-        if (hasWhereClause()) {
-            sqlBuilder.append(" WHERE ");
-            sqlBuilder.append(getWhereClause().toSql());
-        }
-
-        if (hasGroupByClause()) {
-            sqlBuilder.append(" GROUP BY ");
-            sqlBuilder.append(getGroupByClause().toSql());
-        }
-
-        if (hasHavingClause()) {
-            sqlBuilder.append(" HAVING ");
-            sqlBuilder.append(getHavingClause().toSql());
-        }
-
-        sqlBuilder.append(super.toSql());
-
-        return sqlBuilder.toString();
+    public List<Expr> getOutputExpression() {
+        return outputExpr;
     }
 }
 

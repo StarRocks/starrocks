@@ -30,7 +30,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TPipelineProfileMode;
+import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -125,7 +125,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_DOP = "pipeline_dop";
 
-    public static final String PIPELINE_PROFILE_MODE = "pipeline_profile_mode";
+    public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
     public static final String WORKGROUP_ID = "workgroup_id";
 
@@ -196,8 +196,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableResourceGroup = false;
 
     // max memory used on every backend.
+    public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
-    public long maxExecMemByte = 2147483648L;
+    public long maxExecMemByte = DEFAULT_EXEC_MEM_LIMIT;
 
     @VariableMgr.VarAttr(name = ENABLE_SPILLING)
     public boolean enableSpilling = false;
@@ -344,8 +345,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
-    @VariableMgr.VarAttr(name = PIPELINE_PROFILE_MODE)
-    private int pipelineProfileMode = 0;
+    @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
+    private int pipelineProfileLevel = 1;
 
     @VariableMgr.VarAttr(name = WORKGROUP_ID, flag = VariableMgr.INVISIBLE)
     private int workgroupId = 0;
@@ -792,12 +793,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return workgroupId;
     }
 
-    public int getPipelineProfileMode() {
-        return pipelineProfileMode;
+    public int getPipelineProfileLevel() {
+        return pipelineProfileLevel;
     }
 
-    public void setPipelineProfileMode(int pipelineProfileMode) {
-        this.pipelineProfileMode = pipelineProfileMode;
+    public void setPipelineProfileLevel(int pipelineProfileLevel) {
+        this.pipelineProfileLevel = pipelineProfileLevel;
     }
 
     public boolean isEnableReplicationJoin() {
@@ -909,18 +910,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setPipeline_dop(pipelineDop);
-        switch (pipelineProfileMode) {
+        switch (pipelineProfileLevel) {
             case 0:
-                tResult.setPipeline_profile_mode(TPipelineProfileMode.CORE_METRICS);
+                tResult.setPipeline_profile_level(TPipelineProfileLevel.CORE_METRICS);
                 break;
             case 1:
-                tResult.setPipeline_profile_mode(TPipelineProfileMode.ALL_METRICS);
+                tResult.setPipeline_profile_level(TPipelineProfileLevel.ALL_METRICS);
                 break;
             case 2:
-                tResult.setPipeline_profile_mode(TPipelineProfileMode.DETAIL);
+                tResult.setPipeline_profile_level(TPipelineProfileLevel.DETAIL);
                 break;
             default:
-                tResult.setPipeline_profile_mode(TPipelineProfileMode.CORE_METRICS);
+                tResult.setPipeline_profile_level(TPipelineProfileLevel.CORE_METRICS);
                 break;
         }
         return tResult;

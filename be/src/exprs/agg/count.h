@@ -70,7 +70,8 @@ public:
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         auto* column = down_cast<Int64Column*>((*dst).get());
         column->get_data().assign(chunk_size, 1);
     }
@@ -160,7 +161,8 @@ public:
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
 
-    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
         Int64Column* column = down_cast<Int64Column*>((*dst).get());
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());

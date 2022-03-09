@@ -47,8 +47,6 @@ public class ScalarOperatorFunctionsTest {
 
     @Before
     public void setUp() throws AnalysisException {
-        Config.enable_decimal_v3 = true;
-
         O_DT_20101102_183010 = ConstantOperator.createDatetime(LocalDateTime.of(2010, 11, 2, 18, 30, 10));
         O_DT_20101202_023010 = ConstantOperator.createDatetime(LocalDateTime.of(2010, 12, 2, 2, 30, 10));
         O_DT_20150323_092355 = ConstantOperator.createDatetime(LocalDateTime.of(2015, 3, 23, 9, 23, 55));
@@ -219,6 +217,11 @@ public class ScalarOperatorFunctionsTest {
         Assert.assertThrows(IllegalArgumentException.class, () -> ScalarOperatorFunctions
                 .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 21, 13, 4, 5)),
                         ConstantOperator.createVarchar("%X")).getVarchar());
+        assertTrue(ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar(""))
+                .isNull());
+        assertEquals("  ",
+                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("  "))
+                        .getVarchar());
     }
 
     @Test
@@ -571,11 +574,6 @@ public class ScalarOperatorFunctionsTest {
                         .toString());
         assertTrue(ScalarOperatorFunctions.modDecimal(O_DECIMAL128P38S20_100, O_DECIMAL128P38S20_100).getType()
                 .isDecimalV3());
-    }
-
-    @Test
-    public void modLargeInt() {
-        assertEquals("0", ScalarOperatorFunctions.modLargeInt(O_LI_100, O_LI_100).getLargeInt().toString());
     }
 
     @Test

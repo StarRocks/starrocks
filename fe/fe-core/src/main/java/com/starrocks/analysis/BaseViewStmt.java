@@ -30,6 +30,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,21 +44,31 @@ public class BaseViewStmt extends DdlStmt {
 
     protected final TableName tableName;
     protected final List<ColWithComment> cols;
-    protected final QueryStmt viewDefStmt;
+    protected QueryStmt viewDefStmt;
 
     // Set during analyze
-    protected final List<Column> finalCols;
+    protected List<Column> finalCols;
 
     protected String originalViewDef;
     protected String inlineViewDef;
 
     protected QueryStmt cloneStmt;
 
+    protected QueryStatement queryStatement;
+
     public BaseViewStmt(TableName tableName, List<ColWithComment> cols, QueryStmt queryStmt) {
         Preconditions.checkNotNull(queryStmt);
         this.tableName = tableName;
         this.cols = cols;
         this.viewDefStmt = queryStmt;
+        finalCols = Lists.newArrayList();
+    }
+
+    public BaseViewStmt(TableName tableName, List<ColWithComment> cols, QueryStatement queryStmt) {
+        Preconditions.checkNotNull(queryStmt);
+        this.tableName = tableName;
+        this.cols = cols;
+        this.queryStatement = queryStmt;
         finalCols = Lists.newArrayList();
     }
 
@@ -68,12 +80,32 @@ public class BaseViewStmt extends DdlStmt {
         return tableName.getTbl();
     }
 
+    public TableName getTableName() {
+        return tableName;
+    }
+
     public List<Column> getColumns() {
         return finalCols;
     }
 
+    public void setFinalCols(List<Column> finalCols) {
+        this.finalCols = finalCols;
+    }
+
     public String getInlineViewDef() {
         return inlineViewDef;
+    }
+
+    public void setInlineViewDef(String inlineViewDef) {
+        this.inlineViewDef = inlineViewDef;
+    }
+
+    public QueryStatement getQueryStatement() {
+        return queryStatement;
+    }
+
+    public List<ColWithComment> getCols() {
+        return cols;
     }
 
     /**
@@ -144,4 +176,9 @@ public class BaseViewStmt extends DdlStmt {
             throw new AnalysisException("Not support OUTFILE clause in CREATE VIEW statement");
         }
     }
+
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitBaseViewStatement(this, context);
+    }
+
 }

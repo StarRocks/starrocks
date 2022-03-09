@@ -41,6 +41,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -707,7 +708,7 @@ public class RestoreJob extends AbstractJob {
                 OlapTable tbl = (OlapTable) db.getTable(idChain.getTblId());
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
-                Tablet tablet = index.getTablet(idChain.getTabletId());
+                LocalTablet tablet = (LocalTablet) index.getTablet(idChain.getTabletId());
                 Replica replica = tablet.getReplicaById(idChain.getReplicaId());
                 long signature = catalog.getNextId();
                 SnapshotTask task = new SnapshotTask(null, replica.getBackendId(), signature,
@@ -776,7 +777,7 @@ public class RestoreJob extends AbstractJob {
                     restoredIdx.getId(), indexMeta.getSchemaHash(), TStorageMedium.HDD);
             for (Tablet restoreTablet : restoredIdx.getTablets()) {
                 Catalog.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
-                for (Replica restoreReplica : restoreTablet.getReplicas()) {
+                for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
                     Catalog.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
                     CreateReplicaTask task = new CreateReplicaTask(restoreReplica.getBackendId(), dbId,
                             localTbl.getId(), restorePart.getId(), restoredIdx.getId(),
@@ -835,7 +836,7 @@ public class RestoreJob extends AbstractJob {
             for (int i = 0; i < remotetabletSize; i++) {
                 // generate new tablet id
                 long newTabletId = catalog.getNextId();
-                Tablet newTablet = new Tablet(newTabletId);
+                LocalTablet newTablet = new LocalTablet(newTabletId);
                 // add tablet to index, but not add to TabletInvertedIndex
                 remoteIdx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
 
@@ -868,7 +869,7 @@ public class RestoreJob extends AbstractJob {
             BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameById(localIdx.getId()));
             Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
             for (int i = 0; i < localIdx.getTablets().size(); i++) {
-                Tablet localTablet = localIdx.getTablets().get(i);
+                LocalTablet localTablet = (LocalTablet) localIdx.getTablets().get(i);
                 BackupTabletInfo backupTabletInfo = backupIdxInfo.tablets.get(i);
                 LOG.debug("get tablet mapping: {} to {}, index {}", backupTabletInfo.id, localTablet.getId(), i);
                 for (Replica localReplica : localTablet.getReplicas()) {
@@ -934,7 +935,7 @@ public class RestoreJob extends AbstractJob {
                             restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
                     for (Tablet restoreTablet : restoreIdx.getTablets()) {
                         Catalog.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
-                        for (Replica restoreReplica : restoreTablet.getReplicas()) {
+                        for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
                             Catalog.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
                         }
                     }
@@ -952,7 +953,7 @@ public class RestoreJob extends AbstractJob {
                                 restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
                         for (Tablet restoreTablet : restoreIdx.getTablets()) {
                             Catalog.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
-                            for (Replica restoreReplica : restoreTablet.getReplicas()) {
+                            for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
                                 Catalog.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
                             }
                         }
@@ -1059,7 +1060,7 @@ public class RestoreJob extends AbstractJob {
                                 return;
                             }
 
-                            Tablet tablet = idx.getTablet(info.getTabletId());
+                            LocalTablet tablet = (LocalTablet) idx.getTablet(info.getTabletId());
                             if (tablet == null) {
                                 status = new Status(ErrCode.NOT_FOUND,
                                         "tablet " + info.getTabletId() + " does not exist in restored table "
@@ -1214,7 +1215,7 @@ public class RestoreJob extends AbstractJob {
                     // we also need to update the replica version of these overwritten restored partitions
                     for (MaterializedIndex idx : part.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         for (Tablet tablet : idx.getTablets()) {
-                            for (Replica replica : tablet.getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 if (!replica.checkVersionCatchUp(part.getVisibleVersion(), false)) {
                                     replica.updateRowCount(part.getVisibleVersion(),
                                             replica.getDataSize(), replica.getRowCount());

@@ -81,7 +81,7 @@ struct TLoadErrorHubInfo {
     3: optional TBrokerErrorHubInfo broker_info;
 }
 
-enum TPipelineProfileMode {
+enum TPipelineProfileLevel {
   CORE_METRICS,
   ALL_METRICS,
   DETAIL
@@ -158,7 +158,7 @@ struct TQueryOptions {
   // For pipeline query engine
   54: optional i32 pipeline_dop;
   // For pipeline query engine
-  55: optional TPipelineProfileMode pipeline_profile_mode;
+  55: optional TPipelineProfileLevel pipeline_profile_level;
 }
 
 

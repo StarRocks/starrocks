@@ -50,25 +50,28 @@ Status ProtobufFile::load(::google::protobuf::Message* message) {
     ASSIGN_OR_RETURN(auto input_file, _env->new_sequential_file(_path));
 
     FixedFileHeader header;
-    Slice buff((char*)&header, sizeof(header));
-    RETURN_IF_ERROR(input_file->read(&buff));
+    ASSIGN_OR_RETURN(auto nread, input_file->read(&header, sizeof(header)));
+    if (nread != sizeof(header)) {
+        return Status::Corruption("fail to read header");
+    }
     if (header.magic_number != OLAP_FIX_HEADER_MAGIC_NUMBER) {
         return Status::Corruption(strings::Substitute("invalid magic number $0", header.magic_number));
     }
 
     uint32_t unused_flag;
-    buff = Slice((char*)&unused_flag, sizeof(unused_flag));
-    RETURN_IF_ERROR(input_file->read(&buff));
+    ASSIGN_OR_RETURN(nread, input_file->read(&unused_flag, sizeof(unused_flag)));
+    if (UNLIKELY(nread != sizeof(unused_flag))) {
+        return Status::Corruption("fail to read flag");
+    }
 
     std::string str;
     raw::stl_string_resize_uninitialized(&str, header.protobuf_length + 1);
-    buff = Slice(str);
-    RETURN_IF_ERROR(input_file->read(&buff));
-    str.resize(buff.size);
-    if (buff.size != header.protobuf_length) {
+    ASSIGN_OR_RETURN(nread, input_file->read(str.data(), str.size()));
+    str.resize(nread);
+    if (str.size() != header.protobuf_length) {
         return Status::Corruption("mismatched serialized size");
     }
-    if (olap_adler32(ADLER32_INIT, buff.data, buff.size) != header.protobuf_checksum) {
+    if (olap_adler32(ADLER32_INIT, str.data(), str.size()) != header.protobuf_checksum) {
         return Status::Corruption("mismatched checksum");
     }
     if (!message->ParseFromString(str)) {

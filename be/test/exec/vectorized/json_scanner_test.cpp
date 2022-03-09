@@ -10,6 +10,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 
 namespace starrocks::vectorized {
 
@@ -60,6 +61,32 @@ protected:
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
         return std::make_unique<JsonScanner>(_state, _profile, *broker_scan_range, _counter);
+    }
+
+    ChunkPtr test_with_jsonpath(int columns, std::string input_data, std::string jsonpath,
+                                std::vector<std::string> jsonpaths) {
+        std::vector<TypeDescriptor> types;
+        for (int i = 0; i < columns; i++) {
+            types.emplace_back(TypeDescriptor::create_json_type());
+        }
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_JSON;
+        range.strip_outer_array = false;
+        range.__isset.strip_outer_array = false;
+        range.__isset.jsonpaths = true;
+        range.jsonpaths = jsonpath;
+        range.__isset.json_root = false;
+        range.__set_path(input_data);
+        ranges.emplace_back(range);
+
+        auto scanner = create_json_scanner(types, ranges, jsonpaths);
+
+        EXPECT_OK(scanner->open());
+
+        ChunkPtr chunk = scanner->get_next().value();
+        return chunk;
     }
 
     void SetUp() override {
@@ -562,43 +589,99 @@ TEST_F(JsonScannerTest, test_native_json_ndjson_with_jsonpath) {
 }
 
 TEST_F(JsonScannerTest, test_native_json_single_column) {
-    std::vector<TypeDescriptor> types;
-    constexpr int kColumns = 2;
-    for (int i = 0; i < kColumns; i++) {
-        types.emplace_back(TypeDescriptor::create_json_type());
+    std::string datapath = "./be/test/exec/test_data/json_scanner/test_ndjson_chinese.json";
+
+    {
+        std::string jsonpath1 = R"(["$"])";
+        ChunkPtr result1 = test_with_jsonpath(1, datapath, jsonpath1, {"$"});
+        EXPECT_EQ(1, result1->num_columns());
+        EXPECT_EQ(5, result1->num_rows());
+
+        EXPECT_EQ(R"([{"k1": "v1", "keyname": {"ip地址": "10.10.0.1", "value": "10"}, "kind": "中文"}])",
+                  result1->debug_row(0));
+        EXPECT_EQ(R"([{"k1": "v2", "keyname": {"ip地址": "10.10.0.2", "value": "20"}, "kind": "英文"}])",
+                  result1->debug_row(1));
+        EXPECT_EQ(R"([{"k1": "v3", "keyname": {"ip地址": "10.10.0.3", "value": "30"}, "kind": "法文"}])",
+                  result1->debug_row(2));
+        EXPECT_EQ(R"([{"k1": "v4", "keyname": {"ip地址": "10.10.0.4", "value": "40"}, "kind": "德文"}])",
+                  result1->debug_row(3));
+        EXPECT_EQ(R"([{"k1": "v5", "keyname": {"ip地址": "10.10.0.5", "value": "50"}, "kind": "西班牙"}])",
+                  result1->debug_row(4));
     }
+    {
+        std::string jsonpath1 = R"(["$", "$.k1"])";
+        ChunkPtr result1 = test_with_jsonpath(2, datapath, jsonpath1, {"$", "$.k1"});
+        EXPECT_EQ(2, result1->num_columns());
+        EXPECT_EQ(5, result1->num_rows());
 
-    std::vector<TBrokerRangeDesc> ranges;
-    TBrokerRangeDesc range;
-    range.format_type = TFileFormatType::FORMAT_JSON;
-    range.strip_outer_array = false;
-    range.__isset.strip_outer_array = false;
-    range.__isset.jsonpaths = true;
-    range.jsonpaths = R"(["$", "$.k1"])";
-    range.__isset.json_root = false;
-    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson_chinese.json");
-    ranges.emplace_back(range);
+        EXPECT_EQ(R"([{"k1": "v1", "keyname": {"ip地址": "10.10.0.1", "value": "10"}, "kind": "中文"}, "v1"])",
+                  result1->debug_row(0));
+        EXPECT_EQ(R"([{"k1": "v2", "keyname": {"ip地址": "10.10.0.2", "value": "20"}, "kind": "英文"}, "v2"])",
+                  result1->debug_row(1));
+        EXPECT_EQ(R"([{"k1": "v3", "keyname": {"ip地址": "10.10.0.3", "value": "30"}, "kind": "法文"}, "v3"])",
+                  result1->debug_row(2));
+        EXPECT_EQ(R"([{"k1": "v4", "keyname": {"ip地址": "10.10.0.4", "value": "40"}, "kind": "德文"}, "v4"])",
+                  result1->debug_row(3));
+        EXPECT_EQ(R"([{"k1": "v5", "keyname": {"ip地址": "10.10.0.5", "value": "50"}, "kind": "西班牙"}, "v5"])",
+                  result1->debug_row(4));
+    }
+    {
+        std::string jsonpath1 = R"(["$.k1","$"])";
+        ChunkPtr result1 = test_with_jsonpath(2, datapath, jsonpath1, {"$.k1", "$"});
+        EXPECT_EQ(2, result1->num_columns());
+        EXPECT_EQ(5, result1->num_rows());
 
-    auto scanner = create_json_scanner(types, ranges, {"$", "k1"});
+        EXPECT_EQ(R"(["v1", {"k1": "v1", "keyname": {"ip地址": "10.10.0.1", "value": "10"}, "kind": "中文"}])",
+                  result1->debug_row(0));
+        EXPECT_EQ(R"(["v2", {"k1": "v2", "keyname": {"ip地址": "10.10.0.2", "value": "20"}, "kind": "英文"}])",
+                  result1->debug_row(1));
+        EXPECT_EQ(R"(["v3", {"k1": "v3", "keyname": {"ip地址": "10.10.0.3", "value": "30"}, "kind": "法文"}])",
+                  result1->debug_row(2));
+        EXPECT_EQ(R"(["v4", {"k1": "v4", "keyname": {"ip地址": "10.10.0.4", "value": "40"}, "kind": "德文"}])",
+                  result1->debug_row(3));
+        EXPECT_EQ(R"(["v5", {"k1": "v5", "keyname": {"ip地址": "10.10.0.5", "value": "50"}, "kind": "西班牙"}])",
+                  result1->debug_row(4));
+    }
+    {
+        std::string jsonpath1 = R"(["$.k1", "$.kind", "$"])";
+        ChunkPtr result1 = test_with_jsonpath(3, datapath, jsonpath1, {"$.k1", "$.kind", "$"});
+        EXPECT_EQ(3, result1->num_columns());
+        EXPECT_EQ(5, result1->num_rows());
 
-    Status st;
-    st = scanner->open();
-    ASSERT_TRUE(st.ok());
+        EXPECT_EQ(R"(["v1", "中文", {"k1": "v1", "keyname": {"ip地址": "10.10.0.1", "value": "10"}, "kind": "中文"}])",
+                  result1->debug_row(0));
+        EXPECT_EQ(R"(["v2", "英文", {"k1": "v2", "keyname": {"ip地址": "10.10.0.2", "value": "20"}, "kind": "英文"}])",
+                  result1->debug_row(1));
+        EXPECT_EQ(R"(["v3", "法文", {"k1": "v3", "keyname": {"ip地址": "10.10.0.3", "value": "30"}, "kind": "法文"}])",
+                  result1->debug_row(2));
+        EXPECT_EQ(R"(["v4", "德文", {"k1": "v4", "keyname": {"ip地址": "10.10.0.4", "value": "40"}, "kind": "德文"}])",
+                  result1->debug_row(3));
+        EXPECT_EQ(
+                R"(["v5", "西班牙", {"k1": "v5", "keyname": {"ip地址": "10.10.0.5", "value": "50"}, "kind": "西班牙"}])",
+                result1->debug_row(4));
+    }
+    {
+        std::string jsonpath1 = R"(["$.k1", "$.kind", "$", "$.k2"])";
+        ChunkPtr result1 = test_with_jsonpath(4, datapath, jsonpath1, {"$.k1", "$.kind", "$", "$.k2"});
+        EXPECT_EQ(4, result1->num_columns());
+        EXPECT_EQ(5, result1->num_rows());
 
-    ChunkPtr chunk = scanner->get_next().value();
-    EXPECT_EQ(kColumns, chunk->num_columns());
-    EXPECT_EQ(5, chunk->num_rows());
-
-    EXPECT_EQ(R"([{"k1": "v1", "keyname": {"ip地址": "10.10.0.1", "value": "10"}, "kind": "中文"}, "v1"])",
-              chunk->debug_row(0));
-    EXPECT_EQ(R"([{"k1": "v2", "keyname": {"ip地址": "10.10.0.2", "value": "20"}, "kind": "英文"}, "v2"])",
-              chunk->debug_row(1));
-    EXPECT_EQ(R"([{"k1": "v3", "keyname": {"ip地址": "10.10.0.3", "value": "30"}, "kind": "法文"}, "v3"])",
-              chunk->debug_row(2));
-    EXPECT_EQ(R"([{"k1": "v4", "keyname": {"ip地址": "10.10.0.4", "value": "40"}, "kind": "德文"}, "v4"])",
-              chunk->debug_row(3));
-    EXPECT_EQ(R"([{"k1": "v5", "keyname": {"ip地址": "10.10.0.5", "value": "50"}, "kind": "西班牙"}, "v5"])",
-              chunk->debug_row(4));
+        EXPECT_EQ(
+                R"(["v1", "中文", {"k1": "v1", "keyname": {"ip地址": "10.10.0.1", "value": "10"}, "kind": "中文"}, NULL])",
+                result1->debug_row(0));
+        EXPECT_EQ(
+                R"(["v2", "英文", {"k1": "v2", "keyname": {"ip地址": "10.10.0.2", "value": "20"}, "kind": "英文"}, NULL])",
+                result1->debug_row(1));
+        EXPECT_EQ(
+                R"(["v3", "法文", {"k1": "v3", "keyname": {"ip地址": "10.10.0.3", "value": "30"}, "kind": "法文"}, NULL])",
+                result1->debug_row(2));
+        EXPECT_EQ(
+                R"(["v4", "德文", {"k1": "v4", "keyname": {"ip地址": "10.10.0.4", "value": "40"}, "kind": "德文"}, NULL])",
+                result1->debug_row(3));
+        EXPECT_EQ(
+                R"(["v5", "西班牙", {"k1": "v5", "keyname": {"ip地址": "10.10.0.5", "value": "50"}, "kind": "西班牙"}, NULL])",
+                result1->debug_row(4));
+    }
 }
 
 } // namespace starrocks::vectorized

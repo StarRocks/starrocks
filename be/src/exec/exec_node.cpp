@@ -465,12 +465,8 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new vectorized::TableFunctionNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::HDFS_SCAN_NODE:
-#ifdef STARROCKS_WITH_HDFS
         *node = pool->add(new vectorized::HdfsScanNode(pool, tnode, descs));
         return Status::OK();
-#else
-        return Status::InternalError("Don't support HDFS table, you should rebuild StarRocks with WITH_HDFS option ON");
-#endif
     case TPlanNodeType::MYSQL_SCAN_NODE:
         *node = pool->add(new vectorized::MysqlScanNode(pool, tnode, descs));
         return Status::OK();
@@ -613,6 +609,35 @@ void ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized:
         return;
     }
     chunk->filter(*raw_filter);
+}
+
+size_t ExecNode::eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
+                                            vectorized::Filter* filter) {
+    // No need to do expression if none rows
+    DCHECK(chunk != nullptr);
+    if (chunk->num_rows() == 0) {
+        return 0;
+    }
+    for (auto* ctx : ctxs) {
+        ColumnPtr column = ctx->evaluate(chunk);
+        size_t true_count = vectorized::ColumnHelper::count_true_with_notnull(column);
+
+        if (true_count == column->size()) {
+            // all hit, skip
+            continue;
+        } else if (0 == true_count) {
+            return 0;
+        } else {
+            bool all_zero = false;
+            vectorized::ColumnHelper::merge_two_filters(column, filter, &all_zero);
+            if (all_zero) {
+                return 0;
+            }
+        }
+    }
+
+    size_t true_count = SIMD::count_nonzero(*filter);
+    return true_count;
 }
 
 void ExecNode::eval_join_runtime_filters(vectorized::Chunk* chunk) {

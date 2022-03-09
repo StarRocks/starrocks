@@ -2,6 +2,9 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -1326,7 +1329,7 @@ public class ViewPlanTest extends PlanTestBase {
     @Test
     public void test286() throws Exception {
         String sql = "select sum(t1c) from (select t1c, lag(id_datetime, 1, '2020-01-01') over( partition by t1c)" +
-                "from test_all_type) a ;";
+                " from test_all_type) a ;";
         testView(sql);
     }
 
@@ -1663,5 +1666,28 @@ public class ViewPlanTest extends PlanTestBase {
         String sql = "With x0 AS (SELECT DISTINCT v1, v2 FROM t0)\n" +
                 " SELECT v1, v2 from x0";
         testView(sql);
+    }
+
+    @Test
+    public void testAlter() throws Exception {
+        String sql = "select v1 as c1, sum(v2) as c2 from t0 group by v1";
+        String viewName = "view" + INDEX.getAndIncrement();
+        String createView = "create view " + viewName + " as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from " + viewName);
+        Assert.assertEquals(sqlPlan, viewPlan);
+
+        String alterStmt =
+                "with testTbl_cte (w1, w2) as (select v1, v2 from t0) select w1 as c1, sum(w2) as c2 from testTbl_cte where w1 > 10 group by w1";
+        String alterView = "alter view " + viewName + " as " + alterStmt;
+
+        AlterViewStmt alterViewStmt = (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, starRocksAssert.getCtx());
+        Catalog.getCurrentCatalog().alterView(alterViewStmt);
+
+        sqlPlan = getFragmentPlan(alterStmt);
+        viewPlan = getFragmentPlan("select * from " + viewName);
+        Assert.assertEquals(sqlPlan, viewPlan);
     }
 }

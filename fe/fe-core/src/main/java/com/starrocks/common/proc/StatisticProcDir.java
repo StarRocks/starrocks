@@ -27,6 +27,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -34,7 +36,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.Tablet.TabletStatus;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -134,10 +135,11 @@ public class StatisticProcDir implements ProcDirInterface {
                                 .getMaterializedIndices(IndexExtState.VISIBLE)) {
                             ++dbIndexNum;
                             for (Tablet tablet : materializedIndex.getTablets()) {
+                                LocalTablet localTablet = (LocalTablet) tablet;
                                 ++dbTabletNum;
-                                dbReplicaNum += tablet.getReplicas().size();
+                                dbReplicaNum += localTablet.getReplicas().size();
 
-                                Pair<TabletStatus, Priority> res = tablet.getHealthStatusWithPriority(
+                                Pair<TabletStatus, Priority> res = localTablet.getHealthStatusWithPriority(
                                         infoService, db.getClusterName(),
                                         partition.getVisibleVersion(),
                                         replicationNum, aliveBeIdsInCluster);
@@ -149,7 +151,7 @@ public class StatisticProcDir implements ProcDirInterface {
                                     unhealthyTabletIds.put(dbId, tablet.getId());
                                 }
 
-                                if (!tablet.isConsistent()) {
+                                if (!localTablet.isConsistent()) {
                                     inconsistentTabletIds.put(dbId, tablet.getId());
                                 }
                             } // end for tablets

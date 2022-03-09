@@ -243,11 +243,11 @@ protected:
         Status status_;
     };
 
-    // data_ is active iff status_.ok()==true
+    // 'data_' is active if 'status_.ok() == true'.
     struct Dummy {};
     union {
-        // When T is const, we need some non-const object we can cast to void* for
-        // the placement new. dummy_ is that object.
+        // When 'T' is const, we need some non-const object we can cast to void* for
+        // the placement new. 'dummy_' is that object.
         Dummy dummy_;
         T data_;
     };

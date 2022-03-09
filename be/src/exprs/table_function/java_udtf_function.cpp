@@ -16,6 +16,7 @@
 #include "runtime/types.h"
 #include "runtime/user_function_cache.h"
 #include "udf/java/java_udf.h"
+#include "udf/java/utils.h"
 
 namespace starrocks::vectorized {
 template <bool handle_null>
@@ -101,13 +102,22 @@ Status JavaUDTFFunction::prepare(TableFunctionState* state) const {
     return Status::OK();
 }
 
-Status JavaUDTFFunction::open(TableFunctionState* state) const {
-    RETURN_IF_ERROR(down_cast<JavaUDTFState*>(state)->open());
+Status JavaUDTFFunction::open(RuntimeState* runtime_state, TableFunctionState* state) const {
+    auto open_status = [state]() {
+        RETURN_IF_ERROR(down_cast<JavaUDTFState*>(state)->open());
+        return Status::OK();
+    };
+    auto promise = call_function_in_pthread(runtime_state, open_status);
+    RETURN_IF_ERROR(promise->get_future().get());
     return Status::OK();
 }
 
-Status JavaUDTFFunction::close(TableFunctionState* state) const {
-    delete state;
+Status JavaUDTFFunction::close(RuntimeState* runtime_state, TableFunctionState* state) const {
+    auto promise = call_function_in_pthread(runtime_state, [state]() {
+        delete state;
+        return Status::OK();
+    });
+    RETURN_IF_ERROR(promise->get_future().get());
     return Status::OK();
 }
 

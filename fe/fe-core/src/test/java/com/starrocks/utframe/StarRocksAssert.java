@@ -26,6 +26,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DdlStmt;
@@ -56,7 +57,6 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class StarRocksAssert {
@@ -83,6 +83,10 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withDatabase(String dbName) throws Exception {
+        DropDbStmt dropDbStmt =
+                (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt("drop database if exists " + dbName + ";", ctx);
+        Catalog.getCurrentCatalog().dropDb(dropDbStmt);
+        
         CreateDbStmt createDbStmt =
                 (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt("create database " + dbName + ";", ctx);
         Catalog.getCurrentCatalog().createDb(createDbStmt);
@@ -111,6 +115,12 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert withResource(String sql) throws Exception {
+        CreateResourceStmt createResourceStmt = (CreateResourceStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        Catalog.getCurrentCatalog().getResourceMgr().createResource(createResourceStmt);
+        return this;
+    }
+
     public StarRocksAssert withTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
         Catalog.getCurrentCatalog().createTable(createTableStmt);
@@ -118,7 +128,7 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withView(String sql) throws Exception {
-        CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Catalog.getCurrentCatalog().createView(createTableStmt);
         return this;
     }
@@ -166,11 +176,9 @@ public class StarRocksAssert {
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
         SqlParser parser = new SqlParser(input);
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
         List<StatementBase> statements = SqlParserUtils.getMultiStmts(parser);
         for (StatementBase stmt : statements) {
-            analyzer.analyze(stmt);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
             Assert.assertTrue(stmt.getClass().getSimpleName().contains("WorkGroupStmt"));
             DdlExecutor.execute(Catalog.getCurrentCatalog(), (DdlStmt) stmt);
         }
@@ -181,10 +189,8 @@ public class StarRocksAssert {
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
         SqlParser parser = new SqlParser(input);
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
         StatementBase statement = SqlParserUtils.getFirstStmt(parser);
-        analyzer.analyze(statement);
+        com.starrocks.sql.analyzer.Analyzer.analyze(statement, ctx);
         Assert.assertTrue(statement instanceof ShowWorkGroupStmt);
         return Catalog.getCurrentCatalog().getWorkGroupMgr().showWorkGroup((ShowWorkGroupStmt) statement);
     }

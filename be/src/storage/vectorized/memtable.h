@@ -48,6 +48,7 @@ private:
     void _sort(bool is_final);
     void _sort_chunk_by_columns();
     void _sort_chunk_by_rows();
+    template <bool is_final>
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest);
 
     void _aggregate(bool is_final);

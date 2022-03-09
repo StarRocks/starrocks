@@ -2,38 +2,25 @@
 
 #pragma once
 
-#include <optional>
-
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
-#include "runtime/global_dicts.h"
-#include "util/blocking_queue.hpp"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
-namespace vectorized {
-class RuntimeFilterProbeCollector;
-}
+
+class PriorityThreadPool;
+class ScanNode;
 
 namespace pipeline {
 
-class ScanOperator final : public SourceOperator {
+class ScanOperator : public SourceOperator {
 public:
-    ScanOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
-                 const std::vector<ExprContext*>& conjunct_ctxs, int64_t limit)
-            : SourceOperator(factory, id, "olap_scan", plan_node_id),
-              _olap_scan_node(olap_scan_node),
-              _conjunct_ctxs(conjunct_ctxs),
-              _limit(limit),
-              _is_io_task_running(MAX_IO_TASKS_PER_OP),
-              _chunk_sources(MAX_IO_TASKS_PER_OP) {}
+    ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node);
 
     ~ScanOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool has_output() const override;
 
@@ -44,8 +31,17 @@ public:
     void set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
     void set_workgroup(workgroup::WorkGroupPtr wg);
+
+    // interface for different scan node
+    virtual Status do_prepare(RuntimeState* state) = 0;
+    virtual void do_close(RuntimeState* state) = 0;
+    virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel) = 0;
+
+protected:
+    ScanNode* _scan_node = nullptr;
 
 private:
     static constexpr int MAX_IO_TASKS_PER_OP = 4;
@@ -58,20 +54,10 @@ private:
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
 
-    // TODO(hcf) ugly, remove this later
-    RuntimeState* _state = nullptr;
-
     bool _is_finished = false;
+
     int32_t _io_task_retry_cnt = 0;
-
-    const TOlapScanNode& _olap_scan_node;
-    const std::vector<ExprContext*>& _conjunct_ctxs;
     PriorityThreadPool* _io_threads = nullptr;
-    std::vector<std::string> _unused_output_columns;
-    // Pass limit info to scan operator in order to improve sql:
-    // select * from table limit x;
-    int64_t _limit; // -1: no limit
-
     std::atomic<int> _num_running_io_tasks = 0;
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
@@ -79,34 +65,30 @@ private:
     workgroup::WorkGroupPtr _workgroup = nullptr;
 };
 
-class ScanOperatorFactory final : public SourceOperatorFactory {
+class ScanOperatorFactory : public SourceOperatorFactory {
 public:
-    ScanOperatorFactory(int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
-                        std::vector<ExprContext*>&& conjunct_ctxs, int64_t limit)
-            : SourceOperatorFactory(id, "olap_scan", plan_node_id),
-              _olap_scan_node(olap_scan_node),
-              _conjunct_ctxs(std::move(conjunct_ctxs)),
-              _limit(limit) {}
+    ScanOperatorFactory(int32_t id, ScanNode* scan_node);
 
     ~ScanOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<ScanOperator>(this, _id, _plan_node_id, _olap_scan_node, _conjunct_ctxs, _limit);
-    }
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
-    // ScanOperator needs to attach MorselQueue.
     bool with_morsels() const override { return true; }
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-private:
-    const TOlapScanNode& _olap_scan_node;
-    std::vector<ExprContext*> _conjunct_ctxs;
-    // Pass limit info to scan operator in order to improve sql:
-    // select * from table limit x;
-    int64_t _limit; // -1: no limit
+    // interface for different scan node
+    virtual Status do_prepare(RuntimeState* state) = 0;
+    virtual void do_close(RuntimeState* state) = 0;
+    virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
+
+protected:
+    ScanNode* _scan_node;
 };
+
+pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,
+                                                      pipeline::PipelineBuilderContext* context);
 
 } // namespace pipeline
 } // namespace starrocks

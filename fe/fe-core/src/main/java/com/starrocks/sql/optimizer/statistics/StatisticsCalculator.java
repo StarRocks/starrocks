@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
@@ -81,6 +82,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
@@ -113,6 +115,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
@@ -165,27 +168,27 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             statistics = estimateStatistics(ImmutableList.of(predicate), statistics);
         }
 
+        Statistics.Builder statisticsBuilder = Statistics.buildFrom(statistics);
         if (limit != Operator.DEFAULT_LIMIT && limit < statistics.getOutputRowCount()) {
-            statistics = Statistics.buildFrom(statistics).setOutputRowCount(limit).build();
+            statisticsBuilder.setOutputRowCount(limit);
+        }
+        // CTE consumer has children but the children do not estimate the statistics, so here need to filter null
+        if (context.getChildrenStatistics().stream().filter(Objects::nonNull)
+                .anyMatch(Statistics::isTableRowCountMayInaccurate)) {
+            statisticsBuilder.setTableRowCountMayInaccurate(true);
         }
 
         Projection projection = node.getProjection();
         if (projection != null) {
-            Statistics.Builder pruneBuilder = Statistics.builder();
-            pruneBuilder.addColumnStatistics(statistics.getColumnStatistics());
-            pruneBuilder.setOutputRowCount(statistics.getOutputRowCount());
-
             Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
             for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                 ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
-                pruneBuilder.addColumnStatistic(columnRefOperator,
-                        ExpressionStatisticCalculator.calculate(mapOperator, pruneBuilder.build()));
+                statisticsBuilder.addColumnStatistic(columnRefOperator,
+                        ExpressionStatisticCalculator.calculate(mapOperator, statisticsBuilder.build()));
             }
 
-            context.setStatistics(pruneBuilder.build());
-        } else {
-            context.setStatistics(statistics);
         }
+        context.setStatistics(statisticsBuilder.build());
         return null;
     }
 
@@ -345,12 +348,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     table.getTableLevelColumnStats(requiredColumns.stream().
                             map(ColumnRefOperator::getName).collect(Collectors.toList()));
             List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
-                            computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
+                    computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                     .collect(Collectors.toList());
             columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                            new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                                    hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                                    hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
+                    new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                            hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                            hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
                     .collect(Collectors.toList());
         } catch (Exception e) {
             LOG.warn("Hudi table {} get column failed. error : {}", table.getName(), e);
@@ -394,42 +397,33 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return builder;
     }
 
+    private Void computeNormalExternalTableScanNode(Operator node, ExpressionContext context, Table table,
+                                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
+        builder.setOutputRowCount(1);
+
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
+    }
+
     @Override
     public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
-        return computeMysqlScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
-        return computeMysqlScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
-    }
-
-    private Void computeMysqlScanNode(Operator node, ExpressionContext context, Table table,
-                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
-        builder.setOutputRowCount(1);
-
-        context.setStatistics(builder.build());
-        return visitOperator(node, context);
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitLogicalEsScan(LogicalEsScanOperator node, ExpressionContext context) {
-        return computeEsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalEsScan(PhysicalEsScanOperator node, ExpressionContext context) {
-        return computeEsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
-    }
-
-    private Void computeEsScanNode(Operator node, ExpressionContext context, Table table,
-                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
-        builder.setOutputRowCount(1);
-
-        context.setStatistics(builder.build());
-        return visitOperator(node, context);
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
@@ -468,6 +462,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalJDBCScan(LogicalJDBCScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     /**

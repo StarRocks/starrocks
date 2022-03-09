@@ -35,8 +35,8 @@ Usage: $0 <options>
      --clean                        clean and build ut
      --run                          build and run ut
      --gtest_filter                 specify test cases
-     --with-hdfs                    enable to test hdfs
      --with-aws                     enable to test aws
+     --with-bench                   enable to build with benchmark
 
   Eg.
     $0                              build ut
@@ -55,8 +55,8 @@ OPTS=$(getopt \
   -l 'run' \
   -l 'clean' \
   -l "gtest_filter:" \
-  -l "with-hdfs" \
   -l 'with-aws' \
+  -l 'with-bench' \
   -l 'help' \
   -- "$@")
 
@@ -71,7 +71,7 @@ RUN=0
 TEST_FILTER=*
 HELP=0
 WITH_AWS=OFF
-WITH_HDFS=OFF
+WITH_BENCH=OFF
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -79,7 +79,7 @@ while true; do
         --gtest_filter) TEST_FILTER=$2 ; shift 2;; 
         --help) HELP=1 ; shift ;; 
         --with-aws) WITH_AWS=ON; shift ;;
-        --with-hdfs) WITH_HDFS=ON; shift ;;
+        --with-bench) WITH_BENCH=ON; shift ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -110,7 +110,8 @@ fi
 cd ${CMAKE_BUILD_DIR}
 
 ${CMAKE_CMD} ../ -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} -DSTARROCKS_HOME=${STARROCKS_HOME} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-    -DWITH_HDFS=${WITH_HDFS} -DWITH_AWS=${WITH_AWS} -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DUSE_AVX2=$USE_AVX2 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DUSE_AVX2=$USE_AVX2 \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH}
 
 time make -j${PARALLEL}
 
@@ -145,7 +146,44 @@ echo "******************************"
 echo "    Running StarRocks BE Unittest    "
 echo "******************************"
 
+. ${STARROCKS_HOME}/bin/common.sh
+
+# ====================== configure JAVA/JVM ====================
+# NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table
+# this is only for starting be
+jvm_arch="amd64"
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    jvm_arch="aarch64"
+fi
+
+if [ "$JAVA_HOME" = "" ]; then
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jvm/$jvm_arch/server:$STARROCKS_HOME/lib/jvm/$jvm_arch:$LD_LIBRARY_PATH
+else
+    java_version=$(jdk_version)
+    if [[ $java_version -gt 8 ]]; then
+        export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
+    # JAVA_HOME is jdk
+    elif [[ -d "$JAVA_HOME/jre"  ]]; then
+        export LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/$jvm_arch/server:$JAVA_HOME/jre/lib/$jvm_arch:$LD_LIBRARY_PATH
+    # JAVA_HOME is jre
+    else
+        export LD_LIBRARY_PATH=$JAVA_HOME/lib/$jvm_arch/server:$JAVA_HOME/lib/$jvm_arch:$LD_LIBRARY_PATH
+    fi
+fi
+
+export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+
+# HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
+# put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
+export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
+
+# ===========================================================
+
 export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test/
+
+if [ $WITH_AWS = "OFF" ]; then
+    TEST_FILTER="$TEST_FILTER:-*S3*"
+fi
 
 # prepare util test_data
 if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then
@@ -154,7 +192,7 @@ fi
 cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util/
 cp -r ${STARROCKS_HOME}/be/test/plugin/plugin_test ${STARROCKS_TEST_BINARY_DIR}/plugin/
 
-test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" | grep -v starrocks_test`
+test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" | grep -v starrocks_test | grep -v bench_test`
 
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel

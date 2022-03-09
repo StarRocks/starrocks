@@ -26,10 +26,12 @@ public class ValuesRelation extends QueryRelation {
         return rows;
     }
 
-    public List<Expr> getOutputExpr() {
+    @Override
+    public List<Expr> getOutputExpression() {
         return rows.get(0);
     }
 
+    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitValues(this, context);
     }

@@ -153,7 +153,7 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
 }
 
 void GlobalDriverExecutor::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
-    update_profile_by_mode(fragment_ctx, done);
+    update_profile_by_level(fragment_ctx, done);
     auto params = ExecStateReporter::create_report_exec_status_params(fragment_ctx, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
@@ -177,7 +177,7 @@ void GlobalDriverExecutor::report_exec_state(FragmentContext* fragment_ctx, cons
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
-void GlobalDriverExecutor::update_profile_by_mode(FragmentContext* fragment_ctx, bool done) {
+void GlobalDriverExecutor::update_profile_by_level(FragmentContext* fragment_ctx, bool done) {
     if (!done) {
         return;
     }
@@ -186,7 +186,7 @@ void GlobalDriverExecutor::update_profile_by_mode(FragmentContext* fragment_ctx,
         return;
     }
 
-    if (fragment_ctx->profile_mode() >= TPipelineProfileMode::type::DETAIL) {
+    if (fragment_ctx->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
         return;
     }
 
@@ -223,13 +223,14 @@ void GlobalDriverExecutor::update_profile_by_mode(FragmentContext* fragment_ctx,
     // remove pipeline's profile from the hierarchy
     profile->remove_childs();
     for (auto* merged_driver_profile : merged_driver_profiles) {
+        merged_driver_profile->reset_parent();
         profile->add_child(merged_driver_profile, true, nullptr);
     }
 }
 
 void GlobalDriverExecutor::remove_non_core_metrics(FragmentContext* fragment_ctx,
                                                    std::vector<RuntimeProfile*>& driver_profiles) {
-    if (fragment_ctx->profile_mode() > TPipelineProfileMode::CORE_METRICS) {
+    if (fragment_ctx->profile_level() > TPipelineProfileLevel::CORE_METRICS) {
         return;
     }
 

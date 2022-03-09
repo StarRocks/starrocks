@@ -20,6 +20,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -45,6 +46,7 @@ import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IntersectNode;
+import com.starrocks.planner.JDBCScanNode;
 import com.starrocks.planner.MetaScanNode;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.MysqlScanNode;
@@ -89,6 +91,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -192,7 +195,7 @@ public class PlanFragmentBuilder {
         }
 
         List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
-                        .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
+                .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
                 .collect(Collectors.toList());
         execPlan.getOutputExprs().addAll(outputExprs);
 
@@ -262,7 +265,7 @@ public class PlanFragmentBuilder {
                 }
 
                 // we only support single pred like: a = xx, single pre can push down to scan node
-                // complex pred like: a + b = xx, can push down to scan node yet
+                // complex pred like: a + b = xx, can not push down to scan node yet
                 // so the columns in complex pred, it useful for the stage after scan
                 Set<Integer> singlePredColumnIds = new HashSet<Integer>();
                 Set<Integer> complexPredColumnIds = new HashSet<Integer>();
@@ -984,6 +987,47 @@ public class PlanFragmentBuilder {
         }
 
         @Override
+        public PlanFragment visitPhysicalJDBCScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalJDBCScanOperator node = (PhysicalJDBCScanOperator) optExpression.getOp();
+
+            context.getDescTbl().addReferencedTable(node.getTable());
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(node.getTable());
+
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().getName(), slotDescriptor));
+            }
+            tupleDescriptor.computeMemLayout();
+
+            JDBCScanNode scanNode = new JDBCScanNode(context.getNextNodeId(), tupleDescriptor,
+                    (JDBCTable) node.getTable());
+
+            // set predicate
+            List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            formatterContext.setImplicitCast(true);
+            for (ScalarOperator predicate : predicates) {
+                scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
+
+            scanNode.setLimit(node.getLimit());
+            scanNode.computeColumnsAndFilters();
+            scanNode.computeStatistics(optExpression.getStatistics());
+
+            context.getScanNodes().add(scanNode);
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
         public PlanFragment visitPhysicalValues(OptExpression optExpr, ExecPlan context) {
             PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) optExpr.getOp();
 
@@ -1315,7 +1359,7 @@ public class PlanFragmentBuilder {
                 }
                 List<Expr> distributeExpressions =
                         partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
                 dataPartition = DataPartition.hashPartitioned(distributeExpressions);
             } else {
@@ -1586,7 +1630,7 @@ public class PlanFragmentBuilder {
 
                 List<Expr> eqJoinConjuncts =
                         eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
 
                 for (Expr expr : eqJoinConjuncts) {
@@ -1598,13 +1642,13 @@ public class PlanFragmentBuilder {
                 List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getOnPredicate());
                 otherJoin.removeAll(eqOnPredicates);
                 List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 // 3. Get conjuncts
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
                 List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 if (joinOperator.isLeftOuterJoin()) {
@@ -1673,29 +1717,10 @@ public class PlanFragmentBuilder {
                     estimateDopOfBroadcastJoinInPipeline(leftFragment);
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.PARTITIONED)) {
-                    List<Integer> leftOnPredicateColumns = new ArrayList<>();
-                    List<Integer> rightOnPredicateColumns = new ArrayList<>();
-                    JoinPredicateUtils.getJoinOnPredicatesColumns(eqOnPredicates, leftChildColumns, rightChildColumns,
-                            leftOnPredicateColumns, rightOnPredicateColumns);
-
-                    List<ScalarOperator> leftPredicates = leftOnPredicateColumns.stream()
-                            .map(columnRefFactory::getColumnRef).collect(Collectors.toList());
-                    List<Expr> leftJoinExprs =
-                            leftPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                                    .collect(Collectors.toList());
-
-                    List<ScalarOperator> rightPredicates = rightOnPredicateColumns.stream()
-                            .map(columnRefFactory::getColumnRef).collect(Collectors.toList());
-                    List<Expr> rightJoinExprs =
-                            rightPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                                    .collect(Collectors.toList());
-
                     DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
-                            Expr.cloneList(leftJoinExprs, null));
-                    DataPartition rhsJoinPartition =
-                            new DataPartition(TPartitionType.HASH_PARTITIONED, rightJoinExprs);
+                            leftFragment.getDataPartition().getPartitionExprs());
+                    DataPartition rhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
+                            rightFragment.getDataPartition().getPartitionExprs());
 
                     leftFragment.getChild(0).setOutputPartition(lhsJoinPartition);
                     rightFragment.getChild(0).setOutputPartition(rhsJoinPartition);
@@ -1736,10 +1761,6 @@ public class PlanFragmentBuilder {
                     estimateDopOfBroadcastJoinInPipeline(leftFragment);
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
-                    List<Integer> leftOnPredicateColumns = new ArrayList<>();
-                    List<Integer> rightOnPredicateColumns = new ArrayList<>();
-                    JoinPredicateUtils.getJoinOnPredicatesColumns(eqOnPredicates, leftChildColumns, rightChildColumns,
-                            leftOnPredicateColumns, rightOnPredicateColumns);
                     setJoinPushDown(hashJoinNode);
 
                     // distributionMode is SHUFFLE_HASH_BUCKET
@@ -1764,10 +1785,6 @@ public class PlanFragmentBuilder {
                                 rightFragment, hashJoinNode);
                     }
                 } else {
-                    List<Integer> leftOnPredicateColumns = new ArrayList<>();
-                    List<Integer> rightOnPredicateColumns = new ArrayList<>();
-                    JoinPredicateUtils.getJoinOnPredicatesColumns(eqOnPredicates, leftChildColumns, rightChildColumns,
-                            leftOnPredicateColumns, rightOnPredicateColumns);
                     setJoinPushDown(hashJoinNode);
 
                     // distributionMode is BUCKET_SHUFFLE
@@ -1846,11 +1863,21 @@ public class PlanFragmentBuilder {
         }
 
         public boolean isShuffleJoin(OptExpression optExpression) {
+            // through the required properties type check if it is shuffle join
             return optExpression.getRequiredProperties().stream().allMatch(
-                    physicalPropertySet -> physicalPropertySet.getDistributionProperty().isShuffle() &&
-                            ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
-                                    .getHashDistributionDesc().getSourceType().equals(
-                                            HashDistributionDesc.SourceType.SHUFFLE_JOIN));
+                    physicalPropertySet -> {
+                        if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
+                            return false;
+                        }
+                        HashDistributionDesc.SourceType hashSourceType =
+                                ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
+                                        .getHashDistributionDesc().getSourceType();
+                        if (hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_JOIN) ||
+                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE)) {
+                            return true;
+                        }
+                        return false;
+                    });
         }
 
         public PlanFragment computeBucketShufflePlanFragment(ExecPlan context,
@@ -1939,7 +1966,7 @@ public class PlanFragmentBuilder {
 
             List<Expr> partitionExprs =
                     node.getPartitionExpressions().stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                             .collect(Collectors.toList());
 
             List<OrderByElement> orderByElements = node.getOrderByElements().stream().map(e -> new OrderByElement(

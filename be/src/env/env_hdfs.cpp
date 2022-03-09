@@ -23,11 +23,11 @@ public:
 
     ~HdfsRandomAccessFile() override;
 
-    Status read(uint64_t offset, Slice* res) const override;
-    Status read_at(uint64_t offset, const Slice& res) const override;
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override;
+    Status read_at_fully(int64_t offset, void* data, int64_t size) const override;
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
     Status size(uint64_t* size) const override;
-    const std::string& file_name() const override { return _file_name; }
+    const std::string& filename() const override { return _file_name; }
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override;
 
 private:
@@ -42,21 +42,22 @@ HdfsRandomAccessFile::~HdfsRandomAccessFile() {
     PLOG_IF(ERROR, r != 0) << "close " << _file_name << " failed";
 }
 
-Status HdfsRandomAccessFile::read(uint64_t offset, Slice* res) const {
-    tSize n = static_cast<tSize>(std::min<uint64_t>(std::numeric_limits<tSize>::max(), res->size));
-    tSize r = hdfsPread(_fs, _file, offset, res->data, n);
+StatusOr<int64_t> HdfsRandomAccessFile::read_at(int64_t offset, void* data, int64_t size) const {
+    if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
+        return Status::NotSupported("read size is greater than std::numeric_limits<tSize>::max()");
+    }
+    tSize r = hdfsPread(_fs, _file, offset, data, static_cast<tSize>(size));
     if (UNLIKELY(r == -1)) {
         return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _file_name, get_hdfs_err_msg()));
     }
-    res->size = r;
-    return Status::OK();
+    return r;
 }
 
-Status HdfsRandomAccessFile::read_at(uint64_t offset, const Slice& res) const {
-    if (UNLIKELY(res.size > std::numeric_limits<tSize>::max())) {
+Status HdfsRandomAccessFile::read_at_fully(int64_t offset, void* data, int64_t size) const {
+    if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
         return Status::NotSupported("read size is greater than std::numeric_limits<tSize>::max()");
     }
-    tSize r = hdfsPreadFully(_fs, _file, offset, res.data, res.size);
+    tSize r = hdfsPreadFully(_fs, _file, offset, data, static_cast<tSize>(size));
     if (UNLIKELY(r == -1)) {
         return Status::IOError(fmt::format("fail to hdfsPreadFully {}: {}", _file_name, get_hdfs_err_msg()));
     }
@@ -92,7 +93,7 @@ StatusOr<std::unique_ptr<NumericStatistics>> HdfsRandomAccessFile::get_numeric_s
 
 Status HdfsRandomAccessFile::readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const {
     for (size_t i = 0; i < res_cnt; i++) {
-        RETURN_IF_ERROR(HdfsRandomAccessFile::read_at(offset, res[i]));
+        RETURN_IF_ERROR(HdfsRandomAccessFile::read_at_fully(offset, res[i].data, res[i].size));
         offset += res[i].size;
     }
     return Status::OK();

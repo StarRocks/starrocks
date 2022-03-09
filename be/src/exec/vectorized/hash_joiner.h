@@ -25,6 +25,9 @@ namespace vectorized {
 class ColumnRef;
 class RuntimeFilterBuildDescriptor;
 
+class HashJoiner;
+using HashJoinerPtr = std::shared_ptr<HashJoiner>;
+
 // HashJoiner works in four consecutive phases, each phase has its own allowed operations.
 // 1.BUILD: building ht from right child is outstanding, and probe operations is disallowed. EOS from right child
 //   indicates that building ht should be finalized.
@@ -42,19 +45,19 @@ enum HashJoinPhase {
 };
 struct HashJoinerParam {
     HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, TPlanNodeId node_id,
-                    TPlanNodeType::type node_type, int64_t limit, const std::vector<bool>& is_null_safes,
+                    TPlanNodeType::type node_type, const std::vector<bool>& is_null_safes,
                     const std::vector<ExprContext*>& build_expr_ctxs, const std::vector<ExprContext*>& probe_expr_ctxs,
                     const std::vector<ExprContext*>& other_join_conjunct_ctxs,
                     const std::vector<ExprContext*>& conjunct_ctxs, const RowDescriptor& build_row_descriptor,
                     const RowDescriptor& probe_row_descriptor, const RowDescriptor& row_descriptor,
                     TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
-                    bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
-                    const std::set<SlotId>& output_slots)
+                    bool build_conjunct_ctxs_is_empty,
+                    const std::list<RuntimeFilterBuildDescriptor*>& build_runtime_filters,
+                    const std::set<SlotId>& output_slots, const TJoinDistributionMode::type distribution_mode)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _node_id(node_id),
               _node_type(node_type),
-              _limit(limit),
               _is_null_safes(is_null_safes),
               _build_expr_ctxs(build_expr_ctxs),
               _probe_expr_ctxs(probe_expr_ctxs),
@@ -67,15 +70,17 @@ struct HashJoinerParam {
               _probe_node_type(probe_node_type),
               _build_conjunct_ctxs_is_empty(build_conjunct_ctxs_is_empty),
               _build_runtime_filters(build_runtime_filters),
-              _output_slots(output_slots) {}
+              _output_slots(output_slots),
+              _distribution_mode(distribution_mode) {}
+
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
     ~HashJoinerParam() = default;
+
     ObjectPool* _pool;
     const THashJoinNode& _hash_join_node;
     TPlanNodeId _node_id;
     TPlanNodeType::type _node_type;
-    int64_t _limit;
     const std::vector<bool> _is_null_safes;
     const std::vector<ExprContext*> _build_expr_ctxs;
     const std::vector<ExprContext*> _probe_expr_ctxs;
@@ -89,11 +94,14 @@ struct HashJoinerParam {
     bool _build_conjunct_ctxs_is_empty;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
     std::set<SlotId> _output_slots;
+
+    const TJoinDistributionMode::type _distribution_mode;
+    bool _is_buildable = false;
 };
 
 class HashJoiner final : public pipeline::ContextWithDependency {
 public:
-    explicit HashJoiner(const HashJoinerParam& param);
+    explicit HashJoiner(const HashJoinerParam& param, const std::vector<HashJoinerPtr>& read_only_join_probers);
 
     ~HashJoiner() {
         if (_runtime_state != nullptr) {
@@ -101,8 +109,10 @@ public:
         }
     }
 
-    Status prepare(RuntimeState* state);
-    Status close(RuntimeState* state) override;
+    Status prepare_builder(RuntimeState* state, RuntimeProfile* runtime_profile);
+    Status prepare_prober(RuntimeState* state, RuntimeProfile* runtime_profile);
+    void close(RuntimeState* state) override;
+
     bool need_input() const;
     bool has_output() const;
     bool is_build_done() const { return _phase != HashJoinPhase::BUILD; }
@@ -139,12 +149,18 @@ public:
 
     Status create_runtime_filters(RuntimeState* state);
 
+    void reference_hash_table(HashJoiner* src_join_builder);
+
+    bool is_buildable() const { return _is_buildable; }
+
+    // These two methods are used only by the hash join builder.
+    void set_builder_finished();
+    void set_prober_finished();
+
 private:
     static bool _has_null(const ColumnPtr& column);
 
     void _init_hash_table_param(HashTableParam* param);
-
-    bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
 
     void _prepare_key_columns(Columns& key_columns, const ChunkPtr& chunk, const vector<ExprContext*>& expr_ctxs) {
         key_columns.resize(0);
@@ -165,10 +181,14 @@ private:
     }
 
     void _prepare_build_key_columns() {
+        SCOPED_TIMER(_build_conjunct_evaluate_timer);
         _prepare_key_columns(_ht.get_key_columns(), _ht.get_build_chunk(), _build_expr_ctxs);
     }
 
-    void _prepare_probe_key_columns() { _prepare_key_columns(_key_columns, _probe_input_chunk, _probe_expr_ctxs); }
+    void _prepare_probe_key_columns() {
+        SCOPED_TIMER(_probe_conjunct_evaluate_timer);
+        _prepare_key_columns(_key_columns, _probe_input_chunk, _probe_expr_ctxs);
+    }
 
     bool _need_post_probe() const {
         return _join_type == TJoinOp::RIGHT_OUTER_JOIN || _join_type == TJoinOp::RIGHT_ANTI_JOIN ||
@@ -182,7 +202,7 @@ private:
              _join_type == TJoinOp::RIGHT_SEMI_JOIN || _join_type == TJoinOp::RIGHT_ANTI_JOIN ||
              _join_type == TJoinOp::RIGHT_OUTER_JOIN)) {
             _phase = HashJoinPhase::EOS;
-            set_finished();
+            set_builder_finished();
         }
 
         if (_ht.get_row_count() > 0) {
@@ -195,7 +215,7 @@ private:
                 // TODO: This reserved field will be removed in the implementation mechanism in the future.
                 // at that time, you can directly use Column::has_null() to judge
                 _phase = HashJoinPhase::EOS;
-                set_finished();
+                set_builder_finished();
             }
         }
     }
@@ -213,6 +233,7 @@ private:
     void _process_semi_join_with_other_conjunct(ChunkPtr* chunk);
     void _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk);
     void _process_other_conjunct(ChunkPtr* chunk);
+    void _process_where_conjunct(ChunkPtr* chunk);
 
     void _filter_probe_output_chunk(ChunkPtr& chunk) {
         // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
@@ -225,7 +246,7 @@ private:
 
         // TODO(satanson): _conjunct_ctxs shouldn't include local runtime in-filters.
         if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
-            ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
+            _process_where_conjunct(&chunk);
         }
     }
     void _filter_post_probe_output_chunk(ChunkPtr& chunk) {
@@ -233,7 +254,7 @@ private:
         // are `ON` predicates, which need to be processed only on probe phase.
         if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
             // TODO(satanson): _conjunct_ctxs should including local runtime in-filters.
-            ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
+            _process_where_conjunct(&chunk);
         }
     }
 
@@ -295,15 +316,14 @@ private:
         return Status::OK();
     }
 
+private:
+    const THashJoinNode& _hash_join_node;
     ObjectPool* _pool;
 
     RuntimeState* _runtime_state = nullptr;
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
-    const int64_t _limit; // -1: no limit
-    int64_t _num_rows_returned;
     std::atomic<HashJoinPhase> _phase = HashJoinPhase::BUILD;
-    std::shared_ptr<RuntimeProfile> _runtime_profile;
     bool _is_closed = false;
 
     ChunkPtr _probe_input_chunk;
@@ -337,30 +357,29 @@ private:
     Columns _key_columns;
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
-    size_t _probe_chunk_count = 0;
-    size_t _output_chunk_count = 0;
 
-    bool _eos = false;
     // hash table doesn't have reserved data
     bool _ht_has_remain = false;
     // right table have not output data for right outer join/right semi join/right anti join/full outer join
 
-    RuntimeProfile::Counter* _build_timer = nullptr;
+    const bool _is_buildable;
+
+    // These two fields are used only by the hash join builder.
+    const std::vector<HashJoinerPtr>& _read_only_join_probers;
+    std::atomic<size_t> _num_unfinished_probers = 0;
+
+    // Profile for hash join builder.
     RuntimeProfile::Counter* _build_ht_timer = nullptr;
     RuntimeProfile::Counter* _copy_right_table_chunk_timer = nullptr;
     RuntimeProfile::Counter* _build_runtime_filter_timer = nullptr;
-    RuntimeProfile::Counter* _merge_input_chunk_timer = nullptr;
-    RuntimeProfile::Counter* _probe_timer = nullptr;
-    RuntimeProfile::Counter* _search_ht_timer = nullptr;
     RuntimeProfile::Counter* _output_build_column_timer = nullptr;
-    RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
-    RuntimeProfile::Counter* _output_tuple_column_timer = nullptr;
-    RuntimeProfile::Counter* _build_rows_counter = nullptr;
-    RuntimeProfile::Counter* _probe_rows_counter = nullptr;
     RuntimeProfile::Counter* _build_buckets_counter = nullptr;
     RuntimeProfile::Counter* _runtime_filter_num = nullptr;
-    RuntimeProfile::Counter* _avg_input_probe_chunk_size = nullptr;
-    RuntimeProfile::Counter* _avg_output_chunk_size = nullptr;
+
+    // Profile for hash join prober.
+    RuntimeProfile::Counter* _search_ht_timer = nullptr;
+    RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
+    RuntimeProfile::Counter* _output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* _build_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* _probe_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* _other_join_conjunct_evaluate_timer = nullptr;

@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Utils;
@@ -62,6 +63,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
@@ -394,6 +396,11 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 throw new StarRocksPlannerException("EsTable metadata has not been synced, Try it later",
                         ErrorType.USER_ERROR);
             }
+        } else if (Table.TableType.JDBC.equals(node.getTable().getType())) {
+            scanOperator =
+                    new LogicalJDBCScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                            columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
+                            null, null);
         } else {
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);
@@ -434,6 +441,16 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitSubquery(SubqueryRelation node, ExpressionMapping context) {
+        LogicalPlan logicalPlan = transform(node.getQuery());
+        OptExprBuilder builder = new OptExprBuilder(
+                logicalPlan.getRoot().getOp(),
+                logicalPlan.getRootBuilder().getInputs(),
+                new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
+        return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
+    }
+
+    @Override
+    public LogicalPlan visitView(ViewRelation node, ExpressionMapping context) {
         LogicalPlan logicalPlan = transform(node.getQuery());
         OptExprBuilder builder = new OptExprBuilder(
                 logicalPlan.getRoot().getOp(),

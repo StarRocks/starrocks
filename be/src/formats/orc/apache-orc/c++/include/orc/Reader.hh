@@ -201,7 +201,6 @@ public:
      * Set search argument for predicate push down
      */
     RowReaderOptions& searchArgument(std::unique_ptr<SearchArgument> sargs);
-    RowReaderOptions& rowReaderFilter(std::shared_ptr<RowReaderFilter> filter);
 
     /**
      * Should enable encoding block mode
@@ -262,7 +261,6 @@ public:
      * Get search argument for predicate push down
      */
     std::shared_ptr<SearchArgument> getSearchArgument() const;
-    std::shared_ptr<RowReaderFilter> getRowReaderFilter() const;
 
     /**
      * Set desired timezone to return data of timestamp type
@@ -274,6 +272,8 @@ public:
      */
     const std::string& getTimezoneName() const;
 
+    RowReaderOptions& rowReaderFilter(std::shared_ptr<RowReaderFilter> filter);
+    std::shared_ptr<RowReaderFilter> getRowReaderFilter() const;
     RowReaderOptions& useWriterTimezone();
     bool getUseWriterTimezone() const;
     RowReaderOptions& includeLazyLoadColumnNames(const std::list<std::string>& include);
@@ -302,6 +302,12 @@ public:
      * @return the number of rows
      */
     virtual uint64_t getNumberOfRows() const = 0;
+
+    /**
+     * Get the software instance and version that wrote this file.
+     * @return a user-facing string that specifies the software version
+     */
+    virtual std::string getSoftwareVersion() const = 0;
 
     /**
      * Get the user metadata keys.
@@ -521,6 +527,13 @@ public:
    */
 class RowReader {
 public:
+    struct ReadPosition {
+        bool start_new_stripe = false;
+        uint64_t stripe_index = 0;
+        uint64_t num_values = 0;
+        uint64_t row_in_stripe = 0;
+    };
+
     virtual ~RowReader();
     /**
      * Get the selected type of the rows in the file. The file's row type
@@ -550,12 +563,15 @@ public:
      * Caller must look at numElements in the row batch to determine how
      * many rows were read.
      * @param data the row batch to read into.
+     * @param pos about position information.
      * @return true if a non-zero number of rows were read or false if the
      *   end of the file was reached.
      */
-    virtual bool next(ColumnVectorBatch& data) = 0;
+    // This function is for backward comptiability.
+    bool next(ColumnVectorBatch& data);
+    virtual bool next(ColumnVectorBatch& data, ReadPosition* pos) = 0;
 
-    virtual void lazyLoadSkip(uint64_t numValues) = 0;
+    virtual void lazyLoadSeekTo(uint64_t rowInStripe) = 0;
     virtual void lazyLoadNext(ColumnVectorBatch& data, uint64_t numValues) = 0;
 
     /**

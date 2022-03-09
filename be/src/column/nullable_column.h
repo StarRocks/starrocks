@@ -123,11 +123,11 @@ public:
 
     bool append_nulls(size_t count) override;
 
-    bool append_strings(const std::vector<Slice>& strs) override;
+    bool append_strings(const Buffer<Slice>& strs) override;
 
-    bool append_strings_overflow(const std::vector<Slice>& strs, size_t max_length) override;
+    bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;
 
-    bool append_continuous_strings(const std::vector<Slice>& strs) override;
+    bool append_continuous_strings(const Buffer<Slice>& strs) override;
 
     size_t append_numbers(const void* buff, size_t length) override;
 
@@ -157,7 +157,7 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
+    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override {
         if (_null_column->get_data()[idx]) {
@@ -180,6 +180,8 @@ public:
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+
+    int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 

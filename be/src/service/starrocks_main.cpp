@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
     if (argc > 1 && strcmp(argv[1], "meta_tool") == 0) {
         return meta_tool_main(argc - 1, argv + 1);
     }
-    // check if print version or help
+    // Check if print version or help.
     if (argc > 1) {
         if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
             puts(starrocks::get_build_version(false).c_str());
@@ -99,13 +99,13 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    // S2 will crashes when deserialization fails and FLAGS_s2debug was true
+    // S2 will crashes when deserialization fails and FLAGS_s2debug was true.
     FLAGS_s2debug = false;
 
     using starrocks::Status;
     using std::string;
 
-    // open pid file, obtain file lock and save pid
+    // Open pid file, obtain file lock and save pid.
     string pid_file = string(getenv("PID_DIR")) + "/be.pid";
     int fd = open(pid_file.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
     if (fd < 0) {
@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    // descriptor will be leaked when failing to close fd
+    // Descriptor will be leaked if failing to close fd.
     if (::close(fd) < 0) {
         fprintf(stderr, "failed to close fd of pidfile.");
         exit(-1);
@@ -175,13 +175,13 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    // initilize libcurl here to avoid concurrent initialization
+    // Initilize libcurl here to avoid concurrent initialization.
     auto curl_ret = curl_global_init(CURL_GLOBAL_ALL);
     if (curl_ret != 0) {
         LOG(FATAL) << "fail to initialize libcurl, curl_ret=" << curl_ret;
         exit(-1);
     }
-    // add logger for thrift internal
+    // Add logger for thrift internal.
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
     std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     EXIT_IF_ERROR(exec_env->init_mem_tracker());
 
-    // init and open storage engine
+    // Init and open storage engine.
     starrocks::EngineOptions options;
     options.store_paths = paths;
     options.backend_uid = starrocks::UniqueId::gen_uid();
@@ -209,18 +209,18 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    // init exec env
+    // Init exec env.
     EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths));
     exec_env->set_storage_engine(engine);
     engine->set_heartbeat_flags(exec_env->heartbeat_flags());
 
-    // start all backgroud threads of storage engine.
+    // Start all backgroud threads of storage engine.
     // SHOULD be called after exec env is initialized.
     EXIT_IF_ERROR(engine->start_bg_threads());
 
-    // begin to start services
+    // Begin to start services
     starrocks::ThriftRpcHelper::setup(exec_env);
-    // 1. thrift server with be_port
+    // 1. Start thrift server with 'be_port'.
     starrocks::ThriftServer* be_server = nullptr;
     EXIT_IF_ERROR(starrocks::BackendService::create_service(exec_env, starrocks::config::be_port, &be_server));
     Status status = be_server->start();
@@ -230,7 +230,7 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    // 2. brpc service
+    // 2. Start brpc service.
     std::unique_ptr<starrocks::BRpcService> brpc_service = std::make_unique<starrocks::BRpcService>(exec_env);
     status = brpc_service->start(starrocks::config::brpc_port);
     if (!status.ok()) {
@@ -239,7 +239,7 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    // 3. http service
+    // 3. Start http service.
     std::unique_ptr<starrocks::HttpService> http_service = std::make_unique<starrocks::HttpService>(
             exec_env, starrocks::config::webserver_port, starrocks::config::webserver_num_workers);
     status = http_service->start();
@@ -250,7 +250,7 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    // 4. heart beat server
+    // 4. Start heart beat server.
     starrocks::TMasterInfo* master_info = exec_env->master_info();
     starrocks::ThriftServer* heartbeat_thrift_server;
     starrocks::AgentStatus heartbeat_status = starrocks::create_heartbeat_server(
@@ -272,10 +272,8 @@ int main(int argc, char** argv) {
         LOG(INFO) << "StarRocks BE HeartBeat Service started correctly.";
     }
 
-#ifdef STARROCKS_WITH_AWS
     Aws::SDKOptions aws_sdk_options;
     Aws::InitAPI(aws_sdk_options);
-#endif
 
     while (!starrocks::k_starrocks_exit) {
         sleep(10);
@@ -283,9 +281,8 @@ int main(int argc, char** argv) {
     daemon->stop();
     daemon.reset();
 
-#ifdef STARROCKS_WITH_AWS
     Aws::ShutdownAPI(aws_sdk_options);
-#endif
+
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
     delete heartbeat_thrift_server;
