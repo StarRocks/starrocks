@@ -71,8 +71,8 @@ public class LocalTabletTest {
         TabletMeta tabletMeta = new TabletMeta(10, 20, 30, 40, 1, TStorageMedium.HDD);
         invertedIndex.addTablet(1, tabletMeta);
         replica1 = new Replica(1L, 1L, 100L, 0, 200000L, 3000L, ReplicaState.NORMAL, 0, 0);
-        replica2 = new Replica(2L, 2L, 100L, 0, 200000L, 3000L, ReplicaState.NORMAL, 0, 0);
-        replica3 = new Replica(3L, 3L, 100L, 0, 200000L, 3000L, ReplicaState.NORMAL, 0, 0);
+        replica2 = new Replica(2L, 2L, 100L, 0, 200001L, 3001L, ReplicaState.NORMAL, 0, 0);
+        replica3 = new Replica(3L, 3L, 100L, 0, 200002L, 3002L, ReplicaState.NORMAL, 0, 0);
         tablet.addReplica(replica1);
         tablet.addReplica(replica2);
         tablet.addReplica(replica3);
@@ -88,6 +88,9 @@ public class LocalTabletTest {
         Assert.assertEquals(replica1, tablet.getReplicaByBackendId(replica1.getBackendId()));
         Assert.assertEquals(replica2, tablet.getReplicaByBackendId(replica2.getBackendId()));
         Assert.assertEquals(replica3, tablet.getReplicaByBackendId(replica3.getBackendId()));
+
+        Assert.assertEquals(600003L, tablet.getDataSize());
+        Assert.assertEquals(3002L, tablet.getRowCount(100));
     }
 
     @Test
@@ -132,8 +135,8 @@ public class LocalTabletTest {
 
         LocalTablet tablet2 = new LocalTablet(1);
         Replica replica1 = new Replica(1L, 1L, 100L, 0, 200000L, 3000L, ReplicaState.NORMAL, 0, 0);
-        Replica replica2 = new Replica(2L, 2L, 100L, 0, 200000L, 3000L, ReplicaState.NORMAL, 0, 0);
-        Replica replica3 = new Replica(3L, 3L, 100L, 0, 200000L, 3000L, ReplicaState.NORMAL, 0, 0);
+        Replica replica2 = new Replica(2L, 2L, 100L, 0, 200001L, 3001L, ReplicaState.NORMAL, 0, 0);
+        Replica replica3 = new Replica(3L, 3L, 100L, 0, 200002L, 3002L, ReplicaState.NORMAL, 0, 0);
         tablet2.addReplica(replica1);
         tablet2.addReplica(replica2);
         Assert.assertFalse(tablet2.equals(tablet));
@@ -143,11 +146,10 @@ public class LocalTabletTest {
         LocalTablet tablet3 = new LocalTablet(1);
         tablet3.addReplica(replica1);
         tablet3.addReplica(replica2);
-        tablet3.addReplica(new Replica(4L, 4L, 100L, 0, 200000L, 3000L, ReplicaState.NORMAL, 0, 0));
+        tablet3.addReplica(new Replica(4L, 4L, 100L, 0, 200002L, 3002L, ReplicaState.NORMAL, 0, 0));
         Assert.assertFalse(tablet3.equals(tablet));
 
         dis.close();
         file.delete();
     }
-
 }

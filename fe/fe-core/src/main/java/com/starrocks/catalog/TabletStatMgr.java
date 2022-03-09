@@ -101,14 +101,7 @@ public class TabletStatMgr extends MasterDaemon {
                         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                             long indexRowCount = 0L;
                             for (Tablet tablet : index.getTablets()) {
-                                long tabletRowCount = 0L;
-                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                                    if (replica.checkVersionCatchUp(version, false)
-                                            && replica.getRowCount() > tabletRowCount) {
-                                        tabletRowCount = replica.getRowCount();
-                                    }
-                                }
-                                indexRowCount += tabletRowCount;
+                                indexRowCount += tablet.getRowCount(version);
                             } // end for tablets
                             index.setRowCount(indexRowCount);
                         } // end for indices

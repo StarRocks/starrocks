@@ -28,7 +28,9 @@ import com.starrocks.common.io.Writable;
  * This abstract class represents the base olap tablet related metadata.
  */
 public abstract class Tablet extends MetaObject implements Writable {
-    @SerializedName(value = "id")
+    protected static final String JSON_KEY_ID = "id";
+
+    @SerializedName(value = JSON_KEY_ID)
     protected long id;
 
     public Tablet(long id) {
@@ -40,6 +42,8 @@ public abstract class Tablet extends MetaObject implements Writable {
     }
 
     public abstract long getDataSize();
+
+    public abstract long getRowCount(long version);
 
     @Override
     public String toString() {
