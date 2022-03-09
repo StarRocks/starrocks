@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "exec/pipeline/source_operator.h"
+#include "exec/pipeline/scan_operator.h"
 #include "exec/vectorized/jdbc_scanner.h"
 #include "util/blocking_queue.hpp"
 #include "util/spinlock.h"
@@ -11,16 +11,10 @@ namespace starrocks {
 
 namespace pipeline {
 
-class JDBCScanOperator final : public SourceOperator {
+class JDBCScanOperator final : public ScanOperator {
 public:
-    JDBCScanOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const TJDBCScanNode& jdbc_scan_node,
-                     const std::vector<ExprContext*>& conjunct_ctxs, int64_t limit);
-
+    JDBCScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node, const TJDBCScanNode& jdbc_scan_node);
     ~JDBCScanOperator() override = default;
-
-    Status prepare(RuntimeState* state) override;
-
-    void close(RuntimeState* state) override;
 
     bool has_output() const override;
 
@@ -31,6 +25,12 @@ public:
     void set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+
+    Status do_prepare(RuntimeState* state) override;
+
+    void do_close(RuntimeState* state) override;
+
+    ChunkSourcePtr create_chunk_source(MorselPtr morsel) override;
 
 private:
     Status _start_scanner_thread(RuntimeState* state);
@@ -66,26 +66,17 @@ private:
     bool _scanner_finished = false;
 };
 
-class JDBCScanOperatorFactory final : public SourceOperatorFactory {
+class JDBCScanOperatorFactory final : public ScanOperatorFactory {
 public:
-    JDBCScanOperatorFactory(int32_t id, int32_t plan_node_id, const TJDBCScanNode& jdbc_scan_node,
-                            std::vector<ExprContext*>&& conjunct_ctxs, int64_t limit)
-            : SourceOperatorFactory(id, "jdbc_scan", plan_node_id),
-              _jdbc_scan_node(jdbc_scan_node),
-              _conjunct_ctxs(conjunct_ctxs),
-              _limit(limit) {}
+    JDBCScanOperatorFactory(int32_t id, ScanNode* scan_node, const TJDBCScanNode& jdbc_scan_node);
 
     ~JDBCScanOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<JDBCScanOperator>(this, _id, _plan_node_id, _jdbc_scan_node, _conjunct_ctxs, _limit);
-    }
+    Status do_prepare(RuntimeState* state) override;
 
-    bool with_morsels() const override { return true; }
+    void do_close(RuntimeState* state) override;
 
-    Status prepare(RuntimeState* state) override;
-
-    void close(RuntimeState* state) override;
+    OperatorPtr do_create(int32_t dop, int32_t driver_sequence) override;
 
 private:
     const TJDBCScanNode& _jdbc_scan_node;

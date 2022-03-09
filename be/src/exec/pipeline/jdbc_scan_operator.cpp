@@ -13,29 +13,12 @@
 namespace starrocks {
 namespace pipeline {
 
-JDBCScanOperator::JDBCScanOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                   const TJDBCScanNode& jdbc_scan_node, const std::vector<ExprContext*>& conjunct_ctxs,
-                                   int64_t limit)
-        : SourceOperator(factory, id, "jdbc_scan", plan_node_id),
-          _jdbc_scan_node(jdbc_scan_node),
-          _conjunct_ctxs(conjunct_ctxs),
-          _limit(limit),
-          _result_chunks(config::doris_scanner_queue_size) {}
-
-Status JDBCScanOperator::prepare(RuntimeState* state) {
-    SourceOperator::prepare(state);
-    _state = state;
-    _result_tuple_desc = state->desc_tbl().get_tuple_descriptor(_jdbc_scan_node.tuple_id);
-    _start_scanner_thread(state);
-    return Status::OK();
-}
-
-void JDBCScanOperator::close(RuntimeState* state) {
-    if (_scanner_thread) {
-        _scanner_thread->join();
-    }
-    Operator::close(state);
-}
+JDBCScanOperator::JDBCScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node, const TJDBCScanNode& jdbc_scan_node)
+    : ScanOperator(factory, id, scan_node),
+      _jdbc_scan_node(jdbc_scan_node),
+      _conjunct_ctxs(scan_node->conjunct_ctxs()),
+      _limit(scan_node->limit()),
+      _result_chunks(config::doris_scanner_queue_size) {}
 
 bool JDBCScanOperator::has_output() const {
     if (_is_finished.load()) {
@@ -161,6 +144,25 @@ StatusOr<vectorized::ChunkPtr> JDBCScanOperator::pull_chunk(RuntimeState* state)
     return nullptr;
 }
 
+Status JDBCScanOperator::do_prepare(RuntimeState* state) {
+    _state = state;
+    _result_tuple_desc = state->desc_tbl().get_tuple_descriptor(_jdbc_scan_node.tuple_id);
+    _start_scanner_thread(state);
+    return Status::OK();
+}
+
+void JDBCScanOperator::do_close(RuntimeState* state) {
+    if (_scanner_thread) {
+        _is_finished.store(true);
+        _scanner_thread->join();
+    }
+}
+
+ChunkSourcePtr JDBCScanOperator::create_chunk_source(MorselPtr morsel) {
+    // this function is not be used in JDBCScanOperator, just ignore it
+    return nullptr;
+}
+
 void JDBCScanOperator::_set_scanner_state(bool is_finished, const Status& new_status) {
     std::lock_guard<SpinLock> l(_scanner_state_mutex);
     _scanner_finished = is_finished;
@@ -207,16 +209,19 @@ std::string JDBCScanOperator::get_jdbc_sql(const std::string& table, const std::
     return oss.str();
 }
 
-Status JDBCScanOperatorFactory::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+JDBCScanOperatorFactory::JDBCScanOperatorFactory(int32_t id, ScanNode* scan_node, const TJDBCScanNode& jdbc_scan_node)
+    : ScanOperatorFactory(id, scan_node),
+      _jdbc_scan_node(jdbc_scan_node) {}
+
+Status JDBCScanOperatorFactory::do_prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void JDBCScanOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_conjunct_ctxs, state);
-    OperatorFactory::close(state);
+void JDBCScanOperatorFactory::do_close(RuntimeState* state) {
+}
+
+OperatorPtr JDBCScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
+    return std::make_shared<JDBCScanOperator>(this, _id, _scan_node, _jdbc_scan_node);
 }
 
 } // namespace pipeline

@@ -38,8 +38,7 @@ Status JDBCScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
 pipeline::OpFactories JDBCScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators;
-    auto jdbc_scan_operator = std::make_shared<JDBCScanOperatorFactory>(
-            context->next_operator_id(), id(), _jdbc_scan_node, std::move(_conjunct_ctxs), limit());
+    auto jdbc_scan_operator = std::make_shared<JDBCScanOperatorFactory>(context->next_operator_id(), this, _jdbc_scan_node);
     jdbc_scan_operator->set_degree_of_parallelism(1);
     operators.emplace_back(std::move(jdbc_scan_operator));
     if (limit() != -1) {
