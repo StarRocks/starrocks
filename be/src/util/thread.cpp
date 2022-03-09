@@ -215,15 +215,30 @@ int64_t Thread::current_thread_id() {
     return syscall(SYS_gettid);
 }
 
-void Thread::set_thread_name(pthread_t t, const std::string name) {
-    int ret = pthread_setname_np(t, name.data());
+void Thread::set_thread_name(pthread_t t, const std::string& name) {
+    // pthread_setname_np's length is restricted to 16 bytes, including the terminating null byte ('\0')
+    int ret;
+    if (name.length() < 16) {
+        ret = pthread_setname_np(t, name.data());
+    } else {
+        std::string str = name;
+        str.at(15) = '\0';
+        ret = pthread_setname_np(t, str.data());
+    }
     if (ret) {
         LOG(WARNING) << "failed to set thread name: " << name;
     }
 }
 
-void Thread::set_thread_name(std::thread& t, const std::string name) {
-    Thread::set_thread_name(t.native_handle(), name);
+void Thread::set_thread_name(std::thread& t, std::string name) {
+    // pthread_setname_np's length is restricted to 16 bytes, including the terminating null byte ('\0')
+    if (name.length() >= 16) {
+        name.at(15) = '\0';
+    }
+    int ret = pthread_setname_np(t.native_handle(), name.data());
+    if (ret) {
+        LOG(WARNING) << "failed to set thread name: " << name;
+    }
 }
 
 int64_t Thread::wait_for_tid() const {
