@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include <cstdio>
+#include <filesystem>
 #include <memory>
 
 #include "common/logging.h"
@@ -689,6 +690,18 @@ public:
             return io_error(old_path, errno);
         }
         return Status::OK();
+    }
+
+    StatusOr<SpaceInfo> space(const std::string& path) override {
+        try {
+            std::filesystem::space_info path_info = std::filesystem::space(path);
+            SpaceInfo info{.capacity = static_cast<int64_t>(path_info.capacity),
+                           .free = static_cast<int64_t>(path_info.free),
+                           .available = static_cast<int64_t>(path_info.available)};
+            return info;
+        } catch (std::filesystem::filesystem_error& e) {
+            return Status::IOError(fmt::format("fail to get space info of path {}: {}", path, e.what()));
+        }
     }
 };
 

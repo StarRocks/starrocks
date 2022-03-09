@@ -26,6 +26,15 @@ struct WritableFileOptions;
 struct RandomAccessFileOptions;
 struct RandomRWFileOptions;
 
+struct SpaceInfo {
+    // Total size of the filesystem, in bytes
+    int64_t capacity;
+    // Free space on the filesystem, in bytes
+    int64_t free;
+    // Free space available to a non-privileged process (may be equal or less than free)
+    int64_t available;
+};
+
 class Env {
 public:
     // Governs if/how the file is created.
@@ -154,6 +163,9 @@ public:
 
     // create a hard-link
     virtual Status link_file(const std::string& /*old_path*/, const std::string& /*new_path*/) = 0;
+
+    // Determines the information about the filesystem on which the pathname 'path' is located.
+    virtual StatusOr<SpaceInfo> space(const std::string& path) { return Status::NotSupported("Env::space()"); }
 };
 
 struct RandomAccessFileOptions {
