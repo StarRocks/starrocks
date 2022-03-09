@@ -28,11 +28,11 @@ struct RandomRWFileOptions;
 
 struct SpaceInfo {
     // Total size of the filesystem, in bytes
-    int64_t capacity;
+    int64_t capacity = 0;
     // Free space on the filesystem, in bytes
-    int64_t free;
+    int64_t free = 0;
     // Free space available to a non-privileged process (may be equal or less than free)
-    int64_t available;
+    int64_t available = 0;
 };
 
 class Env {
