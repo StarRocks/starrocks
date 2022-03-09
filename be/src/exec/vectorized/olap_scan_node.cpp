@@ -11,6 +11,7 @@
 #include "common/status.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/olap_scan_operator.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
@@ -28,7 +29,9 @@
 namespace starrocks::vectorized {
 
 OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ScanNode(pool, tnode, descs), _olap_scan_node(tnode.olap_scan_node), _status(Status::OK()) {}
+        : ScanNode(pool, tnode, descs), _olap_scan_node(tnode.olap_scan_node), _status(Status::OK()) {
+    _name = "olap_scan";
+}
 
 Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -152,12 +155,12 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         *eos = false;
         DCHECK_CHUNK(*chunk);
         return Status::OK();
-    } else {
-        _update_status(Status::EndOfFile("EOF of OlapScanNode"));
-        *eos = true;
-        status = _get_status();
-        return status.is_end_of_file() ? Status::OK() : status;
     }
+
+    _update_status(Status::EndOfFile("EOF of OlapScanNode"));
+    *eos = true;
+    status = _get_status();
+    return status.is_end_of_file() ? Status::OK() : status;
 }
 
 Status OlapScanNode::close(RuntimeState* state) {
@@ -583,29 +586,8 @@ void OlapScanNode::_close_pending_scanners() {
 }
 
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    ScanNode* scan_node = this;
-    OpFactories operators;
-    // Create a shared RefCountedRuntimeFilterCollector
-    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
-    auto scan_operator = std::make_shared<pipeline::OlapScanOperatorFactory>(context->next_operator_id(), scan_node);
-    // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
-    auto& morsel_queues = context->fragment_context()->morsel_queues();
-    auto source_id = scan_operator->plan_node_id();
-    DCHECK(morsel_queues.count(source_id));
-    auto& morsel_queue = morsel_queues[source_id];
-    // ScanOperator's degree_of_parallelism is not more than the number of morsels
-    // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
-    const auto degree_of_parallelism =
-            std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
-    scan_operator->set_degree_of_parallelism(degree_of_parallelism);
-    operators.emplace_back(std::move(scan_operator));
-    size_t limit = scan_node->limit();
-    if (limit != -1) {
-        operators.emplace_back(
-                std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), scan_node->id(), limit));
-    }
-    return operators;
+    auto factory = std::make_shared<pipeline::OlapScanOperatorFactory>(context->next_operator_id(), this);
+    return pipeline::decompose_scan_node_to_pipeline(factory, this, context);
 }
 
 } // namespace starrocks::vectorized
