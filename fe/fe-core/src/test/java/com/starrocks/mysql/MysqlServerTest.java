@@ -90,18 +90,17 @@ public class MysqlServerTest {
         Assert.assertTrue(server.start());
 
         // submit
-        SocketChannel channel = SocketChannel.open();
-        channel.connect(new InetSocketAddress("127.0.0.1", port));
-        // sleep to wait mock process
-        Thread.sleep(2000);
-        channel.close();
+        SocketChannel channel1 = SocketChannel.open();
+        channel1.connect(new InetSocketAddress("127.0.0.1", port));
 
         // submit twice
-        channel = SocketChannel.open();
-        channel.connect(new InetSocketAddress("127.0.0.1", port));
+        SocketChannel channel2 = SocketChannel.open();
+        channel2.connect(new InetSocketAddress("127.0.0.1", port));
         // sleep to wait mock process
-        Thread.sleep(2000);
-        channel.close();
+        Thread.sleep(3000);
+        
+        channel1.close();
+        channel2.close();
 
         // stop and join
         server.stop();

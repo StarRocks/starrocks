@@ -33,7 +33,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -42,7 +41,6 @@ import java.util.stream.Stream;
 public class PlanTestBase {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
-    public static String runningDir = "fe/mocked/PlanTest/" + UUID.randomUUID().toString() + "/";
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
@@ -55,7 +53,7 @@ public class PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.default_scheduler_interval_millisecond = 1;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster("");
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -812,6 +810,12 @@ public class PlanTestBase {
                 .withTable("create table test.nocolocate3\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 10\n" +
                         "properties(\"replication_num\" = \"1\");");
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
     }
 
     protected static void setTableStatistics(OlapTable table, long rowCount) {
@@ -826,12 +830,6 @@ public class PlanTestBase {
                 partition.getBaseIndex().setRowCount(rowCount);
             }
         }
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     public String getFragmentPlan(String sql) throws Exception {
@@ -901,8 +899,7 @@ public class PlanTestBase {
             System.out.println("DEBUG MODE!");
         }
 
-        String pattern = "\\[plan-(\\d+)]";
-        Pattern r = Pattern.compile(pattern);
+        Pattern regex = Pattern.compile("\\[plan-(\\d+)]");
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             while ((tempStr = reader.readLine()) != null) {
                 if (tempStr.startsWith("/*")) {
@@ -920,7 +917,7 @@ public class PlanTestBase {
                     continue;
                 }
 
-                Matcher m = r.matcher(tempStr);
+                Matcher m = regex.matcher(tempStr);
                 if (m.find()) {
                     isEnumerate = true;
                     planEnumerate = new StringBuilder();
@@ -972,18 +969,18 @@ public class PlanTestBase {
                             String dumpStr = null;
 
                             if (hasResult && !debug) {
-                                Assert.assertEquals(result.toString().trim(), pair.first.trim());
+                                checkWithIgnoreTabletList(result.toString().trim(), pair.first.trim());
                             }
                             if (hasFragment) {
                                 fra = format(pair.second.getExplainString(TExplainLevel.NORMAL));
                                 if (!debug) {
-                                    Assert.assertEquals(fragment.toString().trim(), fra.trim());
+                                    checkWithIgnoreTabletList(fragment.toString().trim(), fra.trim());
                                 }
                             }
                             if (hasFragmentStatistics) {
                                 statistic = format(pair.second.getExplainString(TExplainLevel.COSTS));
                                 if (!debug) {
-                                    Assert.assertEquals(fragmentStatistics.toString().trim(), statistic.trim());
+                                    checkWithIgnoreTabletList(fragmentStatistics.toString().trim(), statistic.trim());
                                 }
                             }
                             if (isDump) {
@@ -1000,7 +997,7 @@ public class PlanTestBase {
                                         pair.first, fra, dumpStr, statistic, comment.toString());
                             }
                             if (isEnumerate) {
-                                Assert.assertEquals(planEnumerate.toString().trim(), pair.first.trim());
+                                checkWithIgnoreTabletList(planEnumerate.toString().trim(), pair.first.trim());
                                 connectContext.getSessionVariable().setUseNthExecPlan(0);
                             }
                         } catch (Error error) {
@@ -1095,5 +1092,24 @@ public class PlanTestBase {
         JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         return gson.toJson(jsonObject);
+    }
+
+    private void checkWithIgnoreTabletList(String expect, String actual) {
+        int expectStart = expect.indexOf("tabletList=");
+        int actualStart = actual.indexOf("tabletList=");
+
+        while (expectStart > 0) {
+            int expectEnd = expect.indexOf("\n", expectStart);
+            expect = expect.substring(0, expectStart) + expect.substring(expectEnd);
+            expectStart = expect.indexOf("tabletList=");
+        }
+
+        while (actualStart > 0) {
+            int actualEnd = actual.indexOf("\n", actualStart);
+            actual = actual.substring(0, actualStart) + actual.substring(actualEnd);
+            actualStart = actual.indexOf("tabletList=");
+        }
+
+        Assert.assertEquals(expect, actual);
     }
 }

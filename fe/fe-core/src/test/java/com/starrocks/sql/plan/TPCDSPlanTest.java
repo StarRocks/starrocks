@@ -526,6 +526,7 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testTPCDSDecodeRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         String sql = "select c_customer_id customer_id        ,c_first_name customer_first_name        " +
                 ",c_last_name customer_last_name        ,c_preferred_cust_flag customer_preferred_cust_flag        " +
@@ -535,14 +536,17 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
                 "and ss_sold_date_sk = d_date_sk  group by c_customer_id          ,c_first_name          ,c_last_name          " +
                 ",c_preferred_cust_flag           ,c_birth_country          ,d_year;";
         String plan = getCostExplain(sql);
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+
         Assert.assertTrue(plan.contains("dict_col=c_birth_country"));
         Assert.assertTrue(plan.contains("  13:Decode\n" +
                 "  |  <dict id 73> : <string id 15>"));
-        FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
 
     @Test
     public void testTPCDSDecodeRewrite1() throws Exception {
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         String sql = "with year_total as (\n" +
                 " select c_customer_id customer_id\n" +
@@ -566,7 +570,9 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
                 "         and t_s_secyear.dyear = 2001+1\n" +
                 "limit 100;";
         String plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("dict_col=c_birth_country"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+
+        Assert.assertTrue(plan.contains("dict_col=c_birth_country"));
     }
 }
