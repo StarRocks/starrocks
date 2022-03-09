@@ -48,7 +48,11 @@ public:
 
     static StatusOr<std::unique_ptr<Env>> CreateUniqueFromString(std::string_view uri);
 
+    static StatusOr<std::shared_ptr<Env>> CreateShardFromString(std::string_view uri);
+
     static StatusOr<std::unique_ptr<Env>> CreateUniqueFromStringOrDefault(std::string_view uri);
+
+    static StatusOr<std::shared_ptr<Env>> CreateSharedFromStringOrDefault(std::string_view uri);
 
     // Return a default environment suitable for the current operating
     // system.  Sophisticated users may wish to provide their own Env

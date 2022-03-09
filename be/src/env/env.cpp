@@ -62,8 +62,18 @@ StatusOr<std::unique_ptr<Env>> Env::CreateUniqueFromString(std::string_view uri)
     return EnvRegistry::Instance().create_env(uri);
 }
 
+StatusOr<std::shared_ptr<Env>> Env::CreateSharedFromString(std::string_view uri) {
+    ASSIGN_OR_RETURN(auto ptr, CreateUniqueFromString(uri));
+    return std::shared_ptr<Env>(std::move(ptr));
+}
+
 StatusOr<std::unique_ptr<Env>> Env::CreateUniqueFromStringOrDefault(std::string_view uri) {
     return EnvRegistry::Instance().create_env_or_default(uri);
+}
+
+StatusOr<std::shared_ptr<Env>> Env::CreateSharedFromStringOrDefault(std::string_view uri) {
+    ASSIGN_OR_RETURN(auto ptr, CreateUniqueFromStringOrDefault(uri));
+    return std::shared_ptr<Env>(std::move(ptr));
 }
 
 class EnvGlobalInitializer {
