@@ -85,9 +85,13 @@ public class SqlParser {
         List<String> sqlLists = Lists.newArrayList();
         boolean inString = false;
         int sqlStartOffset = 0;
+        char inStringStart = '-';
         for (int i = 0; i < sql.length(); ++i) {
-            if (sql.charAt(i) == '\"' || sql.charAt(i) == '\'' || sql.charAt(i) == '`') {
-                inString = !inString;
+            if (!inString && (sql.charAt(i) == '\"' || sql.charAt(i) == '\'' || sql.charAt(i) == '`')) {
+                inString = true;
+                inStringStart = sql.charAt(i);
+            } else if (inString && (sql.charAt(i) == inStringStart)) {
+                inString = false;
             }
 
             if (sql.charAt(i) == ';') {
@@ -97,7 +101,11 @@ public class SqlParser {
                 }
             }
         }
-        sqlLists.add(sql.substring(sqlStartOffset));
+
+        String last = sql.substring(sqlStartOffset).trim();
+        if (!last.isEmpty()) {
+            sqlLists.add(last);
+        }
         return sqlLists;
     }
 }
