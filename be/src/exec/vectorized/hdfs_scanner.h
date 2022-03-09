@@ -74,7 +74,7 @@ struct HdfsScannerParams {
     std::vector<const THdfsScanRange*> scan_ranges;
 
     // runtime bloom filter.
-    RuntimeFilterProbeCollector* runtime_filter_collector;
+    const RuntimeFilterProbeCollector* runtime_filter_collector;
 
     // should clone in scanner
     std::vector<ExprContext*> conjunct_ctxs;

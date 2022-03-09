@@ -59,7 +59,7 @@ public:
     void set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter);
     void set_conjuncts(const std::vector<Expr*>& conjuncts);
     void set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
-                                           RuntimeFilterProbeCollector* rf_collector);
+                                           const RuntimeFilterProbeCollector* rf_collector);
     Status set_timezone(const std::string& tz);
     int num_columns() const { return _src_slot_descriptors.size(); }
 

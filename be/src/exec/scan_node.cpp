@@ -53,5 +53,4 @@ Status ScanNode::prepare(RuntimeState* state) {
 
     return Status::OK();
 }
-
 } // namespace starrocks
