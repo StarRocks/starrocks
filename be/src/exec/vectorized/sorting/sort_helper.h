@@ -10,6 +10,7 @@
 
 namespace starrocks::vectorized {
 
+// Comparator for sort
 template <class T>
 struct SorterComparator {
     static int compare(const T& lhs, const T& rhs) {
@@ -20,6 +21,13 @@ struct SorterComparator {
         } else {
             return 1;
         }
+    }
+};
+
+template <>
+struct SorterComparator<Slice> {
+    static int compare(const Slice& lhs, const Slice& rhs) {
+        return lhs.compare(rhs);
     }
 };
 

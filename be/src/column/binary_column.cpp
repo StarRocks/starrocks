@@ -376,7 +376,7 @@ void BinaryColumn::sort_and_tie(bool is_asc_order, bool is_null_first, SmallPerm
     DCHECK_GE(size(), permutation.size());
     using ItemType = InlinePermuteItem<Slice>;
     auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
-        return SorterComparator<Slice>::compare(lhs.inline_value, rhs.inline_value);
+        return lhs.inline_value.compare(rhs.inline_value);
     };
     
     auto inlined = create_inline_permutation<Slice>(permutation, get_data());
