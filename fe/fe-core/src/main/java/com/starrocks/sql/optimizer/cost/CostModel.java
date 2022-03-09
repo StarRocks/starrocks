@@ -39,6 +39,7 @@ import com.starrocks.statistic.Constants;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class CostModel {
     public static double calculateCost(GroupExpression expression) {
@@ -185,13 +186,16 @@ public class CostModel {
         public CostEstimate computeAggFunExtraCost(PhysicalHashAggregateOperator node, Statistics statistics,
                                                    Statistics inputStatistics) {
             CostEstimate costEstimate = CostEstimate.zero();
-            // If the statistics with inaccurate row count，It don't need to compute the extra cost.
-            if (statistics.isTableRowCountMayInaccurate()) {
+            List<ColumnStatistic> groupByColumnStat =
+                    node.getGroupBys().stream().map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
+
+            // If the statistics with inaccurate row count or have Unknown column statistics，
+            // it don't need to compute the extra cost.
+            if (statistics.isTableRowCountMayInaccurate() ||
+                    groupByColumnStat.stream().anyMatch(ColumnStatistic::isUnknown)) {
                 return costEstimate;
             }
-            int distinctCount =
-                    (int) node.getAggregations().values().stream()
-                            .filter(aggregation -> isDistinctAggFun(aggregation, node)).count();
+
             // Use the number of aggregated rows as buckets, does not equal statistics.getOutputRowCount(),
             // Because limit is computed in statistics.getOutputRowCount().
             double buckets = StatisticsCalculator.computeGroupByStatistics(node.getGroupBys(), inputStatistics,
