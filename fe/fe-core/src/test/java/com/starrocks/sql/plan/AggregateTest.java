@@ -311,6 +311,21 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testCountDistinctGroupByFunction() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select L_LINENUMBER, date_trunc(\"day\",L_SHIPDATE) as day ,count(distinct L_ORDERKEY) from " +
+                "lineitem group by L_LINENUMBER, day";
+        String plan = getFragmentPlan(sql);
+        // check use two stage aggregate
+        Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: multi_distinct_count(1: L_ORDERKEY)"));
+        Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)\n" +
+                "  |  output: multi_distinct_count(19: count)"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testReplicatedAgg() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
 
