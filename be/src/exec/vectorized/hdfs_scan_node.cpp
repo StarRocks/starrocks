@@ -7,6 +7,7 @@
 
 #include "env/env_hdfs.h"
 #include "env/env_s3.h"
+#include "exec/pipeline/hdfs_scan_operator.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
 #include "exec/vectorized/hdfs_scanner_parquet.h"
@@ -61,7 +62,9 @@ std::atomic<int32_t>* OpenLimitAllocator::allocate(const std::string& key) {
 }
 
 HdfsScanNode::HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ScanNode(pool, tnode, descs) {}
+        : ScanNode(pool, tnode, descs), _hdfs_scan_node(tnode.hdfs_scan_node), _status(Status::OK()) {
+    _name = "hdfs_scan";
+}
 
 HdfsScanNode::~HdfsScanNode() {
     if (runtime_state() != nullptr) {
@@ -158,10 +161,8 @@ Status HdfsScanNode::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
-
     _decompose_conjunct_ctxs();
     if (_lake_table != nullptr) _init_partition_values_map();
-
     for (auto& scan_range : _scan_ranges) {
         RETURN_IF_ERROR(_find_and_insert_hdfs_file(scan_range));
     }
@@ -534,9 +535,7 @@ Status HdfsScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
     if (_result_chunks.blocking_get(chunk)) {
         TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1));
-
         eval_join_runtime_filters(chunk);
-
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
         if (reached_limit()) {
@@ -661,9 +660,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
     std::string native_file_path = scan_range.full_path;
     if (_lake_table != nullptr && _lake_table->has_partition()) {
         auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
-
         SCOPED_TIMER(_profile.open_file_timer);
-
         std::filesystem::path file_path(partition_desc->location());
         file_path /= scan_range.relative_path;
         native_file_path = file_path.native();
@@ -722,6 +719,11 @@ void HdfsScanNode::_init_counter() {
     _profile.io_counter = ADD_COUNTER(_runtime_profile, "IoCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
+}
+
+pipeline::OpFactories HdfsScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    auto factory = std::make_shared<pipeline::HdfsScanOperatorFactory>(context->next_operator_id(), this);
+    return pipeline::decompose_scan_node_to_pipeline(factory, this, context);
 }
 
 } // namespace starrocks::vectorized

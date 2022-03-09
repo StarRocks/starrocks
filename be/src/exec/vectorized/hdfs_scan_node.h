@@ -38,6 +38,11 @@ public:
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
 
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
+
+    const THdfsScanNode& thrift_hdfs_scan_node() const { return _hdfs_scan_node; }
+
 private:
     int kMaxConcurrency = config::max_hdfs_scanner_num;
 
@@ -90,6 +95,7 @@ private:
 
     Status _init_table();
 
+    THdfsScanNode _hdfs_scan_node;
     const TupleDescriptor* _tuple_desc = nullptr;
 
     int _min_max_tuple_id = 0;
