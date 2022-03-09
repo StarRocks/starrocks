@@ -24,7 +24,7 @@ template <class T>
 struct InlinePermuteItem {
     // NOTE: do not inline a large value
     static_assert(sizeof(T) <= 16, "Do not inline a large value");
-    
+
     T inline_value;
     uint32_t index_in_chunk;
 };

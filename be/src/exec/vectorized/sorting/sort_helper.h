@@ -99,7 +99,8 @@ static inline void restore_inline_permutation(const InlinePermutation<T>& inline
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
 static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_asc_order, bool is_null_first,
-                                                SmallPermutation& permutation, Tie& tie, std::pair<int, int> range) {
+                                                SmallPermutation& permutation, Tie& tie, std::pair<int, int> range,
+                                                bool build_tie) {
     NullData& null_data = column->null_column_data();
     auto null_pred = [&](const SmallPermuteItem& item) -> bool {
         if (is_null_first) {
@@ -135,7 +136,7 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
             int notnull_end = is_null_first ? range_last : pivot_start;
 
             column->data_column()->sort_and_tie(is_asc_order, is_null_first, permutation, tie,
-                                                {notnull_start, notnull_end});
+                                                {notnull_start, notnull_end}, build_tie);
         }
 
 #ifndef NDEBUG
@@ -155,7 +156,7 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
 
 template <class DataComparator, class PermutationType>
 static inline void sort_and_tie_helper(Column* column, bool is_asc_order, PermutationType& permutation, Tie& tie,
-                                       DataComparator cmp, std::pair<int, int> range) {
+                                       DataComparator cmp, std::pair<int, int> range, bool build_tie) {
     auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
     auto do_sort = [&](auto begin, auto end) {
@@ -186,9 +187,11 @@ static inline void sort_and_tie_helper(Column* column, bool is_asc_order, Permut
         }
         if (range_last - range_first > 1) {
             do_sort(permutation.begin() + range_first, permutation.begin() + range_last);
-            tie[range_first] = 0;
-            for (int i = range_first + 1; i < range_last; i++) {
-                tie[i] &= cmp(permutation[i - 1], permutation[i]) == 0;
+            if (build_tie) {
+                tie[range_first] = 0;
+                for (int i = range_first + 1; i < range_last; i++) {
+                    tie[i] &= cmp(permutation[i - 1], permutation[i]) == 0;
+                }
             }
         }
 #ifndef NDEBUG
