@@ -8,12 +8,11 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
+import java.util.List;
 import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
@@ -29,12 +28,6 @@ public class AnalyzeSingleTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(runningDir);
         AnalyzeTestUtil.init();
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test
@@ -443,5 +436,20 @@ public class AnalyzeSingleTest {
 
         analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
                 "LIKE concat('h', 'a', 'i')) OR ('%')' part of predicate ''%'' should return type 'BOOLEAN'");
+    }
+
+    @Test
+    public void testSqlSplit() {
+        List<StatementBase> list = SqlParser.parse("select * from t1;", 0);
+        Assert.assertEquals(1, list.size());
+
+        list = SqlParser.parse("select * from t1", 0);
+        Assert.assertEquals(1, list.size());
+
+        list = SqlParser.parse("select * from t1;select * from t2;", 0);
+        Assert.assertEquals(2, list.size());
+
+        list = SqlParser.parse("select * from t1 where a1 = 'x\"x;asf';", 0);
+        Assert.assertEquals(1, list.size());
     }
 }
