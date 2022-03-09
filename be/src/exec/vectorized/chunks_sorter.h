@@ -260,7 +260,6 @@ struct DataSegment {
 };
 using DataSegments = std::vector<DataSegment>;
 
-
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorter {
 public:

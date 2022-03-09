@@ -62,7 +62,7 @@ size_t FixedLengthColumnBase<T>::filter_range(const Column::Filter& filter, size
 
 template <typename T>
 void FixedLengthColumnBase<T>::sort_and_tie(bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
-                                            std::vector<uint8_t>& tie, std::pair<int, int> range) {
+                                            std::vector<uint8_t>& tie, std::pair<int, int> range, bool build_tie) {
     DCHECK_GE(size(), permutation.size());
     using ItemType = InlinePermuteItem<T>;
     
@@ -71,7 +71,7 @@ void FixedLengthColumnBase<T>::sort_and_tie(bool is_asc_order, bool is_null_firs
     };
     
     auto inlined = create_inline_permutation<T>(permutation, _data);
-    sort_and_tie_helper(this, is_asc_order, inlined, tie, cmp, range);
+    sort_and_tie_helper(this, is_asc_order, inlined, tie, cmp, range, build_tie);
     restore_inline_permutation(inlined, permutation);
 }
 

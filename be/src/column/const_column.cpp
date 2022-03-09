@@ -61,7 +61,7 @@ size_t ConstColumn::filter_range(const Column::Filter& filter, size_t from, size
 }
 
 void ConstColumn::sort_and_tie(bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
-                               std::vector<uint8_t>& tie, std::pair<int, int> range) {
+                               std::vector<uint8_t>& tie, std::pair<int, int> range, bool build_tie) {
     // noop
 }
 

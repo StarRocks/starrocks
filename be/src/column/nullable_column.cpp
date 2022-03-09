@@ -186,8 +186,8 @@ size_t NullableColumn::filter_range(const Column::Filter& filter, size_t from, s
 }
 
 void NullableColumn::sort_and_tie(bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
-                                  std::vector<uint8_t>& tie, std::pair<int, int> range) {
-    sort_and_tie_helper_nullable(this, is_asc_order, is_null_first, permutation, tie, range);
+                                  std::vector<uint8_t>& tie, std::pair<int, int> range, bool build_tie) {
+    sort_and_tie_helper_nullable(this, is_asc_order, is_null_first, permutation, tie, range, build_tie);
 }
 
 int NullableColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
