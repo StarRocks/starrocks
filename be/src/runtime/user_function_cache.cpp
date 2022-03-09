@@ -33,7 +33,6 @@
 #include "env/env.h"
 #include "fmt/compile.h"
 #include "gutil/strings/split.h"
-#include "util/defer_op.h"
 #include "util/dynamic_util.h"
 #include "util/download_util.h"
 #include "util/file_utils.h"
