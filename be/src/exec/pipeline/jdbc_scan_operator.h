@@ -11,6 +11,10 @@ namespace starrocks {
 
 namespace pipeline {
 
+// Because the implementation of JDBCScanOperator is very different from ScanOperator and not easy to unify,
+// for example, we fetch data in a seperate thread without using _io_threads...
+// so we choose to rewrite almost all the core interfaces without directly reusing the interfaces in ScanOperator
+// Maybe after we put the jdbc scanner into thread pool, the two can be unified.
 class JDBCScanOperator final : public ScanOperator {
 public:
     JDBCScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node, const TJDBCScanNode& jdbc_scan_node);
