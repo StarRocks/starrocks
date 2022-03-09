@@ -308,6 +308,18 @@ public:
 };
 
 template <PrimitiveType PT>
+class DirectMappingJoinBuildFunc {
+public:
+    using CppType = typename RunTimeTypeTraits<PT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+
+    static void prepare(RuntimeState* runtime, JoinHashTableItems* table_items);
+    static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items);
+    static Status construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
+                                       HashTableProbeState* probe_state);
+};
+
+template <PrimitiveType PT>
 class FixedSizeJoinBuildFunc {
 public:
     using CppType = typename RunTimeTypeTraits<PT>::CppType;
@@ -353,12 +365,21 @@ public:
     using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
 
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {}
-
     static Status lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
-
     static const Buffer<CppType>& get_key_data(const HashTableProbeState& probe_state);
-
     static bool equal(const CppType& x, const CppType& y) { return x == y; }
+};
+
+template <PrimitiveType PT>
+class DirectMappingJoinProbeFunc {
+public:
+    using CppType = typename RunTimeTypeTraits<PT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+
+    static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {}
+    static Status lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
+    static const Buffer<CppType>& get_key_data(const HashTableProbeState& probe_state);
+    static bool equal(const CppType& x, const CppType& y) { return true; }
 };
 
 template <PrimitiveType PT>
@@ -527,6 +548,7 @@ private:
 };
 
 #define JoinHashMapForOneKey(PT) JoinHashMap<PT, JoinBuildFunc<PT>, JoinProbeFunc<PT>>
+#define JoinHashMapForDirectMapping(PT) JoinHashMap<PT, DirectMappingJoinBuildFunc<PT>, DirectMappingJoinProbeFunc<PT>>
 #define JoinHashMapForFixedSizeKey(PT) JoinHashMap<PT, FixedSizeJoinBuildFunc<PT>, FixedSizeJoinProbeFunc<PT>>
 #define JoinHashMapForSerializedKey(PT) JoinHashMap<PT, SerializedJoinBuildFunc, SerializedJoinProbeFunc>
 
@@ -598,9 +620,9 @@ private:
     void _remove_duplicate_index_for_right_anti_join(Column::Filter* filter);
     void _remove_duplicate_index_for_full_outer_join(Column::Filter* filter);
 
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_BOOLEAN)> _keyboolean = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_TINYINT)> _key8 = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_SMALLINT)> _key16 = nullptr;
+    std::unique_ptr<JoinHashMapForDirectMapping(TYPE_BOOLEAN)> _keyboolean = nullptr;
+    std::unique_ptr<JoinHashMapForDirectMapping(TYPE_TINYINT)> _key8 = nullptr;
+    std::unique_ptr<JoinHashMapForDirectMapping(TYPE_SMALLINT)> _key16 = nullptr;
     std::unique_ptr<JoinHashMapForOneKey(TYPE_INT)> _key32 = nullptr;
     std::unique_ptr<JoinHashMapForOneKey(TYPE_BIGINT)> _key64 = nullptr;
     std::unique_ptr<JoinHashMapForOneKey(TYPE_LARGEINT)> _key128 = nullptr;
