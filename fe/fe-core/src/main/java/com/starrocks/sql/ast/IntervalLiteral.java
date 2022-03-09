@@ -9,24 +9,24 @@ import com.starrocks.thrift.TExprNode;
 
 public class IntervalLiteral extends LiteralExpr {
     private final Expr value;
-    private final String timeUnitIdent;
+    private final UnitIdentifier unitIdentifier;
 
-    public IntervalLiteral(Expr value, String timeUnitIdent) {
+    public IntervalLiteral(Expr value, UnitIdentifier unitIdentifier) {
         this.value = value;
-        this.timeUnitIdent = timeUnitIdent;
+        this.unitIdentifier = unitIdentifier;
     }
 
     public Expr getValue() {
         return value;
     }
 
-    public String getTimeUnitIdent() {
-        return timeUnitIdent;
+    public UnitIdentifier getUnitIdentifier() {
+        return unitIdentifier;
     }
 
     @Override
     protected String toSqlImpl() {
-        return "interval " + value.toSql() + timeUnitIdent;
+        return "interval " + value.toSql() + unitIdentifier;
     }
 
     @Override
@@ -36,7 +36,7 @@ public class IntervalLiteral extends LiteralExpr {
 
     @Override
     public Expr clone() {
-        return new IntervalLiteral(this.value, this.timeUnitIdent);
+        return new IntervalLiteral(this.value, this.unitIdentifier);
     }
 
     @Override
