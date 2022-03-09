@@ -474,21 +474,13 @@ USE iceberg_test;
 
 ~~~sql
 CREATE EXTERNAL TABLE `iceberg_tbl` ( 
-
 `id` bigint NULL, 
-
 `data` varchar(200) NULL 
-
 ) ENGINE=ICEBERG 
-
 PROPERTIES ( 
-
 "resource" = "iceberg0", 
-
 "database" = "iceberg", 
-
 "table" = "iceberg_table" 
-
 ); 
 ~~~
 
