@@ -61,13 +61,13 @@ size_t FixedLengthColumnBase<T>::filter_range(const Column::Filter& filter, size
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::sort_and_tie(bool is_asc_order, bool is_null_first, Permutation& permutation,
-                                            std::vector<uint8_t>& tie) {
+void FixedLengthColumnBase<T>::sort_and_tie(bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
+                                            std::vector<uint8_t>& tie, bool build_tie) {
     DCHECK_GE(size(), permutation.size());
-    auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) -> int {
+    auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) -> int {
         return SorterComparator<T>::compare(_data[lhs.index_in_chunk], _data[rhs.index_in_chunk]);
     };
-    sort_and_tie_helper(this, is_asc_order, permutation, tie, cmp);
+    sort_and_tie_helper(this, is_asc_order, permutation, tie, cmp, build_tie);
 }
 
 template <typename T>

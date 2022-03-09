@@ -157,8 +157,8 @@ public:
 
     size_t filter_range(const Column::Filter& filter, size_t from, size_t to) override;
 
-    void sort_and_tie(bool is_asc_order, bool is_null_first, Permutation& permutation,
-                      std::vector<uint8_t>& tie) override;
+    void sort_and_tie(bool is_asc_order, bool is_null_first, SmallPermutation& permutation, std::vector<uint8_t>& tie,
+                      bool build_tie = true) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 

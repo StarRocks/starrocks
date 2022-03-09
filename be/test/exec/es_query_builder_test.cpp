@@ -462,7 +462,7 @@ TEST_F(BooleanQueryBuilderTest, validate_esquery) {
 TEST_F(BooleanQueryBuilderTest, validate_partial) {
     ObjectPool pool;
     // TODO(yingchun): LSAN will report some errors in this scope, we should improve the code and enable LSAN later.
-    debug::ScopedLeakCheckDisabler disable_lsan;
+    [[maybe_unused]] debug::ScopedLeakCheckDisabler disable_lsan;
     char like_value[] = "a%e%g_";
     int like_value_length = (int)strlen(like_value);
     TypeDescriptor like_type_desc = TypeDescriptor::create_varchar_type(like_value_length);

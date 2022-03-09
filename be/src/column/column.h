@@ -277,8 +277,8 @@ public:
     virtual size_t filter_range(const Filter& filter, size_t from, size_t to) = 0;
 
     // Sort this column incrementally, and build tie for the next column
-    virtual void sort_and_tie(bool is_asc_order, bool is_null_first, Permutation& permutation,
-                              std::vector<uint8_t>& tie) = 0;
+    virtual void sort_and_tie(bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
+                              std::vector<uint8_t>& tie, bool build_tie = true) = 0;
 
     // Compares (*this)[left] and rhs[right]. Column rhs should have the same type.
     // Returns negative number, 0, or positive number (*this)[left] is less, equal, greater than
