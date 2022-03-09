@@ -48,7 +48,7 @@ public:
 
     static StatusOr<std::unique_ptr<Env>> CreateUniqueFromString(std::string_view uri);
 
-    static StatusOr<std::shared_ptr<Env>> CreateShardFromString(std::string_view uri);
+    static StatusOr<std::shared_ptr<Env>> CreateSharedFromString(std::string_view uri);
 
     static StatusOr<std::unique_ptr<Env>> CreateUniqueFromStringOrDefault(std::string_view uri);
 
