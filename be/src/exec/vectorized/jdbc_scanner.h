@@ -40,7 +40,7 @@ private:
 
     Status _init_jdbc_bridge();
 
-    Status _init_jdbc_scan_context();
+    Status _init_jdbc_scan_context(RuntimeState* state);
 
     Status _init_jdbc_scanner();
 
@@ -48,7 +48,7 @@ private:
 
     Status _has_next(bool* result);
 
-    Status _get_next_chunk(int chunk_size, jobject* chunk);
+    Status _get_next_chunk(jobject* chunk);
 
     Status _fill_chunk(jobject jchunk, ChunkPtr* chunk);
 

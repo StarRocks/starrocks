@@ -36,7 +36,7 @@ Status JDBCScanner::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(_init_jdbc_bridge());
 
-    RETURN_IF_ERROR(_init_jdbc_scan_context());
+    RETURN_IF_ERROR(_init_jdbc_scan_context(state));
 
     RETURN_IF_ERROR(_init_jdbc_scanner());
 
@@ -59,7 +59,6 @@ Status JDBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         *eos = true;
         return Status::OK();
     }
-    int chunk_size = state->chunk_size();
     jobject jchunk;
     DeferOp defer([&jchunk, this] () {
         if (jchunk != nullptr) {
@@ -67,7 +66,7 @@ Status JDBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         }
     });
 
-    RETURN_IF_ERROR(_get_next_chunk(chunk_size, &jchunk));
+    RETURN_IF_ERROR(_get_next_chunk(&jchunk));
     RETURN_IF_ERROR(_fill_chunk(jchunk, chunk));
     return Status::OK();
 }
@@ -98,21 +97,22 @@ Status JDBCScanner::_init_jdbc_bridge() {
     return Status::OK();
 }
 
-Status JDBCScanner::_init_jdbc_scan_context() {
+Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     jclass scan_context_cls = _jni_env->FindClass(JDBC_SCAN_CONTEXT_CLASS_NAME);
     DCHECK(scan_context_cls != nullptr);
 
     jmethodID constructor = _jni_env->GetMethodID(
             scan_context_cls, "<init>",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
     jstring driver_class_name = _jni_env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
     jstring jdbc_url = _jni_env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
     jstring user = _jni_env->NewStringUTF(_scan_ctx.user.c_str());
     jstring passwd = _jni_env->NewStringUTF(_scan_ctx.passwd.c_str());
     jstring sql = _jni_env->NewStringUTF(_scan_ctx.sql.c_str());
+    int statement_fetch_size = state->chunk_size();
 
     _jdbc_scan_context =
-            _jni_env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql);
+            _jni_env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql, statement_fetch_size);
 
     _jni_env->DeleteLocalRef(driver_class_name);
     _jni_env->DeleteLocalRef(jdbc_url);
@@ -148,7 +148,7 @@ Status JDBCScanner::_init_jdbc_scanner() {
     // init jmethod
     _scanner_has_next = _jni_env->GetMethodID(_jdbc_scanner_cls, "hasNext", "()Z");
     DCHECK(_scanner_has_next != nullptr);
-    _scanner_get_next_chunk = _jni_env->GetMethodID(_jdbc_scanner_cls, "getNextChunk", "(I)Ljava/util/List;");
+    _scanner_get_next_chunk = _jni_env->GetMethodID(_jdbc_scanner_cls, "getNextChunk", "()Ljava/util/List;");
     DCHECK(_scanner_get_next_chunk != nullptr);
     _scanner_close = _jni_env->GetMethodID(_jdbc_scanner_cls, "close", "()V");
     DCHECK(_scanner_close != nullptr);
@@ -249,8 +249,8 @@ Status JDBCScanner::_has_next(bool* result) {
     return Status::OK();
 }
 
-Status JDBCScanner::_get_next_chunk(int chunk_size, jobject* chunk) {
-    *chunk = _jni_env->CallObjectMethod(_jdbc_scanner, _scanner_get_next_chunk, chunk_size);
+Status JDBCScanner::_get_next_chunk(jobject* chunk) {
+    *chunk = _jni_env->CallObjectMethod(_jdbc_scanner, _scanner_get_next_chunk);
     CHECK_JAVA_EXCEPTION("getNextChunk failed")
     return Status::OK();
 }
