@@ -2,23 +2,24 @@
 
 package com.starrocks.jdbcbridge;
 
-import java.util.Properties;
-
 public class JDBCScanContext {
     private String driverClassName;
     private String jdbcURL;
     private String user;
     private String password;
     private String sql;
-    private Properties properties;
+
+    private int statementFetchSize;
 
     public JDBCScanContext() {}
-    public JDBCScanContext(String driverClassName, String jdbcURL, String user, String password, String sql) {
+    public JDBCScanContext(String driverClassName, String jdbcURL, String user, String password,
+                           String sql, int statementFetchSize) {
         this.driverClassName = driverClassName;
         this.jdbcURL = jdbcURL;
         this.user = user;
         this.password = password;
         this.sql = sql;
+        this.statementFetchSize = statementFetchSize;
     }
 
     public void setDriverClassName(String driverClassName) {
@@ -36,12 +37,13 @@ public class JDBCScanContext {
     public void setPassword(String password) {
         this.password = password;
     }
+
     public void setSql(String sql) {
         this.sql = sql;
     }
 
-    public void addProperties(String key, String value) {
-        this.properties.put(key, value);
+    public void setStatementFetchSize(int statementFetchSize) {
+        this.statementFetchSize = statementFetchSize;
     }
 
     public String getDriverClassName() {
@@ -64,8 +66,9 @@ public class JDBCScanContext {
         return sql;
     }
 
-    public Properties getProperties() {
-        return properties;
+    public int getStatementFetchSize() {
+        return statementFetchSize;
     }
+
 
 }

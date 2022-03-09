@@ -13,8 +13,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class JDBCScanner {
-    private static final int DEFAULT_STATEMENT_FETCH_SIZE = 1024;
-
     private JDBCScanContext scanContext;
     private HikariDataSource dataSource;
     private Connection connection;
@@ -27,7 +25,7 @@ public class JDBCScanner {
         this.scanContext = scanContext;
     }
 
-    public void open() throws Exception {
+    public void open(int chunkSize) throws Exception {
         HikariConfig config = new HikariConfig();
         config.setDriverClassName(scanContext.getDriverClassName());
         config.setJdbcUrl(scanContext.getJdbcURL());
@@ -35,14 +33,11 @@ public class JDBCScanner {
         config.setPassword(scanContext.getPassword());
         // one connection per query, so just set max pool size to 1
         config.setMaximumPoolSize(1);
-        if (scanContext.getProperties() != null) {
-            config.setDataSourceProperties(scanContext.getProperties());
-        }
 
         dataSource = new HikariDataSource(config);
         connection = dataSource.getConnection();
         statement = connection.createStatement();
-        statement.setFetchSize(DEFAULT_STATEMENT_FETCH_SIZE);
+        statement.setFetchSize(scanContext.getStatementFetchSize());
         statement.execute(scanContext.getSql());
         resultSet = statement.getResultSet();
         resultSetMetaData = resultSet.getMetaData();
@@ -62,7 +57,8 @@ public class JDBCScanner {
     }
 
     // return columnar chunk
-    public List<List<Object>> getNextChunk(int chunkSize) throws Exception {
+    public List<List<Object>> getNextChunk() throws Exception {
+        int chunkSize = scanContext.getStatementFetchSize();
         int columnCount = resultSetMetaData.getColumnCount();
         List<List<Object>> chunk = new ArrayList<>(columnCount);
         for (int i = 0; i < columnCount; i++) {
