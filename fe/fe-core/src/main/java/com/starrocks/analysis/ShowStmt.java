@@ -24,11 +24,12 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
 
 public abstract class ShowStmt extends StatementBase {
     public abstract ShowResultSetMetaData getMetaData();
 
-    public SelectStmt toSelectStmt(Analyzer analyzer) throws AnalysisException {
+    public QueryStatement toSelectStmt() throws AnalysisException {
         return null;
     }
 

@@ -177,7 +177,7 @@ public class StmtExecutorTest {
                 minTimes = 0;
                 result = RedirectStatus.NO_FORWARD;
 
-                showStmt.toSelectStmt((Analyzer) any);
+                showStmt.toSelectStmt();
                 minTimes = 0;
                 result = null;
 
@@ -213,7 +213,7 @@ public class StmtExecutorTest {
                 minTimes = 0;
                 result = RedirectStatus.NO_FORWARD;
 
-                showStmt.toSelectStmt((Analyzer) any);
+                showStmt.toSelectStmt();
                 minTimes = 0;
                 result = null;
 
