@@ -46,9 +46,13 @@ class TxnManager;
 // Now, After DataDir was created, it will never be deleted for easy implementation.
 class DataDir {
 public:
-    DataDir(std::string path, TStorageMedium::type storage_medium = TStorageMedium::HDD,
-            TabletManager* tablet_manager = nullptr, TxnManager* txn_manager = nullptr);
+    explicit DataDir(std::string path, TStorageMedium::type storage_medium = TStorageMedium::HDD,
+                     TabletManager* tablet_manager = nullptr, TxnManager* txn_manager = nullptr);
+
     ~DataDir();
+
+    DataDir(const DataDir&) = delete;
+    void operator=(const DataDir&) = delete;
 
     Status init(bool read_only = false);
     void stop_bg_worker();
@@ -121,7 +125,6 @@ private:
     Status _init_cluster_id();
     Status _init_data_dir();
     Status _init_tmp_dir();
-    Status _init_file_system();
     Status _init_meta(bool read_only = false);
 
     Status _read_and_write_test_file();
@@ -142,12 +145,9 @@ private:
     TStorageMedium::type _storage_medium;
     bool _is_used;
 
-    std::string _file_system;
     TabletManager* _tablet_manager;
     TxnManager* _txn_manager;
     int32_t _cluster_id;
-    // This flag will be set true if this store was not in root path when reloading
-    bool _to_be_deleted;
 
     // used to protect _current_shard and _tablet_set
     std::mutex _mutex;
