@@ -11,6 +11,7 @@
 #include "exprs/slot_ref.h"
 #include "fmt/core.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 
 namespace starrocks::vectorized {
 
@@ -523,6 +524,96 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
     }
 
     clear_sort_exprs(sort_exprs);
+}
+
+static void reset_permutation(SmallPermutation& permutation, int n) {
+    permutation.resize(n);
+    for (int i = 0; i < permutation.size(); i++) {
+        permutation[i].index_in_chunk = i;
+    }
+}
+
+TEST_F(ChunksSorterTest, column_incremental_sort) {
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    ColumnPtr nullable_column = ColumnHelper::create_column(type_desc, true);
+
+    // sort empty column
+    SmallPermutation permutation;
+    Tie tie;
+    std::pair<int, int> range{0, 0};
+    nullable_column->sort_and_tie(true, true, permutation, tie, range, false);
+    nullable_column->sort_and_tie(true, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, true, permutation, tie, range, false);
+
+    // sort all null column
+    const int kNullCount = 5;
+    nullable_column->append_nulls(kNullCount);
+    permutation.resize(kNullCount);
+    for (int i = 0; i < permutation.size(); i++) {
+        permutation[i].index_in_chunk = i;
+    }
+    tie.resize(kNullCount);
+    range = {0, kNullCount};
+    nullable_column->sort_and_tie(true, true, permutation, tie, range, false);
+    nullable_column->sort_and_tie(true, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, true, permutation, tie, range, false);
+
+    // sort 1 element with 5 nulls
+    SmallPermutation expect_perm;
+    nullable_column->append_datum(Datum(1));
+    reset_permutation(permutation, kNullCount + 1);
+    tie = Tie(kNullCount + 1, 0);
+
+    nullable_column->sort_and_tie(true, true, permutation, tie, range, false);
+    reset_permutation(expect_perm, kNullCount + 1);
+    EXPECT_EQ(expect_perm, permutation);
+    EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
+
+    reset_permutation(permutation, kNullCount + 1);
+    tie = Tie(kNullCount + 1, 0);
+    nullable_column->sort_and_tie(true, false, permutation, tie, range, false);
+    reset_permutation(expect_perm, kNullCount + 1);
+    EXPECT_EQ(expect_perm, permutation);
+    EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
+
+    reset_permutation(permutation, kNullCount + 1);
+    tie = Tie(kNullCount + 1, 0);
+    nullable_column->sort_and_tie(false, false, permutation, tie, range, false);
+    reset_permutation(expect_perm, kNullCount + 1);
+    EXPECT_EQ(expect_perm, permutation);
+    EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
+
+    reset_permutation(permutation, kNullCount + 1);
+    tie = Tie(kNullCount + 1, 0);
+    nullable_column->sort_and_tie(false, true, permutation, tie, range, false);
+    reset_permutation(expect_perm, kNullCount + 1);
+    EXPECT_EQ(expect_perm, permutation);
+    EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
+
+    // sort not-null elements
+    nullable_column = nullable_column->clone_empty();
+    nullable_column->append_datum(Datum(1));
+    reset_permutation(expect_perm, 1);
+    reset_permutation(permutation, 1);
+    tie = Tie(1, 1);
+
+    nullable_column->sort_and_tie(true, true, permutation, tie, range, false);
+    EXPECT_EQ(expect_perm, permutation);
+    EXPECT_EQ(Tie({1}), tie);
+
+    nullable_column->sort_and_tie(true, false, permutation, tie, range, false);
+    EXPECT_EQ(expect_perm, permutation);
+    EXPECT_EQ(Tie({1}), tie);
+
+    nullable_column->sort_and_tie(false, false, permutation, tie, range, false);
+    EXPECT_EQ(expect_perm, permutation);
+    EXPECT_EQ(Tie({1}), tie);
+
+    nullable_column->sort_and_tie(false, true, permutation, tie, range, false);
+    EXPECT_EQ(expect_perm, permutation);
+    EXPECT_EQ(Tie({1}), tie);
 }
 
 TEST_F(ChunksSorterTest, find_zero) {

@@ -131,12 +131,14 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
             auto pivot_iter =
                     std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
             int pivot_start = pivot_iter - permutation.begin();
-            tie[pivot_start] = 0;
             int notnull_start = is_null_first ? pivot_start : range_first;
             int notnull_end = is_null_first ? range_last : pivot_start;
 
-            column->data_column()->sort_and_tie(is_asc_order, is_null_first, permutation, tie,
-                                                {notnull_start, notnull_end}, build_tie);
+            if (notnull_start < notnull_end) {
+                tie[pivot_start] = 0;
+                column->data_column()->sort_and_tie(is_asc_order, is_null_first, permutation, tie,
+                                                    {notnull_start, notnull_end}, build_tie);
+            }
         }
 
 #ifndef NDEBUG
@@ -172,7 +174,6 @@ static inline void sort_and_tie_helper(Column* column, bool is_asc_order, Permut
     int tie_count = 0;
 #endif
 
-    // TODO(mofei) is there any optimization opportunity
     int range_first = range.first;
     int range_last = 0;
     while (range_first < range.second) {

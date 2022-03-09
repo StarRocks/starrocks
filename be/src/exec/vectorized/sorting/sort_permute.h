@@ -17,6 +17,8 @@ struct PermutationItem {
 
 struct SmallPermuteItem {
     uint32_t index_in_chunk;
+
+    bool operator==(const SmallPermuteItem& rhs) const { return index_in_chunk == rhs.index_in_chunk; }
 };
 
 // Inline data value into the permutation to optimize cache efficiency
