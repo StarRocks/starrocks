@@ -84,6 +84,7 @@ public class ConnectSchedulerTest {
                         }
                     }
                 };
+                minTimes = 0;
             }
         };
 
